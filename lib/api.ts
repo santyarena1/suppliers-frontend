@@ -30,6 +30,7 @@ export interface ProductDTO {
   price: string;
   imageUrl: string;
   externalId: string;
+  locationAir?: string | null;
 }
 
 export interface CredentialResponse {
@@ -52,13 +53,42 @@ export const authApi = {
 };
 
 // --- Search ---
+export interface SearchAllOptions {
+  providers?: Provider[];
+  onProviderResult?: (provider: Provider, products: ProductDTO[]) => void;
+  onProviderError?: (provider: Provider, error: unknown) => void;
+}
+
 export const searchApi = {
-  all: (name: string) =>
-    api.get<ProductDTO[]>("/search/all", { params: { name } }),
+  // Aggregates results by fan-out to /search/provider/* in parallel.
+  // Bypasses backend /search/all which only includes ELIT.
+  all: async (name: string, opts: SearchAllOptions = {}) => {
+    const providers = opts.providers ?? ALL_PROVIDERS;
+    const results = await Promise.allSettled(
+      providers.map(async (p) => {
+        try {
+          const r = await api.get<ProductDTO[]>(`/search/provider/${p}`, { params: { name } });
+          const data = Array.isArray(r.data) ? r.data : [];
+          opts.onProviderResult?.(p, data);
+          return { provider: p, data };
+        } catch (err) {
+          opts.onProviderError?.(p, err);
+          throw err;
+        }
+      })
+    );
+    const merged: ProductDTO[] = [];
+    for (const r of results) {
+      if (r.status === "fulfilled") merged.push(...r.value.data);
+    }
+    return { data: merged };
+  },
   byProvider: (provider: Provider, name: string) =>
     api.get<ProductDTO[]>(`/search/provider/${provider}`, { params: { name } }),
-  filtered: (name: string, filters: Record<string, boolean>) =>
-    api.post<ProductDTO[]>(`/search/${encodeURIComponent(name)}`, filters),
+  filtered: async (name: string, filters: Record<string, boolean>, opts: SearchAllOptions = {}) => {
+    const providers = ALL_PROVIDERS.filter((p) => filters[p]);
+    return searchApi.all(name, { ...opts, providers });
+  },
 };
 
 // --- Credentials ---

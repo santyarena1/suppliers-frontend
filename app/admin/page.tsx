@@ -1,35 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import { userApi, invidApi } from "@/lib/api";
 import { isAdmin, getUser } from "@/lib/auth";
-import { useEffect } from "react";
 import {
   Users, ToggleLeft, ToggleRight, Trash2, Calendar,
-  RefreshCw, Loader2, Shield, AlertTriangle
+  RefreshCw, Loader2, AlertTriangle, CheckCircle2, XCircle, Zap
 } from "lucide-react";
 
-type Tab = "users" | "invid";
+type UserTab = "status" | "enddate" | "delete";
 
 export default function AdminPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("users");
+  const [tab, setTab] = useState<"users" | "invid">("users");
+  const [userTab, setUserTab] = useState<UserTab>("status");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
-  // Users tab
   const [userId, setUserId] = useState("");
   const [activeStatus, setActiveStatus] = useState(true);
   const [endDate, setEndDate] = useState("");
-  const [userAction, setUserAction] = useState<"toggle" | "enddate" | "delete">("toggle");
-
-  // Invid tab
   const [invidUserId, setInvidUserId] = useState("");
-  const [invidSearch, setInvidSearch] = useState("");
+  const [invidQuery, setInvidQuery] = useState("");
+  const [invidResults, setInvidResults] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAdmin()) router.replace("/search");
@@ -37,26 +33,29 @@ export default function AdminPage() {
 
   const currentUser = getUser();
 
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 4000);
+  }
+
   async function handleUserAction(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
     setLoading(true);
     try {
-      if (userAction === "toggle") {
+      if (userTab === "status") {
         await userApi.updateActiveStatus(userId, activeStatus);
-        setSuccess(`Usuario ${userId} ${activeStatus ? "activado" : "desactivado"}`);
-      } else if (userAction === "enddate") {
+        showToast(`Usuario ${activeStatus ? "activado" : "desactivado"} correctamente`);
+      } else if (userTab === "enddate") {
         await userApi.updateEndDate(userId, endDate);
-        setSuccess(`Fecha de expiración actualizada para ${userId}`);
-      } else if (userAction === "delete") {
+        showToast("Fecha de expiración actualizada");
+      } else {
         await userApi.delete(userId);
-        setSuccess(`Usuario ${userId} eliminado`);
+        showToast("Usuario eliminado");
         setUserId("");
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "Error al ejecutar la acción");
+      showToast(msg || "Error al ejecutar la acción", false);
     } finally {
       setLoading(false);
     }
@@ -64,234 +63,252 @@ export default function AdminPage() {
 
   async function handleInvidSync(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
     setLoading(true);
+    setInvidResults(null);
     try {
       const res = await invidApi.sync(invidUserId);
-      setSuccess(`Sincronización completada: ${res.data}`);
+      showToast("Sincronización completada");
+      setInvidResults(String(res.data));
     } catch {
-      setError("Error al sincronizar Invid");
+      showToast("Error al sincronizar", false);
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleInvidSearch(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await invidApi.search(invidQuery);
+      showToast(`${res.data.length} resultado${res.data.length !== 1 ? "s" : ""} en cache local`);
+    } catch {
+      showToast("Error al buscar en Invid", false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const userTabs: { key: UserTab; label: string; icon: React.ReactNode; danger?: boolean }[] = [
+    { key: "status", label: "Estado", icon: <ToggleRight className="w-3.5 h-3.5" /> },
+    { key: "enddate", label: "Expiración", icon: <Calendar className="w-3.5 h-3.5" /> },
+    { key: "delete", label: "Eliminar", icon: <Trash2 className="w-3.5 h-3.5" />, danger: true },
+  ];
+
   return (
     <AuthGuard>
-      <div className="min-h-screen flex flex-col">
+      <div className="flex h-screen overflow-hidden">
         <Navbar />
-        <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-8">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 bg-yellow-500/20 rounded-xl flex items-center justify-center">
-              <Shield className="w-5 h-5 text-yellow-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">Panel de administración</h1>
-              <p className="text-gray-400 text-sm">Sesión como <span className="text-yellow-400">{currentUser?.username}</span></p>
-            </div>
-          </div>
 
-          {(error || success) && (
-            <div className={`rounded-xl px-4 py-3 mb-6 text-sm border flex items-start gap-2 ${
-              error
-                ? "bg-red-500/10 border-red-500/30 text-red-400"
-                : "bg-green-500/10 border-green-500/30 text-green-400"
-            }`}>
-              {error && <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />}
-              <span className="flex-1">{error || success}</span>
-              <button onClick={() => { setError(""); setSuccess(""); }} className="opacity-50 hover:opacity-100">✕</button>
-            </div>
-          )}
-
-          {/* Tabs */}
-          <div className="flex bg-gray-800 border border-gray-700 rounded-xl p-1 gap-1 mb-6">
-            <button
-              onClick={() => setTab("users")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === "users" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              Usuarios
-            </button>
-            <button
-              onClick={() => setTab("invid")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium transition-colors ${
-                tab === "invid" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"
-              }`}
-            >
-              <RefreshCw className="w-4 h-4" />
-              Invid Sync
-            </button>
-          </div>
-
-          {tab === "users" && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col gap-6">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm text-gray-400">ID de usuario (UUID)</label>
-                <input
-                  type="text"
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  placeholder="c47e6af2-1234-5678-9abc-def123456789"
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-blue-500 font-mono"
-                />
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+          <header className="flex-shrink-0 border-b border-surface-800 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-md bg-yellow-500/15 flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5 text-yellow-400" />
               </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-sm text-gray-400">Acción</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["toggle", "enddate", "delete"] as const).map((action) => (
-                    <button
-                      key={action}
-                      type="button"
-                      onClick={() => setUserAction(action)}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border text-sm font-medium transition-colors ${
-                        userAction === action
-                          ? action === "delete"
-                            ? "bg-red-600/20 border-red-500 text-red-300"
-                            : "bg-blue-600/20 border-blue-500 text-blue-300"
-                          : "border-gray-700 text-gray-500 hover:border-gray-500 hover:text-gray-300"
-                      }`}
-                    >
-                      {action === "toggle" && <ToggleRight className="w-5 h-5" />}
-                      {action === "enddate" && <Calendar className="w-5 h-5" />}
-                      {action === "delete" && <Trash2 className="w-5 h-5" />}
-                      {action === "toggle" && "Activar / Desactivar"}
-                      {action === "enddate" && "Fecha expiración"}
-                      {action === "delete" && "Eliminar"}
-                    </button>
-                  ))}
-                </div>
+              <div>
+                <h1 className="text-base font-semibold text-white">Administración</h1>
+                <p className="text-xs text-surface-500">
+                  Sesión como <span className="text-yellow-400 font-medium">{currentUser?.username}</span>
+                </p>
               </div>
+            </div>
+          </header>
 
-              {userAction === "toggle" && (
-                <div className="flex items-center justify-between bg-gray-800 rounded-xl p-4">
-                  <span className="text-sm text-gray-300">Estado del usuario</span>
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="max-w-2xl">
+              {/* Main tabs */}
+              <div className="flex border-b border-surface-800 mb-6">
+                {[
+                  { key: "users" as const, label: "Usuarios", icon: <Users className="w-3.5 h-3.5" /> },
+                  { key: "invid" as const, label: "Invid Sync", icon: <RefreshCw className="w-3.5 h-3.5" /> },
+                ].map(({ key, label, icon }) => (
                   <button
-                    type="button"
-                    onClick={() => setActiveStatus(!activeStatus)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeStatus
-                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                        : "bg-red-500/20 text-red-400 border border-red-500/30"
+                    key={key}
+                    onClick={() => setTab(key)}
+                    className={`flex items-center gap-1.5 text-sm font-medium px-4 py-2.5 border-b-2 -mb-px transition-all ${
+                      tab === key
+                        ? "border-brand-500 text-brand-400"
+                        : "border-transparent text-surface-500 hover:text-surface-300"
                     }`}
                   >
-                    {activeStatus
-                      ? <><ToggleRight className="w-4 h-4" /> Activo</>
-                      : <><ToggleLeft className="w-4 h-4" /> Inactivo</>
-                    }
+                    {icon}{label}
                   </button>
-                </div>
-              )}
+                ))}
+              </div>
 
-              {userAction === "enddate" && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm text-gray-400">Nueva fecha de expiración</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-blue-500 text-sm"
-                  />
-                </div>
-              )}
-
-              {userAction === "delete" && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                  <p className="text-sm text-red-300">
-                    Esta acción es irreversible. El usuario será eliminado permanentemente.
-                  </p>
-                </div>
-              )}
-
-              <form onSubmit={handleUserAction}>
-                <button
-                  type="submit"
-                  disabled={loading || !userId.trim()}
-                  className={`w-full font-semibold rounded-lg py-2.5 transition-colors flex items-center justify-center gap-2 text-sm disabled:opacity-50 ${
-                    userAction === "delete"
-                      ? "bg-red-600 hover:bg-red-500 text-white"
-                      : "bg-blue-600 hover:bg-blue-500 text-white"
-                  }`}
-                >
-                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {userAction === "toggle" && `${activeStatus ? "Activar" : "Desactivar"} usuario`}
-                  {userAction === "enddate" && "Actualizar fecha"}
-                  {userAction === "delete" && "Eliminar usuario"}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {tab === "invid" && (
-            <div className="flex flex-col gap-4">
-              {/* Sync */}
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                <h2 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 text-orange-400" />
-                  Sincronización manual
-                </h2>
-                <form onSubmit={handleInvidSync} className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-sm text-gray-400">ID de usuario (UUID)</label>
+              {/* Users tab */}
+              {tab === "users" && (
+                <div className="flex flex-col gap-5">
+                  <div>
+                    <label className="block text-xs font-medium text-surface-400 mb-1.5">ID de usuario (UUID)</label>
                     <input
                       type="text"
-                      value={invidUserId}
-                      onChange={(e) => setInvidUserId(e.target.value)}
-                      placeholder="UUID del usuario a sincronizar"
-                      required
-                      className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-blue-500 font-mono"
+                      value={userId}
+                      onChange={(e) => setUserId(e.target.value)}
+                      placeholder="c47e6af2-1234-5678-9abc-def123456789"
+                      className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 transition-all font-mono"
                     />
                   </div>
-                  <button
-                    type="submit"
-                    disabled={loading || !invidUserId.trim()}
-                    className="bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-semibold rounded-lg py-2.5 transition-colors flex items-center justify-center gap-2 text-sm"
-                  >
-                    {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Sincronizar Invid
-                  </button>
-                </form>
-              </div>
 
-              {/* Invid search */}
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                <h2 className="text-base font-semibold text-white mb-4">Buscar en cache local de Invid</h2>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={invidSearch}
-                    onChange={(e) => setInvidSearch(e.target.value)}
-                    placeholder="Nombre del producto"
-                    className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-blue-500"
-                  />
-                  <button
-                    type="button"
-                    disabled={loading || !invidSearch.trim()}
-                    onClick={async () => {
-                      setLoading(true); setError(""); setSuccess("");
-                      try {
-                        const res = await invidApi.search(invidSearch);
-                        setSuccess(`${res.data.length} producto(s) encontrado(s) en cache local`);
-                      } catch {
-                        setError("Error al buscar en Invid");
-                      } finally {
-                        setLoading(false);
-                      }
-                    }}
-                    className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white rounded-lg px-4 py-2.5 text-sm transition-colors"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
-                  </button>
+                  {/* Action sub-tabs */}
+                  <div className="flex gap-2">
+                    {userTabs.map(({ key, label, icon, danger }) => (
+                      <button
+                        key={key}
+                        onClick={() => setUserTab(key)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border transition-all ${
+                          userTab === key
+                            ? danger
+                              ? "bg-red-500/10 border-red-500/30 text-red-400"
+                              : "bg-brand-600/10 border-brand-500/30 text-brand-400"
+                            : "border-surface-700 text-surface-500 hover:text-surface-300 hover:border-surface-600"
+                        }`}
+                      >
+                        {icon}{label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Action-specific UI */}
+                  {userTab === "status" && (
+                    <div className="flex items-center gap-3 bg-surface-800 rounded-xl p-4">
+                      <p className="flex-1 text-sm text-surface-300">Estado del usuario</p>
+                      <button
+                        type="button"
+                        onClick={() => setActiveStatus(!activeStatus)}
+                        className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border transition-all ${
+                          activeStatus
+                            ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                            : "bg-red-500/10 border-red-500/25 text-red-400"
+                        }`}
+                      >
+                        {activeStatus
+                          ? <><ToggleRight className="w-4 h-4" />Activo</>
+                          : <><ToggleLeft className="w-4 h-4" />Inactivo</>
+                        }
+                      </button>
+                    </div>
+                  )}
+
+                  {userTab === "enddate" && (
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400 mb-1.5">Nueva fecha de expiración</label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
+                      />
+                    </div>
+                  )}
+
+                  {userTab === "delete" && (
+                    <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/15 rounded-xl p-4">
+                      <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-300 leading-relaxed">
+                        Esta acción es permanente e irreversible. El usuario y todos sus datos asociados serán eliminados.
+                      </p>
+                    </div>
+                  )}
+
+                  <form onSubmit={handleUserAction}>
+                    <button
+                      type="submit"
+                      disabled={loading || !userId.trim()}
+                      className={`w-full flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 transition-all disabled:opacity-40 ${
+                        userTab === "delete"
+                          ? "bg-red-600 hover:bg-red-500 text-white"
+                          : "bg-brand-600 hover:bg-brand-500 text-white"
+                      }`}
+                    >
+                      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {userTab === "status" && `${activeStatus ? "Activar" : "Desactivar"} usuario`}
+                      {userTab === "enddate" && "Actualizar fecha de expiración"}
+                      {userTab === "delete" && "Eliminar usuario"}
+                    </button>
+                  </form>
                 </div>
-              </div>
+              )}
+
+              {/* Invid tab */}
+              {tab === "invid" && (
+                <div className="flex flex-col gap-4">
+                  {/* Sync */}
+                  <div className="border border-surface-800 rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 bg-surface-900 border-b border-surface-800 flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 text-orange-400" />
+                      <h3 className="text-xs font-semibold text-surface-300">Sincronización manual</h3>
+                    </div>
+                    <form onSubmit={handleInvidSync} className="p-4 flex flex-col gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-surface-400 mb-1.5">ID de usuario</label>
+                        <input
+                          type="text"
+                          value={invidUserId}
+                          onChange={(e) => setInvidUserId(e.target.value)}
+                          placeholder="UUID del usuario"
+                          required
+                          className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 transition-all font-mono"
+                        />
+                      </div>
+                      {invidResults && (
+                        <div className="bg-surface-800 rounded-lg px-3.5 py-2.5 text-xs text-surface-300 font-mono">
+                          {invidResults}
+                        </div>
+                      )}
+                      <button
+                        type="submit"
+                        disabled={loading || !invidUserId.trim()}
+                        className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
+                      >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        Sincronizar
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Local search */}
+                  <div className="border border-surface-800 rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 bg-surface-900 border-b border-surface-800">
+                      <h3 className="text-xs font-semibold text-surface-300">Búsqueda en cache local</h3>
+                    </div>
+                    <form onSubmit={handleInvidSearch} className="p-4 flex gap-2">
+                      <input
+                        type="text"
+                        value={invidQuery}
+                        onChange={(e) => setInvidQuery(e.target.value)}
+                        placeholder="Nombre del producto"
+                        required
+                        className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 transition-all"
+                      />
+                      <button
+                        type="submit"
+                        disabled={loading || !invidQuery.trim()}
+                        className="flex items-center gap-1.5 bg-surface-700 hover:bg-surface-600 disabled:opacity-40 text-surface-200 text-sm font-medium rounded-lg px-4 py-2 transition-all"
+                      >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </main>
+          </div>
+        </div>
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-medium shadow-xl ${
+          toast.ok
+            ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+            : "bg-red-500/10 border-red-500/20 text-red-300"
+        }`}>
+          {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+          {toast.msg}
+        </div>
+      )}
     </AuthGuard>
   );
 }
