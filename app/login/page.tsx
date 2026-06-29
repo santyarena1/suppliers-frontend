@@ -26,6 +26,8 @@ export default function LoginPage() {
         username: payload.sub ?? username,
         role: payload.role ?? payload.roles?.[0] ?? "ROLE_USER",
         id: payload.userId ?? payload.id ?? "",
+        email: payload.email ?? undefined,
+        brandId: payload.brandId ?? undefined,
       });
       router.push("/search");
     } catch (err: unknown) {

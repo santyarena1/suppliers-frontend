@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { clearSession, getUser, isAdmin } from "@/lib/auth";
-import { Search, Key, Users, LogOut, BarChart2, ShoppingCart, Menu, X, Home, Activity } from "lucide-react";
+import { clearSession, getUser, isAdmin, isBrand, isUser } from "@/lib/auth";
+import { Search, Key, Users, LogOut, BarChart2, ShoppingCart, Menu, X, Home, Activity, Building2, Shield } from "lucide-react";
 import { useCart } from "@/lib/cart";
 
 export default function Navbar() {
@@ -27,8 +27,13 @@ export default function Navbar() {
     { href: "/search", label: "Búsqueda", icon: Search, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false },
     { href: "/cart", label: "Carrito", icon: ShoppingCart, badge: totalCount > 0 ? totalCount : undefined, sublabel: providerCount > 0 ? `${providerCount} prov.` : undefined, exact: false },
     { href: "/credentials", label: "Credenciales", icon: Key, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false },
+    ...(isUser() || isAdmin() ? [{ href: "/marcas", label: "Portal de Marcas", icon: Building2, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false }] : []),
+    ...(isBrand() ? [{ href: "/marca", label: "Panel de Marca", icon: Building2, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false }] : []),
     { href: "/diagnostics", label: "Diagnóstico", icon: Activity, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false },
-    ...(isAdmin() ? [{ href: "/admin", label: "Administración", icon: Users, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false }] : []),
+    ...(isAdmin() ? [
+      { href: "/admin", label: "Administración", icon: Users, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false },
+      { href: "/admin/marcas", label: "Marcas (Admin)", icon: Shield, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false },
+    ] : []),
   ];
 
   const SidebarContent = (
@@ -82,6 +87,9 @@ export default function Navbar() {
             <p className="text-xs font-medium text-surface-100 truncate">{user?.username}</p>
             {user?.role === "ROLE_ADMIN" && (
               <p className="text-[10px] text-brand-400 font-medium">Administrador</p>
+            )}
+            {user?.role === "ROLE_BRAND" && (
+              <p className="text-[10px] text-violet-400 font-medium">Marca</p>
             )}
           </div>
           <button

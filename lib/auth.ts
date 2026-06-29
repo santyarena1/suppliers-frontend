@@ -19,14 +19,24 @@ export function getToken(): string | null {
   return localStorage.getItem("token");
 }
 
-export function getUser(): { username: string; role: string; id: string } | null {
+export type UserRole = "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
+
+export interface SessionUser {
+  username: string;
+  role: UserRole;
+  id: string;
+  email?: string;
+  brandId?: string;
+}
+
+export function getUser(): SessionUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem("user");
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
 }
 
-export function saveSession(token: string, user: { username: string; role: string; id: string }) {
+export function saveSession(token: string, user: SessionUser) {
   localStorage.setItem("token", token);
   localStorage.setItem("user", JSON.stringify(user));
   writeCookie(COOKIE, "1", ONE_DAY);
@@ -40,4 +50,16 @@ export function clearSession() {
 
 export function isAdmin(): boolean {
   return getUser()?.role === "ROLE_ADMIN";
+}
+
+export function isBrand(): boolean {
+  return getUser()?.role === "ROLE_BRAND";
+}
+
+export function isUser(): boolean {
+  return getUser()?.role === "ROLE_USER";
+}
+
+export function getBrandId(): string | null {
+  return getUser()?.brandId ?? null;
 }

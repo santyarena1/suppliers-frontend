@@ -41,7 +41,7 @@ export interface CredentialResponse {
 export interface RegisterResponse {
   id: string;
   username: string;
-  role: "ROLE_USER" | "ROLE_ADMIN";
+  role: "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
 }
 
 // --- Auth ---
