@@ -12,6 +12,7 @@ import { UsersModule } from "./users/users.module";
 import { CredentialsModule } from "./credentials/credentials.module";
 import { CartModule } from "./cart/cart.module";
 import { HealthModule } from "./health/health.module";
+import { ProvidersModule } from "./providers/providers.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { HealthModule } from "./health/health.module";
     CredentialsModule,
     CartModule,
     HealthModule,
+    ProvidersModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -1,0 +1,634 @@
+openapi: 3.0.3
+
+info:
+  title: APIv1 Invid
+  version: "1.0.0"
+  description: |
+    API de consulta de productos y autenticacion de **Invid Computers**.
+
+    Permite autenticar integradores y consultar el catalogo de articulos en tiempo real.
+    Todas las respuestas se devuelven en formato `application/json`.
+
+    ## Autenticacion
+
+    La autenticacion se realiza mediante tokens **JWT (Bearer)**. Para operar:
+
+    1. Hacer `POST /api/v1/auth.php` con credenciales validas.
+    2. Usar el `access_token` recibido en el header de cada request protegido:
+    ```
+    Authorization: Bearer <access_token>
+    ```
+    3. El token tiene una vigencia de **24 horas** (`expiration_time: 86400` segundos).
+
+    ## Notas operativas
+
+    - `GET /api/v1/articulo.php` tiene un limite de **50 requests por hora** por usuario autenticado.
+      Al superarlo, la API devuelve `429` con headers `Retry-After` y `X-RateLimit-*`.
+    - El endpoint de articulos devuelve una unica imagen principal en `IMAGE_URL`.
+      La galeria secundaria del producto no se expone actualmente en esta API.
+    - El listado no filtra por defecto articulos con `PRICE: "0.00"` ni articulos sin stock.
+      Cada integrador debe decidir si los consume como catalogo general o si los excluye
+      para escenarios de compra inmediata.
+
+servers:
+  - url: /
+    description: Invid
+
+tags:
+  - name: Auth
+    description: Autenticacion y emision de tokens JWT.
+  - name: Articulos
+    description: Consulta de articulos; cada pagina devuelve hasta 100 resultados.
+
+paths:
+
+  /api/v1/auth.php:
+    post:
+      tags:
+        - Auth
+      summary: Generar un token JWT
+      description: |
+        Autentica al integrador y devuelve un token JWT valido por 24 horas.
+
+        El token retornado debe incluirse como `Authorization: Bearer <access_token>`
+        en todos los endpoints que requieren autenticacion.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRequest'
+            examples:
+              login:
+                summary: Ejemplo de login
+                value:
+                  username: api-user
+                  password: secret
+      responses:
+        '201':
+          description: Credenciales validas. Token generado correctamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccess'
+              example:
+                status: 1
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo.signature
+                token_type: Bearer
+                expiration_time: 86400
+                username: api-user
+        '401':
+          description: Credenciales invalidas o faltantes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 0
+                message: Incorrect credentials.
+        '405':
+          description: Metodo HTTP no permitido. Este endpoint acepta unicamente POST y OPTIONS.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error interno inesperado en el servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Modulo API deshabilitado en el sistema.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/articulo.php:
+    get:
+      tags:
+        - Articulos
+      summary: Consultar el catalogo de articulos
+      description: |
+        Devuelve hasta 100 articulos por pagina segun la lista de precios y permisos
+        asociados al token.
+
+        - Si se envia `id`, se ignora `offset` y se devuelve ese articulo puntual
+          (campo `data` como objeto). Si el articulo no existe, retorna `404`.
+        - Si no se envia `id`, se entrega la primera pagina del catalogo (hasta 100 articulos)
+          y un campo `next_page_url` cuando hay mas datos (campo `data` como array).
+
+        ### Consideraciones de integracion
+
+        - El listado no filtra por defecto articulos sin stock ni articulos con `PRICE: "0.00"`.
+          Se recomienda filtrarlos del lado del integrador si el caso de uso es compra inmediata.
+        - La API permite excluir esos casos via query params:
+          - `exclude_zero_price=1`
+          - `exclude_zero_stock=1`
+          - `published_only=1`
+        - `IMAGE_URL` corresponde a la imagen principal del articulo. La galeria secundaria
+          no se expone en esta version de la API.
+        - `CATEGORIES` expone todas las categorias visibles asignadas al articulo,
+          incluyendo la categoria padre cuando exista.
+        - `STOCK` solo se incluye en la respuesta cuando el usuario tiene permiso para verlo.
+        - Limite de uso: **50 requests por hora** por usuario autenticado.
+          Al superarlo se retorna `429` con headers de rate limit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/ExcludeZeroPrice'
+        - $ref: '#/components/parameters/ExcludeZeroStock'
+        - $ref: '#/components/parameters/PublishedOnly'
+      responses:
+        '200':
+          description: Resultado exitoso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArticuloResponse'
+              examples:
+                listado:
+                  summary: Pagina de resultados (sin `id`)
+                  value:
+                    status: 1
+                    data:
+                      - ID: "ART-001"
+                        TITLE: Notebook 14
+                        PRICE: "150000.00"
+                        CURRENCY: ARS
+                        PART_NUMBER: NB-14-2024
+                        EAN: "07791234567890"
+                        BRAND: Marca
+                        DESCRIPTION: Equipo portatil 14 pulgadas.
+                        LONG_DESCRIPTION: Notebook con pantalla de 14 pulgadas y bateria de larga duracion.
+                        STOCK_STATUS: Disponible
+                        IMAGE_URL: https://example.com/images/ART-001.jpg
+                        CATEGORY_ID: "10"
+                        CATEGORY: Notebooks
+                        CATEGORIES:
+                          - ID: "10"
+                            NAME: Notebooks
+                            IS_PRIMARY: true
+                            PARENT:
+                              ID: "1"
+                              NAME: Informatica
+                        TAGS:
+                          destacado:
+                            - Nuevo
+                        HEIGHT: 2.1
+                        WIDTH: 33.0
+                        LENGTH: 24.0
+                        VOLUME: 1660.8
+                        WEIGHT: 1.4
+                        DIMENSIONS_UNIT: Cm
+                        WEIGHT_UNIT: Kg
+                    next_page_url: https://example.com/api/v1/articulo.php?offset=100
+                detalle:
+                  summary: Consulta por ID (con `id`)
+                  value:
+                    status: 1
+                    data:
+                      ID: "ART-002"
+                      TITLE: Monitor 24
+                      PRICE: "120000.00"
+                      CURRENCY: ARS
+                      PART_NUMBER: MN-24-2024
+                      EAN: "7791234567890"
+                      BRAND: Marca
+                      DESCRIPTION: Monitor 24 pulgadas.
+                      LONG_DESCRIPTION: Monitor de 24 pulgadas con panel IPS y resolucion Full HD.
+                      STOCK_STATUS: Consultar
+                      STOCK: 8
+                      IMAGE_URL: https://example.com/images/ART-002.jpg
+                      CATEGORY_ID: "12"
+                      CATEGORY: Monitores
+                      CATEGORIES:
+                        - ID: "12"
+                          NAME: Monitores
+                          IS_PRIMARY: true
+                          PARENT:
+                            ID: "3"
+                            NAME: Perifericos
+                      TAGS: {}
+                      HEIGHT: 45.0
+                      WIDTH: 55.0
+                      LENGTH: 18.0
+                      VOLUME: 44550
+                      WEIGHT: 4.2
+                      DIMENSIONS_UNIT: Cm
+                      WEIGHT_UNIT: Kg
+        '400':
+          description: |
+            Parametros invalidos, por ejemplo `offset` fuera de rango sin resultados,
+            o articulo inexistente cuando se solicita una pagina distinta a la inicial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token faltante, invalido o usuario sin rol habilitado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No se encontro el articulo solicitado (solo aplica cuando se usa el parametro `id`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '405':
+          description: Metodo HTTP no permitido. Este endpoint acepta unicamente GET y OPTIONS.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Se excedio el limite de 50 requests por hora para el usuario autenticado.
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Cuota maxima de requests en la ventana activa.
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Requests restantes en la ventana activa.
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+              description: Timestamp Unix en el que se reinicia la ventana actual.
+            Retry-After:
+              schema:
+                type: integer
+              description: Segundos a esperar antes de reintentar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: 0
+                message: Rate limit exceeded for GET /api/v1/articulo.php
+        '500':
+          description: Error interno inesperado en el servidor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Modulo API deshabilitado en el sistema.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtenido mediante `POST /api/v1/auth.php`. Vigencia de 24 horas.
+
+  parameters:
+    Id:
+      name: id
+      in: query
+      description: |
+        Codigo de articulo. Si se envia, se ignora `offset` y se devuelve solo ese articulo
+        (campo `data` como objeto en lugar de array). Si no existe, retorna `404`.
+      required: false
+      schema:
+        type: string
+    Offset:
+      name: offset
+      in: query
+      description: |
+        Desplazamiento para el listado paginado. El tamano de pagina es 100 articulos.
+        El valor para la pagina siguiente se obtiene del campo `next_page_url` en la respuesta.
+        Si se envia `id`, este parametro se ignora.
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    ExcludeZeroPrice:
+      name: exclude_zero_price
+      in: query
+      description: |
+        Cuando vale `1`, excluye del listado articulos cuyo precio calculado para la lista
+        de precios del usuario sea `0`.
+      required: false
+      schema:
+        type: integer
+        enum: [1]
+    ExcludeZeroStock:
+      name: exclude_zero_stock
+      in: query
+      description: |
+        Cuando vale `1`, excluye del listado articulos cuyo stock base (`nArtStk`) sea `0`
+        o menor.
+      required: false
+      schema:
+        type: integer
+        enum: [1]
+    PublishedOnly:
+      name: published_only
+      in: query
+      description: |
+        Cuando vale `1`, explicita que solo se desean articulos publicados.
+        En la implementacion actual este endpoint ya devuelve articulos visibles
+        y asociados a categorias publicadas, por lo que este filtro es redundante
+        pero se soporta como parte del contrato de integracion.
+      required: false
+      schema:
+        type: integer
+        enum: [1]
+
+  schemas:
+
+    AuthRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          description: Nombre de usuario del integrador.
+          example: api-user
+        password:
+          type: string
+          format: password
+          description: Contrasena del integrador.
+          example: secret
+
+    AuthSuccess:
+      type: object
+      required:
+        - status
+        - access_token
+        - token_type
+        - expiration_time
+        - username
+      properties:
+        status:
+          type: integer
+          enum: [1]
+          description: "`1` indica exito."
+        access_token:
+          type: string
+          description: "Token JWT. Incluirlo como `Authorization: Bearer <access_token>` en requests posteriores."
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo.signature
+        token_type:
+          type: string
+          description: Tipo de token. Siempre `Bearer`.
+          example: Bearer
+        expiration_time:
+          type: integer
+          description: "Vigencia del token en segundos. Valor actual: 86400 (24 horas)."
+          example: 86400
+        username:
+          type: string
+          description: Nombre de usuario autenticado.
+          example: api-user
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: integer
+          enum: [0]
+          description: "`0` indica error."
+        message:
+          type: string
+          description: Descripcion del error.
+          example: Incorrect credentials.
+
+    ArticuloResponse:
+      type: object
+      required:
+        - status
+        - data
+      properties:
+        status:
+          type: integer
+          enum: [1]
+          description: "`1` indica exito."
+        data:
+          description: |
+            Objeto unico cuando se consulta por `id`; array de articulos cuando es un listado.
+          oneOf:
+            - $ref: '#/components/schemas/Articulo'
+            - type: array
+              items:
+                $ref: '#/components/schemas/Articulo'
+        next_page_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            URL de la siguiente pagina cuando el listado devuelve 100 o mas resultados.
+            `null` o ausente cuando no hay mas paginas.
+
+    Articulo:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Codigo interno del articulo (`cArtCod`).
+          example: "ART-001"
+        TITLE:
+          type: string
+          description: Descripcion corta del articulo.
+          example: Notebook 14
+        PRICE:
+          type: string
+          description: |
+            Precio calculado para la lista de precios del usuario. Puede estar formateado
+            segun la configuracion numerica del sistema. Puede ser `"0.00"` para articulos
+            sin precio asignado; filtrar del lado del integrador si corresponde.
+          example: "150000.00"
+        CURRENCY:
+          type: string
+          description: Simbolo de moneda de la lista de precios aplicada.
+          example: ARS
+        PART_NUMBER:
+          type: string
+          nullable: true
+          description: Referencia del fabricante (`cArtDesPac`).
+          example: NB-14-2024
+        EAN:
+          type: string
+          nullable: false
+          description: |
+            Codigo de barras recibido desde `CodeBars` de SAP. Siempre se incluye
+            como cadena y se devuelve vacio (`""`) cuando el articulo no tiene valor.
+          example: "07791234567890"
+        BRAND:
+          type: string
+          nullable: true
+          description: Marca del articulo.
+          example: Marca
+        DESCRIPTION:
+          type: string
+          nullable: true
+          description: Descripcion corta en texto plano.
+          example: Equipo portatil 14 pulgadas.
+        LONG_DESCRIPTION:
+          type: string
+          nullable: true
+          description: Descripcion extendida en texto plano.
+          example: Notebook con pantalla de 14 pulgadas y bateria de larga duracion.
+        STOCK_STATUS:
+          type: string
+          description: |
+            Estado de stock calculado con los semaforos configurados en el sistema
+            (ej. verde / amarillo / rojo, o las etiquetas equivalentes configuradas).
+          example: Disponible
+        STOCK:
+          type: number
+          nullable: true
+          description: |
+            Valor numerico de stock disponible. Solo se incluye en la respuesta cuando
+            el usuario tiene permiso para ver stock.
+          example: 8
+        IVA_PERCENT:
+          type: number
+          format: float
+          description: Porcentaje de IVA aplicado al articulo.
+          example: 21.0
+        IVA_VALUE:
+          type: string
+          description: Monto de IVA calculado y formateado.
+          example: "31500.00"
+        INTERNAL_TAX_PERCENT:
+          type: number
+          format: float
+          description: Porcentaje de impuesto interno aplicado al articulo.
+          example: 0.0
+        INTERNAL_TAX_VALUE:
+          type: string
+          description: Monto de impuesto interno calculado y formateado.
+          example: "0.00"
+        FINAL_PRICE:
+          type: string
+          description: Precio final formateado (precio base + IVA + impuestos internos).
+          example: "181500.00"
+        IMAGE_URL:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            URL de la imagen principal del articulo. Se devuelve una unica imagen por articulo.
+            La galeria secundaria del producto no se expone actualmente en esta API.
+          example: https://example.com/images/ART-001.jpg
+        CATEGORY:
+          type: string
+          nullable: true
+          description: Nombre de la categoria principal (si existe) o secundaria.
+          example: Notebooks
+        CATEGORY_ID:
+          type: string
+          nullable: true
+          description: Codigo de la categoria principal (si existe) o secundaria.
+          example: "10"
+        CATEGORIES:
+          type: array
+          description: |
+            Todas las categorias visibles asignadas al articulo, incluyendo el indicador
+            de principal (`IS_PRIMARY`) y su categoria padre cuando exista.
+          items:
+            $ref: '#/components/schemas/ArticuloCategory'
+        TAGS:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: |
+            Etiquetas del articulo agrupadas por nombre de grupo.
+            Objeto vacio `{}` cuando el articulo no tiene etiquetas asignadas.
+          example:
+            destacado:
+              - Nuevo
+        HEIGHT:
+          type: number
+          format: float
+          nullable: true
+          description: Alto del articulo en la unidad indicada por `DIMENSIONS_UNIT`.
+          example: 2.1
+        WIDTH:
+          type: number
+          format: float
+          nullable: true
+          description: Ancho del articulo en la unidad indicada por `DIMENSIONS_UNIT`.
+          example: 33.0
+        LENGTH:
+          type: number
+          format: float
+          nullable: true
+          description: Largo del articulo en la unidad indicada por `DIMENSIONS_UNIT`.
+          example: 24.0
+        VOLUME:
+          type: number
+          format: float
+          nullable: true
+          description: Volumen del articulo (calculado o informado).
+          example: 1660.8
+        WEIGHT:
+          type: number
+          format: float
+          nullable: true
+          description: Peso del articulo en la unidad indicada por `WEIGHT_UNIT`.
+          example: 1.4
+        DIMENSIONS_UNIT:
+          type: string
+          nullable: true
+          description: Unidad de medida para alto, ancho y largo (por defecto `Cm`).
+          example: Cm
+        WEIGHT_UNIT:
+          type: string
+          nullable: true
+          description: Unidad de peso (ej. `Kg` o el simbolo configurado en `peso_unidades`).
+          example: Kg
+
+    ArticuloCategory:
+      type: object
+      properties:
+        ID:
+          type: string
+          description: Codigo de la categoria asignada.
+          example: "10"
+        NAME:
+          type: string
+          description: Nombre de la categoria asignada.
+          example: Notebooks
+        IS_PRIMARY:
+          type: boolean
+          description: Indica si la categoria esta marcada como principal para el articulo.
+          example: true
+        PARENT:
+          allOf:
+            - $ref: '#/components/schemas/ArticuloCategoryParent'
+          nullable: true
+
+    ArticuloCategoryParent:
+      type: object
+      description: Categoria padre en la jerarquia de categorias.
+      properties:
+        ID:
+          type: string
+          description: Codigo de la categoria padre.
+          example: "1"
+        NAME:
+          type: string
+          description: Nombre de la categoria padre.
+          example: Informatica
