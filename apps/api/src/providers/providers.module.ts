@@ -3,6 +3,7 @@ import { CredentialsModule } from "../credentials/credentials.module";
 import { ProvidersController } from "./providers.controller";
 import { ProvidersService } from "./providers.service";
 import { ProviderRegistry } from "./provider-registry";
+import { SyncSchedulerService } from "./sync-scheduler.service";
 import { ElitAdapter } from "./adapters/elit.adapter";
 import { InvidAdapter } from "./adapters/invid.adapter";
 import { AirAdapter } from "./adapters/air.adapter";
@@ -15,6 +16,7 @@ import { NewBytesAdapter } from "./adapters/new-bytes.adapter";
   providers: [
     ProvidersService,
     ProviderRegistry,
+    SyncSchedulerService,
     ElitAdapter,
     InvidAdapter,
     AirAdapter,

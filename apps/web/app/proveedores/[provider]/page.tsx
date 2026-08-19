@@ -6,13 +6,39 @@ import Image from "next/image";
 import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
-import { ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, providersApi, searchApi } from "@/lib/api";
+import {
+  ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
+  MissingProductAction, ZeroStockAction, providersApi, searchApi
+} from "@/lib/api";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
+import { SKU_PREFIX } from "@/lib/providerMeta";
 import {
   ArrowLeft, Boxes, CheckCircle2, ImageOff, KeyRound,
-  Loader2, PackageCheck, RefreshCw, Search, XCircle
+  Loader2, PackageCheck, RefreshCw, Save, Search, Settings, XCircle
 } from "lucide-react";
+
+const MISSING_ACTION_LABELS: Record<MissingProductAction, string> = {
+  KEEP: "No hacer nada",
+  OUT_OF_STOCK: "Marcar sin stock",
+  HIDE: "Ocultar del catálogo",
+  DELETE: "Eliminar de nuestra base",
+};
+
+const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
+  KEEP: "Mostrar igual",
+  HIDE: "Ocultar del catálogo",
+  DELETE: "Eliminar de nuestra base",
+};
+
+const INTERVAL_OPTIONS = [
+  { minutes: 15, label: "Cada 15 minutos" },
+  { minutes: 30, label: "Cada 30 minutos" },
+  { minutes: 60, label: "Cada 1 hora" },
+  { minutes: 180, label: "Cada 3 horas" },
+  { minutes: 360, label: "Cada 6 horas" },
+  { minutes: 1440, label: "Cada 24 horas" },
+];
 
 export default function ProviderDetailPage({ params }: { params: Promise<{ provider: string }> }) {
   const { provider: raw } = use(params);
@@ -20,7 +46,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const valid = ALL_PROVIDERS.includes(provider);
   const implemented = IMPLEMENTED_PROVIDERS.includes(provider);
 
-  const [tab, setTab] = useState<"sync" | "catalog">("sync");
+  const [tab, setTab] = useState<"sync" | "catalog" | "config">("sync");
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -30,6 +56,45 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [results, setResults] = useState<ProductDTO[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  const [config, setConfig] = useState<ProviderConfig | null>(null);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [configSaved, setConfigSaved] = useState(false);
+
+  async function loadConfig() {
+    if (!implemented) return;
+    setLoadingConfig(true);
+    try {
+      const res = await providersApi.getConfig(provider);
+      setConfig(res.data);
+    } catch {
+      setConfig(null);
+    } finally {
+      setLoadingConfig(false);
+    }
+  }
+
+  async function handleSaveConfig(e: React.FormEvent) {
+    e.preventDefault();
+    if (!config) return;
+    setSavingConfig(true);
+    setConfigSaved(false);
+    try {
+      const res = await providersApi.updateConfig(provider, {
+        enabled: config.enabled,
+        syncIntervalMinutes: config.syncIntervalMinutes,
+        missingProductAction: config.missingProductAction,
+        zeroStockAction: config.zeroStockAction,
+        priceMarkupPercent: Number(config.priceMarkupPercent) || 0,
+      });
+      setConfig(res.data);
+      setConfigSaved(true);
+      setTimeout(() => setConfigSaved(false), 3000);
+    } finally {
+      setSavingConfig(false);
+    }
+  }
 
   async function loadStatus() {
     if (!implemented) return;
@@ -44,7 +109,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     }
   }
 
-  useEffect(() => { loadStatus(); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadStatus(); loadConfig(); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSync() {
     setSyncing(true);
@@ -152,6 +217,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 <div className="flex border-b border-surface-800">
                   {[
                     { key: "sync" as const, label: "Sincronización" },
+                    { key: "config" as const, label: "Configuración" },
                     { key: "catalog" as const, label: "Catálogo" },
                   ].map(({ key, label }) => (
                     <button
@@ -198,6 +264,127 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         </div>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {tab === "config" && (
+                  <div className="max-w-xl">
+                    {loadingConfig || !config ? (
+                      <div className="flex items-center justify-center py-16">
+                        <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSaveConfig} className="flex flex-col gap-5">
+                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <Settings className="w-4 h-4 text-brand-700 dark:text-brand-400" />
+                            Sincronización automática
+                          </div>
+
+                          <div className="flex items-center justify-between bg-surface-800 rounded-lg px-3.5 py-3">
+                            <div>
+                              <p className="text-sm text-surface-200">Sincronización activa</p>
+                              <p className="text-xs text-surface-500">Se sincroniza solo, según el intervalo, sin que apretés el botón.</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setConfig({ ...config, enabled: !config.enabled })}
+                              className={`w-10 rounded-full relative transition-colors flex-shrink-0 ${config.enabled ? "bg-brand-600" : "bg-surface-600"}`}
+                              style={{ height: 22 }}
+                            >
+                              <span className={`absolute top-0.5 bg-white rounded-full transition-all ${config.enabled ? "left-[22px]" : "left-0.5"}`} style={{ width: 18, height: 18 }} />
+                            </button>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-surface-400 mb-1.5">Intervalo de sincronización</label>
+                            <select
+                              value={config.syncIntervalMinutes}
+                              onChange={(e) => setConfig({ ...config, syncIntervalMinutes: Number(e.target.value) })}
+                              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
+                            >
+                              {INTERVAL_OPTIONS.map((o) => (
+                                <option key={o.minutes} value={o.minutes}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-surface-400 mb-1.5">Prefijo de SKU</label>
+                            <input
+                              disabled
+                              value={SKU_PREFIX[provider] ?? "—"}
+                              className="w-full bg-surface-800/50 border border-surface-800 rounded-lg px-3.5 py-2.5 text-sm text-surface-500 font-mono cursor-not-allowed"
+                            />
+                            <p className="text-[11px] text-surface-500 mt-1">Fijo del proveedor, no editable.</p>
+                          </div>
+                        </div>
+
+                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                          <div className="text-sm font-semibold text-white">Precio</div>
+                          <div>
+                            <label className="block text-xs font-medium text-surface-400 mb-1.5">Markup sobre el precio del proveedor (%)</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              value={config.priceMarkupPercent}
+                              onChange={(e) => setConfig({ ...config, priceMarkupPercent: e.target.value })}
+                              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
+                            />
+                            <p className="text-[11px] text-surface-500 mt-1">Se aplica al guardar cada producto. Ej: 10 = precio del proveedor + 10%.</p>
+                          </div>
+                        </div>
+
+                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                          <div className="text-sm font-semibold text-white">Manejo de stock y catálogo</div>
+                          <div>
+                            <label className="block text-xs font-medium text-surface-400 mb-1.5">Producto con stock 0 en la última sync</label>
+                            <select
+                              value={config.zeroStockAction}
+                              onChange={(e) => setConfig({ ...config, zeroStockAction: e.target.value as ZeroStockAction })}
+                              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
+                            >
+                              {(Object.keys(ZERO_STOCK_ACTION_LABELS) as ZeroStockAction[]).map((k) => (
+                                <option key={k} value={k}>{ZERO_STOCK_ACTION_LABELS[k]}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-surface-400 mb-1.5">Producto que dejó de venir en la última sync</label>
+                            <select
+                              value={config.missingProductAction}
+                              onChange={(e) => setConfig({ ...config, missingProductAction: e.target.value as MissingProductAction })}
+                              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
+                            >
+                              {(Object.keys(MISSING_ACTION_LABELS) as MissingProductAction[]).map((k) => (
+                                <option key={k} value={k}>{MISSING_ACTION_LABELS[k]}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {config.lastSyncError && (
+                          <div className="flex items-start gap-2.5 bg-red-500/8 border border-red-500/20 text-red-400 text-xs rounded-lg px-3.5 py-2.5">
+                            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                            Último error de sincronización: {config.lastSyncError}
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={savingConfig}
+                          className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
+                        >
+                          {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          {savingConfig ? "Guardando..." : "Guardar configuración"}
+                        </button>
+                        {configSaved && (
+                          <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-emerald-500/8 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+                            <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Configuración guardada
+                          </div>
+                        )}
+                      </form>
+                    )}
                   </div>
                 )}
 

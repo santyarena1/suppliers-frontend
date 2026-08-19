@@ -72,6 +72,7 @@ model ProviderSyncCache {
   stock       Int?
   imageUrl    String?
   locationAir String?
+  active      Boolean   @default(true)
   raw         Json
   syncedAt    DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -79,6 +80,38 @@ model ProviderSyncCache {
   @@unique([provider, externalId])
   @@index([provider, name])
   @@index([provider, sku])
+}
+
+enum MissingProductAction {
+  KEEP
+  OUT_OF_STOCK
+  HIDE
+  DELETE
+}
+
+enum ZeroStockAction {
+  KEEP
+  HIDE
+  DELETE
+}
+
+// Configuración de sincronización por usuario y proveedor — equivalente a la
+// pestaña "Configuración" de cada proveedor en AcuStock.
+model ProviderSyncConfig {
+  id                    String                @id @default(uuid())
+  userId                String
+  provider              String
+  enabled               Boolean               @default(false)
+  syncIntervalMinutes   Int                   @default(60)
+  missingProductAction  MissingProductAction  @default(KEEP)
+  zeroStockAction       ZeroStockAction       @default(KEEP)
+  priceMarkupPercent    Decimal               @default(0) @db.Decimal(6, 2)
+  lastSyncedAt          DateTime?
+  lastSyncError         String?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([userId, provider])
 }
 
 model CartItem {

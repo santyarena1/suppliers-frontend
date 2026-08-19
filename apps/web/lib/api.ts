@@ -137,11 +137,29 @@ export interface ProviderStatus {
   lastSyncedAt: string | null;
 }
 
+export type MissingProductAction = "KEEP" | "OUT_OF_STOCK" | "HIDE" | "DELETE";
+export type ZeroStockAction = "KEEP" | "HIDE" | "DELETE";
+
+export interface ProviderConfig {
+  provider: Provider;
+  enabled: boolean;
+  syncIntervalMinutes: number;
+  missingProductAction: MissingProductAction;
+  zeroStockAction: ZeroStockAction;
+  priceMarkupPercent: number | string;
+  lastSyncedAt: string | null;
+  lastSyncError: string | null;
+}
+
 export const providersApi = {
   sync: (providerName: Provider) =>
     api.post<ProviderSyncResult>(`/providers/${providerName}/sync`),
   status: (providerName: Provider) =>
     api.get<ProviderStatus>(`/providers/${providerName}/status`),
+  getConfig: (providerName: Provider) =>
+    api.get<ProviderConfig>(`/providers/${providerName}/config`),
+  updateConfig: (providerName: Provider, config: Partial<ProviderConfig>) =>
+    api.put<ProviderConfig>(`/providers/${providerName}/config`, config),
 };
 
 // --- Admin / Users ---
