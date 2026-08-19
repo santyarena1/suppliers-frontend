@@ -17,15 +17,47 @@ interface AirProduct {
   part_number?: string;
   precio: number;
   moneda: string;
+  impuesto_iva?: { alicuota: number };
+  estado?: { id: string; name: string };
   rubro?: string;
   grupo?: string;
+  grupo_name?: string;
   garantia?: string;
+  ean?: string;
+  upc?: string;
   ros?: AirBranchStock;
   mza?: AirBranchStock;
   cba?: AirBranchStock;
   lug?: AirBranchStock;
   air?: AirBranchStock;
 }
+
+/**
+ * Mapeo manual campo-a-campo de Air Computers hacia nuestro esquema
+ * unificado. Editar acá si Air cambia un nombre de campo.
+ *
+ * IMPORTANTE: `/q=articulos` no trae imagen ni descripción larga — esas
+ * viven en un endpoint separado (`/q=get_meta&codiart=...`) que hoy no
+ * llamamos (habría que pedirlo producto por producto). Por eso quedan
+ * undefined acá, no es un bug de mapeo.
+ */
+const FIELD_MAP: { [K in keyof NormalizedProduct]?: (p: AirProduct) => NormalizedProduct[K] } = {
+  externalId: (p) => p.codigo as never,
+  partNumber: (p) => (p.part_number || undefined) as never,
+  ean: (p) => (p.ean || p.upc || undefined) as never,
+  name: (p) => p.descrip as never,
+  category: (p) => p.rubro as never,
+  subcategory: (p) => (p.grupo_name || p.grupo) as never,
+  price: (p) => p.precio as never,
+  currency: (p) => (p.moneda === "DOL" ? "USD" : p.moneda) as never,
+  ivaPercent: (p) => p.impuesto_iva?.alicuota as never,
+  stockStatus: (p) => p.estado?.name as never,
+  warranty: (p) => p.garantia as never,
+  stock: (p) => sumStock(p) as never,
+  locationAir: (p) => mainBranch(p)?.name as never,
+  // Sin equivalente en /q=articulos: imageUrl, description, longDescription,
+  // finalPrice, weight/dimensiones, tags — necesitan /q=get_meta aparte.
+};
 
 @Injectable()
 export class AirAdapter implements ProviderAdapter {
@@ -45,11 +77,17 @@ export class AirAdapter implements ProviderAdapter {
     const token = login.data.token;
     if (!token) throw new BadGatewayException("Air no devolvió token de sesión");
 
-    // La API no documenta paginación para /q=articulos: se trae el catálogo
-    // completo en una sola respuesta.
+    // La cuenta tiene un límite real de 1 consulta cada 5 minutos en
+    // /q=articulos ("Too many queries detected" si se llama más seguido).
+    // AcuStock usa un endpoint de catálogo masivo distinto que no tenemos
+    // documentado; por ahora traemos todo en una sola llamada grande.
     const { data } = await axios.post<AirProduct[]>(
       BASE_URL,
-      { rubro: "", grupo: "", categoria: "", estado: "", texto: "", orden: "DA", stock: "T", precio_final: false },
+      {
+        rubro: "", grupo: "", categoria: "", estado: "", texto: "",
+        orden: "DA", stock: "T", precio_final: false,
+        pagina: 1, cantidad: 10000,
+      },
       {
         params: { q: "articulos" },
         headers: { Authorization: `Bearer ${token}` },
@@ -57,25 +95,27 @@ export class AirAdapter implements ProviderAdapter {
       }
     );
 
-    await onPage((data ?? []).map(mapProduct));
+    await onPage((data ?? []).map((p) => mapProduct(p)));
   }
 }
 
-function mapProduct(p: AirProduct): NormalizedProduct {
-  const branches = [p.ros, p.mza, p.cba, p.lug, p.air].filter((b): b is AirBranchStock => Boolean(b));
-  const totalStock = branches.reduce((sum, b) => sum + (b.disponible || 0), 0);
-  const mainBranch = branches.find((b) => b.disponible > 0) ?? branches[0];
+function sumStock(p: AirProduct): number {
+  return branches(p).reduce((sum, b) => sum + (b.disponible || 0), 0);
+}
 
-  return {
-    externalId: p.codigo,
-    partNumber: p.part_number || undefined,
-    name: p.descrip,
-    category: p.rubro,
-    subcategory: p.grupo,
-    price: p.precio,
-    currency: p.moneda === "DOL" ? "USD" : p.moneda,
-    stock: totalStock,
-    locationAir: mainBranch?.name,
-    raw: p,
-  };
+function mainBranch(p: AirProduct): AirBranchStock | undefined {
+  const list = branches(p);
+  return list.find((b) => b.disponible > 0) ?? list[0];
+}
+
+function branches(p: AirProduct): AirBranchStock[] {
+  return [p.ros, p.mza, p.cba, p.lug, p.air].filter((b): b is AirBranchStock => Boolean(b));
+}
+
+function mapProduct(p: AirProduct): NormalizedProduct {
+  const out: Partial<NormalizedProduct> = {};
+  for (const [field, getter] of Object.entries(FIELD_MAP)) {
+    (out as Record<string, unknown>)[field] = (getter as (p: AirProduct) => unknown)(p);
+  }
+  return { ...out, raw: p } as NormalizedProduct;
 }

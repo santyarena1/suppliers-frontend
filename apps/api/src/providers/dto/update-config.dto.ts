@@ -25,4 +25,10 @@ export class UpdateProviderConfigDto {
   @Min(-50)
   @Max(500)
   priceMarkupPercent?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  minStockThreshold?: number;
 }

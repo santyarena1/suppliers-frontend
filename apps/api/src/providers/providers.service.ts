@@ -33,8 +33,11 @@ export class ProvidersService {
       missingProductAction: "KEEP" as const,
       zeroStockAction: "KEEP" as const,
       priceMarkupPercent: 0,
+      minStockThreshold: 0,
       lastSyncedAt: null,
       lastSyncError: null,
+      lastSyncCreated: 0,
+      lastSyncUpdated: 0,
     };
   }
 
@@ -60,6 +63,9 @@ export class ProvidersService {
     const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
     const config = await this.getConfig(userId, provider);
     const markup = Number(config.priceMarkupPercent) || 0;
+    const minStock = config.minStockThreshold || 0;
+
+    const totalBefore = await this.prisma.providerSyncCache.count({ where: { provider } });
 
     const syncStartedAt = new Date();
     let count = 0;
@@ -67,7 +73,7 @@ export class ProvidersService {
     try {
       await adapter.syncAll(credentials, async (items) => {
         count += items.length;
-        await this.upsertPage(provider, items, markup);
+        await this.upsertPage(provider, items, markup, minStock);
       });
     } catch (err) {
       await this.prisma.providerSyncConfig.upsert({
@@ -81,16 +87,21 @@ export class ProvidersService {
     const missingCount = await this.applyMissingProductAction(provider, syncStartedAt, config.missingProductAction);
     const zeroStockCount = await this.applyZeroStockAction(provider, syncStartedAt, config.zeroStockAction);
 
+    const totalAfter = await this.prisma.providerSyncCache.count({ where: { provider } });
+    const created = Math.max(0, totalAfter - totalBefore);
+    const updated = Math.max(0, count - created);
+
     await this.prisma.providerSyncConfig.upsert({
       where: { userId_provider: { userId, provider } },
-      create: { userId, provider, lastSyncedAt: new Date(), lastSyncError: null },
-      update: { lastSyncedAt: new Date(), lastSyncError: null },
+      create: { userId, provider, lastSyncedAt: new Date(), lastSyncError: null, lastSyncCreated: created, lastSyncUpdated: updated },
+      update: { lastSyncedAt: new Date(), lastSyncError: null, lastSyncCreated: created, lastSyncUpdated: updated },
     });
 
     this.logger.log(
-      `Sync de ${provider}: ${count} productos (faltantes afectados: ${missingCount}, stock cero afectados: ${zeroStockCount})`
+      `Sync de ${provider}: ${count} productos (creados: ${created}, actualizados: ${updated}, ` +
+        `faltantes afectados: ${missingCount}, stock cero afectados: ${zeroStockCount})`
     );
-    return { provider, synced: count, missingAffected: missingCount, zeroStockAffected: zeroStockCount };
+    return { provider, synced: count, created, updated, missingAffected: missingCount, zeroStockAffected: zeroStockCount };
   }
 
   /** Productos que existían en nuestra base para este proveedor pero no vinieron en la última sync. */
@@ -112,7 +123,7 @@ export class ProvidersService {
     return 0;
   }
 
-  /** Productos que sí vinieron en esta sync pero quedaron con stock 0. */
+  /** Productos que sí vinieron en esta sync pero quedaron con stock 0 (o por debajo del umbral mínimo). */
   private async applyZeroStockAction(provider: Provider, syncStartedAt: Date, action: string) {
     if (action === "KEEP") return 0;
     const where = { provider, syncedAt: { gte: syncStartedAt }, stock: { lte: 0 } };
@@ -127,49 +138,49 @@ export class ProvidersService {
     return 0;
   }
 
-  private async upsertPage(provider: Provider, items: NormalizedProduct[], markupPercent: number) {
+  private async upsertPage(provider: Provider, items: NormalizedProduct[], markupPercent: number, minStock: number) {
     await Promise.all(
       items.map((item) => {
-        const price = applyMarkup(item.price, markupPercent);
+        // Stock mínimo del proveedor: si informa esta cantidad o menos, lo
+        // tratamos como sin stock (mismo concepto que AcuStock).
+        const stock =
+          minStock > 0 && item.stock != null && item.stock <= minStock ? 0 : item.stock;
+
+        const fields = {
+          sku: item.sku,
+          partNumber: item.partNumber,
+          ean: item.ean,
+          name: item.name,
+          brand: item.brand,
+          category: item.category,
+          subcategory: item.subcategory,
+          description: item.description,
+          longDescription: item.longDescription,
+          price: applyMarkup(item.price, markupPercent),
+          finalPrice: item.finalPrice,
+          currency: item.currency,
+          ivaPercent: item.ivaPercent,
+          stock,
+          stockStatus: item.stockStatus,
+          imageUrl: item.imageUrl,
+          productUrl: item.productUrl,
+          locationAir: item.locationAir,
+          warranty: item.warranty,
+          weight: item.weight,
+          weightUnit: item.weightUnit,
+          height: item.height,
+          width: item.width,
+          length: item.length,
+          dimensionsUnit: item.dimensionsUnit,
+          volume: item.volume,
+          tags: item.tags,
+          active: true,
+          raw: item.raw as object,
+        };
         return this.prisma.providerSyncCache.upsert({
           where: { provider_externalId: { provider, externalId: item.externalId } },
-          create: {
-            provider,
-            externalId: item.externalId,
-            sku: item.sku,
-            partNumber: item.partNumber,
-            ean: item.ean,
-            name: item.name,
-            brand: item.brand,
-            category: item.category,
-            subcategory: item.subcategory,
-            description: item.description,
-            price,
-            currency: item.currency,
-            stock: item.stock,
-            imageUrl: item.imageUrl,
-            locationAir: item.locationAir,
-            active: true,
-            raw: item.raw as object,
-          },
-          update: {
-            sku: item.sku,
-            partNumber: item.partNumber,
-            ean: item.ean,
-            name: item.name,
-            brand: item.brand,
-            category: item.category,
-            subcategory: item.subcategory,
-            description: item.description,
-            price,
-            currency: item.currency,
-            stock: item.stock,
-            imageUrl: item.imageUrl,
-            locationAir: item.locationAir,
-            active: true,
-            raw: item.raw as object,
-            syncedAt: new Date(),
-          },
+          create: { provider, externalId: item.externalId, ...fields },
+          update: { ...fields, syncedAt: new Date() },
         });
       })
     );
@@ -210,6 +221,18 @@ export class ProvidersService {
       orderBy: { name: "asc" },
       take: 200,
     });
+  }
+
+  /** "Limpiar sin stock del proveedor" — borra ya mismo los productos con stock 0, sin esperar a la próxima sync. */
+  async clearZeroStock(provider: Provider) {
+    const res = await this.prisma.providerSyncCache.deleteMany({ where: { provider, stock: { lte: 0 } } });
+    return { provider, deleted: res.count };
+  }
+
+  /** "Eliminar todos los productos de {proveedor}" — zona de peligro, borra el catálogo completo de nuestra base. */
+  async deleteAllProducts(provider: Provider) {
+    const res = await this.prisma.providerSyncCache.deleteMany({ where: { provider } });
+    return { provider, deleted: res.count };
   }
 
   /** Usado por el cron de sincronización automática. */

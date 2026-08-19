@@ -14,8 +14,8 @@ import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
 import {
-  ArrowLeft, Boxes, CheckCircle2, ImageOff, KeyRound,
-  Loader2, PackageCheck, RefreshCw, Save, Search, Settings, XCircle
+  AlertTriangle, ArrowLeft, Boxes, CheckCircle2, ImageOff, KeyRound,
+  Loader2, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
 } from "lucide-react";
 
 const MISSING_ACTION_LABELS: Record<MissingProductAction, string> = {
@@ -32,11 +32,11 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
 };
 
 const INTERVAL_OPTIONS = [
-  { minutes: 15, label: "Cada 15 minutos" },
-  { minutes: 30, label: "Cada 30 minutos" },
   { minutes: 60, label: "Cada 1 hora" },
-  { minutes: 180, label: "Cada 3 horas" },
+  { minutes: 120, label: "Cada 2 horas" },
+  { minutes: 240, label: "Cada 4 horas" },
   { minutes: 360, label: "Cada 6 horas" },
+  { minutes: 720, label: "Cada 12 horas" },
   { minutes: 1440, label: "Cada 24 horas" },
 ];
 
@@ -61,6 +61,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
+
+  const [clearingZeroStock, setClearingZeroStock] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   async function loadConfig() {
     if (!implemented) return;
@@ -87,12 +91,45 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,
         priceMarkupPercent: Number(config.priceMarkupPercent) || 0,
+        minStockThreshold: Number(config.minStockThreshold) || 0,
       });
       setConfig(res.data);
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 3000);
     } finally {
       setSavingConfig(false);
+    }
+  }
+
+  async function handleClearZeroStock() {
+    if (!window.confirm(`¿Borrar ya mismo todos los productos de ${provider.replace(/_/g, " ")} con stock 0? Esta acción no se puede deshacer.`)) return;
+    setClearingZeroStock(true);
+    setDangerResult(null);
+    try {
+      const res = await providersApi.clearZeroStock(provider);
+      setDangerResult({ ok: true, msg: `${res.data.deleted.toLocaleString("es-AR")} productos sin stock eliminados` });
+      await loadStatus();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDangerResult({ ok: false, msg: msg || "Error al limpiar sin stock" });
+    } finally {
+      setClearingZeroStock(false);
+    }
+  }
+
+  async function handleDeleteAllProducts() {
+    if (!window.confirm(`¿Eliminar TODOS los productos de ${provider.replace(/_/g, " ")} de nuestra base? Esta acción no se puede deshacer. Vas a tener que sincronizar de nuevo para recuperarlos.`)) return;
+    setDeletingAll(true);
+    setDangerResult(null);
+    try {
+      const res = await providersApi.deleteAllProducts(provider);
+      setDangerResult({ ok: true, msg: `${res.data.deleted.toLocaleString("es-AR")} productos eliminados del catálogo` });
+      await loadStatus();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setDangerResult({ ok: false, msg: msg || "Error al eliminar productos" });
+    } finally {
+      setDeletingAll(false);
     }
   }
 
@@ -338,6 +375,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="text-sm font-semibold text-white">Manejo de stock y catálogo</div>
                           <div>
+                            <label className="block text-xs font-medium text-surface-400 mb-1.5">Stock mínimo del proveedor</label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="1"
+                              value={config.minStockThreshold}
+                              onChange={(e) => setConfig({ ...config, minStockThreshold: Number(e.target.value) })}
+                              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
+                            />
+                            <p className="text-[11px] text-surface-500 mt-1">
+                              Si el proveedor informa esta cantidad o menos, lo tratamos como sin stock (stock 0). Ej: 0 = usar el stock tal cual lo informa.
+                            </p>
+                          </div>
+                          <div>
                             <label className="block text-xs font-medium text-surface-400 mb-1.5">Producto con stock 0 en la última sync</label>
                             <select
                               value={config.zeroStockAction}
@@ -384,6 +435,61 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           </div>
                         )}
                       </form>
+                    )}
+
+                    {!loadingConfig && config && (
+                      <div className="border border-red-500/20 rounded-xl p-5 flex flex-col gap-4 mt-5">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-red-400">
+                          <AlertTriangle className="w-4 h-4" />
+                          Zona de peligro
+                        </div>
+                        <p className="text-xs text-surface-500">
+                          Acciones inmediatas sobre nuestra base para {provider.replace(/_/g, " ")}, sin esperar a la próxima sincronización. No se pueden deshacer.
+                        </p>
+
+                        <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">
+                          <div>
+                            <p className="text-sm text-surface-200">Limpiar sin stock</p>
+                            <p className="text-xs text-surface-500">Borra ya los productos con stock 0 de {provider.replace(/_/g, " ")}.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleClearZeroStock}
+                            disabled={clearingZeroStock}
+                            className="flex items-center gap-1.5 flex-shrink-0 bg-surface-700 hover:bg-red-500/20 hover:text-red-400 disabled:opacity-40 text-surface-200 text-xs font-semibold rounded-lg px-3 py-2 transition-all"
+                          >
+                            {clearingZeroStock ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            Limpiar
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">
+                          <div>
+                            <p className="text-sm text-surface-200">Eliminar todo el catálogo</p>
+                            <p className="text-xs text-surface-500">Borra los {(status?.total ?? 0).toLocaleString("es-AR")} productos de {provider.replace(/_/g, " ")} de nuestra base.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleDeleteAllProducts}
+                            disabled={deletingAll}
+                            className="flex items-center gap-1.5 flex-shrink-0 bg-red-500/10 hover:bg-red-500/25 text-red-400 disabled:opacity-40 text-xs font-semibold rounded-lg px-3 py-2 transition-all"
+                          >
+                            {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            Eliminar todo
+                          </button>
+                        </div>
+
+                        {dangerResult && (
+                          <div className={`flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 ${
+                            dangerResult.ok
+                              ? "bg-emerald-500/8 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                              : "bg-red-500/8 border border-red-500/20 text-red-400"
+                          }`}>
+                            {dangerResult.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
+                            {dangerResult.msg}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

@@ -43,15 +43,32 @@ export interface ProductDTO {
   provider: string;
   name: string;
   price: string | number | null;
+  finalPrice?: string | number | null;
   currency?: string | null;
+  ivaPercent?: string | number | null;
   imageUrl: string | null;
+  productUrl?: string | null;
   externalId: string;
   sku?: string | null;
+  partNumber?: string | null;
+  ean?: string | null;
   brand?: string | null;
   category?: string | null;
   subcategory?: string | null;
+  description?: string | null;
+  longDescription?: string | null;
   stock?: number | null;
+  stockStatus?: string | null;
   locationAir?: string | null;
+  warranty?: string | null;
+  weight?: string | number | null;
+  weightUnit?: string | null;
+  height?: string | number | null;
+  width?: string | number | null;
+  length?: string | number | null;
+  dimensionsUnit?: string | null;
+  volume?: string | number | null;
+  tags?: string | null;
   syncedAt?: string;
 }
 
@@ -147,8 +164,11 @@ export interface ProviderConfig {
   missingProductAction: MissingProductAction;
   zeroStockAction: ZeroStockAction;
   priceMarkupPercent: number | string;
+  minStockThreshold: number;
   lastSyncedAt: string | null;
   lastSyncError: string | null;
+  lastSyncCreated: number;
+  lastSyncUpdated: number;
 }
 
 export const providersApi = {
@@ -160,6 +180,10 @@ export const providersApi = {
     api.get<ProviderConfig>(`/providers/${providerName}/config`),
   updateConfig: (providerName: Provider, config: Partial<ProviderConfig>) =>
     api.put<ProviderConfig>(`/providers/${providerName}/config`, config),
+  clearZeroStock: (providerName: Provider) =>
+    api.post<{ provider: Provider; deleted: number }>(`/providers/${providerName}/clear-zero-stock`),
+  deleteAllProducts: (providerName: Provider) =>
+    api.delete<{ provider: Provider; deleted: number }>(`/providers/${providerName}/products`),
 };
 
 // --- Admin / Users ---

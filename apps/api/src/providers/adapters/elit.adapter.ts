@@ -19,6 +19,13 @@ interface ElitProduct {
   stock_total: number;
   imagenes: string[];
   descripcion: string;
+  garantia?: string;
+  iva?: number;
+  peso?: number;
+  dimensiones?: { largo?: number; ancho?: number; alto?: number };
+  nivel_stock?: string;
+  link?: string;
+  atributos?: { atributo: string; valor: string }[];
 }
 
 interface ElitResponse {
@@ -26,6 +33,41 @@ interface ElitResponse {
   paginador: { total: number; limit: number; offset: number };
   resultado: ElitProduct[];
 }
+
+/**
+ * Mapeo manual campo-a-campo de ELIT hacia nuestro esquema unificado.
+ * Editar acá si ELIT cambia un nombre de campo o si queremos capturar algo
+ * más de lo que hoy está en `raw`.
+ */
+const FIELD_MAP: { [K in keyof NormalizedProduct]?: (p: ElitProduct) => NormalizedProduct[K] } = {
+  externalId: (p) => String(p.id) as never,
+  sku: (p) => p.codigo_producto as never,
+  partNumber: (p) => p.codigo_alfa as never,
+  ean: (p) => (p.ean ? String(p.ean) : undefined) as never,
+  name: (p) => p.nombre as never,
+  brand: (p) => p.marca as never,
+  category: (p) => p.categoria as never,
+  subcategory: (p) => p.sub_categoria as never,
+  description: (p) => (p.descripcion || undefined) as never,
+  price: (p) => p.precio as never,
+  currency: (p) => (p.moneda === 2 ? "USD" : "ARS") as never,
+  stock: (p) => p.stock_total as never,
+  stockStatus: (p) => p.nivel_stock as never,
+  imageUrl: (p) => p.imagenes?.[0] as never,
+  productUrl: (p) => p.link as never,
+  warranty: (p) => p.garantia as never,
+  ivaPercent: (p) => p.iva as never,
+  weight: (p) => p.peso as never,
+  height: (p) => p.dimensiones?.alto as never,
+  width: (p) => p.dimensiones?.ancho as never,
+  length: (p) => p.dimensiones?.largo as never,
+  // ELIT no especifica unidad; "peso"/"dimensiones" son consistentes con Kg/Cm
+  // en el resto del catálogo argentino, pero no está confirmado por la API —
+  // se deja sin asumir en vez de inventar la unidad.
+  tags: (p) => (p.atributos?.length ? p.atributos.map((a) => `${a.atributo}: ${a.valor}`).join(" · ") : undefined) as never,
+  // Sin equivalente en ELIT (queda undefined para este proveedor):
+  // longDescription, finalPrice, weightUnit, dimensionsUnit, volume, locationAir.
+};
 
 @Injectable()
 export class ElitAdapter implements ProviderAdapter {
@@ -61,7 +103,7 @@ export class ElitAdapter implements ProviderAdapter {
       }
 
       total = data.paginador?.total ?? 0;
-      const items = (data.resultado ?? []).map(mapProduct);
+      const items = (data.resultado ?? []).map((p) => mapProduct(p));
       await onPage(items);
 
       offset += data.paginador?.limit ?? PAGE_LIMIT;
@@ -71,20 +113,9 @@ export class ElitAdapter implements ProviderAdapter {
 }
 
 function mapProduct(p: ElitProduct): NormalizedProduct {
-  return {
-    externalId: String(p.id),
-    sku: p.codigo_producto,
-    partNumber: p.codigo_alfa,
-    ean: p.ean ? String(p.ean) : undefined,
-    name: p.nombre,
-    brand: p.marca,
-    category: p.categoria,
-    subcategory: p.sub_categoria,
-    description: p.descripcion || undefined,
-    price: p.precio,
-    currency: p.moneda === 2 ? "USD" : "ARS",
-    stock: p.stock_total,
-    imageUrl: p.imagenes?.[0],
-    raw: p,
-  };
+  const out: Partial<NormalizedProduct> = {};
+  for (const [field, getter] of Object.entries(FIELD_MAP)) {
+    (out as Record<string, unknown>)[field] = (getter as (p: ElitProduct) => unknown)(p);
+  }
+  return { ...out, raw: p } as NormalizedProduct;
 }

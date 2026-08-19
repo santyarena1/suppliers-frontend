@@ -67,11 +67,25 @@ model ProviderSyncCache {
   category    String?
   subcategory String?
   description String?
+  longDescription String?
   price       Decimal?  @db.Decimal(14, 4)
+  finalPrice  Decimal?  @db.Decimal(14, 4)
   currency    String?
+  ivaPercent  Decimal?  @db.Decimal(6, 2)
   stock       Int?
+  stockStatus String?
   imageUrl    String?
+  productUrl  String?
   locationAir String?
+  warranty    String?
+  weight      Decimal?  @db.Decimal(10, 3)
+  weightUnit  String?
+  height      Decimal?  @db.Decimal(10, 3)
+  width       Decimal?  @db.Decimal(10, 3)
+  length      Decimal?  @db.Decimal(10, 3)
+  dimensionsUnit String?
+  volume      Decimal?  @db.Decimal(12, 3)
+  tags        String?
   active      Boolean   @default(true)
   raw         Json
   syncedAt    DateTime  @default(now())
@@ -106,8 +120,14 @@ model ProviderSyncConfig {
   missingProductAction  MissingProductAction  @default(KEEP)
   zeroStockAction       ZeroStockAction       @default(KEEP)
   priceMarkupPercent    Decimal               @default(0) @db.Decimal(6, 2)
+  // Si el proveedor informa esta cantidad de stock o menos, lo tratamos como
+  // sin stock (aplica zeroStockAction). 0 = desactivado. Mismo concepto que
+  // el "stock mínimo del proveedor" de AcuStock.
+  minStockThreshold    Int                   @default(0)
   lastSyncedAt          DateTime?
   lastSyncError         String?
+  lastSyncCreated       Int                   @default(0)
+  lastSyncUpdated       Int                   @default(0)
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -39,6 +39,16 @@ export class ProvidersController {
     @Body() dto: UpdateProviderConfigDto
   ) {
     return this.providersService.updateConfig(user.userId, assertProvider(provider), dto);
+  }
+
+  @Post("providers/:provider/clear-zero-stock")
+  clearZeroStock(@Param("provider") provider: string) {
+    return this.providersService.clearZeroStock(assertProvider(provider));
+  }
+
+  @Delete("providers/:provider/products")
+  deleteAllProducts(@Param("provider") provider: string) {
+    return this.providersService.deleteAllProducts(assertProvider(provider));
   }
 
   @Get("search/provider/:provider")
