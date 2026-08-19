@@ -107,26 +107,115 @@ plano en el repo.
 
 ### SOLUTION_BOX
 - **Base URL**: `https://lxc.solutionbox.com.ar`
-- **Auth**: usuario + contraseña vía endpoint `createToken`.
+- **Auth**: `USUARIO API` + `CONTRASEÑA API` vía endpoint `createToken` (confirmado por la UI
+  de configuración de AcuStock, que trae exactamente esos dos campos y ese nombre de endpoint).
 - **Límite**: **2 requests por hora** — extremadamente restrictivo. AcuStock cachea el catálogo
   agresivamente para no gastar la cuota. Confirma que nuestro diseño de `ProviderSyncCache`
   (sincronizar a nuestra DB en vez de pegarle a la API en cada búsqueda de usuario) es el
   approach correcto, no opcional, para este proveedor en particular.
-- **Estado en AcuStock**: sin configurar.
+- **Precio**: en USD. AcuStock aplica `(Costo × (1 + Impuestos)) × Cotización × (1 + Margen)`.
+- **Stock**: suma de dos depósitos, MDP (Mar del Plata) y CABA.
+- **SKU**: prefijo `SB_{código_API}`.
+- **Solo lectura**: se consulta el catálogo, nunca se modifica nada en Solution Box.
+- **Falta confirmar**: el endpoint real de listado de artículos (más allá de `createToken`
+  para auth) — la UI de AcuStock no lo expone, solo la base URL. Hace falta pedirle a Solution
+  Box su documentación de API o conseguir la URL exacta antes de escribir el adapter, para no
+  adivinar la forma de la respuesta.
+- **Estado en AcuStock**: sin configurar (sin key cargada).
 
-## Fuera del panel de AcuStock
+### POLYTECH — endpoint y auth confirmados en vivo
+- **Base real**: corre sobre la plataforma "Gestión Resellers"
+  (`https://gestionresellers.com.ar/api/extranet/item/search`) — confirmado letra por letra en
+  la pantalla de Configuración de AcuStock (que además tiene una API Key real cargada y
+  funcionando, oculta como password — no se pudo leer el valor por política de seguridad del
+  navegador, pero el campo está activo).
+- **Auth**: HTTP Basic Auth, `username = API Key`, `password` vacío.
+- **SKU**: prefijo `PT_`.
+- **Falta confirmar**: la forma exacta de la respuesta JSON (nombres de campos: nombre,
+  precio, stock, categoría, etc.) — la UI de AcuStock no expone eso, solo el endpoint y el
+  método de auth. Se puede armar el cliente HTTP ya mismo (URL + Basic Auth), pero el
+  `FIELD_MAP` necesita una respuesta real de ejemplo antes de escribirse, para no inventar
+  nombres de campo.
+- **Estado en AcuStock**: configurado con key propia, pero sincronización desactivada
+  ("Sync bloqueada, el stock drop quedó en 0").
 
-- **PC Arts**: aparece en el sidebar de AcuStock pero no corresponde a ninguno de nuestros
-  14 códigos (`NEW_BYTES, ELIT, GRUPO_NUCLEO, AIR, NEW_TREE, INVID, GC, POLYTECH, ASHIR, HDC,
-  SOLUTION_BOX, DISTECNA, CEVEN, DIAPSTORE`). Falta confirmar con el usuario si es un alias
-  de alguno de estos (¿ASHIR?) o directamente un proveedor extra no contemplado originalmente.
-- **GC, ASHIR, HDC, DISTECNA, CEVEN, DIAPSTORE**: no están en el panel de AcuStock — el
-  usuario no los tiene integrados ahí. Para estos 6 hace falta ir directo a la página de cada
-  distribuidor con las credenciales de API (según el plan original del usuario).
+### NEW_TREE (GlobalBluePoint) — el más documentado de los pendientes
+- **Base real**: `https://ws.globalbluepoint.com/newtree/app_webservices/wserpconnect.asmx`
+- **Protocolo**: **SOAP**, no REST — necesita un cliente XML/SOAP en el backend, distinto al
+  resto de adapters.
+- **Auth**: `AuthenticateUser` con `PUSERNAME`, `PPASSWORD`, `PCOMPANY`, y `PWEBSERVICE` (id del
+  servicio web en GBP — NewTree tiene que confirmarlo, la doc genérica GBP suele usar un id
+  distinto de 3).
+- **Catálogo**: script `getArticulos` ejecutado vía `wsGBPScriptExecute`, parámetro
+  `{"client_id": 15}` según la doc GBP/NewTree 2025-02 (15 es el default documentado si no se
+  configura uno propio). Existe un modo legacy con `price_list_id` + `deposit_id` visto en
+  integraciones previas, pero según las notas de AcuStock ese modo "suele devolver un código de
+  error (ej. -9)" — **no usar**, priorizar siempre `client_id`.
+- **Precio**: `price` viene con impuestos incluidos (final), `price_no_tax` es el neto, y
+  `taxes[]` desglosa IVA + Impuestos Internos (no hay que re-sumarlos sobre `price`, ya está
+  incluido).
+- **Stock**: viene como semáforo — `ALTO` / `MEDIO` / `BAJO` / sin stock (no como un número
+  entero directo; hay que confirmar contra la respuesta real si además viene una cantidad).
+- **SKU**: prefijo `NT_{SKU}`.
+- **Falta confirmar**: el XML/WSDL real de la respuesta de `getArticulos` (nombres exactos de
+  cada campo dentro del payload SOAP) — la UI de AcuStock describe el contrato a alto nivel
+  (los campos de precio/stock de arriba) pero no el XML completo. Con las credenciales reales
+  cargadas se puede hacer una llamada de prueba a `AuthenticateUser` + `wsGBPScriptExecute` y
+  recién ahí escribir el parser XML→JSON sin adivinar.
+- **Estado en AcuStock**: sin configurar (sin credenciales cargadas ahí tampoco).
+
+### GC (Gaming City) — confirmado en vivo, no es una API tradicional
+- Según la documentación oficial: **"NO ES UNA API pero de acá se puede levantar bastante
+  fácil todo ya que es solo una tabla recontra expuesta"**:
+  `https://sites.google.com/view/gcgremio/lista-general?authuser=0`
+- **Verificado en vivo (2026-08-19)**: la página de Google Sites embebe un iframe que apunta a
+  una app de Google Apps Script pública, sin login:
+  `https://script.google.com/macros/s/AKfycbwLmFg-DGm7_kOC85f3SRUEBaQX4M8i4jRJ3MpkY92a4gd8ah80pexivewTYFE1Jw7w-Q/exec`
+- Esa app renderiza una tabla en vivo: **1.665 productos**, actualizada (timestamp visible en la
+  UI, "Actualizado: Wed Aug 19 2026 18:36:54 GMT-0300"), con buscador y botón "Descargar
+  listado completo en Excel".
+- **Campos reales, confirmados visualmente — solo 2**: `PRODUCTO` (nombre completo, sin SKU
+  separado) y `PRECIO` (en pesos, `$ N.NNN`, sin aclarar IVA/moneda). **No hay** stock, marca,
+  categoría, imagen, ni código de producto — es literalmente una lista de precios plana, nada
+  más. Cualquier campo adicional (SKU, stock, categoría) sería inventado — no está en esta
+  fuente.
+- **Falta confirmar antes de escribir el scraper**: el mecanismo exacto de carga de datos (si
+  el HTML trae los 1.665 productos ya embebidos en un `<script>` inline, o si hace una llamada
+  interna tipo `google.script.run` que haya que interceptar) — la próxima sesión de research
+  debería inspeccionar el HTML fuente de esa URL directamente (no solo la vista renderizada).
+- **Estado**: pública, sin credenciales — el único bloqueo es tiempo de desarrollo (confirmar
+  el mecanismo de carga y escribir el scraper). Dado el esquema pobre (sin SKU/stock/categoría),
+  su valor real para el catálogo es limitado — prioridad baja frente a POLYTECH/NEW_TREE.
+
+## Fuera del panel de AcuStock y sin documentación
+
+- **PC Arts**: aparece en el sidebar de AcuStock y también en la documentación oficial
+  ("PC ARTS — en proceso de envío"), pero no corresponde a ninguno de nuestros 14 códigos
+  (`NEW_BYTES, ELIT, GRUPO_NUCLEO, AIR, NEW_TREE, INVID, GC, POLYTECH, ASHIR, HDC,
+  SOLUTION_BOX, DISTECNA, CEVEN, DIAPSTORE`). Su propia documentación de API todavía no fue
+  enviada por el proveedor ("en proceso de envío") — nada que hacer hasta que llegue.
+- **ASHIR, HDC, DISTECNA, CEVEN, DIAPSTORE**: no están en el panel de AcuStock ni aparecen
+  mencionados en ninguno de los dos Word docs oficiales que compartió el usuario. No hay
+  ningún dato real (ni endpoint, ni auth, ni campos) del que partir — quedan completamente
+  pendientes de relevar directo con cada distribuidor.
 
 ## Próximo paso sugerido
 
-Empezar el primer adapter real por **INVID** (documentación pública completa, ya validado en
-producción por AcuStock) o por **ELIT** (API más simple, único que el backend viejo ya usaba).
-Los 6 proveedores sin cobertura acá quedan pendientes de relevar directamente en el sitio de
-cada distribuidor.
+**Ya construidos y en producción**: ELIT, NEW_BYTES, GRUPO_NÚCLEO (los 3 verificados con datos
+reales), más INVID y AIR (código listo, bloqueados por rate limit del proveedor, no por
+nuestro lado).
+
+**Documentados y listos para construir en cuanto haya una respuesta real de prueba** (con
+credenciales cargadas — el propio usuario ya tiene cuenta en Polytech, hace falta la de
+Solution Box y NewTree):
+- **POLYTECH**: endpoint + auth 100% confirmados, solo falta un llamado real para ver los
+  nombres de campo antes de escribir el `FIELD_MAP` (mismo estándar que se usó para los 5 ya
+  construidos: nunca adivinar nombres de campo).
+- **NEW_TREE**: protocolo SOAP + auth + script `getArticulos` + semántica de precio/stock ya
+  documentados; falta una llamada de prueba para confirmar el XML exacto.
+- **SOLUTION_BOX**: auth (`createToken`) y comportamiento (USD, 2 dep., 2 req/hora) documentados;
+  falta el endpoint de listado de artículos en sí.
+
+**Sin ningún dato real todavía**: GC (es scrapeable, no necesita credenciales, pero hay que
+mirar la tabla real antes de escribir el parser), PC Arts (proveedor todavía no mandó su doc),
+ASHIR, HDC, DISTECNA, CEVEN, DIAPSTORE (cero información en ninguna fuente disponible).
