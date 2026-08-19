@@ -14,27 +14,11 @@ import { useCart } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, searchApi } from "@/lib/api";
 import { proxyImg, parsePrice, formatARS, formatUSD } from "@/lib/format";
+import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
 import {
   ArrowLeft, Package, ImageOff, ChevronLeft, ChevronRight,
   ZoomIn, X, Copy, ExternalLink, Sparkles
 } from "lucide-react";
-
-const PROVIDER_COLOR: Record<string, string> = {
-  NEW_BYTES: "text-sky-400 bg-sky-400/10 border-sky-400/30",
-  ELIT: "text-purple-400 bg-purple-400/10 border-purple-400/30",
-  GRUPO_NUCLEO: "text-emerald-400 bg-emerald-400/10 border-emerald-400/30",
-  AIR: "text-cyan-400 bg-cyan-400/10 border-cyan-400/30",
-  NEW_TREE: "text-teal-400 bg-teal-400/10 border-teal-400/30",
-  INVID: "text-orange-400 bg-orange-400/10 border-orange-400/30",
-  GC: "text-red-400 bg-red-400/10 border-red-400/30",
-  POLYTECH: "text-pink-400 bg-pink-400/10 border-pink-400/30",
-  ASHIR: "text-indigo-400 bg-indigo-400/10 border-indigo-400/30",
-  HDC: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
-  SOLUTION_BOX: "text-lime-400 bg-lime-400/10 border-lime-400/30",
-  DISTECNA: "text-violet-400 bg-violet-400/10 border-violet-400/30",
-  CEVEN: "text-rose-400 bg-rose-400/10 border-rose-400/30",
-  DIAPSTORE: "text-blue-400 bg-blue-400/10 border-blue-400/30",
-};
 
 export default function ProductPage({ params }: { params: Promise<{ provider: string; externalId: string }> }) {
   const { provider, externalId } = use(params);

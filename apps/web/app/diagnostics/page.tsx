@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import { ALL_PROVIDERS, Provider, searchApi, credentialsApi } from "@/lib/api";
+import { PROVIDER_TEXT_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
 import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, Activity,
   Play, RotateCcw, Clock, Package, Minus, ChevronDown, ChevronRight
@@ -19,14 +20,6 @@ interface ProviderResult {
   error?: string;
   sample?: { name: string; price: string }[];
 }
-
-const PROVIDER_COLOR: Record<string, string> = {
-  NEW_BYTES: "text-sky-400", ELIT: "text-purple-400", GRUPO_NUCLEO: "text-emerald-400",
-  AIR: "text-cyan-400", NEW_TREE: "text-teal-400", INVID: "text-orange-400",
-  GC: "text-red-400", POLYTECH: "text-pink-400", ASHIR: "text-indigo-400",
-  HDC: "text-yellow-400", SOLUTION_BOX: "text-lime-400", DISTECNA: "text-violet-400",
-  CEVEN: "text-rose-400", DIAPSTORE: "text-blue-400",
-};
 
 const SUGGESTED_QUERIES = ["ssd", "ryzen", "rtx", "ddr4", "monitor"];
 

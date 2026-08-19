@@ -12,6 +12,7 @@ import { ALL_PROVIDERS, credentialsApi, Provider } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
 import { useCart } from "@/lib/cart";
 import { getRecentSearches, getTopSearches, SearchEntry, trackSearch } from "@/lib/history";
+import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import {
   Search, TrendingUp, Clock, ArrowRight, ShoppingCart, Key,
   Sparkles, Zap, Cpu, Monitor, HardDrive, Smartphone, Gamepad2,
@@ -60,14 +61,6 @@ const HERO_SLIDES = [
     icon: DollarSign,
   },
 ];
-
-const PROVIDER_COLOR: Record<string, string> = {
-  NEW_BYTES: "text-sky-400", ELIT: "text-purple-400", GRUPO_NUCLEO: "text-emerald-400",
-  AIR: "text-cyan-400", NEW_TREE: "text-teal-400", INVID: "text-orange-400",
-  GC: "text-red-400", POLYTECH: "text-pink-400", ASHIR: "text-indigo-400",
-  HDC: "text-yellow-400", SOLUTION_BOX: "text-lime-400", DISTECNA: "text-violet-400",
-  CEVEN: "text-rose-400", DIAPSTORE: "text-blue-400",
-};
 
 export default function HomePage() {
   const router = useRouter();
@@ -211,7 +204,7 @@ export default function HomePage() {
 
               {/* History */}
               <section className="grid lg:grid-cols-2 gap-4">
-                <Panel icon={TrendingUp} title="Tus búsquedas más frecuentes" iconColor="text-orange-400">
+                <Panel icon={TrendingUp} title="Tus búsquedas más frecuentes" iconColor="text-orange-700 dark:text-orange-400">
                   {top.length === 0 ? (
                     <div className="flex flex-col gap-2 mt-1">
                       <p className="text-xs text-surface-500 mb-1">Aún no hay historial. Probá estas sugerencias:</p>
@@ -240,7 +233,7 @@ export default function HomePage() {
                   )}
                 </Panel>
 
-                <Panel icon={Clock} title="Últimas búsquedas" iconColor="text-brand-400">
+                <Panel icon={Clock} title="Últimas búsquedas" iconColor="text-brand-700 dark:text-brand-400">
                   {recent.length === 0 ? (
                     <p className="text-xs text-surface-500">Vas a ver acá las búsquedas que hagas recientemente.</p>
                   ) : (
@@ -278,11 +271,11 @@ export default function HomePage() {
                           configured ? "border-surface-700 hover:border-brand-500" : "border-surface-800 hover:border-surface-600 opacity-70"
                         }`}
                       >
-                        <span className={`text-[11px] font-bold leading-tight block ${PROVIDER_COLOR[p] || "text-surface-400"}`}>
+                        <span className={`text-[11px] font-bold leading-tight block ${PROVIDER_TEXT_COLOR[p] || "text-surface-400"}`}>
                           {p.replace(/_/g, " ")}
                         </span>
-                        <span className={`text-[9px] mt-1 flex items-center gap-1 ${configured ? "text-emerald-400" : "text-surface-600"}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-emerald-400" : "bg-surface-700"}`} />
+                        <span className={`text-[9px] mt-1 flex items-center gap-1 ${configured ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-emerald-500 dark:bg-emerald-400" : "bg-surface-700"}`} />
                           {configured ? "Configurado" : "Sin credencial"}
                         </span>
                       </button>
@@ -309,7 +302,7 @@ function SectionTitle({ icon: Icon, title, right }: { icon: React.ElementType; t
   return (
     <div className="flex items-center justify-between mb-3">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-        <Icon className="w-4 h-4 text-brand-400" />
+        <Icon className="w-4 h-4 text-brand-700 dark:text-brand-400" />
         {title}
       </h3>
       {right}
@@ -317,7 +310,7 @@ function SectionTitle({ icon: Icon, title, right }: { icon: React.ElementType; t
   );
 }
 
-function Panel({ icon: Icon, title, iconColor = "text-brand-400", children }: {
+function Panel({ icon: Icon, title, iconColor = "text-brand-700 dark:text-brand-400", children }: {
   icon: React.ElementType; title: string; iconColor?: string; children: React.ReactNode;
 }) {
   return (
@@ -337,10 +330,10 @@ function StatCard({ label, value, total, detail, icon: Icon, accent, href }: {
   label: string; value: number | string; total?: number; detail?: string; icon: React.ElementType; accent: string; href?: string;
 }) {
   const accentColors: Record<string, string> = {
-    brand: "text-brand-400 bg-brand-600/10",
-    emerald: "text-emerald-400 bg-emerald-600/10",
-    orange: "text-orange-400 bg-orange-600/10",
-    purple: "text-purple-400 bg-purple-600/10",
+    brand: "text-brand-700 dark:text-brand-400 bg-brand-600/10",
+    emerald: "text-emerald-700 dark:text-emerald-400 bg-emerald-600/10",
+    orange: "text-orange-700 dark:text-orange-400 bg-orange-600/10",
+    purple: "text-purple-700 dark:text-purple-400 bg-purple-600/10",
   };
   const inner = (
     <>
@@ -365,9 +358,9 @@ function CtaCard({ href, icon: Icon, title, description, color }: {
   href: string; icon: React.ElementType; title: string; description: string; color: string;
 }) {
   const colors: Record<string, string> = {
-    brand: "from-brand-600/15 to-brand-800/5 border-brand-600/20 hover:border-brand-500/50 text-brand-400",
-    emerald: "from-emerald-600/15 to-emerald-800/5 border-emerald-600/20 hover:border-emerald-500/50 text-emerald-400",
-    orange: "from-orange-600/15 to-orange-800/5 border-orange-600/20 hover:border-orange-500/50 text-orange-400",
+    brand: "from-brand-600/15 to-brand-800/5 border-brand-600/20 hover:border-brand-500/50 text-brand-700 dark:text-brand-400",
+    emerald: "from-emerald-600/15 to-emerald-800/5 border-emerald-600/20 hover:border-emerald-500/50 text-emerald-700 dark:text-emerald-400",
+    orange: "from-orange-600/15 to-orange-800/5 border-orange-600/20 hover:border-orange-500/50 text-orange-700 dark:text-orange-400",
   };
   return (
     <Link href={href} className={`bg-gradient-to-br ${colors[color]} border rounded-2xl p-5 transition-all group`}>
