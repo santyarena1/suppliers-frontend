@@ -22,20 +22,21 @@
 }
 
 :root[data-theme="light"] {
-  --s-base: 250 250 251;
-  --s-50:  9 11 15;
-  --s-100: 23 25 33;
-  --s-200: 31 41 55;
-  --s-300: 55 65 81;
-  --s-400: 75 85 99;
-  --s-500: 120 128 145;
-  --s-600: 168 175 188;
-  --s-700: 215 219 226;
-  --s-800: 232 235 240;
-  --s-900: 247 248 251;
-  --s-950: 252 253 255;
-  --fg: 17 24 39;
-  --body-bg: 246 247 250;
+  --s-base: 244 246 250;
+  --s-50:   9 12 20;
+  --s-100:  17 22 34;
+  --s-200:  30 38 54;
+  --s-300:  51 61 82;
+  --s-400:  71 82 105;
+  --s-500:  99 110 132;
+  --s-600:  148 157 175;
+  --s-700:  213 218 229;
+  --s-800:  231 235 242;
+  --s-900:  255 255 255;
+  --s-950:  247 249 252;
+  --fg: 13 17 28;
+  --body-bg: 240 243 248;
+  --shadow-color: 30 41 63;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,6 +52,32 @@ body {
 
 /* In light theme, the "text-white" used throughout means primary foreground */
 [data-theme="light"] .text-white { color: rgb(var(--fg)); }
+
+/* Light theme reads as flat without depth cues — dark mode gets contrast for
+   free from near-black surfaces, light mode needs shadows + a faint brand
+   tint to avoid looking like an unstyled gray-scale flip. */
+[data-theme="light"] body {
+  background-image:
+    radial-gradient(1200px 480px at 12% -8%, rgb(53 112 244 / 0.05), transparent 60%),
+    radial-gradient(900px 420px at 100% 0%, rgb(32 80 232 / 0.04), transparent 55%);
+  background-attachment: fixed;
+}
+
+[data-theme="light"] [class*="bg-surface-900"] {
+  box-shadow:
+    0 1px 1px rgb(var(--shadow-color) / 0.03),
+    0 6px 16px -8px rgb(var(--shadow-color) / 0.10);
+}
+
+[data-theme="light"] [class*="bg-surface-800"] {
+  box-shadow: 0 1px 2px rgb(var(--shadow-color) / 0.05);
+}
+
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  box-shadow: inset 0 1px 2px rgb(var(--shadow-color) / 0.04);
+}
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: rgb(var(--s-900)); }
