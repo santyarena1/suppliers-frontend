@@ -1,29 +1,17 @@
 {
-  "name": "suppliers-frontend",
-  "version": "0.1.0",
+  "name": "nodo",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "autoprefixer": "^10.5.0",
-    "axios": "^1.17.0",
-    "lucide-react": "^1.17.0",
-    "next": "^15.5.19",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "sharp": "^0.34.5",
-    "tailwindcss": "^3.4.19"
-  },
-  "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.7",
-    "typescript": "^5"
+    "build:shared": "pnpm --filter @nodo/shared build",
+    "dev:web": "pnpm --filter @nodo/web dev",
+    "dev:api": "pnpm build:shared && pnpm --filter @nodo/api start:dev",
+    "build:web": "pnpm --filter @nodo/web build",
+    "build:api": "pnpm build:shared && pnpm --filter @nodo/api build",
+    "test:api": "pnpm build:shared && pnpm --filter @nodo/api test",
+    "lint:web": "pnpm --filter @nodo/web lint"
   }
 }
