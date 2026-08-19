@@ -52,7 +52,7 @@ export default function DiagnosticsPage() {
           status: data.length > 0 ? "ok" : "empty",
           duration,
           count: data.length,
-          sample: data.slice(0, 3).map((p) => ({ name: p.name, price: p.price })),
+          sample: data.slice(0, 3).map((p) => ({ name: p.name, price: String(p.price ?? "") })),
         },
       }));
     } catch (err: unknown) {

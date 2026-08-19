@@ -20,7 +20,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login(username, password);
-      const token = res.data.data.token;
+      const token = res.data.token;
       const payload = JSON.parse(atob(token.split(".")[1]));
       saveSession(token, {
         username: payload.sub ?? username,

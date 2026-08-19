@@ -12,6 +12,17 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// El backend envuelve toda respuesta exitosa en { success: true, data }.
+// Se desenvuelve acá una sola vez para que el resto del código siga
+// trabajando con el payload plano (arrays, objetos) como antes.
+api.interceptors.response.use((response) => {
+  const body = response.data as unknown;
+  if (body && typeof body === "object" && "success" in (body as Record<string, unknown>)) {
+    response.data = (body as { data: unknown }).data;
+  }
+  return response;
+});
+
 // --- Types ---
 export type Provider =
   | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE"
@@ -24,13 +35,24 @@ export const ALL_PROVIDERS: Provider[] = [
   "SOLUTION_BOX", "DISTECNA", "CEVEN", "DIAPSTORE",
 ];
 
+/** Proveedores con integración real implementada (sincronizan catálogo propio). */
+export const IMPLEMENTED_PROVIDERS: Provider[] = ["ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID"];
+
 export interface ProductDTO {
+  id?: string;
   provider: string;
   name: string;
-  price: string;
-  imageUrl: string;
+  price: string | number | null;
+  currency?: string | null;
+  imageUrl: string | null;
   externalId: string;
+  sku?: string | null;
+  brand?: string | null;
+  category?: string | null;
+  subcategory?: string | null;
+  stock?: number | null;
   locationAir?: string | null;
+  syncedAt?: string;
 }
 
 export interface CredentialResponse {
@@ -47,9 +69,9 @@ export interface RegisterResponse {
 // --- Auth ---
 export const authApi = {
   login: (username: string, password: string) =>
-    api.post<{ success: boolean; data: { token: string } }>("/auth/login", { username, password }),
-  register: (username: string, password: string) =>
-    api.post<{ success: boolean; data: RegisterResponse }>("/auth/register", { username, password }),
+    api.post<{ token: string }>("/auth/login", { username, password }),
+  register: (username: string, email: string, password: string) =>
+    api.post<RegisterResponse>("/auth/register", { username, email, password }),
 };
 
 // --- Search ---
@@ -60,10 +82,8 @@ export interface SearchAllOptions {
 }
 
 export const searchApi = {
-  // Aggregates results by fan-out to /search/provider/* in parallel.
-  // Bypasses backend /search/all which only includes ELIT.
   all: async (name: string, opts: SearchAllOptions = {}) => {
-    const providers = opts.providers ?? ALL_PROVIDERS;
+    const providers = opts.providers ?? IMPLEMENTED_PROVIDERS;
     const results = await Promise.allSettled(
       providers.map(async (p) => {
         try {
@@ -86,7 +106,7 @@ export const searchApi = {
   byProvider: (provider: Provider, name: string) =>
     api.get<ProductDTO[]>(`/search/provider/${provider}`, { params: { name } }),
   filtered: async (name: string, filters: Record<string, boolean>, opts: SearchAllOptions = {}) => {
-    const providers = ALL_PROVIDERS.filter((p) => filters[p]);
+    const providers = IMPLEMENTED_PROVIDERS.filter((p) => filters[p]);
     return searchApi.all(name, { ...opts, providers });
   },
 };
@@ -102,6 +122,28 @@ export const credentialsApi = {
     api.delete(`/credentials/${providerName}`),
 };
 
+// --- Proveedores: sincronización de catálogo completo ---
+export interface ProviderSyncResult {
+  provider: Provider;
+  synced: number;
+}
+
+export interface ProviderStatus {
+  provider: Provider;
+  implemented: boolean;
+  hasCredentials: boolean;
+  total: number;
+  withStock: number;
+  lastSyncedAt: string | null;
+}
+
+export const providersApi = {
+  sync: (providerName: Provider) =>
+    api.post<ProviderSyncResult>(`/providers/${providerName}/sync`),
+  status: (providerName: Provider) =>
+    api.get<ProviderStatus>(`/providers/${providerName}/status`),
+};
+
 // --- Admin / Users ---
 export const userApi = {
   updateActiveStatus: (userId: string, active: boolean) =>
@@ -110,13 +152,6 @@ export const userApi = {
     api.put("/user/update-end-date", { userId, endDate }),
   delete: (userId: string) =>
     api.delete("/user/delete", { data: { userId } }),
-};
-
-// --- Invid Sync ---
-export const invidApi = {
-  sync: (userId: string) => api.get(`/sync/invid/${userId}`),
-  search: (title: string) =>
-    api.get<ProductDTO[]>(`/sync/invid/search/${encodeURIComponent(title)}`),
 };
 
 export default api;

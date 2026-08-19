@@ -9,6 +9,7 @@ import { BarChart2, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 export default function RegisterPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +21,7 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      await authApi.register(username, password);
+      await authApi.register(username, email, password);
       router.push("/login");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -66,13 +67,25 @@ export default function RegisterPage() {
             />
           </div>
           <div>
+            <label className="block text-xs font-medium text-surface-400 mb-1.5">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              required
+              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
+            />
+          </div>
+          <div>
             <label className="block text-xs font-medium text-surface-400 mb-1.5">Contraseña</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 8 caracteres"
               required
+              minLength={8}
               className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
             />
           </div>

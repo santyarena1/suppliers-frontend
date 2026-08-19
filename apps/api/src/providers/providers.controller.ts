@@ -21,6 +21,11 @@ export class ProvidersController {
     return this.providersService.sync(user.userId, assertProvider(provider));
   }
 
+  @Get("providers/:provider/status")
+  status(@CurrentUser() user: { userId: string }, @Param("provider") provider: string) {
+    return this.providersService.status(user.userId, assertProvider(provider));
+  }
+
   @Get("search/provider/:provider")
   search(@Param("provider") provider: string, @Query("name") name = "") {
     return this.providersService.search(assertProvider(provider), name);

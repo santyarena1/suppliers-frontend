@@ -459,7 +459,7 @@ function ListView({ items }: { items: ProductDTO[] }) {
             {p.provider.replace(/_/g, " ")}
           </span>
           <div className="w-28 text-right">
-            <PriceTag usdPrice={p.price} size="sm" showSecondary />
+            <PriceTag usdPrice={p.price ?? ""} size="sm" showSecondary />
           </div>
           <div onClick={(e) => e.stopPropagation()}>
             <AddToCartButton product={p} variant="icon" />

@@ -225,7 +225,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                               </div>
                               <div className="p-2.5">
                                 <p className="text-[11px] text-surface-300 line-clamp-2 leading-tight mb-1.5">{p.name}</p>
-                                <PriceTag usdPrice={p.price} size="sm" />
+                                <PriceTag usdPrice={p.price ?? ""} size="sm" />
                               </div>
                             </Link>
                           ))}

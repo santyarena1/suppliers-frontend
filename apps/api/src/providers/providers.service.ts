@@ -83,6 +83,31 @@ export class ProvidersService {
     );
   }
 
+  async status(userId: string, provider: Provider) {
+    const [hasCredentials, total, withStock, last] = await Promise.all([
+      this.credentials.getByProvider(userId, provider).then(
+        () => true,
+        () => false
+      ),
+      this.prisma.providerSyncCache.count({ where: { provider } }),
+      this.prisma.providerSyncCache.count({ where: { provider, stock: { gt: 0 } } }),
+      this.prisma.providerSyncCache.findFirst({
+        where: { provider },
+        orderBy: { syncedAt: "desc" },
+        select: { syncedAt: true },
+      }),
+    ]);
+
+    return {
+      provider,
+      implemented: Boolean(this.registry.get(provider)),
+      hasCredentials,
+      total,
+      withStock,
+      lastSyncedAt: last?.syncedAt ?? null,
+    };
+  }
+
   async search(provider: Provider, name: string) {
     return this.prisma.providerSyncCache.findMany({
       where: {
