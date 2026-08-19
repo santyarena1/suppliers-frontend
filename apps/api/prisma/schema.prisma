@@ -96,6 +96,61 @@ model ProviderSyncCache {
   @@index([provider, sku])
 }
 
+// Historial real de precio: se graba una fila solo cuando el precio cambia
+// respecto de la última sync (no en cada corrida del cron), para tener un
+// historial genuino de variaciones y poder graficarlo en la ficha del producto.
+model ProductPriceHistory {
+  id         String   @id @default(uuid())
+  provider   String
+  externalId String
+  price      Decimal? @db.Decimal(14, 4)
+  finalPrice Decimal? @db.Decimal(14, 4)
+  currency   String?
+  capturedAt DateTime @default(now())
+
+  @@index([provider, externalId, capturedAt])
+}
+
+// Configuración visual + de visibilidad por proveedor, editable desde el
+// panel de superadmin. Ausencia de fila para un proveedor = visible, sin
+// logo/color custom (se usan los defaults de providerColors.ts).
+model ProviderDisplayConfig {
+  provider  String   @id
+  visible   Boolean  @default(true)
+  logoUrl   String?
+  textColor String?
+  updatedAt DateTime @updatedAt
+}
+
+// Excepciones puntuales de acceso a un módulo del sistema para un usuario.
+// Ausencia de fila = permitido según el rol (todos los módulos salvo Admin
+// para ROLE_USER/ROLE_BRAND). El superadmin puede desactivar módulos por usuario.
+model UserModuleAccess {
+  id      String  @id @default(uuid())
+  userId  String
+  module  String
+  allowed Boolean @default(true)
+
+  @@unique([userId, module])
+}
+
+// Banners de imagen para el home y la landing del buscador, editables desde
+// el panel de superadmin. Se usan URLs de imagen (no hay upload de archivos).
+model HomeBanner {
+  id        String   @id @default(uuid())
+  position  String
+  imageUrl  String
+  title     String?
+  subtitle  String?
+  linkUrl   String?
+  order     Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([position, active, order])
+}
+
 enum MissingProductAction {
   KEEP
   OUT_OF_STOCK
@@ -275,6 +330,10 @@ model BrandAccount {
   website        String?
   active         Boolean  @default(true)
   suspended      Boolean  @default(false)
+  // Visibilidad de la marca para usuarios no-admin, controlada desde el panel
+  // de superadmin (distinto de `active`/`suspended`, que son estado de cuenta).
+  visible        Boolean  @default(true)
+  textColor      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

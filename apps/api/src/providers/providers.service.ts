@@ -139,6 +139,17 @@ export class ProvidersService {
   }
 
   private async upsertPage(provider: Provider, items: NormalizedProduct[], markupPercent: number, minStock: number) {
+    // Historial de precio: se compara contra el precio guardado antes de
+    // pisarlo, y solo se graba una fila nueva si realmente cambió (o es un
+    // producto nuevo) — evita llenar la tabla con una fila idéntica cada vez
+    // que corre el cron sin que haya habido ninguna variación real.
+    const existing = await this.prisma.providerSyncCache.findMany({
+      where: { provider, externalId: { in: items.map((i) => i.externalId) } },
+      select: { externalId: true, price: true, finalPrice: true, currency: true },
+    });
+    const previousByExternalId = new Map(existing.map((e) => [e.externalId, e]));
+    const historyRows: { provider: string; externalId: string; price: number | undefined; finalPrice: number | undefined; currency: string | undefined }[] = [];
+
     await Promise.all(
       items.map((item) => {
         // Stock mínimo del proveedor: si informa esta cantidad o menos, lo
@@ -177,6 +188,22 @@ export class ProvidersService {
           active: true,
           raw: item.raw as object,
         };
+
+        const previous = previousByExternalId.get(item.externalId);
+        const priceChanged =
+          !previous ||
+          numberOrNull(previous.price) !== numberOrNull(fields.price) ||
+          numberOrNull(previous.finalPrice) !== numberOrNull(fields.finalPrice);
+        if (priceChanged && (fields.price != null || fields.finalPrice != null)) {
+          historyRows.push({
+            provider,
+            externalId: item.externalId,
+            price: fields.price,
+            finalPrice: fields.finalPrice,
+            currency: fields.currency,
+          });
+        }
+
         return this.prisma.providerSyncCache.upsert({
           where: { provider_externalId: { provider, externalId: item.externalId } },
           create: { provider, externalId: item.externalId, ...fields },
@@ -184,6 +211,10 @@ export class ProvidersService {
         });
       })
     );
+
+    if (historyRows.length) {
+      await this.prisma.productPriceHistory.createMany({ data: historyRows });
+    }
   }
 
   async status(userId: string, provider: Provider) {
@@ -212,6 +243,7 @@ export class ProvidersService {
   }
 
   async search(provider: Provider, name: string) {
+    if (!(await this.isProviderVisible(provider))) return [];
     return this.prisma.providerSyncCache.findMany({
       where: {
         provider,
@@ -220,6 +252,71 @@ export class ProvidersService {
       },
       orderBy: { name: "asc" },
       take: 200,
+    });
+  }
+
+  /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
+  async getProduct(provider: Provider, externalId: string) {
+    if (!(await this.isProviderVisible(provider))) return null;
+    return this.prisma.providerSyncCache.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+    });
+  }
+
+  /** Serie de precios real (solo puntos donde el precio efectivamente cambió). */
+  async getPriceHistory(provider: Provider, externalId: string) {
+    return this.prisma.productPriceHistory.findMany({
+      where: { provider, externalId },
+      orderBy: { capturedAt: "asc" },
+      select: { price: true, finalPrice: true, currency: true, capturedAt: true },
+    });
+  }
+
+  private async hiddenProviders(): Promise<Set<string>> {
+    const rows = await this.prisma.providerDisplayConfig.findMany({
+      where: { visible: false },
+      select: { provider: true },
+    });
+    return new Set(rows.map((r) => r.provider));
+  }
+
+  private async isProviderVisible(provider: Provider): Promise<boolean> {
+    const row = await this.prisma.providerDisplayConfig.findUnique({ where: { provider } });
+    return row?.visible ?? true;
+  }
+
+  /** Categorías distintas con conteo, cruzando todos los proveedores visibles — para la landing de Búsqueda. */
+  async getCategories() {
+    const hidden = await this.hiddenProviders();
+    const rows = await this.prisma.providerSyncCache.groupBy({
+      by: ["category"],
+      where: { active: true, category: { not: null }, provider: { notIn: [...hidden] } },
+      _count: { _all: true },
+      orderBy: { _count: { category: "desc" } },
+      take: 60,
+    });
+    return rows
+      .filter((r) => r.category)
+      .map((r) => ({ category: r.category as string, count: r._count._all }));
+  }
+
+  /** Muestra de productos activos entre proveedores visibles, para destacados de la landing. */
+  async getFeatured(take: number) {
+    const hidden = await this.hiddenProviders();
+    return this.prisma.providerSyncCache.findMany({
+      where: { active: true, stock: { gt: 0 }, provider: { notIn: [...hidden] } },
+      orderBy: { syncedAt: "desc" },
+      take: Math.min(Math.max(take, 1), 60),
+    });
+  }
+
+  /** Productos de una categoría, cruzando todos los proveedores visibles — clic en la grilla de categorías de la landing. */
+  async getByCategory(category: string, take: number) {
+    const hidden = await this.hiddenProviders();
+    return this.prisma.providerSyncCache.findMany({
+      where: { active: true, category, provider: { notIn: [...hidden] } },
+      orderBy: { name: "asc" },
+      take: Math.min(Math.max(take, 1), 200),
     });
   }
 
@@ -250,6 +347,12 @@ export class ProvidersService {
 function applyMarkup(price: number | undefined, markupPercent: number): number | undefined {
   if (price == null || !markupPercent) return price;
   return Math.round(price * (1 + markupPercent / 100) * 100) / 100;
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 function errorMessage(err: unknown): string {

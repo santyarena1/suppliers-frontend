@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { proxyImg, parsePrice, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
+import { useProviderDisplay } from "@/lib/providerDisplay";
 import AddToCartButton from "./AddToCartButton";
 
 const PROVIDER_HUE: Record<string, string> = {
@@ -31,7 +32,10 @@ const IVA = 0.21;
 export default function ProductCard({ product }: { product: ProductDTO }) {
   const [imgErr, setImgErr] = useState(false);
   const { currency, withIva, convert } = usePrefs();
+  const display = useProviderDisplay();
   const color = PROVIDER_HUE[product.provider] || "text-surface-400 bg-surface-400/10";
+  const logoUrl = display.logoUrl(product.provider);
+  const customColor = display.textColor(product.provider);
   const href = `/product/${encodeURIComponent(product.provider)}/${encodeURIComponent(product.externalId)}`;
 
   const baseUsd = parsePrice(product.price);
@@ -65,8 +69,14 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
           )}
 
           {/* Provider badge - always readable */}
-          <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md tracking-wide bg-black/70 text-white border border-white/10`}>
-            <span className={color.split(" ")[0]}>{product.provider.replace(/_/g, " ")}</span>
+          <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md tracking-wide bg-black/70 text-white border border-white/10">
+            {logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={logoUrl} alt="" className="w-3.5 h-3.5 object-contain rounded-sm" />
+            )}
+            <span className={customColor ? undefined : color.split(" ")[0]} style={customColor ? { color: customColor } : undefined}>
+              {product.provider.replace(/_/g, " ")}
+            </span>
           </span>
 
           {/* IVA badge - always readable */}

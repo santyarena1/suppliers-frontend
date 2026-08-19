@@ -12,13 +12,14 @@ import AddToCartButton from "@/components/AddToCartButton";
 import { useResults } from "@/lib/results";
 import { useCart } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
-import { ProductDTO, searchApi } from "@/lib/api";
+import { ProductDTO, Provider, searchApi, catalogApi, PricePoint } from "@/lib/api";
 import { proxyImg, parsePrice, formatARS, formatUSD } from "@/lib/format";
 import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
 import {
   ArrowLeft, Package, ImageOff, ChevronLeft, ChevronRight,
-  ZoomIn, X, Copy, ExternalLink, Sparkles
+  ZoomIn, X, Copy, ExternalLink, Sparkles, TrendingUp
 } from "lucide-react";
+import PriceHistoryChart from "@/components/PriceHistoryChart";
 
 export default function ProductPage({ params }: { params: Promise<{ provider: string; externalId: string }> }) {
   const { provider, externalId } = use(params);
@@ -37,16 +38,31 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const [imgErr, setImgErr] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [qty, setQty] = useState(1);
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
 
   useEffect(() => {
     const found = find(providerName, extId);
     if (found) {
       setProduct(found);
       setLoading(false);
-    } else {
-      setLoading(false);
+      return;
     }
+    // No está en el caché de la última búsqueda (link directo, refresh, etc.)
+    // — se lo pide directo al backend en vez de mostrar "no encontrado".
+    catalogApi
+      .getProduct(providerName as Provider, extId)
+      .then((res) => setProduct(res.data))
+      .catch(() => setProduct(null))
+      .finally(() => setLoading(false));
   }, [providerName, extId, find]);
+
+  useEffect(() => {
+    if (!product) return;
+    catalogApi
+      .priceHistory(providerName as Provider, extId)
+      .then((res) => setPriceHistory(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setPriceHistory([]));
+  }, [product, providerName, extId]);
 
   // Find similar products in last results (same provider)
   useEffect(() => {
@@ -119,10 +135,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 <Package className="w-12 h-12 text-surface-700 mx-auto mb-3" />
                 <h2 className="text-lg font-semibold text-white mb-2">Producto no encontrado</h2>
                 <p className="text-sm text-surface-400 mb-1">
-                  No se encontraron datos en caché para <span className="font-mono text-surface-200">{providerName} / {extId}</span>.
+                  No encontramos <span className="font-mono text-surface-200">{providerName} / {extId}</span> en nuestra base.
                 </p>
                 <p className="text-xs text-surface-500 mb-6">
-                  Realizá la búsqueda desde el listado para acceder al detalle.
+                  Puede que el proveedor lo haya dado de baja o que el link esté mal.
                 </p>
                 <Link href="/search" className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg px-4 py-2 transition-all">
                   <ArrowLeft className="w-4 h-4" />
@@ -201,6 +217,23 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                             <ExternalLink className="w-3 h-3 flex-shrink-0" /> Ver original
                           </a>
                         </DetailRow>
+                      )}
+                    </div>
+
+                    {/* Evolución de precio */}
+                    <div className="bg-surface-900 border border-surface-800 rounded-2xl p-5 flex flex-col gap-3">
+                      <h2 className="text-sm font-semibold text-surface-300 flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-brand-400" />
+                        Evolución de precio
+                      </h2>
+                      {priceHistory.length >= 2 ? (
+                        <PriceHistoryChart points={priceHistory} />
+                      ) : (
+                        <p className="text-xs text-surface-500">
+                          Todavía no hay variación de precio registrada para este producto — se
+                          va a ir armando el gráfico a medida que el precio cambie en las próximas
+                          sincronizaciones.
+                        </p>
                       )}
                     </div>
 

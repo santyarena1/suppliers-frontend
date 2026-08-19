@@ -196,4 +196,115 @@ export const userApi = {
     api.delete("/user/delete", { data: { userId } }),
 };
 
+// --- Catálogo: producto individual + historial de precio ---
+export interface PricePoint {
+  price: string | number | null;
+  finalPrice: string | number | null;
+  currency: string | null;
+  capturedAt: string;
+}
+
+export interface CategoryCount {
+  category: string;
+  count: number;
+}
+
+export const catalogApi = {
+  getProduct: (provider: Provider, externalId: string) =>
+    api.get<ProductDTO>(`/providers/${provider}/products/${externalId}`),
+  priceHistory: (provider: Provider, externalId: string) =>
+    api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`),
+  categories: () => api.get<CategoryCount[]>("/catalog/categories"),
+  featured: (take = 24) => api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
+  byCategory: (category: string, take = 60) => api.get<ProductDTO[]>("/catalog/by-category", { params: { category, take } }),
+  providerDisplay: () => api.get<ProviderDisplay[]>("/catalog/provider-display"),
+};
+
+// --- Permisos por módulo del usuario actual ---
+export type ModuleKey = "search" | "cart" | "credentials" | "providers" | "brands" | "diagnostics" | "admin";
+
+export const permissionsApi = {
+  mine: () => api.get<ModuleKey[]>("/me/permissions"),
+};
+
+// --- Banners (home / buscador) ---
+export interface Banner {
+  id: string;
+  position: "home" | "search";
+  imageUrl: string;
+  title: string | null;
+  subtitle: string | null;
+  linkUrl: string | null;
+  order: number;
+  active: boolean;
+}
+
+export const bannersApi = {
+  list: (position?: "home" | "search") => api.get<Banner[]>("/banners", { params: position ? { position } : undefined }),
+};
+
+// --- Panel de superadmin ---
+export type UserRole = "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  email: string;
+  role: UserRole;
+  active: boolean;
+  endDate: string | null;
+  createdAt: string;
+}
+
+export interface ProviderDisplay {
+  provider: Provider;
+  visible: boolean;
+  logoUrl: string | null;
+  textColor: string | null;
+}
+
+export interface BrandDisplay {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  textColor: string | null;
+  visible: boolean;
+}
+
+export interface ModulePermission {
+  module: ModuleKey;
+  allowed: boolean;
+}
+
+export const adminApi = {
+  listUsers: () => api.get<AdminUser[]>("/admin/users"),
+  createUser: (data: { username: string; email: string; password: string; role: UserRole }) =>
+    api.post<AdminUser>("/admin/users", data),
+  updateRole: (userId: string, role: UserRole) =>
+    api.put<{ id: string; role: UserRole }>(`/admin/users/${userId}/role`, { role }),
+  updateActiveStatus: (userId: string, active: boolean) =>
+    api.put(`/admin/users/${userId}/active-status`, { active }),
+  updateEndDate: (userId: string, endDate: string) =>
+    api.put(`/admin/users/${userId}/end-date`, { endDate }),
+  deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
+
+  getPermissions: (userId: string) => api.get<ModulePermission[]>(`/admin/permissions/${userId}`),
+  updatePermissions: (userId: string, permissions: ModulePermission[]) =>
+    api.put<ModulePermission[]>(`/admin/permissions/${userId}`, { permissions }),
+
+  listProviderDisplay: () => api.get<ProviderDisplay[]>("/admin/providers/display"),
+  updateProviderDisplay: (provider: Provider, data: Partial<Pick<ProviderDisplay, "visible" | "logoUrl" | "textColor">>) =>
+    api.put<ProviderDisplay>(`/admin/providers/${provider}/display`, data),
+
+  listBrandDisplay: () => api.get<BrandDisplay[]>("/admin/brands/display"),
+  updateBrandDisplay: (brandId: string, data: Partial<Pick<BrandDisplay, "visible" | "logoUrl" | "textColor">>) =>
+    api.put<BrandDisplay>(`/admin/brands/${brandId}/display`, data),
+
+  listBanners: () => api.get<Banner[]>("/admin/banners"),
+  createBanner: (data: Omit<Banner, "id" | "active"> & { active?: boolean }) => api.post<Banner>("/admin/banners", data),
+  updateBanner: (id: string, data: Partial<Omit<Banner, "id">>) => api.put<Banner>(`/admin/banners/${id}`, data),
+  deleteBanner: (id: string) => api.delete(`/admin/banners/${id}`),
+};
+
 export default api;

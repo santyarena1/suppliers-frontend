@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -54,5 +54,33 @@ export class ProvidersController {
   @Get("search/provider/:provider")
   search(@Param("provider") provider: string, @Query("name") name = "") {
     return this.providersService.search(assertProvider(provider), name);
+  }
+
+  @Get("providers/:provider/products/:externalId")
+  async getProduct(@Param("provider") provider: string, @Param("externalId") externalId: string) {
+    const product = await this.providersService.getProduct(assertProvider(provider), externalId);
+    if (!product) throw new NotFoundException("Producto no encontrado");
+    return product;
+  }
+
+  @Get("providers/:provider/products/:externalId/price-history")
+  getPriceHistory(@Param("provider") provider: string, @Param("externalId") externalId: string) {
+    return this.providersService.getPriceHistory(assertProvider(provider), externalId);
+  }
+
+  @Get("catalog/categories")
+  getCategories() {
+    return this.providersService.getCategories();
+  }
+
+  @Get("catalog/featured")
+  getFeatured(@Query("take") take?: string) {
+    return this.providersService.getFeatured(take ? Number(take) : 24);
+  }
+
+  @Get("catalog/by-category")
+  getByCategory(@Query("category") category: string, @Query("take") take?: string) {
+    if (!category) throw new BadRequestException("Falta el parámetro category");
+    return this.providersService.getByCategory(category, take ? Number(take) : 60);
   }
 }
