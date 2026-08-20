@@ -70,18 +70,24 @@ export class AirAdapter implements ProviderAdapter {
     const { user, pass } = credentials;
     if (!user || !pass) throw new BadGatewayException("Credenciales de Air incompletas");
 
-    const login = await axios.get<{ token: string }>(BASE_URL, {
-      params: { user, pass },
-      timeout: 15_000,
-    });
-    const token = login.data.token;
+    let token: string | undefined;
+    try {
+      const login = await axios.get<{ token: string }>(BASE_URL, {
+        params: { user, pass },
+        timeout: 15_000,
+      });
+      token = login.data?.token;
+    } catch (err) {
+      const body = axios.isAxiosError(err) ? JSON.stringify(err.response?.data ?? err.message) : String(err);
+      throw new BadGatewayException(`Air rechazó el login: ${body.slice(0, 300)}`);
+    }
     if (!token) throw new BadGatewayException("Air no devolvió token de sesión");
 
     // La cuenta tiene un límite real de 1 consulta cada 5 minutos en
     // /q=articulos ("Too many queries detected" si se llama más seguido).
     // AcuStock usa un endpoint de catálogo masivo distinto que no tenemos
     // documentado; por ahora traemos todo en una sola llamada grande.
-    const { data } = await axios.post<AirProduct[]>(
+    const { data } = await axios.post<AirProduct[] | Record<string, unknown>>(
       BASE_URL,
       {
         rubro: "", grupo: "", categoria: "", estado: "", texto: "",
@@ -95,7 +101,16 @@ export class AirAdapter implements ProviderAdapter {
       }
     );
 
-    await onPage((data ?? []).map((p) => mapProduct(p)));
+    // Air a veces responde 200 con un objeto de error en vez de un array
+    // (ej. rate limit) — mejor devolver ese mensaje real que reventar con
+    // un TypeError genérico.
+    if (!Array.isArray(data)) {
+      throw new BadGatewayException(
+        `Air no devolvió un catálogo válido: ${JSON.stringify(data).slice(0, 300)}`
+      );
+    }
+
+    await onPage(data.map((p) => mapProduct(p)));
   }
 }
 

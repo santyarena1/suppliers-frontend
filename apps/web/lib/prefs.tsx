@@ -44,7 +44,7 @@ const PrefsContext = createContext<PrefsContextValue | null>(null);
 export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>("ARS");
   const [withIva, setWithIvaState] = useState<boolean>(true);
-  const [dollarType, setDollarTypeState] = useState<DollarType>("blue");
+  const [dollarType, setDollarTypeState] = useState<DollarType>("oficial");
   const [rates, setRates] = useState<DollarRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
 
