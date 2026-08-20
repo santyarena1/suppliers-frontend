@@ -3,8 +3,6 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
@@ -68,7 +66,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     const initialTab = new URLSearchParams(window.location.search).get("tab");
     if (initialTab === "credentials" || initialTab === "sync" || initialTab === "config" || initialTab === "catalog" || initialTab === "invid-account") {
       setTab(initialTab);
+      if (initialTab === "invid-account") loadInvidAccount();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [invidOrders, setInvidOrders] = useState<InvidOrder[] | null>(null);
@@ -290,27 +290,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   }
 
   if (!valid) {
-    return (
-      <AuthGuard>
-        <div className="flex h-screen overflow-hidden">
-          <Navbar />
-          <div className="flex-1 flex items-center justify-center text-surface-500 text-sm">
-            Proveedor inválido.
-          </div>
-        </div>
-      </AuthGuard>
-    );
+    return <div className="flex-1 flex items-center justify-center text-surface-500 text-sm">Proveedor inválido.</div>;
   }
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3 min-w-0">
-              <Link href="/proveedores" className="text-surface-500 hover:text-white transition-colors flex-shrink-0">
+              <Link href="/proveedores" className="text-surface-500 hover:text-white transition-colors flex-shrink-0 lg:hidden">
                 <ArrowLeft className="w-4 h-4" />
               </Link>
               <div className="min-w-0">
@@ -877,9 +864,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
               </div>
             </div>
           )}
-        </div>
-      </div>
-    </AuthGuard>
+    </>
   );
 }
 

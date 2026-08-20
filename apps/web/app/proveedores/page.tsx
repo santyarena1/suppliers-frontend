@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
@@ -51,22 +49,18 @@ export default function ProveedoresPage() {
   const pending = ALL_PROVIDERS.filter((p) => !IMPLEMENTED_PROVIDERS.includes(p));
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
+    <>
+      <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-semibold text-white">Dashboard de Proveedores</h1>
+          <p className="text-xs text-surface-500 hidden sm:block">
+            Estado de sincronización de todos los proveedores — entrá a uno para ver credenciales, configuración y catálogo
+          </p>
+        </div>
+        <PrefsPanel />
+      </header>
 
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
-          <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
-            <div>
-              <h1 className="text-base font-semibold text-white">Proveedores</h1>
-              <p className="text-xs text-surface-500 hidden sm:block">
-                Credenciales, configuración y sincronización — todo en un solo lugar por proveedor
-              </p>
-            </div>
-            <PrefsPanel />
-          </header>
-
-          <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
               <section>
                 <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-3">
@@ -152,7 +146,7 @@ export default function ProveedoresPage() {
 
               <section>
                 <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-widest mb-3">
-                  Próximamente — {pending.length}
+                  Conectar nuevo — {pending.length} disponibles
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
                   {pending.map((provider) => (
@@ -170,9 +164,7 @@ export default function ProveedoresPage() {
               </section>
             </div>
           </div>
-        </div>
-      </div>
-    </AuthGuard>
+    </>
   );
 }
 
