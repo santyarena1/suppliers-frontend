@@ -8,14 +8,16 @@ import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
-  MissingProductAction, ZeroStockAction, providersApi, searchApi
+  MissingProductAction, ZeroStockAction, providersApi, searchApi, credentialsApi
 } from "@/lib/api";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
+import NodoSpinner from "@/components/NodoSpinner";
+import SyncProgressBar from "@/components/SyncProgressBar";
 import {
-  AlertTriangle, ArrowLeft, Boxes, CheckCircle2, ImageOff, KeyRound,
-  Loader2, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
+  AlertTriangle, ArrowLeft, Boxes, CheckCircle2, Eye, EyeOff, ImageOff, KeyRound,
+  Loader2, PackageCheck, Pencil, RefreshCw, Save, Search, Settings, Trash2, XCircle
 } from "lucide-react";
 
 const MISSING_ACTION_LABELS: Record<MissingProductAction, string> = {
@@ -46,11 +48,76 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const valid = ALL_PROVIDERS.includes(provider);
   const implemented = IMPLEMENTED_PROVIDERS.includes(provider);
 
-  const [tab, setTab] = useState<"sync" | "catalog" | "config">("sync");
+  const [tab, setTab] = useState<"credentials" | "sync" | "catalog" | "config">("sync");
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const [credFields, setCredFields] = useState<{ key: string; value: string }[]>([{ key: "", value: "" }]);
+  const [showValues, setShowValues] = useState<Record<number, boolean>>({});
+  const [loadingCred, setLoadingCred] = useState(true);
+  const [savingCred, setSavingCred] = useState(false);
+  const [deletingCred, setDeletingCred] = useState(false);
+  const [credResult, setCredResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [hasCred, setHasCred] = useState(false);
+
+  useEffect(() => {
+    const initialTab = new URLSearchParams(window.location.search).get("tab");
+    if (initialTab === "credentials" || initialTab === "sync" || initialTab === "config" || initialTab === "catalog") {
+      setTab(initialTab);
+    }
+  }, []);
+
+  async function loadCredential() {
+    setLoadingCred(true);
+    try {
+      const res = await credentialsApi.getByProvider(provider);
+      const parsed = typeof res.data.credentialsJson === "string" ? JSON.parse(res.data.credentialsJson) : res.data.credentialsJson;
+      setCredFields(Object.entries(parsed).map(([key, value]) => ({ key, value: String(value) })));
+      setHasCred(true);
+    } catch {
+      setCredFields([{ key: "", value: "" }]);
+      setHasCred(false);
+    } finally {
+      setLoadingCred(false);
+    }
+  }
+
+  async function handleSaveCredential(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingCred(true);
+    setCredResult(null);
+    try {
+      const creds: Record<string, string> = {};
+      credFields.forEach(({ key, value }) => { if (key.trim()) creds[key.trim()] = value; });
+      await credentialsApi.save(provider, creds);
+      setCredResult({ ok: true, msg: "Credencial guardada" });
+      setHasCred(true);
+      await loadStatus();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setCredResult({ ok: false, msg: msg || "Error al guardar la credencial" });
+    } finally {
+      setSavingCred(false);
+    }
+  }
+
+  async function handleDeleteCredential() {
+    if (!window.confirm(`¿Eliminar la credencial de ${provider.replace(/_/g, " ")}?`)) return;
+    setDeletingCred(true);
+    try {
+      await credentialsApi.delete(provider);
+      setCredFields([{ key: "", value: "" }]);
+      setHasCred(false);
+      setCredResult({ ok: true, msg: "Credencial eliminada" });
+      await loadStatus();
+    } catch {
+      setCredResult({ ok: false, msg: "Error al eliminar la credencial" });
+    } finally {
+      setDeletingCred(false);
+    }
+  }
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductDTO[]>([]);
@@ -146,7 +213,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     }
   }
 
-  useEffect(() => { loadStatus(); loadConfig(); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadStatus(); loadConfig(); loadCredential(); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSync() {
     setSyncing(true);
@@ -237,9 +304,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         <CheckCircle2 className="w-4 h-4" /> Configurada
                       </span>
                     ) : (
-                      <Link href="/credentials" className="flex items-center gap-1.5 text-sm font-semibold text-surface-400 hover:text-white mt-1 transition-colors">
+                      <button onClick={() => setTab("credentials")} className="flex items-center gap-1.5 text-sm font-semibold text-surface-400 hover:text-white mt-1 transition-colors">
                         <KeyRound className="w-4 h-4" /> Configurar
-                      </Link>
+                      </button>
                     )}
                   </div>
                   <div className="bg-surface-900 border border-surface-800 rounded-xl p-4 flex flex-col justify-between">
@@ -253,6 +320,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 {/* Tabs */}
                 <div className="flex border-b border-surface-800">
                   {[
+                    { key: "credentials" as const, label: "Credenciales" },
                     { key: "sync" as const, label: "Sincronización" },
                     { key: "config" as const, label: "Configuración" },
                     { key: "catalog" as const, label: "Catálogo" },
@@ -269,6 +337,77 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   ))}
                 </div>
 
+                {tab === "credentials" && (
+                  <div className="max-w-xl flex flex-col gap-4">
+                    <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                      <p className="text-sm text-surface-400">
+                        Credenciales de acceso a la API de {provider.replace(/_/g, " ")}. Se guardan cifradas y son
+                        solo tuyas — cada usuario carga las suyas.
+                      </p>
+                      {loadingCred ? (
+                        <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
+                      ) : (
+                        <form onSubmit={handleSaveCredential} className="flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-medium text-surface-400">Campos</label>
+                            <button type="button" onClick={() => setCredFields((prev) => [...prev, { key: "", value: "" }])} className="text-xs text-brand-400 hover:text-brand-300 transition-colors">
+                              + Agregar campo
+                            </button>
+                          </div>
+                          {credFields.map((field, i) => (
+                            <div key={i} className="flex gap-2 items-center">
+                              <input
+                                placeholder="Clave"
+                                value={field.key}
+                                onChange={(e) => setCredFields((prev) => prev.map((f, idx) => idx === i ? { ...f, key: e.target.value } : f))}
+                                className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 font-mono"
+                              />
+                              <div className="relative flex-[1.5]">
+                                <input
+                                  placeholder="Valor"
+                                  type={showValues[i] ? "text" : "password"}
+                                  value={field.value}
+                                  onChange={(e) => setCredFields((prev) => prev.map((f, idx) => idx === i ? { ...f, value: e.target.value } : f))}
+                                  className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 pr-8 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 font-mono"
+                                />
+                                <button type="button" onClick={() => setShowValues((v) => ({ ...v, [i]: !v[i] }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-300">
+                                  {showValues[i] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                              {credFields.length > 1 && (
+                                <button type="button" onClick={() => setCredFields((prev) => prev.filter((_, idx) => idx !== i))} className="text-surface-600 hover:text-red-400 transition-colors">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <div className="flex gap-2 pt-1">
+                            <button type="submit" disabled={savingCred} className="flex-1 flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all">
+                              {savingCred ? <NodoSpinner className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
+                              {hasCred ? "Actualizar" : "Guardar"}
+                            </button>
+                            {hasCred && (
+                              <button type="button" onClick={handleDeleteCredential} disabled={deletingCred} className="flex items-center justify-center gap-1.5 border border-red-500/25 text-red-400 hover:bg-red-500/10 disabled:opacity-40 text-sm font-medium rounded-lg px-4 transition-all">
+                                {deletingCred ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                              </button>
+                            )}
+                          </div>
+                        </form>
+                      )}
+                      {credResult && (
+                        <div className={`flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 ${
+                          credResult.ok
+                            ? "bg-emerald-500/8 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                            : "bg-red-500/8 border border-red-500/20 text-red-400"
+                        }`}>
+                          {credResult.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <XCircle className="w-4 h-4 flex-shrink-0" />}
+                          {credResult.msg}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {tab === "sync" && (
                   <div className="max-w-xl flex flex-col gap-4">
                     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
@@ -279,7 +418,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       {!status?.hasCredentials && (
                         <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs rounded-lg px-3.5 py-2.5">
                           <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                          Necesitás <Link href="/credentials" className="underline font-medium">configurar la credencial</Link> antes de sincronizar.
+                          Necesitás <button type="button" onClick={() => setTab("credentials")} className="underline font-medium">configurar la credencial</button> antes de sincronizar.
                         </div>
                       )}
                       <button
@@ -287,9 +426,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         disabled={syncing || !status?.hasCredentials}
                         className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                       >
-                        {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        {syncing ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
                         {syncing ? "Sincronizando..." : "Sincronizar ahora"}
                       </button>
+                      {syncing && <SyncProgressBar />}
                       {syncResult && (
                         <div className={`flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 ${
                           syncResult.ok

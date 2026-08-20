@@ -174,7 +174,7 @@ export default function HomePage() {
 
               {/* Stats */}
               <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <StatCard label="Proveedores activos" value={configuredProviders.size} total={ALL_PROVIDERS.length} icon={Building2} href="/credentials" accent="brand" />
+                <StatCard label="Proveedores activos" value={configuredProviders.size} total={ALL_PROVIDERS.length} icon={Building2} href="/proveedores" accent="brand" />
                 <StatCard label={`Dólar ${dollarLabel(dollarType)}`} value={currentRate ? `$${currentRate.venta.toLocaleString("es-AR")}` : "—"} icon={DollarSign} accent="emerald" detail={currency === "USD" ? "Mostrando en USD" : "Convertido a ARS"} />
                 <StatCard label="Carrito" value={totalCount} detail={cartProviders.length > 0 ? `${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}` : "Vacío"} icon={ShoppingCart} href="/cart" accent="orange" />
                 <StatCard label="Búsquedas guardadas" value={top.length} detail="Historial local" icon={Clock} accent="purple" />
@@ -256,7 +256,7 @@ export default function HomePage() {
               {/* Providers */}
               <section>
                 <SectionTitle icon={Building2} title="Proveedores disponibles" right={
-                  <Link href="/credentials" className="text-xs text-brand-400 hover:text-brand-300 font-medium flex items-center gap-1">
+                  <Link href="/proveedores" className="text-xs text-brand-400 hover:text-brand-300 font-medium flex items-center gap-1">
                     Administrar <ArrowRight className="w-3 h-3" />
                   </Link>
                 } />
@@ -286,7 +286,7 @@ export default function HomePage() {
 
               {/* CTAs */}
               <section className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-                <CtaCard href="/credentials" icon={Key} title="Configurar credenciales" description="Agregá las API keys de cada proveedor para activar las búsquedas" color="brand" />
+                <CtaCard href="/proveedores" icon={Key} title="Configurar credenciales" description="Agregá las API keys de cada proveedor para activar las búsquedas" color="brand" />
                 <CtaCard href="/cart" icon={ShoppingCart} title="Ver carrito" description={`${totalCount} ${totalCount === 1 ? "unidad" : "unidades"} de ${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}`} color="emerald" />
                 <CtaCard href="/search" icon={Package} title="Buscar productos" description="Consultá precios actualizados de los proveedores configurados" color="orange" />
               </section>

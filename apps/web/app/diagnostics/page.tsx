@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
@@ -388,7 +389,7 @@ function ProviderRow({ provider, result, configured, expanded, onToggle, onTest 
           )}
           {result.status === "no_cred" && (
             <p className="text-surface-500 text-[11px]">
-              No hay credencial configurada. Andá a <a href="/credentials" className="text-brand-400 hover:underline">Credenciales</a> para agregarla.
+              No hay credencial configurada. Andá a <Link href="/proveedores" className="text-brand-400 hover:underline">Proveedores</Link> para agregarla.
             </p>
           )}
         </div>
