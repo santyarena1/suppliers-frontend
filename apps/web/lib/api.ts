@@ -213,6 +213,29 @@ export const providersApi = {
   },
 };
 
+// --- Invid: pedidos y cuenta corriente (solo lectura, datos reales de su portal) ---
+export interface InvidOrder {
+  orderNumber: string;
+  webOrderNumber: string;
+  status: string;
+  date: string;
+  amount: string;
+  invoice: string;
+}
+export interface InvidAccountMovement {
+  date: string;
+  docType: string;
+  docNumber: string;
+  internalNumber: string;
+  currency: string;
+  total: string;
+}
+export const invidAccountApi = {
+  orders: () => api.get<{ orders: InvidOrder[] }>("/providers/INVID/orders"),
+  accountStatement: () =>
+    api.get<{ balance: number | null; movements: InvidAccountMovement[] }>("/providers/INVID/account-statement"),
+};
+
 // --- Admin / Users ---
 export const userApi = {
   updateActiveStatus: (userId: string, active: boolean) =>

@@ -10,6 +10,7 @@ import { AirAdapter } from "./adapters/air.adapter";
 import { GrupoNucleoAdapter } from "./adapters/grupo-nucleo.adapter";
 import { NewBytesAdapter } from "./adapters/new-bytes.adapter";
 import { FileImportService } from "./file-import.service";
+import { InvidAccountService } from "./invid-account.service";
 
 @Module({
   imports: [CredentialsModule],
@@ -24,6 +25,7 @@ import { FileImportService } from "./file-import.service";
     GrupoNucleoAdapter,
     NewBytesAdapter,
     FileImportService,
+    InvidAccountService,
   ],
 })
 export class ProvidersModule {}

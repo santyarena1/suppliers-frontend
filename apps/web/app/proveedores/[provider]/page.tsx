@@ -8,7 +8,8 @@ import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
-  MissingProductAction, ZeroStockAction, providersApi, searchApi, credentialsApi
+  MissingProductAction, ZeroStockAction, providersApi, searchApi, credentialsApi,
+  invidAccountApi, InvidOrder, InvidAccountMovement
 } from "@/lib/api";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
@@ -17,7 +18,7 @@ import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
 import {
   AlertTriangle, ArrowLeft, Boxes, CheckCircle2, Eye, EyeOff, FileSpreadsheet, ImageOff, KeyRound,
-  Loader2, PackageCheck, Pencil, RefreshCw, Save, Search, Settings, Trash2, XCircle
+  Loader2, PackageCheck, Pencil, Receipt, RefreshCw, Save, Search, Settings, Trash2, Wallet, XCircle
 } from "lucide-react";
 
 const MISSING_ACTION_LABELS: Record<MissingProductAction, string> = {
@@ -48,7 +49,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const valid = ALL_PROVIDERS.includes(provider);
   const implemented = IMPLEMENTED_PROVIDERS.includes(provider);
 
-  const [tab, setTab] = useState<"credentials" | "sync" | "catalog" | "config">("sync");
+  const [tab, setTab] = useState<"credentials" | "sync" | "catalog" | "config" | "invid-account">("sync");
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -65,10 +66,32 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
   useEffect(() => {
     const initialTab = new URLSearchParams(window.location.search).get("tab");
-    if (initialTab === "credentials" || initialTab === "sync" || initialTab === "config" || initialTab === "catalog") {
+    if (initialTab === "credentials" || initialTab === "sync" || initialTab === "config" || initialTab === "catalog" || initialTab === "invid-account") {
       setTab(initialTab);
     }
   }, []);
+
+  const [invidOrders, setInvidOrders] = useState<InvidOrder[] | null>(null);
+  const [invidBalance, setInvidBalance] = useState<number | null>(null);
+  const [invidMovements, setInvidMovements] = useState<InvidAccountMovement[] | null>(null);
+  const [loadingInvidAccount, setLoadingInvidAccount] = useState(false);
+  const [invidAccountError, setInvidAccountError] = useState<string | null>(null);
+
+  async function loadInvidAccount() {
+    setLoadingInvidAccount(true);
+    setInvidAccountError(null);
+    try {
+      const [ordersRes, statementRes] = await Promise.all([invidAccountApi.orders(), invidAccountApi.accountStatement()]);
+      setInvidOrders(ordersRes.data.orders);
+      setInvidBalance(statementRes.data.balance);
+      setInvidMovements(statementRes.data.movements);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setInvidAccountError(msg || "No se pudo traer Pedidos/Cuenta Corriente de Invid");
+    } finally {
+      setLoadingInvidAccount(false);
+    }
+  }
 
   async function loadCredential() {
     setLoadingCred(true);
@@ -346,10 +369,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     { key: "sync" as const, label: "Sincronización" },
                     { key: "config" as const, label: "Configuración" },
                     { key: "catalog" as const, label: "Catálogo" },
+                    ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte." }] : []),
                   ].map(({ key, label }) => (
                     <button
                       key={key}
-                      onClick={() => setTab(key)}
+                      onClick={() => {
+                        setTab(key);
+                        if (key === "invid-account" && invidOrders === null && !loadingInvidAccount) loadInvidAccount();
+                      }}
                       className={`text-sm font-medium px-4 py-2.5 border-b-2 -mb-px transition-all ${
                         tab === key ? "border-brand-500 text-brand-700 dark:text-brand-400" : "border-transparent text-surface-500 hover:text-surface-300"
                       }`}
@@ -747,6 +774,104 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         <p className="text-center text-xs text-surface-500 py-10">Buscá algo para ver el catálogo sincronizado.</p>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {tab === "invid-account" && (
+                  <div className="flex flex-col gap-5 max-w-3xl">
+                    <p className="text-xs text-surface-500">
+                      Datos reales tomados directo de tu cuenta en invidcomputers.com — solo lectura, no modifica ni confirma nada ahí.
+                    </p>
+                    {loadingInvidAccount ? (
+                      <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
+                    ) : invidAccountError ? (
+                      <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
+                        <XCircle className="w-4 h-4 flex-shrink-0" /> {invidAccountError}
+                        <button onClick={loadInvidAccount} className="ml-auto underline">Reintentar</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <Wallet className="w-4 h-4 text-brand-700 dark:text-brand-400" />
+                            Cuenta Corriente
+                          </div>
+                          {invidBalance != null && (
+                            <div>
+                              <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
+                              <p className={`text-2xl font-bold tabular-nums ${invidBalance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+                                {invidBalance.toLocaleString("es-AR", { style: "currency", currency: "ARS" })}
+                              </p>
+                            </div>
+                          )}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+                                  <th className="text-left font-semibold px-2 py-2">Fecha</th>
+                                  <th className="text-left font-semibold px-2 py-2">Tipo</th>
+                                  <th className="text-left font-semibold px-2 py-2">Número</th>
+                                  <th className="text-right font-semibold px-2 py-2">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-surface-800">
+                                {(invidMovements ?? []).map((m, i) => (
+                                  <tr key={i}>
+                                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date}</td>
+                                    <td className="px-2 py-2 text-surface-200">{m.docType}</td>
+                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.docNumber}</td>
+                                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{m.currency} {m.total}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {(invidMovements ?? []).length === 0 && (
+                              <p className="text-center text-xs text-surface-500 py-6">Sin movimientos.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <Receipt className="w-4 h-4 text-brand-700 dark:text-brand-400" />
+                            Mis Pedidos
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+                                  <th className="text-left font-semibold px-2 py-2">N° Orden</th>
+                                  <th className="text-left font-semibold px-2 py-2">N° Pedido Web</th>
+                                  <th className="text-left font-semibold px-2 py-2">Estado</th>
+                                  <th className="text-left font-semibold px-2 py-2">Fecha</th>
+                                  <th className="text-right font-semibold px-2 py-2">Importe</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-surface-800">
+                                {(invidOrders ?? []).map((o, i) => (
+                                  <tr key={i}>
+                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.orderNumber}</td>
+                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.webOrderNumber}</td>
+                                    <td className="px-2 py-2">
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                        o.status === "Cerrado" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                        : o.status === "Vencido" || o.status === "Cancelado" ? "bg-red-500/10 text-red-400"
+                                        : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                      }`}>{o.status}</span>
+                                    </td>
+                                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
+                                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {(invidOrders ?? []).length === 0 && (
+                              <p className="text-center text-xs text-surface-500 py-6">Sin pedidos.</p>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

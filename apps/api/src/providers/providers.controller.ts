@@ -3,8 +3,10 @@ import { AuthGuard } from "@nestjs/passport";
 import type { FastifyRequest } from "fastify";
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { CredentialsService } from "../credentials/credentials.service";
 import { ProvidersService } from "./providers.service";
 import { FileImportService } from "./file-import.service";
+import { InvidAccountService } from "./invid-account.service";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 
 function assertProvider(value: string): Provider {
@@ -19,8 +21,26 @@ function assertProvider(value: string): Provider {
 export class ProvidersController {
   constructor(
     private readonly providersService: ProvidersService,
-    private readonly fileImportService: FileImportService
+    private readonly fileImportService: FileImportService,
+    private readonly credentialsService: CredentialsService,
+    private readonly invidAccountService: InvidAccountService
   ) {}
+
+  /** Historial real de pedidos de Invid (solo lectura) — usa la credencial del portal ya guardada. */
+  @Get("providers/INVID/orders")
+  async invidOrders(@CurrentUser() user: { userId: string }) {
+    const stored = await this.credentialsService.getByProvider(user.userId, "INVID");
+    const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
+    return this.invidAccountService.getOrders(credentials);
+  }
+
+  /** Saldo y movimientos reales de cuenta corriente de Invid (solo lectura). */
+  @Get("providers/INVID/account-statement")
+  async invidAccountStatement(@CurrentUser() user: { userId: string }) {
+    const stored = await this.credentialsService.getByProvider(user.userId, "INVID");
+    const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
+    return this.invidAccountService.getAccountStatement(credentials);
+  }
 
   @Post("providers/:provider/sync")
   sync(@CurrentUser() user: { userId: string }, @Param("provider") provider: string) {

@@ -9,6 +9,7 @@ import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 @Injectable()
 export class ProvidersService {
   private readonly logger = new Logger(ProvidersService.name);
+  private readonly enrichRunning = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -61,10 +62,52 @@ export class ProvidersService {
     if (!stored) throw new NotFoundException(`No hay credenciales guardadas para ${provider}`);
 
     const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
+    const syncedExternalIds: string[] = [];
 
-    return this.runSync(userId, provider, async (onPage) => {
-      await adapter.syncAll(credentials, onPage);
+    const result = await this.runSync(userId, provider, async (onPage) => {
+      await adapter.syncAll(credentials, async (items) => {
+        syncedExternalIds.push(...items.map((i) => i.externalId));
+        await onPage(items);
+      });
     });
+
+    // Enriquecimiento lento (ej. scrapear ficha por producto) — no bloquea
+    // la respuesta de este sync ni el próximo, corre solo en background y
+    // se salta si ya hay uno corriendo para este proveedor+usuario.
+    if (adapter.enrichDetails) {
+      const key = `${userId}:${provider}`;
+      if (!this.enrichRunning.has(key)) {
+        this.enrichRunning.add(key);
+        adapter
+          .enrichDetails(credentials, syncedExternalIds, async (externalId, patch) => {
+            await this.patchProduct(provider, externalId, patch);
+          })
+          .catch((err) => this.logger.warn(`Enriquecimiento de detalle ${provider} falló: ${errorMessage(err)}`))
+          .finally(() => this.enrichRunning.delete(key));
+      }
+    }
+
+    return result;
+  }
+
+  /** Actualiza solo los campos presentes en `patch` para un producto ya sincronizado — no toca el resto ni dispara historial de precio. */
+  private async patchProduct(provider: Provider, externalId: string, patch: Record<string, unknown>) {
+    const data = { ...patch };
+
+    // "Disponible (tienda)" es una señal genérica — si ya había algo más
+    // específico (ej. "Stock Bajo" del Excel de Invid), no lo pisamos.
+    // "Sin stock (tienda)" sí es una corrección real, siempre se aplica.
+    if (data.stockStatus === "Disponible (tienda)") {
+      const current = await this.prisma.providerSyncCache.findUnique({
+        where: { provider_externalId: { provider, externalId } },
+        select: { stockStatus: true },
+      });
+      if (current?.stockStatus) delete data.stockStatus;
+    }
+
+    await this.prisma.providerSyncCache
+      .updateMany({ where: { provider, externalId }, data })
+      .catch(() => undefined); // si el producto ya no existe (borrado entre medio), no rompe el enriquecimiento
   }
 
   /** Igual que sync(), pero la fuente de productos es un archivo Excel/CSV subido a mano en vez de la API del proveedor. */

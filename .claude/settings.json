@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(apps/api/src/providers/**)",
+      "Edit(apps/api/src/providers/**)",
+      "Write(chrome-extension/**)",
+      "Edit(chrome-extension/**)"
+    ]
+  }
+}

@@ -47,4 +47,17 @@ export interface ProviderAdapter {
   /** Recorre el catálogo completo del proveedor, invocando onPage por cada
    * tanda para que el caller la persista sin acumular todo en memoria. */
   syncAll(credentials: Record<string, string>, onPage: (items: NormalizedProduct[]) => Promise<void>): Promise<void>;
+
+  /**
+   * Opcional: enriquecimiento lento producto-por-producto (ej. scrapear la
+   * ficha de cada producto en la tienda web) que no tiene sentido correr
+   * dentro del ciclo de request/response de un sync normal. El caller lo
+   * dispara en background después de un sync exitoso, sin esperar a que
+   * termine. `codes` son los externalId ya sincronizados a enriquecer.
+   */
+  enrichDetails?(
+    credentials: Record<string, string>,
+    codes: string[],
+    onItem: (externalId: string, patch: Partial<NormalizedProduct>) => Promise<void>
+  ): Promise<void>;
 }
