@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
-import { BarChart2, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import NodoLogo from "@/components/NodoLogo";
+import NodoWordmark from "@/components/NodoWordmark";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +15,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("expired")) {
+      setError("Tu sesión venció, volvé a iniciar sesión.");
+    }
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,12 +57,10 @@ export default function LoginPage() {
       {/* Left panel */}
       <div className="hidden lg:flex flex-col justify-between w-80 bg-surface-900 border-r border-surface-800 p-10 flex-shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center">
-            <BarChart2 className="w-4 h-4 text-white" />
-          </div>
+          <NodoLogo className="w-7 h-7" />
           <div>
-            <p className="text-sm font-semibold text-white">NODO</p>
-            <p className="text-xs text-surface-400">Buscador de proveedores</p>
+            <NodoWordmark className="h-3.5" />
+            <p className="text-xs text-surface-400 mt-1">Buscador de proveedores</p>
           </div>
         </div>
         <div>

@@ -10,18 +10,20 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Azul-violeta, sampleado directo del archivo del isotipo real de
+        // NODO (#4033fc fuerte / #b0aafa claro — ver NodoLogo.tsx).
         brand: {
-          50: "#eef5ff",
-          100: "#d9e8ff",
-          200: "#bcd5fe",
-          300: "#8fb9fd",
-          400: "#5c94fa",
-          500: "#3570f4",
-          600: "#2050e8",
-          700: "#1a3ed5",
-          800: "#1c34ab",
-          900: "#1c3187",
-          950: "#161f52",
+          50: "#eeecff",
+          100: "#e1deff",
+          200: "#c8c2ff",
+          300: "#a79efe",
+          400: "#8676fd",
+          500: "#5f4dfc",
+          600: "#4033fc",
+          700: "#3423e0",
+          800: "#2b1cb8",
+          900: "#241b8f",
+          950: "#150f52",
         },
         surface: {
           DEFAULT: "rgb(var(--s-base) / <alpha-value>)",

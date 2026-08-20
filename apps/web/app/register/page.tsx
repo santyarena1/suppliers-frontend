@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
-import { BarChart2, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import NodoLogo from "@/components/NodoLogo";
+import NodoWordmark from "@/components/NodoWordmark";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -35,10 +37,8 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-surface-950 px-6">
       <div className="w-full max-w-sm">
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center">
-            <BarChart2 className="w-4 h-4 text-white" />
-          </div>
-          <p className="text-sm font-semibold text-white">NODO</p>
+          <NodoLogo className="w-7 h-7" />
+          <NodoWordmark className="h-3.5" />
         </div>
 
         <div className="mb-7">

@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { clearSession, getUser, isAdmin, isBrand, isUser } from "@/lib/auth";
-import { Search, Key, Users, LogOut, BarChart2, ShoppingCart, Menu, X, Home, Activity, Building2, Shield, Boxes } from "lucide-react";
+import { Search, Key, Users, LogOut, ShoppingCart, Menu, X, Home, Activity, Building2, Shield, Boxes } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useMyModules } from "@/lib/permissions";
 import type { ModuleKey } from "@/lib/api";
+import NodoLogo from "./NodoLogo";
+import NodoWordmark from "./NodoWordmark";
 
 export default function Navbar() {
   const router = useRouter();
@@ -45,12 +47,10 @@ export default function Navbar() {
     <>
       <div className="px-5 py-5 border-b border-surface-800 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-brand-600 rounded-md flex items-center justify-center">
-            <BarChart2 className="w-4 h-4 text-white" />
-          </div>
+          <NodoLogo className="w-7 h-7" />
           <div>
-            <p className="text-sm font-semibold text-white leading-none">NODO</p>
-            <p className="text-xs text-surface-400 mt-0.5">Proveedores</p>
+            <NodoWordmark className="h-3.5" />
+            <p className="text-xs text-surface-400 mt-1">Proveedores</p>
           </div>
         </div>
         <button onClick={() => setMobileOpen(false)} className="lg:hidden text-surface-400 hover:text-white">
@@ -117,10 +117,8 @@ export default function Navbar() {
           <Menu className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-1.5">
-          <div className="w-5 h-5 bg-brand-600 rounded flex items-center justify-center">
-            <BarChart2 className="w-3 h-3 text-white" />
-          </div>
-          <span className="text-sm font-semibold text-white">NODO</span>
+          <NodoLogo className="w-5 h-5" />
+          <NodoWordmark className="h-3.5" />
         </div>
         <Link href="/cart" className="relative text-surface-300 hover:text-white">
           <ShoppingCart className="w-5 h-5" />

@@ -15,13 +15,31 @@ api.interceptors.request.use((config) => {
 // El backend envuelve toda respuesta exitosa en { success: true, data }.
 // Se desenvuelve acá una sola vez para que el resto del código siga
 // trabajando con el payload plano (arrays, objetos) como antes.
-api.interceptors.response.use((response) => {
-  const body = response.data as unknown;
-  if (body && typeof body === "object" && "success" in (body as Record<string, unknown>)) {
-    response.data = (body as { data: unknown }).data;
+api.interceptors.response.use(
+  (response) => {
+    const body = response.data as unknown;
+    if (body && typeof body === "object" && "success" in (body as Record<string, unknown>)) {
+      response.data = (body as { data: unknown }).data;
+    }
+    return response;
+  },
+  (error) => {
+    // Sesión vencida o inválida: en vez de dejar cada pantalla mostrando
+    // "vacío" en silencio (confunde mucho — parece que se borró todo),
+    // se limpia la sesión y se manda a login una sola vez. Importante: hay
+    // que borrar también la cookie "tgs_auth" (no solo localStorage) — el
+    // middleware decide con esa cookie si mandarte a "/" o a "/login", y si
+    // queda viva mientras el token del cliente ya no sirve, arma un rebote
+    // infinito entre las dos rutas.
+    if (typeof window !== "undefined" && error?.response?.status === 401 && window.location.pathname !== "/login") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      document.cookie = "tgs_auth=; Path=/; Max-Age=0; SameSite=Lax";
+      window.location.href = "/login?expired=1";
+    }
+    return Promise.reject(error);
   }
-  return response;
-});
+);
 
 // --- Types ---
 export type Provider =
