@@ -168,8 +168,15 @@ export class ProvidersService {
     const previousByExternalId = new Map(existing.map((e) => [e.externalId, e]));
     const historyRows: { provider: string; externalId: string; price: number | undefined; finalPrice: number | undefined; currency: string | undefined }[] = [];
 
-    await Promise.all(
-      items.map((item) => {
+    // Algunos adapters (ej. Air) traen el catálogo entero en una sola tanda
+    // en vez de paginado — sin este chunking, un Promise.all de miles de
+    // upserts satura el pool de conexiones de Postgres (33 conexiones) y
+    // todo el sync falla con timeout. Se procesa de a tandas chicas.
+    const CHUNK_SIZE = 25;
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+      const chunk = items.slice(i, i + CHUNK_SIZE);
+      await Promise.all(
+        chunk.map((item) => {
         // Stock mínimo del proveedor: si informa esta cantidad o menos, lo
         // tratamos como sin stock (mismo concepto que AcuStock).
         const stock =
@@ -228,7 +235,8 @@ export class ProvidersService {
           update: { ...fields, syncedAt: new Date() },
         });
       })
-    );
+      );
+    }
 
     if (historyRows.length) {
       await this.prisma.productPriceHistory.createMany({ data: historyRows });
