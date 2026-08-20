@@ -16,7 +16,7 @@ import { SKU_PREFIX } from "@/lib/providerMeta";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
 import {
-  AlertTriangle, ArrowLeft, Boxes, CheckCircle2, Eye, EyeOff, ImageOff, KeyRound,
+  AlertTriangle, ArrowLeft, Boxes, CheckCircle2, Eye, EyeOff, FileSpreadsheet, ImageOff, KeyRound,
   Loader2, PackageCheck, Pencil, RefreshCw, Save, Search, Settings, Trash2, XCircle
 } from "lucide-react";
 
@@ -52,6 +52,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const [credFields, setCredFields] = useState<{ key: string; value: string }[]>([{ key: "", value: "" }]);
@@ -227,6 +228,27 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setSyncResult({ ok: false, msg: msg || "Error al sincronizar" });
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setSyncResult(null);
+    try {
+      const res = await providersApi.importFile(provider, file);
+      const parts = [`${res.data.synced.toLocaleString("es-AR")} productos importados`];
+      if (res.data.rowsSkipped > 0) parts.push(`${res.data.rowsSkipped} filas omitidas (sin código o nombre)`);
+      if (res.data.unmappedColumns.length > 0) parts.push(`columnas no reconocidas: ${res.data.unmappedColumns.join(", ")}`);
+      setSyncResult({ ok: true, msg: parts.join(" · ") });
+      await loadStatus();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setSyncResult({ ok: false, msg: msg || "Error al importar el archivo" });
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -440,6 +462,24 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           {syncResult.msg}
                         </div>
                       )}
+                    </div>
+
+                    <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-3">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                        <FileSpreadsheet className="w-4 h-4 text-brand-700 dark:text-brand-400" />
+                        Importar desde Excel/CSV
+                      </div>
+                      <p className="text-xs text-surface-500">
+                        Alternativa cuando la API del proveedor no da abasto (límites de requests, etc.): exportá el
+                        catálogo desde el portal de {provider.replace(/_/g, " ")} y subilo acá. Reconoce columnas
+                        como código/SKU, nombre, precio, stock, marca, categoría — lo que no matchea se ignora, no se inventa.
+                      </p>
+                      <label className={`flex items-center justify-center gap-2 border border-dashed border-surface-700 hover:border-brand-500 text-surface-300 hover:text-white text-sm font-medium rounded-lg py-2.5 transition-all cursor-pointer ${importing ? "opacity-50 pointer-events-none" : ""}`}>
+                        {importing ? <NodoSpinner className="w-4 h-4" /> : <FileSpreadsheet className="w-4 h-4" />}
+                        {importing ? "Importando..." : "Elegir archivo (.xlsx, .csv)"}
+                        <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} disabled={importing} />
+                      </label>
+                      {importing && <SyncProgressBar />}
                     </div>
                   </div>
                 )}

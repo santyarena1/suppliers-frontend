@@ -91,19 +91,54 @@ export class InvidAdapter implements ProviderAdapter {
     let hasMore = true;
 
     while (hasMore) {
-      const { data } = await axios.get<InvidListResponse>(`${BASE_URL}/articulo.php`, {
-        params: { offset, exclude_zero_price: 1 },
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 30_000,
-      });
+      let res;
+      try {
+        res = await axios.get<InvidListResponse>(`${BASE_URL}/articulo.php`, {
+          params: { offset, exclude_zero_price: 1 },
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 30_000,
+        });
+      } catch (err) {
+        if (axios.isAxiosError(err) && err.response?.status === 429) {
+          // Límite real de Invid: 50 req/hora, compartido con otros sistemas
+          // que usan la misma cuenta. Frenamos acá (lo ya sincronizado hasta
+          // esta página queda guardado) en vez de perder todo el progreso;
+          // el cron reintenta solo en la próxima corrida.
+          const retryAfter = err.response.headers["retry-after"];
+          const waitMsg = retryAfter ? ` Probá de nuevo en ${formatRetryAfter(retryAfter)}.` : "";
+          throw new BadGatewayException(
+            `Invid alcanzó su límite de 50 requests/hora (offset ${offset}, cuenta compartida con otros sistemas).${waitMsg}`
+          );
+        }
+        throw err;
+      }
+
+      const { data } = res;
+      const remaining = res.headers["x-ratelimit-remaining"];
 
       const list = Array.isArray(data.data) ? data.data : data.data ? [data.data] : [];
       await onPage(list.map((p) => mapProduct(p)));
 
       hasMore = Boolean(data.next_page_url) && list.length > 0;
       offset += 100;
+
+      // Si nos queda 1 request o menos de cuota, frenamos antes de que la
+      // próxima pegue un 429 — mejor terminar prolijo con lo sincronizado
+      // hasta acá que perder el request en un error.
+      if (hasMore && remaining !== undefined && Number(remaining) <= 1) {
+        throw new BadGatewayException(
+          `Invid: cuota de 50 requests/hora casi agotada, se frenó en offset ${offset} (cuenta compartida con otros sistemas). Lo sincronizado hasta acá quedó guardado; el cron completa el resto en la próxima corrida.`
+        );
+      }
     }
   }
+}
+
+function formatRetryAfter(value: string): string {
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) return value;
+  const minutes = Math.ceil(seconds / 60);
+  return minutes <= 1 ? "un minuto" : `${minutes} minutos`;
 }
 
 function flattenTags(tags: Record<string, string[]> | undefined): string | undefined {

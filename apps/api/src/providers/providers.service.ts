@@ -61,6 +61,24 @@ export class ProvidersService {
     if (!stored) throw new NotFoundException(`No hay credenciales guardadas para ${provider}`);
 
     const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
+
+    return this.runSync(userId, provider, async (onPage) => {
+      await adapter.syncAll(credentials, onPage);
+    });
+  }
+
+  /** Igual que sync(), pero la fuente de productos es un archivo Excel/CSV subido a mano en vez de la API del proveedor. */
+  async importFromRows(userId: string, provider: Provider, items: NormalizedProduct[]) {
+    return this.runSync(userId, provider, async (onPage) => {
+      await onPage(items);
+    });
+  }
+
+  private async runSync(
+    userId: string,
+    provider: Provider,
+    run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>
+  ) {
     const config = await this.getConfig(userId, provider);
     const markup = Number(config.priceMarkupPercent) || 0;
     const minStock = config.minStockThreshold || 0;
@@ -71,7 +89,7 @@ export class ProvidersService {
     let count = 0;
 
     try {
-      await adapter.syncAll(credentials, async (items) => {
+      await run(async (items) => {
         count += items.length;
         await this.upsertPage(provider, items, markup, minStock);
       });

@@ -202,6 +202,15 @@ export const providersApi = {
     api.post<{ provider: Provider; deleted: number }>(`/providers/${providerName}/clear-zero-stock`),
   deleteAllProducts: (providerName: Provider) =>
     api.delete<{ provider: Provider; deleted: number }>(`/providers/${providerName}/products`),
+  importFile: (providerName: Provider, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return api.post<ProviderSyncResult & { rowsInFile: number; rowsSkipped: number; unmappedColumns: string[] }>(
+      `/providers/${providerName}/import`,
+      form,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+  },
 };
 
 // --- Admin / Users ---

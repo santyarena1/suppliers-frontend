@@ -1,8 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import type { FastifyRequest } from "fastify";
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ProvidersService } from "./providers.service";
+import { FileImportService } from "./file-import.service";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 
 function assertProvider(value: string): Provider {
@@ -15,11 +17,39 @@ function assertProvider(value: string): Provider {
 @UseGuards(AuthGuard("jwt"))
 @Controller()
 export class ProvidersController {
-  constructor(private readonly providersService: ProvidersService) {}
+  constructor(
+    private readonly providersService: ProvidersService,
+    private readonly fileImportService: FileImportService
+  ) {}
 
   @Post("providers/:provider/sync")
   sync(@CurrentUser() user: { userId: string }, @Param("provider") provider: string) {
     return this.providersService.sync(user.userId, assertProvider(provider));
+  }
+
+  /**
+   * Alternativa a la sync por API cuando el proveedor limita muy fuerte
+   * (ej. AIR a 1 req/5min): el usuario exporta el catálogo a Excel/CSV
+   * desde el propio portal del proveedor y lo sube acá. Mismo pipeline de
+   * guardado (markup, stock mínimo, historial de precio) que un sync real.
+   */
+  @Post("providers/:provider/import")
+  async importFile(@CurrentUser() user: { userId: string }, @Param("provider") provider: string, @Req() req: FastifyRequest) {
+    const prov = assertProvider(provider);
+    const file = await req.file();
+    if (!file) throw new BadRequestException("No se recibió ningún archivo");
+    const buffer = await file.toBuffer();
+
+    const rows = this.fileImportService.parseFile(buffer, file.filename);
+    const { items, skipped, unmappedColumns } = this.fileImportService.mapRows(rows);
+    if (items.length === 0) {
+      throw new BadRequestException(
+        "No se pudo mapear ninguna fila (hace falta al menos una columna de código/SKU y una de nombre/descripción)."
+      );
+    }
+
+    const result = await this.providersService.importFromRows(user.userId, prov, items);
+    return { ...result, rowsInFile: rows.length, rowsSkipped: skipped, unmappedColumns };
   }
 
   @Get("providers/:provider/status")
