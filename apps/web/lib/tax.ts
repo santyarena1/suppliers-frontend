@@ -233,10 +233,10 @@ export function linePricing(p: TaxableProduct, qty = 1) {
   const taxFromLines = lines.reduce((s, l) => s + l.unitAmount, 0);
 
   let unitGross: number;
-  if (unitListedGross > 0) {
+  if (taxFromLines > 0) {
+    unitGross = Math.max(unitListedGross, unitNet + taxFromLines);
+  } else if (unitListedGross > 0) {
     unitGross = unitListedGross;
-  } else if (taxFromLines > 0) {
-    unitGross = unitNet + taxFromLines;
   } else if (knownRate != null) {
     unitGross = unitNet * (1 + knownRate);
   } else {
@@ -309,6 +309,50 @@ export function applyInvidCheckoutTaxes(
 
 export function grossFromTaxLines(product: TaxableProduct, lines: TaxLine[]): number {
   return round4(parsePrice(product.price) + lines.reduce((s, l) => s + l.unitAmount, 0));
+}
+
+export type OrderPerceptionExtra = {
+  percepcionPercent?: number;
+  perceptionsUSD?: number;
+  perceptionLines?: { label: string; amount: number }[];
+};
+
+/** Perc. de la línea: la del producto, o la del pedido (alícuota o prorrateo del total). */
+export function linePerceptionFromOrder(
+  item: TaxableProduct & { qty: number },
+  siblings: (TaxableProduct & { qty: number })[],
+  extra?: OrderPerceptionExtra | null
+): TaxLine | null {
+  const existing = taxByKind(extractTaxLines(item), "iibb");
+  if (existing && existing.unitAmount > 0.0001) return existing;
+
+  const unitNet = parsePrice(item.price);
+  const qty = item.qty > 0 ? item.qty : 1;
+  const label = extra?.perceptionLines?.[0]?.label || "Percepciones";
+  const pct = extra?.percepcionPercent ?? 0;
+  if (pct > 0 && unitNet > 0) {
+    return {
+      kind: "iibb",
+      label,
+      percent: pct,
+      unitAmount: round4(unitNet * (pct / 100)),
+    };
+  }
+
+  const lump = extra?.perceptionsUSD ?? 0;
+  if (lump > 0.0005 && unitNet > 0) {
+    const totalNet = siblings.reduce((s, it) => s + parsePrice(it.price) * (it.qty > 0 ? it.qty : 1), 0);
+    if (totalNet <= 0) return null;
+    const share = lump * ((unitNet * qty) / totalNet);
+    return {
+      kind: "iibb",
+      label,
+      percent: round4((lump / totalNet) * 100),
+      unitAmount: round4(share / qty),
+    };
+  }
+
+  return existing;
 }
 
 export function formatTaxPercent(rate: number): string {

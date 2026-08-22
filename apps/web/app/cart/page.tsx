@@ -23,7 +23,9 @@ import {
   taxByKind,
   formatAlicuota,
   perceptionGroupLabel,
+  linePerceptionFromOrder,
 } from "@/lib/tax";
+import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
 import {
   ALL_PROVIDERS,
   ElitCheckoutPreview,
@@ -167,22 +169,33 @@ export default function CartPage() {
     };
   }
 
-  const invidExtra: TaxExtra | undefined = invidPreview?.stockOk
-    ? { shippingUSD: invidPreview.shippingCost ?? 0, percepcionPercent: invidPreview.percepcionPercent ?? 0 }
+  const invidLines = useMemo(() => cartLinesFromItems(byProvider.INVID ?? []), [byProvider.INVID]);
+  const elitLines = useMemo(() => cartLinesFromItems(byProvider.ELIT ?? []), [byProvider.ELIT]);
+  const nbLines = useMemo(() => cartLinesFromItems(byProvider.NEW_BYTES ?? []), [byProvider.NEW_BYTES]);
+  const invidWarm = useCheckoutWarmup("INVID", invidLines);
+  const elitWarm = useCheckoutWarmup("ELIT", elitLines);
+  const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines);
+
+  const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
+  const elitQuoted = elitPreview ?? (elitWarm.status === "ready" ? elitWarm.data?.preview ?? null : null);
+  const nbQuoted = nbSnapshot ?? (nbWarm.status === "ready" ? nbWarm.data?.preview ?? null : null);
+
+  const invidExtra: TaxExtra | undefined = invidQuoted?.stockOk
+    ? { shippingUSD: invidQuoted.shippingCost ?? 0, percepcionPercent: invidQuoted.percepcionPercent ?? 0 }
     : undefined;
-  const elitExtra: TaxExtra | undefined = elitPreview
+  const elitExtra: TaxExtra | undefined = elitQuoted
     ? {
-        shippingUSD: elitPreview.shippingCost ?? 0,
-        perceptionsUSD: elitPreview.perceptions ?? 0,
-        perceptionLines: elitPreview.perceptionLines ?? [],
-        totalUSD: elitPreview.total,
+        shippingUSD: elitQuoted.shippingCost ?? 0,
+        perceptionsUSD: elitQuoted.perceptions ?? 0,
+        perceptionLines: elitQuoted.perceptionLines ?? [],
+        totalUSD: elitQuoted.total,
       }
     : undefined;
-  const nbExtra: TaxExtra | undefined = nbSnapshot
+  const nbExtra: TaxExtra | undefined = nbQuoted
     ? {
-        perceptionsUSD: nbSnapshot.perceptions ?? 0,
-        perceptionLines: nbSnapshot.perceptionLines ?? [],
-        totalUSD: nbSnapshot.total,
+        perceptionsUSD: nbQuoted.perceptions ?? 0,
+        perceptionLines: nbQuoted.perceptionLines ?? [],
+        totalUSD: nbQuoted.total,
       }
     : undefined;
 
@@ -211,14 +224,14 @@ export default function CartPage() {
       productCount: acc.productCount + t.productCount,
       perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
     }), { ...EMPTY_TOTALS });
-  }, [items, byProvider, withIva, invidPreview, elitPreview, nbSnapshot]);
+  }, [items, byProvider, withIva, invidQuoted, elitQuoted, nbQuoted]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
     for (const [p, its] of Object.entries(byProvider)) {
       m[p] = totalsFor(its, extraFor(p));
     }
     return m;
-  }, [byProvider, withIva, invidPreview, elitPreview, nbSnapshot]);
+  }, [byProvider, withIva, invidQuoted, elitQuoted, nbQuoted]);
 
   function fmt(usd: number, digits = currency === "USD" ? 2 : 0) {
     if (currency === "USD") return formatUSD(usd);
@@ -248,14 +261,20 @@ export default function CartPage() {
       const pt = providerTotals[prov];
       lines.push(`*${prov.replace(/_/g, " ")}*`);
       for (const it of its) {
+        const extra = extraFor(prov);
         const pricing = linePricing(it, it.qty);
-        const unit = withIva ? pricing.unitGross : pricing.unitNet;
-        const subtotal = withIva ? pricing.gross : pricing.net;
+        const perc = linePerceptionFromOrder(it, its, extra);
+        const onProduct = (taxByKind(extractTaxLines(it), "iibb")?.unitAmount ?? 0) > 0.0001;
+        const gross = pricing.gross + (!onProduct && perc ? perc.unitAmount * it.qty : 0);
+        const unit = withIva ? gross / it.qty : pricing.unitNet;
+        const subtotal = withIva ? gross : pricing.net;
         const nameTrim = it.name.length > 70 ? it.name.slice(0, 67) + "..." : it.name;
         const qtyBit = it.qty > 1 ? ` x${it.qty}` : "";
         lines.push(`• ${nameTrim}${qtyBit}`);
-        const taxes = extractTaxLines(it)
-          .filter((l) => l.unitAmount > 0)
+        const taxes = [
+          ...extractTaxLines(it).filter((l) => l.kind !== "iibb" && l.unitAmount > 0),
+          ...(perc && perc.unitAmount > 0 ? [perc] : []),
+        ]
           .map((l) => `${l.label} ${formatAlicuota(l.percent)} ${fmt(l.unitAmount * it.qty, 2)}`)
           .join(" · ");
         lines.push(`  ${fmt(unit, 2)} c/u  →  *${fmt(subtotal, 2)}*`);
@@ -308,11 +327,15 @@ export default function CartPage() {
     const rows = [
       ["Proveedor", "ID", "Producto", "Cantidad", "Neto USD", "IVA %", "IVA USD", "Internos %", "Internos USD", "Perc. %", "Perc. USD", "Final USD"],
       ...items.map((it) => {
+        const siblings = byProvider[it.provider] ?? [it];
+        const extra = extraFor(it.provider);
         const pricing = linePricing(it, it.qty);
         const taxLines = extractTaxLines(it);
         const iva = taxByKind(taxLines, "iva");
         const internos = taxByKind(taxLines, "internos");
-        const iibb = taxByKind(taxLines, "iibb");
+        const iibb = linePerceptionFromOrder(it, siblings, extra);
+        const onProduct = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) > 0.0001;
+        const gross = pricing.gross + (!onProduct && iibb ? iibb.unitAmount * it.qty : 0);
         return [
           it.provider, it.externalId, `"${it.name.replace(/"/g, '""')}"`,
           String(it.qty),
@@ -323,7 +346,7 @@ export default function CartPage() {
           ((internos?.unitAmount ?? 0) * it.qty).toFixed(2),
           iibb?.percent ?? "",
           ((iibb?.unitAmount ?? 0) * it.qty).toFixed(2),
-          pricing.gross.toFixed(2),
+          gross.toFixed(2),
         ];
       }),
     ];
@@ -346,7 +369,11 @@ export default function CartPage() {
       dollarRate: currentRate?.venta,
       dollarType,
       items: items.map((it) => {
+        const siblings = byProvider[it.provider] ?? [it];
+        const extra = extraFor(it.provider);
         const pricing = linePricing(it, it.qty);
+        const perc = linePerceptionFromOrder(it, siblings, extra);
+        const onProduct = (taxByKind(extractTaxLines(it), "iibb")?.unitAmount ?? 0) > 0.0001;
         return {
           provider: it.provider,
           externalId: it.externalId,
@@ -354,7 +381,8 @@ export default function CartPage() {
           qty: it.qty,
           unitNetUSD: pricing.unitNet,
           taxes: extractTaxLines(it),
-          lineGrossUSD: pricing.gross,
+          perception: perc,
+          lineGrossUSD: pricing.gross + (!onProduct && perc ? perc.unitAmount * it.qty : 0),
         };
       }),
       totals: grand,
@@ -529,6 +557,7 @@ export default function CartPage() {
                       provider={prov}
                       items={byProvider[prov]}
                       totals={providerTotals[prov]}
+                      extra={extraFor(prov)}
                       fmt={fmt}
                       withIva={withIva}
                       setQty={setQty}
@@ -541,6 +570,7 @@ export default function CartPage() {
                     provider={activeTab}
                     items={shownItems}
                     totals={shownTotals}
+                    extra={extraFor(activeTab)}
                     fmt={fmt}
                     withIva={withIva}
                     setQty={setQty}
@@ -776,11 +806,12 @@ function SummaryBar({
 }
 
 function ProviderSection({
-  provider, items, totals, fmt, withIva, setQty, remove, onClearProvider,
+  provider, items, totals, extra, fmt, withIva, setQty, remove, onClearProvider,
 }: {
   provider: string;
   items: CartItem[];
   totals: Totals;
+  extra?: TaxExtra;
   fmt: (n: number, digits?: number) => string;
   withIva: boolean;
   setQty: (p: string, e: string, q: number) => void;
@@ -837,6 +868,8 @@ function ProviderSection({
           <CartLine
             key={`${it.provider}-${it.externalId}`}
             item={it}
+            siblings={items}
+            extra={extra}
             fmt={fmt}
             withIva={withIva}
             setQty={setQty}
@@ -845,7 +878,7 @@ function ProviderSection({
         ))}
       </div>
 
-      {provider === "INVID" && items.every((it) => !taxByKind(extractTaxLines(it), "iibb")) && (
+      {provider === "INVID" && items.every((it) => !linePerceptionFromOrder(it, items, extra)) && (
         <p className="text-xs text-surface-500 mt-2">
           Las percepciones de Invid aparecen al validar stock.
         </p>
@@ -855,9 +888,11 @@ function ProviderSection({
 }
 
 function CartLine({
-  item, fmt, withIva, setQty, remove,
+  item, siblings, extra, fmt, withIva, setQty, remove,
 }: {
   item: CartItem;
+  siblings: CartItem[];
+  extra?: TaxExtra;
   fmt: (n: number, digits?: number) => string;
   withIva: boolean;
   setQty: (p: string, e: string, q: number) => void;
@@ -867,8 +902,11 @@ function CartLine({
   const taxLines = extractTaxLines(item);
   const iva = taxByKind(taxLines, "iva");
   const internos = taxByKind(taxLines, "internos");
-  const iibb = taxByKind(taxLines, "iibb");
+  const iibb = linePerceptionFromOrder(item, siblings, extra);
   const others = taxLines.filter((l) => l.kind === "other" && l.unitAmount > 0);
+  const onProduct = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) > 0.0001;
+  const percExtra = !onProduct && iibb ? iibb.unitAmount * item.qty : 0;
+  const lineGross = pricing.gross + percExtra;
   const href = `/product/${encodeURIComponent(item.provider)}/${encodeURIComponent(item.externalId)}`;
   const sku = item.sku || item.partNumber || item.externalId;
 
@@ -920,7 +958,7 @@ function CartLine({
       <div className="hidden md:block"><TaxCell line={iibb} qty={item.qty} fmt={fmt} align="right" /></div>
       <MoneyCell
         className="hidden md:block"
-        primary={fmt(withIva ? pricing.gross : pricing.net, 2)}
+        primary={fmt(withIva ? lineGross : pricing.net, 2)}
         emphasize
       />
 
@@ -933,7 +971,7 @@ function CartLine({
       <div className="md:hidden flex items-center justify-between mt-2 pt-2 border-t border-surface-800/60">
         <span className="text-xs text-surface-500">Total línea</span>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-white tabular-nums">{fmt(withIva ? pricing.gross : pricing.net, 2)}</span>
+          <span className="text-sm font-semibold text-white tabular-nums">{fmt(withIva ? lineGross : pricing.net, 2)}</span>
           <button onClick={() => remove(item.provider, item.externalId)} className="text-surface-600 hover:text-red-400">
             <Trash2 className="w-3.5 h-3.5" />
           </button>

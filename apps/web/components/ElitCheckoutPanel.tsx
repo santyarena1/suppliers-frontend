@@ -66,10 +66,6 @@ export default function ElitCheckoutPanel({
   }
 
   useEffect(() => {
-    return () => { onPreviewed?.(null); };
-  }, [onPreviewed]);
-
-  useEffect(() => {
     seeded.current = null;
     hydrated.current = false;
     setLoading(true);

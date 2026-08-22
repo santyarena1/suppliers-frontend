@@ -77,14 +77,9 @@ export default function NewBytesDraftPanel({
   const warm = useCheckoutWarmup("NEW_BYTES", cartItems);
 
   useEffect(() => {
-    return () => { onPreviewed?.(null); };
-  }, [onPreviewed]);
-
-  useEffect(() => {
     seeded.current = null;
     setLoadingMeta(true);
-    onPreviewed?.(null);
-  }, [cartKey, onPreviewed]);
+  }, [cartKey]);
 
   useEffect(() => {
     if (warm.itemsKey !== cartKey) return;
