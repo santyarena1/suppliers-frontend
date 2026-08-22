@@ -4,6 +4,21 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
+/* Brand palette — defaults violet NODO; admin puede cambiar preset en runtime */
+:root {
+  --brand-50: 238 236 255;
+  --brand-100: 225 222 255;
+  --brand-200: 200 194 255;
+  --brand-300: 167 158 254;
+  --brand-400: 134 118 253;
+  --brand-500: 95 77 252;
+  --brand-600: 64 51 252;
+  --brand-700: 52 35 224;
+  --brand-800: 43 28 184;
+  --brand-900: 36 27 143;
+  --brand-950: 21 15 82;
+}
+
 :root, :root[data-theme="dark"] {
   --s-base: 13 15 20;
   --s-50:  244 245 247;
@@ -19,24 +34,29 @@
   --s-950: 13 15 20;
   --fg: 255 255 255;
   --body-bg: 13 15 20;
+  --card-bg: 23 25 33;
+  --card-border: 37 40 50;
+  --shadow-color: 0 0 0;
 }
 
 :root[data-theme="light"] {
-  --s-base: 244 246 250;
-  --s-50:   26 31 44;
-  --s-100:  35 41 56;
-  --s-200:  45 53 71;
-  --s-300:  64 74 95;
-  --s-400:  82 92 114;
-  --s-500:  107 117 138;
-  --s-600:  152 161 178;
-  --s-700:  213 218 229;
-  --s-800:  231 235 242;
-  --s-900:  255 255 255;
-  --s-950:  247 249 252;
-  --fg: 30 35 48;
-  --body-bg: 240 243 248;
-  --shadow-color: 30 41 63;
+  --s-base: 255 255 255;
+  --s-50:   15 23 42;
+  --s-100:  30 41 59;
+  --s-200:  51 65 85;
+  --s-300:  71 85 105;
+  --s-400:  100 116 139;
+  --s-500:  148 163 184;
+  --s-600:  203 213 225;
+  --s-700:  226 232 240;
+  --s-800:  241 245 249;
+  --s-900:  248 250 252;
+  --s-950:  255 255 255;
+  --fg: 15 23 42;
+  --body-bg: 248 250 252;
+  --card-bg: 255 255 255;
+  --card-border: 226 232 240;
+  --shadow-color: 15 23 42;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,42 +67,88 @@ body {
   color: rgb(var(--fg));
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   min-height: 100vh;
-  transition: background-color 0.2s, color 0.2s;
+  transition: background-color 0.25s, color 0.25s;
 }
 
-/* In light theme, the "text-white" used throughout means primary foreground */
-[data-theme="light"] .text-white { color: rgb(var(--fg)); }
+/* Light: texto principal legible (slate-900) en lugar de blanco puro */
+[data-theme="light"] .text-white { color: rgb(15 23 42); }
+[data-theme="light"] .text-surface-100 { color: rgb(30 41 59); }
+[data-theme="light"] .text-surface-200 { color: rgb(51 65 85); }
+[data-theme="light"] .text-surface-300 { color: rgb(71 85 105); }
 
-/* Light theme reads as flat without depth cues — dark mode gets contrast for
-   free from near-black surfaces, light mode needs shadows + a faint brand
-   tint to avoid looking like an unstyled gray-scale flip. */
+/* Light mode — fondo limpio tipo storefront (referencia HardGamers adaptada B2B) */
 [data-theme="light"] body {
+  background-color: rgb(248 250 252);
   background-image:
-    radial-gradient(1200px 480px at 12% -8%, rgb(53 112 244 / 0.05), transparent 60%),
-    radial-gradient(900px 420px at 100% 0%, rgb(32 80 232 / 0.04), transparent 55%);
+    radial-gradient(1100px 400px at 8% -5%, rgb(var(--brand-500) / 0.06), transparent 55%),
+    radial-gradient(800px 360px at 95% 0%, rgb(var(--brand-400) / 0.04), transparent 50%);
   background-attachment: fixed;
 }
 
+[data-theme="light"] [class*="bg-surface-950"] {
+  background-color: rgb(var(--body-bg)) !important;
+}
+
 [data-theme="light"] [class*="bg-surface-900"] {
+  background-color: rgb(var(--card-bg)) !important;
+  border-color: rgb(var(--card-border) / 0.9);
   box-shadow:
-    0 1px 1px rgb(var(--shadow-color) / 0.03),
-    0 6px 16px -8px rgb(var(--shadow-color) / 0.10);
+    0 1px 2px rgb(var(--shadow-color) / 0.04),
+    0 4px 12px -4px rgb(var(--shadow-color) / 0.08);
+}
+
+[data-theme="light"] [class*="border-surface-800"] {
+  border-color: rgb(var(--card-border)) !important;
 }
 
 [data-theme="light"] [class*="bg-surface-800"] {
-  box-shadow: 0 1px 2px rgb(var(--shadow-color) / 0.05);
+  background-color: rgb(241 245 249) !important;
 }
 
 [data-theme="light"] input,
 [data-theme="light"] select,
 [data-theme="light"] textarea {
+  background-color: rgb(255 255 255);
+  border-color: rgb(226 232 240);
+  color: rgb(15 23 42);
   box-shadow: inset 0 1px 2px rgb(var(--shadow-color) / 0.04);
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: rgb(148 163 184);
+}
+
+/* Cards de producto en modo claro — fondo blanco como tienda */
+[data-theme="light"] .product-card-storefront {
+  background-color: rgb(255 255 255) !important;
+  border-color: rgb(226 232 240) !important;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.06);
+}
+
+[data-theme="light"] .product-card-storefront:hover {
+  border-color: rgb(var(--brand-400) / 0.5) !important;
+  box-shadow: 0 8px 24px -8px rgb(15 23 42 / 0.12);
+}
+
+/* Carrusel infinito de partners */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: rgb(var(--s-900)); }
-::-webkit-scrollbar-thumb { background: rgb(var(--s-700)); border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: rgb(var(--s-600)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--s-600)); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--s-500)); }
 
 input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); }
 [data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }

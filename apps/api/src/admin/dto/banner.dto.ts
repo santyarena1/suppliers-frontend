@@ -26,6 +26,10 @@ export class CreateBannerDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsString()
+  slot?: string;
 }
 
 export class UpdateBannerDto {
@@ -56,4 +60,8 @@ export class UpdateBannerDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsString()
+  slot?: string;
 }

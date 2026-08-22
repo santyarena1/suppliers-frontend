@@ -927,9 +927,13 @@ export const permissionsApi = {
 };
 
 // --- Banners (home / buscador) ---
+export type BannerSlot =
+  | "hero_main" | "hero_side" | "tile_1" | "tile_2" | "tile_3" | "tile_4" | "strip";
+
 export interface Banner {
   id: string;
   position: "home" | "search";
+  slot?: BannerSlot | null;
   imageUrl: string;
   title: string | null;
   subtitle: string | null;
@@ -940,6 +944,17 @@ export interface Banner {
 
 export const bannersApi = {
   list: (position?: "home" | "search") => api.get<Banner[]>("/banners", { params: position ? { position } : undefined }),
+};
+
+export type BrandPreset = "violet" | "gamer_red" | "ocean" | "emerald";
+
+export interface PlatformSettings {
+  id: string;
+  brandPreset: BrandPreset;
+}
+
+export const platformApi = {
+  settings: () => api.get<PlatformSettings>("/platform/settings"),
 };
 
 // --- Panel de superadmin ---
@@ -1004,6 +1019,10 @@ export const adminApi = {
   createBanner: (data: Omit<Banner, "id" | "active"> & { active?: boolean }) => api.post<Banner>("/admin/banners", data),
   updateBanner: (id: string, data: Partial<Omit<Banner, "id">>) => api.put<Banner>(`/admin/banners/${id}`, data),
   deleteBanner: (id: string) => api.delete(`/admin/banners/${id}`),
+
+  getPlatformSettings: () => api.get<PlatformSettings>("/admin/platform/settings"),
+  updatePlatformSettings: (brandPreset: BrandPreset) =>
+    api.put<PlatformSettings>("/admin/platform/settings", { brandPreset }),
 };
 
 export default api;

@@ -140,6 +140,8 @@ model UserModuleAccess {
 model HomeBanner {
   id        String   @id @default(uuid())
   position  String
+  /// Slot del grid descontructurado (hero_main, hero_side, tile_1…tile_4, strip).
+  slot      String?
   imageUrl  String
   title     String?
   subtitle  String?
@@ -150,6 +152,13 @@ model HomeBanner {
   updatedAt DateTime @updatedAt
 
   @@index([position, active, order])
+}
+
+/// Identidad visual global de la plataforma (preset de color de marca).
+model PlatformSettings {
+  id          String   @id @default("platform")
+  brandPreset String   @default("violet")
+  updatedAt   DateTime @updatedAt
 }
 
 enum MissingProductAction {

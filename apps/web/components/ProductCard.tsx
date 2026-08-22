@@ -28,7 +28,7 @@ const PROVIDER_HUE: Record<string, string> = {
   DIAPSTORE:    "text-blue-400  bg-blue-400/10",
 };
 
-export default function ProductCard({ product }: { product: ProductDTO }) {
+export default function ProductCard({ product, variant = "default" }: { product: ProductDTO; variant?: "default" | "storefront" }) {
   const [imgErr, setImgErr] = useState(false);
   const { currency, withIva, convert } = usePrefs();
   const display = useProviderDisplay();
@@ -46,8 +46,14 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
     ? (ars > 0 ? formatARS(ars) : null)
     : formatUSD(displayUsd);
 
+  const isStorefront = variant === "storefront";
+
   return (
-    <div className="group relative bg-surface-900 border border-surface-800 rounded-xl overflow-hidden hover:border-surface-600 hover:shadow-lg hover:shadow-black/30 transition-all flex flex-col">
+    <div className={`group relative border rounded-xl overflow-hidden transition-all flex flex-col product-card-storefront ${
+      isStorefront
+        ? "bg-white border-slate-200 hover:border-brand-400/60 hover:shadow-lg"
+        : "bg-surface-900 border-surface-800 hover:border-surface-600 hover:shadow-lg hover:shadow-black/30"
+    }`}>
       <Link href={href} className="block">
         <div className="bg-white aspect-square flex items-center justify-center relative overflow-hidden">
           {product.imageUrl && !imgErr ? (
@@ -98,20 +104,28 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
 
       <div className="p-3 flex flex-col gap-2.5 flex-1">
         <Link href={href} className="block">
-          <p className="text-sm text-surface-100 leading-snug line-clamp-2 font-medium hover:text-white transition-colors min-h-[2.3rem]">
+          <p className={`text-sm leading-snug line-clamp-2 font-medium transition-colors min-h-[2.3rem] ${
+            isStorefront
+              ? "text-slate-800 hover:text-slate-900"
+              : "text-surface-100 hover:text-white"
+          }`}>
             {product.name}
           </p>
         </Link>
 
-        <div className="flex items-end justify-between gap-2 mt-auto pt-2.5 border-t border-surface-800">
+        <div className={`flex items-end justify-between gap-2 mt-auto pt-2.5 border-t ${
+          isStorefront ? "border-slate-100" : "border-surface-800"
+        }`}>
           <div className="flex flex-col min-w-0">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-bold text-white tabular-nums leading-none">{primary}</span>
+              <span className={`text-lg font-bold tabular-nums leading-none ${
+                isStorefront ? "text-slate-900" : "text-white"
+              }`}>{primary}</span>
             </div>
             {secondary && (
-              <span className="text-[11px] text-surface-500 tabular-nums mt-1">{secondary}</span>
+              <span className={`text-[11px] tabular-nums mt-1 ${isStorefront ? "text-slate-500" : "text-surface-500"}`}>{secondary}</span>
             )}
-            <span className="text-[10px] text-surface-600 tabular-nums mt-0.5">
+            <span className={`text-[10px] tabular-nums mt-0.5 ${isStorefront ? "text-slate-400" : "text-surface-600"}`}>
               Base: {formatUSD(pricing.net)} {withIva ? "(s/imp)" : ""}
             </span>
           </div>
@@ -119,7 +133,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
         </div>
 
         {product.externalId && (
-          <span className="text-[9px] text-surface-600 font-mono truncate">#{product.externalId}</span>
+          <span className={`text-[9px] font-mono truncate ${isStorefront ? "text-slate-400" : "text-surface-600"}`}>#{product.externalId}</span>
         )}
       </div>
     </div>

@@ -13,17 +13,17 @@ const config: Config = {
         // Azul-violeta, sampleado directo del archivo del isotipo real de
         // NODO (#4033fc fuerte / #b0aafa claro — ver NodoLogo.tsx).
         brand: {
-          50: "#eeecff",
-          100: "#e1deff",
-          200: "#c8c2ff",
-          300: "#a79efe",
-          400: "#8676fd",
-          500: "#5f4dfc",
-          600: "#4033fc",
-          700: "#3423e0",
-          800: "#2b1cb8",
-          900: "#241b8f",
-          950: "#150f52",
+          50: "rgb(var(--brand-50) / <alpha-value>)",
+          100: "rgb(var(--brand-100) / <alpha-value>)",
+          200: "rgb(var(--brand-200) / <alpha-value>)",
+          300: "rgb(var(--brand-300) / <alpha-value>)",
+          400: "rgb(var(--brand-400) / <alpha-value>)",
+          500: "rgb(var(--brand-500) / <alpha-value>)",
+          600: "rgb(var(--brand-600) / <alpha-value>)",
+          700: "rgb(var(--brand-700) / <alpha-value>)",
+          800: "rgb(var(--brand-800) / <alpha-value>)",
+          900: "rgb(var(--brand-900) / <alpha-value>)",
+          950: "rgb(var(--brand-950) / <alpha-value>)",
         },
         surface: {
           DEFAULT: "rgb(var(--s-base) / <alpha-value>)",

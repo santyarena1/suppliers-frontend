@@ -11,10 +11,13 @@ import {
 import { isAdmin, getUser } from "@/lib/auth";
 import {
   Users, ShieldCheck, Boxes, Building2, Image as ImageIcon,
-  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X,
+  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette,
 } from "lucide-react";
+import {
+  BANNER_SLOTS, BRAND_PRESET_LABELS, BRAND_PRESETS, applyBrandPreset, type BrandPreset, type BannerSlot,
+} from "@/lib/brand-presets";
 
-type Tab = "users" | "permissions" | "providers" | "brands" | "banners";
+type Tab = "users" | "permissions" | "providers" | "brands" | "banners" | "appearance";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "users", label: "Usuarios", icon: <Users className="w-3.5 h-3.5" /> },
@@ -22,6 +25,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "providers", label: "Proveedores", icon: <Boxes className="w-3.5 h-3.5" /> },
   { key: "brands", label: "Marcas", icon: <Building2 className="w-3.5 h-3.5" /> },
   { key: "banners", label: "Banners", icon: <ImageIcon className="w-3.5 h-3.5" /> },
+  { key: "appearance", label: "Apariencia", icon: <Palette className="w-3.5 h-3.5" /> },
 ];
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -90,6 +94,7 @@ export default function AdminPage() {
             {tab === "providers" && <ProvidersTab showToast={showToast} />}
             {tab === "brands" && <BrandsTab showToast={showToast} />}
             {tab === "banners" && <BannersTab showToast={showToast} />}
+            {tab === "appearance" && <AppearanceTab showToast={showToast} />}
           </div>
         </div>
       </div>
@@ -517,7 +522,15 @@ function BannersTab({ showToast }: { showToast: (m: string, ok?: boolean) => voi
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ position: "home" as "home" | "search", imageUrl: "", title: "", subtitle: "", linkUrl: "", order: 0 });
+  const [form, setForm] = useState({
+    position: "search" as "home" | "search",
+    slot: "hero_main" as BannerSlot,
+    imageUrl: "",
+    title: "",
+    subtitle: "",
+    linkUrl: "",
+    order: 0,
+  });
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
@@ -534,7 +547,7 @@ function BannersTab({ showToast }: { showToast: (m: string, ok?: boolean) => voi
       await adminApi.createBanner(form);
       showToast("Banner creado");
       setShowCreate(false);
-      setForm({ position: "home", imageUrl: "", title: "", subtitle: "", linkUrl: "", order: 0 });
+      setForm({ position: "search", slot: "hero_main", imageUrl: "", title: "", subtitle: "", linkUrl: "", order: 0 });
       load();
     } catch (err) {
       showToast(errMsg(err, "Error al crear el banner"), false);
@@ -589,7 +602,10 @@ function BannersTab({ showToast }: { showToast: (m: string, ok?: boolean) => voi
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-surface-200 truncate">{b.title || "(sin título)"}</p>
-                <p className="text-[11px] text-surface-500">{b.position === "home" ? "Home" : "Buscador"} · orden {b.order}</p>
+                <p className="text-[11px] text-surface-500">
+                  {b.position === "home" ? "Home" : "Buscador"}
+                  {b.slot ? ` · ${b.slot}` : ""} · orden {b.order}
+                </p>
               </div>
               <button
                 onClick={() => toggleActive(b)}
@@ -619,6 +635,11 @@ function BannersTab({ showToast }: { showToast: (m: string, ok?: boolean) => voi
                 <option value="home">Home</option>
                 <option value="search">Buscador</option>
               </select>
+              <select value={form.slot} onChange={(e) => setForm({ ...form, slot: e.target.value as BannerSlot })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
+                {BANNER_SLOTS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
               <input required placeholder="URL de la imagen" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
               <input placeholder="Título (opcional)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
               <input placeholder="Subtítulo (opcional)" value={form.subtitle} onChange={(e) => setForm({ ...form, subtitle: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
@@ -631,6 +652,87 @@ function BannersTab({ showToast }: { showToast: (m: string, ok?: boolean) => voi
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------- Apariencia (identidad visual) ----------
+
+function AppearanceTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
+  const [preset, setPreset] = useState<BrandPreset>("violet");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    adminApi.getPlatformSettings()
+      .then((r) => {
+        const p = r.data.brandPreset as BrandPreset;
+        setPreset(p in BRAND_PRESET_LABELS ? p : "violet");
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    try {
+      await adminApi.updatePlatformSettings(preset);
+      applyBrandPreset(preset);
+      showToast("Identidad visual actualizada");
+    } catch (err) {
+      showToast(errMsg(err, "Error al guardar"), false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-lg">
+      <h2 className="text-sm font-semibold text-white mb-1">Identidad visual</h2>
+      <p className="text-xs text-surface-500 mb-5 leading-relaxed">
+        Cambia el color principal del sistema para todos los usuarios. El violeta NODO es el predeterminado; otros presets (ej. rojo gamer) quedan disponibles como alternativa.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        {(Object.keys(BRAND_PRESET_LABELS) as BrandPreset[]).map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => {
+              setPreset(key);
+              applyBrandPreset(key);
+            }}
+            className={`rounded-xl border p-4 text-left transition-all ${
+              preset === key
+                ? "border-brand-500 bg-brand-600/10 ring-1 ring-brand-500/30"
+                : "border-surface-800 bg-surface-900 hover:border-surface-600"
+            }`}
+          >
+            <div
+              className="w-full h-8 rounded-lg mb-3"
+              style={{ backgroundColor: `rgb(${BRAND_PRESETS[key][600]})` }}
+            />
+            <p className="text-sm font-medium text-white">{BRAND_PRESET_LABELS[key]}</p>
+          </button>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        disabled={saving}
+        className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2.5 transition-all"
+      >
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar para todos los usuarios"}
+      </button>
     </div>
   );
 }
