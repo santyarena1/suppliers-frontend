@@ -80,9 +80,11 @@ export default function NewBytesDraftPanel({
         ]);
         if (cancelled) return;
         const addrs = addrRes.data ?? [];
+        const cartSnap = cartRes.data;
+        const pays = (cartSnap?.payments?.length ? cartSnap.payments : payRes.data) ?? [];
         setAddresses(addrs);
-        setPayments(payRes.data ?? []);
-        setCart(cartRes.data);
+        setPayments(pays);
+        setCart(cartSnap);
         const def = addrs.find((a) => a.isDefault) ?? addrs[0];
         if (def) setAddressId(def.id);
       } catch (err: unknown) {
@@ -105,14 +107,18 @@ export default function NewBytesDraftPanel({
       return;
     }
     if (!filteredPayments.some((p) => p.value === medioDePagoId)) {
-      setMedioDePagoId(filteredPayments[0].value);
+      const preferred = delivery === "pickup"
+        ? (filteredPayments.find((p) => p.pickupOnly) ?? filteredPayments[0])
+        : filteredPayments[0];
+      setMedioDePagoId(preferred.value);
     }
-  }, [filteredPayments, medioDePagoId]);
+  }, [filteredPayments, medioDePagoId, delivery]);
 
   useEffect(() => {
     if (delivery !== "shipping") {
       setQuotes([]);
       setMedioDeEnvioId("");
+      setQuoting(false);
       return;
     }
     if (!addressId || cartItems.length === 0) return;
@@ -142,7 +148,6 @@ export default function NewBytesDraftPanel({
   const selectedQuote = quotes.find((q) => q.id === medioDeEnvioId);
   const selectedPayment = filteredPayments.find((p) => p.value === medioDePagoId);
   const canSubmit =
-    Boolean(delivery) &&
     Boolean(medioDePagoId) &&
     !quoting &&
     !submitting &&
@@ -317,6 +322,9 @@ export default function NewBytesDraftPanel({
 
           <button
             onClick={handleSubmit}
+            title={!canSubmit
+              ? (!medioDePagoId ? "Falta un medio de pago de NewBytes" : quoting ? "Cotizando envío…" : "Completá entrega y pago")
+              : undefined}
             disabled={!canSubmit}
             className="h-9 px-3 inline-flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-md text-sm font-semibold flex-shrink-0"
           >

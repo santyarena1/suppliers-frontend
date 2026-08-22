@@ -723,20 +723,24 @@ export class InvidOrderService {
     let orderNumber = parsed.orderNumber;
     let webOrderNumber = parsed.webOrderNumber;
 
-    // Fuente de verdad: el listado real de pedidos de la cuenta.
-    try {
-      const ordersPage = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
-      const latest = parseOrdersTable(ordersPage.data).orders[0];
-      if (latest) {
-        orderNumber = orderNumber ?? latest.orderNumber;
-        webOrderNumber = webOrderNumber ?? latest.webOrderNumber;
-        parsed = { ...parsed, appearsSuccessful: true, orderNumber, webOrderNumber };
+    // Solo completa números si el POST ya se vio como éxito. Un pedido viejo
+    // de lista_pedidos no cuenta como que este submit creó algo.
+    if (parsed.appearsSuccessful) {
+      try {
+        const ordersPage = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
+        const latest = parseOrdersTable(ordersPage.data).orders[0];
+        if (latest) {
+          orderNumber = orderNumber ?? latest.orderNumber;
+          webOrderNumber = webOrderNumber ?? latest.webOrderNumber;
+        }
+      } catch (err) {
+        this.logger.warn(`No se pudo reconsultar lista_pedidos: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch (err) {
-      this.logger.warn(`No se pudo reconsultar lista_pedidos: ${err instanceof Error ? err.message : String(err)}`);
+    } else {
+      this.logger.warn(`Invid no confirmó el pedido: ${parsed.errorMessage || "respuesta sin número de orden"}`);
     }
 
-    const created = Boolean(orderNumber || webOrderNumber || parsed.appearsSuccessful);
+    const created = Boolean(parsed.appearsSuccessful && (orderNumber || webOrderNumber));
     const record = await this.prisma.providerOrder.create({
       data: {
         userId,

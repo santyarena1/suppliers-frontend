@@ -110,15 +110,6 @@ export default function InvidDraftPanel({
     return () => { cancelled = true; };
   }, []);
 
-  const payload = {
-    items: items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
-    addressId,
-    paymentOption,
-    deliveryOption,
-    expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
-    notes: notes.trim() || undefined,
-  };
-
   function invalidatePreview() {
     setError(null);
     if (reviewedOnce.current && addressId && !(deliveryOption === "3" && !expresoId)) {
@@ -163,23 +154,56 @@ export default function InvidDraftPanel({
   }, [addressId, paymentOption, deliveryOption, expresoId, itemsKey]);
 
   async function handleSubmit() {
-    if (!preview?.stockOk) return;
+    if (!addressId) {
+      setError("Elegí una dirección de Invid");
+      return;
+    }
+    if (deliveryOption === "3" && !expresoId) {
+      setError("Para EXPRESO tenés que elegir la empresa de transporte");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
-      const res = await invidCheckoutApi.draft(payload);
+      let ready = preview;
+      if (!ready?.stockOk) {
+        const res = await invidCheckoutApi.preview({
+          items: items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
+          addressId,
+          paymentOption,
+          deliveryOption,
+          expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
+        });
+        reviewedOnce.current = true;
+        publishPreview(res.data);
+        if (res.data.deliveries?.length) setDeliveries(res.data.deliveries);
+        if (res.data.expresoCompanies?.length) setExpresoCompanies(res.data.expresoCompanies);
+        ready = res.data;
+        if (!ready.stockOk) {
+          setError(ready.stockMessage || "Invid no validó el stock de este pedido");
+          return;
+        }
+      }
+      const res = await invidCheckoutApi.draft({
+        items: items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
+        addressId,
+        paymentOption,
+        deliveryOption,
+        expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
+        notes: notes.trim() || undefined,
+      });
       setResult(res.data);
       publishPreview(null);
-      onCreated(res.data.message);
+      onCreated(res.data?.message);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "No se pudo crear el borrador en Invid");
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      setError((Array.isArray(msg) ? msg.join(" · ") : msg) || "No se pudo crear el borrador en Invid");
     } finally {
       setSubmitting(false);
     }
   }
 
-  const canConfirm = Boolean(preview?.stockOk)
+  const canConfirm = Boolean(addressId)
     && !previewing
     && !submitting
     && !(deliveryOption === "3" && !expresoId);
@@ -361,7 +385,7 @@ export default function InvidDraftPanel({
           <button
             onClick={handleSubmit}
             disabled={!canConfirm}
-            title={!preview ? "Primero tenés que revisar en Invid" : !preview.stockOk ? "Invid no validó el stock" : undefined}
+            title={!addressId ? "Elegí una dirección" : deliveryOption === "3" && !expresoId ? "Elegí el expreso" : undefined}
             className="h-9 px-3 inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 text-white rounded-md text-sm font-semibold flex-shrink-0"
           >
             {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
@@ -428,7 +452,8 @@ export default function InvidDraftPanel({
       <button
         onClick={handleSubmit}
         disabled={!canConfirm}
-        title={!preview ? "Primero tenés que revisar en Invid" : !preview.stockOk ? "Invid no validó el stock" : undefined}
+        disabled={!canConfirm}
+        title={!addressId ? "Elegí una dirección" : deliveryOption === "3" && !expresoId ? "Elegí el expreso" : undefined}
         className="flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 disabled:opacity-100 text-white rounded-md py-2.5 text-sm font-semibold"
       >
         {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
