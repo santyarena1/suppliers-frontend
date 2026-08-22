@@ -18,6 +18,8 @@ import {
 } from "@/components/checkout/CheckoutForm";
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
+import { useBackgroundCheckout } from "@/lib/pendingOrders";
+import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -47,32 +49,43 @@ export default function ElitCheckoutPanel({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ElitDraftResult | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const submitLock = useRef(false);
+  const seeded = useRef<string | null>(null);
+  const warm = useCheckoutWarmup("ELIT", cartItems);
+  const {
+    background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
+    openConfirm, acceptResult, leaveInBackground, finishOrder,
+  } = useBackgroundCheckout<ElitDraftResult>("ELIT", "No se pudo crear el pedido en Elit");
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    seeded.current = null;
+    setLoading(true);
+  }, [cartKey]);
+
+  useEffect(() => {
+    if (warm.itemsKey !== cartKey) return;
+    if (warm.status === "ready" && warm.data && seeded.current !== cartKey) {
+      seeded.current = cartKey;
+      const data = warm.data.preview;
+      setPreview(data);
+      setWarehouse(String(data.warehouse ?? data.warehouses[0]?.id ?? ""));
+      setShippingMethod(data.shippingMethod ?? "");
+      setSaleCondition(data.saleCondition ?? "");
+      setShippingAddress(data.shippingAddress ?? data.addresses[0]?.code ?? "");
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    if (warm.status === "error" && seeded.current !== cartKey) {
+      setError(warm.error || "No se pudo armar el carrito de Elit.");
+      setLoading(false);
+      return;
+    }
+    if (warm.status === "loading" && seeded.current !== cartKey) {
       setLoading(true);
       setError(null);
-      try {
-        const res = await elitCheckoutApi.preview({ items: cartItems });
-        if (cancelled) return;
-        const data = res.data;
-        setPreview(data);
-        setWarehouse(String(data.warehouse ?? data.warehouses[0]?.id ?? ""));
-        setShippingMethod(data.shippingMethod ?? "");
-        setSaleCondition(data.saleCondition ?? "");
-        setShippingAddress(data.shippingAddress ?? data.addresses[0]?.code ?? "");
-      } catch (err: unknown) {
-        if (!cancelled) setError(errMessage(err, "No se pudo armar el carrito de Elit."));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [cartItems]);
+    }
+  }, [warm, cartKey]);
 
   const methods = (preview?.shippingMethods ?? []).filter((m) => String(m.warehouse) === warehouse);
   const selectedPay = preview?.saleConditions.find((p) => p.value === saleCondition);
@@ -95,8 +108,8 @@ export default function ElitCheckoutPanel({
     setError(null);
     setSubmitting(true);
     try {
-      const res = await elitCheckoutApi.draft(payload());
-      setResult(res.data);
+      const res = await elitCheckoutApi.draft({ ...payload(), background: true });
+      acceptResult(res.data);
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Elit"));
     } finally {
@@ -133,7 +146,7 @@ export default function ElitCheckoutPanel({
             ))}
           </CheckoutSelect>
         </CheckoutField>
-        <CheckoutSubmit onClick={() => { setError(null); setResult(null); setConfirmOpen(true); }} disabled={!canSubmit}>
+        <CheckoutSubmit onClick={() => { setError(null); openConfirm(); }} disabled={!canSubmit}>
           Confirmar Elit
         </CheckoutSubmit>
       </div>
@@ -164,7 +177,7 @@ export default function ElitCheckoutPanel({
           {" · "}Total {formatUSD(preview.total)}
         </p>
       )}
-      {error && !confirmOpen && <CheckoutError>{error}</CheckoutError>}
+      {(error || jobError) && !confirmOpen && <CheckoutError>{error || jobError}</CheckoutError>}
       <p className="text-[11px] text-surface-600">
         <Link href={providerOrdersHref("ELIT")} className="hover:text-surface-300 underline underline-offset-2">
           Ver historial de Elit
@@ -184,14 +197,18 @@ export default function ElitCheckoutPanel({
         ]}
         confirmLabel="Procesar en Elit"
         loading={submitting}
-        error={error}
+        error={error || jobError}
+        background={background}
+        onBackgroundChange={setBackground}
         result={result ? {
           message: result.message,
+          status: result.status,
           refs: [result.orderNumber && `Pedido ${result.orderNumber}`, result.total != null && `Total ${formatUSD(Number(result.total))}`].filter(Boolean) as string[],
         } : null}
         onCancel={() => { if (!submitting) setConfirmOpen(false); }}
         onConfirm={handleSubmit}
-        onDone={() => { setConfirmOpen(false); if (result) onCreated(result.message); }}
+        onDone={() => finishOrder(onCreated)}
+        onLeaveInBackground={leaveInBackground}
       />
     </div>
   );

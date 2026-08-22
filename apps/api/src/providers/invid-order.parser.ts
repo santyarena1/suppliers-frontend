@@ -103,6 +103,14 @@ export function collectFormFields(html: string, formId = "form_envio"): Record<s
     if (type === "checkbox" && !/\bchecked\b/i.test(tag)) continue;
     fields[name] = attr(tag, "value") ?? "";
   }
+  const selectRe = /<select\b([^>]*)>([\s\S]*?)<\/select>/gi;
+  while ((m = selectRe.exec(block))) {
+    const name = attr(`<x ${m[1]}>`, "name");
+    if (!name) continue;
+    const options = [...m[2].matchAll(/<option\b([^>]*)>/gi)];
+    const selected = options.find((o) => /\bselected\b/i.test(o[0])) ?? options[0];
+    fields[name] = selected ? (attr(selected[0], "value") ?? "") : "";
+  }
   return fields;
 }
 
@@ -199,24 +207,31 @@ export interface InvidSubmitResult {
 }
 
 export function parseSubmitResult(html: string): InvidSubmitResult {
-  const web = html.match(/pedido\s*web[^0-9]{0,40}(\d{3,})/i);
-  const orden = html.match(/(?:n[úu]mero\s*(?:de\s*)?)?orden[^0-9]{0,40}(\d{3,})/i)
-    ?? html.match(/nro\.?\s*(?:de\s*)?pedido[^0-9]{0,40}(\d{3,})/i);
-  const errorBlock = html.match(/class="[^"]*(?:error|msgalerta|alert-danger|stockerror)[^"]*"[^>]*>([^<]{5,200})/i);
   const stillOnCart = /id=["']iniciarpago["']/i.test(html) && /name=["']opcionPago["']/i.test(html);
-  const thanks = /gracias|pedido\s+(?:generado|registrado|confirmado|recibido)|pendiente\s+de\s+procesamiento|n[úu]mero\s+de\s+pedido/i.test(html);
-
+  const thanks = /gracias por tu pedido|pedido fue grabado|enviado a invid para su procesamiento/i.test(html);
+  const web = html.match(/pedido\s*web\s*asignado[^0-9]{0,24}(\d{3,})/i)
+    ?? html.match(/pedido\s*web[^0-9]{0,40}(\d{3,})/i);
+  const orden = html.match(/\borden\b[^0-9]{0,40}(\d{3,})/i);
+  const errorBlock = html.match(/class="[^"]*(?:error|msgalerta|alert-danger|stockerror)[^"]*"[^>]*>([^<]{5,200})/i);
   const errorMessage = errorBlock ? stripTags(errorBlock[1]) : undefined;
   const looksLikeError = Boolean(errorMessage) && /error|no se pudo|inv[aá]lid|rechaz/i.test(errorMessage ?? "");
+  const webOrderNumber = web?.[1];
+  const orderNumber = orden?.[1] && orden[1] !== webOrderNumber ? orden[1] : undefined;
+
+  if (stillOnCart || looksLikeError) {
+    return {
+      appearsSuccessful: false,
+      errorMessage: looksLikeError
+        ? errorMessage
+        : "Invid devolvió el carrito sin confirmar el pedido",
+    };
+  }
 
   return {
-    appearsSuccessful: Boolean((web || orden || thanks) && !looksLikeError && !stillOnCart)
-      || Boolean((web || orden) && !looksLikeError),
-    orderNumber: orden?.[1],
-    webOrderNumber: web?.[1],
-    errorMessage: looksLikeError ? errorMessage : stillOnCart && !web && !orden
-      ? "Invid devolvió el carrito sin confirmar el pedido"
-      : undefined,
+    appearsSuccessful: Boolean(webOrderNumber || thanks),
+    orderNumber,
+    webOrderNumber,
+    errorMessage: webOrderNumber || thanks ? undefined : "Invid no devolvió número de pedido web",
   };
 }
 

@@ -119,6 +119,13 @@ export class ProvidersController {
     return this.invidOrderService.listDrafts(user.userId);
   }
 
+  @Get("providers/INVID/drafts/:id")
+  async invidDraft(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
+    const draft = await this.invidOrderService.getDraft(user.userId, id);
+    if (!draft) throw new NotFoundException("Borrador no encontrado");
+    return draft;
+  }
+
   @Post("providers/INVID/checkout/preview")
   async invidCheckoutPreview(@CurrentUser() user: { userId: string }, @Body() dto: InvidCheckoutPreviewDto) {
     return this.invidOrderService.preview(await this.invidCredentials(user.userId), dto);
@@ -178,6 +185,13 @@ export class ProvidersController {
     return this.newBytesOrderService.listDrafts(user.userId);
   }
 
+  @Get("providers/NEW_BYTES/drafts/:id")
+  async newBytesDraft(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
+    const draft = await this.newBytesOrderService.getDraft(user.userId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
   /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */
   @Post("providers/NEW_BYTES/checkout/cart")
   async newBytesCheckoutCart(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutCartDto) {
@@ -216,6 +230,13 @@ export class ProvidersController {
     return this.grupoNucleoOrderService.listDrafts(user.userId);
   }
 
+  @Get("providers/GRUPO_NUCLEO/drafts/:id")
+  async gnDraftById(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
+    const draft = await this.grupoNucleoOrderService.getDraft(user.userId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
   /** La API de GN no expone historial/cta cte — devolvemos copias de Nodo. */
   @Get("providers/GRUPO_NUCLEO/account")
   gnAccount(@CurrentUser() user: { userId: string }) {
@@ -244,6 +265,13 @@ export class ProvidersController {
   @Get("providers/AIR/drafts")
   airDrafts(@CurrentUser() user: { userId: string }) {
     return this.airOrderService.listDrafts(user.userId);
+  }
+
+  @Get("providers/AIR/drafts/:id")
+  async airDraftById(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
+    const draft = await this.airOrderService.getDraft(user.userId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
   }
 
   @Get("providers/AIR/account")
@@ -277,6 +305,13 @@ export class ProvidersController {
   @Get("providers/ELIT/drafts")
   elitDrafts(@CurrentUser() user: { userId: string }) {
     return this.elitOrderService.listDrafts(user.userId);
+  }
+
+  @Get("providers/ELIT/drafts/:id")
+  async elitDraftById(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
+    const draft = await this.elitOrderService.getDraft(user.userId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
   }
 
   @Get("providers/ELIT/account")

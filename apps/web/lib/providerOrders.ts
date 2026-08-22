@@ -18,3 +18,14 @@ export function providerHasOrderHistory(provider: string): boolean {
 }
 
 export const ORDER_HISTORY_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR"] as const;
+
+export type PolledDraft = {
+  id: string;
+  status: string;
+  invidOrderNumber: string | null;
+  invidWebOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  errorMessage: string | null;
+};

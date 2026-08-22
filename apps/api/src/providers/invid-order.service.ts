@@ -20,7 +20,9 @@ import {
 const SITE_BASE = "https://www.invidcomputers.com";
 const LOGIN_URL = `${SITE_BASE}/login.php`;
 const CART_URL = `${SITE_BASE}/carrito.php`;
-const AXIOS_OPTS = { timeout: 20_000, responseType: "text" as const };
+const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const HTML_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
 /**
  * Formas de pago reales del checkout de Invid (radio `opcionPago`).
@@ -102,6 +104,7 @@ export interface InvidDraftInput {
   notes?: string;
   payerName?: string;
   payerEmail?: string;
+  background?: boolean;
 }
 
 /**
@@ -141,16 +144,23 @@ export class InvidOrderService {
         {
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": BROWSER_UA,
+            Accept: HTML_ACCEPT,
+            "Accept-Language": "es-AR,es;q=0.9",
           },
           timeout: 20_000,
           maxRedirects: 0,
           validateStatus: (s) => s < 400 || s === 302,
         }
       );
-      const cookie = this.mergeCookies(undefined, res.headers["set-cookie"]);
+      let cookie = this.mergeCookies(undefined, res.headers["set-cookie"]);
       if (!cookie) throw new Error("sin cookie de sesión");
+      const location = typeof res.headers.location === "string" ? res.headers.location : undefined;
+      if (res.status === 302 && location) {
+        const next = location.startsWith("http") ? location : `${SITE_BASE}/${location.replace(/^\//, "")}`;
+        const landed = await this.request(cookie, "GET", next);
+        cookie = landed.cookie;
+      }
       return cookie;
     } catch (err) {
       throw new BadGatewayException(
@@ -175,8 +185,9 @@ export class InvidOrderService {
         ...(opts.body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
         Referer: CART_URL,
         Origin: SITE_BASE,
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_UA,
+        Accept: HTML_ACCEPT,
+        "Accept-Language": "es-AR,es;q=0.9",
       },
       timeout: opts.timeout ?? 20_000,
       responseType: "text",
@@ -185,7 +196,7 @@ export class InvidOrderService {
     });
     return {
       cookie: this.mergeCookies(cookie, res.headers["set-cookie"]),
-      data: typeof res.data === "string" ? res.data : String(res.data ?? ""),
+      data: typeof res.data === "string" ? res.data : JSON.stringify(res.data ?? ""),
       status: res.status,
       location: typeof res.headers.location === "string" ? res.headers.location : undefined,
     };
@@ -648,15 +659,66 @@ export class InvidOrderService {
     return rows.map(mapProviderDraft);
   }
 
+  async getDraft(userId: string, id: string) {
+    return this.prisma.providerOrder.findFirst({
+      where: { id, userId, provider: "INVID" },
+    });
+  }
+
   /**
    * Crea el borrador en Invid (POST iniciar_pago=S) y guarda una copia en Nodo.
+   * Confirmado en vivo: el portal responde 302 a mensaje.php con
+   * "Nro. de PEDIDO WEB asignado: NNNNN". Eso es el éxito. La fila en
+   * lista_pedidos tarda un rato más y no se usa para confirmar.
    */
   async submitDraft(userId: string, credentials: Record<string, string>, input: InvidDraftInput) {
+    if (input.background) {
+      const pending = await this.prisma.providerOrder.create({
+        data: {
+          userId,
+          provider: "INVID",
+          status: "PENDING",
+          paymentOption: input.paymentOption,
+          deliveryOption: input.deliveryOption ?? "1",
+          notes: input.notes,
+          items: input.items,
+          addressSnapshot: { id: input.addressId },
+        },
+      });
+      setImmediate(() => {
+        this.fulfillDraft(userId, credentials, input, pending.id).catch(async (err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.error(`Invid draft background ${pending.id}: ${message}`);
+          await this.prisma.providerOrder.update({
+            where: { id: pending.id },
+            data: { status: "FAILED", errorMessage: message.slice(0, 500) },
+          }).catch((updateErr: unknown) => this.logger.error(String(updateErr)));
+        });
+      });
+      return {
+        id: pending.id,
+        status: "PENDING" as const,
+        orderNumber: null,
+        webOrderNumber: null,
+        paymentLabel: null,
+        deliveryLabel: null,
+        items: input.items,
+        total: null,
+        message: "El pedido se está creando en Invid. Podés seguir usando Nodo; el número de pedido web aparece en el historial cuando Invid lo confirma.",
+      };
+    }
+    return this.fulfillDraft(userId, credentials, input);
+  }
+
+  private async fulfillDraft(
+    userId: string,
+    credentials: Record<string, string>,
+    input: InvidDraftInput,
+    existingId?: string
+  ) {
     const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
     if (prepared.itemErrors.length > 0) {
-      throw new BadRequestException(
-        prepared.itemErrors.map((e) => e.message).join(" · ")
-      );
+      throw new BadRequestException(prepared.itemErrors.map((e) => e.message).join(" · "));
     }
     if (!prepared.stockOk) {
       throw new BadRequestException(prepared.stockMessage || "Invid no validó el stock de este pedido");
@@ -684,20 +746,22 @@ export class InvidOrderService {
     const shippingCost = totals.shipping;
     const total = totals.total;
 
+    const stock = await this.validateStock(cookie, prepared.paymentOption, prepared.address.CodProvincia);
+    cookie = stock.cookie;
+    if (!stock.validation.resultado) {
+      throw new BadRequestException(
+        stripHtmlMessage(stock.validation.mensaje) || "Invid no validó el stock de este pedido"
+      );
+    }
+
+    const rate = await this.getTipoCambio(cookie, prepared.paymentOption);
+    const pesosHidden = rate > 0 ? (total * rate).toFixed(2) : total.toFixed(2);
+    if (rate <= 0) {
+      this.logger.warn("Invid no devolvió cotización ARS; prcmoninv1 va en USD y el portal puede rechazar el POST");
+    }
+
     const cartPage = await this.request(cookie, "GET", CART_URL);
     cookie = cartPage.cookie;
-
-    const knownIds = new Set<string>();
-    try {
-      const before = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
-      cookie = before.cookie;
-      for (const o of parseOrdersTable(before.data).orders) {
-        if (o.webOrderNumber) knownIds.add(`w:${o.webOrderNumber}`);
-        if (o.orderNumber) knownIds.add(`o:${o.orderNumber}`);
-      }
-    } catch (err) {
-      this.logger.warn(`No se pudo leer lista_pedidos antes del POST: ${err instanceof Error ? err.message : String(err)}`);
-    }
 
     const fields = collectFormFields(cartPage.data);
     const body = new URLSearchParams(fields);
@@ -715,12 +779,13 @@ export class InvidOrderService {
     body.set("pais_seleccionado", prepared.address.Pais);
     body.set("opcionPago", prepared.paymentOption);
     body.set("entrega", delivery.value);
-    body.set("forma_entrega", delivery.value);
     body.set("costo_envio", String(shippingCost));
     body.set("usa_imi", "true");
     body.set("usa_iva", "true");
-    // Invid opera en USD. El hidden prcmoninv1 va con el total del carrito en dólares.
-    body.set("prcmoninv1", total.toFixed(2));
+    body.set("valida_delivery", fields.valida_delivery || "1");
+    // El pedido es en USD. El hidden prcmoninv1 lo llena el portal en pesos
+    // (total USD × cotización) antes de CONFIRMAR; sin eso el POST no impacta.
+    body.set("prcmoninv1", pesosHidden);
     body.set("percepcionHidden", String(prepared.percepcionPercent));
     body.set("cp_entrega", prepared.address.CodPostal);
     body.set("localidad_entrega", prepared.address.Localidad);
@@ -732,17 +797,18 @@ export class InvidOrderService {
     if (fields.termYCond != null || /termYCond/i.test(cartPage.data)) body.set("termYCond", "on");
 
     this.logger.log(
-      `Invid POST iniciar_pago entrega=${delivery.value} pago=${prepared.paymentOption} usd=${total.toFixed(2)} entrega_valida=${body.get("entrega_valida")}`
+      `Invid POST iniciar_pago entrega=${delivery.value} pago=${prepared.paymentOption} usd=${total.toFixed(2)} ars=${pesosHidden} loc=?`
     );
 
     let html = "";
-    let submit = await this.request(cookie, "POST", CART_URL, { body: body.toString(), timeout: 40_000 });
+    const submit = await this.request(cookie, "POST", CART_URL, { body: body.toString(), timeout: 40_000 });
     cookie = submit.cookie;
     html = submit.data;
 
-    // El portal a veces responde 302 a la página de confirmación / gracias.
     if (submit.status === 302 && submit.location) {
-      const next = submit.location.startsWith("http") ? submit.location : `${SITE_BASE}/${submit.location.replace(/^\//, "")}`;
+      const next = submit.location.startsWith("http")
+        ? submit.location
+        : `${SITE_BASE}/${submit.location.replace(/^\//, "")}`;
       const followed = await this.request(cookie, "GET", next);
       cookie = followed.cookie;
       html = followed.data;
@@ -751,62 +817,50 @@ export class InvidOrderService {
     const parsed = parseSubmitResult(html);
     let orderNumber = parsed.orderNumber;
     let webOrderNumber = parsed.webOrderNumber;
+    const created = Boolean(parsed.appearsSuccessful && webOrderNumber);
 
-    const isNew = (web?: string, orden?: string) =>
-      Boolean((web && !knownIds.has(`w:${web}`)) || (orden && !knownIds.has(`o:${orden}`)));
-
-    let created = Boolean(parsed.appearsSuccessful && isNew(webOrderNumber, orderNumber));
-
-    const readLatestNew = async () => {
-      const ordersPage = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
-      cookie = ordersPage.cookie;
-      const latest = parseOrdersTable(ordersPage.data).orders.find((o) => isNew(o.webOrderNumber, o.orderNumber));
-      return { cookie: ordersPage.cookie, latest };
-    };
-
-    try {
-      let listed = await readLatestNew();
-      cookie = listed.cookie;
-      if (!listed.latest) {
-        await new Promise((r) => setTimeout(r, 1200));
-        listed = await readLatestNew();
-        cookie = listed.cookie;
+    if (created && webOrderNumber && existingId) {
+      try {
+        const listed = await this.findListedWebOrder(cookie, webOrderNumber, 45_000);
+        if (listed) {
+          cookie = listed.cookie;
+          orderNumber = listed.orderNumber || orderNumber;
+          webOrderNumber = listed.webOrderNumber || webOrderNumber;
+        }
+      } catch (err) {
+        this.logger.warn(`lista_pedidos todavía no muestra ${webOrderNumber}: ${err instanceof Error ? err.message : String(err)}`);
       }
-      if (listed.latest) {
-        created = true;
-        orderNumber = listed.latest.orderNumber;
-        webOrderNumber = listed.latest.webOrderNumber;
-      }
-    } catch (err) {
-      this.logger.warn(`No se pudo reconsultar lista_pedidos: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     if (!created) {
       this.logger.warn(
-        `Invid no confirmó el pedido: status=${submit.status} loc=${submit.location ?? "-"} ${parsed.errorMessage || "respuesta sin orden nueva"}`
+        `Invid no confirmó el pedido: status=${submit.status} loc=${submit.location ?? "-"} ${parsed.errorMessage || "sin Nro. de PEDIDO WEB"}`
       );
     }
-    const record = await this.prisma.providerOrder.create({
-      data: {
-        userId,
-        provider: "INVID",
-        status: created ? "CREATED" : "FAILED",
-        invidOrderNumber: orderNumber,
-        invidWebOrderNumber: webOrderNumber,
-        paymentOption: prepared.paymentOption,
-        paymentLabel: prepared.paymentLabel,
-        deliveryOption: delivery.value,
-        deliveryLabel: delivery.label,
-        notes: input.notes,
-        subtotal: prepared.subtotal,
-        impuestos: prepared.impuestos,
-        percepciones: totals.percepciones,
-        total,
-        errorMessage: created ? null : (parsed.errorMessage ?? "Invid no devolvió número de pedido"),
-        items: prepared.items,
-        addressSnapshot: { id: prepared.addressId, ...prepared.address },
-      },
-    });
+
+    const payload = {
+      status: created ? "CREATED" : "FAILED",
+      invidOrderNumber: orderNumber ?? null,
+      invidWebOrderNumber: webOrderNumber ?? null,
+      paymentOption: prepared.paymentOption,
+      paymentLabel: prepared.paymentLabel,
+      deliveryOption: delivery.value,
+      deliveryLabel: delivery.label,
+      notes: input.notes,
+      subtotal: prepared.subtotal,
+      impuestos: prepared.impuestos,
+      percepciones: totals.percepciones,
+      total,
+      errorMessage: created ? null : (parsed.errorMessage ?? "Invid no devolvió número de pedido web"),
+      items: prepared.items,
+      addressSnapshot: { id: prepared.addressId, ...prepared.address },
+    };
+
+    const record = existingId
+      ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: payload })
+      : await this.prisma.providerOrder.create({
+          data: { userId, provider: "INVID", ...payload },
+        });
 
     if (!created) {
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el borrador en Invid");
@@ -826,7 +880,26 @@ export class InvidOrderService {
       percepciones: totals.percepciones,
       shippingCost,
       total,
-      message: "Borrador creado en Invid. Queda pendiente: el vendedor de la cuenta te va a contactar (WhatsApp / mail). Si no se informa el pago en 24 h, Invid lo da de baja.",
+      message: webOrderNumber
+        ? `Pedido confirmado en Invid. Pedido web ${webOrderNumber}. El vendedor de la cuenta te contacta; si no se informa el pago en 24 h, Invid lo da de baja. En Mis pedidos puede tardar un rato en aparecer.`
+        : "Borrador creado en Invid.",
     };
+  }
+
+  private async findListedWebOrder(cookie: string, webOrderNumber: string, budgetMs: number) {
+    const started = Date.now();
+    let current = cookie;
+    let delay = 2500;
+    while (Date.now() - started < budgetMs) {
+      const page = await this.request(current, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
+      current = page.cookie;
+      const match = parseOrdersTable(page.data).orders.find((o) => o.webOrderNumber === webOrderNumber);
+      if (match) return { cookie: current, ...match };
+      const remaining = budgetMs - (Date.now() - started);
+      if (remaining <= 0) break;
+      await new Promise((r) => setTimeout(r, Math.min(delay, remaining)));
+      delay = Math.min(delay * 2, 12_000);
+    }
+    return null;
   }
 }

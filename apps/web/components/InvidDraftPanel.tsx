@@ -22,6 +22,8 @@ import {
 } from "@/components/checkout/CheckoutForm";
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
+import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
+import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
@@ -52,15 +54,21 @@ export default function InvidDraftPanel({
   const [result, setResult] = useState<InvidDraftResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [background, setBackground] = useState(true);
   const reviewedOnce = useRef(false);
   const previewGen = useRef(0);
   const submitLock = useRef(false);
+  const leftInBackground = useRef(false);
   const { patchItem } = useCart();
+  const jobs = usePendingOrders();
 
   const itemsKey = useMemo(
     () => items.map((it) => `${it.externalId}:${it.qty}`).join("|"),
     [items]
   );
+  const lines = useMemo(() => cartLinesFromItems(items), [itemsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const warm = useCheckoutWarmup("INVID", lines);
+  const seeded = useRef<string | null>(null);
 
   function applyPreviewToCart(next: InvidCheckoutPreview) {
     if (!next.stockOk) return;
@@ -88,40 +96,41 @@ export default function InvidDraftPanel({
   useEffect(() => {
     setError(null);
     reviewedOnce.current = false;
+    seeded.current = null;
     publishPreview(null);
+    setLoadingMeta(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsKey]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    if (warm.itemsKey !== itemsKey) return;
+    if (warm.status === "ready" && warm.data && seeded.current !== itemsKey) {
+      seeded.current = itemsKey;
+      const d = warm.data;
+      setAddresses(d.addresses);
+      setPayments(d.payments);
+      setDeliveries(d.deliveries);
+      setExpresoCompanies(d.expresoCompanies);
+      setAddressId(d.addressId);
+      setPaymentOption(d.paymentOption);
+      setDeliveryOption(d.deliveryOption);
+      reviewedOnce.current = true;
+      publishPreview(d.preview);
+      setMetaError(null);
+      setLoadingMeta(false);
+      return;
+    }
+    if (warm.status === "error" && seeded.current !== itemsKey) {
+      setMetaError(warm.error || "No se pudieron cargar direcciones / pagos de Invid.");
+      setLoadingMeta(false);
+      return;
+    }
+    if (warm.status === "loading" && seeded.current !== itemsKey) {
       setLoadingMeta(true);
       setMetaError(null);
-      try {
-        const [addrRes, payRes, delRes] = await Promise.all([
-          invidCheckoutApi.addresses(),
-          invidCheckoutApi.payments(),
-          invidCheckoutApi.deliveries(),
-        ]);
-        if (cancelled) return;
-        const addrs = addrRes.data ?? [];
-        const pays = payRes.data ?? [];
-        const dels = delRes.data ?? [];
-        setAddresses(addrs);
-        setPayments(pays);
-        setDeliveries(dels);
-        const def = addrs.find((a) => a.isDefault) ?? addrs[0];
-        if (def) setAddressId(def.id);
-        if (pays[0] && !pays.some((p) => p.value === "67")) setPaymentOption(pays[0].value);
-      } catch (err: unknown) {
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        if (!cancelled) setMetaError(msg || "No se pudieron cargar direcciones / pagos de Invid.");
-      } finally {
-        if (!cancelled) setLoadingMeta(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warm, itemsKey]);
 
   function invalidatePreview() {
     setError(null);
@@ -173,8 +182,27 @@ export default function InvidDraftPanel({
     }
     setError(null);
     setResult(null);
+    leftInBackground.current = false;
     setConfirmOpen(true);
   }
+
+  useEffect(() => {
+    if (!result?.id || result.status !== "PENDING") return;
+    const job = jobs.find((j) => j.id === result.id);
+    if (!job || job.status === "PENDING") return;
+    if (job.status === "CREATED") {
+      setResult((prev) => prev ? {
+        ...prev,
+        status: "CREATED",
+        orderNumber: job.orderNumber ?? prev.orderNumber,
+        webOrderNumber: job.webOrderNumber ?? prev.webOrderNumber,
+        message: job.message,
+      } : prev);
+    } else {
+      setError(job.errorMessage || "No se pudo crear el borrador en Invid");
+      setResult(null);
+    }
+  }, [jobs, result?.id, result?.status]);
 
   async function handleSubmit() {
     if (submitLock.current) return;
@@ -194,9 +222,20 @@ export default function InvidDraftPanel({
         deliveryOption,
         expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
         notes: notes.trim() || undefined,
+        background: true,
+      });
+      trackPendingOrder({
+        id: res.data.id,
+        provider: "INVID",
+        status: res.data.status === "CREATED" ? "CREATED" : res.data.status === "FAILED" ? "FAILED" : "PENDING",
+        message: res.data.message,
+        webOrderNumber: res.data.webOrderNumber,
+        orderNumber: res.data.orderNumber,
+        startedAt: Date.now(),
       });
       setResult(res.data);
-      publishPreview(null);
+      if (res.data.status === "CREATED") publishPreview(null);
+      if (background || leftInBackground.current) setConfirmOpen(false);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setError((Array.isArray(msg) ? msg.join(" · ") : msg) || "No se pudo crear el borrador en Invid");
@@ -206,9 +245,14 @@ export default function InvidDraftPanel({
     }
   }
 
+  function leaveInBackground() {
+    leftInBackground.current = true;
+    setConfirmOpen(false);
+  }
+
   function finishOrder() {
     setConfirmOpen(false);
-    if (result) onCreated(result.message);
+    if (result?.status === "CREATED") onCreated(result.message);
   }
 
   const reviewedOk = Boolean(preview?.stockOk && (preview.itemErrors?.length ?? 0) === 0);
@@ -361,7 +405,7 @@ export default function InvidDraftPanel({
         open={confirmOpen}
         provider="INVID"
         title="Confirmar borrador"
-        warning="Esto crea el borrador en tu cuenta de Invid. Después hay que cerrarlo en el portal del proveedor."
+        warning="Esto crea el pedido real en Invid. El número de pedido web confirma que quedó grabado; la lista del portal puede tardar un rato en mostrarlo."
         items={items.map((it) => ({ name: it.name, qty: it.qty }))}
         lines={[
           { label: "Dirección", value: selectedAddress ? `${selectedAddress.label} — ${selectedAddress.addressLine}` : "—" },
@@ -373,8 +417,11 @@ export default function InvidDraftPanel({
         confirmLabel="Crear borrador"
         loading={submitting}
         error={error}
+        background={background}
+        onBackgroundChange={setBackground}
         result={result ? {
           message: result.message,
+          status: result.status,
           refs: [
             result.webOrderNumber && `Pedido web ${result.webOrderNumber}`,
             result.orderNumber && `Orden ${result.orderNumber}`,
@@ -384,6 +431,7 @@ export default function InvidDraftPanel({
         onCancel={() => { if (!submitting) setConfirmOpen(false); }}
         onConfirm={handleSubmit}
         onDone={finishOrder}
+        onLeaveInBackground={leaveInBackground}
       />
     </div>
   );

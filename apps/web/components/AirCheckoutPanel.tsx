@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { airCheckoutApi, AirDraftResult, ProviderOption } from "@/lib/api";
 import { CartItem } from "@/lib/cart";
 import Link from "next/link";
+import { formatUSD } from "@/lib/format";
 import {
   CheckoutError,
   CheckoutField,
@@ -14,6 +15,8 @@ import {
 } from "@/components/checkout/CheckoutForm";
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
+import { useBackgroundCheckout } from "@/lib/pendingOrders";
+import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -49,35 +52,47 @@ export default function AirCheckoutPanel({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AirDraftResult | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const submitLock = useRef(false);
+  const seeded = useRef<string | null>(null);
+  const warm = useCheckoutWarmup("AIR", cartItems);
+  const {
+    background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
+    openConfirm, acceptResult, leaveInBackground, finishOrder,
+  } = useBackgroundCheckout<AirDraftResult>("AIR", "No se pudo enviar el pedido en Air");
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    seeded.current = null;
+    setLoading(true);
+  }, [cartKey]);
+
+  useEffect(() => {
+    if (warm.itemsKey !== cartKey) return;
+    if (warm.status === "ready" && warm.data && seeded.current !== cartKey) {
+      seeded.current = cartKey;
+      const d = warm.data;
+      setSucursales(d.sucursales);
+      setVendedores(d.vendedores);
+      setPagos(d.pagos);
+      setEntregas(d.entregas);
+      setTransportes(d.transportes);
+      setSucursal(d.sucursal);
+      setVendedor(d.vendedor);
+      setPago(d.pago);
+      setEntrega(d.entrega);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    if (warm.status === "error" && seeded.current !== cartKey) {
+      setError(warm.error || "No se pudieron cargar las opciones del canasto de Air.");
+      setLoading(false);
+      return;
+    }
+    if (warm.status === "loading" && seeded.current !== cartKey) {
       setLoading(true);
       setError(null);
-      try {
-        const res = await airCheckoutApi.options();
-        if (cancelled) return;
-        setSucursales(res.data.sucursales);
-        setVendedores(res.data.vendedores);
-        setPagos(res.data.pagos);
-        setEntregas(res.data.entregas.filter((e) => e.value !== "05"));
-        setTransportes(res.data.transportes);
-        setSucursal(res.data.sucursales[0]?.value ?? "");
-        setVendedor(res.data.vendedores[0]?.value ?? "");
-        setPago(res.data.pagos[0]?.value ?? "01");
-        setEntrega("01");
-      } catch (err: unknown) {
-        if (!cancelled) setError(errMessage(err, "No se pudieron cargar las opciones del canasto de Air."));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    }
+  }, [warm, cartKey]);
 
   const needsTransporte = entrega === "03" || entrega === "04";
   const canSubmit = Boolean(sucursal && vendedor && pago && entrega && !submitting && !loading);
@@ -96,8 +111,9 @@ export default function AirCheckoutPanel({
         entrega,
         transporte: needsTransporte ? transporte || undefined : undefined,
         notes: notes.trim() || undefined,
+        background: true,
       });
-      setResult(res.data);
+      acceptResult(res.data);
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo enviar el pedido en Air"));
     } finally {
@@ -134,7 +150,7 @@ export default function AirCheckoutPanel({
             {vendedores.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
           </CheckoutSelect>
         </CheckoutField>
-        <CheckoutSubmit onClick={() => { setError(null); setResult(null); setConfirmOpen(true); }} disabled={!canSubmit}>
+        <CheckoutSubmit onClick={() => { setError(null); openConfirm(); }} disabled={!canSubmit}>
           Enviar a Air
         </CheckoutSubmit>
       </div>
@@ -163,8 +179,11 @@ export default function AirCheckoutPanel({
       </CheckoutField>
       <p className="text-[11px] text-surface-500">
         Air no cobra desde Nodo: el canasto queda para que el vendedor lo cargue.
+        {warm.status === "ready" && warm.data?.preview.total != null && (
+          <> · Total {formatUSD(warm.data.preview.total)}</>
+        )}
       </p>
-      {error && !confirmOpen && <CheckoutError>{error}</CheckoutError>}
+      {(error || jobError) && !confirmOpen && <CheckoutError>{error || jobError}</CheckoutError>}
       <p className="text-[11px] text-surface-600">
         <Link href={providerOrdersHref("AIR")} className="hover:text-surface-300 underline underline-offset-2">
           Ver historial de Air
@@ -184,11 +203,14 @@ export default function AirCheckoutPanel({
         ]}
         confirmLabel="Enviar a Air"
         loading={submitting}
-        error={error}
-        result={result ? { message: result.message, refs: [result.orderNumber].filter(Boolean) as string[] } : null}
+        error={error || jobError}
+        background={background}
+        onBackgroundChange={setBackground}
+        result={result ? { message: result.message, status: result.status, refs: [result.orderNumber].filter(Boolean) as string[] } : null}
         onCancel={() => { if (!submitting) setConfirmOpen(false); }}
         onConfirm={handleSubmit}
-        onDone={() => { setConfirmOpen(false); if (result) onCreated(result.message); }}
+        onDone={() => finishOrder(onCreated)}
+        onLeaveInBackground={leaveInBackground}
       />
     </div>
   );

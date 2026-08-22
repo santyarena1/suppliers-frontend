@@ -5,6 +5,7 @@ import { CartProvider } from "@/lib/cart";
 import { ResultsProvider } from "@/lib/results";
 import { ThemeProvider } from "@/lib/theme";
 import ThemeToggle from "@/components/ThemeToggle";
+import ProviderCartPreloader from "@/components/ProviderCartPreloader";
 
 export const metadata: Metadata = {
   title: "NODO",
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <PrefsProvider>
             <CartProvider>
+              <ProviderCartPreloader />
               <ResultsProvider>
                 {children}
                 <ThemeToggle />
