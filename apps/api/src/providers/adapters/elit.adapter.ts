@@ -1,6 +1,7 @@
 import { Injectable, BadGatewayException } from "@nestjs/common";
 import axios from "axios";
 import type { NormalizedProduct, ProviderAdapter } from "../types";
+import { ElitWebClient, hasElitPortalLogin, parseElitCredentials } from "../elit-web-client";
 
 const BASE_URL = "https://clientes.elit.com.ar/v1/api/productos";
 const PAGE_LIMIT = 40;
@@ -77,8 +78,22 @@ export class ElitAdapter implements ProviderAdapter {
     credentials: Record<string, string>,
     onPage: (items: NormalizedProduct[]) => Promise<void>
   ): Promise<void> {
-    const { user_id, token } = credentials;
-    if (!user_id || !token) throw new BadGatewayException("Credenciales de ELIT incompletas");
+    let user_id = (credentials.user_id || credentials.userId || "").trim();
+    let token = (credentials.token || credentials.apiToken || "").trim();
+    if (!user_id || !token) {
+      const parsed = parseElitCredentials(credentials);
+      if (!hasElitPortalLogin(parsed)) {
+        throw new BadGatewayException("Credenciales de ELIT incompletas");
+      }
+      const client = await ElitWebClient.login(credentials);
+      user_id = client.session.customerId;
+      token = client.session.apiTokenKey ?? "";
+      if (!user_id || !token) {
+        throw new BadGatewayException(
+          "Elit no devolvió user_id/token de catálogo. Cargalos a mano o verificá el login del portal.",
+        );
+      }
+    }
 
     // La API de ELIT usa offset 1-indexado: offset=0 devuelve 400
     // ("offset must be greater than or equal to 1"), confirmado en vivo.

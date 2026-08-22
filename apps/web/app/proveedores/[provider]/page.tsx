@@ -15,6 +15,9 @@ import { SKU_PREFIX } from "@/lib/providerMeta";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
 import NewBytesAccountPanel from "@/components/NewBytesAccountPanel";
+import ElitAccountPanel from "@/components/ElitAccountPanel";
+import GrupoNucleoAccountPanel from "@/components/GrupoNucleoAccountPanel";
+import AirAccountPanel from "@/components/AirAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import {
   AlertTriangle, ArrowLeft, Boxes, CheckCircle2, FileSpreadsheet, ImageOff, KeyRound,
@@ -34,6 +37,12 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
+type ProviderTab = "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account";
+
+const VALID_PROVIDER_TABS: ProviderTab[] = [
+  "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account",
+];
+
 const INTERVAL_OPTIONS = [
   { minutes: 60, label: "Cada 1 hora" },
   { minutes: 120, label: "Cada 2 horas" },
@@ -49,7 +58,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const valid = ALL_PROVIDERS.includes(provider);
   const implemented = IMPLEMENTED_PROVIDERS.includes(provider);
 
-  const [tab, setTab] = useState<"credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account">("sync");
+  const [tab, setTab] = useState<ProviderTab>("sync");
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -63,8 +72,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     tabFromQuery.current = false;
     autoTabDone.current = false;
     const initialTab = new URLSearchParams(window.location.search).get("tab");
-    if (initialTab === "credentials" || initialTab === "sync" || initialTab === "config" || initialTab === "catalog" || initialTab === "invid-account" || initialTab === "nb-account") {
-      setTab(initialTab);
+    if (VALID_PROVIDER_TABS.includes(initialTab as ProviderTab)) {
+      setTab(initialTab as ProviderTab);
       tabFromQuery.current = true;
       if (initialTab === "invid-account") loadInvidAccount();
     }
@@ -321,6 +330,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     { key: "catalog" as const, label: "Catálogo" },
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte." }] : []),
                     ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte." }] : []),
+                    ...(provider === "ELIT" ? [{ key: "elit-account" as const, label: "Pedidos y Cta. Cte." }] : []),
+                    ...(provider === "GRUPO_NUCLEO" ? [{ key: "gn-account" as const, label: "Pedidos y Cta. Cte." }] : []),
+                    ...(provider === "AIR" ? [{ key: "air-account" as const, label: "Pedidos y Cta. Cte." }] : []),
                   ].map(({ key, label }) => (
                     <button
                       key={key}
@@ -798,6 +810,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 )}
 
                 {tab === "nb-account" && <NewBytesAccountPanel />}
+                {tab === "elit-account" && <ElitAccountPanel />}
+                {tab === "gn-account" && <GrupoNucleoAccountPanel />}
+                {tab === "air-account" && <AirAccountPanel />}
               </div>
             </div>
           )}

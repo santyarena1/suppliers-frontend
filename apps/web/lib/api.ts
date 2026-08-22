@@ -487,6 +487,242 @@ export const newBytesCheckoutApi = {
   drafts: () => api.get<NewBytesNodoDraft[]>("/providers/NEW_BYTES/drafts"),
 };
 
+export type NodoProviderDraft = NewBytesNodoDraft;
+
+export interface ProviderOption {
+  value: string;
+  label: string;
+}
+
+export interface GnPreviewItem {
+  code: string;
+  qty: number;
+  name: string;
+  priceUsd: number;
+  taxPercent: number;
+  stockMdp: number;
+  stockCaba: number;
+  stock: number;
+  stockOk: boolean;
+}
+
+export interface GnCheckoutPreview {
+  items: GnPreviewItem[];
+  stockOk: boolean;
+  usdExchange: number | null;
+  subtotalUsd: number;
+  subtotalArs: number | null;
+  customerSale: boolean;
+  note: string;
+}
+
+export interface GnCustomer {
+  nombre: string;
+  documento: string;
+  tipoDocumento: number;
+  direccion: string;
+  codigoPostal: string;
+  ciudad: string;
+  codProvincia: number;
+  email: string;
+  tel: string;
+}
+
+export interface GnDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+  pedidos?: { pedido: string; centroDistribucion: string }[];
+}
+
+export const grupoNucleoAccountApi = {
+  account: () =>
+    api.get<{ note: string; drafts: NodoProviderDraft[]; orders: unknown[]; movements: unknown[]; balance: number | null }>(
+      "/providers/GRUPO_NUCLEO/account"
+    ),
+};
+
+export const grupoNucleoCheckoutApi = {
+  options: () =>
+    api.get<{ documentTypes: ProviderOption[]; provinces: { value: number; label: string }[]; note: string }>(
+      "/providers/GRUPO_NUCLEO/checkout/options"
+    ),
+  preview: (body: { items: { code: string; qty: number; name?: string }[]; customerSale?: boolean }) =>
+    api.post<GnCheckoutPreview>("/providers/GRUPO_NUCLEO/checkout/preview", body),
+  draft: (body: {
+    items: { code: string; qty: number; name?: string }[];
+    notes?: string;
+    customerSale?: boolean;
+    customer?: GnCustomer;
+  }) => api.post<GnDraftResult>("/providers/GRUPO_NUCLEO/checkout/draft", body),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/GRUPO_NUCLEO/drafts"),
+};
+
+export interface AirCheckoutPreview {
+  nrocompro: string;
+  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  subtotal: number;
+  total: number;
+  iva21: number;
+  iva105: number;
+  ii: number;
+  paymentLabel: string;
+  deliveryLabel: string;
+  stockOk: boolean;
+  note: string;
+  options: {
+    sucursales: ProviderOption[];
+    vendedores: ProviderOption[];
+    pagos: ProviderOption[];
+    entregas: ProviderOption[];
+    transportes: ProviderOption[];
+  };
+}
+
+export interface AirDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export const airAccountApi = {
+  account: () =>
+    api.get<{
+      balance: number | null;
+      movements: Record<string, string>[];
+      invoices: Record<string, string>[];
+      pending: Record<string, string>[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/AIR/account"),
+};
+
+export const airCheckoutApi = {
+  options: () =>
+    api.get<{
+      sucursales: ProviderOption[];
+      vendedores: ProviderOption[];
+      pagos: ProviderOption[];
+      entregas: ProviderOption[];
+      transportes: ProviderOption[];
+    }>("/providers/AIR/checkout/options"),
+  preview: (body: {
+    items: { code: string; qty: number; name?: string }[];
+    sucursal?: string;
+    vendedor?: string;
+    pago?: string;
+    entrega?: string;
+    transporte?: string;
+    notes?: string;
+  }) => api.post<AirCheckoutPreview>("/providers/AIR/checkout/preview", body),
+  draft: (body: {
+    items: { code: string; qty: number; name?: string }[];
+    sucursal: string;
+    vendedor: string;
+    pago: string;
+    entrega: string;
+    transporte?: string;
+    notes?: string;
+  }) => api.post<AirDraftResult>("/providers/AIR/checkout/draft", body),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/AIR/drafts"),
+};
+
+export interface ElitCheckoutPreview {
+  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  warehouses: { id: number; name: string }[];
+  shippingMethods: {
+    warehouse: number;
+    warehouseName: string;
+    value: string;
+    label: string;
+    cost: number;
+    selected: boolean;
+  }[];
+  saleConditions: { value: string; label: string; surcharge: number }[];
+  addresses: { code: string; label: string; addressLine: string; postalCode?: string }[];
+  warehouse: number | null;
+  shippingMethod: string | null;
+  shippingLabel: string | null;
+  shippingCost: number;
+  saleCondition: string | null;
+  shippingAddress: string | null;
+  subtotal: number;
+  vat: number;
+  internalTax: number;
+  perceptions: number;
+  total: number;
+  exchange: number | null;
+  stockOk: boolean;
+  note: string;
+}
+
+export interface ElitDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export const elitAccountApi = {
+  account: () =>
+    api.get<{
+      profile: { id?: string; name?: string; exchange?: number | null };
+      balance: number | null;
+      orders: {
+        orderNumber: string;
+        invoiceNumber: string;
+        status: string;
+        date: string;
+        amount: number | null;
+        currency: string;
+        warehouseName?: string;
+      }[];
+      movements: {
+        date: string;
+        form: string;
+        number: string;
+        debit: number | null;
+        credit: number | null;
+        total: number | null;
+        balance: number | null;
+        balanceUsd: number | null;
+        currency: string;
+      }[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/ELIT/account"),
+};
+
+export type ElitCheckoutPayload = {
+  items: { code: string; qty: number; name?: string }[];
+  warehouse?: number;
+  shippingMethod?: number;
+  saleCondition?: number;
+  shippingAddress?: string;
+};
+
+export const elitCheckoutApi = {
+  preview: (body: ElitCheckoutPayload) =>
+    api.post<ElitCheckoutPreview>("/providers/ELIT/checkout/preview", body),
+  draft: (body: ElitCheckoutPayload & { warehouse: number }) =>
+    api.post<ElitDraftResult>("/providers/ELIT/checkout/draft", body),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/ELIT/drafts"),
+};
+
 // --- Admin / Users ---
 export const userApi = {
   updateActiveStatus: (userId: string, active: boolean) =>

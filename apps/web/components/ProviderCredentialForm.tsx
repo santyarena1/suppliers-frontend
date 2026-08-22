@@ -6,6 +6,7 @@ import { credentialsApi, type Provider } from "@/lib/api";
 import {
   PROVIDER_CREDENTIAL_SCHEMAS,
   emptyValues,
+  hasElitPortalLogin,
   hasNewBytesPortalLogin,
   toSavePayload,
   validateCredentialValues,
@@ -109,6 +110,11 @@ export default function ProviderCredentialForm({
 
   const tokenOnlyNb =
     provider === "NEW_BYTES" && hasCred && !hasNewBytesPortalLogin(values) && Boolean((values.token ?? "").trim());
+  const catalogOnlyElit =
+    provider === "ELIT" &&
+    hasCred &&
+    !hasElitPortalLogin(values) &&
+    Boolean((values.user_id ?? "").trim() || (values.token ?? "").trim());
 
   return (
     <div className="max-w-xl flex flex-col gap-4">
@@ -143,6 +149,12 @@ export default function ProviderCredentialForm({
           <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs rounded-lg px-3.5 py-2.5">
             <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             Con el token solo se sincroniza el catálogo CSV. Para pedidos y cuenta corriente cargá usuario y contraseña del portal.
+          </div>
+        )}
+        {catalogOnlyElit && (
+          <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs rounded-lg px-3.5 py-2.5">
+            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            Con user ID y token solo se sincroniza el catálogo. Para pedidos y cuenta corriente cargá el nº de cliente y la contraseña del portal.
           </div>
         )}
 

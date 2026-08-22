@@ -10,6 +10,11 @@ import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
 import { NewBytesOrderService } from "./new-bytes-order.service";
+import { GrupoNucleoOrderService } from "./grupo-nucleo-order.service";
+import { AirAccountService } from "./air-account.service";
+import { AirOrderService } from "./air-order.service";
+import { ElitAccountService } from "./elit-account.service";
+import { ElitOrderService } from "./elit-order.service";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 import { InvidCheckoutDraftDto, InvidCheckoutPreviewDto } from "./dto/invid-checkout.dto";
 import {
@@ -18,6 +23,9 @@ import {
   NewBytesCheckoutPreviewDto,
   NewBytesCheckoutShippingDto,
 } from "./dto/new-bytes-checkout.dto";
+import { GrupoNucleoCheckoutDraftDto, GrupoNucleoCheckoutPreviewDto } from "./dto/grupo-nucleo-checkout.dto";
+import { AirCheckoutDraftDto, AirCheckoutPreviewDto } from "./dto/air-checkout.dto";
+import { ElitCheckoutDraftDto, ElitCheckoutPreviewDto } from "./dto/elit-checkout.dto";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -36,7 +44,12 @@ export class ProvidersController {
     private readonly invidAccountService: InvidAccountService,
     private readonly invidOrderService: InvidOrderService,
     private readonly newBytesAccountService: NewBytesAccountService,
-    private readonly newBytesOrderService: NewBytesOrderService
+    private readonly newBytesOrderService: NewBytesOrderService,
+    private readonly grupoNucleoOrderService: GrupoNucleoOrderService,
+    private readonly airAccountService: AirAccountService,
+    private readonly airOrderService: AirOrderService,
+    private readonly elitAccountService: ElitAccountService,
+    private readonly elitOrderService: ElitOrderService
   ) {}
 
   private async invidCredentials(userId: string) {
@@ -151,6 +164,94 @@ export class ProvidersController {
   @Post("providers/NEW_BYTES/checkout/draft")
   async newBytesCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutDraftDto) {
     return this.newBytesOrderService.submitDraft(user.userId, await this.newBytesCredentials(user.userId), dto);
+  }
+
+  private async credentialsOf(userId: string, provider: Provider) {
+    const stored = await this.credentialsService.getByProvider(userId, provider);
+    return JSON.parse(stored.credentialsJson) as Record<string, string>;
+  }
+
+  @Get("providers/GRUPO_NUCLEO/checkout/options")
+  gnCheckoutOptions() {
+    return this.grupoNucleoOrderService.checkoutOptions();
+  }
+
+  @Get("providers/GRUPO_NUCLEO/drafts")
+  gnDrafts(@CurrentUser() user: { userId: string }) {
+    return this.grupoNucleoOrderService.listDrafts(user.userId);
+  }
+
+  /** La API de GN no expone historial/cta cte — devolvemos copias de Nodo. */
+  @Get("providers/GRUPO_NUCLEO/account")
+  gnAccount(@CurrentUser() user: { userId: string }) {
+    return this.grupoNucleoOrderService.getAccount(user.userId);
+  }
+
+  @Post("providers/GRUPO_NUCLEO/checkout/preview")
+  async gnPreview(@CurrentUser() user: { userId: string }, @Body() dto: GrupoNucleoCheckoutPreviewDto) {
+    return this.grupoNucleoOrderService.preview(await this.credentialsOf(user.userId, "GRUPO_NUCLEO"), dto);
+  }
+
+  @Post("providers/GRUPO_NUCLEO/checkout/draft")
+  async gnDraft(@CurrentUser() user: { userId: string }, @Body() dto: GrupoNucleoCheckoutDraftDto) {
+    return this.grupoNucleoOrderService.submitDraft(
+      user.userId,
+      await this.credentialsOf(user.userId, "GRUPO_NUCLEO"),
+      dto
+    );
+  }
+
+  @Get("providers/AIR/checkout/options")
+  async airCheckoutOptions(@CurrentUser() user: { userId: string }) {
+    return this.airOrderService.checkoutOptions(await this.credentialsOf(user.userId, "AIR"));
+  }
+
+  @Get("providers/AIR/drafts")
+  airDrafts(@CurrentUser() user: { userId: string }) {
+    return this.airOrderService.listDrafts(user.userId);
+  }
+
+  @Get("providers/AIR/account")
+  async airAccount(@CurrentUser() user: { userId: string }) {
+    return this.airAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "AIR"));
+  }
+
+  @Post("providers/AIR/checkout/preview")
+  async airPreview(@CurrentUser() user: { userId: string }, @Body() dto: AirCheckoutPreviewDto) {
+    return this.airOrderService.preview(await this.credentialsOf(user.userId, "AIR"), {
+      items: dto.items,
+      sucursal: dto.sucursal ?? "",
+      vendedor: dto.vendedor ?? "",
+      pago: dto.pago ?? "01",
+      entrega: dto.entrega ?? "01",
+      transporte: dto.transporte,
+      notes: dto.notes,
+    });
+  }
+
+  @Post("providers/AIR/checkout/draft")
+  async airDraft(@CurrentUser() user: { userId: string }, @Body() dto: AirCheckoutDraftDto) {
+    return this.airOrderService.submitDraft(user.userId, await this.credentialsOf(user.userId, "AIR"), dto);
+  }
+
+  @Get("providers/ELIT/drafts")
+  elitDrafts(@CurrentUser() user: { userId: string }) {
+    return this.elitOrderService.listDrafts(user.userId);
+  }
+
+  @Get("providers/ELIT/account")
+  async elitAccount(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  @Post("providers/ELIT/checkout/preview")
+  async elitPreview(@CurrentUser() user: { userId: string }, @Body() dto: ElitCheckoutPreviewDto) {
+    return this.elitOrderService.preview(await this.credentialsOf(user.userId, "ELIT"), dto);
+  }
+
+  @Post("providers/ELIT/checkout/draft")
+  async elitDraft(@CurrentUser() user: { userId: string }, @Body() dto: ElitCheckoutDraftDto) {
+    return this.elitOrderService.submitDraft(user.userId, await this.credentialsOf(user.userId, "ELIT"), dto);
   }
 
   @Post("providers/:provider/sync")
