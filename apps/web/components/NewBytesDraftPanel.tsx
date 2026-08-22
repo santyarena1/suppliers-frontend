@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   newBytesCheckoutApi,
   NewBytesAddress,
+  NewBytesCartSnapshot,
   NewBytesDraftResult,
   NewBytesPaymentOption,
   NewBytesShippingQuote,
@@ -35,9 +36,11 @@ function errMessage(err: unknown, fallback: string) {
 export default function NewBytesDraftPanel({
   items,
   onCreated,
+  onPreviewed,
 }: {
   items: CartItem[];
   onCreated: (message?: string) => void;
+  onPreviewed?: (snapshot: NewBytesCartSnapshot | null) => void;
   compact?: boolean;
 }) {
   const cartKey = items.map((it) => `${it.externalId}:${it.qty}`).join("|");
@@ -69,6 +72,26 @@ export default function NewBytesDraftPanel({
   const submitLock = useRef(false);
   const leftInBackground = useRef(false);
   const jobs = usePendingOrders();
+
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      onPreviewed?.(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await newBytesCheckoutApi.cart({ items: cartItems });
+        if (!cancelled) onPreviewed?.(res.data);
+      } catch {
+        if (!cancelled) onPreviewed?.(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      onPreviewed?.(null);
+    };
+  }, [cartItems, onPreviewed]);
 
   useEffect(() => {
     let cancelled = false;

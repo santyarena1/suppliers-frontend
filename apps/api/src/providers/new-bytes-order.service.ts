@@ -265,6 +265,14 @@ export class NewBytesOrderService {
   }
 
   private publicCart(prepared: PreparedCart) {
+    const perc = prepared.subtotales.perceptions ?? 0;
+    const perceptionLines = perc > 0.0005
+      ? [{ label: prepared.subtotales.perceptionLabel, amount: perc }]
+      : [];
+    const subtotal = prepared.subtotales.subtotalUsd ?? prepared.items.reduce((sum, it) => sum + it.subtotal, 0);
+    const iva = prepared.subtotales.iva ?? 0;
+    const reported = prepared.subtotales.totalUsd;
+    const computed = Math.round((subtotal + iva + perc) * 100) / 100;
     return {
       items: prepared.items,
       payments: prepared.payments,
@@ -272,8 +280,11 @@ export class NewBytesOrderService {
       subtotales: prepared.subtotales.raw,
       availability: prepared.availability,
       stockOk: prepared.availability.ok,
-      subtotal: prepared.subtotales.subtotalUsd ?? prepared.items.reduce((sum, it) => sum + it.subtotal, 0),
-      total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
+      subtotal,
+      iva,
+      perceptions: perc,
+      perceptionLines,
+      total: Math.max(reported ?? 0, computed),
     };
   }
 

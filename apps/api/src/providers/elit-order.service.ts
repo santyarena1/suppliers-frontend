@@ -7,6 +7,7 @@ import {
   mapElitCartDetails,
 } from "./elit-web-client";
 import { asNumber, asRecord, asString, snapshotJson, unwrapList } from "./json-value";
+import { mapProviderPerceptions } from "./perceptions";
 
 export interface ElitCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -58,6 +59,13 @@ function publicSummary(summary: Record<string, unknown>, requested: ElitCartItem
   });
   const total = asRecord(summary.total) ?? {};
   const selectedShip = shippingMethods.find((s) => s.selected) ?? shippingMethods[0];
+  const perc = mapProviderPerceptions(total.perceptions);
+  const subtotal = asNumber(total.subtotal) ?? details.reduce((s, it) => s + it.subtotal, 0);
+  const vat = asNumber(total.vat) ?? 0;
+  const internalTax = asNumber(total.internalTax) ?? 0;
+  const shippingCost = selectedShip?.cost ?? 0;
+  const reported = asNumber(total.finalTotal) ?? asNumber(total.total);
+  const computed = subtotal + vat + internalTax + perc.total + shippingCost;
   return {
     items: details,
     warehouses,
@@ -67,14 +75,15 @@ function publicSummary(summary: Record<string, unknown>, requested: ElitCartItem
     warehouse: warehouses[0]?.id ?? selectedShip?.warehouse ?? null,
     shippingMethod: selectedShip?.value ?? null,
     shippingLabel: selectedShip?.label ?? null,
-    shippingCost: selectedShip?.cost ?? 0,
+    shippingCost,
     saleCondition: asString(summary.saleCondition) || saleConditions[0]?.value || null,
     shippingAddress: asString(summary.shippingAddress) || addresses[0]?.code || null,
-    subtotal: asNumber(total.subtotal) ?? details.reduce((s, it) => s + it.subtotal, 0),
-    vat: asNumber(total.vat) ?? 0,
-    internalTax: asNumber(total.internalTax) ?? 0,
-    perceptions: asNumber(asRecord(total.perceptions)?.total) ?? 0,
-    total: asNumber(total.finalTotal) ?? asNumber(total.total) ?? 0,
+    subtotal,
+    vat,
+    internalTax,
+    perceptions: perc.total,
+    perceptionLines: perc.lines,
+    total: Math.max(reported ?? 0, computed),
     exchange: asNumber(summary.currentExchange) ?? null,
     stockOk: details.length === requested.length,
   };

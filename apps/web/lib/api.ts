@@ -481,6 +481,9 @@ export interface NewBytesCartSnapshot {
   pickup: { value: "pickup"; label: string; addressLine: string; postalCode: string };
   subtotal: number;
   total?: number;
+  iva?: number;
+  perceptions?: number;
+  perceptionLines?: { label: string; amount: number }[];
   stockOk: boolean;
   availability: NewBytesAvailability;
   subtotales: Record<string, unknown> | null;
@@ -504,6 +507,9 @@ export interface NewBytesCheckoutPreview {
   availability: NewBytesAvailability;
   subtotal: number;
   total?: number;
+  iva?: number;
+  perceptions?: number;
+  perceptionLines?: { label: string; amount: number }[];
   subtotales: Record<string, unknown> | null;
   note: string;
 }
@@ -765,6 +771,7 @@ export interface ElitCheckoutPreview {
   vat: number;
   internalTax: number;
   perceptions: number;
+  perceptionLines: { label: string; amount: number }[];
   total: number;
   exchange: number | null;
   stockOk: boolean;

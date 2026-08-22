@@ -91,7 +91,32 @@ describe("ElitOrderService", () => {
     expect(preview.items[0]).toMatchObject({ code: "18636", qty: 1, name: "AP Cudy", price: 12.5, subtotal: 12.5 });
     expect(preview.stockOk).toBe(true);
     expect(preview.total).toBe(15.125);
+    expect(preview.perceptions).toBe(0);
     expect(preview.note).toMatch(/cart\/process/);
+  });
+
+  it("suma percepciones IIBB al total aunque Elit no las ponga en finalTotal", async () => {
+    api.getJson.mockImplementation(async (path: string) => {
+      if (path === "cart") return { data: { details: [] } };
+      if (path === "cart/summary") {
+        return {
+          data: summary({
+            total: {
+              subtotal: 50.01,
+              vat: 5.25,
+              internalTax: 0,
+              perceptions: { total: 1.5, details: [{ name: "Percep. II.BB. C.A.B.A", amount: 1.5 }] },
+              finalTotal: 55.26,
+            },
+          }),
+        };
+      }
+      return { data: {} };
+    });
+    const preview = await service.preview(CREDS, { items: ITEMS });
+    expect(preview.perceptions).toBe(1.5);
+    expect(preview.perceptionLines).toEqual([{ label: "Percep. II.BB. C.A.B.A", amount: 1.5 }]);
+    expect(preview.total).toBe(56.76);
   });
 
   it("sin depósito no procesa", async () => {
