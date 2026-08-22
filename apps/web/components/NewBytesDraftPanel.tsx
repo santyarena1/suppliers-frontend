@@ -12,6 +12,7 @@ import { CartItem } from "@/lib/cart";
 import { formatUSD } from "@/lib/format";
 import NodoSpinner from "@/components/NodoSpinner";
 import { CheckCircle2, Loader2, Send } from "lucide-react";
+import Link from "next/link";
 
 export default function NewBytesDraftPanel({
   items,
@@ -109,7 +110,10 @@ export default function NewBytesDraftPanel({
   if (metaError) {
     return (
       <div className="bg-red-500/8 border border-red-500/20 rounded-2xl p-4 text-xs text-red-300">
-        {metaError}
+        {metaError}{" "}
+        <Link href="/proveedores/NEW_BYTES?tab=credentials" className="underline text-red-200 hover:text-white">
+          Cargar cuenta
+        </Link>
       </div>
     );
   }

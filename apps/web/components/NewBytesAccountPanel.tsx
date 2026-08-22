@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import NodoSpinner from "@/components/NodoSpinner";
 import { Receipt, Wallet, XCircle } from "lucide-react";
+import Link from "next/link";
 
 export default function NewBytesAccountPanel() {
   const [orders, setOrders] = useState<NewBytesOrder[] | null>(null);
@@ -56,9 +57,15 @@ export default function NewBytesAccountPanel() {
       {loading ? (
         <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
       ) : error ? (
-        <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
-          <XCircle className="w-4 h-4 flex-shrink-0" /> {error}
-          <button onClick={load} className="ml-auto underline">Reintentar</button>
+        <div className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
+          <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span className="flex-1">
+            {error}{" "}
+            <Link href="/proveedores/NEW_BYTES?tab=credentials" className="underline text-red-300 hover:text-white">
+              Cargar cuenta
+            </Link>
+          </span>
+          <button onClick={load} className="underline flex-shrink-0">Reintentar</button>
         </div>
       ) : (
         <>

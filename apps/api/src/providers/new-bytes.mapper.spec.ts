@@ -11,7 +11,7 @@ import {
   normalizeOrderRow,
   pickBalanceFromClient,
 } from "./new-bytes.mapper";
-import { extractNbToken, unwrapNbList } from "./new-bytes-client";
+import { extractNbToken, parseNbCredentials, unwrapNbList } from "./new-bytes-client";
 
 describe("new-bytes.mapper", () => {
   it("mapea el CSV de lista de precios campo a campo", () => {
@@ -171,5 +171,18 @@ describe("new-bytes-client helpers", () => {
     expect(unwrapNbList([1, 2])).toEqual([1, 2]);
     expect(unwrapNbList({ data: [{ id: 1 }] })).toEqual([{ id: 1 }]);
     expect(unwrapNbList(null)).toEqual([]);
+  });
+
+  it("normaliza aliases de credenciales (usuario/username, pass, readToken)", () => {
+    expect(parseNbCredentials({ usuario: "nb", pass: "x", readToken: "tok" })).toEqual({
+      user: "nb",
+      password: "x",
+      token: "tok",
+    });
+    expect(parseNbCredentials({ user: "a", password: "b" })).toEqual({
+      user: "a",
+      password: "b",
+      token: undefined,
+    });
   });
 });

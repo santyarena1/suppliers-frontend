@@ -54,7 +54,7 @@ export default function ProveedoresPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Dashboard de Proveedores</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Estado de sincronización de todos los proveedores — entrá a uno para ver credenciales, configuración y catálogo
+            Cada usuario carga su propia cuenta de cada proveedor — entrá a uno para conectar credenciales, sincronizar y ver el catálogo
           </p>
         </div>
         <PrefsPanel />
@@ -112,7 +112,8 @@ export default function ProveedoresPage() {
                               href={`/proveedores/${provider}?tab=${s?.hasCredentials ? "config" : "credentials"}`}
                               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-lg py-1.5 transition-all"
                             >
-                              <Settings className="w-3.5 h-3.5" /> Configurar
+                              {s?.hasCredentials ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
+                              {s?.hasCredentials ? "Configurar" : "Cargar cuenta"}
                             </Link>
                             <button
                               onClick={(e) => handleSync(provider, e)}

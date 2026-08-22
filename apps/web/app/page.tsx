@@ -266,7 +266,7 @@ export default function HomePage() {
                     return (
                       <button
                         key={p}
-                        onClick={() => router.push("/search")}
+                        onClick={() => router.push(configured ? `/proveedores/${p}` : `/proveedores/${p}?tab=credentials`)}
                         className={`relative bg-surface-900 border rounded-lg p-3 transition-all hover:scale-[1.02] text-left ${
                           configured ? "border-surface-700 hover:border-brand-500" : "border-surface-800 hover:border-surface-600 opacity-70"
                         }`}
@@ -286,7 +286,7 @@ export default function HomePage() {
 
               {/* CTAs */}
               <section className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-                <CtaCard href="/proveedores" icon={Key} title="Configurar credenciales" description="Agregá las API keys de cada proveedor para activar las búsquedas" color="brand" />
+                <CtaCard href="/proveedores" icon={Key} title="Cargar cuentas" description="Cada usuario conecta su usuario y contraseña de cada proveedor" color="brand" />
                 <CtaCard href="/cart" icon={ShoppingCart} title="Ver carrito" description={`${totalCount} ${totalCount === 1 ? "unidad" : "unidades"} de ${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}`} color="emerald" />
                 <CtaCard href="/search" icon={Package} title="Buscar productos" description="Consultá precios actualizados de los proveedores configurados" color="orange" />
               </section>
