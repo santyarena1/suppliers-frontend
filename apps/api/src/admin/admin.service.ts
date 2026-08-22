@@ -149,4 +149,22 @@ export class AdminService {
     await this.prisma.homeBanner.delete({ where: { id } });
     return { id };
   }
+
+  // ---------- Identidad visual ----------
+
+  async getPlatformSettings() {
+    const row = await this.prisma.platformSettings.findUnique({ where: { id: "platform" } });
+    if (row) return row;
+    return this.prisma.platformSettings.create({
+      data: { id: "platform", brandPreset: "violet" },
+    });
+  }
+
+  async updatePlatformSettings(brandPreset: string) {
+    return this.prisma.platformSettings.upsert({
+      where: { id: "platform" },
+      create: { id: "platform", brandPreset },
+      update: { brandPreset },
+    });
+  }
 }

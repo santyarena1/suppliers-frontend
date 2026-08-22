@@ -4,6 +4,7 @@ import { PrefsProvider } from "@/lib/prefs";
 import { CartProvider } from "@/lib/cart";
 import { ResultsProvider } from "@/lib/results";
 import { ThemeProvider } from "@/lib/theme";
+import { BrandingProvider } from "@/lib/branding";
 import ThemeToggle from "@/components/ThemeToggle";
 import ProviderCartPreloader from "@/components/ProviderCartPreloader";
 
@@ -17,7 +18,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className="h-full" data-theme="dark" suppressHydrationWarning>
       <body className="h-full">
         <ThemeProvider>
-          <PrefsProvider>
+          <BrandingProvider>
+            <PrefsProvider>
             <CartProvider>
               <ProviderCartPreloader />
               <ResultsProvider>
@@ -25,7 +27,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <ThemeToggle />
               </ResultsProvider>
             </CartProvider>
-          </PrefsProvider>
+            </PrefsProvider>
+          </BrandingProvider>
         </ThemeProvider>
       </body>
     </html>

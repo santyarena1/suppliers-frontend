@@ -12,6 +12,7 @@ import { UpdatePermissionsDto } from "./dto/update-permissions.dto";
 import { UpdateProviderDisplayDto } from "./dto/update-provider-display.dto";
 import { UpdateBrandDisplayDto } from "./dto/update-brand-display.dto";
 import { CreateBannerDto, UpdateBannerDto } from "./dto/banner.dto";
+import { UpdatePlatformSettingsDto } from "./dto/platform-settings.dto";
 import { ActiveStatusBodyDto, EndDateBodyDto } from "./dto/body-only.dto";
 
 function assertProvider(value: string): Provider {
@@ -111,6 +112,16 @@ export class AdminController {
   deleteBanner(@Param("id") id: string) {
     return this.adminService.deleteBanner(id);
   }
+
+  @Get("platform/settings")
+  getPlatformSettings() {
+    return this.adminService.getPlatformSettings();
+  }
+
+  @Put("platform/settings")
+  updatePlatformSettings(@Body() dto: UpdatePlatformSettingsDto) {
+    return this.adminService.updatePlatformSettings(dto.brandPreset);
+  }
 }
 
 /** Endpoints de plataforma que consume cualquier usuario autenticado (no solo admin). */
@@ -131,5 +142,10 @@ export class PlatformController {
   @Get("banners")
   banners(@Query("position") position?: string) {
     return this.adminService.listBanners(position);
+  }
+
+  @Get("platform/settings")
+  platformSettings() {
+    return this.adminService.getPlatformSettings();
   }
 }

@@ -8,7 +8,8 @@ import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
-import { searchApi, catalogApi, ALL_PROVIDERS, ProductDTO, Provider, CategoryCount } from "@/lib/api";
+import SearchLanding from "@/components/search/SearchLanding";
+import { searchApi, catalogApi, ALL_PROVIDERS, ProductDTO, Provider } from "@/lib/api";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
 import { parsePrice, proxyImg } from "@/lib/format";
@@ -18,7 +19,7 @@ import Link from "next/link";
 import {
   Search, SlidersHorizontal, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight, Sparkles, Tag
+  ChevronDown, ChevronRight,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc";
@@ -46,24 +47,6 @@ function SearchPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-
-  // Landing (antes de buscar): categorías + destacados
-  const [categories, setCategories] = useState<CategoryCount[]>([]);
-  const [featured, setFeatured] = useState<ProductDTO[]>([]);
-  const [loadingLanding, setLoadingLanding] = useState(true);
-
-  useEffect(() => {
-    let alive = true;
-    Promise.all([catalogApi.categories(), catalogApi.featured(20)])
-      .then(([cats, feat]) => {
-        if (!alive) return;
-        setCategories(Array.isArray(cats.data) ? cats.data : []);
-        setFeatured(Array.isArray(feat.data) ? feat.data : []);
-      })
-      .catch(() => {})
-      .finally(() => alive && setLoadingLanding(false));
-    return () => { alive = false; };
-  }, []);
 
   async function handleCategoryClick(category: string) {
     setError("");
@@ -409,60 +392,7 @@ function SearchPage() {
               )}
 
               {!loading && !searched && (
-                <div className="flex flex-col gap-8">
-                  {loadingLanding ? (
-                    <div className="flex items-center justify-center py-20">
-                      <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
-                    </div>
-                  ) : (
-                    <>
-                      {categories.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-3">
-                            <Tag className="w-4 h-4 text-brand-400" />
-                            <h2 className="text-sm font-bold text-surface-200">Categorías</h2>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {categories.map((c) => (
-                              <button
-                                key={c.category}
-                                onClick={() => handleCategoryClick(c.category)}
-                                className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-surface-800 bg-surface-900 text-surface-300 hover:border-brand-500 hover:text-brand-400 transition-all"
-                              >
-                                {c.category}
-                                <span className="text-[10px] text-surface-600 tabular-nums">{c.count}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </section>
-                      )}
-
-                      {featured.length > 0 && (
-                        <section>
-                          <div className="flex items-center gap-2 mb-3">
-                            <Sparkles className="w-4 h-4 text-brand-400" />
-                            <h2 className="text-sm font-bold text-surface-200">Destacados</h2>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                            {featured.map((product, i) => (
-                              <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} />
-                            ))}
-                          </div>
-                        </section>
-                      )}
-
-                      {categories.length === 0 && featured.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
-                          <Search className="w-9 h-9 text-surface-700 mb-1" />
-                          <p className="text-sm font-medium text-surface-300">Realizá una búsqueda</p>
-                          <p className="text-xs text-surface-500">
-                            Buscá simultáneamente en {ALL_PROVIDERS.length} proveedores mayoristas
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+                <SearchLanding onCategoryClick={handleCategoryClick} />
               )}
 
               {/* Grid */}
