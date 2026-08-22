@@ -1,5 +1,3 @@
-import { Prisma } from "@prisma/client";
-
 export function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -32,10 +30,18 @@ export function unwrapList<T = unknown>(body: unknown): T[] {
   return [];
 }
 
-export function snapshotJson(value: unknown): Prisma.InputJsonValue {
-  const cloned: unknown = JSON.parse(JSON.stringify(value ?? null));
-  if (cloned === null || cloned === undefined) return {};
-  return cloned as Prisma.InputJsonValue;
+export type JsonSnapshot =
+  | string
+  | number
+  | boolean
+  | JsonSnapshot[]
+  | { [key: string]: JsonSnapshot };
+
+/** JSON para columnas Prisma. Nunca null: Prisma pide InputJsonValue, no `null`. */
+export function snapshotJson(value: unknown): JsonSnapshot {
+  const parsed: unknown = JSON.parse(JSON.stringify(value ?? null));
+  if (parsed === null) return {};
+  return parsed as JsonSnapshot;
 }
 
 export function axiosErrorMessage(err: unknown, fallback: string): string {
