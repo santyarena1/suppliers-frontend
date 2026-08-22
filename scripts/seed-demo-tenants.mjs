@@ -38,6 +38,14 @@ async function call(method, path, body) {
 /** Las organizaciones del catálogo con las que arranca el sistema. */
 const ORGANIZATIONS = [
   {
+    // El comercio real de pruebas: `testuser1` ya existe y tiene credenciales
+    // cargadas de varios proveedores, así que se lo adopta en vez de recrearlo.
+    name: "Comercio de Pruebas",
+    type: "RETAILER",
+    contactEmail: "pruebas@nodo.test",
+    members: [{ username: "testuser1", role: "OWNER", title: "Encargado de compras", existing: true }],
+  },
+  {
     name: "Tecno Store Palermo",
     type: "RETAILER",
     contactEmail: "compras@tecnostorepalermo.test",
@@ -103,6 +111,8 @@ const ORGANIZATIONS = [
 
 /** Cada comercio ve solo estas organizaciones. */
 const LINKS = [
+  { client: "Comercio de Pruebas", supplier: "New Bytes", seller: "newbytes.vendedor" },
+  { client: "Comercio de Pruebas", supplier: "Elit", seller: "elit.vendedor" },
   { client: "Tecno Store Palermo", supplier: "New Bytes", seller: "newbytes.vendedor", discountPercent: 4 },
   { client: "Tecno Store Palermo", supplier: "Asus", discountPercent: 2 },
   { client: "Compumundo Rosario", supplier: "Elit", seller: "elit.vendedor", discountPercent: 3 },
@@ -115,6 +125,7 @@ async function main() {
 
   let tree = await call("GET", "/admin/tenants");
   const byName = new Map(tree.tenants.map((tenant) => [tenant.name, tenant]));
+  const existingUsers = new Map((await call("GET", "/admin/users")).map((user) => [user.username, user]));
 
   for (const org of ORGANIZATIONS) {
     let tenant = byName.get(org.name);
@@ -138,13 +149,23 @@ async function main() {
         continue;
       }
       try {
-        await call("POST", `/admin/tenants/${tenant.id}/members/new-user`, {
-          username: member.username,
-          email: `${member.username}@nodo.test`,
-          password: DEMO_PASSWORD,
-          role: member.role,
-          title: member.title,
-        });
+        if (member.existing) {
+          const user = existingUsers.get(member.username);
+          if (!user) throw new Error("el usuario no existe en la plataforma");
+          await call("POST", `/admin/tenants/${tenant.id}/members`, {
+            userId: user.id,
+            role: member.role,
+            title: member.title,
+          });
+        } else {
+          await call("POST", `/admin/tenants/${tenant.id}/members/new-user`, {
+            username: member.username,
+            email: `${member.username}@nodo.test`,
+            password: DEMO_PASSWORD,
+            role: member.role,
+            title: member.title,
+          });
+        }
         console.log(`  + ${member.username} (${member.role})`);
       } catch (err) {
         console.log(`  ! ${member.username}: ${err.message}`);
