@@ -6,6 +6,7 @@ import {
   AdminUser,
   ALL_PROVIDERS,
   BrandDisplay,
+  PROVIDER_LABELS,
   Provider,
   TENANT_LINK_STATUS_LABELS,
   TENANT_ROLE_LABELS,
@@ -63,7 +64,7 @@ function errMsg(err: unknown, fallback: string) {
 }
 
 function providerLabel(provider: string) {
-  return provider.replace(/_/g, " ");
+  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
 }
 
 function decimalToNumber(value: string | number | null): number | null {
@@ -315,6 +316,8 @@ function TenantBranch({
     .map((role) => ({ role, members: tenant.members.filter((member) => member.tenantRole === role) }))
     .filter((group) => group.members.length > 0);
   const linkCount = tenant.suppliers.length + tenant.clients.length;
+  // Solo vale la pena aclararlo cuando el catálogo usa otro nombre que la organización.
+  const catalogName = tenant.providerKey ? providerLabel(tenant.providerKey) : tenant.brand?.name;
 
   return (
     <div className={isSelected ? "bg-brand-600/10" : undefined}>
@@ -343,8 +346,7 @@ function TenantBranch({
           <p className="text-[11px] text-surface-500 truncate">
             {tenant.members.length} {tenant.members.length === 1 ? "persona" : "personas"}
             {linkCount > 0 ? ` · ${linkCount} ${linkCount === 1 ? "vínculo" : "vínculos"}` : ""}
-            {tenant.providerKey ? ` · ${providerLabel(tenant.providerKey)}` : ""}
-            {tenant.brand ? ` · ${tenant.brand.name}` : ""}
+            {catalogName && catalogName !== tenant.name ? ` · ${catalogName}` : ""}
           </p>
         </button>
       </div>
@@ -470,7 +472,7 @@ function TenantPanel({
               <h2 className="text-sm font-semibold text-white truncate">{tenant.name}</h2>
               <p className="text-[11px] text-surface-500">
                 {TENANT_TYPE_LABELS[tenant.type]}
-                {tenant.providerKey ? ` · Proveedor ${providerLabel(tenant.providerKey)}` : ""}
+                {tenant.providerKey ? ` · Catálogo de ${providerLabel(tenant.providerKey)}` : ""}
                 {tenant.brand ? ` · Marca ${tenant.brand.name}` : ""}
               </p>
             </div>

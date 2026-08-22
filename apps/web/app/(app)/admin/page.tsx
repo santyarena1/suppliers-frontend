@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   adminApi, AdminUser, ProviderDisplay, BrandDisplay, Banner,
-  ModulePermission, ModuleKey, ALL_PROVIDERS,
+  ModulePermission, ModuleKey, ALL_PROVIDERS, PROVIDER_LABELS,
 } from "@/lib/api";
 import { isAdmin, getUser } from "@/lib/auth";
 import UsersManagement from "@/components/admin/UsersManagement";
@@ -235,7 +235,7 @@ function ProvidersTab({ showToast }: { showToast: (m: string, ok?: boolean) => v
             ) : null}
           </div>
           <span className="text-sm font-medium text-surface-200 w-40 flex-shrink-0" style={r.textColor ? { color: r.textColor } : undefined}>
-            {r.provider.replace(/_/g, " ")}
+            {PROVIDER_LABELS[r.provider]}
           </span>
           <input
             type="text"
