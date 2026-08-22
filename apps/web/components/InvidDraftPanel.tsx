@@ -87,7 +87,8 @@ export default function InvidDraftPanel({
 
   useEffect(() => {
     setError(null);
-    if (!reviewedOnce.current) publishPreview(null);
+    reviewedOnce.current = false;
+    publishPreview(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsKey]);
 
@@ -124,9 +125,7 @@ export default function InvidDraftPanel({
 
   function invalidatePreview() {
     setError(null);
-    if (reviewedOnce.current && addressId && !(deliveryOption === "3" && !expresoId)) {
-      return;
-    }
+    reviewedOnce.current = false;
     publishPreview(null);
   }
 
@@ -158,16 +157,12 @@ export default function InvidDraftPanel({
     }
   }
 
-  useEffect(() => {
-    if (!reviewedOnce.current || !addressId || previewing || submitting) return;
-    if (deliveryOption === "3" && !expresoId) return;
-    const t = setTimeout(() => { void handlePreview(); }, 350);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [addressId, paymentOption, deliveryOption, expresoId, itemsKey]);
-
   function requestConfirm() {
     if (submitLock.current || !canConfirm) return;
+    if (!preview?.stockOk) {
+      setError("Revisá el pedido en Invid antes de crear el borrador");
+      return;
+    }
     if (!addressId) {
       setError("Elegí una dirección de Invid");
       return;
@@ -183,29 +178,15 @@ export default function InvidDraftPanel({
 
   async function handleSubmit() {
     if (submitLock.current) return;
+    if (!preview?.stockOk) {
+      setError("Revisá el pedido en Invid antes de crear el borrador");
+      setConfirmOpen(false);
+      return;
+    }
     submitLock.current = true;
     setError(null);
     setSubmitting(true);
     try {
-      let ready = preview;
-      if (!ready?.stockOk) {
-        const res = await invidCheckoutApi.preview({
-          items: items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
-          addressId,
-          paymentOption,
-          deliveryOption,
-          expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
-        });
-        reviewedOnce.current = true;
-        publishPreview(res.data);
-        if (res.data.deliveries?.length) setDeliveries(res.data.deliveries);
-        if (res.data.expresoCompanies?.length) setExpresoCompanies(res.data.expresoCompanies);
-        ready = res.data;
-        if (!ready.stockOk) {
-          setError(ready.stockMessage || "Invid no validó el stock de este pedido");
-          return;
-        }
-      }
       const res = await invidCheckoutApi.draft({
         items: items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
         addressId,
@@ -230,7 +211,9 @@ export default function InvidDraftPanel({
     if (result) onCreated(result.message);
   }
 
-  const canConfirm = Boolean(addressId)
+  const reviewedOk = Boolean(preview?.stockOk && (preview.itemErrors?.length ?? 0) === 0);
+  const canConfirm = reviewedOk
+    && Boolean(addressId)
     && !previewing
     && !submitting
     && !(deliveryOption === "3" && !expresoId);
@@ -297,17 +280,34 @@ export default function InvidDraftPanel({
         </CheckoutField>
 
         <div className="flex gap-2">
-          <CheckoutGhostButton
-            onClick={handlePreview}
-            disabled={previewing || submitting || !addressId}
-            loading={previewing}
-          >
-            {previewing ? "Validando…" : "Revisar"}
-          </CheckoutGhostButton>
+          {reviewedOk ? (
+            <CheckoutGhostButton
+              onClick={handlePreview}
+              disabled={previewing || submitting || !addressId}
+              loading={previewing}
+            >
+              {previewing ? "Validando…" : "Revisar de nuevo"}
+            </CheckoutGhostButton>
+          ) : (
+            <CheckoutSubmit
+              onClick={handlePreview}
+              disabled={previewing || submitting || !addressId || (deliveryOption === "3" && !expresoId)}
+              loading={previewing}
+              title={!addressId ? "Elegí una dirección" : deliveryOption === "3" && !expresoId ? "Elegí el expreso" : undefined}
+            >
+              {previewing ? "Validando…" : "Revisar en Invid"}
+            </CheckoutSubmit>
+          )}
           <CheckoutSubmit
             onClick={requestConfirm}
             disabled={!canConfirm}
-            title={!addressId ? "Elegí una dirección" : deliveryOption === "3" && !expresoId ? "Elegí el expreso" : undefined}
+            title={
+              !addressId ? "Elegí una dirección"
+                : deliveryOption === "3" && !expresoId ? "Elegí el expreso"
+                : !reviewedOk ? "Revisá el pedido en Invid primero"
+                : undefined
+            }
+            className={reviewedOk ? "" : "opacity-40"}
           >
             Crear borrador
           </CheckoutSubmit>
@@ -338,6 +338,11 @@ export default function InvidDraftPanel({
         />
       </CheckoutField>
 
+      {!preview && !error && !previewing && (
+        <p className="text-xs text-amber-400/90 leading-relaxed">
+          Obligatorio: revisá stock, impuestos y envío en Invid. Sin eso no se puede crear el borrador.
+        </p>
+      )}
       {preview && (
         <InvidValidationFeedback
           preview={preview}

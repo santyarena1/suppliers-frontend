@@ -8,6 +8,7 @@ import {
   parseInvidMoney,
   parseQuotedShipping,
   parseXmlCost,
+  collectFormFields,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -51,6 +52,13 @@ describe("invid-order.parser", () => {
     const result = parseSubmitResult(CART_HTML);
     expect(result.appearsSuccessful).toBe(false);
     expect(result.errorMessage).toMatch(/sin confirmar/i);
+  });
+
+  it("toma los hidden del form_envio y deja entrega_valida en 0 como el portal", () => {
+    const fields = collectFormFields(CART_HTML);
+    expect(fields.iniciar_pago).toBe("");
+    expect(fields.entrega_valida).toBe("0");
+    expect(fields.opcionPago).toBeUndefined();
   });
 
   it("lee el historial de pedidos del portal", () => {

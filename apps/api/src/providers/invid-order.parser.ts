@@ -82,6 +82,30 @@ export function parseCheckoutForm(html: string): InvidCheckoutForm {
   };
 }
 
+/** Hidden/text/checkbox values from `#form_envio` — lo que mandaría el browser. */
+export function collectFormFields(html: string, formId = "form_envio"): Record<string, string> {
+  const formMatch = html.match(new RegExp(`<form\\b[^>]*\\bid=["']${formId}["'][^>]*>([\\s\\S]*?)</form>`, "i"));
+  const block = formMatch?.[1] ?? "";
+  if (!block) return {};
+  const fields: Record<string, string> = {};
+  const inputRe = /<input\b([^>]*)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = inputRe.exec(block))) {
+    const tag = m[0];
+    const type = (attr(tag, "type") ?? "text").toLowerCase();
+    if (["button", "submit", "image", "file"].includes(type)) continue;
+    const name = attr(tag, "name");
+    if (!name) continue;
+    if (type === "radio") {
+      if (/\bchecked\b/i.test(tag)) fields[name] = attr(tag, "value") ?? "";
+      continue;
+    }
+    if (type === "checkbox" && !/\bchecked\b/i.test(tag)) continue;
+    fields[name] = attr(tag, "value") ?? "";
+  }
+  return fields;
+}
+
 function parseSelectOptions(html: string, id: string): InvidRadioOption[] {
   const block = html.match(new RegExp(`<select[^>]*\\bid=["']${id}["'][^>]*>([\\s\\S]*?)</select>`, "i"));
   if (!block) return [];

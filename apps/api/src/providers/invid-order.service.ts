@@ -12,6 +12,7 @@ import {
   parseInvidMoney,
   parseXmlCost,
   parseQuotedShipping,
+  collectFormFields,
   type InvidRadioOption,
 } from "./invid-order.parser";
 
@@ -137,7 +138,11 @@ export class InvidOrderService {
         LOGIN_URL,
         new URLSearchParams({ login: "S", usuari: username, passwd: password, volver: "" }).toString(),
         {
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          },
           timeout: 20_000,
           maxRedirects: 0,
           validateStatus: (s) => s < 400 || s === 302,
@@ -168,6 +173,9 @@ export class InvidOrderService {
         Cookie: cookie,
         ...(opts.body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
         Referer: CART_URL,
+        Origin: SITE_BASE,
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
       },
       timeout: opts.timeout ?? 20_000,
       responseType: "text",
@@ -674,37 +682,58 @@ export class InvidOrderService {
     const shippingCost = totals.shipping;
     const total = totals.total;
 
-    const body = new URLSearchParams({
-      iniciar_pago: "S",
-      entrega_valida: "1",
-      dir_entrega: prepared.addressId,
-      identificador_seleccionado: prepared.address.Identificador,
-      direccion_seleccionado: prepared.address.Direccion,
-      nropuerta_seleccionado: prepared.address.NroPuerta,
-      localidad_seleccionado: prepared.address.Localidad,
-      ciudad_seleccionado: prepared.address.Ciudad,
-      codpostal_seleccionado: prepared.address.CodPostal,
-      codprovincia_seleccionado: prepared.address.CodProvincia,
-      provincia_seleccionado: prepared.address.Provincia,
-      codpais_seleccionado: prepared.address.CodPais,
-      pais_seleccionado: prepared.address.Pais,
-      opcionPago: prepared.paymentOption,
-      entrega: delivery.value,
-      forma_entrega: delivery.value,
-      costo_envio: String(shippingCost),
-      valida_delivery: "1",
-      usa_imi: "true",
-      usa_iva: "true",
-      termYCond: "on",
-      prcmoninv1: String(total),
-      cp_entrega: prepared.address.CodPostal,
-      localidad_entrega: prepared.address.Localidad,
-      provincia_entrega: prepared.address.Provincia,
-    });
+    const cartPage = await this.request(cookie, "GET", CART_URL);
+    cookie = cartPage.cookie;
+
+    const knownIds = new Set<string>();
+    try {
+      const before = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
+      cookie = before.cookie;
+      for (const o of parseOrdersTable(before.data).orders) {
+        if (o.webOrderNumber) knownIds.add(`w:${o.webOrderNumber}`);
+        if (o.orderNumber) knownIds.add(`o:${o.orderNumber}`);
+      }
+    } catch (err) {
+      this.logger.warn(`No se pudo leer lista_pedidos antes del POST: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const tc = await this.getTipoCambio(cookie, prepared.paymentOption);
+    const totalPesos = tc > 0 ? round2(total * tc) : round2(total);
+
+    const fields = collectFormFields(cartPage.data);
+    const body = new URLSearchParams(fields);
+    body.set("iniciar_pago", "S");
+    body.set("dir_entrega", prepared.addressId);
+    body.set("identificador_seleccionado", prepared.address.Identificador);
+    body.set("direccion_seleccionado", prepared.address.Direccion);
+    body.set("nropuerta_seleccionado", prepared.address.NroPuerta);
+    body.set("localidad_seleccionado", prepared.address.Localidad);
+    body.set("ciudad_seleccionado", prepared.address.Ciudad);
+    body.set("codpostal_seleccionado", prepared.address.CodPostal);
+    body.set("codprovincia_seleccionado", prepared.address.CodProvincia);
+    body.set("provincia_seleccionado", prepared.address.Provincia);
+    body.set("codpais_seleccionado", prepared.address.CodPais);
+    body.set("pais_seleccionado", prepared.address.Pais);
+    body.set("opcionPago", prepared.paymentOption);
+    body.set("entrega", delivery.value);
+    body.set("forma_entrega", delivery.value);
+    body.set("costo_envio", String(shippingCost));
+    body.set("usa_imi", "true");
+    body.set("usa_iva", "true");
+    body.set("prcmoninv1", totalPesos.toFixed(2));
+    body.set("percepcionHidden", String(prepared.percepcionPercent));
+    body.set("cp_entrega", prepared.address.CodPostal);
+    body.set("localidad_entrega", prepared.address.Localidad);
+    body.set("provincia_entrega", prepared.address.Provincia);
     if (input.expresoId) body.set("expreso_entrega", input.expresoId);
     if (input.notes) body.set("observaciones", input.notes);
     if (input.payerName) body.set("nombre_pagador", input.payerName);
     if (input.payerEmail) body.set("mail_pagador", input.payerEmail);
+    if (fields.termYCond != null || /termYCond/i.test(cartPage.data)) body.set("termYCond", "on");
+
+    this.logger.log(
+      `Invid POST iniciar_pago entrega=${delivery.value} pago=${prepared.paymentOption} usd=${total} tc=${tc} prcmoninv1=${totalPesos.toFixed(2)} entrega_valida=${body.get("entrega_valida")}`
+    );
 
     let html = "";
     let submit = await this.request(cookie, "POST", CART_URL, { body: body.toString(), timeout: 40_000 });
@@ -719,28 +748,44 @@ export class InvidOrderService {
       html = followed.data;
     }
 
-    let parsed = parseSubmitResult(html);
+    const parsed = parseSubmitResult(html);
     let orderNumber = parsed.orderNumber;
     let webOrderNumber = parsed.webOrderNumber;
 
-    // Solo completa números si el POST ya se vio como éxito. Un pedido viejo
-    // de lista_pedidos no cuenta como que este submit creó algo.
-    if (parsed.appearsSuccessful) {
-      try {
-        const ordersPage = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
-        const latest = parseOrdersTable(ordersPage.data).orders[0];
-        if (latest) {
-          orderNumber = orderNumber ?? latest.orderNumber;
-          webOrderNumber = webOrderNumber ?? latest.webOrderNumber;
-        }
-      } catch (err) {
-        this.logger.warn(`No se pudo reconsultar lista_pedidos: ${err instanceof Error ? err.message : String(err)}`);
+    const isNew = (web?: string, orden?: string) =>
+      Boolean((web && !knownIds.has(`w:${web}`)) || (orden && !knownIds.has(`o:${orden}`)));
+
+    let created = Boolean(parsed.appearsSuccessful && isNew(webOrderNumber, orderNumber));
+
+    const readLatestNew = async () => {
+      const ordersPage = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
+      cookie = ordersPage.cookie;
+      const latest = parseOrdersTable(ordersPage.data).orders.find((o) => isNew(o.webOrderNumber, o.orderNumber));
+      return { cookie: ordersPage.cookie, latest };
+    };
+
+    try {
+      let listed = await readLatestNew();
+      cookie = listed.cookie;
+      if (!listed.latest) {
+        await new Promise((r) => setTimeout(r, 1200));
+        listed = await readLatestNew();
+        cookie = listed.cookie;
       }
-    } else {
-      this.logger.warn(`Invid no confirmó el pedido: ${parsed.errorMessage || "respuesta sin número de orden"}`);
+      if (listed.latest) {
+        created = true;
+        orderNumber = listed.latest.orderNumber;
+        webOrderNumber = listed.latest.webOrderNumber;
+      }
+    } catch (err) {
+      this.logger.warn(`No se pudo reconsultar lista_pedidos: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    const created = Boolean(parsed.appearsSuccessful && (orderNumber || webOrderNumber));
+    if (!created) {
+      this.logger.warn(
+        `Invid no confirmó el pedido: status=${submit.status} loc=${submit.location ?? "-"} ${parsed.errorMessage || "respuesta sin orden nueva"}`
+      );
+    }
     const record = await this.prisma.providerOrder.create({
       data: {
         userId,
