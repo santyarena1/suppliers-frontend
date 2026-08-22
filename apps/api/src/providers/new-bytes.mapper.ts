@@ -1,5 +1,5 @@
 import type { NormalizedProduct } from "./types";
-import { asNumber, asRecord, asString, NB_SITE_BASE } from "./new-bytes-client";
+import { asNumber, asRecord, asString, NB_SITE_BASE, unwrapNbList } from "./new-bytes-client";
 
 export interface NbCsvRow {
   CODIGO?: string;
@@ -332,4 +332,153 @@ export function extractProcessResult(body: unknown): { orderId?: string; branch?
     branch: asString(nested.branch) || asString(rec.branch),
     raw: body,
   };
+}
+
+export type NbDeliveryMode = "pickup" | "shipping";
+
+/** Sucursal fija de retiro según developers.nb.com.ar. */
+export const NB_PICKUP_BRANCH = {
+  value: "pickup" as const,
+  label: "Retiro en New Bytes",
+  addressLine: "Av. Jujuy 1039, CABA",
+  postalCode: "C1229ABF",
+};
+
+export interface NbShippingQuote {
+  id: string;
+  label: string;
+  plazo?: string;
+  total?: number;
+}
+
+export interface NbDatosBultos {
+  weightKg: number;
+  sizeCm: string;
+  amount: number;
+}
+
+export interface NbSubtotales {
+  subtotalUsd?: number;
+  totalUsd?: number;
+  iva?: number;
+  perceptions?: number;
+  raw: Record<string, unknown> | null;
+}
+
+export interface NbAvailabilityIssue {
+  code?: string;
+  message: string;
+}
+
+export interface NbAvailability {
+  ok: boolean;
+  issues: NbAvailabilityIssue[];
+  raw: unknown;
+}
+
+export function filterPaymentsForDelivery(
+  payments: NbPaymentOption[],
+  delivery: NbDeliveryMode
+): NbPaymentOption[] {
+  if (delivery === "shipping") return payments.filter((p) => !p.pickupOnly);
+  return payments;
+}
+
+export function parseDatosBultos(raw: unknown): NbDatosBultos | undefined {
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const weightKg = asNumber(rec.weightKg) ?? 0;
+  const sizeCm = asString(rec.sizeCm) || "0x0x0";
+  const amount = asNumber(rec.amount) ?? 1;
+  return { weightKg, sizeCm, amount };
+}
+
+export function parseShippingQuote(body: unknown): { quotes: NbShippingQuote[]; datosBultos?: NbDatosBultos } {
+  const rec = asRecord(body) ?? {};
+  const quotes: NbShippingQuote[] = [];
+  for (const row of unwrapNbList(rec.cotizacion ?? rec)) {
+    const item = asRecord(row) ?? {};
+    const id = asString(item.id);
+    if (!id) continue;
+    quotes.push({
+      id,
+      label: asString(item.description) || asString(item.descripcion) || `Envío ${id}`,
+      plazo: asString(item.plazoEntrega),
+      total: asNumber(item.total),
+    });
+  }
+  return { quotes, datosBultos: parseDatosBultos(rec.datosBulto ?? rec.datosBultos) };
+}
+
+export function parseNbSubtotales(body: unknown): NbSubtotales {
+  const rec = asRecord(body);
+  if (!rec) return { raw: null };
+  const nested = asRecord(rec.subtotal) ?? rec;
+  return {
+    subtotalUsd: asNumber(nested.subTotalDollar) ?? asNumber(nested.subTotal),
+    totalUsd: asNumber(nested.subTotalDollarFinal) ?? asNumber(nested.subTotalFinal) ?? asNumber(nested.subTotalDollar),
+    iva: asNumber(nested.iva) ?? asNumber(nested.IVA),
+    perceptions: asNumber(nested.perceptionsIIBB) ?? asNumber(nested.perceptions),
+    raw: rec,
+  };
+}
+
+export function parseNbAvailability(body: unknown): NbAvailability {
+  const issues: NbAvailabilityIssue[] = [];
+  const visit = (node: unknown, depth: number) => {
+    if (depth > 4 || node == null) return;
+    if (Array.isArray(node)) {
+      node.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+    const rec = asRecord(node);
+    if (!rec) return;
+    const available = rec.available ?? rec.isAvailable ?? rec.ok;
+    const message = asString(rec.message) || asString(rec.motivo) || asString(rec.reason) || asString(rec.status);
+    const code = asString(rec.productId) || asString(rec.id) || asString(rec.sku);
+    if (available === false || available === "false") {
+      issues.push({ code, message: message || `Sin disponibilidad${code ? ` (${code})` : ""}` });
+    } else if (message && /sin stock|no disponible|faltante|unavailable/i.test(message)) {
+      issues.push({ code, message });
+    }
+    for (const value of Object.values(rec)) {
+      if (value && typeof value === "object") visit(value, depth + 1);
+    }
+  };
+  visit(body, 0);
+  return { ok: issues.length === 0, issues, raw: body };
+}
+
+export function buildNbProcessBody(input: {
+  delivery: NbDeliveryMode;
+  medioDePagoId: number;
+  notes?: string;
+  postalCode?: string;
+  medioDeEnvioId?: number;
+  addressId?: string;
+  datosBultos?: NbDatosBultos;
+  dropShipping?: boolean;
+  dropShippingClientName?: string;
+  dropShippingClientEmail?: string;
+}): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    note: input.notes ?? "",
+    medioDePagoId: input.medioDePagoId,
+  };
+  if (input.delivery === "pickup") return body;
+
+  body.codigoPostalFavorito = input.postalCode;
+  body.mediodeEnvioId = input.medioDeEnvioId;
+  body.idDirCli = input.addressId;
+  if (input.datosBultos) body.datosBultos = input.datosBultos;
+  if (input.dropShipping) {
+    body.dropShipping = true;
+    if (input.dropShippingClientName || input.dropShippingClientEmail) {
+      body.dpPayload = {
+        clientName: input.dropShippingClientName,
+        clientEmail: input.dropShippingClientEmail,
+      };
+    }
+  }
+  return body;
 }

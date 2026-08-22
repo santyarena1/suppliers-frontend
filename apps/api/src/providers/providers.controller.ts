@@ -12,7 +12,12 @@ import { NewBytesAccountService } from "./new-bytes-account.service";
 import { NewBytesOrderService } from "./new-bytes-order.service";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 import { InvidCheckoutDraftDto, InvidCheckoutPreviewDto } from "./dto/invid-checkout.dto";
-import { NewBytesCheckoutDraftDto, NewBytesCheckoutPreviewDto } from "./dto/new-bytes-checkout.dto";
+import {
+  NewBytesCheckoutCartDto,
+  NewBytesCheckoutDraftDto,
+  NewBytesCheckoutPreviewDto,
+  NewBytesCheckoutShippingDto,
+} from "./dto/new-bytes-checkout.dto";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -125,12 +130,24 @@ export class ProvidersController {
     return this.newBytesOrderService.listDrafts(user.userId);
   }
 
+  /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */
+  @Post("providers/NEW_BYTES/checkout/cart")
+  async newBytesCheckoutCart(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutCartDto) {
+    return this.newBytesOrderService.syncCart(await this.newBytesCredentials(user.userId), dto);
+  }
+
+  /** GET /carrito/calcularEnvioPara/{cp}/{idDirCli} sobre el carrito armado. */
+  @Post("providers/NEW_BYTES/checkout/shipping")
+  async newBytesCheckoutShipping(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutShippingDto) {
+    return this.newBytesOrderService.quoteShippingForAddress(await this.newBytesCredentials(user.userId), dto);
+  }
+
   @Post("providers/NEW_BYTES/checkout/preview")
   async newBytesCheckoutPreview(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutPreviewDto) {
     return this.newBytesOrderService.preview(await this.newBytesCredentials(user.userId), dto);
   }
 
-  /** Crea el pedido en NewBytes (retiro por defecto) y guarda una copia en Nodo. */
+  /** POST /carrito/process: retiro ({ note, medioDePagoId }) o envío (cotización + idDirCli). */
   @Post("providers/NEW_BYTES/checkout/draft")
   async newBytesCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutDraftDto) {
     return this.newBytesOrderService.submitDraft(user.userId, await this.newBytesCredentials(user.userId), dto);

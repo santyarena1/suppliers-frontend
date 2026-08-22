@@ -1,5 +1,16 @@
 import { Type } from "class-transformer";
-import { ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
+import {
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+  ValidateNested,
+} from "class-validator";
 
 export class NewBytesDraftItemDto {
   @IsString()
@@ -16,16 +27,28 @@ export class NewBytesDraftItemDto {
   name?: string;
 }
 
-export class NewBytesCheckoutPreviewDto {
+export class NewBytesCheckoutCartDto {
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => NewBytesDraftItemDto)
   items!: NewBytesDraftItemDto[];
+}
 
+export class NewBytesCheckoutShippingDto extends NewBytesCheckoutCartDto {
+  @IsString()
+  @MinLength(1)
+  addressId!: string;
+}
+
+export class NewBytesCheckoutPreviewDto extends NewBytesCheckoutCartDto {
+  @IsIn(["pickup", "shipping"])
+  delivery!: "pickup" | "shipping";
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
-  medioDePagoId!: number;
+  medioDePagoId?: number;
 
   @IsOptional()
   @IsString()
@@ -39,9 +62,11 @@ export class NewBytesCheckoutPreviewDto {
   @IsOptional()
   @IsString()
   notes?: string;
-}
 
-export class NewBytesCheckoutDraftDto extends NewBytesCheckoutPreviewDto {
+  @IsOptional()
+  @IsBoolean()
+  dropShipping?: boolean;
+
   @IsOptional()
   @IsString()
   dropShippingClientName?: string;
@@ -49,4 +74,10 @@ export class NewBytesCheckoutDraftDto extends NewBytesCheckoutPreviewDto {
   @IsOptional()
   @IsString()
   dropShippingClientEmail?: string;
+}
+
+export class NewBytesCheckoutDraftDto extends NewBytesCheckoutPreviewDto {
+  @Type(() => Number)
+  @IsInt()
+  medioDePagoId!: number;
 }
