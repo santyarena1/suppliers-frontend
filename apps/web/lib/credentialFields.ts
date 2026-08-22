@@ -207,6 +207,121 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
       },
     ],
   },
+  CEVEN: {
+    title: "Ceven",
+    intro: "El catálogo público de ceven.com se sincroniza sin login.",
+    extra:
+      "Precios de lista en ARS (SuiteCommerce). No es precio mayorista autenticado — si más adelante hay cuenta, se puede cargar acá.",
+    portalUrl: "https://www.ceven.com/catalogo",
+    portalLabel: "ceven.com",
+    fields: [],
+  },
+  DIAPSTORE: {
+    title: "Diapstore",
+    intro: "El catálogo público de diapstore.com se sincroniza sin login.",
+    extra:
+      "La vista pública de api.cumar.com.ar trae nombre, SKU, stock e imagen. El precio mayorista no viene en esa vista (unit_price llega null) — no se inventa.",
+    portalUrl: "https://diapstore.com",
+    portalLabel: "diapstore.com",
+    fields: [
+      {
+        key: "account_id",
+        label: "Account ID (opcional)",
+        type: "text",
+        required: false,
+        placeholder: "Solo si Simple Gestion te da otra cuenta",
+        aliases: ["accountId"],
+      },
+    ],
+  },
+  POLYTECH: {
+    title: "Conectar tu cuenta de Polytech",
+    intro: "API Key de Gestión Resellers (HTTP Basic Auth). Se guarda cifrada y es solo tuya.",
+    extra:
+      "Endpoint confirmado: gestionresellers.com.ar/api/extranet/item/search. Falta una respuesta real para mapear campos.",
+    portalUrl: "https://www.gestion-resellers.com.ar",
+    portalLabel: "Gestión Resellers",
+    fields: [
+      {
+        key: "api_key",
+        label: "API Key",
+        type: "password",
+        required: true,
+        placeholder: "Key de Gestión Resellers",
+        aliases: ["apiKey", "key", "token"],
+      },
+    ],
+  },
+  NEW_TREE: {
+    title: "Conectar tu cuenta de NewTree",
+    intro: "Usuario SOAP de GlobalBluePoint / NewTree. Se guarda cifrada y es solo tuya.",
+    extra:
+      "Protocolo SOAP (AuthenticateUser + getArticulos). Hace falta una llamada de prueba con tu cuenta para mapear el XML/JSON exacto.",
+    portalUrl: "https://ws.globalbluepoint.com/newtree/app_webservices/wserpconnect.asmx",
+    portalLabel: "WSDL NewTree",
+    fields: [
+      { key: "username", label: "Usuario", type: "text", required: true, aliases: ["user", "PUSERNAME"], autoComplete: "username" },
+      { key: "password", label: "Contraseña", type: "password", required: true, aliases: ["pass", "PPASSWORD"], autoComplete: "current-password" },
+      { key: "company", label: "Company", type: "text", required: true, aliases: ["PCOMPANY"] },
+      { key: "webservice", label: "Web service ID", type: "text", required: false, help: "PWEBSERVICE. NewTree lo confirma.", aliases: ["PWEBSERVICE"] },
+      { key: "client_id", label: "Client ID (getArticulos)", type: "text", required: false, placeholder: "15 por defecto en la doc", aliases: ["clientId"] },
+    ],
+  },
+  HDC: {
+    title: "Conectar tu cuenta de HDC",
+    intro: "HDC corre sobre GlobalBluePoint (mismo SOAP que NewTree). Se guarda cifrada y es solo tuya.",
+    extra: "Portal hdcsa.com.ar. Falta una llamada autenticada para mapear el catálogo.",
+    portalUrl: "https://www.hdcsa.com.ar",
+    portalLabel: "hdcsa.com.ar",
+    fields: [
+      { key: "username", label: "Usuario", type: "text", required: true, aliases: ["user"], autoComplete: "username" },
+      { key: "password", label: "Contraseña", type: "password", required: true, aliases: ["pass"], autoComplete: "current-password" },
+    ],
+  },
+  SOLUTION_BOX: {
+    title: "Conectar tu cuenta de Solution Box",
+    intro: "Usuario y contraseña de la API (createToken). Se guarda cifrada y es solo tuya.",
+    extra:
+      "Límite documentado: 2 requests/hora. El host lxc.solutionbox.com.ar todavía no expone el endpoint de artículos en las rutas probadas.",
+    portalUrl: "https://www.solutionbox.com.ar",
+    portalLabel: "solutionbox.com.ar",
+    fields: [
+      { key: "user", label: "Usuario API", type: "text", required: true, aliases: ["username", "usuario"], autoComplete: "username" },
+      { key: "password", label: "Contraseña API", type: "password", required: true, aliases: ["pass"], autoComplete: "current-password" },
+    ],
+  },
+  GC: {
+    title: "Gaming City",
+    intro: "La lista de precios es pública (Google Sites / Apps Script). No pide login.",
+    extra:
+      "Solo trae producto y precio (ARS, IVA incluido), sin SKU ni stock. Importá el Excel del listado en Sincronización hasta que esté el scraper de obtenerDatosFinales.",
+    portalUrl: "https://sites.google.com/view/gcgremio/lista-general",
+    portalLabel: "Lista Gaming City",
+    fields: [],
+  },
+  ASHIR: {
+    title: "Conectar tu cuenta de Ashir",
+    intro: "Todavía no hay API documentada. Guardá lo que te dé Ashir para cuando esté el adapter.",
+    extra: "ashir.com.ar es WordPress; no hay endpoint de catálogo público confirmado.",
+    portalUrl: "https://ashir.com.ar",
+    portalLabel: "ashir.com.ar",
+    fields: [
+      { key: "user", label: "Usuario", type: "text", required: false, aliases: ["username"], autoComplete: "username" },
+      { key: "password", label: "Contraseña", type: "password", required: false, aliases: ["pass"], autoComplete: "current-password" },
+    ],
+  },
+  DISTECNA: {
+    title: "Conectar tu cuenta de Distécna",
+    intro: "Distécna tiene API (api@distecna.com) pero la documentación no es pública.",
+    extra: "Pedí acceso a api@distecna.com. Cuando llegue el contrato se arma el adapter sin adivinar campos.",
+    portalUrl: "https://www.distecna.com",
+    portalLabel: "distecna.com",
+    fields: [
+      { key: "user", label: "Usuario", type: "text", required: false, aliases: ["username"], autoComplete: "username" },
+      { key: "password", label: "Contraseña", type: "password", required: false, aliases: ["pass"], autoComplete: "current-password" },
+      { key: "token", label: "Token / API key", type: "password", required: false, aliases: ["apiKey", "api_key"] },
+    ],
+  },
 };
 
 export function emptyValues(schema: CredentialSchema): Record<string, string> {

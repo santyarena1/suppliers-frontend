@@ -5,7 +5,7 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
-import { ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, providersApi, ProviderStatus } from "@/lib/api";
+import { ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, providersApi, ProviderStatus, canSyncProvider } from "@/lib/api";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, XCircle } from "lucide-react";
 
@@ -89,6 +89,10 @@ export default function ProveedoresPage() {
                               <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                                 <CheckCircle2 className="w-3 h-3" /> Configurado
                               </span>
+                            ) : s?.publicCatalog ? (
+                              <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400">
+                                <CheckCircle2 className="w-3 h-3" /> Catálogo público
+                              </span>
                             ) : (
                               <span className="flex items-center gap-1 text-[10px] font-semibold text-surface-500">
                                 <KeyRound className="w-3 h-3" /> Sin credencial
@@ -109,16 +113,16 @@ export default function ProveedoresPage() {
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
                             <Link
-                              href={`/proveedores/${provider}?tab=${s?.hasCredentials ? "config" : "credentials"}`}
+                              href={`/proveedores/${provider}?tab=${canSyncProvider(s) ? "sync" : "credentials"}`}
                               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-lg py-1.5 transition-all"
                             >
                               {s?.hasCredentials ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
-                              {s?.hasCredentials ? "Configurar" : "Cargar cuenta"}
+                              {s?.hasCredentials ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
                             </Link>
                             <button
                               onClick={(e) => handleSync(provider, e)}
-                              disabled={isSyncing || !s?.hasCredentials}
-                              title={!s?.hasCredentials ? "Configurá la credencial primero" : undefined}
+                              disabled={isSyncing || !canSyncProvider(s)}
+                              title={!canSyncProvider(s) ? "Configurá la credencial primero" : undefined}
                               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-lg py-1.5 transition-all"
                             >
                               {isSyncing ? <NodoSpinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}

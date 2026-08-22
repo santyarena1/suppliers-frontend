@@ -5,4 +5,10 @@ export const SKU_PREFIX: Record<string, string> = {
   GRUPO_NUCLEO: "GN_",
   AIR: "AIR_",
   INVID: "IC_",
+  CEVEN: "CV_",
+  DIAPSTORE: "DS_",
+  POLYTECH: "PT_",
+  NEW_TREE: "NT_",
+  SOLUTION_BOX: "SB_",
+  GC: "GC_",
 };

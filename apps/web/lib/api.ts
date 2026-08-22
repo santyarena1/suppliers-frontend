@@ -101,7 +101,9 @@ export const ALL_PROVIDERS: Provider[] = [
 ];
 
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
-export const IMPLEMENTED_PROVIDERS: Provider[] = ["ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID"];
+export const IMPLEMENTED_PROVIDERS: Provider[] = [
+  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE",
+];
 
 export interface ProductDTO {
   id?: string;
@@ -221,10 +223,15 @@ export interface ProviderSyncResult {
 export interface ProviderStatus {
   provider: Provider;
   implemented: boolean;
+  publicCatalog?: boolean;
   hasCredentials: boolean;
   total: number;
   withStock: number;
   lastSyncedAt: string | null;
+}
+
+export function canSyncProvider(status?: ProviderStatus | null): boolean {
+  return Boolean(status?.hasCredentials || status?.publicCatalog);
 }
 
 export type MissingProductAction = "KEEP" | "OUT_OF_STOCK" | "HIDE" | "DELETE";
