@@ -452,7 +452,6 @@ export default function InvidDraftPanel({
       <button
         onClick={handleSubmit}
         disabled={!canConfirm}
-        disabled={!canConfirm}
         title={!addressId ? "Elegí una dirección" : deliveryOption === "3" && !expresoId ? "Elegí el expreso" : undefined}
         className="flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 disabled:opacity-100 text-white rounded-md py-2.5 text-sm font-semibold"
       >
