@@ -12,7 +12,7 @@ import { CartItem, useCart } from "@/lib/cart";
 import { applyInvidCheckoutTaxes, grossFromTaxLines } from "@/lib/tax";
 import { formatUSD } from "@/lib/format";
 import NodoSpinner from "@/components/NodoSpinner";
-import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Send, AlertTriangle } from "lucide-react";
+import { CheckCircle2, Loader2, Send, AlertTriangle } from "lucide-react";
 
 export default function InvidDraftPanel({
   items,
@@ -21,7 +21,7 @@ export default function InvidDraftPanel({
   compact = false,
 }: {
   items: CartItem[];
-  onCreated: () => void;
+  onCreated: (message?: string) => void;
   onPreviewed?: (preview: InvidCheckoutPreview | null) => void;
   compact?: boolean;
 }) {
@@ -41,7 +41,6 @@ export default function InvidDraftPanel({
   const [preview, setPreview] = useState<InvidCheckoutPreview | null>(null);
   const [result, setResult] = useState<InvidDraftResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<0 | 1>(0);
   const reviewedOnce = useRef(false);
   const previewGen = useRef(0);
   const { patchItem } = useCart();
@@ -171,7 +170,7 @@ export default function InvidDraftPanel({
       const res = await invidCheckoutApi.draft(payload);
       setResult(res.data);
       publishPreview(null);
-      onCreated();
+      onCreated(res.data.message);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "No se pudo crear el borrador en Invid");
@@ -273,7 +272,7 @@ export default function InvidDraftPanel({
 
   if (loadingMeta) {
     return (
-      <div className={`${compact ? "" : "border border-surface-800 rounded-lg p-5 "}flex items-center gap-2 text-sm text-surface-400`}>
+      <div className={`${compact ? "h-9 " : "border border-surface-800 rounded-lg p-5 "}flex items-center gap-2 text-sm text-surface-400`}>
         <Loader2 className="w-4 h-4 animate-spin" /> Cargando checkout de Invid…
       </div>
     );
@@ -305,83 +304,78 @@ export default function InvidDraftPanel({
 
   if (compact) {
     return (
-      <div className="flex flex-col gap-3">
-        <p className="text-xs text-surface-500">
-          Paso {step + 1} de 2 · {step === 0 ? "Datos del pedido" : "Revisar y confirmar"}
-        </p>
-
-        {step === 0 && (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {addressSelect}
-              {paymentSelect}
-              {deliverySelect}
-            </div>
-            {expresoSelect && <div className="grid sm:grid-cols-3 gap-3">{expresoSelect}</div>}
-            {deliveryOption === "6" && (
-              <p className="text-sm text-surface-400">Express 24hs: al revisar, Invid cotiza el envío con esa dirección.</p>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setStep(1)}
-                disabled={!addressId}
-                className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-md px-4 py-2 text-sm font-medium"
-              >
-                Siguiente <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center gap-2 min-h-9">
+          <select
+            aria-label="Dirección"
+            value={addressId}
+            onChange={(e) => { setAddressId(e.target.value); invalidatePreview(); }}
+            className="h-9 min-w-[160px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
+          >
+            {addresses.length === 0 && <option value="">Sin direcciones</option>}
+            {addresses.map((a) => (
+              <option key={a.id} value={a.id}>{a.label} — {a.addressLine}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Pago"
+            value={paymentOption}
+            onChange={(e) => { setPaymentOption(e.target.value); invalidatePreview(); }}
+            className="h-9 min-w-[140px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
+          >
+            {payments.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Entrega"
+            value={deliveryOption}
+            onChange={(e) => { setDeliveryOption(e.target.value); invalidatePreview(); }}
+            className="h-9 min-w-[140px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
+          >
+            {deliveryChoices.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
+          {deliveryOption === "3" && (
+            <select
+              aria-label="Expreso"
+              value={expresoId}
+              onChange={(e) => { setExpresoId(e.target.value); invalidatePreview(); }}
+              className="h-9 min-w-[140px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
+            >
+              <option value="">Expreso</option>
+              {expresoCompanies.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={handlePreview}
+            disabled={previewing || submitting || !addressId}
+            className="h-9 px-3 inline-flex items-center gap-1.5 border border-surface-600 hover:border-brand-500/50 text-surface-100 rounded-md text-sm font-medium disabled:opacity-40 flex-shrink-0"
+          >
+            {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+            {previewing ? "Validando…" : "Revisar"}
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canConfirm}
+            title={!preview ? "Primero tenés que revisar en Invid" : !preview.stockOk ? "Invid no validó el stock" : undefined}
+            className="h-9 px-3 inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 text-white rounded-md text-sm font-semibold flex-shrink-0"
+          >
+            {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+            Crear borrador
+          </button>
+        </div>
+        {preview && (
+          <InvidValidationFeedback
+            compact
+            preview={preview}
+            deliveryLabel={preview.suggestedDelivery?.label ?? deliveries.find((d) => d.value === deliveryOption)?.label}
+          />
         )}
-
-        {step === 1 && (
-          <>
-            {notesField}
-            {!preview && !error && !previewing && (
-              <p className="text-xs text-surface-500">
-                Obligatorio: confirma stock, impuestos y envío. Si un producto no está, te lo dice acá.
-              </p>
-            )}
-            {preview && (
-              <InvidValidationFeedback
-                compact
-                preview={preview}
-                deliveryLabel={preview.suggestedDelivery?.label ?? deliveries.find((d) => d.value === deliveryOption)?.label}
-              />
-            )}
-            {error && (
-              <div className="border border-red-500/25 bg-red-500/5 rounded-md px-3 py-2 text-sm text-red-300 leading-relaxed whitespace-pre-wrap">
-                {error}
-              </div>
-            )}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <button
-                onClick={() => setStep(0)}
-                className="flex items-center gap-1 text-sm text-surface-400 hover:text-white"
-              >
-                <ChevronLeft className="w-4 h-4" /> Atrás
-              </button>
-              <div className="flex gap-2">
-                <button
-                  onClick={handlePreview}
-                  disabled={previewing || submitting || !addressId}
-                  className="flex items-center justify-center gap-1.5 border border-surface-600 hover:border-brand-500/50 text-surface-100 rounded-md px-3.5 py-2 text-sm font-medium disabled:opacity-40"
-                >
-                  {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                  {previewing ? "Validando…" : "Revisar en Invid"}
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={!canConfirm}
-                  title={!preview ? "Primero tenés que revisar en Invid" : !preview.stockOk ? "Invid no validó el stock" : undefined}
-                  className="flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 text-white rounded-md px-3.5 py-2 text-sm font-semibold"
-                >
-                  {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-                  Crear borrador
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+        {error && <p className="text-sm text-red-300 leading-snug whitespace-pre-wrap">{error}</p>}
       </div>
     );
   }
