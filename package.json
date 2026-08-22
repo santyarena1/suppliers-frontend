@@ -11,7 +11,7 @@
     "dev:api": "pnpm build:shared && pnpm --filter @nodo/api start:dev",
     "build:web": "pnpm --filter @nodo/web build",
     "build:api": "pnpm build:shared && pnpm --filter @nodo/api build",
-    "test:api": "pnpm build:shared && pnpm --filter @nodo/api test",
+    "test:api": "pnpm build:shared && pnpm --filter @nodo/api prisma:generate && pnpm --filter @nodo/api test",
     "lint:web": "pnpm --filter @nodo/web lint"
   }
 }
