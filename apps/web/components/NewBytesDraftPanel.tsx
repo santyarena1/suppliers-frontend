@@ -24,6 +24,7 @@ import {
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
+import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
 
 type Delivery = "pickup" | "shipping";
 
@@ -71,55 +72,61 @@ export default function NewBytesDraftPanel({
   const [background, setBackground] = useState(true);
   const submitLock = useRef(false);
   const leftInBackground = useRef(false);
+  const seeded = useRef<string | null>(null);
   const jobs = usePendingOrders();
+  const warm = useCheckoutWarmup("NEW_BYTES", cartItems);
 
   useEffect(() => {
-    if (cartItems.length === 0) {
+    return () => { onPreviewed?.(null); };
+  }, [onPreviewed]);
+
+  useEffect(() => {
+    seeded.current = null;
+    setLoadingMeta(true);
+    onPreviewed?.(null);
+  }, [cartKey, onPreviewed]);
+
+  useEffect(() => {
+    if (warm.itemsKey !== cartKey) return;
+    if (warm.status === "ready" && warm.data && seeded.current !== cartKey) {
+      seeded.current = cartKey;
+      const addrs = warm.data.addresses;
+      const pays = warm.data.payments;
+      const preview = warm.data.preview;
+      setAddresses(addrs);
+      setPayments(pays);
+      const def = addrs.find((a) => a.isDefault) ?? addrs[0];
+      if (def) setAddressId(def.id);
+      setMetaError(null);
+      setLoadingMeta(false);
+      onPreviewed?.({
+        items: preview.items,
+        payments: pays,
+        addresses: addrs,
+        pickup: preview.pickup ?? { value: "pickup", label: "Retiro", addressLine: "", postalCode: "" },
+        subtotal: preview.subtotal,
+        total: preview.total,
+        iva: preview.iva,
+        perceptions: preview.perceptions,
+        perceptionLines: preview.perceptionLines,
+        stockOk: preview.stockOk,
+        availability: preview.availability,
+        subtotales: preview.subtotales,
+        note: preview.note,
+      });
+      return;
+    }
+    if (warm.status === "error" && seeded.current !== cartKey) {
+      setMetaError(warm.error || "No se pudieron cargar direcciones y pagos de NewBytes.");
+      setLoadingMeta(false);
       onPreviewed?.(null);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await newBytesCheckoutApi.cart({ items: cartItems });
-        if (!cancelled) onPreviewed?.(res.data);
-      } catch {
-        if (!cancelled) onPreviewed?.(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      onPreviewed?.(null);
-    };
-  }, [cartItems, onPreviewed]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    if (warm.status === "loading" && seeded.current !== cartKey) {
       setLoadingMeta(true);
       setMetaError(null);
-      try {
-        const [addrRes, payRes] = await Promise.all([
-          newBytesCheckoutApi.addresses(),
-          newBytesCheckoutApi.payments(),
-        ]);
-        if (cancelled) return;
-        const addrs = addrRes.data ?? [];
-        const pays = payRes.data ?? [];
-        setAddresses(addrs);
-        setPayments(pays);
-        const def = addrs.find((a) => a.isDefault) ?? addrs[0];
-        if (def) setAddressId(def.id);
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setMetaError(errMessage(err, "No se pudieron cargar direcciones y pagos de NewBytes."));
-        }
-      } finally {
-        if (!cancelled) setLoadingMeta(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    }
+  }, [warm, cartKey, onPreviewed]);
 
   const filteredPayments = useMemo(() => {
     if (delivery === "shipping") return payments.filter((p) => !p.pickupOnly);

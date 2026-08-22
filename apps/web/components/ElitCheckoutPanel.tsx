@@ -19,6 +19,7 @@ import {
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { useBackgroundCheckout } from "@/lib/pendingOrders";
+import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -51,7 +52,9 @@ export default function ElitCheckoutPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitLock = useRef(false);
+  const seeded = useRef<string | null>(null);
   const hydrated = useRef(false);
+  const warm = useCheckoutWarmup("ELIT", cartItems);
   const {
     background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
     openConfirm, acceptResult, leaveInBackground, finishOrder,
@@ -67,32 +70,39 @@ export default function ElitCheckoutPanel({
   }, [onPreviewed]);
 
   useEffect(() => {
-    let cancelled = false;
+    seeded.current = null;
     hydrated.current = false;
-    (async () => {
+    setLoading(true);
+  }, [cartKey]);
+
+  useEffect(() => {
+    if (warm.itemsKey !== cartKey) return;
+    if (warm.status === "ready" && warm.data && seeded.current !== cartKey) {
+      seeded.current = cartKey;
+      const data = warm.data.preview;
+      publishPreview(data);
+      setWarehouse(String(data.warehouse ?? data.warehouses[0]?.id ?? ""));
+      setShippingMethod(data.shippingMethod ?? "");
+      setSaleCondition(data.saleCondition ?? "");
+      setShippingAddress(data.shippingAddress ?? data.addresses[0]?.code ?? "");
+      setError(null);
+      setLoading(false);
+      hydrated.current = true;
+      return;
+    }
+    if (warm.status === "error" && seeded.current !== cartKey) {
+      publishPreview(null);
+      setError(warm.error || "No se pudo armar el carrito de Elit.");
+      setLoading(false);
+      return;
+    }
+    if (warm.status === "loading" && seeded.current !== cartKey) {
       setLoading(true);
       setError(null);
-      try {
-        const res = await elitCheckoutApi.preview({ items: cartItems });
-        if (cancelled) return;
-        const data = res.data;
-        publishPreview(data);
-        setWarehouse(String(data.warehouse ?? data.warehouses[0]?.id ?? ""));
-        setShippingMethod(data.shippingMethod ?? "");
-        setSaleCondition(data.saleCondition ?? "");
-        setShippingAddress(data.shippingAddress ?? data.addresses[0]?.code ?? "");
-        hydrated.current = true;
-      } catch (err: unknown) {
-        if (!cancelled) {
-          publishPreview(null);
-          setError(errMessage(err, "No se pudo armar el carrito de Elit."));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [cartItems]);
+    }
+    // publishPreview is stable enough for this seed-once effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warm, cartKey]);
 
   const methods = (preview?.shippingMethods ?? []).filter((m) => String(m.warehouse) === warehouse);
   const selectedPay = preview?.saleConditions.find((p) => p.value === saleCondition);

@@ -20,6 +20,7 @@ import {
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { useBackgroundCheckout } from "@/lib/pendingOrders";
+import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -54,33 +55,65 @@ export default function GrupoNucleoCheckoutPanel({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitLock = useRef(false);
+  const seeded = useRef<string | null>(null);
   const {
     background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
     openConfirm, acceptResult, leaveInBackground, finishOrder,
   } = useBackgroundCheckout<GnDraftResult>("GRUPO_NUCLEO", "No se pudo crear el pedido en Grupo Núcleo");
+  const warm = useCheckoutWarmup("GRUPO_NUCLEO", cartItems);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    seeded.current = null;
+    setLoading(true);
+  }, [cartKey]);
+
+  useEffect(() => {
+    if (customerSale) {
+      seeded.current = null;
+      let cancelled = false;
       setLoading(true);
       setError(null);
-      try {
-        const [opt, prev] = await Promise.all([
-          grupoNucleoCheckoutApi.options(),
-          grupoNucleoCheckoutApi.preview({ items: cartItems, customerSale }),
-        ]);
-        if (cancelled) return;
-        setProvinces(opt.data.provinces);
-        setDocTypes(opt.data.documentTypes.map((d) => ({ value: String(d.value), label: d.label })));
-        setPreview(prev.data);
-      } catch (err: unknown) {
-        if (!cancelled) setError(errMessage(err, "No se pudo validar stock/precio en Grupo Núcleo."));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [cartItems, customerSale]);
+      (async () => {
+        try {
+          const [opt, prev] = await Promise.all([
+            grupoNucleoCheckoutApi.options(),
+            grupoNucleoCheckoutApi.preview({ items: cartItems, customerSale: true }),
+          ]);
+          if (cancelled) return;
+          setProvinces(opt.data.provinces);
+          setDocTypes(opt.data.documentTypes.map((d) => ({ value: String(d.value), label: d.label })));
+          setPreview(prev.data);
+          setLoading(false);
+        } catch (err: unknown) {
+          if (!cancelled) {
+            setError(errMessage(err, "No se pudo validar stock/precio en Grupo Núcleo."));
+            setLoading(false);
+          }
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
+    if (warm.itemsKey !== cartKey) return;
+    if (warm.status === "ready" && warm.data && seeded.current !== cartKey) {
+      seeded.current = cartKey;
+      setProvinces(warm.data.provinces);
+      setDocTypes(warm.data.documentTypes.map((d) => ({ value: String(d.value), label: d.label })));
+      setPreview(warm.data.preview);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    if (warm.status === "error" && seeded.current !== cartKey) {
+      setError(warm.error || "No se pudo validar stock/precio en Grupo Núcleo.");
+      setLoading(false);
+      return;
+    }
+    if (warm.status === "loading" && seeded.current !== cartKey) {
+      setLoading(true);
+      setError(null);
+    }
+  }, [customerSale, cartItems, cartKey, warm]);
 
   const canSubmit = !loading && !submitting && Boolean(preview?.stockOk) && (
     !customerSale || Boolean(customer.nombre && customer.documento && customer.direccion && customer.codigoPostal && customer.ciudad && customer.email && customer.tel)

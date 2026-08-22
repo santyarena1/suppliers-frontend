@@ -61,7 +61,7 @@ export function runBackgroundDraft(
     fulfill().catch(async (err) => {
       const message = err instanceof Error ? err.message : String(err);
       logger.error(`${label} ${id}: ${message}`);
-      await markFailed(message.slice(0, 500)).catch((updateErr) => logger.error(String(updateErr)));
+      await markFailed(message.slice(0, 500)).catch((updateErr: unknown) => logger.error(String(updateErr)));
     });
   });
 }
