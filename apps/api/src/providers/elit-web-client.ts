@@ -222,6 +222,129 @@ export class ElitWebClient {
     }
     return typeof res.data === "string" ? res.data : String(res.data ?? "");
   }
+
+  /**
+   * El front de www.elit.com.ar pega a `/api/proxy` + path de `/v1/web`.
+   * `new.api.elit.com.ar/v1/web/account/...` directo responde 403.
+   * No usar GET `/account/payments?include=options` — crea un informe vacío.
+   */
+  private proxyUrl(path: string): string {
+    const p = path.startsWith("/") ? path : `/${path}`;
+    return `${ELIT_SITE}/api/proxy${p}`;
+  }
+
+  private proxyHeaders(extra?: Record<string, string>): Record<string, string> {
+    return {
+      Cookie: this.siteCookie,
+      Accept: "application/json, */*",
+      Origin: ELIT_SITE,
+      Referer: `${ELIT_SITE}/mi-cuenta`,
+      ...extra,
+    };
+  }
+
+  async proxyGet<T = unknown>(path: string): Promise<T> {
+    const url = this.proxyUrl(path);
+    try {
+      const res = await axios.get<T>(url, {
+        headers: this.proxyHeaders(),
+        timeout: 30_000,
+        validateStatus: (s) => s < 500,
+      });
+      if (res.status >= 400) {
+        throw new BadGatewayException(
+          `Elit proxy GET ${path} → ${res.status}: ${String(JSON.stringify(res.data)).slice(0, 240)}`
+        );
+      }
+      return res.data;
+    } catch (err) {
+      if (err instanceof BadGatewayException || err instanceof BadRequestException) throw err;
+      throw new BadGatewayException(`Elit proxy GET ${path} falló: ${axiosErrorMessage(err, "error")}`);
+    }
+  }
+
+  async proxyPostJson<T = unknown>(path: string, data?: unknown): Promise<T> {
+    const url = this.proxyUrl(path);
+    try {
+      const res = await axios.post<T>(url, data, {
+        headers: this.proxyHeaders({ "Content-Type": "application/json" }),
+        timeout: 30_000,
+        validateStatus: (s) => s < 500,
+      });
+      if (res.status >= 400) {
+        const rec = asRecord(res.data);
+        const msg = asString(rec?.message) || JSON.stringify(res.data);
+        const errCls = res.status === 400 || res.status === 422 ? BadRequestException : BadGatewayException;
+        throw new errCls(`Elit proxy POST ${path} → ${res.status}: ${String(msg).slice(0, 400)}`);
+      }
+      return res.data;
+    } catch (err) {
+      if (err instanceof BadGatewayException || err instanceof BadRequestException) throw err;
+      throw new BadGatewayException(`Elit proxy POST ${path} falló: ${axiosErrorMessage(err, "error")}`);
+    }
+  }
+
+  async proxyPostForm<T = unknown>(path: string, form: FormData): Promise<T> {
+    const url = this.proxyUrl(path);
+    try {
+      const res = await axios.post<T>(url, form, {
+        headers: this.proxyHeaders(),
+        timeout: 45_000,
+        validateStatus: (s) => s < 500,
+      });
+      if (res.status >= 400) {
+        const rec = asRecord(res.data);
+        const msg = asString(rec?.message) || JSON.stringify(res.data);
+        const errCls = res.status === 400 || res.status === 422 ? BadRequestException : BadGatewayException;
+        throw new errCls(`Elit proxy POST ${path} → ${res.status}: ${String(msg).slice(0, 400)}`);
+      }
+      return res.data;
+    } catch (err) {
+      if (err instanceof BadGatewayException || err instanceof BadRequestException) throw err;
+      throw new BadGatewayException(`Elit proxy POST ${path} falló: ${axiosErrorMessage(err, "error")}`);
+    }
+  }
+
+  async proxyGetBuffer(path: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const url = this.proxyUrl(path);
+    try {
+      const res = await axios.get<ArrayBuffer>(url, {
+        headers: this.proxyHeaders({ Accept: "application/pdf, application/octet-stream, */*" }),
+        timeout: 45_000,
+        responseType: "arraybuffer",
+        validateStatus: (s) => s < 500,
+      });
+      const buffer = Buffer.from(res.data);
+      if (res.status >= 400) {
+        const text = buffer.toString("utf8").slice(0, 240);
+        throw new BadGatewayException(`Elit proxy GET ${path} → ${res.status}: ${text}`);
+      }
+      const contentType = String(res.headers["content-type"] || "application/octet-stream").split(";")[0];
+      return { buffer, contentType };
+    } catch (err) {
+      if (err instanceof BadGatewayException || err instanceof BadRequestException) throw err;
+      throw new BadGatewayException(`Elit proxy GET ${path} falló: ${axiosErrorMessage(err, "error")}`);
+    }
+  }
+
+  async fetchPublicBuffer(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    try {
+      const res = await axios.get<ArrayBuffer>(url, {
+        timeout: 30_000,
+        responseType: "arraybuffer",
+        validateStatus: (s) => s < 500,
+      });
+      const buffer = Buffer.from(res.data);
+      if (res.status >= 400) {
+        throw new BadGatewayException(`Elit CDN ${res.status}`);
+      }
+      const contentType = String(res.headers["content-type"] || "application/octet-stream").split(";")[0];
+      return { buffer, contentType };
+    } catch (err) {
+      if (err instanceof BadGatewayException) throw err;
+      throw new BadGatewayException(`No se pudo bajar el PDF de Elit: ${axiosErrorMessage(err, "error")}`);
+    }
+  }
 }
 
 export function elitData<T = unknown>(body: unknown): T {

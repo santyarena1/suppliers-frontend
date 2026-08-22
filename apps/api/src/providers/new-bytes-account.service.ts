@@ -1,4 +1,4 @@
-import { BadGatewayException, Injectable } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   hasNbPortalLogin,
   NewBytesApiClient,
@@ -13,6 +13,7 @@ import {
   type NbComprobanteRow,
   type NbOrderRow,
 } from "./new-bytes.mapper";
+import { documentFile } from "./document-file";
 
 /**
  * Lectura de la cuenta real de NewBytes (pedidos, órdenes de compra y
@@ -86,5 +87,36 @@ export class NewBytesAccountService {
       movements: rows.map(normalizeComprobante),
       profile: { user, client: nestedData, misDatos, balance },
     };
+  }
+
+  async getDocument(credentials: Record<string, string>, voucherId: string) {
+    if (!voucherId?.trim()) throw new BadRequestException("Falta voucherId");
+    const api = await this.client(credentials);
+    const rows = await api.paginate("miCuenta/comprobantes", 20, 200);
+    const found = rows.map(normalizeComprobante).find((r) => String(r.voucherId) === String(voucherId));
+    const url = found?.voucherUrl;
+    if (!url) throw new NotFoundException("Ese comprobante no tiene voucherUrl");
+    const parsed = new URL(url, "https://api.nb.com.ar/v1/");
+    if (!["api.nb.com.ar", "www.nb.com.ar", "static.nb.com.ar"].includes(parsed.hostname)) {
+      throw new BadRequestException("URL de comprobante no permitida");
+    }
+    const file = await api.getBuffer(parsed.toString());
+    return documentFile(file.buffer, file.contentType, `comprobante-${voucherId}`);
+  }
+
+  async getOrderDetail(credentials: Record<string, string>, id: string) {
+    if (!id?.trim()) throw new BadRequestException("Falta id");
+    const api = await this.client(credentials);
+    try {
+      const body = await api.get(`miCuenta/pedidos/${encodeURIComponent(id)}`);
+      return { found: true, raw: body };
+    } catch {
+      try {
+        const body = await api.get(`miCuenta/ordenesDeCompra/${encodeURIComponent(id)}`);
+        return { found: true, raw: body };
+      } catch {
+        return { found: false, raw: null };
+      }
+    }
   }
 }

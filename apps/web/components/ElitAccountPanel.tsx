@@ -5,18 +5,32 @@ import {
   elitAccountApi,
   elitCheckoutApi,
   NodoProviderDraft,
+  ElitSaleNote,
+  ElitMovement,
+  ElitPayment,
+  uploadAuthedFile,
 } from "@/lib/api";
 import NodoSpinner from "@/components/NodoSpinner";
 import { Receipt, Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
+import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
+import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { CheckoutField, CheckoutGhostButton, CheckoutInput, CheckoutSelect, CheckoutSubmit } from "@/components/checkout/CheckoutForm";
 
 type ElitAccount = Awaited<ReturnType<typeof elitAccountApi.account>>["data"];
+type Detail =
+  | { kind: "order"; row: ElitSaleNote }
+  | { kind: "movement"; row: ElitMovement }
+  | { kind: "draft"; row: NodoProviderDraft }
+  | { kind: "payment"; row: ElitPayment };
 
 export default function ElitAccountPanel() {
   const [account, setAccount] = useState<ElitAccount | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [detailNote, setDetailNote] = useState<ElitSaleNote | null>(null);
 
   useEffect(() => {
     void load();
@@ -40,10 +54,25 @@ export default function ElitAccountPanel() {
     }
   }
 
+  useEffect(() => {
+    if (detail?.kind !== "order") {
+      setDetailNote(null);
+      return;
+    }
+    const number = detail.row.orderNumber;
+    if (!number || (detail.row.items && detail.row.items.length > 0)) {
+      setDetailNote(detail.row);
+      return;
+    }
+    void elitAccountApi.saleNote(number).then((res) => setDetailNote(res.data)).catch(() => setDetailNote(detail.row));
+  }, [detail]);
+
+  const openOrder = detail?.kind === "order" ? (detailNote ?? detail.row) : null;
+
   return (
     <div className="flex flex-col gap-5 max-w-3xl">
       <p className="text-xs text-surface-500">
-        Pedidos y comprobantes de tu cuenta en elit.com.ar — solo lectura, no confirma ni cobra nada.
+        Pedidos, comprobantes e informes de pago de tu cuenta en elit.com.ar. Las facturas y recibos se bajan autenticados; las notas de venta/remito usan el PDF del CDN de Elit.
       </p>
       {loading ? (
         <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -90,6 +119,7 @@ export default function ElitAccountPanel() {
                     <th className="text-right font-semibold px-2 py-2">Débito</th>
                     <th className="text-right font-semibold px-2 py-2">Crédito</th>
                     <th className="text-right font-semibold px-2 py-2">Saldo</th>
+                    <th className="text-right font-semibold px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800">
@@ -101,6 +131,7 @@ export default function ElitAccountPanel() {
                       <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.debit, m.currency)}</td>
                       <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.credit, m.currency)}</td>
                       <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.balanceUsd ?? m.balance, m.currency)}</td>
+                      <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setDetail({ kind: "movement", row: m })} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -111,12 +142,14 @@ export default function ElitAccountPanel() {
             </div>
           </div>
 
+          <ElitPaymentSection payments={account?.payments ?? []} canCreate={account?.canCreateReport} onOpen={(p) => setDetail({ kind: "payment", row: p })} onDone={load} />
+
           <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
               <Receipt className="w-4 h-4 text-sky-400" />
               Pedidos creados desde Nodo
             </div>
-            <DraftsTable drafts={drafts ?? []} />
+            <DraftsTable drafts={drafts ?? []} onOpen={(d) => setDetail({ kind: "draft", row: d })} />
           </div>
 
           <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
@@ -134,6 +167,7 @@ export default function ElitAccountPanel() {
                     <th className="text-left font-semibold px-2 py-2">Depósito</th>
                     <th className="text-left font-semibold px-2 py-2">Fecha</th>
                     <th className="text-right font-semibold px-2 py-2">Importe</th>
+                    <th className="text-right font-semibold px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800">
@@ -147,6 +181,7 @@ export default function ElitAccountPanel() {
                       <td className="px-2 py-2 text-surface-400">{o.warehouseName || "—"}</td>
                       <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
                       <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(o.amount, o.currency)}</td>
+                      <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setDetail({ kind: "order", row: o })} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -158,8 +193,110 @@ export default function ElitAccountPanel() {
           </div>
         </>
       )}
+
+      {detail?.kind === "order" && openOrder && (
+        <AccountRowDetail
+          open
+          title={`Nota de venta ${openOrder.orderNumber}`}
+          lines={[
+            { label: "Estado", value: openOrder.status },
+            { label: "Detalle", value: openOrder.statusDescription || "" },
+            { label: "Factura", value: openOrder.invoiceNumber },
+            { label: "Fecha", value: openOrder.date },
+            { label: "Depósito", value: openOrder.warehouseName || "" },
+            { label: "Condición", value: openOrder.saleCondition || "" },
+            { label: "Envío", value: openOrder.shippingMethod || "" },
+            { label: "Tracking", value: [openOrder.trackingSupplier, openOrder.tracking, openOrder.trackingStatus].filter(Boolean).join(" · ") },
+            { label: "Importe", value: fmt(openOrder.amount, openOrder.currency) },
+          ]}
+          items={(openOrder.items ?? []).map((it) => ({
+            code: it.code,
+            name: it.name || it.code || "Ítem",
+            qty: it.quantity ?? undefined,
+            price: it.price ?? undefined,
+            total: it.total ?? undefined,
+          }))}
+          documents={elitOrderDocs(openOrder)}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {detail?.kind === "movement" && (
+        <AccountRowDetail
+          open
+          title={`${detail.row.form} ${detail.row.number}`.trim()}
+          lines={[
+            { label: "Tipo", value: detail.row.form },
+            { label: "Número", value: detail.row.number },
+            { label: "Fecha", value: detail.row.date },
+            { label: "Débito", value: fmt(detail.row.debit, detail.row.currency) },
+            { label: "Crédito", value: fmt(detail.row.credit, detail.row.currency) },
+            { label: "Saldo", value: fmt(detail.row.balanceUsd ?? detail.row.balance, detail.row.currency) },
+          ]}
+          documents={elitMovementDocs(detail.row)}
+          note={/saldo/i.test(detail.row.form) ? "El saldo no es un comprobante descargable." : undefined}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {detail?.kind === "draft" && (
+        <AccountRowDetail
+          open
+          title="Pedido desde Nodo"
+          lines={draftLines(detail.row)}
+          items={draftItems(detail.row)}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {detail?.kind === "payment" && (
+        <AccountRowDetail
+          open
+          title={`Informe ${detail.row.id}`}
+          lines={[
+            { label: "Id", value: detail.row.id },
+            { label: "Fecha", value: detail.row.date },
+            { label: "Estado", value: detail.row.status },
+            { label: "Total", value: detail.row.total != null ? String(detail.row.total) : "" },
+            { label: "Aprobado", value: detail.row.totalApproved != null ? String(detail.row.totalApproved) : "" },
+          ]}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
   );
+}
+
+function elitOrderDocs(o: ElitSaleNote): AccountDetailDoc[] {
+  const docs: AccountDetailDoc[] = [];
+  if (o.pdfUrl || o.orderNumber) {
+    docs.push({
+      label: "Descargar nota de venta",
+      href: `/providers/ELIT/documents?form=${encodeURIComponent(o.form || "NOTA DE VENTA")}&number=${encodeURIComponent(o.orderNumber)}&kind=salenote`,
+      filename: `nv-${o.orderNumber}.pdf`,
+    });
+  }
+  if (o.dispatchNotePdfUrl) {
+    docs.push({
+      label: "Descargar remito",
+      href: `/providers/ELIT/documents?form=${encodeURIComponent(o.form || "NOTA DE VENTA")}&number=${encodeURIComponent(o.orderNumber)}&kind=dispatch`,
+      filename: `remito-${o.orderNumber}.pdf`,
+    });
+  }
+  if (o.invoiceNumber) {
+    docs.push({
+      label: "Descargar factura",
+      href: `/providers/ELIT/documents?form=${encodeURIComponent("FACTURA A")}&number=${encodeURIComponent(o.invoiceNumber)}`,
+      filename: `factura-${o.invoiceNumber}.pdf`,
+    });
+  }
+  return docs;
+}
+
+function elitMovementDocs(m: ElitMovement): AccountDetailDoc[] {
+  if (!m.number || /saldo/i.test(m.form)) return [];
+  return [{
+    label: `Descargar ${m.form}`,
+    href: `/providers/ELIT/documents?form=${encodeURIComponent(m.form)}&number=${encodeURIComponent(m.number)}`,
+    filename: `${m.form}-${m.number}.pdf`,
+  }];
 }
 
 function fmt(n: number | null | undefined, currency?: string) {
@@ -174,7 +311,7 @@ function statusClass(status: string) {
   return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
 }
 
-function DraftsTable({ drafts }: { drafts: NodoProviderDraft[] }) {
+function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: (d: NodoProviderDraft) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -184,6 +321,7 @@ function DraftsTable({ drafts }: { drafts: NodoProviderDraft[] }) {
             <th className="text-left font-semibold px-2 py-2">Pedido</th>
             <th className="text-left font-semibold px-2 py-2">Fecha</th>
             <th className="text-right font-semibold px-2 py-2">Total</th>
+            <th></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-surface-800">
@@ -197,12 +335,209 @@ function DraftsTable({ drafts }: { drafts: NodoProviderDraft[] }) {
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
               <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>
           ))}
         </tbody>
       </table>
       {drafts.length === 0 && (
         <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste pedidos desde Nodo.</p>
+      )}
+    </div>
+  );
+}
+
+function pickOpId(raw: unknown): string | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const rec = raw as Record<string, unknown>;
+  const nested = rec.data && typeof rec.data === "object" ? (rec.data as Record<string, unknown>) : rec;
+  const id = nested.id ?? nested._id ?? rec.id ?? rec._id;
+  return id != null ? String(id) : undefined;
+}
+
+function ElitPaymentSection({
+  payments,
+  canCreate,
+  onOpen,
+  onDone,
+}: {
+  payments: ElitPayment[];
+  canCreate?: boolean;
+  onOpen: (p: ElitPayment) => void;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [banks, setBanks] = useState<{ id?: number; name: string }[]>([]);
+  const [operations, setOperations] = useState<{ bank?: number; code?: string; name?: string }[]>([]);
+  const [bankId, setBankId] = useState("");
+  const [opCode, setOpCode] = useState("");
+  const [date, setDate] = useState("");
+  const [amount, setAmount] = useState("");
+  const [number, setNumber] = useState("");
+  const [opId, setOpId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function loadOptions() {
+    setOpen(true);
+    setErr(null);
+    try {
+      const res = await elitAccountApi.paymentOptions();
+      setBanks(res.data.banks);
+      setOperations(res.data.operations);
+    } catch (e: unknown) {
+      const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setErr(m || "No se pudieron cargar bancos/operaciones de Elit");
+    }
+  }
+
+  const opsForBank = operations.filter((o) => !bankId || String(o.bank) === bankId);
+  const selectedBank = banks.find((b) => String(b.id) === bankId);
+  const selectedOp = opsForBank.find((o) => o.code === opCode) ?? operations.find((o) => o.code === opCode);
+
+  async function createOp() {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const body = {
+        type: selectedOp?.code || opCode || undefined,
+        bank: selectedBank?.id ?? (bankId ? Number(bankId) : undefined),
+        bankName: selectedBank?.name,
+        operationName: selectedOp?.name,
+        date: date || undefined,
+        amount: amount ? Number(amount) : undefined,
+        number: number || undefined,
+      };
+      const res = await elitAccountApi.createOperation(body);
+      let id = pickOpId(res.data);
+      if (!id) {
+        const list = await elitAccountApi.payments();
+        id = pickOpId(list.data.active);
+      }
+      if (!id) throw new Error("Elit creó la operación pero no devolvió un id. Revisá Informes de pago en su sitio.");
+      setOpId(id);
+      setMsg(`Operación ${id} creada. Ahora adjuntá el comprobante.`);
+    } catch (e: unknown) {
+      const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setErr(m || (e instanceof Error ? e.message : "No se pudo crear la operación"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function attach(file: File) {
+    if (!opId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await uploadAuthedFile(`/providers/ELIT/payments/operation/${encodeURIComponent(opId)}/attach`, file);
+      setMsg("Comprobante adjunto. Cerrá el informe para mandarlo.");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "No se pudo adjuntar");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function finish() {
+    setBusy(true);
+    setErr(null);
+    try {
+      await elitAccountApi.finishPayment();
+      setMsg("Informe enviado.");
+      setOpId(null);
+      onDone();
+    } catch (e: unknown) {
+      const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setErr(m || "No se pudo cerrar el informe");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+      <div className="flex items-center gap-2 text-sm font-semibold text-white">
+        <Wallet className="w-4 h-4 text-emerald-400" />
+        Informes de pago
+      </div>
+      <p className="text-xs text-surface-500">
+        Subí el comprobante acá para no entrar a Elit. No se abre un informe vacío: primero elegís banco, tipo, fecha e importe.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+              <th className="text-left font-semibold px-2 py-2">Id</th>
+              <th className="text-left font-semibold px-2 py-2">Fecha</th>
+              <th className="text-left font-semibold px-2 py-2">Estado</th>
+              <th className="text-right font-semibold px-2 py-2">Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-surface-800">
+            {payments.map((p) => (
+              <tr key={p.id}>
+                <td className="px-2 py-2 font-mono text-xs text-surface-400">{p.id}</td>
+                <td className="px-2 py-2 text-surface-400">{p.date || "—"}</td>
+                <td className="px-2 py-2 text-surface-200">{p.status || "—"}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{p.total ?? "—"}</td>
+                <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(p)} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {payments.length === 0 && <p className="text-center text-xs text-surface-500 py-4">Sin informes.</p>}
+      </div>
+      {canCreate !== false && (
+        <CheckoutGhostButton type="button" onClick={loadOptions}>Nuevo informe</CheckoutGhostButton>
+      )}
+      {open && (
+        <div className="grid gap-3 sm:grid-cols-2 border-t border-surface-800 pt-4">
+          <CheckoutField label="Banco">
+            <CheckoutSelect value={bankId} onChange={(e) => { setBankId(e.target.value); setOpCode(""); }}>
+              <option value="">Elegí banco</option>
+              {banks.map((b) => (
+                <option key={String(b.id ?? b.name)} value={b.id != null ? String(b.id) : ""}>{b.name}</option>
+              ))}
+            </CheckoutSelect>
+          </CheckoutField>
+          <CheckoutField label="Tipo">
+            <CheckoutSelect value={opCode} onChange={(e) => setOpCode(e.target.value)}>
+              <option value="">Elegí operación</option>
+              {opsForBank.map((o) => (
+                <option key={String(o.code)} value={o.code || ""}>{o.name}</option>
+              ))}
+            </CheckoutSelect>
+          </CheckoutField>
+          <CheckoutField label="Fecha">
+            <CheckoutInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </CheckoutField>
+          <CheckoutField label="Importe">
+            <CheckoutInput type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          </CheckoutField>
+          <CheckoutField label="N° operación" className="sm:col-span-2">
+            <CheckoutInput value={number} onChange={(e) => setNumber(e.target.value)} />
+          </CheckoutField>
+          <div className="sm:col-span-2 flex flex-wrap gap-2">
+            <CheckoutSubmit type="button" loading={busy} disabled={busy || !opCode} onClick={createOp}>
+              Crear operación
+            </CheckoutSubmit>
+            {opId && (
+              <>
+                <label className="h-10 px-3 inline-flex items-center text-xs border border-surface-700 text-surface-200 rounded-sm cursor-pointer">
+                  Adjuntar archivo
+                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void attach(f); }} />
+                </label>
+                <CheckoutGhostButton type="button" loading={busy} disabled={busy} onClick={finish}>Cerrar informe</CheckoutGhostButton>
+              </>
+            )}
+          </div>
+          {msg && <p className="sm:col-span-2 text-xs text-emerald-400">{msg}</p>}
+          {err && <p className="sm:col-span-2 text-xs text-red-400">{err}</p>}
+        </div>
       )}
     </div>
   );

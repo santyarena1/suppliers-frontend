@@ -2,6 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable } from "@nestjs/co
 import { PrismaService } from "../prisma/prisma.service";
 import { GrupoNucleoApiClient } from "./grupo-nucleo-client";
 import { asNumber, asRecord, asString, snapshotJson, unwrapList } from "./json-value";
+import { mapProviderDraft } from "./provider-draft";
 import { GN_DOC_TYPES, GN_PROVINCE_CODES } from "./dto/grupo-nucleo-checkout.dto";
 
 export const GN_PROVINCES: { value: number; label: string }[] = [
@@ -182,11 +183,12 @@ export class GrupoNucleoOrderService {
   }
 
   async listDrafts(userId: string) {
-    return this.prisma.providerOrder.findMany({
+    const rows = await this.prisma.providerOrder.findMany({
       where: { userId, provider: "GRUPO_NUCLEO" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
+    return rows.map(mapProviderDraft);
   }
 
   /** La API de GN no expone pedidos históricos ni cta cte — devolvemos copias de Nodo. */
@@ -198,7 +200,7 @@ export class GrupoNucleoOrderService {
       balance: null,
       drafts,
       note:
-        "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá están solo los pedidos creados desde Nodo.",
+        "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá están solo los pedidos creados desde Nodo. No hay descarga de factura; la API solo permite informar una etiqueta con POST /API_V1/UpdateSaleOrderDeliveryLabel.",
     };
   }
 

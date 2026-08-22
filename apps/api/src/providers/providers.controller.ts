@@ -26,6 +26,7 @@ import {
 import { GrupoNucleoCheckoutDraftDto, GrupoNucleoCheckoutPreviewDto } from "./dto/grupo-nucleo-checkout.dto";
 import { AirCheckoutDraftDto, AirCheckoutPreviewDto } from "./dto/air-checkout.dto";
 import { ElitCheckoutDraftDto, ElitCheckoutPreviewDto } from "./dto/elit-checkout.dto";
+import { ElitPaymentOperationDto } from "./dto/elit-payment.dto";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -72,6 +73,30 @@ export class ProvidersController {
   @Get("providers/INVID/account-statement")
   async invidAccountStatement(@CurrentUser() user: { userId: string }) {
     return this.invidAccountService.getAccountStatement(await this.invidCredentials(user.userId));
+  }
+
+  @Get("providers/INVID/documents")
+  async invidDocument(@CurrentUser() user: { userId: string }, @Query("href") href: string) {
+    return this.invidAccountService.getDocument(await this.invidCredentials(user.userId), href);
+  }
+
+  @Post("providers/INVID/payments/attach")
+  async invidPaymentAttach(@CurrentUser() user: { userId: string }, @Req() req: FastifyRequest) {
+    const file = await req.file();
+    if (!file) throw new BadRequestException("No se recibió ningún archivo");
+    const buffer = await file.toBuffer();
+    const extra: Record<string, string> = {};
+    for (const [k, v] of Object.entries(file.fields ?? {})) {
+      if (k === "file") continue;
+      const val = Array.isArray(v) ? v[0] : v;
+      if (val && typeof val === "object" && "value" in val) extra[k] = String((val as { value: unknown }).value);
+      else if (typeof val === "string") extra[k] = val;
+    }
+    return this.invidAccountService.attachPayment(
+      await this.invidCredentials(user.userId),
+      { filename: file.filename, mimetype: file.mimetype, buffer },
+      extra
+    );
   }
 
   @Get("providers/INVID/checkout/addresses")
@@ -126,6 +151,16 @@ export class ProvidersController {
   @Get("providers/NEW_BYTES/profile")
   async newBytesProfile(@CurrentUser() user: { userId: string }) {
     return this.newBytesAccountService.getProfile(await this.newBytesCredentials(user.userId));
+  }
+
+  @Get("providers/NEW_BYTES/documents")
+  async newBytesDocument(@CurrentUser() user: { userId: string }, @Query("voucherId") voucherId: string) {
+    return this.newBytesAccountService.getDocument(await this.newBytesCredentials(user.userId), voucherId);
+  }
+
+  @Get("providers/NEW_BYTES/orders/:id")
+  async newBytesOrderDetail(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
+    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(user.userId), id);
   }
 
   @Get("providers/NEW_BYTES/checkout/addresses")
@@ -216,6 +251,11 @@ export class ProvidersController {
     return this.airAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "AIR"));
   }
 
+  @Get("providers/AIR/documents")
+  async airDocument(@CurrentUser() user: { userId: string }, @Query("href") href: string) {
+    return this.airAccountService.getDocument(await this.credentialsOf(user.userId, "AIR"), href);
+  }
+
   @Post("providers/AIR/checkout/preview")
   async airPreview(@CurrentUser() user: { userId: string }, @Body() dto: AirCheckoutPreviewDto) {
     return this.airOrderService.preview(await this.credentialsOf(user.userId, "AIR"), {
@@ -242,6 +282,58 @@ export class ProvidersController {
   @Get("providers/ELIT/account")
   async elitAccount(@CurrentUser() user: { userId: string }) {
     return this.elitAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  @Get("providers/ELIT/salenotes/:number")
+  async elitSaleNote(@CurrentUser() user: { userId: string }, @Param("number") number: string) {
+    return this.elitAccountService.getSaleNote(await this.credentialsOf(user.userId, "ELIT"), number);
+  }
+
+  @Get("providers/ELIT/documents")
+  async elitDocument(
+    @CurrentUser() user: { userId: string },
+    @Query("form") form: string,
+    @Query("number") number: string,
+    @Query("kind") kind?: string
+  ) {
+    return this.elitAccountService.getDocument(await this.credentialsOf(user.userId, "ELIT"), { form, number, kind });
+  }
+
+  @Get("providers/ELIT/payments")
+  async elitPayments(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.getPayments(await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  /** Bancos y tipos de operación. No usar GET /account/payments?include=options (crea un informe vacío). */
+  @Get("providers/ELIT/payments/options")
+  async elitPaymentOptions(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.getPaymentOptions(await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  @Post("providers/ELIT/payments/operation")
+  async elitPaymentOperation(@CurrentUser() user: { userId: string }, @Body() dto: ElitPaymentOperationDto) {
+    return this.elitAccountService.createPaymentOperation(await this.credentialsOf(user.userId, "ELIT"), dto);
+  }
+
+  @Post("providers/ELIT/payments/operation/:id/attach")
+  async elitPaymentAttach(
+    @CurrentUser() user: { userId: string },
+    @Param("id") id: string,
+    @Req() req: FastifyRequest
+  ) {
+    const file = await req.file();
+    if (!file) throw new BadRequestException("No se recibió ningún archivo");
+    const buffer = await file.toBuffer();
+    return this.elitAccountService.attachPaymentOperation(
+      await this.credentialsOf(user.userId, "ELIT"),
+      id,
+      { filename: file.filename, mimetype: file.mimetype, buffer }
+    );
+  }
+
+  @Post("providers/ELIT/payments/finish")
+  async elitPaymentFinish(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.finishPayment(await this.credentialsOf(user.userId, "ELIT"));
   }
 
   @Post("providers/ELIT/checkout/preview")

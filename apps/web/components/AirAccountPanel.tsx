@@ -9,14 +9,19 @@ import {
 import NodoSpinner from "@/components/NodoSpinner";
 import { Receipt, Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
+import AccountRowDetail, { VerMasButton, type AccountDetailDoc, type AccountDetailLine } from "@/components/account/AccountRowDetail";
+import { draftItems, draftLines } from "@/components/account/draftDetail";
 
 type AirAccount = Awaited<ReturnType<typeof airAccountApi.account>>["data"];
+type AirRow = Record<string, string> & { _links?: { href: string; label: string }[]; _href?: string };
+type Detail = { kind: "row"; title: string; row: AirRow } | { kind: "draft"; row: NodoProviderDraft };
 
 export default function AirAccountPanel() {
   const [account, setAccount] = useState<AirAccount | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
 
   useEffect(() => {
     void load();
@@ -43,7 +48,7 @@ export default function AirAccountPanel() {
   return (
     <div className="flex flex-col gap-5 max-w-3xl">
       <p className="text-xs text-surface-500">
-        {account?.note || "Datos del portal www.air-intra.com (debe/haber y comprobantes). Solo lectura."}
+        {account?.note || "Datos del portal www.air-intra.com (debe/haber y comprobantes)."}
       </p>
       {loading ? (
         <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -73,7 +78,7 @@ export default function AirAccountPanel() {
                 </p>
               </div>
             )}
-            <HtmlRowsTable rows={account?.movements ?? []} empty="Sin movimientos." />
+            <HtmlRowsTable rows={(account?.movements ?? []) as AirRow[]} empty="Sin movimientos." onOpen={(row) => setDetail({ kind: "row", title: "Movimiento", row })} />
           </div>
 
           <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
@@ -81,7 +86,7 @@ export default function AirAccountPanel() {
               <Receipt className="w-4 h-4 text-sky-400" />
               Comprobantes
             </div>
-            <HtmlRowsTable rows={account?.invoices ?? []} empty="Sin comprobantes." />
+            <HtmlRowsTable rows={(account?.invoices ?? []) as AirRow[]} empty="Sin comprobantes." onOpen={(row) => setDetail({ kind: "row", title: "Comprobante", row })} />
           </div>
 
           <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
@@ -89,7 +94,7 @@ export default function AirAccountPanel() {
               <Receipt className="w-4 h-4 text-amber-400" />
               Comprobantes pendientes
             </div>
-            <HtmlRowsTable rows={account?.pending ?? []} empty="Sin pendientes." />
+            <HtmlRowsTable rows={(account?.pending ?? []) as AirRow[]} empty="Sin pendientes." onOpen={(row) => setDetail({ kind: "row", title: "Pendiente", row })} />
           </div>
 
           <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
@@ -105,6 +110,7 @@ export default function AirAccountPanel() {
                     <th className="text-left font-semibold px-2 py-2">Pedido</th>
                     <th className="text-left font-semibold px-2 py-2">Fecha</th>
                     <th className="text-right font-semibold px-2 py-2">Total</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800">
@@ -118,6 +124,7 @@ export default function AirAccountPanel() {
                       <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
                       <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
                       <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+                      <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setDetail({ kind: "draft", row: d })} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -129,12 +136,48 @@ export default function AirAccountPanel() {
           </div>
         </>
       )}
+
+      {detail?.kind === "row" && (
+        <AccountRowDetail
+          open
+          title={detail.title}
+          lines={airLines(detail.row)}
+          documents={airDocs(detail.row)}
+          note={airDocs(detail.row).length === 0 ? "Esta fila no trajo un link de PDF en el portal." : undefined}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {detail?.kind === "draft" && (
+        <AccountRowDetail
+          open
+          title="Canasto enviado desde Nodo"
+          lines={draftLines(detail.row)}
+          items={draftItems(detail.row)}
+          note="El canasto de Air no cobra. No hay factura para descargar desde la API."
+          onClose={() => setDetail(null)}
+        />
+      )}
     </div>
   );
 }
 
-function HtmlRowsTable({ rows, empty }: { rows: Record<string, string>[]; empty: string }) {
-  const keys = rows[0] ? Object.keys(rows[0]).slice(0, 8) : [];
+function airLines(row: AirRow): AccountDetailLine[] {
+  return Object.entries(row)
+    .filter(([k]) => k !== "_links" && k !== "_href")
+    .map(([label, value]) => ({ label, value: value == null ? "" : String(value) }));
+}
+
+function airDocs(row: AirRow): AccountDetailDoc[] {
+  const links = row._links ?? (row._href ? [{ href: row._href, label: "Descargar" }] : []);
+  return links.map((l, i) => ({
+    label: l.label && l.label !== l.href ? l.label : `Descargar ${i + 1}`,
+    href: `/providers/AIR/documents?href=${encodeURIComponent(l.href)}`,
+    filename: l.label || "comprobante-air",
+  }));
+}
+
+function HtmlRowsTable({ rows, empty, onOpen }: { rows: AirRow[]; empty: string; onOpen: (row: AirRow) => void }) {
+  const keys = rows[0] ? Object.keys(rows[0]).filter((k) => k !== "_links" && k !== "_href").slice(0, 8) : [];
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -143,14 +186,16 @@ function HtmlRowsTable({ rows, empty }: { rows: Record<string, string>[]; empty:
             {keys.map((k) => (
               <th key={k} className="text-left font-semibold px-2 py-2 whitespace-nowrap">{k}</th>
             ))}
+            <th></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-surface-800">
           {rows.map((row, i) => (
             <tr key={i}>
               {keys.map((k) => (
-                <td key={k} className="px-2 py-2 text-surface-400 whitespace-nowrap">{row[k] || "—"}</td>
+                <td key={k} className="px-2 py-2 text-surface-400 whitespace-nowrap">{String(row[k] ?? "—")}</td>
               ))}
+              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(row)} /></td>
             </tr>
           ))}
         </tbody>

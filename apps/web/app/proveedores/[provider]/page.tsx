@@ -7,7 +7,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi,
-  invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft
+  invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile
 } from "@/lib/api";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
@@ -18,6 +18,8 @@ import NewBytesAccountPanel from "@/components/NewBytesAccountPanel";
 import ElitAccountPanel from "@/components/ElitAccountPanel";
 import GrupoNucleoAccountPanel from "@/components/GrupoNucleoAccountPanel";
 import AirAccountPanel from "@/components/AirAccountPanel";
+import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
+import { draftItems, draftLines } from "@/components/account/draftDetail";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import {
   AlertTriangle, ArrowLeft, Boxes, CheckCircle2, FileSpreadsheet, ImageOff, KeyRound,
@@ -85,6 +87,16 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [loadingInvidAccount, setLoadingInvidAccount] = useState(false);
   const [invidAccountError, setInvidAccountError] = useState<string | null>(null);
   const [invidNodoDrafts, setInvidNodoDrafts] = useState<InvidNodoDraft[] | null>(null);
+  const [invidPaymentUploads, setInvidPaymentUploads] = useState<InvidFileForm[]>([]);
+  const [invidUploadNote, setInvidUploadNote] = useState<string | null>(null);
+  const [invidDetail, setInvidDetail] = useState<
+    | { kind: "order"; row: InvidOrder }
+    | { kind: "movement"; row: InvidAccountMovement }
+    | { kind: "draft"; row: InvidNodoDraft }
+    | null
+  >(null);
+  const [invidUploadError, setInvidUploadError] = useState<string | null>(null);
+  const [invidUploading, setInvidUploading] = useState(false);
 
   async function loadInvidAccount() {
     setLoadingInvidAccount(true);
@@ -96,6 +108,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         invidCheckoutApi.drafts().catch(() => ({ data: [] as InvidNodoDraft[] })),
       ]);
       setInvidOrders(ordersRes.data.orders);
+      setInvidPaymentUploads(ordersRes.data.paymentUploads ?? []);
+      setInvidUploadNote(ordersRes.data.note ?? null);
       setInvidBalance(statementRes.data.balance);
       setInvidMovements(statementRes.data.movements);
       setInvidNodoDrafts(draftsRes.data ?? []);
@@ -676,7 +690,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 {tab === "invid-account" && (
                   <div className="flex flex-col gap-5 max-w-3xl">
                     <p className="text-xs text-surface-500">
-                      Datos reales tomados directo de tu cuenta en invidcomputers.com — solo lectura, no modifica ni confirma nada ahí.
+                      Datos reales de tu cuenta en invidcomputers.com. Ver más muestra ítems, entrega/pago y PDFs si el portal los linkea. Si hay un formulario de comprobante de pago en la sesión, también se puede subir desde Nodo.
                     </p>
                     {loadingInvidAccount ? (
                       <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -708,6 +722,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                   <th className="text-left font-semibold px-2 py-2">Tipo</th>
                                   <th className="text-left font-semibold px-2 py-2">Número</th>
                                   <th className="text-right font-semibold px-2 py-2">Total</th>
+                                  <th></th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-surface-800">
@@ -717,6 +732,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                     <td className="px-2 py-2 text-surface-200">{m.docType}</td>
                                     <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.docNumber}</td>
                                     <td className="px-2 py-2 text-right tabular-nums text-surface-200">{m.currency} {m.total}</td>
+                                    <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setInvidDetail({ kind: "movement", row: m })} /></td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -741,6 +757,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                   <th className="text-left font-semibold px-2 py-2">Orden</th>
                                   <th className="text-left font-semibold px-2 py-2">Fecha</th>
                                   <th className="text-right font-semibold px-2 py-2">Total</th>
+                                  <th></th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-surface-800">
@@ -755,6 +772,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                     <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? "—"}</td>
                                     <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
                                     <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+                                    <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setInvidDetail({ kind: "draft", row: d })} /></td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -779,6 +797,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                   <th className="text-left font-semibold px-2 py-2">Estado</th>
                                   <th className="text-left font-semibold px-2 py-2">Fecha</th>
                                   <th className="text-right font-semibold px-2 py-2">Importe</th>
+                                  <th></th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-surface-800">
@@ -795,6 +814,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                     </td>
                                     <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
                                     <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount}</td>
+                                    <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setInvidDetail({ kind: "order", row: o })} /></td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -805,6 +825,96 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           </div>
                         </div>
                       </>
+                    )}
+                    {invidDetail?.kind === "order" && (
+                      <AccountRowDetail
+                        open
+                        title={`Pedido ${invidDetail.row.orderNumber}`}
+                        lines={[
+                          { label: "Orden", value: invidDetail.row.orderNumber },
+                          { label: "Pedido web", value: invidDetail.row.webOrderNumber },
+                          { label: "Estado", value: invidDetail.row.status },
+                          { label: "Fecha", value: invidDetail.row.date },
+                          { label: "Importe", value: invidDetail.row.amount },
+                          { label: "Factura", value: invidDetail.row.invoice },
+                          { label: "Entrega", value: invidDetail.row.delivery || "" },
+                          { label: "Pago", value: invidDetail.row.payment || "" },
+                        ]}
+                        items={(invidDetail.row.items ?? []).map((it) => ({
+                          code: it.code,
+                          name: it.name,
+                          qty: it.qty,
+                          price: it.price,
+                          total: it.total,
+                        }))}
+                        documents={[
+                          ...(invidDetail.row.invoiceHrefs ?? []).map((href, i) => ({
+                            label: "Descargar factura",
+                            href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
+                            filename: `invid-factura-${invidDetail.row.orderNumber || i}.pdf`,
+                          })),
+                          ...(invidDetail.row.links ?? [])
+                            .filter((l) => !/ultima\.php/i.test(l.href))
+                            .map((l) => ({
+                              label: l.label || "Descargar",
+                              href: `/providers/INVID/documents?href=${encodeURIComponent(l.href)}`,
+                              filename: l.label || "invid-doc",
+                            })),
+                        ]}
+                        note={
+                          invidPaymentUploads.length === 0
+                            ? (invidUploadNote || "Si Invid no muestra un formulario de comprobante en esta sesión, el alta se hace desde su portal.")
+                            : undefined
+                        }
+                        upload={
+                          invidPaymentUploads.length > 0
+                            ? {
+                                label: "Subir comprobante de pago",
+                                loading: invidUploading,
+                                error: invidUploadError,
+                                onFile: (file) => {
+                                  setInvidUploading(true);
+                                  setInvidUploadError(null);
+                                  void uploadAuthedFile("/providers/INVID/payments/attach", file)
+                                    .then(() => { setInvidUploadError(null); })
+                                    .catch((e: unknown) => setInvidUploadError(e instanceof Error ? e.message : "No se pudo subir"))
+                                    .finally(() => setInvidUploading(false));
+                                },
+                              }
+                            : undefined
+                        }
+                        onClose={() => setInvidDetail(null)}
+                      />
+                    )}
+                    {invidDetail?.kind === "movement" && (
+                      <AccountRowDetail
+                        open
+                        title={`${invidDetail.row.docType} ${invidDetail.row.docNumber}`.trim()}
+                        lines={[
+                          { label: "Fecha", value: invidDetail.row.date },
+                          { label: "Tipo", value: invidDetail.row.docType },
+                          { label: "Número", value: invidDetail.row.docNumber },
+                          { label: "Interno", value: invidDetail.row.internalNumber },
+                          { label: "Moneda", value: invidDetail.row.currency },
+                          { label: "Total", value: invidDetail.row.total },
+                        ]}
+                        documents={(invidDetail.row.hrefs ?? []).map((href, i) => ({
+                          label: "Descargar",
+                          href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
+                          filename: `invid-${invidDetail.row.docNumber || i}.pdf`,
+                        }))}
+                        note={(invidDetail.row.hrefs ?? []).length === 0 ? "Este movimiento no trae un link de PDF en el HTML de Invid." : undefined}
+                        onClose={() => setInvidDetail(null)}
+                      />
+                    )}
+                    {invidDetail?.kind === "draft" && (
+                      <AccountRowDetail
+                        open
+                        title="Borrador desde Nodo"
+                        lines={draftLines(invidDetail.row)}
+                        items={draftItems(invidDetail.row)}
+                        onClose={() => setInvidDetail(null)}
+                      />
                     )}
                   </div>
                 )}

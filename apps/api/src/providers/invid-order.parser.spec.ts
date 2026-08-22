@@ -3,6 +3,7 @@ import {
   parseSubmitResult,
   pickPickupDelivery,
   parseOrdersTable,
+  parseAccountStatement,
   computeInvidTotals,
   stripHtmlMessage,
   parseInvidMoney,
@@ -76,6 +77,56 @@ describe("invid-order.parser", () => {
       webOrderNumber: "88421",
       status: "Pendiente",
     });
+  });
+
+  it("lee ítems, entrega y pago de la fila outline (Ver más)", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img onclick="showhide('menu1outline','imgm1','tr1')" /></td>
+        <td class="valorizar">203148</td>
+        <td class="text-center">Pedido</td>
+        <td class="text-center">31-07-2026 13:26:15</td>
+        <td class="text-right">US$ 72.07</td>
+      </tr>
+      <tr id="menu1outline" style="display:none">
+        <td colspan="5">
+          <table class="tablaped">
+            <tr><td></td><td><b>Producto</b></td><td><b>Precio (s/IVA)</b></td><td><b>Cant.</b></td></tr>
+            <tr><td></td><td>(0417914) Cargador Kelyx 65W</td><td>US$ 14.89</td><td>4</td></tr>
+            <tr><td colspan="4"><a href="ultima.php?n_ped_sel=203148">Cargar a pedido actual</a></td></tr>
+          </table>
+          <b>Forma de Entrega</b> RETIRA<br>
+          <b>Forma de Pago</b> Efectivo
+        </td>
+      </tr>
+    `;
+    const order = parseOrdersTable(html).orders[0];
+    expect(order).toMatchObject({
+      orderNumber: "203148",
+      status: "Pedido",
+      delivery: "RETIRA",
+      payment: "Efectivo",
+    });
+    expect(order.items[0]).toMatchObject({ code: "0417914", name: expect.stringContaining("Cargador"), qty: "4" });
+    expect(order.links.some((l) => l.href.includes("ultima.php"))).toBe(true);
+  });
+
+  it("conserva hrefs de la cuenta corriente", () => {
+    const html = `
+      Saldo de Cuenta Corriente: $-12.50
+      <tr class="CartProduct">
+        <td class="valorizar">21-08-2026</td>
+        <td class="text-center">FAC</td>
+        <td class="text-center"><a href="factura.php?n=99">A-99</a></td>
+        <td class="text-center">1</td>
+        <td class="text-center">USD</td>
+        <td class="text-right">12.50</td>
+      </tr>
+    `;
+    const stmt = parseAccountStatement(html);
+    expect(stmt.balance).toBe(-12.5);
+    expect(stmt.movements[0]).toMatchObject({ docType: "FAC", docNumber: "A-99" });
+    expect(stmt.movements[0].hrefs).toEqual(["factura.php?n=99"]);
   });
 
   it("elige RETIRA como forma de entrega del borrador", () => {

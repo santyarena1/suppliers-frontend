@@ -192,6 +192,26 @@ export class AirPortalClient {
     }
   }
 
+  async getBuffer(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    try {
+      const res = await axios.get<ArrayBuffer>(url, {
+        headers: this.headers({ Accept: "application/pdf, */*" }),
+        timeout: 30_000,
+        responseType: "arraybuffer",
+        validateStatus: (s) => s < 500,
+      });
+      const buffer = Buffer.from(res.data);
+      if (res.status >= 400) {
+        throw new BadGatewayException(`Air documento → ${res.status}`);
+      }
+      const contentType = String(res.headers["content-type"] || "application/octet-stream").split(";")[0];
+      return { buffer, contentType };
+    } catch (err) {
+      if (err instanceof BadGatewayException || err instanceof BadRequestException) throw err;
+      throw new BadGatewayException(`Air GET ${url} falló: ${axiosErrorMessage(err, "error")}`);
+    }
+  }
+
   async canasto(q: string, params: Record<string, string | number> = {}, base = AIR_CANASTO_URL): Promise<unknown> {
     const search = new URLSearchParams({ q });
     for (const [k, v] of Object.entries(params)) search.set(k, String(v));

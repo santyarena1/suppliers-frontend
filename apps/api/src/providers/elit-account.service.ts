@@ -1,30 +1,54 @@
-import { Injectable } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { ElitWebClient } from "./elit-web-client";
-import { parseElitCtaRsc, parseElitPedidosRsc } from "./elit-rsc.parser";
+import {
+  mapElitSaleNote,
+  parseElitCtaRsc,
+  parseElitPaymentOptions,
+  parseElitPaymentsPayload,
+  parseElitPedidosRsc,
+  parseElitSaleNotesPayload,
+  type ElitRscOrder,
+} from "./elit-rsc.parser";
+import { mapProviderDraft } from "./provider-draft";
+import { documentFile } from "./document-file";
+import { assertHttpsHost, sniffContentType } from "./safe-url";
+import { asRecord } from "./json-value";
 
-/**
- * Cuenta de Elit: login del portal + RSC de /mi-cuenta/pedidos y
- * /mi-cuenta/cuenta-corriente (los JSON de pedidos/cta cte no tienen
- * collection REST pública; el sitio los manda en el payload RSC).
- */
+const ELIT_CDN_HOSTS = ["cdn.elit.com.ar"];
+
+export interface ElitPaymentOperationInput {
+  type?: string;
+  bank?: number;
+  bankName?: string;
+  operationName?: string;
+  date?: string;
+  amount?: number;
+  number?: string;
+}
+
 @Injectable()
 export class ElitAccountService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getAccount(userId: string, credentials: Record<string, string>) {
     const api = await ElitWebClient.login(credentials);
-    const [pedidos, cta, drafts] = await Promise.all([
-      api.getRsc("/mi-cuenta/pedidos"),
-      api.getRsc("/mi-cuenta/cuenta-corriente"),
+    const [pedidosRsc, cta, drafts, saleNotesApi, paymentsApi] = await Promise.all([
+      api.getRsc("/mi-cuenta/pedidos").catch(() => ""),
+      api.getRsc("/mi-cuenta/cuenta-corriente").catch(() => ""),
       this.prisma.providerOrder.findMany({
         where: { userId, provider: "ELIT" },
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
+      api.proxyGet("/account/salenotes?limit=50&sortBy=number:desc").catch(() => null),
+      api.proxyGet("/account/payments").catch(() => null),
     ]);
-    const orders = parseElitPedidosRsc(pedidos);
-    const statement = parseElitCtaRsc(cta);
+    const fromRsc = pedidosRsc ? parseElitPedidosRsc(pedidosRsc) : [];
+    const fromApi = saleNotesApi ? parseElitSaleNotesPayload(saleNotesApi) : [];
+    const orders = mergeSaleNotes(fromApi, fromRsc);
+    const statement = cta ? parseElitCtaRsc(cta) : { balance: null, movements: [] };
+    const payments = paymentsApi ? parseElitPaymentsPayload(paymentsApi) : { canCreateReport: false, active: null, payments: [] };
     return {
       profile: {
         id: api.session.customerId,
@@ -34,8 +58,121 @@ export class ElitAccountService {
       balance: statement.balance,
       orders,
       movements: statement.movements,
-      drafts,
-      note: "Pedidos y comprobantes de tu cuenta en elit.com.ar. Solo lectura.",
+      payments: payments.payments,
+      canCreateReport: payments.canCreateReport,
+      drafts: drafts.map(mapProviderDraft),
+      note: "Pedidos, comprobantes e informes de pago de tu cuenta en elit.com.ar.",
     };
   }
+
+  async getSaleNote(credentials: Record<string, string>, number: string) {
+    const api = await ElitWebClient.login(credentials);
+    const body = await api.proxyGet(`/account/salenotes/${encodeURIComponent(number)}`);
+    const rec = asRecord(body);
+    const data = asRecord(rec?.data) ?? rec ?? {};
+    const note = mapElitSaleNote(data);
+    if (!note.orderNumber) throw new NotFoundException("Nota de venta no encontrada");
+    return note;
+  }
+
+  async getDocument(
+    credentials: Record<string, string>,
+    query: { form?: string; number: string; kind?: string }
+  ) {
+    const form = (query.form || "").trim();
+    const number = query.number.trim();
+    const kind = (query.kind || "").trim();
+    if (!number) throw new BadRequestException("Falta number");
+
+    const api = await ElitWebClient.login(credentials);
+    if (kind === "salenote" || kind === "dispatch" || /nota de venta/i.test(form)) {
+      const note = await this.lookupSaleNote(api, number);
+      const url = kind === "dispatch" ? note.dispatchNotePdfUrl : note.pdfUrl;
+      if (url) {
+        assertHttpsHost(url, "https://cdn.elit.com.ar/", ELIT_CDN_HOSTS);
+        const file = await api.fetchPublicBuffer(url);
+        const filename = kind === "dispatch" ? `remito-${number}` : `nota-venta-${number}`;
+        return documentFile(file.buffer, file.contentType, filename);
+      }
+      if (kind === "dispatch") {
+        throw new NotFoundException("Esta nota de venta no tiene remito en PDF");
+      }
+    }
+
+    if (!form) throw new BadRequestException("Falta form (tipo de comprobante)");
+    const path = `/account/myFile?type=${encodeURIComponent(form)}&number=${encodeURIComponent(number)}`;
+    const file = await api.proxyGetBuffer(path);
+    if (sniffContentType(file.buffer, file.contentType) === "application/octet-stream"
+      && file.buffer.toString("utf8", 0, 20).includes("{")) {
+      throw new BadGatewayException("Elit no devolvió un PDF para ese comprobante");
+    }
+    return documentFile(file.buffer, file.contentType, `${form}-${number}`);
+  }
+
+  async getPayments(credentials: Record<string, string>) {
+    const api = await ElitWebClient.login(credentials);
+    return parseElitPaymentsPayload(await api.proxyGet("/account/payments"));
+  }
+
+  async getPaymentOptions(credentials: Record<string, string>) {
+    const api = await ElitWebClient.login(credentials);
+    return parseElitPaymentOptions(await api.proxyGet("/account/payments/options"));
+  }
+
+  async createPaymentOperation(credentials: Record<string, string>, input: ElitPaymentOperationInput) {
+    const api = await ElitWebClient.login(credentials);
+    const body: Record<string, unknown> = {};
+    if (input.type != null) body.type = input.type;
+    if (input.bank != null) body.bank = input.bank;
+    if (input.bankName != null) body.bankName = input.bankName;
+    if (input.operationName != null) body.operationName = input.operationName;
+    if (input.date != null) body.date = input.date;
+    if (input.amount != null) body.amount = input.amount;
+    if (input.number != null) body.number = input.number;
+    if (Object.keys(body).length === 0) {
+      throw new BadRequestException("Mandá al menos un campo de la operación (banco, tipo, fecha, importe)");
+    }
+    return api.proxyPostJson("/account/payments/operation", body);
+  }
+
+  async attachPaymentOperation(
+    credentials: Record<string, string>,
+    operationId: string,
+    file: { filename: string; mimetype: string; buffer: Buffer }
+  ) {
+    if (!operationId.trim()) throw new BadRequestException("Falta el id de la operación");
+    const api = await ElitWebClient.login(credentials);
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(file.buffer)], { type: file.mimetype || "application/octet-stream" }), file.filename);
+    return api.proxyPostForm(`/account/payments/operation/attach/${encodeURIComponent(operationId)}`, form);
+  }
+
+  async finishPayment(credentials: Record<string, string>) {
+    const api = await ElitWebClient.login(credentials);
+    return api.proxyPostJson("/account/payments/finish", {});
+  }
+
+  private async lookupSaleNote(api: ElitWebClient, number: string): Promise<ElitRscOrder> {
+    try {
+      const body = await api.proxyGet(`/account/salenotes/${encodeURIComponent(number)}`);
+      const rec = asRecord(body);
+      const data = asRecord(rec?.data) ?? rec ?? {};
+      const note = mapElitSaleNote(data);
+      if (note.orderNumber) return note;
+    } catch {
+      /* list fallback */
+    }
+    const list = parseElitSaleNotesPayload(
+      await api.proxyGet("/account/salenotes?limit=50&sortBy=number:desc")
+    );
+    const found = list.find((o) => o.orderNumber === number);
+    if (!found) throw new NotFoundException("Nota de venta no encontrada");
+    return found;
+  }
+}
+
+function mergeSaleNotes(primary: ElitRscOrder[], fallback: ElitRscOrder[]): ElitRscOrder[] {
+  if (primary.length === 0) return fallback;
+  const extra = fallback.filter((o) => !primary.some((p) => p.orderNumber === o.orderNumber));
+  return [...primary, ...extra];
 }

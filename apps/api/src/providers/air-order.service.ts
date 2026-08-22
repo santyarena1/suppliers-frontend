@@ -7,6 +7,7 @@ import {
   type AirCart,
 } from "./air-portal-client";
 import { snapshotJson } from "./json-value";
+import { mapProviderDraft } from "./provider-draft";
 
 export interface AirCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -69,11 +70,12 @@ export class AirOrderService {
   }
 
   async listDrafts(userId: string) {
-    return this.prisma.providerOrder.findMany({
+    const rows = await this.prisma.providerOrder.findMany({
       where: { userId, provider: "AIR" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
+    return rows.map(mapProviderDraft);
   }
 
   private async syncCanasto(api: AirPortalClient, items: AirCartItems["items"]): Promise<AirCart> {

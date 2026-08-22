@@ -9,12 +9,15 @@ import {
 import NodoSpinner from "@/components/NodoSpinner";
 import { Receipt, XCircle } from "lucide-react";
 import Link from "next/link";
+import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
+import { draftItems, draftLines } from "@/components/account/draftDetail";
 
 export default function GrupoNucleoAccountPanel() {
   const [note, setNote] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<NodoProviderDraft | null>(null);
 
   useEffect(() => {
     void load();
@@ -70,6 +73,7 @@ export default function GrupoNucleoAccountPanel() {
                   <th className="text-left font-semibold px-2 py-2">Pedido</th>
                   <th className="text-left font-semibold px-2 py-2">Fecha</th>
                   <th className="text-right font-semibold px-2 py-2">Total</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-800">
@@ -83,6 +87,7 @@ export default function GrupoNucleoAccountPanel() {
                     <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
                     <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
                     <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+                    <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setOpen(d)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -92,6 +97,16 @@ export default function GrupoNucleoAccountPanel() {
             )}
           </div>
         </div>
+      )}
+      {open && (
+        <AccountRowDetail
+          open
+          title="Pedido Grupo Núcleo"
+          lines={draftLines(open)}
+          items={draftItems(open)}
+          note="La API de GN no descarga facturas. Solo se puede informar el link de etiqueta de transporte (UpdateSaleOrderDeliveryLabel)."
+          onClose={() => setOpen(null)}
+        />
       )}
     </div>
   );

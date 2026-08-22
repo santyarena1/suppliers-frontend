@@ -41,6 +41,53 @@ api.interceptors.response.use(
   }
 );
 
+export async function downloadAuthedFile(pathWithQuery: string, filename: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const path = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const ct = res.headers.get("content-type") || "";
+  if (!res.ok || ct.includes("application/json")) {
+    let message = `No se pudo descargar (${res.status})`;
+    try {
+      const body = (await res.json()) as { message?: string };
+      if (body.message) message = body.message;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function uploadAuthedFile(path: string, file: File, extra?: Record<string, string>) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const form = new FormData();
+  form.append("file", file);
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) form.append(k, v);
+  }
+  const res = await fetch(`${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const body = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; data?: unknown };
+  if (!res.ok || body.success === false) {
+    throw new Error(body.message || `No se pudo subir (${res.status})`);
+  }
+  return body.data ?? body;
+}
+
 // --- Types ---
 export type Provider =
   | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE"
@@ -222,6 +269,13 @@ export const providersApi = {
 };
 
 // --- Invid: pedidos y cuenta corriente (solo lectura, datos reales de su portal) ---
+export interface InvidOrderItem {
+  code?: string;
+  name: string;
+  price?: string;
+  qty?: string;
+  total?: string;
+}
 export interface InvidOrder {
   orderNumber: string;
   webOrderNumber: string;
@@ -229,6 +283,17 @@ export interface InvidOrder {
   date: string;
   amount: string;
   invoice: string;
+  invoiceHrefs?: string[];
+  delivery?: string;
+  payment?: string;
+  items?: InvidOrderItem[];
+  links?: { href: string; label: string }[];
+}
+export interface InvidFileForm {
+  action: string;
+  method: string;
+  fileField: string;
+  fields: Record<string, string>;
 }
 export interface InvidAccountMovement {
   date: string;
@@ -237,9 +302,11 @@ export interface InvidAccountMovement {
   internalNumber: string;
   currency: string;
   total: string;
+  hrefs?: string[];
 }
 export const invidAccountApi = {
-  orders: () => api.get<{ orders: InvidOrder[] }>("/providers/INVID/orders"),
+  orders: () =>
+    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>("/providers/INVID/orders"),
   accountStatement: () =>
     api.get<{ balance: number | null; movements: InvidAccountMovement[] }>("/providers/INVID/account-statement"),
 };
@@ -304,9 +371,11 @@ export interface InvidNodoDraft {
   invidWebOrderNumber: string | null;
   paymentLabel: string | null;
   deliveryLabel: string | null;
+  notes?: string | null;
   total: string | number | null;
   createdAt: string;
   errorMessage: string | null;
+  items?: NewBytesNodoDraft["items"];
 }
 
 export const invidCheckoutApi = {
@@ -445,9 +514,20 @@ export interface NewBytesNodoDraft {
   invidWebOrderNumber: string | null;
   paymentLabel: string | null;
   deliveryLabel: string | null;
+  notes?: string | null;
   total: string | number | null;
   createdAt: string;
   errorMessage: string | null;
+  items?: {
+    code?: string;
+    name?: string;
+    qty?: number;
+    quantity?: number;
+    price?: number;
+    priceUsd?: number;
+    subtotal?: number;
+    total?: number;
+  }[];
 }
 
 export const newBytesAccountApi = {
@@ -455,6 +535,8 @@ export const newBytesAccountApi = {
   purchaseOrders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/purchase-orders"),
   accountStatement: () =>
     api.get<{ balance: number | null; movements: NewBytesComprobante[] }>("/providers/NEW_BYTES/account-statement"),
+  orderDetail: (id: string) =>
+    api.get<{ found: boolean; raw: unknown }>(`/providers/NEW_BYTES/orders/${encodeURIComponent(id)}`),
 };
 
 export type NewBytesCheckoutItemInput = { code: string; qty: number; name?: string };
@@ -682,30 +764,84 @@ export const elitAccountApi = {
     api.get<{
       profile: { id?: string; name?: string; exchange?: number | null };
       balance: number | null;
-      orders: {
-        orderNumber: string;
-        invoiceNumber: string;
-        status: string;
-        date: string;
-        amount: number | null;
-        currency: string;
-        warehouseName?: string;
-      }[];
-      movements: {
-        date: string;
-        form: string;
-        number: string;
-        debit: number | null;
-        credit: number | null;
-        total: number | null;
-        balance: number | null;
-        balanceUsd: number | null;
-        currency: string;
-      }[];
+      orders: ElitSaleNote[];
+      movements: ElitMovement[];
+      payments?: ElitPayment[];
+      canCreateReport?: boolean;
       drafts: NodoProviderDraft[];
       note: string;
     }>("/providers/ELIT/account"),
+  saleNote: (number: string) => api.get<ElitSaleNote>(`/providers/ELIT/salenotes/${encodeURIComponent(number)}`),
+  payments: () =>
+    api.get<{ canCreateReport: boolean; active: unknown; payments: ElitPayment[] }>("/providers/ELIT/payments"),
+  paymentOptions: () =>
+    api.get<{
+      banks: { id?: number; name: string }[];
+      operations: { bank?: number; code?: string; name?: string }[];
+    }>("/providers/ELIT/payments/options"),
+  createOperation: (body: {
+    type?: string;
+    bank?: number;
+    bankName?: string;
+    operationName?: string;
+    date?: string;
+    amount?: number;
+    number?: string;
+  }) => api.post<unknown>("/providers/ELIT/payments/operation", body),
+  finishPayment: () => api.post<unknown>("/providers/ELIT/payments/finish"),
 };
+
+export interface ElitSaleNote {
+  orderNumber: string;
+  invoiceNumber: string;
+  status: string;
+  statusDescription?: string;
+  date: string;
+  amount: number | null;
+  currency: string;
+  form?: string;
+  warehouseName?: string;
+  saleCondition?: string;
+  shippingMethod?: string;
+  pdfUrl?: string;
+  dispatchNotePdfUrl?: string;
+  tracking?: string;
+  trackingSupplier?: string;
+  trackingStatus?: string;
+  items?: {
+    code?: string;
+    name?: string;
+    quantity?: number | null;
+    price?: number | null;
+    total?: number | null;
+  }[];
+  summary?: {
+    subtotal?: number | null;
+    vat?: number | null;
+    total?: number | null;
+    shipping?: number | null;
+  };
+}
+
+export interface ElitMovement {
+  date: string;
+  form: string;
+  number: string;
+  debit: number | null;
+  credit: number | null;
+  total: number | null;
+  balance: number | null;
+  balanceUsd: number | null;
+  currency: string;
+}
+
+export interface ElitPayment {
+  id: string;
+  date: string;
+  total: number | null;
+  totalApproved: number | null;
+  status: string;
+}
 
 export type ElitCheckoutPayload = {
   items: { code: string; qty: number; name?: string }[];

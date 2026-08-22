@@ -1,15 +1,14 @@
-import { BadGatewayException, Injectable } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import axios from "axios";
-import { decodeEntities, parseOrdersTable } from "./invid-order.parser";
+import { parseAccountStatement, parseOrdersTable } from "./invid-order.parser";
+import { parseFileUploadForms } from "./html-table";
+import { documentFile } from "./document-file";
+import { assertHttpsHost } from "./safe-url";
 
 const SITE_BASE = "https://www.invidcomputers.com";
 const LOGIN_URL = `${SITE_BASE}/login.php`;
+const INVID_HOSTS = ["www.invidcomputers.com", "invidcomputers.com"];
 
-/**
- * Lectura de datos reales de la cuenta de Invid (pedidos y cuenta
- * corriente) — solo GET, nunca escribe ni cambia nada en Invid. Mismo
- * patrón de login que el resto de los adapters de Invid.
- */
 @Injectable()
 export class InvidAccountService {
   private async login(username: string, password: string): Promise<string> {
@@ -34,26 +33,34 @@ export class InvidAccountService {
     }
   }
 
-  /** Historial real de pedidos — GET/lectura, no confirma ni modifica nada. */
-  async getOrders(credentials: Record<string, string>) {
+  private creds(credentials: Record<string, string>) {
     const { username, password } = credentials;
     if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
-    const cookie = await this.login(username, password);
+    return { username, password };
+  }
 
+  async getOrders(credentials: Record<string, string>) {
+    const { username, password } = this.creds(credentials);
+    const cookie = await this.login(username, password);
     const res = await axios.get<string>(`${SITE_BASE}/lista_pedidos_invid.php`, {
       headers: { Cookie: cookie },
       timeout: 20_000,
       responseType: "text",
     });
-    return parseOrdersTable(res.data);
+    const parsed = parseOrdersTable(res.data);
+    const paymentUploads = parseFileUploadForms(res.data);
+    return {
+      orders: parsed.orders,
+      paymentUploads,
+      note: paymentUploads.length === 0
+        ? "Si Invid muestra un formulario para adjuntar el comprobante de pago en esta sesión, aparece acá. Si no, el alta se hace desde su portal."
+        : undefined,
+    };
   }
 
-  /** Saldo y movimientos reales de cuenta corriente — GET/lectura. */
   async getAccountStatement(credentials: Record<string, string>) {
-    const { username, password } = credentials;
-    if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
+    const { username, password } = this.creds(credentials);
     const cookie = await this.login(username, password);
-
     const res = await axios.get<string>(`${SITE_BASE}/lista_ctacte_invid.php`, {
       headers: { Cookie: cookie },
       timeout: 20_000,
@@ -61,32 +68,65 @@ export class InvidAccountService {
     });
     return parseAccountStatement(res.data);
   }
-}
 
-function parseAccountStatement(html: string) {
-  // Formato real: "Saldo de Cuenta Corriente: $-66622.38" — punto decimal
-  // directo, sin separador de miles en el encabezado (a diferencia de la
-  // tabla de abajo, que sí puede traer comas como separador de miles).
-  const balanceMatch = html.match(/Saldo de Cuenta Corriente:\s*\$?\s*(-?[\d,]+\.?\d*)/i);
-  const balance = balanceMatch ? Number(balanceMatch[1].replace(/,/g, "")) : null;
-
-  const movements: { date: string; docType: string; docNumber: string; internalNumber: string; currency: string; total: string }[] = [];
-  // Fila real: <tr class="CartProduct" id="trN"><td class="valorizar">fecha</td>
-  // <td class="text-center">tipo</td><td class="text-center">numero</td>
-  // <td class="text-center">interno</td><td class="text-center">moneda</td>
-  // <td align="right" class="text-right">total</td></tr>
-  const rowRe =
-    /<tr class="CartProduct"[^>]*>\s*<td class="valorizar">\s*([\d-]+)\s*<\/td>\s*<td class="text-center">\s*([^<]*?)\s*<\/td>\s*<td class="text-center">\s*([^<]*?)\s*<\/td>\s*<td class="text-center">\s*([^<]*?)\s*<\/td>\s*<td class="text-center">\s*([^<]*?)\s*<\/td>\s*<td[^>]*class="text-right"[^>]*>\s*([^<]*?)\s*<\/td>\s*<\/tr>/g;
-  let m: RegExpExecArray | null;
-  while ((m = rowRe.exec(html))) {
-    movements.push({
-      date: m[1].trim(),
-      docType: decodeEntities(m[2].trim()),
-      docNumber: m[3].trim(),
-      internalNumber: m[4].trim(),
-      currency: m[5].trim(),
-      total: decodeEntities(m[6].trim()),
+  async getDocument(credentials: Record<string, string>, href: string) {
+    const { username, password } = this.creds(credentials);
+    if (!href?.trim()) throw new BadRequestException("Falta href");
+    const url = assertHttpsHost(href, `${SITE_BASE}/`, INVID_HOSTS);
+    const cookie = await this.login(username, password);
+    const res = await axios.get<ArrayBuffer>(url.toString(), {
+      headers: { Cookie: cookie, Accept: "application/pdf, */*" },
+      timeout: 30_000,
+      responseType: "arraybuffer",
+      validateStatus: (s) => s < 500,
     });
+    const buffer = Buffer.from(res.data);
+    if (res.status >= 400) {
+      throw new BadGatewayException(`Invid documento → ${res.status}`);
+    }
+    const contentType = String(res.headers["content-type"] || "application/octet-stream").split(";")[0];
+    const filename = url.pathname.split("/").pop() || "comprobante-invid";
+    return documentFile(buffer, contentType, filename);
   }
-  return { balance, movements };
+
+  async attachPayment(
+    credentials: Record<string, string>,
+    file: { filename: string; mimetype: string; buffer: Buffer },
+    extraFields?: Record<string, string>
+  ) {
+    const { username, password } = this.creds(credentials);
+    const cookie = await this.login(username, password);
+    const page = await axios.get<string>(`${SITE_BASE}/lista_pedidos_invid.php`, {
+      headers: { Cookie: cookie },
+      timeout: 20_000,
+      responseType: "text",
+    });
+    const forms = parseFileUploadForms(page.data);
+    if (forms.length === 0) {
+      throw new NotFoundException(
+        "Invid no mostró un formulario para adjuntar comprobante en esta sesión. Hay que hacerlo desde su portal."
+      );
+    }
+    const form = forms[0];
+    const actionUrl = assertHttpsHost(form.action || "lista_pedidos_invid.php", `${SITE_BASE}/`, INVID_HOSTS);
+    const body = new FormData();
+    for (const [k, v] of Object.entries({ ...form.fields, ...(extraFields ?? {}) })) {
+      body.append(k, v);
+    }
+    body.append(
+      form.fileField || "file",
+      new Blob([new Uint8Array(file.buffer)], { type: file.mimetype || "application/octet-stream" }),
+      file.filename
+    );
+    const res = await axios.post<string>(actionUrl.toString(), body, {
+      headers: { Cookie: cookie },
+      timeout: 45_000,
+      maxRedirects: 5,
+      validateStatus: (s) => s < 500,
+    });
+    if (res.status >= 400) {
+      throw new BadGatewayException(`Invid no aceptó el comprobante (${res.status})`);
+    }
+    return { ok: true, status: res.status };
+  }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AIR_COMPROBANTES_URL,
@@ -6,16 +6,28 @@ import {
   AIR_DEBEHABER_URL,
   AirPortalClient,
 } from "./air-portal-client";
-import { parseHtmlTables, pickBalance, tableRowsAsObjects } from "./html-table";
+import { parseHtmlTables, pickBalance, tableRowsDetailed, type HtmlLink } from "./html-table";
+import { mapProviderDraft } from "./provider-draft";
+import { documentFile } from "./document-file";
+import { assertHttpsHost } from "./safe-url";
 
-function flattenTables(html: string): Record<string, string>[] {
-  return parseHtmlTables(html).flatMap((t) => tableRowsAsObjects(t));
+export type AirAccountRow = {
+  [key: string]: string | HtmlLink[] | undefined;
+  _links?: HtmlLink[];
+};
+
+function flattenTables(html: string): AirAccountRow[] {
+  return parseHtmlTables(html).flatMap((t) =>
+    tableRowsDetailed(t).map((row) => {
+      const rec: AirAccountRow = { ...row.values };
+      if (row.links.length > 0) rec._links = row.links;
+      return rec;
+    })
+  );
 }
 
-/**
- * Lectura de la cuenta de Air (debe/haber y comprobantes del portal 2025).
- * Solo GET. La API JSON v2 no se usa (rate limit 1 req/5 min).
- */
+const AIR_HOSTS = ["www.air-intra.com", "air-intra.com"];
+
 @Injectable()
 export class AirAccountService {
   constructor(private readonly prisma: PrismaService) {}
@@ -41,8 +53,17 @@ export class AirAccountService {
       movements,
       invoices,
       pending,
-      drafts,
-      note: "Datos del portal www.air-intra.com (consultas/debehaber y comprobantes). Solo lectura.",
+      drafts: drafts.map(mapProviderDraft),
+      note: "Datos del portal www.air-intra.com (consultas/debehaber y comprobantes).",
     };
+  }
+
+  async getDocument(credentials: Record<string, string>, href: string) {
+    if (!href?.trim()) throw new BadRequestException("Falta href");
+    const url = assertHttpsHost(href, "https://www.air-intra.com/2025/consultas/", AIR_HOSTS);
+    const api = await AirPortalClient.login(credentials);
+    const file = await api.getBuffer(url.toString());
+    const filename = url.pathname.split("/").pop() || "comprobante-air";
+    return documentFile(file.buffer, file.contentType, filename);
   }
 }

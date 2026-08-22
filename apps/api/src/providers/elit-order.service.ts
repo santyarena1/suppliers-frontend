@@ -1,5 +1,6 @@
 import { BadGatewayException, BadRequestException, Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { mapProviderDraft } from "./provider-draft";
 import {
   ElitWebClient,
   elitData,
@@ -87,11 +88,12 @@ export class ElitOrderService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listDrafts(userId: string) {
-    return this.prisma.providerOrder.findMany({
+    const rows = await this.prisma.providerOrder.findMany({
       where: { userId, provider: "ELIT" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
+    return rows.map(mapProviderDraft);
   }
 
   private async syncCart(api: ElitWebClient, items: ElitCartItems["items"]) {
