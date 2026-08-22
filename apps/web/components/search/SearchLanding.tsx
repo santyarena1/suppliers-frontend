@@ -65,7 +65,6 @@ export default function SearchLanding({ onCategoryClick }: SearchLandingProps) {
               <ProductCard
                 key={`${product.provider}-${product.externalId}-${i}`}
                 product={product}
-                variant="storefront"
               />
             ))}
           </div>

@@ -1,13 +1,11 @@
 "use client";
 
 import { usePrefs, DollarType } from "@/lib/prefs";
-import { useTheme } from "@/lib/theme";
-import { DollarSign, RefreshCw, Receipt, Check, Sun, Moon } from "lucide-react";
+import { DollarSign, RefreshCw, Receipt, Check } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 export default function PrefsPanel() {
   const { currency, setCurrency, withIva, setWithIva, dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel } = usePrefs();
-  const { theme, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -98,29 +96,6 @@ export default function PrefsPanel() {
                     </button>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Theme */}
-            <div>
-              <label className="block text-[10px] font-semibold text-surface-500 uppercase tracking-wider mb-1.5">Apariencia</label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  onClick={() => setTheme("dark")}
-                  className={`flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border transition-all ${
-                    theme === "dark" ? "bg-brand-600/15 border-brand-500 text-brand-400" : "border-surface-700 text-surface-400 hover:text-surface-200"
-                  }`}
-                >
-                  <Moon className="w-3.5 h-3.5" />Oscuro
-                </button>
-                <button
-                  onClick={() => setTheme("light")}
-                  className={`flex items-center justify-center gap-1.5 text-xs font-medium py-2 rounded-lg border transition-all ${
-                    theme === "light" ? "bg-brand-600/15 border-brand-500 text-brand-400" : "border-surface-700 text-surface-400 hover:text-surface-200"
-                  }`}
-                >
-                  <Sun className="w-3.5 h-3.5" />Claro
-                </button>
               </div>
             </div>
 
