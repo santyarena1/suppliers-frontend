@@ -19,6 +19,7 @@ import {
   taxByKind,
   formatAlicuota,
 } from "@/lib/tax";
+import { InvidCheckoutPreview } from "@/lib/api";
 import {
   Trash2, Minus, Plus, Download, AlertTriangle, ImageOff,
   FileText, MessageCircle, Check, Copy, ChevronDown,
@@ -30,6 +31,8 @@ type Totals = {
   internosUSD: number;
   iibbUSD: number;
   otherUSD: number;
+  shippingUSD: number;
+  quotedShipping: boolean;
   taxUSD: number;
   totalUSD: number;
   itemCount: number;
@@ -39,6 +42,7 @@ type Totals = {
 export default function CartPage() {
   const { items, byProvider, setQty, remove, clear, clearProvider, totalCount } = useCart();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
+  const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
 
   const [confirmClear, setConfirmClear] = useState<"all" | string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -59,7 +63,7 @@ export default function CartPage() {
     [byProvider]
   );
 
-  function totalsFor(its: CartItem[]): Totals {
+  function totalsFor(its: CartItem[], extra?: { shippingUSD?: number; percepcionPercent?: number }): Totals {
     let subtotalUSD = 0, ivaUSD = 0, internosUSD = 0, iibbUSD = 0, otherUSD = 0;
     for (const it of its) {
       const pricing = linePricing(it, it.qty);
@@ -72,6 +76,11 @@ export default function CartPage() {
         else otherUSD += amt;
       }
     }
+    const shippingUSD = extra?.shippingUSD ?? 0;
+    const shippingIva = shippingUSD * 0.21;
+    const shippingIibb = shippingUSD * ((extra?.percepcionPercent ?? 0) / 100);
+    ivaUSD += shippingIva;
+    iibbUSD += shippingIibb;
     const taxUSD = ivaUSD + internosUSD + iibbUSD + otherUSD;
     return {
       subtotalUSD,
@@ -79,19 +88,27 @@ export default function CartPage() {
       internosUSD,
       iibbUSD,
       otherUSD,
+      shippingUSD,
+      quotedShipping: extra != null,
       taxUSD,
-      totalUSD: withIva ? subtotalUSD + taxUSD : subtotalUSD,
+      totalUSD: withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD,
       itemCount: its.reduce((s, it) => s + it.qty, 0),
       productCount: its.length,
     };
   }
 
-  const grand = useMemo(() => totalsFor(items), [items, withIva]);
+  const invidExtra = invidPreview?.stockOk
+    ? { shippingUSD: invidPreview.shippingCost ?? 0, percepcionPercent: invidPreview.percepcionPercent ?? 0 }
+    : undefined;
+
+  const grand = useMemo(() => totalsFor(items, invidExtra), [items, withIva, invidPreview]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
-    for (const [p, its] of Object.entries(byProvider)) m[p] = totalsFor(its);
+    for (const [p, its] of Object.entries(byProvider)) {
+      m[p] = totalsFor(its, p === "INVID" ? invidExtra : undefined);
+    }
     return m;
-  }, [byProvider, withIva]);
+  }, [byProvider, withIva, invidPreview]);
 
   function fmt(usd: number, digits = currency === "USD" ? 2 : 0) {
     if (currency === "USD") return formatUSD(usd);
@@ -140,6 +157,7 @@ export default function CartPage() {
 
     lines.push(`*TOTAL*`);
     lines.push(`Neto: ${fmt(tot.subtotalUSD)}`);
+    if (tot.shippingUSD > 0.004) lines.push(`Envío: ${fmt(tot.shippingUSD, 2)}`);
     if (withIva) {
       if (tot.ivaUSD > 0) lines.push(`IVA: ${fmt(tot.ivaUSD, 2)}`);
       if (tot.internosUSD > 0) lines.push(`Imp. internos: ${fmt(tot.internosUSD, 2)}`);
@@ -258,8 +276,8 @@ export default function CartPage() {
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
           <header className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 py-3.5 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="text-[15px] font-semibold tracking-tight text-white">Cotización</h1>
-              <p className="text-[11px] text-surface-500 mt-0.5 tabular-nums">
+              <h1 className="text-lg font-semibold tracking-tight text-white">Cotización</h1>
+              <p className="text-xs text-surface-500 mt-0.5 tabular-nums">
                 {items.length === 0
                   ? "Sin productos"
                   : `${items.length} ${items.length === 1 ? "línea" : "líneas"} · ${totalCount} ${totalCount === 1 ? "unidad" : "unidades"} · ${sortedProviders.length} ${sortedProviders.length === 1 ? "proveedor" : "proveedores"}`}
@@ -272,7 +290,7 @@ export default function CartPage() {
                   <div className="relative" ref={exportRef}>
                     <button
                       onClick={() => setExportOpen((v) => !v)}
-                      className="flex items-center gap-1.5 text-xs text-surface-300 hover:text-white border border-surface-700 hover:border-surface-500 rounded-md px-2.5 py-1.5 transition-colors"
+                      className="flex items-center gap-1.5 text-sm text-surface-300 hover:text-white border border-surface-700 hover:border-surface-500 rounded-md px-3 py-1.5 transition-colors"
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
                       {copied ? "Copiado" : "Exportar"}
@@ -280,17 +298,17 @@ export default function CartPage() {
                     </button>
                     {exportOpen && (
                       <div className="absolute right-0 top-full mt-1.5 w-48 bg-surface-900 border border-surface-700 rounded-md shadow-xl z-30 py-1">
-                        <button onClick={copyForWhatsApp} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-200 hover:bg-surface-800">
+                        <button onClick={copyForWhatsApp} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800">
                           <Copy className="w-3.5 h-3.5 text-surface-500" /> Copiar para WhatsApp
                         </button>
-                        <button onClick={shareWhatsApp} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-200 hover:bg-surface-800">
+                        <button onClick={shareWhatsApp} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800">
                           <MessageCircle className="w-3.5 h-3.5 text-surface-500" /> Abrir WhatsApp
                         </button>
                         <div className="h-px bg-surface-800 my-1" />
-                        <button onClick={exportCSV} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-200 hover:bg-surface-800">
+                        <button onClick={exportCSV} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800">
                           <FileText className="w-3.5 h-3.5 text-surface-500" /> CSV
                         </button>
-                        <button onClick={exportJSON} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-surface-200 hover:bg-surface-800">
+                        <button onClick={exportJSON} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800">
                           <Download className="w-3.5 h-3.5 text-surface-500" /> JSON
                         </button>
                       </div>
@@ -298,7 +316,7 @@ export default function CartPage() {
                   </div>
                   <button
                     onClick={() => setConfirmClear("all")}
-                    className="text-xs text-surface-500 hover:text-red-400 border border-transparent hover:border-red-500/30 rounded-md px-2.5 py-1.5 transition-colors"
+                    className="text-sm text-surface-500 hover:text-red-400 border border-transparent hover:border-red-500/30 rounded-md px-3 py-1.5 transition-colors"
                   >
                     Vaciar
                   </button>
@@ -309,126 +327,132 @@ export default function CartPage() {
 
           {items.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-              <p className="text-sm text-surface-200">No hay productos en esta cotización</p>
-              <p className="text-xs text-surface-500 mt-1.5 max-w-sm">
-                Agregá ítems desde la búsqueda. Cada línea muestra neto, IVA, imp. internos e IIBB según lo que informe el proveedor.
+              <p className="text-base text-surface-200">No hay productos en esta cotización</p>
+              <p className="text-sm text-surface-500 mt-2 max-w-md">
+                Agregá ítems desde la búsqueda. Cada línea muestra neto, IVA, imp. internos e IIBB.
               </p>
-              <Link href="/search" className="mt-5 text-xs font-medium text-brand-400 hover:text-brand-300 border-b border-brand-400/40 pb-0.5">
+              <Link href="/search" className="mt-5 text-sm font-medium text-brand-400 hover:text-brand-300 border-b border-brand-400/40 pb-0.5">
                 Ir a buscar
               </Link>
             </div>
           ) : (
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] overflow-hidden">
-              <div className="overflow-y-auto">
-                <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800 px-5 lg:px-8">
-                  <div className="flex gap-0 overflow-x-auto">
-                    {tabsToShow.map((tab) => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key)}
-                        className={`relative whitespace-nowrap text-[12px] px-3 py-2.5 transition-colors ${
-                          activeTab === tab.key
-                            ? "text-white"
-                            : "text-surface-500 hover:text-surface-200"
-                        }`}
-                      >
-                        {tab.label}
-                        <span className="ml-1.5 text-[10px] tabular-nums text-surface-500">{tab.count}</span>
-                        {activeTab === tab.key && (
-                          <span className="absolute inset-x-3 -bottom-px h-px bg-brand-500" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
+            <div className="flex-1 overflow-y-auto">
+              <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800 px-5 lg:px-8">
+                <div className="flex gap-0 overflow-x-auto">
+                  {tabsToShow.map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={`relative whitespace-nowrap text-sm px-3.5 py-3 transition-colors ${
+                        activeTab === tab.key
+                          ? "text-white"
+                          : "text-surface-500 hover:text-surface-200"
+                      }`}
+                    >
+                      {tab.label}
+                      <span className="ml-1.5 text-xs tabular-nums text-surface-500">{tab.count}</span>
+                      {activeTab === tab.key && (
+                        <span className="absolute inset-x-3 -bottom-px h-px bg-brand-500" />
+                      )}
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                <div className="px-5 lg:px-8 py-5 flex flex-col gap-8">
-                  {activeTab === "all" ? (
-                    sortedProviders.map((prov) => (
-                      <ProviderSection
-                        key={prov}
-                        provider={prov}
-                        items={byProvider[prov]}
-                        totals={providerTotals[prov]}
-                        fmt={fmt}
-                        withIva={withIva}
-                        setQty={setQty}
-                        remove={remove}
-                        onClearProvider={() => setConfirmClear(prov)}
-                      />
-                    ))
-                  ) : (
+              <div className="px-5 lg:px-8 py-6 flex flex-col gap-8">
+                {activeTab === "all" ? (
+                  sortedProviders.map((prov) => (
                     <ProviderSection
-                      provider={activeTab}
-                      items={shownItems}
-                      totals={shownTotals}
+                      key={prov}
+                      provider={prov}
+                      items={byProvider[prov]}
+                      totals={providerTotals[prov]}
                       fmt={fmt}
                       withIva={withIva}
                       setQty={setQty}
                       remove={remove}
-                      onClearProvider={() => setConfirmClear(activeTab)}
+                      onClearProvider={() => setConfirmClear(prov)}
                     />
-                  )}
-                </div>
-              </div>
-
-              <aside className="border-t lg:border-t-0 lg:border-l border-surface-800 overflow-y-auto">
-                <div className="p-5 lg:p-6 flex flex-col gap-6">
-                  <SummaryCard
-                    title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
+                  ))
+                ) : (
+                  <ProviderSection
+                    provider={activeTab}
+                    items={shownItems}
                     totals={shownTotals}
                     fmt={fmt}
                     withIva={withIva}
-                    currency={currency}
-                    showInvidNote={Boolean(byProvider.INVID?.length)}
+                    setQty={setQty}
+                    remove={remove}
+                    onClearProvider={() => setConfirmClear(activeTab)}
                   />
+                )}
+              </div>
 
-                  {byProvider.INVID?.length > 0 && (
-                    <InvidDraftPanel
-                      items={byProvider.INVID}
-                      onCreated={() => clearProvider("INVID")}
+              <div className="border-t border-surface-800 px-5 lg:px-8 py-6">
+                <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,380px)_minmax(0,1fr)] gap-8 xl:gap-10 items-start">
+                  <div className="flex flex-col gap-5">
+                    <SummaryCard
+                      title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
+                      totals={shownTotals}
+                      fmt={fmt}
+                      withIva={withIva}
+                      currency={currency}
+                      showInvidNote={Boolean(byProvider.INVID?.length)}
                     />
-                  )}
 
-                  {byProvider.NEW_BYTES?.length > 0 && (
-                    <NewBytesDraftPanel
-                      items={byProvider.NEW_BYTES}
-                      onCreated={() => clearProvider("NEW_BYTES")}
-                    />
-                  )}
-
-                  {activeTab === "all" && sortedProviders.length > 1 && (
-                    <div>
-                      <h2 className="text-[10px] font-semibold text-surface-500 uppercase tracking-[0.14em] mb-2">
-                        Por proveedor
-                      </h2>
-                      <div className="flex flex-col">
-                        {sortedProviders.map((p) => {
-                          const t = providerTotals[p];
-                          return (
-                            <button
-                              key={p}
-                              onClick={() => setActiveTab(p)}
-                              className="flex items-center justify-between gap-2 py-2 border-b border-surface-800 last:border-0 text-left hover:bg-surface-900/60 -mx-1 px-1 transition-colors"
-                            >
-                              <span className={`text-[11px] font-medium ${PROVIDER_TEXT_COLOR[p] || "text-surface-300"}`}>
-                                {p.replace(/_/g, " ")}
-                              </span>
-                              <span className="text-[11px] tabular-nums text-surface-200">{fmt(t.totalUSD)}</span>
-                            </button>
-                          );
-                        })}
+                    {activeTab === "all" && sortedProviders.length > 1 && (
+                      <div>
+                        <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">
+                          Por proveedor
+                        </h2>
+                        <div className="flex flex-col">
+                          {sortedProviders.map((p) => {
+                            const t = providerTotals[p];
+                            return (
+                              <button
+                                key={p}
+                                onClick={() => setActiveTab(p)}
+                                className="flex items-center justify-between gap-2 py-2.5 border-b border-surface-800 last:border-0 text-left hover:bg-surface-900/60 -mx-1 px-1 transition-colors"
+                              >
+                                <span className={`text-sm font-medium ${PROVIDER_TEXT_COLOR[p] || "text-surface-300"}`}>
+                                  {p.replace(/_/g, " ")}
+                                </span>
+                                <span className="text-sm tabular-nums text-surface-200">{fmt(t.totalUSD)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {currentRate && currency === "ARS" && (
-                    <p className="text-[10px] text-surface-500 leading-relaxed">
-                      Convertido al dólar {dollarLabel(dollarType)} (${currentRate.venta.toLocaleString("es-AR")}) · {new Date(currentRate.fechaActualizacion).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
-                    </p>
-                  )}
+                    {currentRate && currency === "ARS" && (
+                      <p className="text-xs text-surface-500 leading-relaxed">
+                        Dólar {dollarLabel(dollarType)} (${currentRate.venta.toLocaleString("es-AR")}) · {new Date(currentRate.fechaActualizacion).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-5 min-w-0">
+                    {byProvider.INVID?.length > 0 && (
+                      <InvidDraftPanel
+                        items={byProvider.INVID}
+                        onCreated={() => {
+                          setInvidPreview(null);
+                          clearProvider("INVID");
+                        }}
+                        onPreviewed={setInvidPreview}
+                      />
+                    )}
+
+                    {byProvider.NEW_BYTES?.length > 0 && (
+                      <NewBytesDraftPanel
+                        items={byProvider.NEW_BYTES}
+                        onCreated={() => clearProvider("NEW_BYTES")}
+                      />
+                    )}
+                  </div>
                 </div>
-              </aside>
+              </div>
             </div>
           )}
         </div>
@@ -485,12 +509,15 @@ function SummaryCard({
 }) {
   return (
     <div>
-      <h2 className="text-[10px] font-semibold text-surface-500 uppercase tracking-[0.14em] mb-3">{title}</h2>
-      <dl className="flex flex-col gap-1.5 text-[12px]">
+      <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-3">{title}</h2>
+      <dl className="flex flex-col gap-2 text-sm">
         <SummaryRow label="Líneas" value={String(totals.productCount)} />
         <SummaryRow label="Unidades" value={String(totals.itemCount)} />
         <div className="h-px bg-surface-800 my-1.5" />
         <SummaryRow label="Neto" value={fmt(totals.subtotalUSD)} />
+        {(totals.quotedShipping || totals.shippingUSD > 0.004) && (
+          <SummaryRow label="Envío" value={fmt(totals.shippingUSD, 2)} muted={totals.shippingUSD === 0} />
+        )}
         {withIva && (
           <>
             <SummaryRow label="IVA" value={fmt(totals.ivaUSD, 2)} muted={totals.ivaUSD === 0} />
@@ -501,19 +528,19 @@ function SummaryCard({
         )}
         <div className="h-px bg-surface-800 my-1.5" />
         <div className="flex items-baseline justify-between pt-0.5">
-          <dt className="text-[12px] font-medium text-surface-300">Total</dt>
+          <dt className="text-sm font-medium text-surface-300">Total</dt>
           <dd className="text-right">
-            <p className="text-lg font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
+            <p className="text-xl font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
             {currency === "ARS" && (
-              <p className="text-[10px] text-surface-500 tabular-nums mt-1">{formatUSD(totals.totalUSD)}</p>
+              <p className="text-xs text-surface-500 tabular-nums mt-1">{formatUSD(totals.totalUSD)}</p>
             )}
-            {!withIva && <p className="text-[10px] text-surface-500 mt-1">sin impuestos</p>}
+            {!withIva && <p className="text-xs text-surface-500 mt-1">sin impuestos</p>}
           </dd>
         </div>
       </dl>
-      {withIva && showInvidNote && (
-        <p className="text-[10px] text-surface-500 leading-relaxed mt-3">
-          IIBB / percepciones de Invid se confirman al validar stock en el portal. El total de lista es neto + IVA + internos.
+      {withIva && showInvidNote && !totals.quotedShipping && (
+        <p className="text-xs text-surface-500 leading-relaxed mt-3">
+          IIBB y envío de Invid se confirman al validar stock.
         </p>
       )}
     </div>
@@ -548,34 +575,34 @@ function ProviderSection({
 
   return (
     <section>
-      <div className="flex items-center justify-between gap-3 pb-2 border-b border-surface-800">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-surface-800">
+        <div className="flex items-center gap-2.5 min-w-0">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="w-4 h-4 object-contain rounded-sm" />
+            <img src={logoUrl} alt="" className="w-5 h-5 object-contain rounded-sm" />
           ) : (
-            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${color}`}>
+            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${color}`}>
               {provider.replace(/_/g, " ")}
             </span>
           )}
           {logoUrl && (
-            <span className={`text-[12px] font-semibold tracking-wide ${PROVIDER_TEXT_COLOR[provider] || "text-white"}`}>
+            <span className={`text-sm font-semibold tracking-wide ${PROVIDER_TEXT_COLOR[provider] || "text-white"}`}>
               {provider.replace(/_/g, " ")}
             </span>
           )}
-          <span className="text-[11px] text-surface-500 tabular-nums">
+          <span className="text-xs text-surface-500 tabular-nums">
             {totals.productCount} {totals.productCount === 1 ? "línea" : "líneas"} · {totals.itemCount} u.
           </span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="text-[13px] font-medium text-white tabular-nums">{fmt(totals.totalUSD)}</span>
+          <span className="text-[15px] font-medium text-white tabular-nums">{fmt(totals.totalUSD)}</span>
           <button onClick={onClearProvider} className="text-surface-600 hover:text-red-400 transition-colors" title="Quitar proveedor">
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <div className="hidden md:grid grid-cols-[minmax(0,1.4fr)_72px_88px_88px_88px_88px_96px_28px] gap-2 pt-2 pb-1 text-[10px] font-medium uppercase tracking-[0.12em] text-surface-500">
+      <div className="hidden md:grid grid-cols-[minmax(0,1.5fr)_80px_100px_100px_100px_100px_110px_36px] gap-3 pt-3 pb-1.5 text-xs font-medium uppercase tracking-wider text-surface-500">
         <span>Producto</span>
         <span className="text-center">Cant.</span>
         <span className="text-right">Neto</span>
@@ -599,9 +626,9 @@ function ProviderSection({
         ))}
       </div>
 
-      {provider === "INVID" && (
-        <p className="text-[10px] text-surface-500 mt-2">
-          Invid no informa IIBB en lista de precios. Aparece al validar stock (percepciones).
+      {provider === "INVID" && items.every((it) => !taxByKind(extractTaxLines(it), "iibb")) && (
+        <p className="text-xs text-surface-500 mt-2">
+          El IIBB de Invid aparece al validar stock.
         </p>
       )}
     </section>
@@ -627,31 +654,31 @@ function CartLine({
   const sku = item.sku || item.partNumber || item.externalId;
 
   return (
-    <div className="py-3 md:grid md:grid-cols-[minmax(0,1.4fr)_72px_88px_88px_88px_88px_96px_28px] md:gap-2 md:items-center">
-      <div className="flex items-start gap-3 min-w-0">
-        <Link href={href} className="w-12 h-12 relative flex-shrink-0 bg-white rounded overflow-hidden border border-surface-800">
+    <div className="py-4 md:grid md:grid-cols-[minmax(0,1.5fr)_80px_100px_100px_100px_100px_110px_36px] md:gap-3 md:items-center">
+      <div className="flex items-start gap-3.5 min-w-0">
+        <Link href={href} className="w-16 h-16 relative flex-shrink-0 bg-white rounded-md overflow-hidden border border-surface-800">
           {item.imageUrl ? (
-            <Image src={proxyImg(item.imageUrl)} alt="" fill className="object-contain p-0.5" unoptimized />
+            <Image src={proxyImg(item.imageUrl)} alt="" fill className="object-contain p-1" unoptimized />
           ) : (
-            <ImageOff className="w-3.5 h-3.5 text-surface-400 absolute inset-0 m-auto" />
+            <ImageOff className="w-4 h-4 text-surface-400 absolute inset-0 m-auto" />
           )}
         </Link>
         <div className="min-w-0 flex-1">
-          <Link href={href} className="text-[13px] text-surface-100 leading-snug line-clamp-2 hover:text-white">
+          <Link href={href} className="text-[15px] text-surface-100 leading-snug line-clamp-2 hover:text-white">
             {item.name}
           </Link>
-          <p className="text-[10px] text-surface-500 font-mono mt-0.5 truncate">
+          <p className="text-xs text-surface-500 font-mono mt-1 truncate">
             {item.brand ? `${item.brand} · ` : ""}#{sku}
           </p>
           {item.stockStatus?.toLowerCase().includes("bajo") && (
-            <p className="text-[10px] text-amber-400/90 mt-0.5">Stock bajo</p>
+            <p className="text-xs text-amber-400/90 mt-0.5">Stock bajo</p>
           )}
           {others.length > 0 && (
-            <p className="text-[10px] text-surface-500 mt-0.5">
+            <p className="text-xs text-surface-500 mt-0.5">
               {others.map((o) => `${o.label} ${formatAlicuota(o.percent)} ${fmt(o.unitAmount * item.qty, 2)}`).join(" · ")}
             </p>
           )}
-          <div className="md:hidden mt-2 grid grid-cols-3 gap-x-3 gap-y-1">
+          <div className="md:hidden mt-2.5 grid grid-cols-3 gap-x-3 gap-y-1">
             <TaxCell label="IVA" line={iva} qty={item.qty} fmt={fmt} />
             <TaxCell label="Internos" line={internos} qty={item.qty} fmt={fmt} />
             <TaxCell label="IIBB" line={iibb} qty={item.qty} fmt={fmt} />
@@ -680,12 +707,12 @@ function CartLine({
 
       <div className="hidden md:flex justify-end">
         <button onClick={() => remove(item.provider, item.externalId)} className="text-surface-600 hover:text-red-400 p-1" title="Quitar">
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
       <div className="md:hidden flex items-center justify-between mt-2 pt-2 border-t border-surface-800/60">
-        <span className="text-[11px] text-surface-500">Total línea</span>
+        <span className="text-xs text-surface-500">Total línea</span>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-white tabular-nums">{fmt(withIva ? pricing.gross : pricing.net, 2)}</span>
           <button onClick={() => remove(item.provider, item.externalId)} className="text-surface-600 hover:text-red-400">
@@ -709,13 +736,13 @@ function TaxCell({
   const empty = !line;
   return (
     <div className={align === "right" ? "text-right" : ""}>
-      {label && <p className="text-[9px] uppercase tracking-wider text-surface-500 mb-0.5">{label}</p>}
+      {label && <p className="text-[11px] uppercase tracking-wider text-surface-500 mb-0.5">{label}</p>}
       {empty ? (
-        <p className="text-[12px] text-surface-600 tabular-nums">—</p>
+        <p className="text-sm text-surface-600 tabular-nums">—</p>
       ) : (
         <>
-          <p className="text-[10px] text-surface-500 tabular-nums">{formatAlicuota(line.percent)}</p>
-          <p className="text-[12px] text-surface-200 tabular-nums leading-tight">{fmt(line.unitAmount * qty, 2)}</p>
+          <p className="text-xs text-surface-500 tabular-nums">{formatAlicuota(line.percent)}</p>
+          <p className="text-sm text-surface-200 tabular-nums leading-tight">{fmt(line.unitAmount * qty, 2)}</p>
         </>
       )}
     </div>
@@ -732,10 +759,10 @@ function MoneyCell({
 }) {
   return (
     <div className={`text-right ${className}`}>
-      <p className={`tabular-nums leading-tight ${emphasize ? "text-[13px] font-semibold text-white" : "text-[12px] text-surface-200"}`}>
+      <p className={`tabular-nums leading-tight ${emphasize ? "text-[15px] font-semibold text-white" : "text-sm text-surface-200"}`}>
         {primary}
       </p>
-      {secondary && <p className="text-[10px] text-surface-500 tabular-nums mt-0.5">{secondary}</p>}
+      {secondary && <p className="text-xs text-surface-500 tabular-nums mt-0.5">{secondary}</p>}
     </div>
   );
 }
@@ -749,19 +776,19 @@ function QtyControl({
   onSet: (q: number) => void;
 }) {
   return (
-    <div className="inline-flex items-center border border-surface-700 rounded-md h-7">
-      <button onClick={onDec} className="w-7 h-7 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Restar">
-        <Minus className="w-3 h-3" />
+    <div className="inline-flex items-center border border-surface-700 rounded-md h-8">
+      <button onClick={onDec} className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Restar">
+        <Minus className="w-3.5 h-3.5" />
       </button>
       <input
         type="number"
         min={1}
         value={qty}
         onChange={(e) => onSet(Math.max(1, parseInt(e.target.value) || 1))}
-        className="w-8 bg-transparent text-white text-[12px] font-medium text-center focus:outline-none tabular-nums"
+        className="w-9 bg-transparent text-white text-sm font-medium text-center focus:outline-none tabular-nums"
       />
-      <button onClick={onInc} className="w-7 h-7 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Sumar">
-        <Plus className="w-3 h-3" />
+      <button onClick={onInc} className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Sumar">
+        <Plus className="w-3.5 h-3.5" />
       </button>
     </div>
   );

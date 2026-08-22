@@ -5,6 +5,9 @@ import {
   parseOrdersTable,
   computeInvidTotals,
   stripHtmlMessage,
+  parseInvidMoney,
+  parseQuotedShipping,
+  parseXmlCost,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -92,6 +95,20 @@ describe("invid-order.parser", () => {
     expect(totals.total).toBe(18.47);
   });
 
+  it("incluye IVA y percepción del envío puerta a puerta", () => {
+    const totals = computeInvidTotals({
+      net: 14.89,
+      ivaProducts: 3.13,
+      internos: 0,
+      percepcionPercent: 3,
+      shipping: 6.01,
+    });
+    expect(totals.shipping).toBe(6.01);
+    expect(totals.iva).toBe(4.39);
+    expect(totals.percepciones).toBe(0.63);
+    expect(totals.total).toBe(25.92);
+  });
+
   it("deja el mensaje de stock de Invid sin HTML", () => {
     expect(stripHtmlMessage('<span class="stockok">Se han validado los stocks de los productos</span>'))
       .toBe("Se han validado los stocks de los productos");
@@ -112,5 +129,21 @@ describe("invid-order.parser", () => {
       { value: "1", label: "ACERCAR" },
       { value: "214", label: "ACI CARGAS" },
     ]);
+  });
+
+  it("parsea montos de Invid en USD, XML y HTML de entrega", () => {
+    expect(parseInvidMoney("US$ 6.01")).toBe(6.01);
+    expect(parseInvidMoney("6,50")).toBe(6.5);
+    expect(parseXmlCost("<root><costo>0.00</costo></root>")).toBe(0);
+    const html = `
+      <span id="valor_envio_x_cp">6.01</span>
+      <span id="valorEntregar">12.40</span>
+      <span id="valorExpreso">0.00</span>
+      <tr id="fila_1"><td></td><td>RETIRA</td><td>US$ 0.00</td></tr>
+    `;
+    expect(parseQuotedShipping(html, "5")).toBe(6.01);
+    expect(parseQuotedShipping(html, "6")).toBe(12.4);
+    expect(parseQuotedShipping(html, "3")).toBe(0);
+    expect(parseQuotedShipping(html, "1")).toBe(0);
   });
 });

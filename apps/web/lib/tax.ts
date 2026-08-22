@@ -236,6 +236,66 @@ export function linePricing(p: TaxableProduct, qty = 1) {
   return { unitNet, unitGross, net, gross, tax, rate, knownRate, lines };
 }
 
+/** Completa IVA / internos / IIBB (percepciones) con lo que devolvió ValidarStockInvid. */
+export function applyInvidCheckoutTaxes(
+  product: TaxableProduct,
+  qty: number,
+  checkout: { lineIva?: number; lineInternos?: number; percepcionPercent?: number }
+): TaxLine[] {
+  const unitNet = parsePrice(product.price);
+  const existing = extractTaxLines(product);
+  const keep = (kind: TaxKind) => taxByKind(existing, kind);
+  const lines: TaxLine[] = [];
+  const safeQty = qty > 0 ? qty : 1;
+
+  const lineIva = checkout.lineIva;
+  if (lineIva != null && lineIva > 0.0001) {
+    const unit = round4(lineIva / safeQty);
+    lines.push({
+      kind: "iva",
+      label: "IVA",
+      percent: unitNet > 0 ? round4((unit / unitNet) * 100) : null,
+      unitAmount: unit,
+    });
+  } else {
+    const prev = keep("iva");
+    if (prev) lines.push(prev);
+  }
+
+  const lineInternos = checkout.lineInternos;
+  if (lineInternos != null && lineInternos > 0.0001) {
+    const unit = round4(lineInternos / safeQty);
+    lines.push({
+      kind: "internos",
+      label: "Imp. internos",
+      percent: unitNet > 0 ? round4((unit / unitNet) * 100) : null,
+      unitAmount: unit,
+    });
+  } else {
+    const prev = keep("internos");
+    if (prev) lines.push(prev);
+  }
+
+  const pct = checkout.percepcionPercent ?? 0;
+  if (pct > 0 && unitNet > 0) {
+    lines.push({
+      kind: "iibb",
+      label: "IIBB",
+      percent: pct,
+      unitAmount: round4(unitNet * (pct / 100)),
+    });
+  } else {
+    const prev = keep("iibb");
+    if (prev) lines.push(prev);
+  }
+
+  return lines;
+}
+
+export function grossFromTaxLines(product: TaxableProduct, lines: TaxLine[]): number {
+  return round4(parsePrice(product.price) + lines.reduce((s, l) => s + l.unitAmount, 0));
+}
+
 export function formatTaxPercent(rate: number): string {
   const pct = Math.round(rate * 1000) / 10;
   return Number.isInteger(pct) ? String(pct) : pct.toFixed(1);

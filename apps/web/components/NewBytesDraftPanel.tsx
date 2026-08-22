@@ -138,19 +138,18 @@ export default function NewBytesDraftPanel({
     <div className="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 flex flex-col gap-3">
       <div>
         <h3 className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Pedido NEW BYTES</h3>
-        <p className="text-[11px] text-surface-400 mt-1 leading-relaxed">
-          Crea la orden en tu cuenta de NewBytes como retiro en sucursal (Av. Jujuy 1039, CABA).
-          Tarjeta y MercadoPago no se ofrecen desde Nodo porque redirigen a un cobro externo.
+        <p className="text-sm text-surface-400 mt-1">
+          Orden de retiro en sucursal (Av. Jujuy 1039). Tarjeta y MercadoPago no se ofrecen desde Nodo.
         </p>
       </div>
 
       {addresses.length > 0 && (
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-surface-400">Dirección (referencia, el retiro usa la sucursal)</span>
+          <span className="text-sm text-surface-400">Dirección (referencia; el retiro usa la sucursal)</span>
           <select
             value={addressId}
             onChange={(e) => { setAddressId(e.target.value); setPreview(null); }}
-            className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
+            className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white"
           >
             {addresses.map((a) => (
               <option key={a.id} value={a.id}>{a.label} — {a.addressLine}</option>
@@ -160,11 +159,11 @@ export default function NewBytesDraftPanel({
       )}
 
       <label className="flex flex-col gap-1">
-        <span className="text-[11px] text-surface-400">Forma de pago</span>
+        <span className="text-sm text-surface-400">Forma de pago</span>
         <select
           value={medioDePagoId}
           onChange={(e) => { setMedioDePagoId(e.target.value); setPreview(null); }}
-          className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
+          className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white"
         >
           {payments.map((p) => (
             <option key={p.value} value={p.value}>{p.label}{p.pickupOnly ? " (retiro)" : ""}</option>
@@ -173,18 +172,18 @@ export default function NewBytesDraftPanel({
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-[11px] text-surface-400">Nota para NewBytes (opcional)</span>
+        <span className="text-sm text-surface-400">Nota para NewBytes (opcional)</span>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white resize-none"
+          className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white resize-none"
           placeholder="Ej. pedido de cliente X, retirar el viernes"
         />
       </label>
 
       {preview && (
-        <div className="bg-surface-900/70 border border-surface-800 rounded-xl p-3 text-xs space-y-1">
+        <div className="bg-surface-900/70 border border-surface-800 rounded-xl p-3.5 text-sm space-y-1">
           <p className="text-surface-300">{preview.items.length} producto(s) · {preview.paymentLabel}</p>
           <p className="text-surface-400">Entrega: {preview.suggestedDelivery?.label ?? "Retiro en sucursal"}</p>
           {preview.total != null && (
@@ -199,7 +198,7 @@ export default function NewBytesDraftPanel({
         <button
           onClick={handlePreview}
           disabled={previewing || submitting || !medioDePagoId}
-          className="flex-1 flex items-center justify-center gap-1.5 border border-surface-700 hover:border-sky-500/40 text-surface-200 rounded-lg py-2 text-xs font-medium disabled:opacity-40"
+          className="flex-1 flex items-center justify-center gap-1.5 border border-surface-700 hover:border-sky-500/40 text-surface-200 rounded-lg py-2.5 text-sm font-medium disabled:opacity-40"
         >
           {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
           Revisar en NewBytes
@@ -207,7 +206,7 @@ export default function NewBytesDraftPanel({
         <button
           onClick={handleSubmit}
           disabled={submitting || previewing || !medioDePagoId}
-          className="flex-1 flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg py-2 text-xs font-semibold"
+          className="flex-1 flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg py-2.5 text-sm font-semibold"
         >
           {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
           Crear pedido
