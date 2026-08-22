@@ -975,6 +975,11 @@ export interface AdminUser {
   active: boolean;
   endDate: string | null;
   createdAt: string;
+  updatedAt?: string;
+  brandId?: string | null;
+  brand?: { id: string; name: string; slug: string } | null;
+  providers?: string[];
+  brandAccesses?: { brandId: string; brandName: string; brandSlug: string; status: string }[];
 }
 
 export interface ProviderDisplay {
@@ -1000,13 +1005,24 @@ export interface ModulePermission {
 
 export const adminApi = {
   listUsers: () => api.get<AdminUser[]>("/admin/users"),
-  createUser: (data: { username: string; email: string; password: string; role: UserRole }) =>
-    api.post<AdminUser>("/admin/users", data),
+  createUser: (data: {
+    username: string;
+    email: string;
+    password: string;
+    role: UserRole;
+    brandId?: string;
+    active?: boolean;
+    endDate?: string;
+  }) => api.post<AdminUser>("/admin/users", data),
+  updateUser: (userId: string, data: { username?: string; email?: string; brandId?: string | null }) =>
+    api.put<{ id: string; username: string; email: string; role: UserRole; brandId: string | null }>(`/admin/users/${userId}`, data),
+  resetPassword: (userId: string, password: string) =>
+    api.put<{ id: string }>(`/admin/users/${userId}/password`, { password }),
   updateRole: (userId: string, role: UserRole) =>
     api.put<{ id: string; role: UserRole }>(`/admin/users/${userId}/role`, { role }),
   updateActiveStatus: (userId: string, active: boolean) =>
     api.put(`/admin/users/${userId}/active-status`, { active }),
-  updateEndDate: (userId: string, endDate: string) =>
+  updateEndDate: (userId: string, endDate: string | null) =>
     api.put(`/admin/users/${userId}/end-date`, { endDate }),
   deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
 
@@ -1030,6 +1046,187 @@ export const adminApi = {
   getPlatformSettings: () => api.get<PlatformSettings>("/admin/platform/settings"),
   updatePlatformSettings: (brandPreset: BrandPreset) =>
     api.put<PlatformSettings>("/admin/platform/settings", { brandPreset }),
+};
+
+// --- Organizaciones (multi-tenant) ---
+// Ver docs/ARQUITECTURA_TENANTS.md. `tenantRole` es el alcance dentro de la
+// organización; `platformRole` es el nivel de acceso a Nodo.
+
+export type TenantType = "RETAILER" | "DISTRIBUTOR" | "BRAND";
+
+export type TenantRole =
+  | "OWNER"
+  | "ADMIN"
+  | "BUYER"
+  | "SELLER"
+  | "PRODUCT_MANAGER"
+  | "MARKETING"
+  | "COMMERCIAL"
+  | "VIEWER";
+
+export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED";
+
+export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
+  RETAILER: "Comercio",
+  DISTRIBUTOR: "Distribuidor",
+  BRAND: "Marca",
+};
+
+export const TENANT_ROLE_LABELS: Record<TenantRole, string> = {
+  OWNER: "Dueño",
+  ADMIN: "Administrador",
+  BUYER: "Comprador",
+  SELLER: "Vendedor",
+  PRODUCT_MANAGER: "Product Manager",
+  MARKETING: "Marketing",
+  COMMERCIAL: "Comercial",
+  VIEWER: "Solo lectura",
+};
+
+export const TENANT_ROLES_BY_TYPE: Record<TenantType, TenantRole[]> = {
+  RETAILER: ["OWNER", "ADMIN", "BUYER", "SELLER", "VIEWER"],
+  DISTRIBUTOR: ["OWNER", "ADMIN", "SELLER", "PRODUCT_MANAGER", "VIEWER"],
+  BRAND: ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL", "VIEWER"],
+};
+
+export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
+  PENDING: "Pendiente",
+  ACTIVE: "Activo",
+  SUSPENDED: "Suspendido",
+  REVOKED: "Revocado",
+};
+
+export interface TenantMember {
+  membershipId: string;
+  tenantRole: TenantRole;
+  title: string | null;
+  membershipActive: boolean;
+  userId: string;
+  username: string;
+  email: string;
+  platformRole: UserRole;
+  active: boolean;
+  endDate: string | null;
+  managedBrands?: string[];
+}
+
+export interface TenantAccessCode {
+  id: string;
+  code: string;
+  label: string | null;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string | null;
+  revoked: boolean;
+  createdAt: string;
+}
+
+export interface TenantLinkView {
+  linkId: string;
+  status: TenantLinkStatus;
+  discountPercent: string | number | null;
+  notes: string | null;
+  accountManager: { id: string; username: string; email: string } | null;
+  tenant: { id: string; name: string; type: TenantType } | undefined;
+}
+
+export interface TenantNode {
+  id: string;
+  name: string;
+  type: TenantType;
+  providerKey: Provider | null;
+  brand: { id: string; name: string } | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  notes: string | null;
+  advertisingEnabled: boolean;
+  active: boolean;
+  createdAt: string;
+  members: TenantMember[];
+  accessCodes: TenantAccessCode[];
+  suppliers: TenantLinkView[];
+  clients: TenantLinkView[];
+}
+
+export interface TenantTree {
+  tenants: TenantNode[];
+  unassignedUsers: Pick<AdminUser, "id" | "username" | "email" | "role" | "active" | "endDate">[];
+}
+
+export interface TenantUserRelations {
+  organizations: {
+    membershipId: string;
+    role: TenantRole;
+    title: string | null;
+    active: boolean;
+    tenant: { id: string; name: string; type: TenantType };
+    colleagues: TenantMember[];
+    suppliers: TenantLinkView[];
+    clients: TenantLinkView[];
+  }[];
+  assignedAccounts: {
+    linkId: string;
+    status: TenantLinkStatus;
+    discountPercent: string | number | null;
+    client: { id: string; name: string; type: TenantType };
+    supplier: { id: string; name: string; type: TenantType };
+  }[];
+}
+
+export const tenantsApi = {
+  tree: () => api.get<TenantTree>("/admin/tenants"),
+  userRelations: (userId: string) => api.get<TenantUserRelations>(`/admin/tenants/users/${userId}/relations`),
+
+  create: (data: {
+    name: string;
+    type: TenantType;
+    providerKey?: Provider;
+    brandId?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    notes?: string;
+    advertisingEnabled?: boolean;
+  }) => api.post<TenantNode>("/admin/tenants", data),
+  update: (
+    id: string,
+    data: Partial<{
+      name: string;
+      providerKey: Provider | null;
+      brandId: string | null;
+      contactEmail: string | null;
+      contactPhone: string | null;
+      notes: string | null;
+      advertisingEnabled: boolean;
+      active: boolean;
+    }>
+  ) => api.put<TenantNode>(`/admin/tenants/${id}`, data),
+  remove: (id: string) => api.delete(`/admin/tenants/${id}`),
+
+  addMember: (tenantId: string, data: { userId: string; role: TenantRole; title?: string }) =>
+    api.post<TenantMember>(`/admin/tenants/${tenantId}/members`, data),
+  createMemberUser: (
+    tenantId: string,
+    data: { username: string; email: string; password: string; role: TenantRole; title?: string }
+  ) => api.post<TenantMember>(`/admin/tenants/${tenantId}/members/new-user`, data),
+  updateMember: (membershipId: string, data: Partial<{ role: TenantRole; title: string | null; active: boolean }>) =>
+    api.put<TenantMember>(`/admin/tenants/members/${membershipId}`, data),
+  removeMember: (membershipId: string) => api.delete(`/admin/tenants/members/${membershipId}`),
+  setManagedBrands: (membershipId: string, brandNames: string[]) =>
+    api.put(`/admin/tenants/members/${membershipId}/managed-brands`, { brandNames }),
+
+  upsertLink: (data: {
+    clientTenantId: string;
+    supplierTenantId: string;
+    accountManagerId?: string | null;
+    status?: TenantLinkStatus;
+    discountPercent?: number | null;
+    notes?: string | null;
+  }) => api.put("/admin/tenants/links", data),
+  deleteLink: (linkId: string) => api.delete(`/admin/tenants/links/${linkId}`),
+
+  createAccessCode: (tenantId: string, data: { label?: string; maxUses?: number; expiresInDays?: number }) =>
+    api.post<TenantAccessCode>(`/admin/tenants/${tenantId}/access-codes`, data),
+  revokeAccessCode: (codeId: string) => api.delete(`/admin/tenants/access-codes/${codeId}`),
 };
 
 export default api;

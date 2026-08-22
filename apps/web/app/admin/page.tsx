@@ -6,20 +6,23 @@ import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import {
   adminApi, AdminUser, ProviderDisplay, BrandDisplay, Banner,
-  ModulePermission, ModuleKey, UserRole, ALL_PROVIDERS,
+  ModulePermission, ModuleKey, ALL_PROVIDERS,
 } from "@/lib/api";
 import { isAdmin, getUser } from "@/lib/auth";
+import UsersManagement from "@/components/admin/UsersManagement";
+import OrganizationsTree from "@/components/admin/OrganizationsTree";
 import {
   Users, ShieldCheck, Boxes, Building2, Image as ImageIcon,
-  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette,
+  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette, Network,
 } from "lucide-react";
 import {
   BANNER_SLOTS, BRAND_PRESET_LABELS, BRAND_PRESETS, applyBrandPreset, type BrandPreset, type BannerSlot,
 } from "@/lib/brand-presets";
 
-type Tab = "users" | "permissions" | "providers" | "brands" | "banners" | "appearance";
+type Tab = "organizations" | "users" | "permissions" | "providers" | "brands" | "banners" | "appearance";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
+  { key: "organizations", label: "Organizaciones", icon: <Network className="w-3.5 h-3.5" /> },
   { key: "users", label: "Usuarios", icon: <Users className="w-3.5 h-3.5" /> },
   { key: "permissions", label: "Permisos", icon: <ShieldCheck className="w-3.5 h-3.5" /> },
   { key: "providers", label: "Proveedores", icon: <Boxes className="w-3.5 h-3.5" /> },
@@ -40,7 +43,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("users");
+  const [tab, setTab] = useState<Tab>("organizations");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
@@ -89,7 +92,8 @@ export default function AdminPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {tab === "users" && <UsersTab showToast={showToast} />}
+            {tab === "organizations" && <OrganizationsTree showToast={showToast} />}
+            {tab === "users" && <UsersManagement showToast={showToast} />}
             {tab === "permissions" && <PermissionsTab showToast={showToast} />}
             {tab === "providers" && <ProvidersTab showToast={showToast} />}
             {tab === "brands" && <BrandsTab showToast={showToast} />}
@@ -115,181 +119,6 @@ export default function AdminPage() {
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
-}
-
-// ---------- Usuarios ----------
-
-function UsersTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ username: "", email: "", password: "", role: "ROLE_USER" as UserRole });
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    adminApi.listUsers().then((r) => setUsers(r.data)).catch(() => setUsers([])).finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await adminApi.createUser(form);
-      showToast("Usuario creado");
-      setShowCreate(false);
-      setForm({ username: "", email: "", password: "", role: "ROLE_USER" });
-      load();
-    } catch (err) {
-      showToast(errMsg(err, "Error al crear el usuario"), false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleRoleChange(id: string, role: UserRole) {
-    try {
-      await adminApi.updateRole(id, role);
-      showToast("Rol actualizado");
-      load();
-    } catch (err) {
-      showToast(errMsg(err, "Error al cambiar el rol"), false);
-    }
-  }
-
-  async function handleToggleActive(u: AdminUser) {
-    try {
-      await adminApi.updateActiveStatus(u.id, !u.active);
-      showToast(u.active ? "Usuario desactivado" : "Usuario activado");
-      load();
-    } catch (err) {
-      showToast(errMsg(err, "Error al cambiar el estado"), false);
-    }
-  }
-
-  async function handleEndDate(u: AdminUser, endDate: string) {
-    try {
-      await adminApi.updateEndDate(u.id, endDate);
-      showToast("Fecha de expiración actualizada");
-      load();
-    } catch (err) {
-      showToast(errMsg(err, "Error al actualizar la fecha"), false);
-    }
-  }
-
-  async function handleDelete(u: AdminUser) {
-    if (!window.confirm(`¿Eliminar al usuario ${u.username}? Esta acción no se puede deshacer.`)) return;
-    try {
-      await adminApi.deleteUser(u.id);
-      showToast("Usuario eliminado");
-      load();
-    } catch (err) {
-      showToast(errMsg(err, "Error al eliminar el usuario"), false);
-    }
-  }
-
-  return (
-    <div className="max-w-5xl">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-white">Usuarios ({users.length})</h2>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg px-3 py-2 transition-all"
-        >
-          <Plus className="w-3.5 h-3.5" /> Nuevo usuario
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
-      ) : (
-        <div className="border border-surface-800 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-surface-900 text-[10px] uppercase tracking-wider text-surface-500">
-                  <th className="text-left font-semibold px-3 py-2.5">Usuario</th>
-                  <th className="text-left font-semibold px-3 py-2.5">Email</th>
-                  <th className="text-left font-semibold px-3 py-2.5">Rol</th>
-                  <th className="text-left font-semibold px-3 py-2.5">Activo</th>
-                  <th className="text-left font-semibold px-3 py-2.5">Expira</th>
-                  <th className="text-right font-semibold px-3 py-2.5"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-800">
-                {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-surface-900/60">
-                    <td className="px-3 py-2 text-surface-200 font-medium">{u.username}</td>
-                    <td className="px-3 py-2 text-surface-400">{u.email}</td>
-                    <td className="px-3 py-2">
-                      <select
-                        value={u.role}
-                        onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
-                        className="bg-surface-800 border border-surface-700 rounded-md px-2 py-1 text-xs text-white focus:outline-none focus:border-brand-500"
-                      >
-                        <option value="ROLE_USER">ROLE_USER</option>
-                        <option value="ROLE_ADMIN">ROLE_ADMIN</option>
-                        <option value="ROLE_BRAND">ROLE_BRAND</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={() => handleToggleActive(u)}
-                        className={`text-xs font-medium px-2 py-1 rounded-md border ${
-                          u.active ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-red-500/10 border-red-500/25 text-red-400"
-                        }`}
-                      >
-                        {u.active ? "Activo" : "Inactivo"}
-                      </button>
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="date"
-                        defaultValue={u.endDate ? u.endDate.slice(0, 10) : ""}
-                        onBlur={(e) => e.target.value && handleEndDate(u, e.target.value)}
-                        className="bg-surface-800 border border-surface-700 rounded-md px-2 py-1 text-xs text-white focus:outline-none focus:border-brand-500"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button onClick={() => handleDelete(u)} className="text-surface-500 hover:text-red-400 transition-colors">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-white">Nuevo usuario</h3>
-              <button onClick={() => setShowCreate(false)} className="text-surface-500 hover:text-white"><X className="w-4 h-4" /></button>
-            </div>
-            <form onSubmit={handleCreate} className="flex flex-col gap-3">
-              <input required placeholder="Usuario" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
-              <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
-              <input required type="password" minLength={8} placeholder="Contraseña (mín. 8)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                <option value="ROLE_USER">ROLE_USER</option>
-                <option value="ROLE_ADMIN">ROLE_ADMIN</option>
-                <option value="ROLE_BRAND">ROLE_BRAND</option>
-              </select>
-              <button type="submit" disabled={saving} className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all mt-1">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Crear usuario"}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ---------- Permisos ----------

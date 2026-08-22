@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { UpdateActiveStatusDto } from "./dto/update-active-status.dto";
 import { UpdateEndDateDto } from "./dto/update-end-date.dto";
@@ -10,10 +10,47 @@ export class UsersService {
 
   async list() {
     const users = await this.prisma.user.findMany({
-      select: { id: true, username: true, email: true, role: true, active: true, endDate: true, createdAt: true },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        active: true,
+        endDate: true,
+        createdAt: true,
+        updatedAt: true,
+        brandId: true,
+        brand: { select: { id: true, name: true, slug: true } },
+        credentials: { select: { providerName: true, updatedAt: true } },
+        accesses: {
+          select: {
+            brandId: true,
+            status: true,
+            brand: { select: { name: true, slug: true } },
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
-    return users;
+    return users.map((user) => ({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      active: user.active,
+      endDate: user.endDate,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      brandId: user.brandId,
+      brand: user.brand,
+      providers: user.credentials.map((c) => c.providerName),
+      brandAccesses: user.accesses.map((a) => ({
+        brandId: a.brandId,
+        brandName: a.brand.name,
+        brandSlug: a.brand.slug,
+        status: a.status,
+      })),
+    }));
   }
 
   private async assertExists(userId: string) {
@@ -23,7 +60,10 @@ export class UsersService {
   }
 
   async updateActiveStatus(dto: UpdateActiveStatusDto) {
-    await this.assertExists(dto.userId);
+    const existing = await this.assertExists(dto.userId);
+    if (existing.role === "ROLE_ADMIN" && dto.active === false) {
+      await this.assertNotLastActiveAdmin(dto.userId);
+    }
     const user = await this.prisma.user.update({
       where: { id: dto.userId },
       data: { active: dto.active },
@@ -35,14 +75,26 @@ export class UsersService {
     await this.assertExists(dto.userId);
     const user = await this.prisma.user.update({
       where: { id: dto.userId },
-      data: { endDate: new Date(dto.endDate) },
+      data: { endDate: dto.endDate ? new Date(dto.endDate) : null },
     });
     return { id: user.id, endDate: user.endDate };
   }
 
   async delete(dto: DeleteUserDto) {
-    await this.assertExists(dto.userId);
+    const existing = await this.assertExists(dto.userId);
+    if (existing.role === "ROLE_ADMIN") {
+      await this.assertNotLastActiveAdmin(dto.userId);
+    }
     await this.prisma.user.delete({ where: { id: dto.userId } });
     return { id: dto.userId };
+  }
+
+  private async assertNotLastActiveAdmin(userId: string) {
+    const others = await this.prisma.user.count({
+      where: { role: "ROLE_ADMIN", active: true, id: { not: userId } },
+    });
+    if (others === 0) {
+      throw new BadRequestException("No se puede quitar el último administrador activo");
+    }
   }
 }

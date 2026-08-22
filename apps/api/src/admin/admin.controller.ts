@@ -14,6 +14,8 @@ import { UpdateBrandDisplayDto } from "./dto/update-brand-display.dto";
 import { CreateBannerDto, UpdateBannerDto } from "./dto/banner.dto";
 import { UpdatePlatformSettingsDto } from "./dto/platform-settings.dto";
 import { ActiveStatusBodyDto, EndDateBodyDto } from "./dto/body-only.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -44,6 +46,16 @@ export class AdminController {
     return this.adminService.updateRole(id, dto);
   }
 
+  @Put("users/:id")
+  updateUser(@Param("id") id: string, @Body() dto: UpdateUserDto) {
+    return this.adminService.updateUser(id, dto);
+  }
+
+  @Put("users/:id/password")
+  resetPassword(@Param("id") id: string, @Body() dto: ResetPasswordDto) {
+    return this.adminService.resetPassword(id, dto.password);
+  }
+
   @Put("users/:id/active-status")
   updateActiveStatus(@Param("id") id: string, @Body() dto: ActiveStatusBodyDto) {
     return this.usersService.updateActiveStatus({ userId: id, active: dto.active });
@@ -55,7 +67,10 @@ export class AdminController {
   }
 
   @Delete("users/:id")
-  deleteUser(@Param("id") id: string) {
+  deleteUser(@Param("id") id: string, @CurrentUser() me: JwtPayload) {
+    if (id === me.userId) {
+      throw new BadRequestException("No podés eliminarte a vos mismo");
+    }
     return this.usersService.delete({ userId: id } as DeleteUserDto);
   }
 

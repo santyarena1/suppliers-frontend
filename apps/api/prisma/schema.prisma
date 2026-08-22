@@ -16,37 +16,178 @@ enum UserRole {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  username     String    @unique
-  email        String    @unique
+  id           String        @id @default(uuid())
+  username     String        @unique
+  email        String        @unique
   passwordHash String
-  role         UserRole  @default(ROLE_USER)
-  active       Boolean   @default(true)
+  role         UserRole      @default(ROLE_USER)
+  active       Boolean       @default(true)
   endDate      DateTime?
   brandId      String?
   brand        BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  credentials   Credential[]
+  credentials    Credential[]
   cartItems      CartItem[]
   providerOrders ProviderOrder[]
   favorites      BrandFavorite[]
-  notifications BrandNotification[]
-  accesses      BrandAccess[]        @relation("AccessUser")
-  auditLogs     AuditLogEntry[]
+  notifications  BrandNotification[]
+  accesses       BrandAccess[]       @relation("AccessUser")
+  auditLogs      AuditLogEntry[]
+
+  memberships          TenantMembership[]
+  managedAccounts      TenantLink[]          @relation("AccountManager")
+  productManagerScopes ProductManagerScope[]
 
   @@index([brandId])
 }
 
+// ---------- Organizaciones (multi-tenant) ----------
+// Ver docs/ARQUITECTURA_TENANTS.md. El `role` del User es el nivel de plataforma;
+// el alcance funcional real lo define la membresía del usuario en una organización.
+
+enum TenantType {
+  RETAILER // Cliente tipo 1 — comercio / local
+  DISTRIBUTOR // Cliente tipo 2 — proveedor / distribuidor
+  BRAND // Cliente tipo 3 — marca
+}
+
+enum TenantRole {
+  OWNER // Dueño o gerente: control total dentro de su organización
+  ADMIN // Administrador operativo delegado
+  BUYER // Comprador de un comercio
+  SELLER // Vendedor (de comercio o de distribuidor)
+  PRODUCT_MANAGER // PM de marcas dentro de un distribuidor
+  MARKETING // Marketing de una marca
+  COMMERCIAL // Comercial de una marca
+  VIEWER // Solo lectura
+}
+
+enum TenantLinkStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+model Tenant {
+  id                 String        @id @default(uuid())
+  /// Nombre normalizado, es lo único que se muestra en pantalla.
+  name               String        @unique
+  type               TenantType
+  /// Distribuidores con integración por API: clave del proveedor (NEW_BYTES, ELIT…).
+  providerKey        String?       @unique
+  /// Marcas: cuenta del módulo de Marcas que representa esta organización.
+  brandId            String?       @unique
+  brand              BrandAccount? @relation("TenantBrand", fields: [brandId], references: [id])
+  contactEmail       String?
+  contactPhone       String?
+  notes              String?
+  /// Publicidad paga contratada: habilita que comercios no vinculados la descubran.
+  advertisingEnabled Boolean       @default(false)
+  active             Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  memberships   TenantMembership[]
+  accessCodes   TenantAccessCode[]
+  supplierLinks TenantLink[]          @relation("LinkClient")
+  clientLinks   TenantLink[]          @relation("LinkSupplier")
+  pmScopes      ProductManagerScope[]
+
+  @@index([type, active])
+}
+
+model TenantMembership {
+  id        String     @id @default(uuid())
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      TenantRole
+  /// Cargo visible en la interfaz cuando el rol no alcanza para describirlo.
+  title     String?
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+}
+
+/// Única puerta de visibilidad entre organizaciones: un comercio ve a un
+/// distribuidor o marca solo si existe este vínculo activo.
+model TenantLink {
+  id               String           @id @default(uuid())
+  clientTenantId   String
+  clientTenant     Tenant           @relation("LinkClient", fields: [clientTenantId], references: [id], onDelete: Cascade)
+  supplierTenantId String
+  supplierTenant   Tenant           @relation("LinkSupplier", fields: [supplierTenantId], references: [id], onDelete: Cascade)
+  /// Vendedor del proveedor asignado a este cliente (punto de contacto comercial).
+  accountManagerId String?
+  accountManager   User?            @relation("AccountManager", fields: [accountManagerId], references: [id])
+  status           TenantLinkStatus @default(ACTIVE)
+  /// Descuento comercial pactado, en porcentaje.
+  discountPercent  Decimal?         @db.Decimal(6, 2)
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([clientTenantId, supplierTenantId])
+  @@index([supplierTenantId, status])
+}
+
+/// Código escrito o QR que un distribuidor o marca entrega por fuera de Nodo.
+/// El canje no revela la organización de origen hasta completarse.
+model TenantAccessCode {
+  id        String    @id @default(uuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  code      String    @unique
+  label     String?
+  maxUses   Int       @default(1)
+  usedCount Int       @default(0)
+  expiresAt DateTime?
+  revoked   Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  redemptions TenantAccessCodeRedemption[]
+}
+
+model TenantAccessCodeRedemption {
+  id                 String           @id @default(uuid())
+  accessCodeId       String
+  accessCode         TenantAccessCode @relation(fields: [accessCodeId], references: [id], onDelete: Cascade)
+  redeemedByUserId   String
+  redeemedByTenantId String
+  redeemedAt         DateTime         @default(now())
+
+  @@index([redeemedByTenantId])
+}
+
+/// Marcas que un Product Manager controla dentro de su distribuidor.
+model ProductManagerScope {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Nombre normalizado de la marca tal como se muestra en pantalla.
+  brandName String
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, userId, brandName])
+}
+
 model Credential {
-  id                  String   @id @default(uuid())
-  userId              String
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  providerName        String
+  id                   String   @id @default(uuid())
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerName         String
   credentialsEncrypted String
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@unique([userId, providerName])
 }
@@ -57,40 +198,40 @@ model Credential {
 // respuesta cruda completa del proveedor para ese producto, así ningún
 // dato se pierde aunque hoy no lo mostremos en el frontend.
 model ProviderSyncCache {
-  id          String    @id @default(uuid())
-  provider    String
-  externalId  String
-  sku         String?
-  partNumber  String?
-  ean         String?
-  name        String
-  brand       String?
-  category    String?
-  subcategory String?
-  description String?
+  id              String   @id @default(uuid())
+  provider        String
+  externalId      String
+  sku             String?
+  partNumber      String?
+  ean             String?
+  name            String
+  brand           String?
+  category        String?
+  subcategory     String?
+  description     String?
   longDescription String?
-  price       Decimal?  @db.Decimal(14, 4)
-  finalPrice  Decimal?  @db.Decimal(14, 4)
-  currency    String?
-  ivaPercent  Decimal?  @db.Decimal(6, 2)
-  stock       Int?
-  stockStatus String?
-  imageUrl    String?
-  productUrl  String?
-  locationAir String?
-  warranty    String?
-  weight      Decimal?  @db.Decimal(10, 3)
-  weightUnit  String?
-  height      Decimal?  @db.Decimal(10, 3)
-  width       Decimal?  @db.Decimal(10, 3)
-  length      Decimal?  @db.Decimal(10, 3)
-  dimensionsUnit String?
-  volume      Decimal?  @db.Decimal(12, 3)
-  tags        String?
-  active      Boolean   @default(true)
-  raw         Json
-  syncedAt    DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  price           Decimal? @db.Decimal(14, 4)
+  finalPrice      Decimal? @db.Decimal(14, 4)
+  currency        String?
+  ivaPercent      Decimal? @db.Decimal(6, 2)
+  stock           Int?
+  stockStatus     String?
+  imageUrl        String?
+  productUrl      String?
+  locationAir     String?
+  warranty        String?
+  weight          Decimal? @db.Decimal(10, 3)
+  weightUnit      String?
+  height          Decimal? @db.Decimal(10, 3)
+  width           Decimal? @db.Decimal(10, 3)
+  length          Decimal? @db.Decimal(10, 3)
+  dimensionsUnit  String?
+  volume          Decimal? @db.Decimal(12, 3)
+  tags            String?
+  active          Boolean  @default(true)
+  raw             Json
+  syncedAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([provider, externalId])
   @@index([provider, name])
@@ -177,24 +318,24 @@ enum ZeroStockAction {
 // Configuración de sincronización por usuario y proveedor — equivalente a la
 // pestaña "Configuración" de cada proveedor en AcuStock.
 model ProviderSyncConfig {
-  id                    String                @id @default(uuid())
-  userId                String
-  provider              String
-  enabled               Boolean               @default(false)
-  syncIntervalMinutes   Int                   @default(60)
-  missingProductAction  MissingProductAction  @default(KEEP)
-  zeroStockAction       ZeroStockAction       @default(KEEP)
-  priceMarkupPercent    Decimal               @default(0) @db.Decimal(6, 2)
+  id                   String               @id @default(uuid())
+  userId               String
+  provider             String
+  enabled              Boolean              @default(false)
+  syncIntervalMinutes  Int                  @default(60)
+  missingProductAction MissingProductAction @default(KEEP)
+  zeroStockAction      ZeroStockAction      @default(KEEP)
+  priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)
   // Si el proveedor informa esta cantidad de stock o menos, lo tratamos como
   // sin stock (aplica zeroStockAction). 0 = desactivado. Mismo concepto que
   // el "stock mínimo del proveedor" de AcuStock.
-  minStockThreshold    Int                   @default(0)
-  lastSyncedAt          DateTime?
-  lastSyncError         String?
-  lastSyncCreated       Int                   @default(0)
-  lastSyncUpdated       Int                   @default(0)
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
+  minStockThreshold    Int                  @default(0)
+  lastSyncedAt         DateTime?
+  lastSyncError        String?
+  lastSyncCreated      Int                  @default(0)
+  lastSyncUpdated      Int                  @default(0)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
 
   @@unique([userId, provider])
 }
@@ -220,9 +361,9 @@ model CartItem {
 // NEW_BYTES: POST /carrito/process crea la orden en la cuenta (retiro por defecto).
 // `invidOrderNumber` / `invidWebOrderNumber` guardan el nro. externo del proveedor.
 model ProviderOrder {
-  id                  String   @id @default(uuid())
+  id                  String              @id @default(uuid())
   userId              String
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   provider            String
   status              String
   invidOrderNumber    String?
@@ -232,17 +373,31 @@ model ProviderOrder {
   deliveryOption      String?
   deliveryLabel       String?
   notes               String?
-  subtotal            Decimal? @db.Decimal(14, 4)
-  impuestos           Decimal? @db.Decimal(14, 4)
-  percepciones        Decimal? @db.Decimal(14, 4)
-  total               Decimal? @db.Decimal(14, 4)
+  subtotal            Decimal?            @db.Decimal(14, 4)
+  impuestos           Decimal?            @db.Decimal(14, 4)
+  percepciones        Decimal?            @db.Decimal(14, 4)
+  total               Decimal?            @db.Decimal(14, 4)
   errorMessage        String?
   items               Json
   addressSnapshot     Json
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  // Aprobación interna del comercio: un vendedor arma el pedido pero no lo
+  // confirma; queda en PENDING_APPROVAL hasta que lo aprueba el dueño.
+  approvalStatus      OrderApprovalStatus @default(NOT_REQUIRED)
+  createdByUserId     String?
+  approvedByUserId    String?
+  approvalDecidedAt   DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 
   @@index([userId, provider, createdAt])
+  @@index([approvalStatus])
+}
+
+enum OrderApprovalStatus {
+  NOT_REQUIRED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
 }
 
 // ---------- Marcas ----------
@@ -388,6 +543,7 @@ model BrandAccount {
   imports       ImportRecord[]
   notifications BrandNotification[]
   auditLogs     AuditLogEntry[]
+  tenant        Tenant?             @relation("TenantBrand")
 }
 
 model Distributor {
@@ -403,58 +559,58 @@ model Distributor {
 }
 
 model BrandDistributor {
-  id               String      @id @default(uuid())
-  brandId          String
-  brand            BrandAccount @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  distributorId    String
-  distributor      Distributor @relation(fields: [distributorId], references: [id])
-  active           Boolean     @default(true)
-  visibleToUsers   Boolean     @default(true)
-  commercialNotes  String?
-  createdAt        DateTime    @default(now())
+  id              String       @id @default(uuid())
+  brandId         String
+  brand           BrandAccount @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  distributorId   String
+  distributor     Distributor  @relation(fields: [distributorId], references: [id])
+  active          Boolean      @default(true)
+  visibleToUsers  Boolean      @default(true)
+  commercialNotes String?
+  createdAt       DateTime     @default(now())
 
   @@unique([brandId, distributorId])
 }
 
 model Category {
-  id       String  @id @default(uuid())
+  id       String     @id @default(uuid())
   name     String
   parentId String?
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
-  active   Boolean @default(true)
+  active   Boolean    @default(true)
 
   products BrandProduct[]
 }
 
 model BrandProduct {
-  id                        String   @id @default(uuid())
-  brandId                   String
-  brand                     BrandAccount @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  categoryId                String?
-  category                  Category? @relation(fields: [categoryId], references: [id])
-  subcategoryId             String?
-  internalSku               String?
-  brandSku                  String
-  model                     String
-  commercialName            String
-  eanUpc                    String?
-  shortDescription          String?
-  technicalDescription      String?
-  imageUrls                 String[] @default([])
-  datasheetUrl              String?
-  generalCommercialStatus   String?
-  active                    Boolean  @default(true)
-  discontinued              Boolean  @default(false)
-  isLaunch                  Boolean  @default(false)
-  recommended               Boolean  @default(false)
-  featured                  Boolean  @default(false)
-  hasReplacement            Boolean  @default(false)
-  replacementProductId      String?
-  internalNotes             String?
-  tags                      String[] @default([])
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  id                      String       @id @default(uuid())
+  brandId                 String
+  brand                   BrandAccount @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  categoryId              String?
+  category                Category?    @relation(fields: [categoryId], references: [id])
+  subcategoryId           String?
+  internalSku             String?
+  brandSku                String
+  model                   String
+  commercialName          String
+  eanUpc                  String?
+  shortDescription        String?
+  technicalDescription    String?
+  imageUrls               String[]     @default([])
+  datasheetUrl            String?
+  generalCommercialStatus String?
+  active                  Boolean      @default(true)
+  discontinued            Boolean      @default(false)
+  isLaunch                Boolean      @default(false)
+  recommended             Boolean      @default(false)
+  featured                Boolean      @default(false)
+  hasReplacement          Boolean      @default(false)
+  replacementProductId    String?
+  internalNotes           String?
+  tags                    String[]     @default([])
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
 
   availabilities ProductAvailability[]
   favorites      BrandFavorite[]
@@ -464,21 +620,21 @@ model BrandProduct {
 }
 
 model ProductAvailability {
-  id                   String      @id @default(uuid())
+  id                   String       @id @default(uuid())
   productId            String
   product              BrandProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
   distributorId        String
-  distributor          Distributor @relation(fields: [distributorId], references: [id])
+  distributor          Distributor  @relation(fields: [distributorId], references: [id])
   status               StockStatus
   estimatedQuantity    Int?
   estimatedArrivalDate DateTime?
   notes                String?
-  suggestedPrice       Decimal?    @db.Decimal(12, 2)
+  suggestedPrice       Decimal?     @db.Decimal(12, 2)
   commercialAction     String?
   replacementSuggested String?
   commercialPriority   Int?
-  tags                 String[]    @default([])
-  updatedAt            DateTime    @updatedAt
+  tags                 String[]     @default([])
+  updatedAt            DateTime     @updatedAt
   updatedBy            String?
 
   history AvailabilityHistoryEntry[]
@@ -487,30 +643,30 @@ model ProductAvailability {
 }
 
 model AvailabilityHistoryEntry {
-  id             String   @id @default(uuid())
+  id             String              @id @default(uuid())
   availabilityId String
   availability   ProductAvailability @relation(fields: [availabilityId], references: [id], onDelete: Cascade)
   previousStatus StockStatus?
   newStatus      StockStatus
   changedBy      String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime            @default(now())
 }
 
 model BrandAccess {
-  id               String       @id @default(uuid())
-  brandId          String
-  brand            BrandAccount @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  userId           String?
-  user             User?        @relation("AccessUser", fields: [userId], references: [id])
-  userEmail        String
-  status           AccessStatus @default(PENDING)
-  invitedAt        DateTime     @default(now())
-  acceptedAt       DateTime?
-  lastActivityAt   DateTime?
-  expiresAt        DateTime?
-  userGroup        String?
-  userTags         String[]     @default([])
-  blockedByAdmin   Boolean      @default(false)
+  id             String       @id @default(uuid())
+  brandId        String
+  brand          BrandAccount @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?        @relation("AccessUser", fields: [userId], references: [id])
+  userEmail      String
+  status         AccessStatus @default(PENDING)
+  invitedAt      DateTime     @default(now())
+  acceptedAt     DateTime?
+  lastActivityAt DateTime?
+  expiresAt      DateTime?
+  userGroup      String?
+  userTags       String[]     @default([])
+  blockedByAdmin Boolean      @default(false)
 
   @@unique([brandId, userEmail])
 }
@@ -536,20 +692,20 @@ model BrandNews {
 }
 
 model BrandCampaign {
-  id                     String         @id @default(uuid())
-  brandId                String
-  brand                  BrandAccount   @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  name                   String
-  description            String
-  startDate              DateTime
-  endDate                DateTime
-  productIds             String[]       @default([])
-  distributorIds         String[]       @default([])
-  commercialConditions   String?
-  attachmentUrls         String[]       @default([])
-  visibleUserIds         String[]       @default([])
-  status                 CampaignStatus @default(DRAFT)
-  createdAt              DateTime       @default(now())
+  id                   String         @id @default(uuid())
+  brandId              String
+  brand                BrandAccount   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String
+  startDate            DateTime
+  endDate              DateTime
+  productIds           String[]       @default([])
+  distributorIds       String[]       @default([])
+  commercialConditions String?
+  attachmentUrls       String[]       @default([])
+  visibleUserIds       String[]       @default([])
+  status               CampaignStatus @default(DRAFT)
+  createdAt            DateTime       @default(now())
 }
 
 model BrandMaterial {
@@ -589,18 +745,18 @@ model BrandFavorite {
 }
 
 model BrandNotification {
-  id               String            @id @default(uuid())
+  id               String           @id @default(uuid())
   userId           String
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   brandId          String?
-  brand            BrandAccount?     @relation(fields: [brandId], references: [id])
+  brand            BrandAccount?    @relation(fields: [brandId], references: [id])
   type             NotificationType
   title            String
   message          String
-  read             Boolean           @default(false)
+  read             Boolean          @default(false)
   relatedProductId String?
   relatedEntityId  String?
-  createdAt        DateTime          @default(now())
+  createdAt        DateTime         @default(now())
 
   @@index([userId, read])
 }
@@ -625,25 +781,25 @@ model ImportRecord {
 }
 
 model ImportRowError {
-  id       String        @id @default(uuid())
+  id       String       @id @default(uuid())
   importId String
-  import   ImportRecord  @relation(fields: [importId], references: [id], onDelete: Cascade)
+  import   ImportRecord @relation(fields: [importId], references: [id], onDelete: Cascade)
   row      Int
   column   String?
   message  String
 }
 
 model AuditLogEntry {
-  id              String       @id @default(uuid())
-  entityType      String
-  entityId        String
-  action          String
-  performedById   String
-  performedBy     User         @relation(fields: [performedById], references: [id])
-  brandId         String?
-  brand           BrandAccount? @relation(fields: [brandId], references: [id])
-  changes         Json?
-  createdAt       DateTime     @default(now())
+  id            String        @id @default(uuid())
+  entityType    String
+  entityId      String
+  action        String
+  performedById String
+  performedBy   User          @relation(fields: [performedById], references: [id])
+  brandId       String?
+  brand         BrandAccount? @relation(fields: [brandId], references: [id])
+  changes       Json?
+  createdAt     DateTime      @default(now())
 
   @@index([entityType, entityId])
   @@index([brandId])

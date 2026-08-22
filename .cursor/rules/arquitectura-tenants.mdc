@@ -1,0 +1,51 @@
+---
+description: Arquitectura multi-tenant de NODO — tipos de cliente, roles internos y reglas de visibilidad. Regla base para cualquier trabajo sobre usuarios, permisos, órdenes o superadmin.
+alwaysApply: true
+---
+
+# Arquitectura multi-tenant de NODO
+
+Plan detallado y fases: `docs/ARQUITECTURA_TENANTS.md`. Ese documento es la fuente de verdad;
+esta regla es el resumen obligatorio.
+
+## Modelo base
+
+Todo usuario pertenece a una **organización (`Tenant`)** mediante una **membresía
+(`TenantMembership`)** que define su rol interno. El `role` del `User` (`ROLE_USER`,
+`ROLE_ADMIN`, `ROLE_BRAND`) es solo el nivel de plataforma; **el alcance real lo da la
+membresía**. Nunca resolver permisos de negocio mirando solo `User.role`.
+
+| Tipo de cliente | `TenantType` | Roles internos (`TenantRole`) |
+|---|---|---|
+| 1 — Comercio / local | `RETAILER` | `OWNER`, `BUYER`, `SELLER`, `VIEWER` |
+| 2 — Distribuidor / proveedor | `DISTRIBUTOR` | `OWNER`, `SELLER`, `PRODUCT_MANAGER`, `VIEWER` |
+| 3 — Marca | `BRAND` | `OWNER`, `MARKETING`, `COMMERCIAL`, `VIEWER` |
+
+`SUPERADMIN` es transversal: no pertenece a ninguna organización y ve y administra todo.
+
+## Reglas innegociables
+
+1. **Aislamiento por organización.** Toda consulta de datos de negocio se filtra por
+   `tenantId`. Un usuario nunca ve datos de otra organización salvo a través de un
+   `TenantLink` explícito.
+2. **Descubrimiento cerrado.** Un `RETAILER` solo conoce los distribuidores y marcas con
+   los que tiene `TenantLink`. Un proveedor no vinculado **no debe aparecer ni siquiera
+   como existente**. Las únicas excepciones son la publicidad paga y el canje de un
+   `TenantAccessCode`.
+3. **Códigos de vinculación anónimos.** El endpoint de canje nunca revela a qué
+   organización pertenece un código antes de canjearlo, ni permite enumerar códigos.
+4. **Aprobación de órdenes.** Un `SELLER` de un `RETAILER` arma el carrito pero no
+   confirma: la orden queda en `PENDING_APPROVAL` y solo `OWNER`/`ADMIN` de esa
+   organización la aprueba. Si no hay `SELLER`, la orden nace `NOT_REQUIRED`.
+5. **Alcance del Product Manager.** Un `PRODUCT_MANAGER` opera solo sobre las marcas de
+   su `ProductManagerScope`, y solo dentro de su propio distribuidor.
+6. **Nada de slugs en la interfaz.** En pantalla siempre nombre normalizado
+   (`Tenant.name`, `BrandAccount.name`). Los slugs y las claves de proveedor
+   (`NEW_BYTES`) son identificadores internos.
+
+## Al agregar features
+
+- Nueva entidad de negocio → lleva `tenantId` y su índice.
+- Nuevo endpoint → declarar qué `TenantType` y qué `TenantRole` lo pueden usar.
+- Nueva pantalla → derivar la navegación del `TenantType` del usuario, no de `User.role`.
+- Cambios de contrato → actualizar `API_CONTRACT.md`.

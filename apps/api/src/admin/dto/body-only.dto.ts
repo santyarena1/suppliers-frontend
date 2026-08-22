@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString } from "class-validator";
+import { IsBoolean, IsDateString, ValidateIf } from "class-validator";
 
 export class ActiveStatusBodyDto {
   @IsBoolean()
@@ -6,6 +6,7 @@ export class ActiveStatusBodyDto {
 }
 
 export class EndDateBodyDto {
+  @ValidateIf((_, value) => value !== null)
   @IsDateString()
-  endDate!: string;
+  endDate!: string | null;
 }

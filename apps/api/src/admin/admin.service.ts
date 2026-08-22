@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { ALL_PROVIDERS, DEFAULT_MODULES_BY_ROLE, MODULE_KEYS, type ModuleKey, type Provider, type UserRole } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
@@ -8,6 +8,7 @@ import { UpdatePermissionsDto } from "./dto/update-permissions.dto";
 import { UpdateProviderDisplayDto } from "./dto/update-provider-display.dto";
 import { UpdateBrandDisplayDto } from "./dto/update-brand-display.dto";
 import { CreateBannerDto, UpdateBannerDto } from "./dto/banner.dto";
+import { UpdateUserDto } from "./dto/update-user.dto";
 
 @Injectable()
 export class AdminService {
@@ -24,15 +25,62 @@ export class AdminService {
         existing.username === dto.username ? "El nombre de usuario ya está en uso" : "El email ya está registrado"
       );
     }
+    if (dto.brandId) await this.assertBrandExists(dto.brandId);
     const passwordHash = await argon2.hash(dto.password);
     const user = await this.prisma.user.create({
-      data: { username: dto.username, email: dto.email, passwordHash, role: dto.role },
+      data: {
+        username: dto.username,
+        email: dto.email,
+        passwordHash,
+        role: dto.role,
+        brandId: dto.brandId,
+        active: dto.active ?? true,
+        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+      },
     });
     return { id: user.id, username: user.username, email: user.email, role: user.role };
   }
 
-  async updateRole(userId: string, dto: UpdateRoleDto) {
+  async updateUser(userId: string, dto: UpdateUserDto) {
     await this.assertUserExists(userId);
+    if (dto.username) {
+      const clash = await this.prisma.user.findFirst({ where: { username: dto.username, id: { not: userId } } });
+      if (clash) throw new ConflictException("El nombre de usuario ya está en uso");
+    }
+    if (dto.email) {
+      const clash = await this.prisma.user.findFirst({ where: { email: dto.email, id: { not: userId } } });
+      if (clash) throw new ConflictException("El email ya está registrado");
+    }
+    if (dto.brandId) await this.assertBrandExists(dto.brandId);
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.username ? { username: dto.username } : {}),
+        ...(dto.email ? { email: dto.email } : {}),
+        ...(dto.brandId === undefined ? {} : { brandId: dto.brandId }),
+      },
+      select: { id: true, username: true, email: true, role: true, brandId: true },
+    });
+    return user;
+  }
+
+  async resetPassword(userId: string, password: string) {
+    await this.assertUserExists(userId);
+    const passwordHash = await argon2.hash(password);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    return { id: userId };
+  }
+
+  async updateRole(userId: string, dto: UpdateRoleDto) {
+    const existing = await this.assertUserExists(userId);
+    if (existing.role === "ROLE_ADMIN" && dto.role !== "ROLE_ADMIN") {
+      const others = await this.prisma.user.count({
+        where: { role: "ROLE_ADMIN", active: true, id: { not: userId } },
+      });
+      if (others === 0) {
+        throw new BadRequestException("No se puede quitar el rol del último administrador activo");
+      }
+    }
     const user = await this.prisma.user.update({ where: { id: userId }, data: { role: dto.role } });
     return { id: user.id, role: user.role };
   }
@@ -41,6 +89,12 @@ export class AdminService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException("Usuario no encontrado");
     return user;
+  }
+
+  private async assertBrandExists(brandId: string) {
+    const brand = await this.prisma.brandAccount.findUnique({ where: { id: brandId } });
+    if (!brand) throw new NotFoundException("Marca no encontrada");
+    return brand;
   }
 
   // ---------- Permisos por módulo ----------

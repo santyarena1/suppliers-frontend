@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsString, MinLength } from "class-validator";
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsOptional, IsString, IsUUID, MinLength } from "class-validator";
 import type { UserRole } from "@nodo/shared";
 
 const ROLES: UserRole[] = ["ROLE_USER", "ROLE_ADMIN", "ROLE_BRAND"];
@@ -17,4 +17,16 @@ export class CreateUserDto {
 
   @IsIn(ROLES)
   role!: UserRole;
+
+  @IsOptional()
+  @IsUUID()
+  brandId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
 }
