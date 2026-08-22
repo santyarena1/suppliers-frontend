@@ -18,28 +18,24 @@ import NodoLogo from "../NodoLogo";
 import NodoWordmark from "../NodoWordmark";
 
 const COLLAPSED_KEY = "nodo.sidebar.collapsed";
-const SECTIONS_KEY = "nodo.sidebar.sections";
-
-const DEFAULT_SECTIONS: Record<NavSectionId, boolean> = {
-  providers: true,
-  brands: true,
-  system: true,
-};
+const OPEN_SECTION_KEY = "nodo.sidebar.openSection";
+const SECTION_IDS = new Set<NavSectionId>(["providers", "brands", "system"]);
 
 const ROLE_LABEL: Partial<Record<UserRole, { text: string; className: string }>> = {
   ROLE_ADMIN: { text: "Administrador", className: "text-brand-400" },
   ROLE_BRAND: { text: "Marca", className: "text-violet-400" },
 };
 
-function readSections(): Record<NavSectionId, boolean> {
-  if (typeof window === "undefined") return DEFAULT_SECTIONS;
-  try {
-    const raw = localStorage.getItem(SECTIONS_KEY);
-    if (!raw) return DEFAULT_SECTIONS;
-    return { ...DEFAULT_SECTIONS, ...JSON.parse(raw) };
-  } catch {
-    return DEFAULT_SECTIONS;
-  }
+function readOpenSection(): NavSectionId | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(OPEN_SECTION_KEY);
+  if (raw && SECTION_IDS.has(raw as NavSectionId)) return raw as NavSectionId;
+  return null;
+}
+
+function persistOpenSection(id: NavSectionId | null) {
+  if (id) localStorage.setItem(OPEN_SECTION_KEY, id);
+  else localStorage.removeItem(OPEN_SECTION_KEY);
 }
 
 interface Props {
@@ -56,11 +52,11 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const myModules = useMyModules();
 
   const [collapsed, setCollapsed] = useState(false);
-  const [openSections, setOpenSections] = useState<Record<NavSectionId, boolean>>(DEFAULT_SECTIONS);
+  const [openSection, setOpenSection] = useState<NavSectionId | null>(null);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
-    setOpenSections(readSections());
+    setOpenSection(readOpenSection());
   }, []);
 
   const items = useMemo(
@@ -74,11 +70,10 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
 
   useEffect(() => {
     if (!activeItem?.section) return;
-    setOpenSections((prev) => {
-      if (prev[activeItem.section!]) return prev;
-      const next = { ...prev, [activeItem.section!]: true };
-      localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
-      return next;
+    setOpenSection((prev) => {
+      if (prev === activeItem.section) return prev;
+      persistOpenSection(activeItem.section!);
+      return activeItem.section!;
     });
   }, [activeItem?.section]);
 
@@ -91,9 +86,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   }
 
   function toggleSection(id: NavSectionId) {
-    setOpenSections((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem(SECTIONS_KEY, JSON.stringify(next));
+    setOpenSection((prev) => {
+      const next = prev === id ? null : id;
+      persistOpenSection(next);
       return next;
     });
   }
@@ -182,7 +177,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         {NAV_SECTIONS.map((section) => {
           const sectionItems = items.filter((item) => item.section === section.id);
           if (sectionItems.length === 0) return null;
-          const open = openSections[section.id];
+          const open = openSection === section.id;
           const sectionActive = sectionItems.some((item) => item.id === activeId);
 
           if (iconMode) {
