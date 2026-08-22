@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import {
   adminApi, AdminUser, ProviderDisplay, BrandDisplay, Banner,
   ModulePermission, ModuleKey, ALL_PROVIDERS, PROVIDER_LABELS,
@@ -34,7 +32,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
 const MODULE_LABELS: Record<ModuleKey, string> = {
   search: "Búsqueda",
   cart: "Carrito",
-  credentials: "Credenciales",
+  credentials: "Credenciales (en Proveedores)",
   providers: "Proveedores",
   brands: "Portal de Marcas",
   diagnostics: "Diagnóstico",
@@ -58,11 +56,7 @@ export default function AdminPage() {
   }
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           <header className="flex-shrink-0 border-b border-surface-800 px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="w-7 h-7 rounded-md bg-yellow-500/15 flex items-center justify-center">
@@ -100,8 +94,6 @@ export default function AdminPage() {
             {tab === "banners" && <BannersTab showToast={showToast} />}
             {tab === "appearance" && <AppearanceTab showToast={showToast} />}
           </div>
-        </div>
-      </div>
 
       {toast && (
         <div className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-medium shadow-xl ${
@@ -113,7 +105,7 @@ export default function AdminPage() {
           {toast.msg}
         </div>
       )}
-    </AuthGuard>
+    </>
   );
 }
 
@@ -174,7 +166,12 @@ function PermissionsTab({ showToast }: { showToast: (m: string, ok?: boolean) =>
         <div className="border border-surface-800 rounded-xl divide-y divide-surface-800">
           {perms.map((p) => (
             <div key={p.module} className="flex items-center justify-between px-4 py-3">
-              <span className="text-sm text-surface-200">{MODULE_LABELS[p.module]}</span>
+              <div>
+                <span className="text-sm text-surface-200">{MODULE_LABELS[p.module]}</span>
+                {p.module === "credentials" && (
+                  <p className="text-[11px] text-surface-500 mt-0.5">Ya no tiene ítem propio en el menú: vive en cada proveedor.</p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => toggle(p.module)}

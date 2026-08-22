@@ -2,9 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import Navbar from "@/components/Navbar";
 import ProductCard from "@/components/ProductCard";
-import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
@@ -187,11 +185,7 @@ function SearchPage() {
   const hasInResultsFilter = refineText || minPrice || maxPrice || hideNoImage;
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           {/* Top bar */}
           <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-6 py-3.5 flex items-center gap-3">
             <form onSubmit={handleSearch} className="flex-1 max-w-xl flex items-center gap-2">
@@ -441,9 +435,7 @@ function SearchPage() {
               )}
             </div>
           </div>
-        </div>
-      </div>
-    </AuthGuard>
+    </>
   );
 }
 

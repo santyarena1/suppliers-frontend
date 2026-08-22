@@ -1,7 +1,5 @@
 "use client";
 
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { useTheme, THEME_OPTIONS, type Theme } from "@/lib/theme";
 import { getUser } from "@/lib/auth";
@@ -24,11 +22,7 @@ export default function ConfiguracionPage() {
   } = usePrefs();
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-brand-600/15 border border-brand-500/25 flex items-center justify-center">
@@ -183,8 +177,6 @@ export default function ConfiguracionPage() {
               </section>
             </div>
           </div>
-        </div>
-      </div>
-    </AuthGuard>
+    </>
   );
 }

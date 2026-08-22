@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import { ALL_PROVIDERS, Provider, searchApi, credentialsApi } from "@/lib/api";
 import { PROVIDER_TEXT_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
@@ -110,11 +108,7 @@ export default function DiagnosticsPage() {
   const tested = summary.ok + summary.empty + summary.error;
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           <header className="flex-shrink-0 border-b border-surface-800 px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-7 h-7 rounded-md bg-emerald-500/15 flex items-center justify-center">
@@ -261,9 +255,7 @@ export default function DiagnosticsPage() {
               </section>
             </div>
           </div>
-        </div>
-      </div>
-    </AuthGuard>
+    </>
   );
 }
 

@@ -3,9 +3,9 @@ import {
   Megaphone, FolderOpen, GraduationCap, History, Settings,
   Heart, Bell, GitCompare, Mail,
 } from "lucide-react";
-import type { ModuleNavItem } from "@/components/brands/BrandModuleShell";
+import type { ContextNavItem } from "@/components/layout/ContextNav";
 
-export const USER_BRANDS_NAV: ModuleNavItem[] = [
+export const USER_BRANDS_NAV: ContextNavItem[] = [
   { href: "/marcas", label: "Inicio", icon: Home, exact: true },
   { href: "/marcas/invitaciones", label: "Invitaciones", icon: Mail },
   { href: "/marcas/novedades", label: "Novedades", icon: Newspaper },
@@ -14,7 +14,7 @@ export const USER_BRANDS_NAV: ModuleNavItem[] = [
   { href: "/marcas/comparador", label: "Comparador", icon: GitCompare },
 ];
 
-export const BRAND_PANEL_NAV: ModuleNavItem[] = [
+export const BRAND_PANEL_NAV: ContextNavItem[] = [
   { href: "/marca", label: "Dashboard", icon: Home, exact: true },
   { href: "/marca/productos", label: "Productos", icon: Grid3X3 },
   { href: "/marca/disponibilidad", label: "Mapa de disponibilidad", icon: Building2 },
@@ -29,7 +29,7 @@ export const BRAND_PANEL_NAV: ModuleNavItem[] = [
   { href: "/marca/historial", label: "Historial", icon: History },
 ];
 
-export const ADMIN_MARCAS_NAV: ModuleNavItem[] = [
+export const ADMIN_MARCAS_NAV: ContextNavItem[] = [
   { href: "/admin/marcas", label: "Resumen", icon: Home, exact: true },
   { href: "/admin/marcas/marcas", label: "Marcas", icon: Building2 },
   { href: "/admin/marcas/distribuidores", label: "Distribuidores", icon: Truck },

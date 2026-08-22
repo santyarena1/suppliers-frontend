@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
+import { invalidateMyModules } from "@/lib/permissions";
 import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
@@ -30,6 +31,7 @@ export default function LoginPage() {
       const res = await authApi.login(username, password);
       const token = res.data.token;
       const payload = JSON.parse(atob(token.split(".")[1]));
+      invalidateMyModules();
       saveSession(token, {
         username: payload.sub ?? username,
         role: payload.role ?? payload.roles?.[0] ?? "ROLE_USER",

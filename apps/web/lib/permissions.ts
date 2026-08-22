@@ -5,6 +5,13 @@ import { permissionsApi, ModuleKey } from "./api";
 
 let cache: ModuleKey[] | null = null;
 let inflight: Promise<ModuleKey[] | null> | null = null;
+const listeners = new Set<() => void>();
+
+export function invalidateMyModules() {
+  cache = null;
+  inflight = null;
+  listeners.forEach((fn) => fn());
+}
 
 async function load(): Promise<ModuleKey[] | null> {
   if (cache) return cache;
@@ -16,7 +23,7 @@ async function load(): Promise<ModuleKey[] | null> {
         return cache;
       })
       // Si falla (token vencido, red, lo que sea) no hay que ocultar todo el
-      // Navbar — eso deja al usuario sin poder ni siquiera loguearse de nuevo
+      // sidebar — eso deja al usuario sin poder ni siquiera loguearse de nuevo
       // por su cuenta. `null` = "no lo sabemos, mostrar todo" (fail-open);
       // las restricciones reales igual se aplican del lado del backend.
       .catch(() => null);
@@ -27,11 +34,20 @@ async function load(): Promise<ModuleKey[] | null> {
 /**
  * Módulos habilitados para el usuario logueado (por rol + excepciones que
  * cargó el superadmin). Devuelve `null` mientras carga o si falló la
- * consulta — el Navbar no debe ocultar nada sin una respuesta real, para no
+ * consulta — el sidebar no debe ocultar nada sin una respuesta real, para no
  * parpadear ni dejar a nadie bloqueado por un error transitorio.
  */
 export function useMyModules(): ModuleKey[] | null {
   const [modules, setModules] = useState<ModuleKey[] | null>(cache);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const unsub = () => setTick((n) => n + 1);
+    listeners.add(unsub);
+    return () => {
+      listeners.delete(unsub);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -41,7 +57,7 @@ export function useMyModules(): ModuleKey[] | null {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [tick]);
 
   return modules;
 }
