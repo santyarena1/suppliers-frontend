@@ -54,7 +54,7 @@ function stubApi() {
 }
 
 const ITEMS = [{ code: "18636", qty: 1, name: "AP Cudy" }];
-const CREDS = { id: "28736", password: "x" };
+const CREDS = { id: "12345", password: "x" };
 
 describe("ElitOrderService", () => {
   let api: ReturnType<typeof stubApi>;
