@@ -7,6 +7,18 @@ import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
 import { AppModule } from "./app.module";
 
+/**
+ * Los deploys de preview de Vercel tienen dominio dinámico, así que una entrada de
+ * CORS_ORIGIN puede traer un comodín (`https://*.vercel.app`). El comodín cubre una
+ * sola etiqueta de dominio; sin comodín la comparación es exacta.
+ */
+function toOriginMatcher(pattern: string): (origin: string) => boolean {
+  if (!pattern.includes("*")) return (origin) => origin === pattern;
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^./]+");
+  const regex = new RegExp(`^${escaped}$`);
+  return (origin) => regex.test(origin);
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
 
@@ -15,13 +27,18 @@ async function bootstrap() {
   await app.register(helmet as any);
   await app.register(multipart as any, { limits: { fileSize: 20 * 1024 * 1024 } });
 
-  const corsOrigin = (config.get<string>("CORS_ORIGIN") ?? "http://localhost:3000")
+  const allowedOrigins = (config.get<string>("CORS_ORIGIN") ?? "http://localhost:3000")
     .split(",")
     .map((origin) => origin.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map(toOriginMatcher);
 
   app.enableCors({
-    origin: corsOrigin,
+    origin: (origin: string | undefined, callback: (err: Error | null, allow: boolean) => void) => {
+      // Sin cabecera Origin no hay navegador de por medio (curl, health checks).
+      if (!origin) return callback(null, true);
+      callback(null, allowedOrigins.some((matches) => matches(origin)));
+    },
     credentials: true,
   });
 
