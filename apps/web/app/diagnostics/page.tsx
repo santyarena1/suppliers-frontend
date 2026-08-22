@@ -256,7 +256,7 @@ export default function DiagnosticsPage() {
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" /><span><strong className="text-emerald-400">OK:</strong> proveedor respondió con productos</span></li>
                   <li className="flex items-start gap-2"><Minus className="w-3.5 h-3.5 text-yellow-400 mt-0.5 flex-shrink-0" /><span><strong className="text-yellow-400">Vacío:</strong> respondió pero sin resultados para ese término</span></li>
                   <li className="flex items-start gap-2"><XCircle className="w-3.5 h-3.5 text-red-400 mt-0.5 flex-shrink-0" /><span><strong className="text-red-400">Error:</strong> el back o el proveedor devolvieron un error</span></li>
-                  <li className="flex items-start gap-2"><AlertTriangle className="w-3.5 h-3.5 text-surface-500 mt-0.5 flex-shrink-0" /><span><strong className="text-surface-400">Sin credencial:</strong> falta configurar API key en Credenciales</span></li>
+                  <li className="flex items-start gap-2"><AlertTriangle className="w-3.5 h-3.5 text-surface-500 mt-0.5 flex-shrink-0" /><span><strong className="text-surface-400">Sin credencial:</strong> falta cargar la cuenta en Proveedores → Mi cuenta</span></li>
                 </ul>
               </section>
             </div>

@@ -329,6 +329,108 @@ export const invidCheckoutApi = {
   drafts: () => api.get<InvidNodoDraft[]>("/providers/INVID/drafts"),
 };
 
+// --- NewBytes: pedidos, comprobantes y checkout (API oficial api.nb.com.ar) ---
+export interface NewBytesOrder {
+  orderNumber?: string;
+  webOrderNumber?: string;
+  albNumber?: string;
+  branch?: string;
+  status: string;
+  statusDescription?: string;
+  date: string;
+  amount?: string | number;
+  clientName?: string;
+  trackingNumber?: string;
+  invoice?: string;
+}
+export interface NewBytesComprobante {
+  voucherId?: string | number;
+  invoiceDate?: string;
+  invoiceType?: string;
+  invoiceNumber?: string;
+  invoiceLabel?: string;
+  branch?: string | number;
+  subtotalUsd?: number;
+  totalUsd?: number;
+  subtotalArs?: number;
+  totalArs?: number;
+  perceptions?: number;
+  voucherUrl?: string;
+}
+export interface NewBytesAddress {
+  id: string;
+  label: string;
+  addressLine: string;
+  postalCode?: string;
+  isDefault: boolean;
+}
+export interface NewBytesPaymentOption {
+  value: string;
+  label: string;
+  interest: number;
+  pickupOnly: boolean;
+}
+export interface NewBytesCheckoutItem {
+  code: string;
+  qty: number;
+  name: string;
+  price: number;
+  subtotal: number;
+}
+export interface NewBytesCheckoutPreview {
+  items: NewBytesCheckoutItem[];
+  payments: NewBytesPaymentOption[];
+  addresses: NewBytesAddress[];
+  address: { id: string; label: string; addressLine: string; postalCode?: string } | null;
+  paymentOption?: string;
+  paymentLabel?: string;
+  deliveries: { value: string; label: string }[];
+  suggestedDelivery?: { value: string; label: string };
+  stockOk: boolean;
+  subtotal: number;
+  total?: number;
+  note: string;
+}
+export interface NewBytesDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  items: NewBytesCheckoutItem[];
+  total: string | number | null;
+  message: string;
+}
+export interface NewBytesNodoDraft {
+  id: string;
+  status: string;
+  invidOrderNumber: string | null;
+  invidWebOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  createdAt: string;
+  errorMessage: string | null;
+}
+
+export const newBytesAccountApi = {
+  orders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/orders"),
+  purchaseOrders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/purchase-orders"),
+  accountStatement: () =>
+    api.get<{ balance: number | null; movements: NewBytesComprobante[] }>("/providers/NEW_BYTES/account-statement"),
+};
+
+export const newBytesCheckoutApi = {
+  addresses: () => api.get<NewBytesAddress[]>("/providers/NEW_BYTES/checkout/addresses"),
+  payments: () => api.get<NewBytesPaymentOption[]>("/providers/NEW_BYTES/checkout/payments"),
+  preview: (body: { items: { code: string; qty: number }[]; medioDePagoId: number; addressId?: string; medioDeEnvioId?: number; notes?: string }) =>
+    api.post<NewBytesCheckoutPreview>("/providers/NEW_BYTES/checkout/preview", body),
+  draft: (body: { items: { code: string; qty: number; name?: string }[]; medioDePagoId: number; addressId?: string; medioDeEnvioId?: number; notes?: string }) =>
+    api.post<NewBytesDraftResult>("/providers/NEW_BYTES/checkout/draft", body),
+  drafts: () => api.get<NewBytesNodoDraft[]>("/providers/NEW_BYTES/drafts"),
+};
+
 // --- Admin / Users ---
 export const userApi = {
   updateActiveStatus: (userId: string, active: boolean) =>

@@ -8,8 +8,11 @@ import { ProvidersService } from "./providers.service";
 import { FileImportService } from "./file-import.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
+import { NewBytesAccountService } from "./new-bytes-account.service";
+import { NewBytesOrderService } from "./new-bytes-order.service";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 import { InvidCheckoutDraftDto, InvidCheckoutPreviewDto } from "./dto/invid-checkout.dto";
+import { NewBytesCheckoutDraftDto, NewBytesCheckoutPreviewDto } from "./dto/new-bytes-checkout.dto";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -26,11 +29,18 @@ export class ProvidersController {
     private readonly fileImportService: FileImportService,
     private readonly credentialsService: CredentialsService,
     private readonly invidAccountService: InvidAccountService,
-    private readonly invidOrderService: InvidOrderService
+    private readonly invidOrderService: InvidOrderService,
+    private readonly newBytesAccountService: NewBytesAccountService,
+    private readonly newBytesOrderService: NewBytesOrderService
   ) {}
 
   private async invidCredentials(userId: string) {
     const stored = await this.credentialsService.getByProvider(userId, "INVID");
+    return JSON.parse(stored.credentialsJson) as Record<string, string>;
+  }
+
+  private async newBytesCredentials(userId: string) {
+    const stored = await this.credentialsService.getByProvider(userId, "NEW_BYTES");
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
@@ -75,6 +85,55 @@ export class ProvidersController {
   @Post("providers/INVID/checkout/draft")
   async invidCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: InvidCheckoutDraftDto) {
     return this.invidOrderService.submitDraft(user.userId, await this.invidCredentials(user.userId), dto);
+  }
+
+  /** Historial real de pedidos web de NewBytes (solo lectura). */
+  @Get("providers/NEW_BYTES/orders")
+  async newBytesOrders(@CurrentUser() user: { userId: string }) {
+    return this.newBytesAccountService.getOrders(await this.newBytesCredentials(user.userId));
+  }
+
+  /** Órdenes de compra reales de NewBytes (las que genera el checkout). */
+  @Get("providers/NEW_BYTES/purchase-orders")
+  async newBytesPurchaseOrders(@CurrentUser() user: { userId: string }) {
+    return this.newBytesAccountService.getPurchaseOrders(await this.newBytesCredentials(user.userId));
+  }
+
+  /** Comprobantes / cuenta corriente de NewBytes (solo lectura). */
+  @Get("providers/NEW_BYTES/account-statement")
+  async newBytesAccountStatement(@CurrentUser() user: { userId: string }) {
+    return this.newBytesAccountService.getAccountStatement(await this.newBytesCredentials(user.userId));
+  }
+
+  @Get("providers/NEW_BYTES/profile")
+  async newBytesProfile(@CurrentUser() user: { userId: string }) {
+    return this.newBytesAccountService.getProfile(await this.newBytesCredentials(user.userId));
+  }
+
+  @Get("providers/NEW_BYTES/checkout/addresses")
+  async newBytesAddresses(@CurrentUser() user: { userId: string }) {
+    return this.newBytesOrderService.getAddresses(await this.newBytesCredentials(user.userId));
+  }
+
+  @Get("providers/NEW_BYTES/checkout/payments")
+  async newBytesPayments(@CurrentUser() user: { userId: string }) {
+    return this.newBytesOrderService.getPayments(await this.newBytesCredentials(user.userId));
+  }
+
+  @Get("providers/NEW_BYTES/drafts")
+  newBytesDrafts(@CurrentUser() user: { userId: string }) {
+    return this.newBytesOrderService.listDrafts(user.userId);
+  }
+
+  @Post("providers/NEW_BYTES/checkout/preview")
+  async newBytesCheckoutPreview(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutPreviewDto) {
+    return this.newBytesOrderService.preview(await this.newBytesCredentials(user.userId), dto);
+  }
+
+  /** Crea el pedido en NewBytes (retiro por defecto) y guarda una copia en Nodo. */
+  @Post("providers/NEW_BYTES/checkout/draft")
+  async newBytesCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutDraftDto) {
+    return this.newBytesOrderService.submitDraft(user.userId, await this.newBytesCredentials(user.userId), dto);
   }
 
   @Post("providers/:provider/sync")

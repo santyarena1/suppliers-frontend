@@ -7,6 +7,7 @@ import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import InvidDraftPanel from "@/components/InvidDraftPanel";
+import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
 import { useCart, CartItem } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { proxyImg, formatUSD } from "@/lib/format";
@@ -386,6 +387,13 @@ export default function CartPage() {
                     <InvidDraftPanel
                       items={byProvider.INVID}
                       onCreated={() => clearProvider("INVID")}
+                    />
+                  )}
+
+                  {byProvider.NEW_BYTES?.length > 0 && (
+                    <NewBytesDraftPanel
+                      items={byProvider.NEW_BYTES}
+                      onCreated={() => clearProvider("NEW_BYTES")}
                     />
                   )}
 
