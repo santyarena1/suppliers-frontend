@@ -30,8 +30,18 @@ export function unwrapList<T = unknown>(body: unknown): T[] {
   return [];
 }
 
-export function snapshotJson(value: unknown) {
-  return JSON.parse(JSON.stringify(value ?? null)) as string | number | boolean | null | object;
+export type JsonSnapshot =
+  | string
+  | number
+  | boolean
+  | JsonSnapshot[]
+  | { [key: string]: JsonSnapshot };
+
+/** JSON para columnas Prisma. Nunca null: Prisma pide InputJsonValue, no `null`. */
+export function snapshotJson(value: unknown): JsonSnapshot {
+  const parsed: unknown = JSON.parse(JSON.stringify(value ?? null));
+  if (parsed === null) return {};
+  return parsed as JsonSnapshot;
 }
 
 export function axiosErrorMessage(err: unknown, fallback: string): string {
