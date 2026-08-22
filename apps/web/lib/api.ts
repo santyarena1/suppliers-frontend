@@ -100,6 +100,24 @@ export const ALL_PROVIDERS: Provider[] = [
   "SOLUTION_BOX", "DISTECNA", "CEVEN", "DIAPSTORE",
 ];
 
+/** Nombre comercial normalizado de cada proveedor. Es lo único que se muestra en pantalla. */
+export const PROVIDER_LABELS: Record<Provider, string> = {
+  NEW_BYTES: "New Bytes",
+  ELIT: "Elit",
+  GRUPO_NUCLEO: "Grupo Núcleo",
+  AIR: "Air",
+  NEW_TREE: "New Tree",
+  INVID: "Invid",
+  GC: "GC",
+  POLYTECH: "Polytech",
+  ASHIR: "Ashir",
+  HDC: "HDC",
+  SOLUTION_BOX: "Solution Box",
+  DISTECNA: "Distecna",
+  CEVEN: "Ceven",
+  DIAPSTORE: "Diapstore",
+};
+
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
 export const IMPLEMENTED_PROVIDERS: Provider[] = [
   "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE",

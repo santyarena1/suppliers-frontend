@@ -8,6 +8,8 @@ import {
   BrandDisplay,
   ModuleKey,
   ModulePermission,
+  PROVIDER_LABELS,
+  Provider,
   UserRole,
 } from "@/lib/api";
 import { getUser } from "@/lib/auth";
@@ -54,7 +56,7 @@ function errMsg(err: unknown, fallback: string) {
 }
 
 function providerLabel(provider: string) {
-  return provider.replace(/_/g, " ");
+  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
 }
 
 function formatDate(value: string | null | undefined) {
