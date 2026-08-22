@@ -6,6 +6,8 @@ import { InvidAdapter } from "./adapters/invid.adapter";
 import { AirAdapter } from "./adapters/air.adapter";
 import { GrupoNucleoAdapter } from "./adapters/grupo-nucleo.adapter";
 import { NewBytesAdapter } from "./adapters/new-bytes.adapter";
+import { CevenAdapter } from "./adapters/ceven.adapter";
+import { DiapstoreAdapter } from "./adapters/diapstore.adapter";
 
 @Injectable()
 export class ProviderRegistry {
@@ -16,7 +18,9 @@ export class ProviderRegistry {
     invid: InvidAdapter,
     air: AirAdapter,
     grupoNucleo: GrupoNucleoAdapter,
-    newBytes: NewBytesAdapter
+    newBytes: NewBytesAdapter,
+    ceven: CevenAdapter,
+    diapstore: DiapstoreAdapter
   ) {
     this.adapters = {
       ELIT: elit,
@@ -24,6 +28,8 @@ export class ProviderRegistry {
       AIR: air,
       GRUPO_NUCLEO: grupoNucleo,
       NEW_BYTES: newBytes,
+      CEVEN: ceven,
+      DIAPSTORE: diapstore,
     };
   }
 

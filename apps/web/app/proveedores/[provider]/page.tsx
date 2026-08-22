@@ -6,7 +6,7 @@ import Image from "next/image";
 import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
-  MissingProductAction, ZeroStockAction, providersApi, searchApi,
+  MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
   invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft
 } from "@/lib/api";
 import { parsePrice, proxyImg } from "@/lib/format";
@@ -199,7 +199,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     if (status.provider !== provider) return;
     autoTabDone.current = true;
     if (tabFromQuery.current) return;
-    if (!status.hasCredentials) setTab("credentials");
+    if (!canSyncProvider(status)) setTab("credentials");
   }, [loadingStatus, status, provider]);
 
   async function handleSync() {
@@ -298,6 +298,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       <button onClick={() => setTab("credentials")} className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-1 hover:text-emerald-300 transition-colors">
                         <CheckCircle2 className="w-4 h-4" /> Configurada
                       </button>
+                    ) : status?.publicCatalog ? (
+                      <span className="flex items-center gap-1.5 text-sm font-semibold text-sky-400 mt-1">
+                        <CheckCircle2 className="w-4 h-4" /> Catálogo público
+                      </span>
                     ) : (
                       <button onClick={() => setTab("credentials")} className="flex items-center gap-1.5 text-sm font-semibold text-surface-400 hover:text-white mt-1 transition-colors">
                         <KeyRound className="w-4 h-4" /> Cargar cuenta
@@ -348,15 +352,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         Trae el catálogo completo de {provider.replace(/_/g, " ")} y lo guarda en nuestra base.
                         Las búsquedas de los usuarios consultan esta base, no la API del proveedor en vivo.
                       </p>
-                      {!status?.hasCredentials && (
+                      {!canSyncProvider(status) && (
                         <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs rounded-lg px-3.5 py-2.5">
                           <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                           Necesitás <button type="button" onClick={() => setTab("credentials")} className="underline font-medium">cargar tu cuenta</button> antes de sincronizar.
                         </div>
                       )}
+                      {status?.publicCatalog && !status.hasCredentials && (
+                        <p className="text-xs text-surface-500">
+                          Este catálogo es público: se sincroniza sin login. Los precios son los que publica el sitio (lista, no necesariamente mayorista).
+                        </p>
+                      )}
                       <button
                         onClick={handleSync}
-                        disabled={syncing || !status?.hasCredentials}
+                        disabled={syncing || !canSyncProvider(status)}
                         className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                       >
                         {syncing ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}

@@ -150,6 +150,10 @@ export default function ProviderCredentialForm({
           <div className="flex justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
           </div>
+        ) : schema && schema.fields.length === 0 ? (
+          <p className="text-xs text-surface-400">
+            No hace falta cargar usuario: el catálogo se sincroniza desde la pestaña Sincronización.
+          </p>
         ) : schema ? (
           <form onSubmit={handleSave} className="flex flex-col gap-3">
             {schema.fields.map((field) => (

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { IMPLEMENTED_PROVIDERS, Provider, providersApi, ProviderStatus } from "@/lib/api";
+import { IMPLEMENTED_PROVIDERS, Provider, providersApi, ProviderStatus, canSyncProvider } from "@/lib/api";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { LayoutDashboard } from "lucide-react";
 
@@ -50,7 +50,7 @@ export default function ProvidersSubSidebar() {
           {IMPLEMENTED_PROVIDERS.map((provider) => {
             const active = pathname === `/proveedores/${provider}`;
             const s = statuses[provider];
-            const dotColor = !s?.hasCredentials
+            const dotColor = !canSyncProvider(s)
               ? "bg-surface-600"
               : s?.lastSyncedAt
               ? "bg-emerald-500"

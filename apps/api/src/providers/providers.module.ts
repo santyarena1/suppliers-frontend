@@ -9,6 +9,8 @@ import { InvidAdapter } from "./adapters/invid.adapter";
 import { AirAdapter } from "./adapters/air.adapter";
 import { GrupoNucleoAdapter } from "./adapters/grupo-nucleo.adapter";
 import { NewBytesAdapter } from "./adapters/new-bytes.adapter";
+import { CevenAdapter } from "./adapters/ceven.adapter";
+import { DiapstoreAdapter } from "./adapters/diapstore.adapter";
 import { FileImportService } from "./file-import.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
@@ -27,6 +29,8 @@ import { NewBytesOrderService } from "./new-bytes-order.service";
     AirAdapter,
     GrupoNucleoAdapter,
     NewBytesAdapter,
+    CevenAdapter,
+    DiapstoreAdapter,
     FileImportService,
     InvidAccountService,
     InvidOrderService,

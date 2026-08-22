@@ -59,9 +59,11 @@ export class ProvidersService {
     }
 
     const stored = await this.credentials.getByProvider(userId, provider).catch(() => null);
-    if (!stored) throw new NotFoundException(`No hay credenciales guardadas para ${provider}`);
+    if (!stored && !adapter.publicCatalog) {
+      throw new NotFoundException(`No hay credenciales guardadas para ${provider}`);
+    }
 
-    const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
+    const credentials = stored ? (JSON.parse(stored.credentialsJson) as Record<string, string>) : {};
     const syncedExternalIds: string[] = [];
 
     const result = await this.runSync(userId, provider, async (onPage) => {
@@ -304,6 +306,7 @@ export class ProvidersService {
     return {
       provider,
       implemented: Boolean(this.registry.get(provider)),
+      publicCatalog: Boolean(this.registry.get(provider)?.publicCatalog),
       hasCredentials,
       total,
       withStock,

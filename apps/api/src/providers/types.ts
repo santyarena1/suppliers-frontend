@@ -44,6 +44,8 @@ export interface NormalizedProduct {
 
 export interface ProviderAdapter {
   readonly provider: Provider;
+  /** Catálogo público: se puede sincronizar sin guardar credenciales. */
+  readonly publicCatalog?: boolean;
   /** Recorre el catálogo completo del proveedor, invocando onPage por cada
    * tanda para que el caller la persista sin acumular todo en memoria. */
   syncAll(credentials: Record<string, string>, onPage: (items: NormalizedProduct[]) => Promise<void>): Promise<void>;
