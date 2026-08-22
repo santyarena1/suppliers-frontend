@@ -22,14 +22,22 @@ import {
   extractTaxLines,
   taxByKind,
   formatAlicuota,
+  perceptionGroupLabel,
 } from "@/lib/tax";
-import { ALL_PROVIDERS, InvidCheckoutPreview } from "@/lib/api";
+import {
+  ALL_PROVIDERS,
+  ElitCheckoutPreview,
+  InvidCheckoutPreview,
+  NewBytesCartSnapshot,
+} from "@/lib/api";
 import {
   Trash2, Minus, Plus, Download, AlertTriangle, ImageOff,
   FileText, MessageCircle, Check, Copy, ChevronDown, History,
 } from "lucide-react";
 import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
 import type { PendingOrderProvider } from "@/lib/pendingOrders";
+
+type PerceptionLine = { label: string; amount: number };
 
 type Totals = {
   subtotalUSD: number;
@@ -43,6 +51,15 @@ type Totals = {
   totalUSD: number;
   itemCount: number;
   productCount: number;
+  perceptionLines: PerceptionLine[];
+};
+
+type TaxExtra = {
+  shippingUSD?: number;
+  percepcionPercent?: number;
+  perceptionsUSD?: number;
+  perceptionLines?: PerceptionLine[];
+  totalUSD?: number;
 };
 
 const EMPTY_TOTALS: Totals = {
@@ -57,12 +74,15 @@ const EMPTY_TOTALS: Totals = {
   totalUSD: 0,
   itemCount: 0,
   productCount: 0,
+  perceptionLines: [],
 };
 
 export default function CartPage() {
   const { items, byProvider, setQty, remove, clear, clearProvider, totalCount } = useCart();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
+  const [elitPreview, setElitPreview] = useState<ElitCheckoutPreview | null>(null);
+  const [nbSnapshot, setNbSnapshot] = useState<NewBytesCartSnapshot | null>(null);
 
   const [confirmClear, setConfirmClear] = useState<"all" | string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -104,8 +124,9 @@ export default function CartPage() {
     [byProvider]
   );
 
-  function totalsFor(its: CartItem[], extra?: { shippingUSD?: number; percepcionPercent?: number }): Totals {
+  function totalsFor(its: CartItem[], extra?: TaxExtra): Totals {
     let subtotalUSD = 0, ivaUSD = 0, internosUSD = 0, iibbUSD = 0, otherUSD = 0;
+    const perceptionLines: PerceptionLine[] = [...(extra?.perceptionLines ?? [])];
     for (const it of its) {
       const pricing = linePricing(it, it.qty);
       subtotalUSD += pricing.net;
@@ -113,8 +134,12 @@ export default function CartPage() {
         const amt = line.unitAmount * it.qty;
         if (line.kind === "iva") ivaUSD += amt;
         else if (line.kind === "internos") internosUSD += amt;
-        else if (line.kind === "iibb") iibbUSD += amt;
-        else otherUSD += amt;
+        else if (line.kind === "iibb") {
+          iibbUSD += amt;
+          if (amt > 0.0005 && !extra?.perceptionLines?.length) {
+            perceptionLines.push({ label: line.label || "Percepciones", amount: amt });
+          }
+        } else otherUSD += amt;
       }
     }
     const shippingUSD = extra?.shippingUSD ?? 0;
@@ -122,7 +147,10 @@ export default function CartPage() {
     const shippingIibb = shippingUSD * ((extra?.percepcionPercent ?? 0) / 100);
     ivaUSD += shippingIva;
     iibbUSD += shippingIibb;
+    if (extra?.perceptionsUSD) iibbUSD += extra.perceptionsUSD;
     const taxUSD = ivaUSD + internosUSD + iibbUSD + otherUSD;
+    let totalUSD = withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD;
+    if (withIva && extra?.totalUSD != null) totalUSD = Math.max(totalUSD, extra.totalUSD);
     return {
       subtotalUSD,
       ivaUSD,
@@ -132,24 +160,65 @@ export default function CartPage() {
       shippingUSD,
       quotedShipping: extra != null,
       taxUSD,
-      totalUSD: withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD,
+      totalUSD,
       itemCount: its.reduce((s, it) => s + it.qty, 0),
       productCount: its.length,
+      perceptionLines,
     };
   }
 
-  const invidExtra = invidPreview?.stockOk
+  const invidExtra: TaxExtra | undefined = invidPreview?.stockOk
     ? { shippingUSD: invidPreview.shippingCost ?? 0, percepcionPercent: invidPreview.percepcionPercent ?? 0 }
     : undefined;
+  const elitExtra: TaxExtra | undefined = elitPreview
+    ? {
+        shippingUSD: elitPreview.shippingCost ?? 0,
+        perceptionsUSD: elitPreview.perceptions ?? 0,
+        perceptionLines: elitPreview.perceptionLines ?? [],
+        totalUSD: elitPreview.total,
+      }
+    : undefined;
+  const nbExtra: TaxExtra | undefined = nbSnapshot
+    ? {
+        perceptionsUSD: nbSnapshot.perceptions ?? 0,
+        perceptionLines: nbSnapshot.perceptionLines ?? [],
+        totalUSD: nbSnapshot.total,
+      }
+    : undefined;
 
-  const grand = useMemo(() => totalsFor(items, invidExtra), [items, withIva, invidPreview]);
+  function extraFor(provider: string): TaxExtra | undefined {
+    if (provider === "INVID") return invidExtra;
+    if (provider === "ELIT") return elitExtra;
+    if (provider === "NEW_BYTES") return nbExtra;
+    return undefined;
+  }
+
+  const grand = useMemo(() => {
+    const tot = totalsFor(items);
+    const parts = Object.entries(byProvider).map(([p, its]) => totalsFor(its, extraFor(p)));
+    if (parts.length === 0) return tot;
+    return parts.reduce((acc, t) => ({
+      subtotalUSD: acc.subtotalUSD + t.subtotalUSD,
+      ivaUSD: acc.ivaUSD + t.ivaUSD,
+      internosUSD: acc.internosUSD + t.internosUSD,
+      iibbUSD: acc.iibbUSD + t.iibbUSD,
+      otherUSD: acc.otherUSD + t.otherUSD,
+      shippingUSD: acc.shippingUSD + t.shippingUSD,
+      quotedShipping: acc.quotedShipping || t.quotedShipping,
+      taxUSD: acc.taxUSD + t.taxUSD,
+      totalUSD: acc.totalUSD + t.totalUSD,
+      itemCount: acc.itemCount + t.itemCount,
+      productCount: acc.productCount + t.productCount,
+      perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
+    }), { ...EMPTY_TOTALS });
+  }, [items, byProvider, withIva, invidPreview, elitPreview, nbSnapshot]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
     for (const [p, its] of Object.entries(byProvider)) {
-      m[p] = totalsFor(its, p === "INVID" ? invidExtra : undefined);
+      m[p] = totalsFor(its, extraFor(p));
     }
     return m;
-  }, [byProvider, withIva, invidPreview]);
+  }, [byProvider, withIva, invidPreview, elitPreview, nbSnapshot]);
 
   function fmt(usd: number, digits = currency === "USD" ? 2 : 0) {
     if (currency === "USD") return formatUSD(usd);
@@ -202,7 +271,10 @@ export default function CartPage() {
     if (withIva) {
       if (tot.ivaUSD > 0) lines.push(`IVA: ${fmt(tot.ivaUSD, 2)}`);
       if (tot.internosUSD > 0) lines.push(`Imp. internos: ${fmt(tot.internosUSD, 2)}`);
-      if (tot.iibbUSD > 0) lines.push(`IIBB: ${fmt(tot.iibbUSD, 2)}`);
+      if (tot.iibbUSD > 0) {
+        const percLabel = perceptionGroupLabel(tot.perceptionLines.length ? tot.perceptionLines : [{ label: "Percepciones", amount: tot.iibbUSD }]);
+        lines.push(`${percLabel}: ${fmt(tot.iibbUSD, 2)}`);
+      }
     }
     lines.push(`*TOTAL: ${fmt(tot.totalUSD)}*${withIva ? "" : " (sin impuestos)"}`);
     if (currency === "ARS") lines.push(`(${formatUSD(tot.totalUSD)} USD)`);
@@ -234,7 +306,7 @@ export default function CartPage() {
 
   function exportCSV() {
     const rows = [
-      ["Proveedor", "ID", "Producto", "Cantidad", "Neto USD", "IVA %", "IVA USD", "Internos %", "Internos USD", "IIBB %", "IIBB USD", "Final USD"],
+      ["Proveedor", "ID", "Producto", "Cantidad", "Neto USD", "IVA %", "IVA USD", "Internos %", "Internos USD", "Perc. %", "Perc. USD", "Final USD"],
       ...items.map((it) => {
         const pricing = linePricing(it, it.qty);
         const taxLines = extractTaxLines(it);
@@ -419,7 +491,7 @@ export default function CartPage() {
             <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
               <p className="text-base text-surface-200">No hay productos en esta cotización</p>
               <p className="text-sm text-surface-500 mt-2 max-w-md">
-                Agregá ítems desde la búsqueda. Cada línea muestra neto, IVA, imp. internos e IIBB.
+                Agregá ítems desde la búsqueda. Cada línea muestra neto, IVA, imp. internos y percepciones.
               </p>
               <Link href="/search" className="mt-5 text-sm font-medium text-brand-400 hover:text-brand-300 border-b border-brand-400/40 pb-0.5">
                 Ir a buscar
@@ -547,10 +619,12 @@ export default function CartPage() {
                       compact
                       items={byProvider.NEW_BYTES}
                       onCreated={(message) => {
+                        setNbSnapshot(null);
                         setNotice(message || "Pedido creado en NewBytes");
                         setActiveTab("all");
                         clearProvider("NEW_BYTES");
                       }}
+                      onPreviewed={setNbSnapshot}
                     />
                   )}
 
@@ -558,10 +632,12 @@ export default function CartPage() {
                     <ElitCheckoutPanel
                       items={byProvider.ELIT}
                       onCreated={(message) => {
+                        setElitPreview(null);
                         setNotice(message || "Pedido creado en Elit");
                         setActiveTab("all");
                         clearProvider("ELIT");
                       }}
+                      onPreviewed={setElitPreview}
                     />
                   )}
 
@@ -671,13 +747,21 @@ function SummaryBar({
                 Internos <span className="tabular-nums text-surface-200">{fmt(totals.internosUSD, 2)}</span>
               </span>
             )}
-            <span className="text-surface-500">
-              IIBB <span className="tabular-nums text-surface-200">{fmt(totals.iibbUSD, 2)}</span>
-            </span>
+            {totals.iibbUSD > 0.004 && (
+              <span className="text-surface-500">
+                {perceptionGroupLabel(totals.perceptionLines.length ? totals.perceptionLines : [{ label: "Percepciones", amount: totals.iibbUSD }])}{" "}
+                <span className="tabular-nums text-surface-200">{fmt(totals.iibbUSD, 2)}</span>
+              </span>
+            )}
+            {totals.perceptionLines.length > 1 && totals.perceptionLines.map((line, i) => (
+              <span key={`${line.label}-${i}`} className="text-surface-600 text-xs">
+                {line.label} <span className="tabular-nums">{fmt(line.amount, 2)}</span>
+              </span>
+            ))}
           </>
         )}
         {withIva && showInvidNote && !totals.quotedShipping && (
-          <span className="text-xs text-surface-600">IIBB/envío al validar</span>
+          <span className="text-xs text-surface-600">Perc./envío al validar</span>
         )}
       </div>
       <div className="text-right flex-shrink-0">
@@ -743,7 +827,7 @@ function ProviderSection({
         <span className="text-right">Neto</span>
         <span className="text-right">IVA</span>
         <span className="text-right">Internos</span>
-        <span className="text-right">IIBB</span>
+        <span className="text-right">Perc.</span>
         <span className="text-right">Total</span>
         <span />
       </div>
@@ -763,7 +847,7 @@ function ProviderSection({
 
       {provider === "INVID" && items.every((it) => !taxByKind(extractTaxLines(it), "iibb")) && (
         <p className="text-xs text-surface-500 mt-2">
-          El IIBB de Invid aparece al validar stock.
+          Las percepciones de Invid aparecen al validar stock.
         </p>
       )}
     </section>
@@ -816,7 +900,7 @@ function CartLine({
           <div className="md:hidden mt-2.5 grid grid-cols-3 gap-x-3 gap-y-1">
             <TaxCell label="IVA" line={iva} qty={item.qty} fmt={fmt} />
             <TaxCell label="Internos" line={internos} qty={item.qty} fmt={fmt} />
-            <TaxCell label="IIBB" line={iibb} qty={item.qty} fmt={fmt} />
+            <TaxCell label={iibb?.label || "Perc."} line={iibb} qty={item.qty} fmt={fmt} />
           </div>
         </div>
       </div>

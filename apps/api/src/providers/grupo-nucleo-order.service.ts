@@ -285,8 +285,8 @@ export class GrupoNucleoOrderService {
           paymentLabel: input.customerSale ? "Factura al cliente final" : "A mi nombre",
           deliveryOption: "warehouse",
           notes: input.notes,
-          items: input.items,
-          addressSnapshot: { customerSale: Boolean(input.customerSale), customer: input.customer ?? null },
+          items: snapshotJson(input.items),
+          addressSnapshot: snapshotJson({ customerSale: Boolean(input.customerSale), customer: input.customer ?? null }),
         },
       });
       runBackgroundDraft(
