@@ -12,16 +12,18 @@ import { CartItem, useCart } from "@/lib/cart";
 import { applyInvidCheckoutTaxes, grossFromTaxLines } from "@/lib/tax";
 import { formatUSD } from "@/lib/format";
 import NodoSpinner from "@/components/NodoSpinner";
-import { CheckCircle2, Loader2, Send, AlertTriangle } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Loader2, Send, AlertTriangle } from "lucide-react";
 
 export default function InvidDraftPanel({
   items,
   onCreated,
   onPreviewed,
+  compact = false,
 }: {
   items: CartItem[];
   onCreated: () => void;
   onPreviewed?: (preview: InvidCheckoutPreview | null) => void;
+  compact?: boolean;
 }) {
   const [addresses, setAddresses] = useState<InvidAddress[]>([]);
   const [payments, setPayments] = useState<InvidPaymentOption[]>([]);
@@ -39,6 +41,7 @@ export default function InvidDraftPanel({
   const [preview, setPreview] = useState<InvidCheckoutPreview | null>(null);
   const [result, setResult] = useState<InvidDraftResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<0 | 1>(0);
   const reviewedOnce = useRef(false);
   const previewGen = useRef(0);
   const { patchItem } = useCart();
@@ -182,9 +185,95 @@ export default function InvidDraftPanel({
     && !submitting
     && !(deliveryOption === "3" && !expresoId);
 
+  const selectClass = "bg-surface-900 border border-surface-700 rounded-md px-3 py-2 text-sm text-white";
+  const deliveryChoices = deliveries.length ? deliveries : [
+    { value: "1", label: "RETIRA" },
+    { value: "5", label: "Puerta a puerta" },
+    { value: "3", label: "EXPRESO (interior, costo contra entrega)" },
+    { value: "6", label: "Entrega Express 24hs (AMBA)" },
+  ];
+
+  const addressSelect = (
+    <label className="flex flex-col gap-1 min-w-0">
+      <span className="text-sm text-surface-400">Dirección</span>
+      <select
+        value={addressId}
+        onChange={(e) => { setAddressId(e.target.value); invalidatePreview(); }}
+        className={selectClass}
+      >
+        {addresses.length === 0 && <option value="">Sin direcciones en Invid</option>}
+        {addresses.map((a) => (
+          <option key={a.id} value={a.id}>{a.label} — {a.addressLine}</option>
+        ))}
+      </select>
+    </label>
+  );
+
+  const paymentSelect = (
+    <label className="flex flex-col gap-1 min-w-0">
+      <span className="text-sm text-surface-400">Forma de pago</span>
+      <select
+        value={paymentOption}
+        onChange={(e) => { setPaymentOption(e.target.value); invalidatePreview(); }}
+        className={selectClass}
+      >
+        {payments.map((p) => (
+          <option key={p.value} value={p.value}>{p.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+
+  const deliverySelect = (
+    <label className="flex flex-col gap-1 min-w-0">
+      <span className="text-sm text-surface-400">Forma de entrega</span>
+      <select
+        value={deliveryOption}
+        onChange={(e) => { setDeliveryOption(e.target.value); invalidatePreview(); }}
+        className={selectClass}
+      >
+        {deliveryChoices.map((d) => (
+          <option key={d.value} value={d.value}>{d.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+
+  const expresoSelect = deliveryOption === "3" ? (
+    <label className="flex flex-col gap-1 min-w-0">
+      <span className="text-sm text-surface-400">Empresa de expreso</span>
+      <select
+        value={expresoId}
+        onChange={(e) => { setExpresoId(e.target.value); invalidatePreview(); }}
+        className={selectClass}
+      >
+        <option value="">Seleccione el expreso</option>
+        {expresoCompanies.map((c) => (
+          <option key={c.value} value={c.value}>{c.label}</option>
+        ))}
+      </select>
+      {expresoCompanies.length === 0 && (
+        <span className="text-xs text-surface-500">Revisá en Invid para cargar las empresas.</span>
+      )}
+    </label>
+  ) : null;
+
+  const notesField = (
+    <label className="flex flex-col gap-1 min-w-0">
+      <span className="text-sm text-surface-400">Nota para el vendedor (opcional)</span>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        rows={compact ? 1 : 2}
+        className={`${selectClass} resize-none`}
+        placeholder="Ej. consultar por WhatsApp, pedido de cliente X"
+      />
+    </label>
+  );
+
   if (loadingMeta) {
     return (
-      <div className="border border-surface-800 rounded-lg p-5 flex items-center gap-2 text-sm text-surface-400">
+      <div className={`${compact ? "" : "border border-surface-800 rounded-lg p-5 "}flex items-center gap-2 text-sm text-surface-400`}>
         <Loader2 className="w-4 h-4 animate-spin" /> Cargando checkout de Invid…
       </div>
     );
@@ -192,7 +281,7 @@ export default function InvidDraftPanel({
 
   if (metaError) {
     return (
-      <div className="border border-red-500/25 bg-red-500/5 rounded-lg p-5 text-sm text-red-300">
+      <div className={`${compact ? "" : "border border-red-500/25 bg-red-500/5 rounded-lg p-5 "}text-sm text-red-300`}>
         {metaError}
       </div>
     );
@@ -200,7 +289,7 @@ export default function InvidDraftPanel({
 
   if (result) {
     return (
-      <div className="border border-emerald-500/25 bg-emerald-500/5 rounded-lg p-4 flex flex-col gap-2">
+      <div className={`${compact ? "" : "border border-emerald-500/25 bg-emerald-500/5 rounded-lg p-4 "}flex flex-col gap-2`}>
         <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
           <CheckCircle2 className="w-4 h-4" /> Borrador creado en Invid
         </div>
@@ -210,6 +299,89 @@ export default function InvidDraftPanel({
           {result.orderNumber && <p>Orden: {result.orderNumber}</p>}
           <p>Total: {formatUSD(result.total)}</p>
         </div>
+      </div>
+    );
+  }
+
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p className="text-xs text-surface-500">
+          Paso {step + 1} de 2 · {step === 0 ? "Datos del pedido" : "Revisar y confirmar"}
+        </p>
+
+        {step === 0 && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {addressSelect}
+              {paymentSelect}
+              {deliverySelect}
+            </div>
+            {expresoSelect && <div className="grid sm:grid-cols-3 gap-3">{expresoSelect}</div>}
+            {deliveryOption === "6" && (
+              <p className="text-sm text-surface-400">Express 24hs: al revisar, Invid cotiza el envío con esa dirección.</p>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setStep(1)}
+                disabled={!addressId}
+                className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-md px-4 py-2 text-sm font-medium"
+              >
+                Siguiente <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            {notesField}
+            {!preview && !error && !previewing && (
+              <p className="text-xs text-surface-500">
+                Obligatorio: confirma stock, impuestos y envío. Si un producto no está, te lo dice acá.
+              </p>
+            )}
+            {preview && (
+              <InvidValidationFeedback
+                compact
+                preview={preview}
+                deliveryLabel={preview.suggestedDelivery?.label ?? deliveries.find((d) => d.value === deliveryOption)?.label}
+              />
+            )}
+            {error && (
+              <div className="border border-red-500/25 bg-red-500/5 rounded-md px-3 py-2 text-sm text-red-300 leading-relaxed whitespace-pre-wrap">
+                {error}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                onClick={() => setStep(0)}
+                className="flex items-center gap-1 text-sm text-surface-400 hover:text-white"
+              >
+                <ChevronLeft className="w-4 h-4" /> Atrás
+              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePreview}
+                  disabled={previewing || submitting || !addressId}
+                  className="flex items-center justify-center gap-1.5 border border-surface-600 hover:border-brand-500/50 text-surface-100 rounded-md px-3.5 py-2 text-sm font-medium disabled:opacity-40"
+                >
+                  {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {previewing ? "Validando…" : "Revisar en Invid"}
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!canConfirm}
+                  title={!preview ? "Primero tenés que revisar en Invid" : !preview.stockOk ? "Invid no validó el stock" : undefined}
+                  className="flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 text-white rounded-md px-3.5 py-2 text-sm font-semibold"
+                >
+                  {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+                  Crear borrador
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -224,86 +396,16 @@ export default function InvidDraftPanel({
       </div>
 
       <div className="grid sm:grid-cols-2 gap-3">
-      <label className="flex flex-col gap-1">
-        <span className="text-sm text-surface-400">Dirección</span>
-        <select
-          value={addressId}
-          onChange={(e) => { setAddressId(e.target.value); invalidatePreview(); }}
-          className="bg-surface-900 border border-surface-700 rounded-md px-3 py-2 text-sm text-white"
-        >
-          {addresses.length === 0 && <option value="">Sin direcciones en Invid</option>}
-          {addresses.map((a) => (
-            <option key={a.id} value={a.id}>{a.label} — {a.addressLine}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-sm text-surface-400">Forma de pago</span>
-        <select
-          value={paymentOption}
-          onChange={(e) => { setPaymentOption(e.target.value); invalidatePreview(); }}
-          className="bg-surface-900 border border-surface-700 rounded-md px-3 py-2 text-sm text-white"
-        >
-          {payments.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
-      </label>
-
-      <label className="flex flex-col gap-1">
-        <span className="text-sm text-surface-400">Forma de entrega</span>
-        <select
-          value={deliveryOption}
-          onChange={(e) => { setDeliveryOption(e.target.value); invalidatePreview(); }}
-          className="bg-surface-900 border border-surface-700 rounded-md px-3 py-2 text-sm text-white"
-        >
-          {(deliveries.length ? deliveries : [
-            { value: "1", label: "RETIRA" },
-            { value: "5", label: "Puerta a puerta" },
-            { value: "3", label: "EXPRESO (interior, costo contra entrega)" },
-            { value: "6", label: "Entrega Express 24hs (AMBA)" },
-          ]).map((d) => (
-            <option key={d.value} value={d.value}>{d.label}</option>
-          ))}
-        </select>
-      </label>
-
-      {deliveryOption === "3" && (
-        <label className="flex flex-col gap-1">
-          <span className="text-sm text-surface-400">Empresa de expreso</span>
-          <select
-            value={expresoId}
-            onChange={(e) => { setExpresoId(e.target.value); invalidatePreview(); }}
-            className="bg-surface-900 border border-surface-700 rounded-md px-3 py-2 text-sm text-white"
-          >
-            <option value="">Seleccione el expreso</option>
-            {expresoCompanies.map((c) => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
-          </select>
-          {expresoCompanies.length === 0 && (
-            <span className="text-xs text-surface-500">Revisá en Invid para cargar las empresas.</span>
-          )}
-        </label>
-      )}
-
-      {deliveryOption === "6" && (
-        <p className="text-sm text-surface-400 sm:col-span-2">
-          Express 24hs: al revisar, Invid cotiza el envío con esa dirección.
-        </p>
-      )}
-
-      <label className="flex flex-col gap-1 sm:col-span-2">
-        <span className="text-sm text-surface-400">Nota para el vendedor (opcional)</span>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          className="bg-surface-900 border border-surface-700 rounded-md px-3 py-2 text-sm text-white resize-none"
-          placeholder="Ej. consultar por WhatsApp, pedido de cliente X"
-        />
-      </label>
+        {addressSelect}
+        {paymentSelect}
+        {deliverySelect}
+        {expresoSelect}
+        {deliveryOption === "6" && (
+          <p className="text-sm text-surface-400 sm:col-span-2">
+            Express 24hs: al revisar, Invid cotiza el envío con esa dirección.
+          </p>
+        )}
+        <div className="sm:col-span-2">{notesField}</div>
       </div>
 
       <button
@@ -345,16 +447,18 @@ export default function InvidDraftPanel({
 function InvidValidationFeedback({
   preview,
   deliveryLabel,
+  compact = false,
 }: {
   preview: InvidCheckoutPreview;
   deliveryLabel?: string;
+  compact?: boolean;
 }) {
   const errors = preview.itemErrors ?? [];
   const ok = preview.stockOk && errors.length === 0;
 
   return (
     <div className="flex flex-col gap-2">
-      <div className={`rounded-md px-3.5 py-3 text-sm leading-relaxed ${
+      <div className={`rounded-md px-3.5 py-2.5 text-sm leading-relaxed ${
         ok
           ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-300"
           : "bg-red-500/8 border border-red-500/25 text-red-300"
@@ -385,7 +489,7 @@ function InvidValidationFeedback({
         )}
       </div>
 
-      {ok && (
+      {ok && !compact && (
         <div className="border border-surface-800 rounded-md p-3.5 text-sm space-y-1">
           <p className="text-surface-400">
             {preview.items.length} producto{preview.items.length === 1 ? "" : "s"} · {preview.paymentLabel}
@@ -406,6 +510,12 @@ function InvidValidationFeedback({
             </p>
           </div>
         </div>
+      )}
+      {ok && compact && (
+        <p className="text-xs text-surface-500">
+          {preview.items.length} producto{preview.items.length === 1 ? "" : "s"} · {preview.paymentLabel}
+          {deliveryLabel ? ` · ${deliveryLabel}` : ""}
+        </p>
       )}
     </div>
   );

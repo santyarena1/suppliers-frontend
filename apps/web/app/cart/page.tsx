@@ -336,8 +336,8 @@ export default function CartPage() {
               </Link>
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
-              <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800 px-5 lg:px-8">
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+              <div className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 bg-surface-950">
                 <div className="flex gap-0 overflow-x-auto">
                   {tabsToShow.map((tab) => (
                     <button
@@ -359,7 +359,7 @@ export default function CartPage() {
                 </div>
               </div>
 
-              <div className="px-5 lg:px-8 py-6 flex flex-col gap-8">
+              <div className="flex-1 overflow-y-auto px-5 lg:px-8 py-6 flex flex-col gap-8">
                 {activeTab === "all" ? (
                   sortedProviders.map((prov) => (
                     <ProviderSection
@@ -388,71 +388,74 @@ export default function CartPage() {
                 )}
               </div>
 
-              <div className="border-t border-surface-800 px-5 lg:px-8 py-6">
-                <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,380px)_minmax(0,1fr)] gap-8 xl:gap-10 items-start">
-                  <div className="flex flex-col gap-5">
-                    <SummaryCard
-                      title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
-                      totals={shownTotals}
-                      fmt={fmt}
-                      withIva={withIva}
-                      currency={currency}
-                      showInvidNote={Boolean(byProvider.INVID?.length)}
-                    />
+              <footer className="flex-shrink-0 border-t border-surface-800 bg-surface-950">
+                <div className="px-5 lg:px-8 py-3.5">
+                  <SummaryBar
+                    title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
+                    totals={shownTotals}
+                    fmt={fmt}
+                    withIva={withIva}
+                    currency={currency}
+                    showInvidNote={activeTab === "INVID"}
+                  />
+                  {currentRate && currency === "ARS" && (
+                    <p className="text-xs text-surface-500 mt-1.5">
+                      Dólar {dollarLabel(dollarType)} (${currentRate.venta.toLocaleString("es-AR")}) · {new Date(currentRate.fechaActualizacion).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
+                    </p>
+                  )}
+                </div>
 
-                    {activeTab === "all" && sortedProviders.length > 1 && (
-                      <div>
-                        <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-2">
-                          Por proveedor
-                        </h2>
-                        <div className="flex flex-col">
-                          {sortedProviders.map((p) => {
-                            const t = providerTotals[p];
-                            return (
-                              <button
-                                key={p}
-                                onClick={() => setActiveTab(p)}
-                                className="flex items-center justify-between gap-2 py-2.5 border-b border-surface-800 last:border-0 text-left hover:bg-surface-900/60 -mx-1 px-1 transition-colors"
-                              >
-                                <span className={`text-sm font-medium ${PROVIDER_TEXT_COLOR[p] || "text-surface-300"}`}>
-                                  {p.replace(/_/g, " ")}
-                                </span>
-                                <span className="text-sm tabular-nums text-surface-200">{fmt(t.totalUSD)}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
+                {activeTab === "all" && (
+                  <div className="px-5 lg:px-8 pb-4 pt-1 border-t border-surface-800/80 flex flex-col gap-2.5">
+                    {sortedProviders.length > 1 && (
+                      <div className="flex flex-wrap gap-2">
+                        {sortedProviders.map((p) => {
+                          const t = providerTotals[p];
+                          return (
+                            <button
+                              key={p}
+                              onClick={() => setActiveTab(p)}
+                              className="flex items-center gap-2 text-sm border border-surface-700 hover:border-surface-500 rounded-md px-2.5 py-1.5 transition-colors"
+                            >
+                              <span className={`font-medium ${PROVIDER_TEXT_COLOR[p] || "text-surface-300"}`}>
+                                {p.replace(/_/g, " ")}
+                              </span>
+                              <span className="tabular-nums text-surface-200">{fmt(t.totalUSD)}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
-
-                    {currentRate && currency === "ARS" && (
-                      <p className="text-xs text-surface-500 leading-relaxed">
-                        Dólar {dollarLabel(dollarType)} (${currentRate.venta.toLocaleString("es-AR")}) · {new Date(currentRate.fechaActualizacion).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}
-                      </p>
-                    )}
+                    <p className="text-sm text-surface-500">
+                      Vista informativa. Para confirmar un pedido, abrí la pestaña del proveedor.
+                    </p>
                   </div>
+                )}
 
-                  <div className="flex flex-col gap-5 min-w-0">
-                    {byProvider.INVID?.length > 0 && (
-                      <InvidDraftPanel
-                        items={byProvider.INVID}
-                        onCreated={() => {
-                          setInvidPreview(null);
-                          clearProvider("INVID");
-                        }}
-                        onPreviewed={setInvidPreview}
-                      />
-                    )}
-
-                    {byProvider.NEW_BYTES?.length > 0 && (
-                      <NewBytesDraftPanel
-                        items={byProvider.NEW_BYTES}
-                        onCreated={() => clearProvider("NEW_BYTES")}
-                      />
-                    )}
+                {activeTab === "INVID" && byProvider.INVID?.length > 0 && (
+                  <div className="px-5 lg:px-8 pb-4 pt-3 border-t border-surface-800/80 max-h-[38vh] overflow-y-auto">
+                    <InvidDraftPanel
+                      compact
+                      items={byProvider.INVID}
+                      onCreated={() => {
+                        setInvidPreview(null);
+                        clearProvider("INVID");
+                      }}
+                      onPreviewed={setInvidPreview}
+                    />
                   </div>
-                </div>
-              </div>
+                )}
+
+                {activeTab === "NEW_BYTES" && byProvider.NEW_BYTES?.length > 0 && (
+                  <div className="px-5 lg:px-8 pb-4 pt-3 border-t border-surface-800/80 max-h-[38vh] overflow-y-auto">
+                    <NewBytesDraftPanel
+                      compact
+                      items={byProvider.NEW_BYTES}
+                      onCreated={() => clearProvider("NEW_BYTES")}
+                    />
+                  </div>
+                )}
+              </footer>
             </div>
           )}
         </div>
@@ -497,7 +500,7 @@ export default function CartPage() {
   );
 }
 
-function SummaryCard({
+function SummaryBar({
   title, totals, fmt, withIva, currency, showInvidNote,
 }: {
   title: string;
@@ -508,50 +511,46 @@ function SummaryCard({
   showInvidNote: boolean;
 }) {
   return (
-    <div>
-      <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-3">{title}</h2>
-      <dl className="flex flex-col gap-2 text-sm">
-        <SummaryRow label="Líneas" value={String(totals.productCount)} />
-        <SummaryRow label="Unidades" value={String(totals.itemCount)} />
-        <div className="h-px bg-surface-800 my-1.5" />
-        <SummaryRow label="Neto" value={fmt(totals.subtotalUSD)} />
-        {(totals.quotedShipping || totals.shippingUSD > 0.004) && (
-          <SummaryRow label="Envío" value={fmt(totals.shippingUSD, 2)} muted={totals.shippingUSD === 0} />
-        )}
-        {withIva && (
-          <>
-            <SummaryRow label="IVA" value={fmt(totals.ivaUSD, 2)} muted={totals.ivaUSD === 0} />
-            <SummaryRow label="Imp. internos" value={fmt(totals.internosUSD, 2)} muted={totals.internosUSD === 0} />
-            <SummaryRow label="IIBB" value={fmt(totals.iibbUSD, 2)} muted={totals.iibbUSD === 0} />
-            {totals.otherUSD > 0.004 && <SummaryRow label="Otros" value={fmt(totals.otherUSD, 2)} />}
-          </>
-        )}
-        <div className="h-px bg-surface-800 my-1.5" />
-        <div className="flex items-baseline justify-between pt-0.5">
-          <dt className="text-sm font-medium text-surface-300">Total</dt>
-          <dd className="text-right">
-            <p className="text-xl font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
-            {currency === "ARS" && (
-              <p className="text-xs text-surface-500 tabular-nums mt-1">{formatUSD(totals.totalUSD)}</p>
-            )}
-            {!withIva && <p className="text-xs text-surface-500 mt-1">sin impuestos</p>}
-          </dd>
+    <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-2">
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider mb-1.5">{title}</p>
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+          <span className="text-surface-500">
+            Neto <span className="tabular-nums text-surface-200">{fmt(totals.subtotalUSD)}</span>
+          </span>
+          {(totals.quotedShipping || totals.shippingUSD > 0.004) && (
+            <span className={totals.shippingUSD === 0 ? "text-surface-600" : "text-surface-500"}>
+              Envío <span className="tabular-nums text-surface-200">{fmt(totals.shippingUSD, 2)}</span>
+            </span>
+          )}
+          {withIva && (
+            <>
+              <span className={totals.ivaUSD === 0 ? "text-surface-600" : "text-surface-500"}>
+                IVA <span className="tabular-nums text-surface-200">{fmt(totals.ivaUSD, 2)}</span>
+              </span>
+              {totals.internosUSD > 0.004 && (
+                <span className="text-surface-500">
+                  Internos <span className="tabular-nums text-surface-200">{fmt(totals.internosUSD, 2)}</span>
+                </span>
+              )}
+              <span className={totals.iibbUSD === 0 ? "text-surface-600" : "text-surface-500"}>
+                IIBB <span className="tabular-nums text-surface-200">{fmt(totals.iibbUSD, 2)}</span>
+              </span>
+            </>
+          )}
         </div>
-      </dl>
-      {withIva && showInvidNote && !totals.quotedShipping && (
-        <p className="text-xs text-surface-500 leading-relaxed mt-3">
-          IIBB y envío de Invid se confirman al validar stock.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function SummaryRow({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className={`text-surface-500 ${muted ? "opacity-60" : ""}`}>{label}</dt>
-      <dd className={`tabular-nums ${muted ? "text-surface-600" : "text-surface-200"}`}>{value}</dd>
+        {withIva && showInvidNote && !totals.quotedShipping && (
+          <p className="text-xs text-surface-500 mt-1">IIBB y envío se confirman al validar stock.</p>
+        )}
+      </div>
+      <div className="text-right ml-auto">
+        <p className="text-xs text-surface-500 mb-0.5">Total</p>
+        <p className="text-xl font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
+        {currency === "ARS" && (
+          <p className="text-xs text-surface-500 tabular-nums mt-1">{formatUSD(totals.totalUSD)}</p>
+        )}
+        {!withIva && <p className="text-xs text-surface-500 mt-1">sin impuestos</p>}
+      </div>
     </div>
   );
 }
