@@ -10,6 +10,11 @@ import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
 import { NewBytesOrderService } from "./new-bytes-order.service";
+import { GrupoNucleoOrderService } from "./grupo-nucleo-order.service";
+import { AirAccountService } from "./air-account.service";
+import { AirOrderService } from "./air-order.service";
+import { ElitAccountService } from "./elit-account.service";
+import { ElitOrderService } from "./elit-order.service";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 import { InvidCheckoutDraftDto, InvidCheckoutPreviewDto } from "./dto/invid-checkout.dto";
 import {
@@ -18,6 +23,10 @@ import {
   NewBytesCheckoutPreviewDto,
   NewBytesCheckoutShippingDto,
 } from "./dto/new-bytes-checkout.dto";
+import { GrupoNucleoCheckoutDraftDto, GrupoNucleoCheckoutPreviewDto } from "./dto/grupo-nucleo-checkout.dto";
+import { AirCheckoutDraftDto, AirCheckoutPreviewDto } from "./dto/air-checkout.dto";
+import { ElitCheckoutDraftDto, ElitCheckoutPreviewDto } from "./dto/elit-checkout.dto";
+import { ElitPaymentOperationDto } from "./dto/elit-payment.dto";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -36,7 +45,12 @@ export class ProvidersController {
     private readonly invidAccountService: InvidAccountService,
     private readonly invidOrderService: InvidOrderService,
     private readonly newBytesAccountService: NewBytesAccountService,
-    private readonly newBytesOrderService: NewBytesOrderService
+    private readonly newBytesOrderService: NewBytesOrderService,
+    private readonly grupoNucleoOrderService: GrupoNucleoOrderService,
+    private readonly airAccountService: AirAccountService,
+    private readonly airOrderService: AirOrderService,
+    private readonly elitAccountService: ElitAccountService,
+    private readonly elitOrderService: ElitOrderService
   ) {}
 
   private async invidCredentials(userId: string) {
@@ -59,6 +73,30 @@ export class ProvidersController {
   @Get("providers/INVID/account-statement")
   async invidAccountStatement(@CurrentUser() user: { userId: string }) {
     return this.invidAccountService.getAccountStatement(await this.invidCredentials(user.userId));
+  }
+
+  @Get("providers/INVID/documents")
+  async invidDocument(@CurrentUser() user: { userId: string }, @Query("href") href: string) {
+    return this.invidAccountService.getDocument(await this.invidCredentials(user.userId), href);
+  }
+
+  @Post("providers/INVID/payments/attach")
+  async invidPaymentAttach(@CurrentUser() user: { userId: string }, @Req() req: FastifyRequest) {
+    const file = await req.file();
+    if (!file) throw new BadRequestException("No se recibió ningún archivo");
+    const buffer = await file.toBuffer();
+    const extra: Record<string, string> = {};
+    for (const [k, v] of Object.entries(file.fields ?? {})) {
+      if (k === "file") continue;
+      const val = Array.isArray(v) ? v[0] : v;
+      if (val && typeof val === "object" && "value" in val) extra[k] = String((val as { value: unknown }).value);
+      else if (typeof val === "string") extra[k] = val;
+    }
+    return this.invidAccountService.attachPayment(
+      await this.invidCredentials(user.userId),
+      { filename: file.filename, mimetype: file.mimetype, buffer },
+      extra
+    );
   }
 
   @Get("providers/INVID/checkout/addresses")
@@ -115,6 +153,16 @@ export class ProvidersController {
     return this.newBytesAccountService.getProfile(await this.newBytesCredentials(user.userId));
   }
 
+  @Get("providers/NEW_BYTES/documents")
+  async newBytesDocument(@CurrentUser() user: { userId: string }, @Query("voucherId") voucherId: string) {
+    return this.newBytesAccountService.getDocument(await this.newBytesCredentials(user.userId), voucherId);
+  }
+
+  @Get("providers/NEW_BYTES/orders/:id")
+  async newBytesOrderDetail(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
+    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(user.userId), id);
+  }
+
   @Get("providers/NEW_BYTES/checkout/addresses")
   async newBytesAddresses(@CurrentUser() user: { userId: string }) {
     return this.newBytesOrderService.getAddresses(await this.newBytesCredentials(user.userId));
@@ -151,6 +199,151 @@ export class ProvidersController {
   @Post("providers/NEW_BYTES/checkout/draft")
   async newBytesCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutDraftDto) {
     return this.newBytesOrderService.submitDraft(user.userId, await this.newBytesCredentials(user.userId), dto);
+  }
+
+  private async credentialsOf(userId: string, provider: Provider) {
+    const stored = await this.credentialsService.getByProvider(userId, provider);
+    return JSON.parse(stored.credentialsJson) as Record<string, string>;
+  }
+
+  @Get("providers/GRUPO_NUCLEO/checkout/options")
+  gnCheckoutOptions() {
+    return this.grupoNucleoOrderService.checkoutOptions();
+  }
+
+  @Get("providers/GRUPO_NUCLEO/drafts")
+  gnDrafts(@CurrentUser() user: { userId: string }) {
+    return this.grupoNucleoOrderService.listDrafts(user.userId);
+  }
+
+  /** La API de GN no expone historial/cta cte — devolvemos copias de Nodo. */
+  @Get("providers/GRUPO_NUCLEO/account")
+  gnAccount(@CurrentUser() user: { userId: string }) {
+    return this.grupoNucleoOrderService.getAccount(user.userId);
+  }
+
+  @Post("providers/GRUPO_NUCLEO/checkout/preview")
+  async gnPreview(@CurrentUser() user: { userId: string }, @Body() dto: GrupoNucleoCheckoutPreviewDto) {
+    return this.grupoNucleoOrderService.preview(await this.credentialsOf(user.userId, "GRUPO_NUCLEO"), dto);
+  }
+
+  @Post("providers/GRUPO_NUCLEO/checkout/draft")
+  async gnDraft(@CurrentUser() user: { userId: string }, @Body() dto: GrupoNucleoCheckoutDraftDto) {
+    return this.grupoNucleoOrderService.submitDraft(
+      user.userId,
+      await this.credentialsOf(user.userId, "GRUPO_NUCLEO"),
+      dto
+    );
+  }
+
+  @Get("providers/AIR/checkout/options")
+  async airCheckoutOptions(@CurrentUser() user: { userId: string }) {
+    return this.airOrderService.checkoutOptions(await this.credentialsOf(user.userId, "AIR"));
+  }
+
+  @Get("providers/AIR/drafts")
+  airDrafts(@CurrentUser() user: { userId: string }) {
+    return this.airOrderService.listDrafts(user.userId);
+  }
+
+  @Get("providers/AIR/account")
+  async airAccount(@CurrentUser() user: { userId: string }) {
+    return this.airAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "AIR"));
+  }
+
+  @Get("providers/AIR/documents")
+  async airDocument(@CurrentUser() user: { userId: string }, @Query("href") href: string) {
+    return this.airAccountService.getDocument(await this.credentialsOf(user.userId, "AIR"), href);
+  }
+
+  @Post("providers/AIR/checkout/preview")
+  async airPreview(@CurrentUser() user: { userId: string }, @Body() dto: AirCheckoutPreviewDto) {
+    return this.airOrderService.preview(await this.credentialsOf(user.userId, "AIR"), {
+      items: dto.items,
+      sucursal: dto.sucursal ?? "",
+      vendedor: dto.vendedor ?? "",
+      pago: dto.pago ?? "01",
+      entrega: dto.entrega ?? "01",
+      transporte: dto.transporte,
+      notes: dto.notes,
+    });
+  }
+
+  @Post("providers/AIR/checkout/draft")
+  async airDraft(@CurrentUser() user: { userId: string }, @Body() dto: AirCheckoutDraftDto) {
+    return this.airOrderService.submitDraft(user.userId, await this.credentialsOf(user.userId, "AIR"), dto);
+  }
+
+  @Get("providers/ELIT/drafts")
+  elitDrafts(@CurrentUser() user: { userId: string }) {
+    return this.elitOrderService.listDrafts(user.userId);
+  }
+
+  @Get("providers/ELIT/account")
+  async elitAccount(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  @Get("providers/ELIT/salenotes/:number")
+  async elitSaleNote(@CurrentUser() user: { userId: string }, @Param("number") number: string) {
+    return this.elitAccountService.getSaleNote(await this.credentialsOf(user.userId, "ELIT"), number);
+  }
+
+  @Get("providers/ELIT/documents")
+  async elitDocument(
+    @CurrentUser() user: { userId: string },
+    @Query("form") form: string,
+    @Query("number") number: string,
+    @Query("kind") kind?: string
+  ) {
+    return this.elitAccountService.getDocument(await this.credentialsOf(user.userId, "ELIT"), { form, number, kind });
+  }
+
+  @Get("providers/ELIT/payments")
+  async elitPayments(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.getPayments(await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  /** Bancos y tipos de operación. No usar GET /account/payments?include=options (crea un informe vacío). */
+  @Get("providers/ELIT/payments/options")
+  async elitPaymentOptions(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.getPaymentOptions(await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  @Post("providers/ELIT/payments/operation")
+  async elitPaymentOperation(@CurrentUser() user: { userId: string }, @Body() dto: ElitPaymentOperationDto) {
+    return this.elitAccountService.createPaymentOperation(await this.credentialsOf(user.userId, "ELIT"), dto);
+  }
+
+  @Post("providers/ELIT/payments/operation/:id/attach")
+  async elitPaymentAttach(
+    @CurrentUser() user: { userId: string },
+    @Param("id") id: string,
+    @Req() req: FastifyRequest
+  ) {
+    const file = await req.file();
+    if (!file) throw new BadRequestException("No se recibió ningún archivo");
+    const buffer = await file.toBuffer();
+    return this.elitAccountService.attachPaymentOperation(
+      await this.credentialsOf(user.userId, "ELIT"),
+      id,
+      { filename: file.filename, mimetype: file.mimetype, buffer }
+    );
+  }
+
+  @Post("providers/ELIT/payments/finish")
+  async elitPaymentFinish(@CurrentUser() user: { userId: string }) {
+    return this.elitAccountService.finishPayment(await this.credentialsOf(user.userId, "ELIT"));
+  }
+
+  @Post("providers/ELIT/checkout/preview")
+  async elitPreview(@CurrentUser() user: { userId: string }, @Body() dto: ElitCheckoutPreviewDto) {
+    return this.elitOrderService.preview(await this.credentialsOf(user.userId, "ELIT"), dto);
+  }
+
+  @Post("providers/ELIT/checkout/draft")
+  async elitDraft(@CurrentUser() user: { userId: string }, @Body() dto: ElitCheckoutDraftDto) {
+    return this.elitOrderService.submitDraft(user.userId, await this.credentialsOf(user.userId, "ELIT"), dto);
   }
 
   @Post("providers/:provider/sync")

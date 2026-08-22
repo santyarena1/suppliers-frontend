@@ -151,6 +151,28 @@ export class NewBytesApiClient {
     return this.request<T>("GET", path, { params });
   }
 
+  async getBuffer(path: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const url = path.startsWith("http") ? path : `${NB_API_BASE}/${path.replace(/^\//, "")}`;
+    try {
+      const res = await axios.get<ArrayBuffer>(url, {
+        responseType: "arraybuffer",
+        timeout: AXIOS_TIMEOUT,
+        headers: { Authorization: `Bearer ${this.jwt}`, Accept: "*/*" },
+        validateStatus: (s) => s < 500,
+      });
+      const buffer = Buffer.from(res.data);
+      if (res.status >= 400) {
+        throw new BadGatewayException(`NewBytes GET ${path} → ${res.status}`);
+      }
+      const contentType = String(res.headers["content-type"] || "application/octet-stream").split(";")[0];
+      return { buffer, contentType };
+    } catch (err) {
+      if (err instanceof BadGatewayException || err instanceof BadRequestException) throw err;
+      const msg = axios.isAxiosError(err) ? String(err.response?.data ?? err.message) : String(err);
+      throw new BadGatewayException(`NewBytes GET ${path} falló: ${msg.slice(0, 300)}`);
+    }
+  }
+
   post<T = unknown>(path: string, data?: unknown) {
     return this.request<T>("POST", path, { data });
   }

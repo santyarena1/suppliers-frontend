@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import axios, { type AxiosResponse } from "axios";
 import { PrismaService } from "../prisma/prisma.service";
+import { mapProviderDraft } from "./provider-draft";
 import {
   decodeEntities,
   parseCheckoutForm,
@@ -639,11 +640,12 @@ export class InvidOrderService {
   }
 
   async listDrafts(userId: string) {
-    return this.prisma.providerOrder.findMany({
+    const rows = await this.prisma.providerOrder.findMany({
       where: { userId, provider: "INVID" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
+    return rows.map(mapProviderDraft);
   }
 
   /**

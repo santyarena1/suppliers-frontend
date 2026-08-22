@@ -122,25 +122,54 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     title: "Conectar tu cuenta de ELIT",
     intro:
       "Cada usuario de Nodo carga la suya. Se guarda cifrada y no se comparte con el resto.",
-    extra: "User ID y token de la API de clientes.elit.com.ar.",
-    portalUrl: "https://clientes.elit.com.ar",
-    portalLabel: "clientes.elit.com.ar",
+    extra:
+      "User ID y token sincronizan el catálogo (clientes.elit.com.ar). Nro. de cliente y contraseña del portal habilitan pedidos y cuenta corriente en elit.com.ar.",
+    portalUrl: "https://www.elit.com.ar",
+    portalLabel: "www.elit.com.ar",
     fields: [
       {
         key: "user_id",
-        label: "User ID",
+        label: "User ID (API catálogo)",
         type: "text",
-        required: true,
-        placeholder: "User ID de ELIT",
+        required: false,
+        placeholder: "User ID de la API de clientes",
+        help: "Opcional si ya cargás nro. de cliente y contraseña. Sirve para sincronizar el catálogo.",
         aliases: ["userId", "user"],
       },
       {
         key: "token",
-        label: "Token",
+        label: "Token (API catálogo)",
         type: "password",
-        required: true,
+        required: false,
         placeholder: "Token de la API",
         aliases: ["apiToken"],
+      },
+      {
+        key: "id",
+        label: "Nº de cliente (portal)",
+        type: "text",
+        required: false,
+        placeholder: "El mismo número con el que entrás a elit.com.ar",
+        help: "Para pedidos y cta. cte. Si está vacío se usa el User ID.",
+        aliases: ["clientId", "nroCliente"],
+        autoComplete: "username",
+      },
+      {
+        key: "password",
+        label: "Contraseña del portal",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña de elit.com.ar",
+        aliases: ["pass"],
+        autoComplete: "current-password",
+      },
+      {
+        key: "agent",
+        label: "Agente (opcional)",
+        type: "text",
+        required: false,
+        placeholder: "Solo si tu login es nro-agente",
+        help: "El form de Elit parte nro-agente. Dejalo vacío si no aplica.",
       },
     ],
   },
@@ -237,6 +266,17 @@ export function validateCredentialValues(
     return "Cargá usuario y contraseña de nb.com.ar, o el token de lista de precios.";
   }
 
+  if (provider === "ELIT") {
+    const userId = (values.user_id ?? "").trim();
+    const token = (values.token ?? "").trim();
+    const password = (values.password ?? "").trim();
+    const id = (values.id ?? "").trim();
+    if ((id || userId) && password) return null;
+    if (userId && token) return null;
+    if (password) return "Cargá el nº de cliente junto con la contraseña del portal.";
+    return "Cargá nro. de cliente y contraseña del portal, o user id y token de catálogo.";
+  }
+
   for (const field of schema.fields) {
     if (field.required && !(values[field.key] ?? "").trim()) {
       return `Falta ${field.label.toLowerCase()}.`;
@@ -247,4 +287,10 @@ export function validateCredentialValues(
 
 export function hasNewBytesPortalLogin(values: Record<string, string>): boolean {
   return Boolean((values.user ?? "").trim() && (values.password ?? "").trim());
+}
+
+export function hasElitPortalLogin(values: Record<string, string>): boolean {
+  const id = (values.id ?? values.user_id ?? "").trim();
+  const password = (values.password ?? "").trim();
+  return Boolean(id && password);
 }

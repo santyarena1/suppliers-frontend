@@ -26,6 +26,7 @@ import {
   type NbShippingQuote,
   type NbSubtotales,
 } from "./new-bytes.mapper";
+import { mapProviderDraft } from "./provider-draft";
 
 export interface NewBytesCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -157,11 +158,12 @@ export class NewBytesOrderService {
   }
 
   async listDrafts(userId: string) {
-    return this.prisma.providerOrder.findMany({
+    const rows = await this.prisma.providerOrder.findMany({
       where: { userId, provider: "NEW_BYTES" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
+    return rows.map(mapProviderDraft);
   }
 
   /** POST /v1/carrito/new — crea y activa el carrito. Si falla, vacía e intenta de nuevo. */

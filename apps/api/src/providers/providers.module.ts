@@ -14,6 +14,11 @@ import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
 import { NewBytesOrderService } from "./new-bytes-order.service";
+import { GrupoNucleoOrderService } from "./grupo-nucleo-order.service";
+import { AirAccountService } from "./air-account.service";
+import { AirOrderService } from "./air-order.service";
+import { ElitAccountService } from "./elit-account.service";
+import { ElitOrderService } from "./elit-order.service";
 
 @Module({
   imports: [CredentialsModule],
@@ -32,6 +37,11 @@ import { NewBytesOrderService } from "./new-bytes-order.service";
     InvidOrderService,
     NewBytesAccountService,
     NewBytesOrderService,
+    GrupoNucleoOrderService,
+    AirAccountService,
+    AirOrderService,
+    ElitAccountService,
+    ElitOrderService,
   ],
 })
 export class ProvidersModule {}

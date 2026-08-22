@@ -11,6 +11,13 @@ import {
 import NodoSpinner from "@/components/NodoSpinner";
 import { Receipt, Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
+import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
+import { draftItems, draftLines } from "@/components/account/draftDetail";
+
+type Detail =
+  | { kind: "movement"; row: NewBytesComprobante }
+  | { kind: "order"; row: NewBytesOrder; title: string }
+  | { kind: "draft"; row: NewBytesNodoDraft };
 
 export default function NewBytesAccountPanel() {
   const [orders, setOrders] = useState<NewBytesOrder[] | null>(null);
@@ -20,10 +27,10 @@ export default function NewBytesAccountPanel() {
   const [drafts, setDrafts] = useState<NewBytesNodoDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function load() {
@@ -52,7 +59,7 @@ export default function NewBytesAccountPanel() {
   return (
     <div className="flex flex-col gap-5 max-w-3xl">
       <p className="text-xs text-surface-500">
-        Datos reales tomados de tu cuenta en nb.com.ar (API oficial) — solo lectura, no modifica nada ahí.
+        Datos reales tomados de tu cuenta en nb.com.ar (API oficial). Si el comprobante trae voucherUrl, se puede descargar desde Ver más.
       </p>
       {loading ? (
         <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -91,6 +98,7 @@ export default function NewBytesAccountPanel() {
                     <th className="text-left font-semibold px-2 py-2">Número</th>
                     <th className="text-left font-semibold px-2 py-2">Detalle</th>
                     <th className="text-right font-semibold px-2 py-2">Total</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800">
@@ -103,6 +111,7 @@ export default function NewBytesAccountPanel() {
                       <td className="px-2 py-2 text-right tabular-nums text-surface-200">
                         {m.totalUsd != null ? `USD ${m.totalUsd.toLocaleString("es-AR", { maximumFractionDigits: 2 })}` : "—"}
                       </td>
+                      <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setDetail({ kind: "movement", row: m })} /></td>
                     </tr>
                   ))}
                 </tbody>
@@ -118,18 +127,69 @@ export default function NewBytesAccountPanel() {
               <Receipt className="w-4 h-4 text-sky-400" />
               Pedidos creados desde Nodo
             </div>
-            <DraftsTable drafts={drafts ?? []} />
+            <DraftsTable drafts={drafts ?? []} onOpen={(d) => setDetail({ kind: "draft", row: d })} />
           </div>
 
-          <OrdersTable title="Mis Pedidos" orders={orders ?? []} numberKey="albNumber" />
-          <OrdersTable title="Órdenes de compra" orders={purchaseOrders ?? []} numberKey="orderNumber" />
+          <OrdersTable title="Mis Pedidos" orders={orders ?? []} numberKey="albNumber" onOpen={(o) => setDetail({ kind: "order", row: o, title: "Pedido" })} />
+          <OrdersTable title="Órdenes de compra" orders={purchaseOrders ?? []} numberKey="orderNumber" onOpen={(o) => setDetail({ kind: "order", row: o, title: "Orden de compra" })} />
         </>
+      )}
+
+      {detail?.kind === "movement" && (
+        <AccountRowDetail
+          open
+          title={`${detail.row.invoiceType ?? "Comprobante"} ${detail.row.invoiceNumber ?? ""}`.trim()}
+          lines={[
+            { label: "Fecha", value: detail.row.invoiceDate || "" },
+            { label: "Tipo", value: detail.row.invoiceType || "" },
+            { label: "Número", value: detail.row.invoiceNumber || "" },
+            { label: "Detalle", value: detail.row.invoiceLabel || "" },
+            { label: "Sucursal", value: detail.row.branch != null ? String(detail.row.branch) : "" },
+            { label: "Subtotal USD", value: detail.row.subtotalUsd != null ? String(detail.row.subtotalUsd) : "" },
+            { label: "Total USD", value: detail.row.totalUsd != null ? String(detail.row.totalUsd) : "" },
+            { label: "Percepciones", value: detail.row.perceptions != null ? String(detail.row.perceptions) : "" },
+          ]}
+          documents={nbVoucherDocs(detail.row)}
+          note={!detail.row.voucherUrl ? "Este comprobante no trajo voucherUrl: no hay PDF para descargar." : undefined}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {detail?.kind === "order" && (
+        <AccountRowDetail
+          open
+          title={`${detail.title} ${detail.row.orderNumber || detail.row.albNumber || ""}`.trim()}
+          lines={[
+            { label: "N°", value: String(detail.row.orderNumber || detail.row.albNumber || "") },
+            { label: "Pedido web", value: detail.row.webOrderNumber || "" },
+            { label: "Sucursal", value: detail.row.branch != null ? String(detail.row.branch) : "" },
+            { label: "Estado", value: detail.row.status || "" },
+            { label: "Detalle estado", value: detail.row.statusDescription || "" },
+            { label: "Fecha", value: detail.row.date || "" },
+            { label: "Importe", value: detail.row.amount != null ? String(detail.row.amount) : "" },
+            { label: "Cliente", value: detail.row.clientName || "" },
+            { label: "Tracking", value: detail.row.trackingNumber || "" },
+            { label: "Factura", value: detail.row.invoice || "" },
+          ]}
+          onClose={() => setDetail(null)}
+        />
+      )}
+      {detail?.kind === "draft" && (
+        <AccountRowDetail open title="Pedido desde Nodo" lines={draftLines(detail.row)} items={draftItems(detail.row)} onClose={() => setDetail(null)} />
       )}
     </div>
   );
 }
 
-function DraftsTable({ drafts }: { drafts: NewBytesNodoDraft[] }) {
+function nbVoucherDocs(m: NewBytesComprobante): AccountDetailDoc[] {
+  if (!m.voucherUrl || m.voucherId == null) return [];
+  return [{
+    label: "Descargar comprobante",
+    href: `/providers/NEW_BYTES/documents?voucherId=${encodeURIComponent(String(m.voucherId))}`,
+    filename: `nb-${m.invoiceNumber || m.voucherId}.pdf`,
+  }];
+}
+
+function DraftsTable({ drafts, onOpen }: { drafts: NewBytesNodoDraft[]; onOpen: (d: NewBytesNodoDraft) => void }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -139,6 +199,7 @@ function DraftsTable({ drafts }: { drafts: NewBytesNodoDraft[] }) {
             <th className="text-left font-semibold px-2 py-2">Orden</th>
             <th className="text-left font-semibold px-2 py-2">Fecha</th>
             <th className="text-right font-semibold px-2 py-2">Total</th>
+            <th></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-surface-800">
@@ -152,6 +213,7 @@ function DraftsTable({ drafts }: { drafts: NewBytesNodoDraft[] }) {
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
               <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
             </tr>
           ))}
         </tbody>
@@ -163,7 +225,14 @@ function DraftsTable({ drafts }: { drafts: NewBytesNodoDraft[] }) {
   );
 }
 
-function OrdersTable({ title, orders, numberKey }: { title: string; orders: NewBytesOrder[]; numberKey: "albNumber" | "orderNumber" }) {
+function OrdersTable({
+  title, orders, numberKey, onOpen,
+}: {
+  title: string;
+  orders: NewBytesOrder[];
+  numberKey: "albNumber" | "orderNumber";
+  onOpen: (o: NewBytesOrder) => void;
+}) {
   return (
     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2 text-sm font-semibold text-white">
@@ -179,6 +248,7 @@ function OrdersTable({ title, orders, numberKey }: { title: string; orders: NewB
               <th className="text-left font-semibold px-2 py-2">Estado</th>
               <th className="text-left font-semibold px-2 py-2">Fecha</th>
               <th className="text-right font-semibold px-2 py-2">Importe</th>
+              <th></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-800">
@@ -195,6 +265,7 @@ function OrdersTable({ title, orders, numberKey }: { title: string; orders: NewB
                 </td>
                 <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
                 <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount ?? "—"}</td>
+                <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(o)} /></td>
               </tr>
             ))}
           </tbody>

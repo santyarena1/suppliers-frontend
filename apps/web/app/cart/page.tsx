@@ -8,6 +8,9 @@ import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import InvidDraftPanel from "@/components/InvidDraftPanel";
 import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
+import ElitCheckoutPanel from "@/components/ElitCheckoutPanel";
+import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
+import AirCheckoutPanel from "@/components/AirCheckoutPanel";
 import { useCart, CartItem } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { proxyImg, formatUSD } from "@/lib/format";
@@ -534,6 +537,39 @@ export default function CartPage() {
                         setNotice(message || "Pedido creado en NewBytes");
                         setActiveTab("all");
                         clearProvider("NEW_BYTES");
+                      }}
+                    />
+                  )}
+
+                  {activeTab === "ELIT" && byProvider.ELIT?.length > 0 && (
+                    <ElitCheckoutPanel
+                      items={byProvider.ELIT}
+                      onCreated={(message) => {
+                        setNotice(message || "Pedido creado en Elit");
+                        setActiveTab("all");
+                        clearProvider("ELIT");
+                      }}
+                    />
+                  )}
+
+                  {activeTab === "GRUPO_NUCLEO" && byProvider.GRUPO_NUCLEO?.length > 0 && (
+                    <GrupoNucleoCheckoutPanel
+                      items={byProvider.GRUPO_NUCLEO}
+                      onCreated={(message) => {
+                        setNotice(message || "Pedido creado en Grupo Núcleo");
+                        setActiveTab("all");
+                        clearProvider("GRUPO_NUCLEO");
+                      }}
+                    />
+                  )}
+
+                  {activeTab === "AIR" && byProvider.AIR?.length > 0 && (
+                    <AirCheckoutPanel
+                      items={byProvider.AIR}
+                      onCreated={(message) => {
+                        setNotice(message || "Canasto enviado a Air");
+                        setActiveTab("all");
+                        clearProvider("AIR");
                       }}
                     />
                   )}

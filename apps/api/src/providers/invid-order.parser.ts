@@ -220,20 +220,165 @@ export function parseSubmitResult(html: string): InvidSubmitResult {
   };
 }
 
-export function parseOrdersTable(html: string) {
-  const rows: { orderNumber: string; webOrderNumber: string; status: string; date: string; amount: string; invoice: string }[] = [];
-  const rowRe =
-    /<tr class="CartProduct"[^>]*>\s*<td>.*?<\/td>\s*<td class="valorizar">\s*(\d+)\s*<\/td>\s*<td class="valorizar">\s*(\d+)\s*<\/td>\s*<td class="text-center">\s*([^<]+?)\s*<\/td>\s*<td class="text-center">\s*([\d-]+)\s*<\/td>\s*<td[^>]*class="text-right"[^>]*>\s*([^<]+?)\s*<\/td>\s*<td>\s*([^<]*?)\s*<\/td>\s*<\/tr>/g;
+export interface InvidOrderItem {
+  code?: string;
+  name: string;
+  price?: string;
+  qty?: string;
+  total?: string;
+}
+
+export interface InvidOrderRow {
+  orderNumber: string;
+  webOrderNumber: string;
+  status: string;
+  date: string;
+  amount: string;
+  invoice: string;
+  invoiceHrefs: string[];
+  delivery?: string;
+  payment?: string;
+  items: InvidOrderItem[];
+  links: { href: string; label: string }[];
+}
+
+function extractTdHtml(trInner: string): string[] {
+  const cells: string[] = [];
+  const tdRe = /<td\b[^>]*>([\s\S]*?)<\/td>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tdRe.exec(trInner))) cells.push(m[1]);
+  return cells;
+}
+
+function extractAnchors(html: string): { href: string; label: string }[] {
+  const links: { href: string; label: string }[] = [];
+  const re = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const href = decodeEntities(m[1]).trim();
+    if (!href || /^(javascript:|#|mailto:)/i.test(href)) continue;
+    links.push({ href, label: stripTags(m[2]) || href });
+  }
+  return links;
+}
+
+function parseOutlineBlock(html: string): Pick<InvidOrderRow, "items" | "delivery" | "payment" | "links"> {
+  const items: InvidOrderItem[] = [];
+  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html))) {
-    rows.push({
-      orderNumber: m[1],
-      webOrderNumber: m[2],
-      status: decodeEntities(m[3].trim()),
-      date: m[4].trim(),
-      amount: decodeEntities(m[5].trim()),
-      invoice: decodeEntities(m[6].trim()),
+    const texts = extractTdHtml(m[1]).map(stripTags);
+    if (texts.length < 3) continue;
+    const joined = texts.join(" ");
+    if (/calificaci[oó]n/i.test(joined) && /producto/i.test(joined)) continue;
+    if (/cargar a pedido/i.test(joined)) continue;
+    if (/^total:/i.test(joined) || texts.some((t) => /^total:/i.test(t))) continue;
+    const name = texts.length >= 4 ? texts[1] : texts[0];
+    if (!name || /forma de (entrega|pago)/i.test(name)) continue;
+    const price = texts.length >= 4 ? texts[2] : texts[1];
+    const qty = texts.length >= 4 ? texts[3] : texts[2];
+    if (!/\d/.test(price || "") && !/\d/.test(qty || "")) continue;
+    const code = name.match(/\((\d{4,})\)/)?.[1];
+    items.push({ code, name, price, qty });
+  }
+  const delivery = stripTags(html.match(/<b>\s*Forma de Entrega\s*<\/b>\s*([^<]+)/i)?.[1] ?? "") || undefined;
+  const payment = stripTags(html.match(/<b>\s*Forma de Pago\s*<\/b>\s*([^<]+)/i)?.[1] ?? "") || undefined;
+  return { items, delivery, payment, links: extractAnchors(html) };
+}
+
+export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
+  const orders: InvidOrderRow[] = [];
+  const rowRe = /<tr\b([^>]*class="[^"]*CartProduct[^"]*"[^>]*)>([\s\S]*?)<\/tr>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html))) {
+    const trTag = m[1];
+    if (/cartTableHeader/i.test(trTag) || /cartTableHeader/i.test(m[0])) continue;
+    const cells = extractTdHtml(m[2]);
+    if (cells.length === 0) continue;
+    const firstIsChrome = /<img/i.test(cells[0]) || stripTags(cells[0]) === "";
+    const data = (firstIsChrome ? cells.slice(1) : cells).map(stripTags);
+    if (data.length < 4) continue;
+
+    let orderNumber: string;
+    let webOrderNumber = "";
+    let status: string;
+    let date: string;
+    let amount: string;
+    let invoice = "";
+    let invoiceHrefs: string[] = [];
+    if (data.length >= 6) {
+      orderNumber = data[0];
+      webOrderNumber = data[1];
+      status = data[2];
+      date = data[3];
+      amount = data[4];
+      invoice = data[5];
+      invoiceHrefs = extractAnchors(cells[firstIsChrome ? 6 : 5] ?? "").map((l) => l.href);
+    } else {
+      orderNumber = data[0];
+      status = data[1];
+      date = data[2];
+      amount = data[3];
+    }
+
+    const after = html.slice(m.index + m[0].length);
+    const nextOrder = after.search(/<tr\b[^>]*class="[^"]*CartProduct/i);
+    const outlineHtml = nextOrder >= 0 ? after.slice(0, nextOrder) : after.slice(0, 20_000);
+    const outline = /id=["']menu\d+outline["']/i.test(outlineHtml)
+      ? parseOutlineBlock(outlineHtml)
+      : { items: [] as InvidOrderItem[], delivery: undefined, payment: undefined, links: [] as { href: string; label: string }[] };
+
+    orders.push({
+      orderNumber,
+      webOrderNumber,
+      status,
+      date,
+      amount,
+      invoice,
+      invoiceHrefs,
+      delivery: outline.delivery,
+      payment: outline.payment,
+      items: outline.items,
+      links: outline.links,
     });
   }
-  return { orders: rows };
+  return { orders };
+}
+
+export interface InvidAccountMovement {
+  date: string;
+  docType: string;
+  docNumber: string;
+  internalNumber: string;
+  currency: string;
+  total: string;
+  hrefs: string[];
+}
+
+export function parseAccountStatement(html: string): {
+  balance: number | null;
+  movements: InvidAccountMovement[];
+} {
+  const balanceMatch = html.match(/Saldo de Cuenta Corriente:\s*\$?\s*(-?[\d,]+\.?\d*)/i);
+  const balance = balanceMatch ? Number(balanceMatch[1].replace(/,/g, "")) : null;
+  const movements: InvidAccountMovement[] = [];
+  const rowRe = /<tr class="CartProduct"[^>]*>([\s\S]*?)<\/tr>/g;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html))) {
+    const cells = extractTdHtml(m[1]);
+    if (cells.length < 6) continue;
+    const texts = cells.map(stripTags);
+    if (texts.length < 6) continue;
+    if (!/^[\d/-]+/.test(texts[0])) continue;
+    movements.push({
+      date: texts[0],
+      docType: texts[1],
+      docNumber: texts[2],
+      internalNumber: texts[3],
+      currency: texts[4],
+      total: texts[5],
+      hrefs: cells.flatMap((c) => extractAnchors(c).map((l) => l.href)),
+    });
+  }
+  return { balance, movements };
 }

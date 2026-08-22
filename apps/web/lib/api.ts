@@ -41,6 +41,53 @@ api.interceptors.response.use(
   }
 );
 
+export async function downloadAuthedFile(pathWithQuery: string, filename: string) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const path = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const ct = res.headers.get("content-type") || "";
+  if (!res.ok || ct.includes("application/json")) {
+    let message = `No se pudo descargar (${res.status})`;
+    try {
+      const body = (await res.json()) as { message?: string };
+      if (body.message) message = body.message;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function uploadAuthedFile(path: string, file: File, extra?: Record<string, string>) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const form = new FormData();
+  form.append("file", file);
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) form.append(k, v);
+  }
+  const res = await fetch(`${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const body = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; data?: unknown };
+  if (!res.ok || body.success === false) {
+    throw new Error(body.message || `No se pudo subir (${res.status})`);
+  }
+  return body.data ?? body;
+}
+
 // --- Types ---
 export type Provider =
   | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE"
@@ -222,6 +269,13 @@ export const providersApi = {
 };
 
 // --- Invid: pedidos y cuenta corriente (solo lectura, datos reales de su portal) ---
+export interface InvidOrderItem {
+  code?: string;
+  name: string;
+  price?: string;
+  qty?: string;
+  total?: string;
+}
 export interface InvidOrder {
   orderNumber: string;
   webOrderNumber: string;
@@ -229,6 +283,17 @@ export interface InvidOrder {
   date: string;
   amount: string;
   invoice: string;
+  invoiceHrefs?: string[];
+  delivery?: string;
+  payment?: string;
+  items?: InvidOrderItem[];
+  links?: { href: string; label: string }[];
+}
+export interface InvidFileForm {
+  action: string;
+  method: string;
+  fileField: string;
+  fields: Record<string, string>;
 }
 export interface InvidAccountMovement {
   date: string;
@@ -237,9 +302,11 @@ export interface InvidAccountMovement {
   internalNumber: string;
   currency: string;
   total: string;
+  hrefs?: string[];
 }
 export const invidAccountApi = {
-  orders: () => api.get<{ orders: InvidOrder[] }>("/providers/INVID/orders"),
+  orders: () =>
+    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>("/providers/INVID/orders"),
   accountStatement: () =>
     api.get<{ balance: number | null; movements: InvidAccountMovement[] }>("/providers/INVID/account-statement"),
 };
@@ -304,9 +371,11 @@ export interface InvidNodoDraft {
   invidWebOrderNumber: string | null;
   paymentLabel: string | null;
   deliveryLabel: string | null;
+  notes?: string | null;
   total: string | number | null;
   createdAt: string;
   errorMessage: string | null;
+  items?: NewBytesNodoDraft["items"];
 }
 
 export const invidCheckoutApi = {
@@ -445,9 +514,20 @@ export interface NewBytesNodoDraft {
   invidWebOrderNumber: string | null;
   paymentLabel: string | null;
   deliveryLabel: string | null;
+  notes?: string | null;
   total: string | number | null;
   createdAt: string;
   errorMessage: string | null;
+  items?: {
+    code?: string;
+    name?: string;
+    qty?: number;
+    quantity?: number;
+    price?: number;
+    priceUsd?: number;
+    subtotal?: number;
+    total?: number;
+  }[];
 }
 
 export const newBytesAccountApi = {
@@ -455,6 +535,8 @@ export const newBytesAccountApi = {
   purchaseOrders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/purchase-orders"),
   accountStatement: () =>
     api.get<{ balance: number | null; movements: NewBytesComprobante[] }>("/providers/NEW_BYTES/account-statement"),
+  orderDetail: (id: string) =>
+    api.get<{ found: boolean; raw: unknown }>(`/providers/NEW_BYTES/orders/${encodeURIComponent(id)}`),
 };
 
 export type NewBytesCheckoutItemInput = { code: string; qty: number; name?: string };
@@ -485,6 +567,296 @@ export const newBytesCheckoutApi = {
   draft: (body: NewBytesCheckoutPayload & { medioDePagoId: number }) =>
     api.post<NewBytesDraftResult>("/providers/NEW_BYTES/checkout/draft", body),
   drafts: () => api.get<NewBytesNodoDraft[]>("/providers/NEW_BYTES/drafts"),
+};
+
+export type NodoProviderDraft = NewBytesNodoDraft;
+
+export interface ProviderOption {
+  value: string;
+  label: string;
+}
+
+export interface GnPreviewItem {
+  code: string;
+  qty: number;
+  name: string;
+  priceUsd: number;
+  taxPercent: number;
+  stockMdp: number;
+  stockCaba: number;
+  stock: number;
+  stockOk: boolean;
+}
+
+export interface GnCheckoutPreview {
+  items: GnPreviewItem[];
+  stockOk: boolean;
+  usdExchange: number | null;
+  subtotalUsd: number;
+  subtotalArs: number | null;
+  customerSale: boolean;
+  note: string;
+}
+
+export interface GnCustomer {
+  nombre: string;
+  documento: string;
+  tipoDocumento: number;
+  direccion: string;
+  codigoPostal: string;
+  ciudad: string;
+  codProvincia: number;
+  email: string;
+  tel: string;
+}
+
+export interface GnDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+  pedidos?: { pedido: string; centroDistribucion: string }[];
+}
+
+export const grupoNucleoAccountApi = {
+  account: () =>
+    api.get<{ note: string; drafts: NodoProviderDraft[]; orders: unknown[]; movements: unknown[]; balance: number | null }>(
+      "/providers/GRUPO_NUCLEO/account"
+    ),
+};
+
+export const grupoNucleoCheckoutApi = {
+  options: () =>
+    api.get<{ documentTypes: ProviderOption[]; provinces: { value: number; label: string }[]; note: string }>(
+      "/providers/GRUPO_NUCLEO/checkout/options"
+    ),
+  preview: (body: { items: { code: string; qty: number; name?: string }[]; customerSale?: boolean }) =>
+    api.post<GnCheckoutPreview>("/providers/GRUPO_NUCLEO/checkout/preview", body),
+  draft: (body: {
+    items: { code: string; qty: number; name?: string }[];
+    notes?: string;
+    customerSale?: boolean;
+    customer?: GnCustomer;
+  }) => api.post<GnDraftResult>("/providers/GRUPO_NUCLEO/checkout/draft", body),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/GRUPO_NUCLEO/drafts"),
+};
+
+export interface AirCheckoutPreview {
+  nrocompro: string;
+  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  subtotal: number;
+  total: number;
+  iva21: number;
+  iva105: number;
+  ii: number;
+  paymentLabel: string;
+  deliveryLabel: string;
+  stockOk: boolean;
+  note: string;
+  options: {
+    sucursales: ProviderOption[];
+    vendedores: ProviderOption[];
+    pagos: ProviderOption[];
+    entregas: ProviderOption[];
+    transportes: ProviderOption[];
+  };
+}
+
+export interface AirDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export const airAccountApi = {
+  account: () =>
+    api.get<{
+      balance: number | null;
+      movements: Record<string, string>[];
+      invoices: Record<string, string>[];
+      pending: Record<string, string>[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/AIR/account"),
+};
+
+export const airCheckoutApi = {
+  options: () =>
+    api.get<{
+      sucursales: ProviderOption[];
+      vendedores: ProviderOption[];
+      pagos: ProviderOption[];
+      entregas: ProviderOption[];
+      transportes: ProviderOption[];
+    }>("/providers/AIR/checkout/options"),
+  preview: (body: {
+    items: { code: string; qty: number; name?: string }[];
+    sucursal?: string;
+    vendedor?: string;
+    pago?: string;
+    entrega?: string;
+    transporte?: string;
+    notes?: string;
+  }) => api.post<AirCheckoutPreview>("/providers/AIR/checkout/preview", body),
+  draft: (body: {
+    items: { code: string; qty: number; name?: string }[];
+    sucursal: string;
+    vendedor: string;
+    pago: string;
+    entrega: string;
+    transporte?: string;
+    notes?: string;
+  }) => api.post<AirDraftResult>("/providers/AIR/checkout/draft", body),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/AIR/drafts"),
+};
+
+export interface ElitCheckoutPreview {
+  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  warehouses: { id: number; name: string }[];
+  shippingMethods: {
+    warehouse: number;
+    warehouseName: string;
+    value: string;
+    label: string;
+    cost: number;
+    selected: boolean;
+  }[];
+  saleConditions: { value: string; label: string; surcharge: number }[];
+  addresses: { code: string; label: string; addressLine: string; postalCode?: string }[];
+  warehouse: number | null;
+  shippingMethod: string | null;
+  shippingLabel: string | null;
+  shippingCost: number;
+  saleCondition: string | null;
+  shippingAddress: string | null;
+  subtotal: number;
+  vat: number;
+  internalTax: number;
+  perceptions: number;
+  total: number;
+  exchange: number | null;
+  stockOk: boolean;
+  note: string;
+}
+
+export interface ElitDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export const elitAccountApi = {
+  account: () =>
+    api.get<{
+      profile: { id?: string; name?: string; exchange?: number | null };
+      balance: number | null;
+      orders: ElitSaleNote[];
+      movements: ElitMovement[];
+      payments?: ElitPayment[];
+      canCreateReport?: boolean;
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/ELIT/account"),
+  saleNote: (number: string) => api.get<ElitSaleNote>(`/providers/ELIT/salenotes/${encodeURIComponent(number)}`),
+  payments: () =>
+    api.get<{ canCreateReport: boolean; active: unknown; payments: ElitPayment[] }>("/providers/ELIT/payments"),
+  paymentOptions: () =>
+    api.get<{
+      banks: { id?: number; name: string }[];
+      operations: { bank?: number; code?: string; name?: string }[];
+    }>("/providers/ELIT/payments/options"),
+  createOperation: (body: {
+    type?: string;
+    bank?: number;
+    bankName?: string;
+    operationName?: string;
+    date?: string;
+    amount?: number;
+    number?: string;
+  }) => api.post<unknown>("/providers/ELIT/payments/operation", body),
+  finishPayment: () => api.post<unknown>("/providers/ELIT/payments/finish"),
+};
+
+export interface ElitSaleNote {
+  orderNumber: string;
+  invoiceNumber: string;
+  status: string;
+  statusDescription?: string;
+  date: string;
+  amount: number | null;
+  currency: string;
+  form?: string;
+  warehouseName?: string;
+  saleCondition?: string;
+  shippingMethod?: string;
+  pdfUrl?: string;
+  dispatchNotePdfUrl?: string;
+  tracking?: string;
+  trackingSupplier?: string;
+  trackingStatus?: string;
+  items?: {
+    code?: string;
+    name?: string;
+    quantity?: number | null;
+    price?: number | null;
+    total?: number | null;
+  }[];
+  summary?: {
+    subtotal?: number | null;
+    vat?: number | null;
+    total?: number | null;
+    shipping?: number | null;
+  };
+}
+
+export interface ElitMovement {
+  date: string;
+  form: string;
+  number: string;
+  debit: number | null;
+  credit: number | null;
+  total: number | null;
+  balance: number | null;
+  balanceUsd: number | null;
+  currency: string;
+}
+
+export interface ElitPayment {
+  id: string;
+  date: string;
+  total: number | null;
+  totalApproved: number | null;
+  status: string;
+}
+
+export type ElitCheckoutPayload = {
+  items: { code: string; qty: number; name?: string }[];
+  warehouse?: number;
+  shippingMethod?: number;
+  saleCondition?: number;
+  shippingAddress?: string;
+};
+
+export const elitCheckoutApi = {
+  preview: (body: ElitCheckoutPayload) =>
+    api.post<ElitCheckoutPreview>("/providers/ELIT/checkout/preview", body),
+  draft: (body: ElitCheckoutPayload & { warehouse: number }) =>
+    api.post<ElitDraftResult>("/providers/ELIT/checkout/draft", body),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/ELIT/drafts"),
 };
 
 // --- Admin / Users ---
