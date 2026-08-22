@@ -236,6 +236,72 @@ export const invidAccountApi = {
     api.get<{ balance: number | null; movements: InvidAccountMovement[] }>("/providers/INVID/account-statement"),
 };
 
+export interface InvidAddress {
+  id: string;
+  label: string;
+  addressLine: string;
+  isDefault: boolean;
+}
+export interface InvidPaymentOption {
+  value: string;
+  label: string;
+}
+export interface InvidCheckoutItem {
+  code: string;
+  qty: number;
+  name: string;
+  price: number;
+  subtotal: number;
+}
+export interface InvidCheckoutPreview {
+  items: InvidCheckoutItem[];
+  address: Record<string, string>;
+  paymentOption: string;
+  paymentLabel: string;
+  payments: InvidPaymentOption[];
+  deliveries: InvidPaymentOption[];
+  suggestedDelivery?: InvidPaymentOption;
+  stockOk: boolean;
+  stockMessage?: string;
+  subtotal: number;
+  impuestos: number;
+  percepciones: number;
+  total: number;
+  note: string;
+}
+export interface InvidDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  items: InvidCheckoutItem[];
+  total: number;
+  message: string;
+}
+export interface InvidNodoDraft {
+  id: string;
+  status: string;
+  invidOrderNumber: string | null;
+  invidWebOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  createdAt: string;
+  errorMessage: string | null;
+}
+
+export const invidCheckoutApi = {
+  addresses: () => api.get<InvidAddress[]>("/providers/INVID/checkout/addresses"),
+  payments: () => api.get<InvidPaymentOption[]>("/providers/INVID/checkout/payments"),
+  preview: (body: { items: { code: string; qty: number }[]; addressId: string; paymentOption: string }) =>
+    api.post<InvidCheckoutPreview>("/providers/INVID/checkout/preview", body),
+  draft: (body: { items: { code: string; qty: number; name?: string }[]; addressId: string; paymentOption: string; notes?: string }) =>
+    api.post<InvidDraftResult>("/providers/INVID/checkout/draft", body),
+  drafts: () => api.get<InvidNodoDraft[]>("/providers/INVID/drafts"),
+};
+
 // --- Admin / Users ---
 export const userApi = {
   updateActiveStatus: (userId: string, active: boolean) =>

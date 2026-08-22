@@ -1,22 +1,33 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
-import axios from "axios";
+import axios, { type AxiosResponse } from "axios";
+import { PrismaService } from "../prisma/prisma.service";
+import {
+  decodeEntities,
+  parseCheckoutForm,
+  parseOrdersTable,
+  parseSubmitResult,
+  pickPickupDelivery,
+  type InvidRadioOption,
+} from "./invid-order.parser";
 
 const SITE_BASE = "https://www.invidcomputers.com";
 const LOGIN_URL = `${SITE_BASE}/login.php`;
+const CART_URL = `${SITE_BASE}/carrito.php`;
+const AXIOS_OPTS = { timeout: 20_000, responseType: "text" as const };
 
 /**
- * Mapa real de formas de pago del checkout de Invid (valores del radio
- * `opcionPago`, confirmados leyendo el HTML real del carrito autenticado).
- * Solo informativo acá — la elección final de pago se hace a mano en el
- * paso 2 (ver nota en `previewOrder`).
+ * Formas de pago reales del checkout de Invid (radio `opcionPago`).
+ * Tarjeta (132) no se ofrece como borrador: abre MercadoPago y no queda
+ * pendiente para que el vendedor contacte por WhatsApp.
  */
 export const INVID_PAYMENT_OPTIONS = [
   { value: "-1", label: "Contado" },
   { value: "67", label: "Depósito/Transferencia Banco" },
   { value: "69", label: "Cheque previa acreditación" },
-  { value: "107", label: "Transferencia desde MercadoPag" },
-  { value: "132", label: "Tarjeta de Crédito (recargo 5%)" },
+  { value: "107", label: "Transferencia desde MercadoPago" },
 ] as const;
+
+const DRAFT_PAYMENT_VALUES = new Set(INVID_PAYMENT_OPTIONS.map((p) => p.value));
 
 interface AddressField {
   Identificador: string;
@@ -31,20 +42,62 @@ interface AddressField {
   Pais: string;
 }
 
+interface PreparedCart {
+  cookie: string;
+  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  address: AddressField;
+  addressId: string;
+  paymentOption: string;
+  paymentLabel: string;
+  stockOk: boolean;
+  stockMessage?: string;
+  subtotal: number;
+  impuestos: number;
+  percepciones: number;
+  total: number;
+  deliveries: InvidRadioOption[];
+  payments: InvidRadioOption[];
+  cartHtml: string;
+}
+
+export interface InvidDraftInput {
+  items: { code: string; qty: number; name?: string }[];
+  addressId: string;
+  paymentOption: string;
+  deliveryOption?: string;
+  notes?: string;
+  payerName?: string;
+  payerEmail?: string;
+}
+
 /**
- * Arma pedidos de Invid de forma semi-automática: todo lo que es reversible
- * y de bajo riesgo (login, carrito, direcciones, validar stock e impuestos)
- * lo hace el sistema. El último paso — apretar "CONFIRMAR PEDIDO", que
- * genera un compromiso de compra real con plata real — queda deliberadamente
- * afuera de este servicio y se hace a mano en invidcomputers.com, con el
- * carrito ya armado por acá. No es una limitación técnica: automatizar ese
- * último POST está bloqueado a propósito por el clasificador de seguridad
- * de esta sesión, y aunque no lo estuviera, un pedido real con plata real
- * amerita que el último click lo dé una persona, no un script.
+ * Crea un borrador de pedido en el portal de Invid desde Nodo.
+ *
+ * Invid documenta el flujo así: confirmar en el carrito deja el pedido
+ * *pendiente de procesamiento* y el vendedor de la cuenta contacta al
+ * cliente (WhatsApp / mail). No cobra solo: si no se informa el pago
+ * en 24 h, Invid da de baja el pedido. Ese POST (`iniciar_pago=S` a
+ * carrito.php) es el borrador — no un cobro.
  */
 @Injectable()
 export class InvidOrderService {
   private readonly logger = new Logger(InvidOrderService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  private mergeCookies(current: string | undefined, setCookie: string[] | undefined): string {
+    const map = new Map<string, string>();
+    for (const part of (current ?? "").split(";").map((s) => s.trim()).filter(Boolean)) {
+      const eq = part.indexOf("=");
+      if (eq > 0) map.set(part.slice(0, eq), part.slice(eq + 1));
+    }
+    for (const raw of setCookie ?? []) {
+      const pair = raw.split(";")[0];
+      const eq = pair.indexOf("=");
+      if (eq > 0) map.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+    }
+    return [...map.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
+  }
 
   private async login(username: string, password: string): Promise<string> {
     try {
@@ -58,7 +111,7 @@ export class InvidOrderService {
           validateStatus: (s) => s < 400 || s === 302,
         }
       );
-      const cookie = res.headers["set-cookie"]?.map((c: string) => c.split(";")[0]).join("; ");
+      const cookie = this.mergeCookies(undefined, res.headers["set-cookie"]);
       if (!cookie) throw new Error("sin cookie de sesión");
       return cookie;
     } catch (err) {
@@ -68,33 +121,63 @@ export class InvidOrderService {
     }
   }
 
+  private async request(
+    cookie: string,
+    method: "GET" | "POST",
+    url: string,
+    opts: { params?: Record<string, string | number>; body?: string; timeout?: number } = {}
+  ): Promise<{ cookie: string; data: string; status: number; location?: string }> {
+    const res: AxiosResponse<string> = await axios.request({
+      method,
+      url,
+      params: opts.params,
+      data: opts.body,
+      headers: {
+        Cookie: cookie,
+        ...(opts.body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+        Referer: CART_URL,
+      },
+      timeout: opts.timeout ?? 20_000,
+      responseType: "text",
+      maxRedirects: 0,
+      validateStatus: (s) => s < 400 || s === 302,
+    });
+    return {
+      cookie: this.mergeCookies(cookie, res.headers["set-cookie"]),
+      data: typeof res.data === "string" ? res.data : String(res.data ?? ""),
+      status: res.status,
+      location: typeof res.headers.location === "string" ? res.headers.location : undefined,
+    };
+  }
+
+  paymentOptions() {
+    return INVID_PAYMENT_OPTIONS.map((p) => ({ value: p.value, label: p.label }));
+  }
+
   /** Direcciones guardadas reales de la cuenta — solo lectura. */
   async getAddresses(credentials: Record<string, string>) {
     const { username, password } = credentials;
     if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
     const cookie = await this.login(username, password);
 
-    const res = await axios.get<string>(`${SITE_BASE}/select_direcciones.php`, {
-      headers: { Cookie: cookie },
-      timeout: 15_000,
-      responseType: "text",
-    });
-    const html = res.data;
+    const res = await this.request(cookie, "GET", `${SITE_BASE}/select_direcciones.php`);
     const addresses: { id: string; label: string; addressLine: string; isDefault: boolean }[] = [];
     const re = /<input type="radio" name="dir_selected" id="dir_selected_(\d+)" value="\d+" ?(checked="checked")? ?> ?\s*<label[^>]*><b>([^<]*)<\/b><\/label> ([^<]*)<br\/>/g;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(html))) {
-      addresses.push({ id: m[1], label: decodeEntities(m[3].trim()), addressLine: decodeEntities(m[4].trim()), isDefault: !!m[2] });
+    while ((m = re.exec(res.data))) {
+      addresses.push({
+        id: m[1],
+        label: decodeEntities(m[3].trim()),
+        addressLine: decodeEntities(m[4].trim()),
+        isDefault: !!m[2],
+      });
     }
     return addresses;
   }
 
-  private async getAddressDetail(cookie: string, addressId: string): Promise<AddressField> {
-    const res = await axios.get<string>(`${SITE_BASE}/ajaxDatosPersonales.php`, {
+  private async getAddressDetail(cookie: string, addressId: string): Promise<{ cookie: string; address: AddressField }> {
+    const res = await this.request(cookie, "GET", `${SITE_BASE}/ajaxDatosPersonales.php`, {
       params: { funcion: "getDatosDireccion", id: addressId },
-      headers: { Cookie: cookie },
-      timeout: 15_000,
-      responseType: "text",
     });
     const xml = res.data;
     const field = (tag: string) => xml.match(new RegExp(`<${tag}>(.*?)</${tag}>`))?.[1] ?? "";
@@ -113,33 +196,28 @@ export class InvidOrderService {
     if (!address.Direccion || !address.CodPostal || !address.CodProvincia) {
       throw new BadRequestException("La dirección seleccionada es inválida o está incompleta en Invid");
     }
-    return address;
+    return { cookie: res.cookie, address };
   }
 
-  /** Vacía el carrito real de Invid para esta sesión antes de armar el pedido nuevo, sacando siempre el índice 1 hasta que no quede nada. */
-  private async clearCart(cookie: string): Promise<void> {
+  /** Vacía el carrito real de Invid para esta sesión antes de armar el pedido nuevo. */
+  private async clearCart(cookie: string): Promise<string> {
+    let current = cookie;
     for (let i = 0; i < 50; i++) {
-      const res = await axios.get<string>(`${SITE_BASE}/carrito.php`, {
-        headers: { Cookie: cookie },
-        timeout: 15_000,
-        responseType: "text",
-      });
-      if (!/sacarItemCarrito\('1'\)/.test(res.data)) return; // ya no hay item en el índice 1: carrito vacío
-      await axios.get(`${SITE_BASE}/ajaxCarrito.php`, {
+      const cart = await this.request(current, "GET", CART_URL);
+      current = cart.cookie;
+      if (!/sacarItemCarrito\('1'\)/.test(cart.data)) return current;
+      const removed = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
         params: { funcion: "sacar_carrito", indice: 1 },
-        headers: { Cookie: cookie },
-        timeout: 15_000,
       });
+      current = removed.cookie;
     }
     this.logger.warn("clearCart de Invid alcanzó el tope de 50 iteraciones — puede haber quedado algo en el carrito");
+    return current;
   }
 
   private async addItem(cookie: string, code: string, qty: number) {
-    const res = await axios.get<string>(`${SITE_BASE}/servicios.php`, {
+    const res = await this.request(cookie, "GET", `${SITE_BASE}/servicios.php`, {
       params: { servicio: "sumar_a_carrito", producto: code, cantidad: qty },
-      headers: { Cookie: cookie },
-      timeout: 15_000,
-      responseType: "text",
     });
     const xml = res.data;
     const field = (tag: string) => xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`))?.[1] ?? "";
@@ -148,82 +226,247 @@ export class InvidOrderService {
     if (!nombre || !Number.isFinite(monto)) {
       throw new BadRequestException(`Invid rechazó el producto ${code} (sin stock o código inválido)`);
     }
-    return { code, qty, name: nombre, price: Number(field("precio")) || 0, subtotal: monto };
+    return {
+      cookie: res.cookie,
+      item: { code, qty, name: nombre, price: Number(field("precio")) || 0, subtotal: monto },
+    };
   }
 
   private async validateStock(cookie: string, paymentOption: string, codProvincia: string) {
-    const res = await axios.get(`${SITE_BASE}/ajaxCarrito.php`, {
+    const res = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
       params: { funcion: "ValidarStockInvid", opcionPago: paymentOption, codprov: codProvincia },
-      headers: { Cookie: cookie },
-      timeout: 20_000,
     });
-    return res.data as {
+    let parsed: {
       resultado: boolean;
       mensaje?: string;
       impint?: { impuesto: string; subtotal: string; total: string; nroItem: string }[];
       percepcion?: number;
       domicilioFiscal?: boolean;
     };
+    try {
+      parsed = JSON.parse(res.data);
+    } catch {
+      throw new BadGatewayException("Invid no devolvió un JSON válido al validar stock");
+    }
+    return { cookie: res.cookie, validation: parsed };
   }
 
-  /**
-   * Arma el pedido en el carrito REAL de Invid (login, vacía el carrito,
-   * agrega los productos, valida stock e impuestos con la dirección
-   * elegida) y devuelve un resumen para revisar. El carrito queda armado
-   * en la cuenta de Invid — el usuario entra a invidcomputers.com/carrito.php,
-   * ve exactamente esto mismo ya cargado, elige forma de entrega si hace
-   * falta, y aprieta "CONFIRMAR PEDIDO" ahí mismo. Este método no confirma
-   * nada — solo prepara.
-   */
-  async buildCart(
+  private async prepareCart(
     credentials: Record<string, string>,
     items: { code: string; qty: number }[],
     addressId: string,
     paymentOption: string
-  ) {
+  ): Promise<PreparedCart> {
     const { username, password } = credentials;
     if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
     if (items.length === 0) throw new BadRequestException("No hay productos de Invid en el pedido");
-    if (!INVID_PAYMENT_OPTIONS.some((p) => p.value === paymentOption)) {
-      throw new BadRequestException("Forma de pago no reconocida");
+    if (!DRAFT_PAYMENT_VALUES.has(paymentOption as typeof INVID_PAYMENT_OPTIONS[number]["value"])) {
+      throw new BadRequestException("Esa forma de pago no sirve para un borrador (la tarjeta se cobra en MercadoPago)");
     }
 
-    const cookie = await this.login(username, password);
-    await this.clearCart(cookie);
+    let cookie = await this.login(username, password);
+    cookie = await this.clearCart(cookie);
 
     const addedItems = [];
     for (const item of items) {
-      addedItems.push(await this.addItem(cookie, item.code, item.qty));
+      const added = await this.addItem(cookie, item.code, item.qty);
+      cookie = added.cookie;
+      addedItems.push(added.item);
     }
 
-    const address = await this.getAddressDetail(cookie, addressId);
-    const validation = await this.validateStock(cookie, paymentOption, address.CodProvincia);
+    const addr = await this.getAddressDetail(cookie, addressId);
+    cookie = addr.cookie;
+    const stock = await this.validateStock(cookie, paymentOption, addr.address.CodProvincia);
+    cookie = stock.cookie;
+    const validation = stock.validation;
+
+    const cart = await this.request(cookie, "GET", CART_URL);
+    cookie = cart.cookie;
+    const checkout = parseCheckoutForm(cart.data);
 
     const subtotal = addedItems.reduce((s, i) => s + i.subtotal, 0);
     const impTotal = (validation.impint ?? []).reduce((s, i) => s + (Number(i.impuesto) || 0), 0);
     const percepcion = Number(validation.percepcion) || 0;
-    const total = subtotal + impTotal + percepcion;
 
     return {
+      cookie,
       items: addedItems,
-      address,
-      paymentLabel: INVID_PAYMENT_OPTIONS.find((p) => p.value === paymentOption)?.label,
+      address: addr.address,
+      addressId,
+      paymentOption,
+      paymentLabel: INVID_PAYMENT_OPTIONS.find((p) => p.value === paymentOption)?.label ?? paymentOption,
       stockOk: Boolean(validation.resultado),
       stockMessage: validation.mensaje,
       subtotal,
       impuestos: impTotal,
       percepciones: percepcion,
-      total,
-      checkoutUrl: `${SITE_BASE}/carrito.php`,
+      total: subtotal + impTotal + percepcion,
+      deliveries: checkout.deliveries,
+      payments: checkout.payments.length > 0
+        ? checkout.payments.filter((p) => DRAFT_PAYMENT_VALUES.has(p.value as typeof INVID_PAYMENT_OPTIONS[number]["value"]))
+        : this.paymentOptions(),
+      cartHtml: cart.data,
     };
   }
-}
 
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&aacute;/gi, "á").replace(/&eacute;/gi, "é").replace(/&iacute;/gi, "í")
-    .replace(/&oacute;/gi, "ó").replace(/&uacute;/gi, "ú").replace(/&ntilde;/gi, "ñ")
-    .replace(/&Aacute;/g, "Á").replace(/&Eacute;/g, "É").replace(/&Iacute;/g, "Í")
-    .replace(/&Oacute;/g, "Ó").replace(/&Uacute;/g, "Ú").replace(/&Ntilde;/g, "Ñ")
-    .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/g, "'");
+  /**
+   * Arma el carrito real de Invid y devuelve resumen + formas de entrega
+   * leídas del HTML autenticado. No crea el pedido.
+   */
+  async preview(credentials: Record<string, string>, input: InvidDraftInput) {
+    const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
+    const suggestedDelivery = pickPickupDelivery(prepared.deliveries);
+    return {
+      items: prepared.items,
+      address: prepared.address,
+      paymentOption: prepared.paymentOption,
+      paymentLabel: prepared.paymentLabel,
+      payments: prepared.payments,
+      deliveries: prepared.deliveries,
+      suggestedDelivery,
+      stockOk: prepared.stockOk,
+      stockMessage: prepared.stockMessage,
+      subtotal: prepared.subtotal,
+      impuestos: prepared.impuestos,
+      percepciones: prepared.percepciones,
+      total: prepared.total,
+      note: "Esto todavía no crea el pedido. Al confirmar, Invid deja un borrador pendiente y el vendedor de la cuenta te contacta.",
+    };
+  }
+
+  async listDrafts(userId: string) {
+    return this.prisma.providerOrder.findMany({
+      where: { userId, provider: "INVID" },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+  }
+
+  /**
+   * Crea el borrador en Invid (POST iniciar_pago=S) y guarda una copia en Nodo.
+   */
+  async submitDraft(userId: string, credentials: Record<string, string>, input: InvidDraftInput) {
+    const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
+    if (!prepared.stockOk) {
+      throw new BadRequestException(prepared.stockMessage || "Invid no validó el stock de este pedido");
+    }
+
+    const delivery = pickPickupDelivery(prepared.deliveries);
+    if (!delivery || delivery.value !== "1") {
+      throw new BadRequestException(
+        "Invid no ofreció RETIRA en el carrito. Sin esa forma de entrega no se puede armar el borrador desde Nodo."
+      );
+    }
+
+    let cookie = prepared.cookie;
+    try {
+      const setDelivery = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+        params: { funcion: "setearDelivery", tipo_delivery: delivery.value },
+      });
+      cookie = setDelivery.cookie;
+    } catch (err) {
+      this.logger.warn(`setearDelivery falló (${delivery.value}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const body = new URLSearchParams({
+      iniciar_pago: "S",
+      entrega_valida: "1",
+      dir_entrega: prepared.addressId,
+      identificador_seleccionado: prepared.address.Identificador,
+      direccion_seleccionado: prepared.address.Direccion,
+      nropuerta_seleccionado: prepared.address.NroPuerta,
+      localidad_seleccionado: prepared.address.Localidad,
+      ciudad_seleccionado: prepared.address.Ciudad,
+      codpostal_seleccionado: prepared.address.CodPostal,
+      codprovincia_seleccionado: prepared.address.CodProvincia,
+      provincia_seleccionado: prepared.address.Provincia,
+      codpais_seleccionado: prepared.address.CodPais,
+      pais_seleccionado: prepared.address.Pais,
+      opcionPago: prepared.paymentOption,
+      entrega: delivery.value,
+      forma_entrega: delivery.value,
+      costo_envio: "0",
+      valida_delivery: "1",
+      usa_imi: "true",
+      usa_iva: "true",
+      termYCond: "on",
+      prcmoninv1: String(prepared.total),
+    });
+    if (input.notes) body.set("observaciones", input.notes);
+    if (input.payerName) body.set("nombre_pagador", input.payerName);
+    if (input.payerEmail) body.set("mail_pagador", input.payerEmail);
+
+    let html = "";
+    let submit = await this.request(cookie, "POST", CART_URL, { body: body.toString(), timeout: 40_000 });
+    cookie = submit.cookie;
+    html = submit.data;
+
+    // El portal a veces responde 302 a la página de confirmación / gracias.
+    if (submit.status === 302 && submit.location) {
+      const next = submit.location.startsWith("http") ? submit.location : `${SITE_BASE}/${submit.location.replace(/^\//, "")}`;
+      const followed = await this.request(cookie, "GET", next);
+      cookie = followed.cookie;
+      html = followed.data;
+    }
+
+    let parsed = parseSubmitResult(html);
+    let orderNumber = parsed.orderNumber;
+    let webOrderNumber = parsed.webOrderNumber;
+
+    // Fuente de verdad: el listado real de pedidos de la cuenta.
+    try {
+      const ordersPage = await this.request(cookie, "GET", `${SITE_BASE}/lista_pedidos_invid.php`);
+      const latest = parseOrdersTable(ordersPage.data).orders[0];
+      if (latest) {
+        orderNumber = orderNumber ?? latest.orderNumber;
+        webOrderNumber = webOrderNumber ?? latest.webOrderNumber;
+        parsed = { ...parsed, appearsSuccessful: true, orderNumber, webOrderNumber };
+      }
+    } catch (err) {
+      this.logger.warn(`No se pudo reconsultar lista_pedidos: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const created = Boolean(orderNumber || webOrderNumber || parsed.appearsSuccessful);
+    const record = await this.prisma.providerOrder.create({
+      data: {
+        userId,
+        provider: "INVID",
+        status: created ? "CREATED" : "FAILED",
+        invidOrderNumber: orderNumber,
+        invidWebOrderNumber: webOrderNumber,
+        paymentOption: prepared.paymentOption,
+        paymentLabel: prepared.paymentLabel,
+        deliveryOption: delivery.value,
+        deliveryLabel: delivery.label,
+        notes: input.notes,
+        subtotal: prepared.subtotal,
+        impuestos: prepared.impuestos,
+        percepciones: prepared.percepciones,
+        total: prepared.total,
+        errorMessage: created ? null : (parsed.errorMessage ?? "Invid no devolvió número de pedido"),
+        items: prepared.items,
+        addressSnapshot: { id: prepared.addressId, ...prepared.address },
+      },
+    });
+
+    if (!created) {
+      throw new BadGatewayException(record.errorMessage || "No se pudo crear el borrador en Invid");
+    }
+
+    return {
+      id: record.id,
+      status: record.status,
+      orderNumber: record.invidOrderNumber,
+      webOrderNumber: record.invidWebOrderNumber,
+      paymentLabel: record.paymentLabel,
+      deliveryLabel: record.deliveryLabel,
+      items: prepared.items,
+      address: prepared.address,
+      subtotal: prepared.subtotal,
+      impuestos: prepared.impuestos,
+      percepciones: prepared.percepciones,
+      total: prepared.total,
+      message: "Borrador creado en Invid. Queda pendiente: el vendedor de la cuenta te va a contactar (WhatsApp / mail). Si no se informa el pago en 24 h, Invid lo da de baja.",
+    };
+  }
 }

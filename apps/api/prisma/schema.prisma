@@ -29,8 +29,9 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   credentials   Credential[]
-  cartItems     CartItem[]
-  favorites     BrandFavorite[]
+  cartItems      CartItem[]
+  providerOrders ProviderOrder[]
+  favorites      BrandFavorite[]
   notifications BrandNotification[]
   accesses      BrandAccess[]        @relation("AccessUser")
   auditLogs     AuditLogEntry[]
@@ -203,6 +204,35 @@ model CartItem {
   updatedAt  DateTime @updatedAt
 
   @@unique([userId, provider, externalId])
+}
+
+// Borrador de pedido creado en Nodo y enviado al portal del proveedor.
+// Hoy solo INVID: el POST de "CONFIRMAR PEDIDO" deja el pedido pendiente
+// y el vendedor de la cuenta contacta al cliente (WhatsApp / mail).
+model ProviderOrder {
+  id                  String   @id @default(uuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider            String
+  status              String
+  invidOrderNumber    String?
+  invidWebOrderNumber String?
+  paymentOption       String
+  paymentLabel        String?
+  deliveryOption      String?
+  deliveryLabel       String?
+  notes               String?
+  subtotal            Decimal? @db.Decimal(14, 4)
+  impuestos           Decimal? @db.Decimal(14, 4)
+  percepciones        Decimal? @db.Decimal(14, 4)
+  total               Decimal? @db.Decimal(14, 4)
+  errorMessage        String?
+  items               Json
+  addressSnapshot     Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId, provider, createdAt])
 }
 
 // ---------- Marcas ----------

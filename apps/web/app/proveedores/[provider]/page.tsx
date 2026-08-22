@@ -7,7 +7,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, credentialsApi,
-  invidAccountApi, InvidOrder, InvidAccountMovement
+  invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft
 } from "@/lib/api";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
@@ -76,15 +76,21 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [invidMovements, setInvidMovements] = useState<InvidAccountMovement[] | null>(null);
   const [loadingInvidAccount, setLoadingInvidAccount] = useState(false);
   const [invidAccountError, setInvidAccountError] = useState<string | null>(null);
+  const [invidNodoDrafts, setInvidNodoDrafts] = useState<InvidNodoDraft[] | null>(null);
 
   async function loadInvidAccount() {
     setLoadingInvidAccount(true);
     setInvidAccountError(null);
     try {
-      const [ordersRes, statementRes] = await Promise.all([invidAccountApi.orders(), invidAccountApi.accountStatement()]);
+      const [ordersRes, statementRes, draftsRes] = await Promise.all([
+        invidAccountApi.orders(),
+        invidAccountApi.accountStatement(),
+        invidCheckoutApi.drafts().catch(() => ({ data: [] as InvidNodoDraft[] })),
+      ]);
       setInvidOrders(ordersRes.data.orders);
       setInvidBalance(statementRes.data.balance);
       setInvidMovements(statementRes.data.movements);
+      setInvidNodoDrafts(draftsRes.data ?? []);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setInvidAccountError(msg || "No se pudo traer Pedidos/Cuenta Corriente de Invid");
@@ -814,6 +820,44 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                             </table>
                             {(invidMovements ?? []).length === 0 && (
                               <p className="text-center text-xs text-surface-500 py-6">Sin movimientos.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <Receipt className="w-4 h-4 text-orange-400" />
+                            Borradores creados desde Nodo
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+                                  <th className="text-left font-semibold px-2 py-2">Estado</th>
+                                  <th className="text-left font-semibold px-2 py-2">Pedido web</th>
+                                  <th className="text-left font-semibold px-2 py-2">Orden</th>
+                                  <th className="text-left font-semibold px-2 py-2">Fecha</th>
+                                  <th className="text-right font-semibold px-2 py-2">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-surface-800">
+                                {(invidNodoDrafts ?? []).map((d) => (
+                                  <tr key={d.id}>
+                                    <td className="px-2 py-2">
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                        d.status === "CREATED" ? "bg-amber-500/10 text-amber-400" : "bg-red-500/10 text-red-400"
+                                      }`}>{d.status === "CREATED" ? "Pendiente" : d.status}</span>
+                                    </td>
+                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidWebOrderNumber ?? "—"}</td>
+                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? "—"}</td>
+                                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
+                                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            {(invidNodoDrafts ?? []).length === 0 && (
+                              <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste borradores desde Nodo.</p>
                             )}
                           </div>
                         </div>

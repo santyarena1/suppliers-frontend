@@ -1,5 +1,6 @@
 import { BadGatewayException, Injectable } from "@nestjs/common";
 import axios from "axios";
+import { decodeEntities, parseOrdersTable } from "./invid-order.parser";
 
 const SITE_BASE = "https://www.invidcomputers.com";
 const LOGIN_URL = `${SITE_BASE}/login.php`;
@@ -62,29 +63,6 @@ export class InvidAccountService {
   }
 }
 
-function parseOrdersTable(html: string) {
-  const rows: { orderNumber: string; webOrderNumber: string; status: string; date: string; amount: string; invoice: string }[] = [];
-  // Fila real: <tr class="CartProduct" id="trN"><td><img.../></td> (ícono
-  // de expandir, se descarta) <td class="valorizar">orden</td>
-  // <td class="valorizar">pedido web</td><td class="text-center">estado</td>
-  // <td class="text-center">fecha</td><td align="right" class="text-right">importe</td>
-  // <td>comprobante</td></tr>
-  const rowRe =
-    /<tr class="CartProduct"[^>]*>\s*<td>.*?<\/td>\s*<td class="valorizar">\s*(\d+)\s*<\/td>\s*<td class="valorizar">\s*(\d+)\s*<\/td>\s*<td class="text-center">\s*([^<]+?)\s*<\/td>\s*<td class="text-center">\s*([\d-]+)\s*<\/td>\s*<td[^>]*class="text-right"[^>]*>\s*([^<]+?)\s*<\/td>\s*<td>\s*([^<]*?)\s*<\/td>\s*<\/tr>/g;
-  let m: RegExpExecArray | null;
-  while ((m = rowRe.exec(html))) {
-    rows.push({
-      orderNumber: m[1],
-      webOrderNumber: m[2],
-      status: decodeEntities(m[3].trim()),
-      date: m[4].trim(),
-      amount: decodeEntities(m[5].trim()),
-      invoice: decodeEntities(m[6].trim()),
-    });
-  }
-  return { orders: rows };
-}
-
 function parseAccountStatement(html: string) {
   // Formato real: "Saldo de Cuenta Corriente: $-66622.38" — punto decimal
   // directo, sin separador de miles en el encabezado (a diferencia de la
@@ -111,11 +89,4 @@ function parseAccountStatement(html: string) {
     });
   }
   return { balance, movements };
-}
-
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&aacute;/gi, "á").replace(/&eacute;/gi, "é").replace(/&iacute;/gi, "í")
-    .replace(/&oacute;/gi, "ó").replace(/&uacute;/gi, "ú").replace(/&ntilde;/gi, "ñ")
-    .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&");
 }

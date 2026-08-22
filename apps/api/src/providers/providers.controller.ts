@@ -7,7 +7,9 @@ import { CredentialsService } from "../credentials/credentials.service";
 import { ProvidersService } from "./providers.service";
 import { FileImportService } from "./file-import.service";
 import { InvidAccountService } from "./invid-account.service";
+import { InvidOrderService } from "./invid-order.service";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
+import { InvidCheckoutDraftDto, InvidCheckoutPreviewDto } from "./dto/invid-checkout.dto";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -23,23 +25,51 @@ export class ProvidersController {
     private readonly providersService: ProvidersService,
     private readonly fileImportService: FileImportService,
     private readonly credentialsService: CredentialsService,
-    private readonly invidAccountService: InvidAccountService
+    private readonly invidAccountService: InvidAccountService,
+    private readonly invidOrderService: InvidOrderService
   ) {}
+
+  private async invidCredentials(userId: string) {
+    const stored = await this.credentialsService.getByProvider(userId, "INVID");
+    return JSON.parse(stored.credentialsJson) as Record<string, string>;
+  }
 
   /** Historial real de pedidos de Invid (solo lectura) — usa la credencial del portal ya guardada. */
   @Get("providers/INVID/orders")
   async invidOrders(@CurrentUser() user: { userId: string }) {
-    const stored = await this.credentialsService.getByProvider(user.userId, "INVID");
-    const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
-    return this.invidAccountService.getOrders(credentials);
+    return this.invidAccountService.getOrders(await this.invidCredentials(user.userId));
   }
 
   /** Saldo y movimientos reales de cuenta corriente de Invid (solo lectura). */
   @Get("providers/INVID/account-statement")
   async invidAccountStatement(@CurrentUser() user: { userId: string }) {
-    const stored = await this.credentialsService.getByProvider(user.userId, "INVID");
-    const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
-    return this.invidAccountService.getAccountStatement(credentials);
+    return this.invidAccountService.getAccountStatement(await this.invidCredentials(user.userId));
+  }
+
+  @Get("providers/INVID/checkout/addresses")
+  async invidAddresses(@CurrentUser() user: { userId: string }) {
+    return this.invidOrderService.getAddresses(await this.invidCredentials(user.userId));
+  }
+
+  @Get("providers/INVID/checkout/payments")
+  invidPayments() {
+    return this.invidOrderService.paymentOptions();
+  }
+
+  @Get("providers/INVID/drafts")
+  invidDrafts(@CurrentUser() user: { userId: string }) {
+    return this.invidOrderService.listDrafts(user.userId);
+  }
+
+  @Post("providers/INVID/checkout/preview")
+  async invidCheckoutPreview(@CurrentUser() user: { userId: string }, @Body() dto: InvidCheckoutPreviewDto) {
+    return this.invidOrderService.preview(await this.invidCredentials(user.userId), dto);
+  }
+
+  /** Crea el borrador en Invid (pedido pendiente) y guarda una copia en Nodo. */
+  @Post("providers/INVID/checkout/draft")
+  async invidCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: InvidCheckoutDraftDto) {
+    return this.invidOrderService.submitDraft(user.userId, await this.invidCredentials(user.userId), dto);
   }
 
   @Post("providers/:provider/sync")

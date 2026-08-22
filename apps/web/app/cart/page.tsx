@@ -6,6 +6,7 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
+import InvidDraftPanel from "@/components/InvidDraftPanel";
 import { useCart, CartItem } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { parsePrice, formatARS, formatUSD, proxyImg } from "@/lib/format";
@@ -337,6 +338,13 @@ export default function CartPage() {
                       </div>
                     </div>
                   </div>
+
+                  {byProvider.INVID?.length > 0 && (
+                    <InvidDraftPanel
+                      items={byProvider.INVID}
+                      onCreated={() => clearProvider("INVID")}
+                    />
+                  )}
 
                   {/* Per-provider breakdown */}
                   {activeTab === "all" && sortedProviders.length > 1 && (
