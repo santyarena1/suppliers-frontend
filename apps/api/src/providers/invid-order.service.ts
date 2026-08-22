@@ -366,7 +366,7 @@ export class InvidOrderService {
     cookie = cart.cookie;
     const checkout = parseCheckoutForm(cart.data);
 
-    const items = addedItems.map((item, idx) => {
+    const preparedItems = addedItems.map((item, idx) => {
       const tax = taxLines.find((t) => String(t.nroItem) === String(idx + 1))
         ?? taxLines[idx];
       const internos = tax?.internos ?? 0;
@@ -374,9 +374,9 @@ export class InvidOrderService {
       return { ...item, internos, percepciones };
     });
 
-    const net = items.reduce((s, i) => s + i.subtotal, 0);
-    const ivaProducts = items.reduce((s, i) => s + i.iva, 0);
-    const internos = items.reduce((s, i) => s + i.internos, 0);
+    const net = preparedItems.reduce((s, i) => s + i.subtotal, 0);
+    const ivaProducts = preparedItems.reduce((s, i) => s + i.iva, 0);
+    const internos = preparedItems.reduce((s, i) => s + i.internos, 0);
     const totals = computeInvidTotals({
       net,
       ivaProducts,
@@ -387,7 +387,7 @@ export class InvidOrderService {
 
     return {
       cookie,
-      items,
+      items: preparedItems,
       address: addr.address,
       addressId,
       paymentOption,
