@@ -697,9 +697,6 @@ export class InvidOrderService {
       this.logger.warn(`No se pudo leer lista_pedidos antes del POST: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    const tc = await this.getTipoCambio(cookie, prepared.paymentOption);
-    const totalPesos = tc > 0 ? round2(total * tc) : round2(total);
-
     const fields = collectFormFields(cartPage.data);
     const body = new URLSearchParams(fields);
     body.set("iniciar_pago", "S");
@@ -720,7 +717,8 @@ export class InvidOrderService {
     body.set("costo_envio", String(shippingCost));
     body.set("usa_imi", "true");
     body.set("usa_iva", "true");
-    body.set("prcmoninv1", totalPesos.toFixed(2));
+    // Invid opera en USD. El hidden prcmoninv1 va con el total del carrito en dólares.
+    body.set("prcmoninv1", total.toFixed(2));
     body.set("percepcionHidden", String(prepared.percepcionPercent));
     body.set("cp_entrega", prepared.address.CodPostal);
     body.set("localidad_entrega", prepared.address.Localidad);
@@ -732,7 +730,7 @@ export class InvidOrderService {
     if (fields.termYCond != null || /termYCond/i.test(cartPage.data)) body.set("termYCond", "on");
 
     this.logger.log(
-      `Invid POST iniciar_pago entrega=${delivery.value} pago=${prepared.paymentOption} usd=${total} tc=${tc} prcmoninv1=${totalPesos.toFixed(2)} entrega_valida=${body.get("entrega_valida")}`
+      `Invid POST iniciar_pago entrega=${delivery.value} pago=${prepared.paymentOption} usd=${total.toFixed(2)} entrega_valida=${body.get("entrega_valida")}`
     );
 
     let html = "";
