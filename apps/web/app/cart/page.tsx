@@ -19,11 +19,12 @@ import {
   taxByKind,
   formatAlicuota,
 } from "@/lib/tax";
-import { InvidCheckoutPreview } from "@/lib/api";
+import { ALL_PROVIDERS, InvidCheckoutPreview } from "@/lib/api";
 import {
   Trash2, Minus, Plus, Download, AlertTriangle, ImageOff,
-  FileText, MessageCircle, Check, Copy, ChevronDown,
+  FileText, MessageCircle, Check, Copy, ChevronDown, History,
 } from "lucide-react";
+import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
 
 type Totals = {
   subtotalUSD: number;
@@ -62,8 +63,10 @@ export default function CartPage() {
   const [activeTab, setActiveTab] = useState<string>("all");
   const [copied, setCopied] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [pedidosOpen, setPedidosOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+  const pedidosRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (activeTab !== "all" && !byProvider[activeTab]?.length) setActiveTab("all");
@@ -78,6 +81,7 @@ export default function CartPage() {
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false);
+      if (pedidosRef.current && !pedidosRef.current.contains(e.target as Node)) setPedidosOpen(false);
     }
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -310,6 +314,45 @@ export default function CartPage() {
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <PrefsPanel />
+              <div className="relative" ref={pedidosRef}>
+                <button
+                  onClick={() => setPedidosOpen((v) => !v)}
+                  className="flex items-center gap-1.5 text-sm text-surface-300 hover:text-white border border-surface-700 hover:border-surface-500 rounded-sm px-3 py-1.5 transition-colors"
+                >
+                  <History className="w-3.5 h-3.5" />
+                  Pedidos
+                  <ChevronDown className="w-3 h-3 text-surface-500" />
+                </button>
+                {pedidosOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 w-64 bg-surface-950 border border-surface-800 shadow-xl z-30 py-1 max-h-80 overflow-y-auto">
+                    <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Historial</p>
+                    {ALL_PROVIDERS.filter(providerHasOrderHistory).map((p) => (
+                      <Link
+                        key={p}
+                        href={providerOrdersHref(p)}
+                        onClick={() => setPedidosOpen(false)}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-900"
+                      >
+                        <span className={PROVIDER_TEXT_COLOR[p] || "text-surface-200"}>{p.replace(/_/g, " ")}</span>
+                        <span className="text-[11px] text-surface-500">Pedidos</span>
+                      </Link>
+                    ))}
+                    <div className="h-px bg-surface-800 my-1" />
+                    <p className="px-3 pt-1.5 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Distribuidores</p>
+                    {ALL_PROVIDERS.filter((p) => !providerHasOrderHistory(p)).map((p) => (
+                      <Link
+                        key={p}
+                        href={providerOrdersHref(p)}
+                        onClick={() => setPedidosOpen(false)}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-surface-300 hover:bg-surface-900"
+                      >
+                        <span>{p.replace(/_/g, " ")}</span>
+                        <span className="text-[11px] text-surface-600">Cuenta</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
               {items.length > 0 && (
                 <>
                   <div className="relative" ref={exportRef}>
@@ -419,8 +462,8 @@ export default function CartPage() {
                 )}
               </div>
 
-              <footer className="flex-shrink-0 border-t border-surface-800 bg-surface-950">
-                <div className="px-5 lg:px-8 py-3 flex flex-col gap-3">
+              <footer className="flex-shrink-0 border-t border-white/5 bg-surface-950">
+                <div className="px-5 lg:px-8 py-4 flex flex-col gap-4">
                   <SummaryBar
                     title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
                     totals={shownTotals}
@@ -428,6 +471,8 @@ export default function CartPage() {
                     withIva={withIva}
                     currency={currency}
                     showInvidNote={activeTab === "INVID"}
+                    historyHref={activeTab !== "all" ? providerOrdersHref(activeTab) : undefined}
+                    historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
                   />
 
                   {currentRate && currency === "ARS" && (
@@ -441,16 +486,24 @@ export default function CartPage() {
                       {sortedProviders.map((p) => {
                         const t = providerTotals[p];
                         return (
-                          <button
-                            key={p}
-                            onClick={() => setActiveTab(p)}
-                            className="h-9 px-2.5 inline-flex items-center gap-2 text-sm border border-surface-700 hover:border-surface-500 rounded-md transition-colors"
-                          >
-                            <span className={`font-medium ${PROVIDER_TEXT_COLOR[p] || "text-surface-300"}`}>
-                              {p.replace(/_/g, " ")}
-                            </span>
-                            <span className="tabular-nums text-surface-300">{fmt(t.totalUSD)}</span>
-                          </button>
+                          <div key={p} className="inline-flex h-9 overflow-hidden border border-surface-700 rounded-sm">
+                            <button
+                              onClick={() => setActiveTab(p)}
+                              className="h-9 px-2.5 inline-flex items-center gap-2 text-sm hover:bg-surface-900 transition-colors"
+                            >
+                              <span className={`font-medium ${PROVIDER_TEXT_COLOR[p] || "text-surface-300"}`}>
+                                {p.replace(/_/g, " ")}
+                              </span>
+                              <span className="tabular-nums text-surface-300">{fmt(t.totalUSD)}</span>
+                            </button>
+                            <Link
+                              href={providerOrdersHref(p)}
+                              title={providerHasOrderHistory(p) ? "Ver historial de pedidos" : "Ir a la cuenta del proveedor"}
+                              className="h-9 px-2 inline-flex items-center border-l border-surface-700 text-surface-500 hover:text-white"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </Link>
+                          </div>
                         );
                       })}
                       <span className="text-sm text-surface-500">
@@ -531,7 +584,7 @@ export default function CartPage() {
 }
 
 function SummaryBar({
-  title, totals, fmt, withIva, currency, showInvidNote,
+  title, totals, fmt, withIva, currency, showInvidNote, historyHref, historyLabel,
 }: {
   title: string;
   totals: Totals;
@@ -539,11 +592,18 @@ function SummaryBar({
   withIva: boolean;
   currency: string;
   showInvidNote: boolean;
+  historyHref?: string;
+  historyLabel?: string;
 }) {
   return (
     <div className="flex items-baseline justify-between gap-6 min-h-8">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm min-w-0">
         <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider mr-1">{title}</span>
+        {historyHref && historyLabel && (
+          <Link href={historyHref} className="text-[11px] text-surface-500 hover:text-white underline underline-offset-2">
+            {historyLabel}
+          </Link>
+        )}
         <span className="text-surface-500">
           Neto <span className="tabular-nums text-surface-200">{fmt(totals.subtotalUSD)}</span>
         </span>

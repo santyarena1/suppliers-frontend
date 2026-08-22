@@ -11,14 +11,24 @@ import {
 import { CartItem, useCart } from "@/lib/cart";
 import { applyInvidCheckoutTaxes, grossFromTaxLines } from "@/lib/tax";
 import { formatUSD } from "@/lib/format";
-import NodoSpinner from "@/components/NodoSpinner";
-import { CheckCircle2, Loader2, Send, AlertTriangle } from "lucide-react";
+import {
+  CheckoutError,
+  CheckoutField,
+  CheckoutGhostButton,
+  CheckoutInput,
+  CheckoutLoading,
+  CheckoutSelect,
+  CheckoutSubmit,
+} from "@/components/checkout/CheckoutForm";
+import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
+import { providerOrdersHref } from "@/lib/providerOrders";
+import Link from "next/link";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 export default function InvidDraftPanel({
   items,
   onCreated,
   onPreviewed,
-  compact = false,
 }: {
   items: CartItem[];
   onCreated: (message?: string) => void;
@@ -41,8 +51,10 @@ export default function InvidDraftPanel({
   const [preview, setPreview] = useState<InvidCheckoutPreview | null>(null);
   const [result, setResult] = useState<InvidDraftResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const reviewedOnce = useRef(false);
   const previewGen = useRef(0);
+  const submitLock = useRef(false);
   const { patchItem } = useCart();
 
   const itemsKey = useMemo(
@@ -76,7 +88,7 @@ export default function InvidDraftPanel({
   useEffect(() => {
     setError(null);
     if (!reviewedOnce.current) publishPreview(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al cambiar líneas/cantidades
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsKey]);
 
   useEffect(() => {
@@ -102,7 +114,7 @@ export default function InvidDraftPanel({
         if (pays[0] && !pays.some((p) => p.value === "67")) setPaymentOption(pays[0].value);
       } catch (err: unknown) {
         const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        if (!cancelled) setMetaError(msg || "No se pudieron cargar direcciones / pagos de Invid. ¿Están las credenciales del portal?");
+        if (!cancelled) setMetaError(msg || "No se pudieron cargar direcciones / pagos de Invid.");
       } finally {
         if (!cancelled) setLoadingMeta(false);
       }
@@ -149,11 +161,13 @@ export default function InvidDraftPanel({
   useEffect(() => {
     if (!reviewedOnce.current || !addressId || previewing || submitting) return;
     if (deliveryOption === "3" && !expresoId) return;
-    void handlePreview();
+    const t = setTimeout(() => { void handlePreview(); }, 350);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addressId, paymentOption, deliveryOption, expresoId, itemsKey]);
 
-  async function handleSubmit() {
+  function requestConfirm() {
+    if (submitLock.current || !canConfirm) return;
     if (!addressId) {
       setError("Elegí una dirección de Invid");
       return;
@@ -162,6 +176,14 @@ export default function InvidDraftPanel({
       setError("Para EXPRESO tenés que elegir la empresa de transporte");
       return;
     }
+    setError(null);
+    setResult(null);
+    setConfirmOpen(true);
+  }
+
+  async function handleSubmit() {
+    if (submitLock.current) return;
+    submitLock.current = true;
     setError(null);
     setSubmitting(true);
     try {
@@ -194,13 +216,18 @@ export default function InvidDraftPanel({
       });
       setResult(res.data);
       publishPreview(null);
-      onCreated(res.data?.message);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setError((Array.isArray(msg) ? msg.join(" · ") : msg) || "No se pudo crear el borrador en Invid");
     } finally {
+      submitLock.current = false;
       setSubmitting(false);
     }
+  }
+
+  function finishOrder() {
+    setConfirmOpen(false);
+    if (result) onCreated(result.message);
   }
 
   const canConfirm = Boolean(addressId)
@@ -208,7 +235,6 @@ export default function InvidDraftPanel({
     && !submitting
     && !(deliveryOption === "3" && !expresoId);
 
-  const selectClass = "bg-surface-900 border border-surface-700 rounded-md px-3 py-2 text-sm text-white";
   const deliveryChoices = deliveries.length ? deliveries : [
     { value: "1", label: "RETIRA" },
     { value: "5", label: "Puerta a puerta" },
@@ -216,248 +242,144 @@ export default function InvidDraftPanel({
     { value: "6", label: "Entrega Express 24hs (AMBA)" },
   ];
 
-  const addressSelect = (
-    <label className="flex flex-col gap-1 min-w-0">
-      <span className="text-sm text-surface-400">Dirección</span>
-      <select
-        value={addressId}
-        onChange={(e) => { setAddressId(e.target.value); invalidatePreview(); }}
-        className={selectClass}
-      >
-        {addresses.length === 0 && <option value="">Sin direcciones en Invid</option>}
-        {addresses.map((a) => (
-          <option key={a.id} value={a.id}>{a.label} — {a.addressLine}</option>
-        ))}
-      </select>
-    </label>
-  );
-
-  const paymentSelect = (
-    <label className="flex flex-col gap-1 min-w-0">
-      <span className="text-sm text-surface-400">Forma de pago</span>
-      <select
-        value={paymentOption}
-        onChange={(e) => { setPaymentOption(e.target.value); invalidatePreview(); }}
-        className={selectClass}
-      >
-        {payments.map((p) => (
-          <option key={p.value} value={p.value}>{p.label}</option>
-        ))}
-      </select>
-    </label>
-  );
-
-  const deliverySelect = (
-    <label className="flex flex-col gap-1 min-w-0">
-      <span className="text-sm text-surface-400">Forma de entrega</span>
-      <select
-        value={deliveryOption}
-        onChange={(e) => { setDeliveryOption(e.target.value); invalidatePreview(); }}
-        className={selectClass}
-      >
-        {deliveryChoices.map((d) => (
-          <option key={d.value} value={d.value}>{d.label}</option>
-        ))}
-      </select>
-    </label>
-  );
-
-  const expresoSelect = deliveryOption === "3" ? (
-    <label className="flex flex-col gap-1 min-w-0">
-      <span className="text-sm text-surface-400">Empresa de expreso</span>
-      <select
-        value={expresoId}
-        onChange={(e) => { setExpresoId(e.target.value); invalidatePreview(); }}
-        className={selectClass}
-      >
-        <option value="">Seleccione el expreso</option>
-        {expresoCompanies.map((c) => (
-          <option key={c.value} value={c.value}>{c.label}</option>
-        ))}
-      </select>
-      {expresoCompanies.length === 0 && (
-        <span className="text-xs text-surface-500">Revisá en Invid para cargar las empresas.</span>
-      )}
-    </label>
-  ) : null;
-
-  const notesField = (
-    <label className="flex flex-col gap-1 min-w-0">
-      <span className="text-sm text-surface-400">Nota para el vendedor (opcional)</span>
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        rows={compact ? 1 : 2}
-        className={`${selectClass} resize-none`}
-        placeholder="Ej. consultar por WhatsApp, pedido de cliente X"
-      />
-    </label>
-  );
-
-  if (loadingMeta) {
-    return (
-      <div className={`${compact ? "h-9 " : "border border-surface-800 rounded-lg p-5 "}flex items-center gap-2 text-sm text-surface-400`}>
-        <Loader2 className="w-4 h-4 animate-spin" /> Cargando checkout de Invid…
-      </div>
-    );
-  }
+  if (loadingMeta) return <CheckoutLoading label="Cargando checkout Invid…" />;
 
   if (metaError) {
     return (
-      <div className={`${compact ? "" : "border border-red-500/25 bg-red-500/5 rounded-lg p-5 "}text-sm text-red-300`}>
+      <CheckoutError href="/proveedores/INVID?tab=credentials" hrefLabel="Cargar cuenta">
         {metaError}
-      </div>
+      </CheckoutError>
     );
   }
 
-  if (result) {
-    return (
-      <div className={`${compact ? "" : "border border-emerald-500/25 bg-emerald-500/5 rounded-lg p-4 "}flex flex-col gap-2`}>
-        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
-          <CheckCircle2 className="w-4 h-4" /> Borrador creado en Invid
-        </div>
-        <p className="text-sm text-surface-300 leading-relaxed">{result.message}</p>
-        <div className="text-sm text-surface-400 font-mono space-y-0.5">
-          {result.webOrderNumber && <p>Pedido web: {result.webOrderNumber}</p>}
-          {result.orderNumber && <p>Orden: {result.orderNumber}</p>}
-          <p>Total: {formatUSD(result.total)}</p>
-        </div>
-      </div>
-    );
-  }
+  const selectedAddress = addresses.find((a) => a.id === addressId);
+  const selectedPayment = payments.find((p) => p.value === paymentOption);
+  const selectedDelivery = deliveryChoices.find((d) => d.value === deliveryOption);
 
-  if (compact) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <div className="flex flex-wrap items-center gap-2 min-h-9">
-          <select
-            aria-label="Dirección"
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
+        <CheckoutField label="Dirección" htmlFor="invid-dir">
+          <CheckoutSelect
+            id="invid-dir"
             value={addressId}
             onChange={(e) => { setAddressId(e.target.value); invalidatePreview(); }}
-            className="h-9 min-w-[160px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
           >
             {addresses.length === 0 && <option value="">Sin direcciones</option>}
             {addresses.map((a) => (
               <option key={a.id} value={a.id}>{a.label} — {a.addressLine}</option>
             ))}
-          </select>
-          <select
-            aria-label="Pago"
+          </CheckoutSelect>
+        </CheckoutField>
+
+        <CheckoutField label="Pago" htmlFor="invid-pago">
+          <CheckoutSelect
+            id="invid-pago"
             value={paymentOption}
             onChange={(e) => { setPaymentOption(e.target.value); invalidatePreview(); }}
-            className="h-9 min-w-[140px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
           >
             {payments.map((p) => (
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
-          </select>
-          <select
-            aria-label="Entrega"
+          </CheckoutSelect>
+        </CheckoutField>
+
+        <CheckoutField label="Entrega" htmlFor="invid-entrega">
+          <CheckoutSelect
+            id="invid-entrega"
             value={deliveryOption}
             onChange={(e) => { setDeliveryOption(e.target.value); invalidatePreview(); }}
-            className="h-9 min-w-[140px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
           >
             {deliveryChoices.map((d) => (
               <option key={d.value} value={d.value}>{d.label}</option>
             ))}
-          </select>
-          {deliveryOption === "3" && (
-            <select
-              aria-label="Expreso"
-              value={expresoId}
-              onChange={(e) => { setExpresoId(e.target.value); invalidatePreview(); }}
-              className="h-9 min-w-[140px] flex-1 bg-surface-900 border border-surface-700 rounded-md px-2.5 text-sm text-white"
-            >
-              <option value="">Expreso</option>
-              {expresoCompanies.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-          )}
-          <button
+          </CheckoutSelect>
+        </CheckoutField>
+
+        <div className="flex gap-2">
+          <CheckoutGhostButton
             onClick={handlePreview}
             disabled={previewing || submitting || !addressId}
-            className="h-9 px-3 inline-flex items-center gap-1.5 border border-surface-600 hover:border-brand-500/50 text-surface-100 rounded-md text-sm font-medium disabled:opacity-40 flex-shrink-0"
+            loading={previewing}
           >
-            {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
             {previewing ? "Validando…" : "Revisar"}
-          </button>
-          <button
-            onClick={handleSubmit}
+          </CheckoutGhostButton>
+          <CheckoutSubmit
+            onClick={requestConfirm}
             disabled={!canConfirm}
             title={!addressId ? "Elegí una dirección" : deliveryOption === "3" && !expresoId ? "Elegí el expreso" : undefined}
-            className="h-9 px-3 inline-flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 text-white rounded-md text-sm font-semibold flex-shrink-0"
           >
-            {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
             Crear borrador
-          </button>
+          </CheckoutSubmit>
         </div>
-        {preview && (
-          <InvidValidationFeedback
-            compact
-            preview={preview}
-            deliveryLabel={preview.suggestedDelivery?.label ?? deliveries.find((d) => d.value === deliveryOption)?.label}
-          />
-        )}
-        {error && <p className="text-sm text-red-300 leading-snug whitespace-pre-wrap">{error}</p>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="border border-surface-800 rounded-lg p-5 flex flex-col gap-3.5">
-      <div>
-        <h3 className="text-xs font-semibold text-surface-500 uppercase tracking-wider">Pedido Invid</h3>
-        <p className="text-sm text-surface-400 mt-1">
-          Revisá stock e impuestos en el portal antes de crear el borrador.
-        </p>
       </div>
 
-      <div className="grid sm:grid-cols-2 gap-3">
-        {addressSelect}
-        {paymentSelect}
-        {deliverySelect}
-        {expresoSelect}
-        {deliveryOption === "6" && (
-          <p className="text-sm text-surface-400 sm:col-span-2">
-            Express 24hs: al revisar, Invid cotiza el envío con esa dirección.
-          </p>
-        )}
-        <div className="sm:col-span-2">{notesField}</div>
-      </div>
-
-      <button
-        onClick={handlePreview}
-        disabled={previewing || submitting || !addressId}
-        className="flex items-center justify-center gap-1.5 border border-surface-600 hover:border-brand-500/50 text-surface-100 rounded-md py-2.5 text-sm font-medium disabled:opacity-40"
-      >
-        {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-        {previewing ? "Validando en Invid…" : "Revisar en Invid"}
-      </button>
-
-      {!preview && !error && !previewing && (
-        <p className="text-xs text-surface-500">
-          Obligatorio: confirma stock, impuestos y envío. Si un producto no está, te lo dice acá.
-        </p>
+      {deliveryOption === "3" && (
+        <CheckoutField label="Empresa de expreso" htmlFor="invid-expreso">
+          <CheckoutSelect
+            id="invid-expreso"
+            value={expresoId}
+            onChange={(e) => { setExpresoId(e.target.value); invalidatePreview(); }}
+          >
+            <option value="">Seleccione el expreso</option>
+            {expresoCompanies.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </CheckoutSelect>
+        </CheckoutField>
       )}
 
-      {preview && <InvidValidationFeedback preview={preview} deliveryLabel={preview.suggestedDelivery?.label ?? deliveries.find((d) => d.value === deliveryOption)?.label} />}
+      <CheckoutField label="Nota (opcional)" htmlFor="invid-nota">
+        <CheckoutInput
+          id="invid-nota"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Consulta, referencia del cliente…"
+        />
+      </CheckoutField>
 
-      {error && (
-        <div className="border border-red-500/25 bg-red-500/5 rounded-md px-3 py-2.5 text-sm text-red-300 leading-relaxed whitespace-pre-wrap">
-          {error}
-        </div>
+      {preview && (
+        <InvidValidationFeedback
+          preview={preview}
+          deliveryLabel={preview.suggestedDelivery?.label ?? deliveries.find((d) => d.value === deliveryOption)?.label}
+        />
       )}
+      {error && !confirmOpen && <CheckoutError>{error}</CheckoutError>}
 
-      <button
-        onClick={handleSubmit}
-        disabled={!canConfirm}
-        title={!addressId ? "Elegí una dirección" : deliveryOption === "3" && !expresoId ? "Elegí el expreso" : undefined}
-        className="flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:bg-surface-800 disabled:text-surface-500 disabled:opacity-100 text-white rounded-md py-2.5 text-sm font-semibold"
-      >
-        {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-        Crear borrador
-      </button>
+      <p className="text-[11px] text-surface-600">
+        <Link href={providerOrdersHref("INVID")} className="hover:text-surface-300 underline underline-offset-2">
+          Ver historial de Invid
+        </Link>
+      </p>
+
+      <OrderConfirmModal
+        open={confirmOpen}
+        provider="INVID"
+        title="Confirmar borrador"
+        warning="Esto crea el borrador en tu cuenta de Invid. Después hay que cerrarlo en el portal del proveedor."
+        items={items.map((it) => ({ name: it.name, qty: it.qty }))}
+        lines={[
+          { label: "Dirección", value: selectedAddress ? `${selectedAddress.label} — ${selectedAddress.addressLine}` : "—" },
+          { label: "Pago", value: selectedPayment?.label ?? paymentOption },
+          { label: "Entrega", value: selectedDelivery?.label ?? deliveryOption },
+          ...(deliveryOption === "3" ? [{ label: "Expreso", value: expresoCompanies.find((c) => c.value === expresoId)?.label ?? expresoId }] : []),
+          ...(preview?.total != null ? [{ label: "Total Invid", value: formatUSD(preview.total) }] : []),
+        ]}
+        confirmLabel="Crear borrador"
+        loading={submitting}
+        error={error}
+        result={result ? {
+          message: result.message,
+          refs: [
+            result.webOrderNumber && `Pedido web ${result.webOrderNumber}`,
+            result.orderNumber && `Orden ${result.orderNumber}`,
+            result.total != null && `Total ${formatUSD(result.total)}`,
+          ].filter(Boolean) as string[],
+        } : null}
+        onCancel={() => { if (!submitting) setConfirmOpen(false); }}
+        onConfirm={handleSubmit}
+        onDone={finishOrder}
+      />
     </div>
   );
 }
@@ -465,85 +387,42 @@ export default function InvidDraftPanel({
 function InvidValidationFeedback({
   preview,
   deliveryLabel,
-  compact = false,
 }: {
   preview: InvidCheckoutPreview;
   deliveryLabel?: string;
-  compact?: boolean;
 }) {
   const errors = preview.itemErrors ?? [];
   const ok = preview.stockOk && errors.length === 0;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className={`rounded-md px-3.5 py-2.5 text-sm leading-relaxed ${
-        ok
-          ? "bg-emerald-500/10 border border-emerald-500/25 text-emerald-300"
-          : "bg-red-500/8 border border-red-500/25 text-red-300"
-      }`}>
-        {ok ? (
-          <p className="flex items-start gap-1.5 font-medium">
-            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            {preview.stockMessage || "Se han validado los stocks de los productos"}
-          </p>
-        ) : (
-          <div className="flex items-start gap-1.5">
-            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <div className="min-w-0">
-              <p className="font-medium whitespace-pre-wrap">
-                {preview.stockMessage || "Invid no validó el stock de este pedido"}
-              </p>
-              {errors.length > 0 && (
-                <ul className="mt-1.5 space-y-0.5 list-disc pl-4">
-                  {errors.map((e) => (
-                    <li key={e.code}>
-                      {e.name ? `${e.name} (${e.code})` : e.code}: {e.message}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {ok && !compact && (
-        <div className="border border-surface-800 rounded-md p-3.5 text-sm space-y-1">
-          <p className="text-surface-400">
+    <div className={`flex items-start gap-2 text-sm leading-relaxed ${ok ? "text-emerald-400" : "text-red-400"}`}>
+      {ok ? (
+        <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+      ) : (
+        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+      )}
+      <div className="min-w-0">
+        <p className="font-medium whitespace-pre-wrap">
+          {ok
+            ? (preview.stockMessage || "Stock validado")
+            : (preview.stockMessage || "Invid no validó el stock de este pedido")}
+        </p>
+        {ok && (
+          <p className="text-xs text-surface-500 mt-0.5">
             {preview.items.length} producto{preview.items.length === 1 ? "" : "s"} · {preview.paymentLabel}
             {deliveryLabel ? ` · ${deliveryLabel}` : ""}
           </p>
-          <div className="border-t border-surface-800 pt-2 mt-2 space-y-1">
-            <LedgerRow label="(a) Subtotal" value={formatUSD(preview.subtotal)} />
-            <LedgerRow label="(b) Envío" value={formatUSD(preview.shippingCost ?? 0)} />
-            <LedgerRow label="(c) IVA" value={formatUSD(preview.iva ?? 0)} />
-            <LedgerRow label="(d) Imp. internos" value={formatUSD(preview.impuestos)} />
-            <LedgerRow
-              label={`(e) Percepciones${preview.percepcionPercent ? ` ${preview.percepcionPercent}%` : ""}`}
-              value={formatUSD(preview.percepciones)}
-            />
-            <p className="flex justify-between text-white font-semibold pt-1">
-              <span>Total Invid</span>
-              <span className="tabular-nums">{formatUSD(preview.total)}</span>
-            </p>
-          </div>
-        </div>
-      )}
-      {ok && compact && (
-        <p className="text-xs text-surface-500">
-          {preview.items.length} producto{preview.items.length === 1 ? "" : "s"} · {preview.paymentLabel}
-          {deliveryLabel ? ` · ${deliveryLabel}` : ""}
-        </p>
-      )}
+        )}
+        {errors.length > 0 && (
+          <ul className="mt-1 space-y-0.5 list-disc pl-4">
+            {errors.map((e) => (
+              <li key={e.code}>
+                {e.name ? `${e.name} (${e.code})` : e.code}: {e.message}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
-  );
-}
-
-function LedgerRow({ label, value }: { label: string; value: string }) {
-  return (
-    <p className="flex justify-between text-surface-400">
-      <span>{label}</span>
-      <span className="tabular-nums">{value}</span>
-    </p>
   );
 }
