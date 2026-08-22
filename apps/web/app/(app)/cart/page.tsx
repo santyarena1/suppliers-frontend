@@ -3,8 +3,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import InvidDraftPanel from "@/components/InvidDraftPanel";
 import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
@@ -410,11 +408,7 @@ export default function CartPage() {
   const shownTotals = (activeTab === "all" ? grand : providerTotals[activeTab]) ?? EMPTY_TOTALS;
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           <header className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 py-3.5 flex items-center justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-lg font-semibold tracking-tight text-white">Cotización</h1>
@@ -696,8 +690,6 @@ export default function CartPage() {
               </footer>
             </div>
           )}
-        </div>
-      </div>
 
       {confirmClear && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -734,7 +726,7 @@ export default function CartPage() {
           </div>
         </div>
       )}
-    </AuthGuard>
+    </>
   );
 }
 

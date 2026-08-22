@@ -5,8 +5,6 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import { ALL_PROVIDERS, credentialsApi, Provider } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
@@ -105,11 +103,7 @@ export default function HomePage() {
   const cartProviders = useMemo(() => Array.from(new Set(cartItems.map((it) => it.provider))), [cartItems]);
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
             <div>
               <h1 className="text-base font-semibold text-white">Inicio</h1>
@@ -292,9 +286,7 @@ export default function HomePage() {
               </section>
             </div>
           </div>
-        </div>
-      </div>
-    </AuthGuard>
+    </>
   );
 }
 

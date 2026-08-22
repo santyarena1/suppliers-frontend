@@ -4,8 +4,6 @@ import { use, useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import Navbar from "@/components/Navbar";
-import AuthGuard from "@/components/AuthGuard";
 import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
@@ -104,11 +102,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   }
 
   return (
-    <AuthGuard>
-      <div className="flex h-screen overflow-hidden">
-        <Navbar />
-
-        <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+    <>
           {/* Header */}
           <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-6 py-3 flex items-center justify-between">
             <button
@@ -357,8 +351,6 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               </div>
             )}
           </div>
-        </div>
-      </div>
 
       {/* Zoom modal */}
       {zoom && product?.imageUrl && (
@@ -374,7 +366,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
           </div>
         </div>
       )}
-    </AuthGuard>
+    </>
   );
 }
 
