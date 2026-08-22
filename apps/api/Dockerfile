@@ -1,5 +1,6 @@
 FROM node:20-alpine AS build
 WORKDIR /repo
+# Monorepo: build @nodo/shared + @nodo/api. Railway usa este Dockerfile desde la raíz.
 RUN apk add --no-cache openssl
 RUN corepack enable
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
