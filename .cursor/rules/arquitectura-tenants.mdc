@@ -23,6 +23,13 @@ membresía**. Nunca resolver permisos de negocio mirando solo `User.role`.
 
 `SUPERADMIN` es transversal: no pertenece a ninguna organización y ve y administra todo.
 
+## Decisiones cerradas
+
+- Las credenciales de proveedor pertenecen a la **organización**, no a la persona.
+- El precio de un producto es **por comercio**: la ficha del producto es global, el precio
+  y el stock van por organización.
+- Una persona pertenece a **una sola** organización.
+
 ## Reglas innegociables
 
 1. **Aislamiento por organización.** Toda consulta de datos de negocio se filtra por

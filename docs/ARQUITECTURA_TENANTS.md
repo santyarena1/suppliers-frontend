@@ -21,6 +21,24 @@ nivel de acceso a Nodo. **El alcance funcional lo define siempre la membresía.*
 
 ---
 
+## 1.1 Decisiones tomadas
+
+Estas definiciones ya están resueltas y condicionan el diseño. No volver a abrirlas sin
+acordarlo.
+
+- **Las credenciales de proveedor son de la organización, no de la persona.** El `OWNER`
+  del comercio carga la cuenta de cada distribuidor y todo el comercio compra con ella.
+  Implica mover `Credential` de `userId` a `tenantId`.
+- **El precio de un producto es por comercio.** La API del proveedor devuelve el precio de
+  la cuenta autenticada, así que no existe "el precio de un producto de New Bytes".
+  `ProviderSyncCache` se parte en dos: la ficha del producto (nombre, SKU, imágenes,
+  especificaciones) sigue siendo global, y precio y stock pasan a una tabla por
+  organización. Hoy esto es un bug real: el markup configurado por un usuario se escribe
+  en el catálogo global y contamina lo que ven los demás.
+- **Una persona pertenece a una sola organización.** El esquema soporta varias membresías,
+  pero el producto asume una. No hay selector de organización activa y el JWT lleva una
+  sola. Si alguna vez hace falta, se habilita sin migrar datos.
+
 ## 2. Los tres tipos de cliente
 
 ### Tipo 1 — Comercio (`TenantType.RETAILER`)
@@ -140,7 +158,10 @@ En pantalla, siempre nombres normalizados. Nunca slugs ni claves internas.
 |---|---|---|
 | 1 | Modelo de datos: `Tenant`, `TenantMembership`, `TenantLink`, `TenantAccessCode`, `ProductManagerScope`, campos de aprobación en `ProviderOrder`. | Hecho |
 | 2 | Superadmin: árbol de organizaciones, alta y edición de organizaciones y membresías, datos semilla de ejemplo. | Hecho |
-| 3 | Filtrado real por `tenantId` en búsqueda, credenciales y órdenes. Guards por `TenantType` y `TenantRole`. | Pendiente |
+| 3a | Partir el catálogo: ficha del producto global, precio y stock por organización. Arregla el bug del markup compartido. | Pendiente |
+| 3b | Mover `Credential`, `ProviderSyncConfig`, `CartItem` y `ProviderOrder` de `userId` a `tenantId`. | Pendiente |
+| 3c | Organización y rol interno en el JWT, y guard de membresía además del guard de rol de plataforma. | Pendiente |
+| 3d | Filtrar la búsqueda por los `TenantLink` activos del comercio. | Pendiente |
 | 4 | Aprobación de órdenes end to end en la interfaz del comercio. | Pendiente |
 | 5 | Códigos y QR de vinculación: generación, canje anónimo y auditoría. | Pendiente |
 | 6 | Panel del distribuidor: cartera de clientes por vendedor, descuentos, resumen de órdenes. | Pendiente |
