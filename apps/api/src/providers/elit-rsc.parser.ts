@@ -110,7 +110,7 @@ export function parseElitPedidosRsc(rsc: string): ElitRscOrder[] {
       invoiceNumber: asString(rec.invoiceNumber) || "",
       status: asString(rec.message) || asString(rec.status) || "",
       date: asString(rec.date) || "",
-      amount: asNumber(rec.debit) ?? asNumber(rec.balance),
+      amount: asNumber(rec.debit) ?? asNumber(rec.balance) ?? null,
       currency: currencyLabel(rec.currency),
       form: asString(rec.form) || "NOTA DE VENTA",
       warehouseName: asString(rec.warehouseName),
