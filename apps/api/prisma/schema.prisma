@@ -207,8 +207,9 @@ model CartItem {
 }
 
 // Borrador de pedido creado en Nodo y enviado al portal del proveedor.
-// Hoy solo INVID: el POST de "CONFIRMAR PEDIDO" deja el pedido pendiente
-// y el vendedor de la cuenta contacta al cliente (WhatsApp / mail).
+// INVID: el POST de "CONFIRMAR PEDIDO" deja el pedido pendiente.
+// NEW_BYTES: POST /carrito/process crea la orden en la cuenta (retiro por defecto).
+// `invidOrderNumber` / `invidWebOrderNumber` guardan el nro. externo del proveedor.
 model ProviderOrder {
   id                  String   @id @default(uuid())
   userId              String

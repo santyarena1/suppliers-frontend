@@ -14,6 +14,7 @@ import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
+import NewBytesAccountPanel from "@/components/NewBytesAccountPanel";
 import {
   AlertTriangle, ArrowLeft, Boxes, CheckCircle2, Eye, EyeOff, FileSpreadsheet, ImageOff, KeyRound,
   Loader2, PackageCheck, Pencil, Receipt, RefreshCw, Save, Search, Settings, Trash2, Wallet, XCircle
@@ -47,7 +48,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const valid = ALL_PROVIDERS.includes(provider);
   const implemented = IMPLEMENTED_PROVIDERS.includes(provider);
 
-  const [tab, setTab] = useState<"credentials" | "sync" | "catalog" | "config" | "invid-account">("sync");
+  const [tab, setTab] = useState<"credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account">("sync");
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -64,7 +65,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
   useEffect(() => {
     const initialTab = new URLSearchParams(window.location.search).get("tab");
-    if (initialTab === "credentials" || initialTab === "sync" || initialTab === "config" || initialTab === "catalog" || initialTab === "invid-account") {
+    if (initialTab === "credentials" || initialTab === "sync" || initialTab === "config" || initialTab === "catalog" || initialTab === "invid-account" || initialTab === "nb-account") {
       setTab(initialTab);
       if (initialTab === "invid-account") loadInvidAccount();
     }
@@ -107,7 +108,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setCredFields(Object.entries(parsed).map(([key, value]) => ({ key, value: String(value) })));
       setHasCred(true);
     } catch {
-      setCredFields([{ key: "", value: "" }]);
+      setCredFields(
+        provider === "NEW_BYTES"
+          ? [{ key: "user", value: "" }, { key: "password", value: "" }, { key: "token", value: "" }]
+          : [{ key: "", value: "" }]
+      );
       setHasCred(false);
     } finally {
       setLoadingCred(false);
@@ -363,6 +368,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     { key: "config" as const, label: "Configuración" },
                     { key: "catalog" as const, label: "Catálogo" },
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte." }] : []),
+                    ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte." }] : []),
                   ].map(({ key, label }) => (
                     <button
                       key={key}
@@ -386,6 +392,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         Credenciales de acceso a la API de {provider.replace(/_/g, " ")}. Se guardan cifradas y son
                         solo tuyas — cada usuario carga las suyas.
                       </p>
+                      {provider === "NEW_BYTES" && (
+                        <p className="text-xs text-surface-500 leading-relaxed">
+                          Para el catálogo completo, pedidos y cuenta corriente usá <span className="font-mono text-surface-300">user</span> y{" "}
+                          <span className="font-mono text-surface-300">password</span> del portal nb.com.ar.
+                          El campo <span className="font-mono text-surface-300">token</span> (lista de precios CSV) queda como respaldo si no hay login.
+                        </p>
+                      )}
                       {loadingCred ? (
                         <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
                       ) : (
@@ -905,6 +918,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     )}
                   </div>
                 )}
+
+                {tab === "nb-account" && <NewBytesAccountPanel />}
               </div>
             </div>
           )}
