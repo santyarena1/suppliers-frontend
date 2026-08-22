@@ -108,6 +108,46 @@ function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
+/** "US$ 6.01", "6,01", 6.01 → número. */
+export function parseInvidMoney(raw: unknown): number {
+  if (typeof raw === "number" && Number.isFinite(raw)) return round2(raw);
+  if (raw == null) return 0;
+  const s = String(raw).replace(/US\$/gi, "").replace(/AR\$/gi, "").replace(/[^\d,.-]/g, "").trim();
+  if (!s) return 0;
+  const normalized = s.includes(",") && !s.includes(".")
+    ? s.replace(",", ".")
+    : s.replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? round2(n) : 0;
+}
+
+export function parseXmlCost(xml: string): number {
+  return parseInvidMoney(xml.match(/<costo>([^<]*)<\/costo>/i)?.[1]);
+}
+
+/**
+ * Precio mostrado en la tabla de entrega del carrito autenticado.
+ * 1 RETIRA · 5 Puerta a puerta · 3 EXPRESO · 6 Express 24hs.
+ */
+export function parseQuotedShipping(html: string, deliveryValue: string): number | null {
+  const byId = (id: string) => {
+    const m = html.match(new RegExp(`id=["']${id}["'][^>]*>([^<]*)`, "i"));
+    if (!m) return null;
+    const n = parseInvidMoney(m[1]);
+    return Number.isFinite(n) ? n : null;
+  };
+  if (deliveryValue === "5") return byId("valor_envio_x_cp");
+  if (deliveryValue === "6") return byId("valorEntregar");
+  if (deliveryValue === "3") return byId("valorExpreso");
+  if (deliveryValue === "1") {
+    const row = html.match(/<tr[^>]*id=["']fila_1["'][\s\S]*?<\/tr>/i);
+    const lastTd = row?.[0]?.match(/<td[^>]*>\s*(?:US\$\s*)?([\d.,]+)\s*<\/td>\s*<\/tr>/i);
+    if (lastTd) return parseInvidMoney(lastTd[1]);
+    return 0;
+  }
+  return null;
+}
+
 /**
  * Misma fórmula que el resumen del carrito de Invid:
  * (a) subtotal neto + (b) envío + (c) IVA de (a)+(b) + (d) imp. internos + (e) percepción % de (a)+(b).

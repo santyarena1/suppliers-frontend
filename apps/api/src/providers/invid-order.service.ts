@@ -9,6 +9,9 @@ import {
   pickPickupDelivery,
   computeInvidTotals,
   stripHtmlMessage,
+  parseInvidMoney,
+  parseXmlCost,
+  parseQuotedShipping,
   type InvidRadioOption,
 } from "./invid-order.parser";
 
@@ -38,6 +41,10 @@ export const INVID_DELIVERY_OPTIONS = [
 
 const DRAFT_PAYMENT_VALUES = new Set(INVID_PAYMENT_OPTIONS.map((p) => p.value));
 
+function round2(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 interface AddressField {
   Identificador: string;
   Direccion: string;
@@ -53,7 +60,16 @@ interface AddressField {
 
 interface PreparedCart {
   cookie: string;
-  items: { code: string; qty: number; name: string; price: number; subtotal: number; iva: number }[];
+  items: {
+    code: string;
+    qty: number;
+    name: string;
+    price: number;
+    subtotal: number;
+    iva: number;
+    internos: number;
+    percepciones: number;
+  }[];
   address: AddressField;
   addressId: string;
   paymentOption: string;
@@ -261,6 +277,8 @@ export class InvidOrderService {
         price: Number.isFinite(unitNet) ? unitNet : lineGross / lineQty,
         subtotal: net,
         iva: Math.max(0, lineGross - net),
+        internos: 0,
+        percepciones: 0,
       },
     };
   }
@@ -348,9 +366,17 @@ export class InvidOrderService {
     cookie = cart.cookie;
     const checkout = parseCheckoutForm(cart.data);
 
-    const net = addedItems.reduce((s, i) => s + i.subtotal, 0);
-    const ivaProducts = addedItems.reduce((s, i) => s + i.iva, 0);
-    const internos = taxLines.reduce((s, i) => s + i.internos, 0);
+    const items = addedItems.map((item, idx) => {
+      const tax = taxLines.find((t) => String(t.nroItem) === String(idx + 1))
+        ?? taxLines[idx];
+      const internos = tax?.internos ?? 0;
+      const percepciones = round2(item.subtotal * (percepcionPercent / 100));
+      return { ...item, internos, percepciones };
+    });
+
+    const net = items.reduce((s, i) => s + i.subtotal, 0);
+    const ivaProducts = items.reduce((s, i) => s + i.iva, 0);
+    const internos = items.reduce((s, i) => s + i.internos, 0);
     const totals = computeInvidTotals({
       net,
       ivaProducts,
@@ -361,7 +387,7 @@ export class InvidOrderService {
 
     return {
       cookie,
-      items: addedItems,
+      items,
       address: addr.address,
       addressId,
       paymentOption,
@@ -370,7 +396,7 @@ export class InvidOrderService {
       stockMessage,
       itemErrors,
       subtotal: net,
-      iva: totals.iva,
+      iva: ivaProducts,
       impuestos: internos,
       percepcionPercent,
       percepciones: totals.percepciones,
@@ -397,40 +423,11 @@ export class InvidOrderService {
     cookie: string,
     delivery: InvidRadioOption,
     address: AddressField,
-    expresoId?: string
+    expresoId?: string,
+    paymentOption?: string
   ): Promise<{ cookie: string; shippingCost: number }> {
     let current = cookie;
     let shippingCost = 0;
-
-    if (delivery.value === "3") {
-      if (expresoId) {
-        try {
-          const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-            params: { funcion: "getCostoEnvioExpreso" },
-          });
-          current = quoted.cookie;
-          const parsed = JSON.parse(quoted.data) as { costo?: number | string; error?: string };
-          if (!parsed.error) shippingCost = Number(parsed.costo) || 0;
-        } catch (err) {
-          this.logger.warn(`getCostoEnvioExpreso: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-    }
-
-    if (delivery.value === "5") {
-      const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-        params: { funcion: "getCostoEnvioXCP", cod_postal: address.CodPostal },
-      });
-      current = quoted.cookie;
-      let parsed: { costo?: number | string; error?: string };
-      try {
-        parsed = JSON.parse(quoted.data);
-      } catch {
-        throw new BadGatewayException("Invid no pudo cotizar Puerta a puerta para ese código postal");
-      }
-      if (parsed.error) throw new BadRequestException(String(parsed.error));
-      shippingCost = Number(parsed.costo) || 0;
-    }
 
     try {
       const setDelivery = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
@@ -441,7 +438,151 @@ export class InvidOrderService {
       this.logger.warn(`setearDelivery falló (${delivery.value}): ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    return { cookie: current, shippingCost };
+    if (delivery.value === "1") {
+      shippingCost = await this.quoteDeliveryXml(current, "1") ?? 0;
+    } else if (delivery.value === "5") {
+      const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+        params: { funcion: "getCostoEnvioXCP", cod_postal: address.CodPostal },
+      });
+      current = quoted.cookie;
+      const parsed = this.parseQuotePayload(quoted.data);
+      if (parsed.error) throw new BadRequestException(String(parsed.error));
+      shippingCost = parsed.costo;
+      if (shippingCost <= 0) {
+        const cart = await this.request(current, "GET", CART_URL);
+        current = cart.cookie;
+        shippingCost = parseQuotedShipping(cart.data, "5") ?? 0;
+      }
+      if (shippingCost <= 0) {
+        throw new BadRequestException(
+          `Invid no cotizó Puerta a puerta para el CP ${address.CodPostal}. Probá otra dirección o RETIRA.`
+        );
+      }
+    } else if (delivery.value === "3") {
+      if (expresoId) {
+        try {
+          const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+            params: { funcion: "getCostoEnvioExpreso" },
+          });
+          current = quoted.cookie;
+          const parsed = this.parseQuotePayload(quoted.data);
+          if (!parsed.error) shippingCost = parsed.costo;
+        } catch (err) {
+          this.logger.warn(`getCostoEnvioExpreso: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    } else if (delivery.value === "6") {
+      const express = await this.quoteExpressAmba(current, address, paymentOption);
+      current = express.cookie;
+      shippingCost = express.costo;
+      const cart = await this.request(current, "GET", CART_URL);
+      current = cart.cookie;
+      const fromHtml = parseQuotedShipping(cart.data, "6");
+      if (fromHtml != null && fromHtml > 0) shippingCost = fromHtml;
+      if (shippingCost <= 0) {
+        throw new BadRequestException(
+          "Invid no cotizó Entrega Express 24hs para esa dirección. Elegí Puerta a puerta o RETIRA."
+        );
+      }
+    }
+
+    return { cookie: current, shippingCost: round2(shippingCost) };
+  }
+
+  private parseQuotePayload(data: string): { costo: number; error?: string; moneda?: string; valor?: number } {
+    const trimmed = data.replace(/^\uFEFF/, "").trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+        return {
+          costo: parseInvidMoney(parsed.costo ?? parsed.valor),
+          error: parsed.error != null ? String(parsed.error) : undefined,
+          moneda: parsed.mon != null ? String(parsed.mon) : parsed.moneda != null ? String(parsed.moneda) : undefined,
+          valor: parseInvidMoney(parsed.valor),
+        };
+      } catch {
+        return { costo: parseXmlCost(trimmed) };
+      }
+    }
+    return { costo: parseXmlCost(trimmed) };
+  }
+
+  private async quoteDeliveryXml(cookie: string, tipo: string): Promise<number | null> {
+    try {
+      const quoted = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+        params: { funcion: "getDelivery", tipo_delivery: tipo },
+      });
+      return parseXmlCost(quoted.data);
+    } catch (err) {
+      this.logger.warn(`getDelivery(${tipo}): ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
+  private isUsdMoney(moneda?: string) {
+    if (!moneda) return true;
+    const m = moneda.trim();
+    if (m === "1") return true;
+    return /us\$|usd|u\$s/i.test(m);
+  }
+
+  private async getTipoCambio(cookie: string, paymentOption?: string): Promise<number> {
+    const opcion = paymentOption && DRAFT_PAYMENT_VALUES.has(paymentOption as typeof INVID_PAYMENT_OPTIONS[number]["value"])
+      ? paymentOption
+      : "67";
+    const res = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+      params: { funcion: "traerCotizacionOpcionPago", opcion },
+    });
+    try {
+      const parsed = JSON.parse(res.data) as { cotizacion?: number | string; cotizac?: number | string };
+      const n = Number(parsed.cotizacion ?? parsed.cotizac);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async quoteExpressAmba(
+    cookie: string,
+    address: AddressField,
+    paymentOption?: string
+  ): Promise<{ cookie: string; costo: number }> {
+    const quoted = await this.request(cookie, "POST", `${SITE_BASE}/cotizarOpcionesEntregar.php`, {
+      body: new URLSearchParams({
+        direccion: address.Direccion,
+        localidad: address.Localidad || address.Ciudad,
+        codPostal: address.CodPostal,
+        provincia: address.Provincia,
+        grabar: "S",
+        directo: "S",
+      }).toString(),
+      timeout: 40_000,
+    });
+    let first: { status?: string; mensaje?: string };
+    try {
+      first = JSON.parse(quoted.data);
+    } catch {
+      throw new BadGatewayException("Invid no pudo cotizar Express 24hs");
+    }
+    if (first.status !== "ok") {
+      throw new BadRequestException(first.mensaje || "Invid no pudo cotizar Express 24hs para esa dirección");
+    }
+
+    const saved = await this.request(quoted.cookie, "POST", `${SITE_BASE}/guardarOpcionesEntregar.php`, {
+      body: new URLSearchParams({ grabar: "S" }).toString(),
+      timeout: 40_000,
+    });
+    const parsed = this.parseQuotePayload(saved.data);
+    let costo = parsed.valor || parsed.costo;
+    if (costo > 0 && !this.isUsdMoney(parsed.moneda)) {
+      try {
+        const tc = await this.getTipoCambio(saved.cookie, paymentOption);
+        if (tc > 0) costo = round2(costo / tc);
+      } catch (err) {
+        this.logger.warn(`tipo de cambio Express: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    return { cookie: saved.cookie, costo };
   }
 
   /**
@@ -451,7 +592,13 @@ export class InvidOrderService {
   async preview(credentials: Record<string, string>, input: InvidDraftInput) {
     const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
     const delivery = this.resolveDelivery(prepared, input.deliveryOption);
-    const quoted = await this.quoteShipping(prepared.cookie, delivery, prepared.address, input.expresoId);
+    const quoted = await this.quoteShipping(
+      prepared.cookie,
+      delivery,
+      prepared.address,
+      input.expresoId,
+      prepared.paymentOption
+    );
     const totals = computeInvidTotals({
       net: prepared.subtotal,
       ivaProducts: prepared.iva,
@@ -509,7 +656,13 @@ export class InvidOrderService {
     if (delivery.value === "3" && !input.expresoId) {
       throw new BadRequestException("Para EXPRESO tenés que elegir la empresa de transporte");
     }
-    const quoted = await this.quoteShipping(prepared.cookie, delivery, prepared.address, input.expresoId);
+    const quoted = await this.quoteShipping(
+      prepared.cookie,
+      delivery,
+      prepared.address,
+      input.expresoId,
+      prepared.paymentOption
+    );
     let cookie = quoted.cookie;
     const totals = computeInvidTotals({
       net: prepared.subtotal,

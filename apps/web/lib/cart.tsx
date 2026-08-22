@@ -15,6 +15,7 @@ interface CartContextValue {
   add: (product: ProductDTO, qty?: number) => void;
   remove: (provider: string, externalId: string) => void;
   setQty: (provider: string, externalId: string, qty: number) => void;
+  patchItem: (provider: string, externalId: string, data: Partial<Pick<CartItem, "taxes" | "finalPrice">>) => void;
   clear: () => void;
   clearProvider: (provider: string) => void;
   has: (provider: string, externalId: string) => boolean;
@@ -86,6 +87,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.map((it) => key(it.provider, it.externalId) === k ? { ...it, qty: Math.max(1, qty) } : it));
   }, []);
 
+  const patchItem = useCallback((
+    provider: string,
+    externalId: string,
+    data: Partial<Pick<CartItem, "taxes" | "finalPrice">>
+  ) => {
+    const k = key(provider, externalId);
+    setItems((prev) => prev.map((it) => (
+      key(it.provider, it.externalId) === k ? { ...it, ...data } : it
+    )));
+  }, []);
+
   const clear = useCallback(() => setItems([]), []);
   const clearProvider = useCallback((provider: string) => {
     setItems((prev) => prev.filter((it) => it.provider !== provider));
@@ -108,7 +120,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items]);
 
   return (
-    <CartContext.Provider value={{ items, totalCount, add, remove, setQty, clear, clearProvider, has, byProvider }}>
+    <CartContext.Provider value={{ items, totalCount, add, remove, setQty, patchItem, clear, clearProvider, has, byProvider }}>
       {children}
     </CartContext.Provider>
   );

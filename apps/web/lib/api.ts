@@ -261,6 +261,8 @@ export interface InvidCheckoutItem {
   price: number;
   subtotal: number;
   iva?: number;
+  internos?: number;
+  percepciones?: number;
 }
 export interface InvidCheckoutPreview {
   items: InvidCheckoutItem[];
