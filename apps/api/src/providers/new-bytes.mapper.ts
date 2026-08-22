@@ -362,6 +362,7 @@ export interface NbSubtotales {
   totalUsd?: number;
   iva?: number;
   perceptions?: number;
+  perceptionLabel: string;
   raw: Record<string, unknown> | null;
 }
 
@@ -412,13 +413,16 @@ export function parseShippingQuote(body: unknown): { quotes: NbShippingQuote[]; 
 
 export function parseNbSubtotales(body: unknown): NbSubtotales {
   const rec = asRecord(body);
-  if (!rec) return { raw: null };
+  if (!rec) return { raw: null, perceptionLabel: "Percepciones" };
   const nested = asRecord(rec.subtotal) ?? rec;
+  const iibb = asNumber(nested.perceptionsIIBB);
+  const generic = asNumber(nested.perceptions);
   return {
     subtotalUsd: asNumber(nested.subTotalDollar) ?? asNumber(nested.subTotal),
     totalUsd: asNumber(nested.subTotalDollarFinal) ?? asNumber(nested.subTotalFinal) ?? asNumber(nested.subTotalDollar),
     iva: asNumber(nested.iva) ?? asNumber(nested.IVA),
-    perceptions: asNumber(nested.perceptionsIIBB) ?? asNumber(nested.perceptions),
+    perceptions: iibb ?? generic,
+    perceptionLabel: iibb != null ? "IIBB" : "Percepciones",
     raw: rec,
   };
 }

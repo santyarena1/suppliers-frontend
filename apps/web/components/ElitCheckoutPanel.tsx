@@ -30,9 +30,11 @@ function errMessage(err: unknown, fallback: string) {
 export default function ElitCheckoutPanel({
   items,
   onCreated,
+  onPreviewed,
 }: {
   items: CartItem[];
   onCreated: (message?: string) => void;
+  onPreviewed?: (preview: ElitCheckoutPreview | null) => void;
 }) {
   const cartKey = items.map((it) => `${it.externalId}:${it.qty}`).join("|");
   const cartItems = useMemo(
@@ -51,14 +53,25 @@ export default function ElitCheckoutPanel({
   const [error, setError] = useState<string | null>(null);
   const submitLock = useRef(false);
   const seeded = useRef<string | null>(null);
+  const hydrated = useRef(false);
   const warm = useCheckoutWarmup("ELIT", cartItems);
   const {
     background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
     openConfirm, acceptResult, leaveInBackground, finishOrder,
   } = useBackgroundCheckout<ElitDraftResult>("ELIT", "No se pudo crear el pedido en Elit");
 
+  function publishPreview(data: ElitCheckoutPreview | null) {
+    setPreview(data);
+    onPreviewed?.(data);
+  }
+
+  useEffect(() => {
+    return () => { onPreviewed?.(null); };
+  }, [onPreviewed]);
+
   useEffect(() => {
     seeded.current = null;
+    hydrated.current = false;
     setLoading(true);
   }, [cartKey]);
 
@@ -67,16 +80,18 @@ export default function ElitCheckoutPanel({
     if (warm.status === "ready" && warm.data && seeded.current !== cartKey) {
       seeded.current = cartKey;
       const data = warm.data.preview;
-      setPreview(data);
+      publishPreview(data);
       setWarehouse(String(data.warehouse ?? data.warehouses[0]?.id ?? ""));
       setShippingMethod(data.shippingMethod ?? "");
       setSaleCondition(data.saleCondition ?? "");
       setShippingAddress(data.shippingAddress ?? data.addresses[0]?.code ?? "");
       setError(null);
       setLoading(false);
+      hydrated.current = true;
       return;
     }
     if (warm.status === "error" && seeded.current !== cartKey) {
+      publishPreview(null);
       setError(warm.error || "No se pudo armar el carrito de Elit.");
       setLoading(false);
       return;
@@ -85,6 +100,8 @@ export default function ElitCheckoutPanel({
       setLoading(true);
       setError(null);
     }
+    // publishPreview is stable enough for this seed-once effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warm, cartKey]);
 
   const methods = (preview?.shippingMethods ?? []).filter((m) => String(m.warehouse) === warehouse);
@@ -101,6 +118,31 @@ export default function ElitCheckoutPanel({
       shippingAddress: shippingAddress || undefined,
     };
   }
+
+  useEffect(() => {
+    if (!hydrated.current || !preview || loading) return;
+    const same =
+      Number(warehouse) === Number(preview.warehouse) &&
+      String(selectedShip?.value || shippingMethod) === String(preview.shippingMethod ?? "") &&
+      String(saleCondition) === String(preview.saleCondition ?? "") &&
+      String(shippingAddress) === String(preview.shippingAddress ?? "");
+    if (same) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const res = await elitCheckoutApi.preview(payload());
+        if (!cancelled) publishPreview(res.data);
+      } catch (err: unknown) {
+        if (!cancelled) setError(errMessage(err, "No se pudo actualizar el carrito de Elit."));
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+    // payload/selectedShip change with preview; we only want user option changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warehouse, shippingMethod, saleCondition, shippingAddress]);
 
   async function handleSubmit() {
     if (submitLock.current) return;
@@ -172,7 +214,12 @@ export default function ElitCheckoutPanel({
         <p className="text-[11px] text-surface-500 tabular-nums">
           Neto {formatUSD(preview.subtotal)}
           {preview.vat ? ` · IVA ${formatUSD(preview.vat)}` : ""}
-          {preview.perceptions ? ` · Perc. ${formatUSD(preview.perceptions)}` : ""}
+          {(preview.perceptionLines?.length
+            ? preview.perceptionLines
+            : preview.perceptions
+              ? [{ label: "Percepciones", amount: preview.perceptions }]
+              : []
+          ).map((line) => ` · ${line.label} ${formatUSD(line.amount)}`).join("")}
           {selectedShip?.cost ? ` · Envío ${formatUSD(selectedShip.cost)}` : ""}
           {" · "}Total {formatUSD(preview.total)}
         </p>
@@ -194,6 +241,10 @@ export default function ElitCheckoutPanel({
           { label: "Entrega", value: selectedShip?.label ?? "—" },
           { label: "Pago", value: selectedPay?.label ?? "—" },
           { label: "Líneas", value: String(items.length) },
+          ...(preview?.perceptionLines ?? []).map((line) => ({
+            label: line.label,
+            value: formatUSD(line.amount),
+          })),
         ]}
         confirmLabel="Procesar en Elit"
         loading={submitting}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   newBytesCheckoutApi,
   NewBytesAddress,
+  NewBytesCartSnapshot,
   NewBytesDraftResult,
   NewBytesPaymentOption,
   NewBytesShippingQuote,
@@ -36,9 +37,11 @@ function errMessage(err: unknown, fallback: string) {
 export default function NewBytesDraftPanel({
   items,
   onCreated,
+  onPreviewed,
 }: {
   items: CartItem[];
   onCreated: (message?: string) => void;
+  onPreviewed?: (snapshot: NewBytesCartSnapshot | null) => void;
   compact?: boolean;
 }) {
   const cartKey = items.map((it) => `${it.externalId}:${it.qty}`).join("|");
@@ -74,9 +77,14 @@ export default function NewBytesDraftPanel({
   const warm = useCheckoutWarmup("NEW_BYTES", cartItems);
 
   useEffect(() => {
+    return () => { onPreviewed?.(null); };
+  }, [onPreviewed]);
+
+  useEffect(() => {
     seeded.current = null;
     setLoadingMeta(true);
-  }, [cartKey]);
+    onPreviewed?.(null);
+  }, [cartKey, onPreviewed]);
 
   useEffect(() => {
     if (warm.itemsKey !== cartKey) return;
@@ -84,24 +92,41 @@ export default function NewBytesDraftPanel({
       seeded.current = cartKey;
       const addrs = warm.data.addresses;
       const pays = warm.data.payments;
+      const preview = warm.data.preview;
       setAddresses(addrs);
       setPayments(pays);
       const def = addrs.find((a) => a.isDefault) ?? addrs[0];
       if (def) setAddressId(def.id);
       setMetaError(null);
       setLoadingMeta(false);
+      onPreviewed?.({
+        items: preview.items,
+        payments: pays,
+        addresses: addrs,
+        pickup: preview.pickup ?? { value: "pickup", label: "Retiro", addressLine: "", postalCode: "" },
+        subtotal: preview.subtotal,
+        total: preview.total,
+        iva: preview.iva,
+        perceptions: preview.perceptions,
+        perceptionLines: preview.perceptionLines,
+        stockOk: preview.stockOk,
+        availability: preview.availability,
+        subtotales: preview.subtotales,
+        note: preview.note,
+      });
       return;
     }
     if (warm.status === "error" && seeded.current !== cartKey) {
       setMetaError(warm.error || "No se pudieron cargar direcciones y pagos de NewBytes.");
       setLoadingMeta(false);
+      onPreviewed?.(null);
       return;
     }
     if (warm.status === "loading" && seeded.current !== cartKey) {
       setLoadingMeta(true);
       setMetaError(null);
     }
-  }, [warm, cartKey]);
+  }, [warm, cartKey, onPreviewed]);
 
   const filteredPayments = useMemo(() => {
     if (delivery === "shipping") return payments.filter((p) => !p.pickupOnly);

@@ -22,7 +22,7 @@ export type TaxableProduct = {
 export const TAX_KIND_LABEL: Record<TaxKind, string> = {
   iva: "IVA",
   internos: "Imp. internos",
-  iibb: "IIBB",
+  iibb: "Percepciones",
   other: "Otros",
 };
 
@@ -74,9 +74,19 @@ function foldAccents(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+export function isIibbDescription(desc?: string | null): boolean {
+  return /i\.?i\.?b\.?b|ingresos\s*brutos/.test(foldAccents(desc ?? ""));
+}
+
+export function perceptionGroupLabel(lines: { label: string }[]): string {
+  if (lines.length === 1) return lines[0].label;
+  if (lines.length > 1 && lines.every((l) => isIibbDescription(l.label))) return "IIBB";
+  return "Percepciones";
+}
+
 export function classifyTaxKind(desc: string): TaxKind {
   const d = foldAccents(desc);
-  if (/iibb|i\.i\.b\.b|ingresos\s*brutos/.test(d)) return "iibb";
+  if (/i\.?i\.?b\.?b|ingresos\s*brutos/.test(d)) return "iibb";
   if (/interno/.test(d)) return "internos";
   if (/iva|i\.v\.a/.test(d)) return "iva";
   if (/perc/.test(d)) return "iibb";
@@ -84,7 +94,12 @@ export function classifyTaxKind(desc: string): TaxKind {
 }
 
 function labelFor(kind: TaxKind, original?: string) {
-  if (kind === "other" && original?.trim()) return original.trim();
+  const orig = original?.trim();
+  if (kind === "iibb") {
+    if (orig && isIibbDescription(orig)) return orig;
+    return "Percepciones";
+  }
+  if (kind === "other" && orig) return orig;
   return TAX_KIND_LABEL[kind];
 }
 
@@ -280,7 +295,7 @@ export function applyInvidCheckoutTaxes(
   if (pct > 0 && unitNet > 0) {
     lines.push({
       kind: "iibb",
-      label: "IIBB",
+      label: "Percepciones",
       percent: pct,
       unitAmount: round4(unitNet * (pct / 100)),
     });
