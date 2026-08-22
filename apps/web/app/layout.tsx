@@ -5,7 +5,6 @@ import { CartProvider } from "@/lib/cart";
 import { ResultsProvider } from "@/lib/results";
 import { ThemeProvider } from "@/lib/theme";
 import { BrandingProvider } from "@/lib/branding";
-import ThemeToggle from "@/components/ThemeToggle";
 import ProviderCartPreloader from "@/components/ProviderCartPreloader";
 
 export const metadata: Metadata = {
@@ -15,18 +14,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className="h-full" data-theme="dark" suppressHydrationWarning>
+    <html lang="es" className="h-full" data-theme="soft" suppressHydrationWarning>
       <body className="h-full">
         <ThemeProvider>
           <BrandingProvider>
             <PrefsProvider>
-            <CartProvider>
-              <ProviderCartPreloader />
-              <ResultsProvider>
-                {children}
-                <ThemeToggle />
-              </ResultsProvider>
-            </CartProvider>
+              <CartProvider>
+                <ProviderCartPreloader />
+                <ResultsProvider>
+                  {children}
+                </ResultsProvider>
+              </CartProvider>
             </PrefsProvider>
           </BrandingProvider>
         </ThemeProvider>

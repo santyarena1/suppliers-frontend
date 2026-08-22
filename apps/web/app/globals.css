@@ -17,6 +17,13 @@
   --brand-800: 43 28 184;
   --brand-900: 36 27 143;
   --brand-950: 21 15 82;
+
+  /* Product cards — siempre blancas en todos los temas */
+  --product-card-bg: 255 255 255;
+  --product-card-border: 226 232 240;
+  --product-card-text: 30 41 59;
+  --product-card-text-muted: 100 116 139;
+  --product-card-divider: 241 245 249;
 }
 
 :root, :root[data-theme="dark"] {
@@ -37,6 +44,35 @@
   --card-bg: 23 25 33;
   --card-border: 37 40 50;
   --shadow-color: 0 0 0;
+}
+
+/* Suave — gris azulado, ni negro puro ni blanco; tarjetas de producto blancas */
+:root[data-theme="soft"] {
+  --s-base: 26 31 44;
+  --s-50:  248 250 252;
+  --s-100: 226 232 240;
+  --s-200: 203 213 225;
+  --s-300: 148 163 184;
+  --s-400: 100 116 139;
+  --s-500: 86 98 118;
+  --s-600: 58 68 88;
+  --s-700: 48 56 74;
+  --s-800: 38 45 62;
+  --s-900: 32 38 52;
+  --s-950: 26 31 44;
+  --fg: 226 232 240;
+  --body-bg: 26 31 44;
+  --card-bg: 38 45 62;
+  --card-border: 52 62 82;
+  --shadow-color: 8 12 24;
+}
+
+:root[data-theme="soft"] body {
+  background-color: rgb(var(--body-bg));
+  background-image:
+    radial-gradient(1000px 420px at 10% -8%, rgb(var(--brand-600) / 0.07), transparent 58%),
+    radial-gradient(800px 380px at 100% 0%, rgb(56 70 95 / 0.45), transparent 52%);
+  background-attachment: fixed;
 }
 
 :root[data-theme="light"] {
@@ -70,13 +106,12 @@ body {
   transition: background-color 0.25s, color 0.25s;
 }
 
-/* Light: texto principal legible (slate-900) en lugar de blanco puro */
+/* Light: texto principal legible */
 [data-theme="light"] .text-white { color: rgb(15 23 42); }
 [data-theme="light"] .text-surface-100 { color: rgb(30 41 59); }
 [data-theme="light"] .text-surface-200 { color: rgb(51 65 85); }
 [data-theme="light"] .text-surface-300 { color: rgb(71 85 105); }
 
-/* Light mode — fondo limpio tipo storefront (referencia HardGamers adaptada B2B) */
 [data-theme="light"] body {
   background-color: rgb(248 250 252);
   background-image:
@@ -119,16 +154,49 @@ body {
   color: rgb(148 163 184);
 }
 
-/* Cards de producto en modo claro — fondo blanco como tienda */
-[data-theme="light"] .product-card-storefront {
-  background-color: rgb(255 255 255) !important;
-  border-color: rgb(226 232 240) !important;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 0.06);
+/* Tarjetas de producto — unificadas en todos los temas */
+.product-card {
+  background-color: rgb(var(--product-card-bg));
+  border: 1px solid rgb(var(--product-card-border));
+  box-shadow: 0 1px 3px rgb(var(--shadow-color) / 0.08);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-[data-theme="light"] .product-card-storefront:hover {
-  border-color: rgb(var(--brand-400) / 0.5) !important;
-  box-shadow: 0 8px 24px -8px rgb(15 23 42 / 0.12);
+.product-card:hover {
+  border-color: rgb(var(--brand-400) / 0.45);
+  box-shadow: 0 8px 24px -10px rgb(var(--shadow-color) / 0.22);
+}
+
+.product-card .product-card-title {
+  color: rgb(var(--product-card-text));
+}
+
+.product-card .product-card-title:hover {
+  color: rgb(15 23 42);
+}
+
+.product-card .product-card-price {
+  color: rgb(15 23 42);
+}
+
+.product-card .product-card-meta {
+  color: rgb(var(--product-card-text-muted));
+}
+
+.product-card .product-card-divider {
+  border-color: rgb(var(--product-card-divider));
+}
+
+[data-theme="soft"] .product-card {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.12),
+    0 6px 16px -8px rgb(0 0 0 / 0.35);
+}
+
+[data-theme="soft"] .product-card:hover {
+  box-shadow:
+    0 4px 12px rgb(0 0 0 / 0.18),
+    0 12px 28px -8px rgb(0 0 0 / 0.4);
 }
 
 /* Carrusel infinito de partners */

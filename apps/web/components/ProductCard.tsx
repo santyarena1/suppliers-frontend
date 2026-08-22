@@ -28,7 +28,7 @@ const PROVIDER_HUE: Record<string, string> = {
   DIAPSTORE:    "text-blue-400  bg-blue-400/10",
 };
 
-export default function ProductCard({ product, variant = "default" }: { product: ProductDTO; variant?: "default" | "storefront" }) {
+export default function ProductCard({ product }: { product: ProductDTO }) {
   const [imgErr, setImgErr] = useState(false);
   const { currency, withIva, convert } = usePrefs();
   const display = useProviderDisplay();
@@ -46,14 +46,8 @@ export default function ProductCard({ product, variant = "default" }: { product:
     ? (ars > 0 ? formatARS(ars) : null)
     : formatUSD(displayUsd);
 
-  const isStorefront = variant === "storefront";
-
   return (
-    <div className={`group relative border rounded-xl overflow-hidden transition-all flex flex-col product-card-storefront ${
-      isStorefront
-        ? "bg-white border-slate-200 hover:border-brand-400/60 hover:shadow-lg"
-        : "bg-surface-900 border-surface-800 hover:border-surface-600 hover:shadow-lg hover:shadow-black/30"
-    }`}>
+    <div className="group relative rounded-xl overflow-hidden flex flex-col product-card">
       <Link href={href} className="block">
         <div className="bg-white aspect-square flex items-center justify-center relative overflow-hidden">
           {product.imageUrl && !imgErr ? (
@@ -67,13 +61,12 @@ export default function ProductCard({ product, variant = "default" }: { product:
               onError={() => setImgErr(true)}
             />
           ) : (
-            <div className="flex flex-col items-center gap-1.5 text-gray-400 bg-gradient-to-br from-surface-950 to-surface-900 absolute inset-0 justify-center">
+            <div className="flex flex-col items-center gap-1.5 text-slate-400 bg-slate-50 absolute inset-0 justify-center">
               {imgErr ? <ImageOff className="w-10 h-10" /> : <Package className="w-10 h-10" />}
               <span className="text-[10px]">Sin imagen</span>
             </div>
           )}
 
-          {/* Provider badge - always readable */}
           <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md tracking-wide bg-black/70 text-white border border-white/10">
             {logoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -84,7 +77,6 @@ export default function ProductCard({ product, variant = "default" }: { product:
             </span>
           </span>
 
-          {/* IVA badge - always readable */}
           <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md ${
             withIva
               ? "bg-brand-600 text-white border border-brand-400/40"
@@ -104,28 +96,20 @@ export default function ProductCard({ product, variant = "default" }: { product:
 
       <div className="p-3 flex flex-col gap-2.5 flex-1">
         <Link href={href} className="block">
-          <p className={`text-sm leading-snug line-clamp-2 font-medium transition-colors min-h-[2.3rem] ${
-            isStorefront
-              ? "text-slate-800 hover:text-slate-900"
-              : "text-surface-100 hover:text-white"
-          }`}>
+          <p className="product-card-title text-sm leading-snug line-clamp-2 font-medium transition-colors min-h-[2.3rem]">
             {product.name}
           </p>
         </Link>
 
-        <div className={`flex items-end justify-between gap-2 mt-auto pt-2.5 border-t ${
-          isStorefront ? "border-slate-100" : "border-surface-800"
-        }`}>
+        <div className="flex items-end justify-between gap-2 mt-auto pt-2.5 border-t product-card-divider">
           <div className="flex flex-col min-w-0">
             <div className="flex items-baseline gap-1.5">
-              <span className={`text-lg font-bold tabular-nums leading-none ${
-                isStorefront ? "text-slate-900" : "text-white"
-              }`}>{primary}</span>
+              <span className="product-card-price text-lg font-bold tabular-nums leading-none">{primary}</span>
             </div>
             {secondary && (
-              <span className={`text-[11px] tabular-nums mt-1 ${isStorefront ? "text-slate-500" : "text-surface-500"}`}>{secondary}</span>
+              <span className="product-card-meta text-[11px] tabular-nums mt-1">{secondary}</span>
             )}
-            <span className={`text-[10px] tabular-nums mt-0.5 ${isStorefront ? "text-slate-400" : "text-surface-600"}`}>
+            <span className="product-card-meta text-[10px] tabular-nums mt-0.5">
               Base: {formatUSD(pricing.net)} {withIva ? "(s/imp)" : ""}
             </span>
           </div>
@@ -133,7 +117,7 @@ export default function ProductCard({ product, variant = "default" }: { product:
         </div>
 
         {product.externalId && (
-          <span className={`text-[9px] font-mono truncate ${isStorefront ? "text-slate-400" : "text-surface-600"}`}>#{product.externalId}</span>
+          <span className="product-card-meta text-[9px] font-mono truncate">#{product.externalId}</span>
         )}
       </div>
     </div>

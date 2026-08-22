@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { clearSession, getUser, isAdmin, isBrand, isUser } from "@/lib/auth";
-import { Search, Users, LogOut, ShoppingCart, Menu, X, Home, Activity, Building2, Shield, Boxes } from "lucide-react";
+import { Search, Users, LogOut, ShoppingCart, Menu, X, Home, Activity, Building2, Shield, Boxes, Settings } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { useMyModules } from "@/lib/permissions";
 import type { ModuleKey } from "@/lib/api";
@@ -33,6 +33,7 @@ export default function Navbar() {
     { href: "/search", label: "Búsqueda", icon: Search, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false, module: "search" as ModuleKey | null },
     { href: "/cart", label: "Carrito", icon: ShoppingCart, badge: totalCount > 0 ? totalCount : undefined, sublabel: providerCount > 0 ? `${providerCount} prov.` : undefined, exact: false, module: "cart" as ModuleKey | null },
     { href: "/proveedores", label: "Proveedores", icon: Boxes, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false, module: "providers" as ModuleKey | null },
+    { href: "/configuracion", label: "Configuración", icon: Settings, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false, module: null as ModuleKey | null },
     ...(isUser() || isAdmin() ? [{ href: "/marcas", label: "Portal de Marcas", icon: Building2, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false, module: "brands" as ModuleKey | null }] : []),
     ...(isBrand() ? [{ href: "/marca", label: "Panel de Marca", icon: Building2, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false, module: "brands" as ModuleKey | null }] : []),
     { href: "/diagnostics", label: "Diagnóstico", icon: Activity, badge: undefined as number | undefined, sublabel: undefined as string | undefined, exact: false, module: "diagnostics" as ModuleKey | null },
