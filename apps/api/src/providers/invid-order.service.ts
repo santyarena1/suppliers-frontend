@@ -692,7 +692,7 @@ export class InvidOrderService {
           await this.prisma.providerOrder.update({
             where: { id: pending.id },
             data: { status: "FAILED", errorMessage: message.slice(0, 500) },
-          }).catch((updateErr) => this.logger.error(String(updateErr)));
+          }).catch((updateErr: unknown) => this.logger.error(String(updateErr)));
         });
       });
       return {

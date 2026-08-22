@@ -23,6 +23,7 @@ import {
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
+import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
@@ -65,6 +66,9 @@ export default function InvidDraftPanel({
     () => items.map((it) => `${it.externalId}:${it.qty}`).join("|"),
     [items]
   );
+  const lines = useMemo(() => cartLinesFromItems(items), [itemsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const warm = useCheckoutWarmup("INVID", lines);
+  const seeded = useRef<string | null>(null);
 
   function applyPreviewToCart(next: InvidCheckoutPreview) {
     if (!next.stockOk) return;
@@ -92,40 +96,41 @@ export default function InvidDraftPanel({
   useEffect(() => {
     setError(null);
     reviewedOnce.current = false;
+    seeded.current = null;
     publishPreview(null);
+    setLoadingMeta(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsKey]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    if (warm.itemsKey !== itemsKey) return;
+    if (warm.status === "ready" && warm.data && seeded.current !== itemsKey) {
+      seeded.current = itemsKey;
+      const d = warm.data;
+      setAddresses(d.addresses);
+      setPayments(d.payments);
+      setDeliveries(d.deliveries);
+      setExpresoCompanies(d.expresoCompanies);
+      setAddressId(d.addressId);
+      setPaymentOption(d.paymentOption);
+      setDeliveryOption(d.deliveryOption);
+      reviewedOnce.current = true;
+      publishPreview(d.preview);
+      setMetaError(null);
+      setLoadingMeta(false);
+      return;
+    }
+    if (warm.status === "error" && seeded.current !== itemsKey) {
+      setMetaError(warm.error || "No se pudieron cargar direcciones / pagos de Invid.");
+      setLoadingMeta(false);
+      return;
+    }
+    if (warm.status === "loading" && seeded.current !== itemsKey) {
       setLoadingMeta(true);
       setMetaError(null);
-      try {
-        const [addrRes, payRes, delRes] = await Promise.all([
-          invidCheckoutApi.addresses(),
-          invidCheckoutApi.payments(),
-          invidCheckoutApi.deliveries(),
-        ]);
-        if (cancelled) return;
-        const addrs = addrRes.data ?? [];
-        const pays = payRes.data ?? [];
-        const dels = delRes.data ?? [];
-        setAddresses(addrs);
-        setPayments(pays);
-        setDeliveries(dels);
-        const def = addrs.find((a) => a.isDefault) ?? addrs[0];
-        if (def) setAddressId(def.id);
-        if (pays[0] && !pays.some((p) => p.value === "67")) setPaymentOption(pays[0].value);
-      } catch (err: unknown) {
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        if (!cancelled) setMetaError(msg || "No se pudieron cargar direcciones / pagos de Invid.");
-      } finally {
-        if (!cancelled) setLoadingMeta(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [warm, itemsKey]);
 
   function invalidatePreview() {
     setError(null);

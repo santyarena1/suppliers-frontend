@@ -1,5 +1,4 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   asNumber,
@@ -27,6 +26,7 @@ import {
   type NbSubtotales,
 } from "./new-bytes.mapper";
 import { mapProviderDraft } from "./provider-draft";
+import { snapshotJson } from "./json-value";
 
 export interface NewBytesCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -84,10 +84,6 @@ function mapAddress(raw: unknown): NbAddress | null {
 
 function publicAddress(address: NbAddress) {
   return { id: address.id, label: address.label, addressLine: address.addressLine, postalCode: address.postalCode };
-}
-
-function snapshotJson(value: unknown): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
 function cartItemsFromBody(
@@ -375,7 +371,7 @@ export class NewBytesOrderService {
           await this.prisma.providerOrder.update({
             where: { id: pending.id },
             data: { status: "FAILED", errorMessage: message.slice(0, 500) },
-          }).catch((updateErr) => this.logger.error(String(updateErr)));
+          }).catch((updateErr: unknown) => this.logger.error(String(updateErr)));
         });
       });
       return {

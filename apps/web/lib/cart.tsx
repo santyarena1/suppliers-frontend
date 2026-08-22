@@ -12,6 +12,7 @@ export interface CartItem extends ProductDTO {
 interface CartContextValue {
   items: CartItem[];
   totalCount: number;
+  hydrated: boolean;
   add: (product: ProductDTO, qty?: number) => void;
   remove: (provider: string, externalId: string) => void;
   setQty: (provider: string, externalId: string, qty: number) => void;
@@ -120,7 +121,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items]);
 
   return (
-    <CartContext.Provider value={{ items, totalCount, add, remove, setQty, patchItem, clear, clearProvider, has, byProvider }}>
+    <CartContext.Provider value={{ items, totalCount, hydrated, add, remove, setQty, patchItem, clear, clearProvider, has, byProvider }}>
       {children}
     </CartContext.Provider>
   );
