@@ -68,6 +68,7 @@ const COLUMN_INDEX = {
   moneda: 5,
   precioSinIva: 6,
   iva: 7,
+  impInternos: 8,
   precioFinal: 9,
   observaciones: 11,
 } as const;
@@ -347,6 +348,10 @@ function mapProduct(row: unknown[]): NormalizedProduct {
 
   const stockStatus = str(row[COLUMN_INDEX.observaciones]);
   const isLowStock = stockStatus?.trim().toLowerCase() === "stock bajo";
+  const net = num(row[COLUMN_INDEX.precioSinIva]);
+  const iva = num(row[COLUMN_INDEX.iva]);
+  const internos = num(row[COLUMN_INDEX.impInternos]);
+  const listedFinal = num(row[COLUMN_INDEX.precioFinal]);
 
   return {
     externalId: String(row[COLUMN_INDEX.codigo]).trim(),
@@ -355,11 +360,19 @@ function mapProduct(row: unknown[]): NormalizedProduct {
     partNumber: str(row[COLUMN_INDEX.nroDeParte]),
     ean: str(row[COLUMN_INDEX.ean]),
     currency: str(row[COLUMN_INDEX.moneda])?.includes("US$") ? "USD" : str(row[COLUMN_INDEX.moneda]),
-    price: num(row[COLUMN_INDEX.precioSinIva]),
-    ivaPercent: num(row[COLUMN_INDEX.iva]),
-    finalPrice: num(row[COLUMN_INDEX.precioFinal]),
+    price: net,
+    ivaPercent: iva,
+    finalPrice: listedFinal ?? sumInvidTaxes(net, iva, internos),
     stock: isLowStock ? 1 : 5, // nominal, no cantidad real — ver comentario arriba de COLUMN_INDEX
     stockStatus,
     raw: row,
   } as NormalizedProduct;
+}
+
+/** Invid: precio final = neto + IVA + impuesto interno. La alícuota puede ser % o monto. */
+function sumInvidTaxes(net?: number, iva?: number, internos?: number): number | undefined {
+  if (net == null) return undefined;
+  const ivaAmount = iva == null ? 0 : iva > 1 && iva <= 100 ? net * (iva / 100) : iva;
+  const intAmount = internos == null ? 0 : internos > 1 && internos <= 100 ? net * (internos / 100) : internos;
+  return Math.round((net + ivaAmount + intAmount) * 10000) / 10000;
 }

@@ -236,7 +236,7 @@ export class ProvidersService {
           description: item.description,
           longDescription: item.longDescription,
           price: applyMarkup(item.price, markupPercent),
-          finalPrice: item.finalPrice,
+          finalPrice: applyMarkup(item.finalPrice, markupPercent),
           currency: item.currency,
           ivaPercent: item.ivaPercent,
           stock,

@@ -5,9 +5,10 @@ import { Package, ImageOff, MapPin } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { proxyImg, parsePrice, formatARS, formatUSD } from "@/lib/format";
+import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { useProviderDisplay } from "@/lib/providerDisplay";
+import { linePricing, taxLabel } from "@/lib/tax";
 import AddToCartButton from "./AddToCartButton";
 
 const PROVIDER_HUE: Record<string, string> = {
@@ -27,8 +28,6 @@ const PROVIDER_HUE: Record<string, string> = {
   DIAPSTORE:    "text-blue-400  bg-blue-400/10",
 };
 
-const IVA = 0.21;
-
 export default function ProductCard({ product }: { product: ProductDTO }) {
   const [imgErr, setImgErr] = useState(false);
   const { currency, withIva, convert } = usePrefs();
@@ -38,14 +37,14 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
   const customColor = display.textColor(product.provider);
   const href = `/product/${encodeURIComponent(product.provider)}/${encodeURIComponent(product.externalId)}`;
 
-  const baseUsd = parsePrice(product.price);
-  const finalUsd = withIva ? baseUsd * (1 + IVA) : baseUsd;
-  const ars = convert(finalUsd).amount;
+  const pricing = linePricing(product);
+  const displayUsd = withIva ? pricing.gross : pricing.net;
+  const ars = convert(displayUsd).amount;
 
-  const primary = currency === "USD" ? formatUSD(finalUsd) : formatARS(ars);
+  const primary = currency === "USD" ? formatUSD(displayUsd) : formatARS(ars);
   const secondary = currency === "USD"
     ? (ars > 0 ? formatARS(ars) : null)
-    : formatUSD(finalUsd);
+    : formatUSD(displayUsd);
 
   return (
     <div className="group relative bg-surface-900 border border-surface-800 rounded-xl overflow-hidden hover:border-surface-600 hover:shadow-lg hover:shadow-black/30 transition-all flex flex-col">
@@ -85,7 +84,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               ? "bg-brand-600 text-white border border-brand-400/40"
               : "bg-black/70 text-white border border-white/10"
           }`}>
-            {withIva ? "+ IVA 21%" : "Sin IVA"}
+            {withIva ? `+ ${taxLabel(product)}` : "Sin imp."}
           </span>
 
           {product.locationAir && (
@@ -113,7 +112,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               <span className="text-[11px] text-surface-500 tabular-nums mt-1">{secondary}</span>
             )}
             <span className="text-[10px] text-surface-600 tabular-nums mt-0.5">
-              Base: {formatUSD(baseUsd)} {withIva ? "(s/IVA)" : ""}
+              Base: {formatUSD(pricing.net)} {withIva ? "(s/imp)" : ""}
             </span>
           </div>
           <AddToCartButton product={product} variant="icon" />

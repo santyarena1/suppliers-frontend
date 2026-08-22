@@ -64,6 +64,14 @@ export interface ProductDTO {
   finalPrice?: string | number | null;
   currency?: string | null;
   ivaPercent?: string | number | null;
+  taxes?: {
+    kind: "iva" | "internos" | "iibb" | "other";
+    label: string;
+    percent: number | null;
+    unitAmount: number;
+  }[];
+  /** Payload crudo del proveedor. No persistir en el carrito. */
+  raw?: unknown;
   imageUrl: string | null;
   productUrl?: string | null;
   externalId: string;
@@ -252,6 +260,7 @@ export interface InvidCheckoutItem {
   name: string;
   price: number;
   subtotal: number;
+  iva?: number;
 }
 export interface InvidCheckoutPreview {
   items: InvidCheckoutItem[];
@@ -260,12 +269,18 @@ export interface InvidCheckoutPreview {
   paymentLabel: string;
   payments: InvidPaymentOption[];
   deliveries: InvidPaymentOption[];
+  expresoCompanies?: InvidPaymentOption[];
   suggestedDelivery?: InvidPaymentOption;
   stockOk: boolean;
   stockMessage?: string;
   subtotal: number;
+  iva?: number;
   impuestos: number;
+  percepcionPercent?: number;
   percepciones: number;
+  shippingCost?: number;
+  taxLines?: { nroItem: string; internos: number; subtotal: number; total: number }[];
+  itemErrors?: { code: string; name?: string; message: string }[];
   total: number;
   note: string;
 }
@@ -295,10 +310,22 @@ export interface InvidNodoDraft {
 export const invidCheckoutApi = {
   addresses: () => api.get<InvidAddress[]>("/providers/INVID/checkout/addresses"),
   payments: () => api.get<InvidPaymentOption[]>("/providers/INVID/checkout/payments"),
-  preview: (body: { items: { code: string; qty: number }[]; addressId: string; paymentOption: string }) =>
-    api.post<InvidCheckoutPreview>("/providers/INVID/checkout/preview", body),
-  draft: (body: { items: { code: string; qty: number; name?: string }[]; addressId: string; paymentOption: string; notes?: string }) =>
-    api.post<InvidDraftResult>("/providers/INVID/checkout/draft", body),
+  deliveries: () => api.get<InvidPaymentOption[]>("/providers/INVID/checkout/deliveries"),
+  preview: (body: {
+    items: { code: string; qty: number }[];
+    addressId: string;
+    paymentOption: string;
+    deliveryOption?: string;
+    expresoId?: string;
+  }) => api.post<InvidCheckoutPreview>("/providers/INVID/checkout/preview", body),
+  draft: (body: {
+    items: { code: string; qty: number; name?: string }[];
+    addressId: string;
+    paymentOption: string;
+    deliveryOption?: string;
+    expresoId?: string;
+    notes?: string;
+  }) => api.post<InvidDraftResult>("/providers/INVID/checkout/draft", body),
   drafts: () => api.get<InvidNodoDraft[]>("/providers/INVID/drafts"),
 };
 

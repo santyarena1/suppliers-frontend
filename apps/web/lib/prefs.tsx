@@ -21,8 +21,6 @@ const DOLLAR_LABELS: Record<DollarType, string> = {
   mayorista: "Mayorista",
 };
 
-const IVA_RATE = 0.21;
-
 interface PrefsContextValue {
   currency: Currency;
   setCurrency: (c: Currency) => void;
@@ -36,7 +34,6 @@ interface PrefsContextValue {
   loadingRates: boolean;
   dollarLabel: (t: DollarType) => string;
   convert: (usdPrice: number) => { amount: number; currency: Currency };
-  applyIva: (price: number) => number;
 }
 
 const PrefsContext = createContext<PrefsContextValue | null>(null);
@@ -105,14 +102,12 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
     return { amount: usdPrice * rate, currency: "ARS" as Currency };
   }, [currency, currentRate]);
 
-  const applyIva = useCallback((price: number) => withIva ? price * (1 + IVA_RATE) : price, [withIva]);
-
   return (
     <PrefsContext.Provider value={{
       currency, setCurrency, withIva, setWithIva, dollarType, setDollarType,
       rates, currentRate, refreshRates, loadingRates,
       dollarLabel: (t) => DOLLAR_LABELS[t] || t,
-      convert, applyIva,
+      convert,
     }}>
       {children}
     </PrefsContext.Provider>

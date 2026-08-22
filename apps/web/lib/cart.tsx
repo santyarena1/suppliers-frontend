@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { ProductDTO } from "@/lib/api";
+import { extractTaxLines } from "@/lib/tax";
 
 export interface CartItem extends ProductDTO {
   qty: number;
@@ -28,14 +29,25 @@ function key(provider: string, externalId: string) {
   return `${provider}::${externalId}`;
 }
 
+function compactProduct(product: ProductDTO): ProductDTO {
+  const { raw: _raw, ...rest } = product;
+  return { ...rest, taxes: extractTaxLines(product) };
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw));
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as CartItem[];
+        setItems(parsed.map((it) => {
+          const compacted = compactProduct(it);
+          return { ...compacted, qty: it.qty, addedAt: it.addedAt };
+        }));
+      }
     } catch { /**/ }
     setHydrated(true);
   }, []);
@@ -49,12 +61,18 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => {
       const k = key(product.provider, product.externalId);
       const idx = prev.findIndex((it) => key(it.provider, it.externalId) === k);
+      const compact = compactProduct(product);
       if (idx >= 0) {
         const next = [...prev];
-        next[idx] = { ...next[idx], qty: next[idx].qty + qty };
+        const current = next[idx];
+        next[idx] = {
+          ...current,
+          ...(current.taxes?.length ? {} : compact),
+          qty: current.qty + qty,
+        };
         return next;
       }
-      return [...prev, { ...product, qty, addedAt: Date.now() }];
+      return [...prev, { ...compact, qty, addedAt: Date.now() }];
     });
   }, []);
 

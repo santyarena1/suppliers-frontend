@@ -56,6 +56,11 @@ export class ProvidersController {
     return this.invidOrderService.paymentOptions();
   }
 
+  @Get("providers/INVID/checkout/deliveries")
+  invidDeliveries() {
+    return this.invidOrderService.deliveryOptions();
+  }
+
   @Get("providers/INVID/drafts")
   invidDrafts(@CurrentUser() user: { userId: string }) {
     return this.invidOrderService.listDrafts(user.userId);

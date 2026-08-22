@@ -33,6 +33,10 @@ export class InvidCheckoutPreviewDto {
   @IsOptional()
   @IsString()
   deliveryOption?: string;
+
+  @IsOptional()
+  @IsString()
+  expresoId?: string;
 }
 
 export class InvidCheckoutDraftDto extends InvidCheckoutPreviewDto {

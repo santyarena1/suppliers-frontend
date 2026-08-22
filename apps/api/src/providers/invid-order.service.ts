@@ -7,6 +7,8 @@ import {
   parseOrdersTable,
   parseSubmitResult,
   pickPickupDelivery,
+  computeInvidTotals,
+  stripHtmlMessage,
   type InvidRadioOption,
 } from "./invid-order.parser";
 
@@ -27,6 +29,13 @@ export const INVID_PAYMENT_OPTIONS = [
   { value: "107", label: "Transferencia desde MercadoPago" },
 ] as const;
 
+export const INVID_DELIVERY_OPTIONS = [
+  { value: "1", label: "RETIRA" },
+  { value: "5", label: "Puerta a puerta" },
+  { value: "3", label: "EXPRESO (interior, costo contra entrega)" },
+  { value: "6", label: "Entrega Express 24hs (AMBA)" },
+] as const;
+
 const DRAFT_PAYMENT_VALUES = new Set(INVID_PAYMENT_OPTIONS.map((p) => p.value));
 
 interface AddressField {
@@ -44,19 +53,25 @@ interface AddressField {
 
 interface PreparedCart {
   cookie: string;
-  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  items: { code: string; qty: number; name: string; price: number; subtotal: number; iva: number }[];
   address: AddressField;
   addressId: string;
   paymentOption: string;
   paymentLabel: string;
   stockOk: boolean;
   stockMessage?: string;
+  itemErrors: { code: string; name?: string; message: string }[];
   subtotal: number;
+  iva: number;
   impuestos: number;
+  percepcionPercent: number;
   percepciones: number;
+  shippingCost: number;
   total: number;
   deliveries: InvidRadioOption[];
+  expresoCompanies: InvidRadioOption[];
   payments: InvidRadioOption[];
+  taxLines: { nroItem: string; internos: number; subtotal: number; total: number }[];
   cartHtml: string;
 }
 
@@ -65,6 +80,7 @@ export interface InvidDraftInput {
   addressId: string;
   paymentOption: string;
   deliveryOption?: string;
+  expresoId?: string;
   notes?: string;
   payerName?: string;
   payerEmail?: string;
@@ -154,6 +170,10 @@ export class InvidOrderService {
     return INVID_PAYMENT_OPTIONS.map((p) => ({ value: p.value, label: p.label }));
   }
 
+  deliveryOptions() {
+    return INVID_DELIVERY_OPTIONS.map((d) => ({ value: d.value, label: d.label }));
+  }
+
   /** Direcciones guardadas reales de la cuenta — solo lectura. */
   async getAddresses(credentials: Record<string, string>) {
     const { username, password } = credentials;
@@ -222,13 +242,26 @@ export class InvidOrderService {
     const xml = res.data;
     const field = (tag: string) => xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`))?.[1] ?? "";
     const nombre = decodeEntities(field("nombre"));
-    const monto = Number(field("monto"));
-    if (!nombre || !Number.isFinite(monto)) {
-      throw new BadRequestException(`Invid rechazó el producto ${code} (sin stock o código inválido)`);
+    const unitNet = Number(field("precio"));
+    const lineGross = Number(field("monto"));
+    const lineQty = Number(field("cantidad")) || qty;
+    const xmlError = stripHtmlMessage(field("error") || field("mensaje") || field("msg"));
+    if (!nombre || !Number.isFinite(lineGross)) {
+      throw new BadRequestException(
+        xmlError || `Invid rechazó el producto ${code} (sin stock o código inválido)`
+      );
     }
+    const net = Number.isFinite(unitNet) ? unitNet * lineQty : lineGross;
     return {
       cookie: res.cookie,
-      item: { code, qty, name: nombre, price: Number(field("precio")) || 0, subtotal: monto },
+      item: {
+        code,
+        qty: lineQty,
+        name: nombre,
+        price: Number.isFinite(unitNet) ? unitNet : lineGross / lineQty,
+        subtotal: net,
+        iva: Math.max(0, lineGross - net),
+      },
     };
   }
 
@@ -253,7 +286,7 @@ export class InvidOrderService {
 
   private async prepareCart(
     credentials: Record<string, string>,
-    items: { code: string; qty: number }[],
+    items: { code: string; qty: number; name?: string }[],
     addressId: string,
     paymentOption: string
   ): Promise<PreparedCart> {
@@ -267,26 +300,64 @@ export class InvidOrderService {
     let cookie = await this.login(username, password);
     cookie = await this.clearCart(cookie);
 
-    const addedItems = [];
+    const addedItems: PreparedCart["items"] = [];
+    const itemErrors: PreparedCart["itemErrors"] = [];
     for (const item of items) {
-      const added = await this.addItem(cookie, item.code, item.qty);
-      cookie = added.cookie;
-      addedItems.push(added.item);
+      try {
+        const added = await this.addItem(cookie, item.code, item.qty);
+        cookie = added.cookie;
+        addedItems.push(added.item);
+      } catch (err) {
+        const message = err instanceof BadRequestException
+          ? String(err.message)
+          : `Invid rechazó el producto ${item.code} (sin stock o código inválido)`;
+        itemErrors.push({ code: item.code, name: item.name, message });
+      }
     }
 
     const addr = await this.getAddressDetail(cookie, addressId);
     cookie = addr.cookie;
-    const stock = await this.validateStock(cookie, paymentOption, addr.address.CodProvincia);
-    cookie = stock.cookie;
-    const validation = stock.validation;
+
+    let stockOk = false;
+    let stockMessage: string | undefined;
+    let taxLines: PreparedCart["taxLines"] = [];
+    let percepcionPercent = 0;
+
+    if (addedItems.length > 0 && itemErrors.length === 0) {
+      const stock = await this.validateStock(cookie, paymentOption, addr.address.CodProvincia);
+      cookie = stock.cookie;
+      const validation = stock.validation;
+      stockOk = Boolean(validation.resultado);
+      stockMessage = stockOk
+        ? (stripHtmlMessage(validation.mensaje) || "Se han validado los stocks de los productos")
+        : (stripHtmlMessage(validation.mensaje) || "Invid no validó el stock de este pedido");
+      taxLines = (validation.impint ?? []).map((i) => ({
+        nroItem: i.nroItem,
+        internos: Number(i.impuesto) || 0,
+        subtotal: Number(i.subtotal) || 0,
+        total: Number(i.total) || 0,
+      }));
+      percepcionPercent = Number(validation.percepcion) || 0;
+    } else if (itemErrors.length > 0) {
+      stockMessage = itemErrors.length === 1
+        ? itemErrors[0].message
+        : `${itemErrors.length} productos no se pudieron cargar en Invid.`;
+    }
 
     const cart = await this.request(cookie, "GET", CART_URL);
     cookie = cart.cookie;
     const checkout = parseCheckoutForm(cart.data);
 
-    const subtotal = addedItems.reduce((s, i) => s + i.subtotal, 0);
-    const impTotal = (validation.impint ?? []).reduce((s, i) => s + (Number(i.impuesto) || 0), 0);
-    const percepcion = Number(validation.percepcion) || 0;
+    const net = addedItems.reduce((s, i) => s + i.subtotal, 0);
+    const ivaProducts = addedItems.reduce((s, i) => s + i.iva, 0);
+    const internos = taxLines.reduce((s, i) => s + i.internos, 0);
+    const totals = computeInvidTotals({
+      net,
+      ivaProducts,
+      internos,
+      percepcionPercent,
+      shipping: 0,
+    });
 
     return {
       cookie,
@@ -295,18 +366,82 @@ export class InvidOrderService {
       addressId,
       paymentOption,
       paymentLabel: INVID_PAYMENT_OPTIONS.find((p) => p.value === paymentOption)?.label ?? paymentOption,
-      stockOk: Boolean(validation.resultado),
-      stockMessage: validation.mensaje,
-      subtotal,
-      impuestos: impTotal,
-      percepciones: percepcion,
-      total: subtotal + impTotal + percepcion,
-      deliveries: checkout.deliveries,
+      stockOk,
+      stockMessage,
+      itemErrors,
+      subtotal: net,
+      iva: totals.iva,
+      impuestos: internos,
+      percepcionPercent,
+      percepciones: totals.percepciones,
+      shippingCost: 0,
+      total: totals.total,
+      deliveries: checkout.deliveries.length > 0 ? checkout.deliveries : this.deliveryOptions(),
+      expresoCompanies: checkout.expresoCompanies,
       payments: checkout.payments.length > 0
         ? checkout.payments.filter((p) => DRAFT_PAYMENT_VALUES.has(p.value as typeof INVID_PAYMENT_OPTIONS[number]["value"]))
         : this.paymentOptions(),
+      taxLines,
       cartHtml: cart.data,
     };
+  }
+
+  private resolveDelivery(prepared: PreparedCart, deliveryOption?: string) {
+    const selected = prepared.deliveries.find((d) => d.value === deliveryOption)
+      ?? this.deliveryOptions().find((d) => d.value === deliveryOption);
+    if (selected) return selected;
+    return pickPickupDelivery(prepared.deliveries) ?? this.deliveryOptions()[0];
+  }
+
+  private async quoteShipping(
+    cookie: string,
+    delivery: InvidRadioOption,
+    address: AddressField,
+    expresoId?: string
+  ): Promise<{ cookie: string; shippingCost: number }> {
+    let current = cookie;
+    let shippingCost = 0;
+
+    if (delivery.value === "3") {
+      if (expresoId) {
+        try {
+          const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+            params: { funcion: "getCostoEnvioExpreso" },
+          });
+          current = quoted.cookie;
+          const parsed = JSON.parse(quoted.data) as { costo?: number | string; error?: string };
+          if (!parsed.error) shippingCost = Number(parsed.costo) || 0;
+        } catch (err) {
+          this.logger.warn(`getCostoEnvioExpreso: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    if (delivery.value === "5") {
+      const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+        params: { funcion: "getCostoEnvioXCP", cod_postal: address.CodPostal },
+      });
+      current = quoted.cookie;
+      let parsed: { costo?: number | string; error?: string };
+      try {
+        parsed = JSON.parse(quoted.data);
+      } catch {
+        throw new BadGatewayException("Invid no pudo cotizar Puerta a puerta para ese código postal");
+      }
+      if (parsed.error) throw new BadRequestException(String(parsed.error));
+      shippingCost = Number(parsed.costo) || 0;
+    }
+
+    try {
+      const setDelivery = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
+        params: { funcion: "setearDelivery", tipo_delivery: delivery.value },
+      });
+      current = setDelivery.cookie;
+    } catch (err) {
+      this.logger.warn(`setearDelivery falló (${delivery.value}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return { cookie: current, shippingCost };
   }
 
   /**
@@ -315,7 +450,15 @@ export class InvidOrderService {
    */
   async preview(credentials: Record<string, string>, input: InvidDraftInput) {
     const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
-    const suggestedDelivery = pickPickupDelivery(prepared.deliveries);
+    const delivery = this.resolveDelivery(prepared, input.deliveryOption);
+    const quoted = await this.quoteShipping(prepared.cookie, delivery, prepared.address, input.expresoId);
+    const totals = computeInvidTotals({
+      net: prepared.subtotal,
+      ivaProducts: prepared.iva,
+      internos: prepared.impuestos,
+      percepcionPercent: prepared.percepcionPercent,
+      shipping: quoted.shippingCost,
+    });
     return {
       items: prepared.items,
       address: prepared.address,
@@ -323,13 +466,19 @@ export class InvidOrderService {
       paymentLabel: prepared.paymentLabel,
       payments: prepared.payments,
       deliveries: prepared.deliveries,
-      suggestedDelivery,
+      expresoCompanies: prepared.expresoCompanies,
+      suggestedDelivery: delivery,
       stockOk: prepared.stockOk,
       stockMessage: prepared.stockMessage,
+      itemErrors: prepared.itemErrors,
       subtotal: prepared.subtotal,
+      iva: totals.iva,
       impuestos: prepared.impuestos,
-      percepciones: prepared.percepciones,
-      total: prepared.total,
+      percepcionPercent: prepared.percepcionPercent,
+      percepciones: totals.percepciones,
+      shippingCost: totals.shipping,
+      taxLines: prepared.taxLines,
+      total: totals.total,
       note: "Esto todavía no crea el pedido. Al confirmar, Invid deja un borrador pendiente y el vendedor de la cuenta te contacta.",
     };
   }
@@ -347,26 +496,30 @@ export class InvidOrderService {
    */
   async submitDraft(userId: string, credentials: Record<string, string>, input: InvidDraftInput) {
     const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
+    if (prepared.itemErrors.length > 0) {
+      throw new BadRequestException(
+        prepared.itemErrors.map((e) => e.message).join(" · ")
+      );
+    }
     if (!prepared.stockOk) {
       throw new BadRequestException(prepared.stockMessage || "Invid no validó el stock de este pedido");
     }
 
-    const delivery = pickPickupDelivery(prepared.deliveries);
-    if (!delivery || delivery.value !== "1") {
-      throw new BadRequestException(
-        "Invid no ofreció RETIRA en el carrito. Sin esa forma de entrega no se puede armar el borrador desde Nodo."
-      );
+    const delivery = this.resolveDelivery(prepared, input.deliveryOption);
+    if (delivery.value === "3" && !input.expresoId) {
+      throw new BadRequestException("Para EXPRESO tenés que elegir la empresa de transporte");
     }
-
-    let cookie = prepared.cookie;
-    try {
-      const setDelivery = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-        params: { funcion: "setearDelivery", tipo_delivery: delivery.value },
-      });
-      cookie = setDelivery.cookie;
-    } catch (err) {
-      this.logger.warn(`setearDelivery falló (${delivery.value}): ${err instanceof Error ? err.message : String(err)}`);
-    }
+    const quoted = await this.quoteShipping(prepared.cookie, delivery, prepared.address, input.expresoId);
+    let cookie = quoted.cookie;
+    const totals = computeInvidTotals({
+      net: prepared.subtotal,
+      ivaProducts: prepared.iva,
+      internos: prepared.impuestos,
+      percepcionPercent: prepared.percepcionPercent,
+      shipping: quoted.shippingCost,
+    });
+    const shippingCost = totals.shipping;
+    const total = totals.total;
 
     const body = new URLSearchParams({
       iniciar_pago: "S",
@@ -385,13 +538,17 @@ export class InvidOrderService {
       opcionPago: prepared.paymentOption,
       entrega: delivery.value,
       forma_entrega: delivery.value,
-      costo_envio: "0",
+      costo_envio: String(shippingCost),
       valida_delivery: "1",
       usa_imi: "true",
       usa_iva: "true",
       termYCond: "on",
-      prcmoninv1: String(prepared.total),
+      prcmoninv1: String(total),
+      cp_entrega: prepared.address.CodPostal,
+      localidad_entrega: prepared.address.Localidad,
+      provincia_entrega: prepared.address.Provincia,
     });
+    if (input.expresoId) body.set("expreso_entrega", input.expresoId);
     if (input.notes) body.set("observaciones", input.notes);
     if (input.payerName) body.set("nombre_pagador", input.payerName);
     if (input.payerEmail) body.set("mail_pagador", input.payerEmail);
@@ -441,8 +598,8 @@ export class InvidOrderService {
         notes: input.notes,
         subtotal: prepared.subtotal,
         impuestos: prepared.impuestos,
-        percepciones: prepared.percepciones,
-        total: prepared.total,
+        percepciones: totals.percepciones,
+        total,
         errorMessage: created ? null : (parsed.errorMessage ?? "Invid no devolvió número de pedido"),
         items: prepared.items,
         addressSnapshot: { id: prepared.addressId, ...prepared.address },
@@ -464,8 +621,9 @@ export class InvidOrderService {
       address: prepared.address,
       subtotal: prepared.subtotal,
       impuestos: prepared.impuestos,
-      percepciones: prepared.percepciones,
-      total: prepared.total,
+      percepciones: totals.percepciones,
+      shippingCost,
+      total,
       message: "Borrador creado en Invid. Queda pendiente: el vendedor de la cuenta te va a contactar (WhatsApp / mail). Si no se informa el pago en 24 h, Invid lo da de baja.",
     };
   }

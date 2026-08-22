@@ -50,7 +50,8 @@ const FIELD_MAP: { [K in keyof NormalizedProduct]?: (p: GnProduct) => Normalized
   longDescription: (p) => (p.item_desc_2 || undefined) as never,
   price: (p) => p.precioNeto_USD as never,
   currency: () => "USD" as never,
-  ivaPercent: (p) => p.impuestos?.[0]?.imp_porcentaje as never,
+  ivaPercent: (p) => sumTaxPercent(p.impuestos) as never,
+  finalPrice: (p) => grossFromTaxes(p.precioNeto_USD, p.impuestos) as never,
   stock: (p) => (p.stock_mdp ?? 0) + (p.stock_caba ?? 0) as never,
   imageUrl: (p) => p.url_imagenes?.[0]?.url as never,
   weight: (p) => p.peso_gr as never,
@@ -60,10 +61,25 @@ const FIELD_MAP: { [K in keyof NormalizedProduct]?: (p: GnProduct) => Normalized
   length: (p) => p.largo_cm as never,
   dimensionsUnit: (p) => (p.alto_cm != null ? "cm" : undefined) as never,
   volume: (p) => p.volumen_cm3 as never,
-  // Sin equivalente en Grupo Núcleo: finalPrice, stockStatus, productUrl,
+  // Sin equivalente en Grupo Núcleo: stockStatus, productUrl,
   // warranty, tags. El stock por depósito (mdp/caba) queda solo en `raw`,
-  // acá se suma en un único número.
+  // acá se suma en un único número. `ivaPercent` es la SUMA de todas las
+  // líneas de `impuestos[]` (IVA + internos, etc.), no solo la primera.
 };
+
+function sumTaxPercent(impuestos: GnImpuesto[] | undefined): number | undefined {
+  if (!impuestos?.length) return undefined;
+  const total = impuestos.reduce((s, t) => s + (Number(t.imp_porcentaje) || 0), 0);
+  return Number.isFinite(total) ? total : undefined;
+}
+
+function grossFromTaxes(net: number | undefined, impuestos: GnImpuesto[] | undefined): number | undefined {
+  if (net == null || !Number.isFinite(net)) return undefined;
+  const pct = sumTaxPercent(impuestos);
+  if (pct == null) return undefined;
+  const rate = pct > 1 ? pct / 100 : pct;
+  return Math.round(net * (1 + rate) * 10000) / 10000;
+}
 
 @Injectable()
 export class GrupoNucleoAdapter implements ProviderAdapter {

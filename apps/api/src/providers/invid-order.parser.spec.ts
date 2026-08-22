@@ -3,6 +3,8 @@ import {
   parseSubmitResult,
   pickPickupDelivery,
   parseOrdersTable,
+  computeInvidTotals,
+  stripHtmlMessage,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -30,6 +32,7 @@ describe("invid-order.parser", () => {
     expect(form.payments.map((p) => p.value)).toEqual(["-1", "67"]);
     expect(form.payments[1].label).toMatch(/Depósito\/Transferencia/i);
     expect(form.deliveries).toHaveLength(2);
+    expect(form.expresoCompanies).toEqual([]);
     expect(pickPickupDelivery(form.deliveries)?.value).toBe("1");
   });
 
@@ -74,5 +77,40 @@ describe("invid-order.parser", () => {
     const form = parseCheckoutForm(html);
     expect(pickPickupDelivery(form.deliveries)?.value).toBe("1");
     expect(pickPickupDelivery(form.deliveries)?.label).toMatch(/RETIRA/i);
+  });
+
+  it("suma el resumen de Invid igual que el portal: neto + IVA + percepción %", () => {
+    const totals = computeInvidTotals({
+      net: 14.89,
+      ivaProducts: 3.13,
+      internos: 0,
+      percepcionPercent: 3,
+      shipping: 0,
+    });
+    expect(totals.iva).toBe(3.13);
+    expect(totals.percepciones).toBe(0.45);
+    expect(totals.total).toBe(18.47);
+  });
+
+  it("deja el mensaje de stock de Invid sin HTML", () => {
+    expect(stripHtmlMessage('<span class="stockok">Se han validado los stocks de los productos</span>'))
+      .toBe("Se han validado los stocks de los productos");
+    expect(stripHtmlMessage("Sin stock: <b>0417517</b><br/>Producto agotado"))
+      .toBe("Sin stock: 0417517\nProducto agotado");
+  });
+
+  it("lee las empresas de expreso del select real", () => {
+    const html = `
+      <select name="expreso_entrega" id="expreso_entrega">
+        <option value="">Seleccione el Expreso</option>
+        <option value="1">ACERCAR</option>
+        <option value="214">ACI CARGAS</option>
+      </select>
+    `;
+    const form = parseCheckoutForm(html);
+    expect(form.expresoCompanies).toEqual([
+      { value: "1", label: "ACERCAR" },
+      { value: "214", label: "ACI CARGAS" },
+    ]);
   });
 });

@@ -133,7 +133,7 @@ export default function PrefsPanel() {
               >
                 <div className="flex items-center gap-2">
                   <Receipt className="w-3.5 h-3.5 text-surface-400" />
-                  <span className="text-xs text-surface-200">Mostrar con IVA (21%)</span>
+                  <span className="text-xs text-surface-200">Mostrar con impuestos</span>
                 </div>
                 <div className={`w-8 h-4 rounded-full relative transition-colors ${withIva ? "bg-brand-600" : "bg-surface-600"}`}>
                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${withIva ? "left-4" : "left-0.5"}`} />

@@ -13,8 +13,9 @@ import { useResults } from "@/lib/results";
 import { useCart } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint } from "@/lib/api";
-import { proxyImg, parsePrice, formatARS, formatUSD } from "@/lib/format";
+import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
+import { linePricing, taxLabel } from "@/lib/tax";
 import {
   ArrowLeft, Package, ImageOff, ChevronLeft, ChevronRight,
   ZoomIn, X, Copy, ExternalLink, Sparkles, TrendingUp
@@ -26,7 +27,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const router = useRouter();
   const { find, query } = useResults();
   const { items: cartItems } = useCart();
-  const { currency, withIva, applyIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
+  const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
 
   const dec = (s: string) => decodeURIComponent(s);
   const providerName = dec(provider);
@@ -89,14 +90,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     } catch { /**/ }
   }
 
-  // Computed prices
-  const basePriceUSD = product ? parsePrice(product.price) : 0;
-  const subtotalUSD = basePriceUSD * qty;
-  const ivaAmountUSD = withIva ? subtotalUSD * 0.21 : 0;
-  const totalUSD = subtotalUSD + ivaAmountUSD;
-  const conv = useMemo(() => convert(totalUSD), [convert, totalUSD]);
-  const subtotalConv = useMemo(() => convert(subtotalUSD), [convert, subtotalUSD]);
-  const ivaConv = useMemo(() => convert(ivaAmountUSD), [convert, ivaAmountUSD]);
+  const pricing = product ? linePricing(product, qty) : null;
+  const displayUSD = pricing ? (withIva ? pricing.gross : pricing.net) : 0;
+  const conv = useMemo(() => convert(displayUSD), [convert, displayUSD]);
+  const subtotalConv = useMemo(() => convert(pricing?.net ?? 0), [convert, pricing?.net]);
+  const taxConv = useMemo(() => convert(pricing?.tax ?? 0), [convert, pricing?.tax]);
 
   const cartItem = cartItems.find((i) => i.provider === providerName && i.externalId === extId);
   const color = PROVIDER_COLOR[providerName] || "text-surface-400 bg-surface-400/10 border-surface-400/30";
@@ -258,7 +256,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                               </div>
                               <div className="p-2.5">
                                 <p className="text-[11px] text-surface-300 line-clamp-2 leading-tight mb-1.5">{p.name}</p>
-                                <PriceTag usdPrice={p.price ?? ""} size="sm" />
+                                <PriceTag product={p} size="sm" />
                               </div>
                             </Link>
                           ))}
@@ -285,11 +283,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         <span className="text-3xl font-bold text-white tabular-nums">
                           {currency === "USD" ? formatUSD(conv.amount) : formatARS(conv.amount)}
                         </span>
-                        {!withIva && <span className="text-xs text-surface-500 font-medium">sin IVA</span>}
+                        {!withIva && <span className="text-xs text-surface-500 font-medium">sin imp.</span>}
                       </div>
                       {currency === "ARS" && currentRate && (
                         <p className="text-sm text-surface-400 tabular-nums mb-4">
-                          {formatUSD(totalUSD)} <span className="text-surface-600">·</span> Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
+                          {formatUSD(displayUSD)} <span className="text-surface-600">·</span> Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
                         </p>
                       )}
 
@@ -298,22 +296,22 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         <div className="flex justify-between">
                           <span className="text-surface-400">Precio unitario</span>
                           <span className="text-surface-200 tabular-nums">
-                            {currency === "USD" ? formatUSD(basePriceUSD) : formatARS(convert(basePriceUSD).amount)}
+                            {currency === "USD" ? formatUSD(pricing?.unitNet ?? 0) : formatARS(convert(pricing?.unitNet ?? 0).amount)}
                           </span>
                         </div>
                         {qty > 1 && (
                           <div className="flex justify-between">
                             <span className="text-surface-400">Subtotal ({qty} u.)</span>
                             <span className="text-surface-200 tabular-nums">
-                              {currency === "USD" ? formatUSD(subtotalUSD) : formatARS(subtotalConv.amount)}
+                              {currency === "USD" ? formatUSD(pricing?.net ?? 0) : formatARS(subtotalConv.amount)}
                             </span>
                           </div>
                         )}
-                        {withIva && (
+                        {withIva && pricing && pricing.tax > 0 && (
                           <div className="flex justify-between">
-                            <span className="text-surface-400">IVA (21%)</span>
+                            <span className="text-surface-400">{taxLabel(product ?? {})}</span>
                             <span className="text-surface-200 tabular-nums">
-                              + {currency === "USD" ? formatUSD(ivaAmountUSD) : formatARS(ivaConv.amount)}
+                              + {currency === "USD" ? formatUSD(pricing.tax) : formatARS(taxConv.amount)}
                             </span>
                           </div>
                         )}

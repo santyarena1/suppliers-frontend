@@ -7,6 +7,15 @@ export function decodeEntities(s: string): string {
     .replace(/&nbsp;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/g, "'");
 }
 
+/** Invid manda `mensaje` de stock en HTML; lo dejamos legible para Nodo. */
+export function stripHtmlMessage(html: string | undefined | null): string | undefined {
+  if (!html) return undefined;
+  const text = decodeEntities(
+    html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<[^>]+>/g, " ")
+  ).replace(/[ \t]+\n/g, "\n").replace(/\n{2,}/g, "\n").replace(/[ \t]{2,}/g, " ").trim();
+  return text || undefined;
+}
+
 export interface InvidRadioOption {
   value: string;
   label: string;
@@ -16,6 +25,7 @@ export interface InvidRadioOption {
 export interface InvidCheckoutForm {
   payments: InvidRadioOption[];
   deliveries: InvidRadioOption[];
+  expresoCompanies: InvidRadioOption[];
   hasTerms: boolean;
   hasConfirmButton: boolean;
 }
@@ -66,15 +76,55 @@ export function parseCheckoutForm(html: string): InvidCheckoutForm {
   return {
     payments: parseRadios(html, "opcionPago"),
     deliveries: parseRadios(html, "entrega"),
+    expresoCompanies: parseSelectOptions(html, "expreso_entrega"),
     hasTerms: /name=["']termYCond["']/i.test(html) || /id=["']termYCond["']/i.test(html),
     hasConfirmButton: /id=["']iniciarpago["']/i.test(html) || /CONFIRMAR\s+PEDIDO/i.test(html),
   };
+}
+
+function parseSelectOptions(html: string, id: string): InvidRadioOption[] {
+  const block = html.match(new RegExp(`<select[^>]*\\bid=["']${id}["'][^>]*>([\\s\\S]*?)</select>`, "i"));
+  if (!block) return [];
+  const options: InvidRadioOption[] = [];
+  const re = /<option\b([^>]*)>([\s\S]*?)<\/option>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block[1]))) {
+    const value = attr(`<x ${m[1]}>`, "value");
+    if (!value) continue;
+    const label = stripTags(m[2]);
+    if (!label || /seleccione/i.test(label)) continue;
+    options.push({ value, label });
+  }
+  return options;
 }
 
 export function pickPickupDelivery(deliveries: InvidRadioOption[]): InvidRadioOption | undefined {
   return deliveries.find((d) => /retir|f[aá]brica|sucursal|pickup/i.test(`${d.label} ${d.id ?? ""}`))
     ?? deliveries.find((d) => d.value === "1")
     ?? deliveries[0];
+}
+
+function round2(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/**
+ * Misma fórmula que el resumen del carrito de Invid:
+ * (a) subtotal neto + (b) envío + (c) IVA de (a)+(b) + (d) imp. internos + (e) percepción % de (a)+(b).
+ * `percepcionPercent` es alícuota (3 = 3%), no un monto.
+ */
+export function computeInvidTotals(input: {
+  net: number;
+  ivaProducts: number;
+  internos: number;
+  percepcionPercent: number;
+  shipping?: number;
+}) {
+  const shipping = input.shipping ?? 0;
+  const iva = round2(input.ivaProducts + shipping * 0.21);
+  const percepciones = round2((input.net + shipping) * (input.percepcionPercent / 100));
+  const total = round2(input.net + shipping + iva + input.internos + percepciones);
+  return { shipping, iva, percepciones, total };
 }
 
 export interface InvidSubmitResult {
