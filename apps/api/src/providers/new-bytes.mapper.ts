@@ -395,22 +395,19 @@ export function parseDatosBultos(raw: unknown): NbDatosBultos | undefined {
 
 export function parseShippingQuote(body: unknown): { quotes: NbShippingQuote[]; datosBultos?: NbDatosBultos } {
   const rec = asRecord(body) ?? {};
-  const cotizacion = unwrapNbList(rec.cotizacion ?? rec);
-  const quotes = cotizacion
-    .map((row) => {
-      const item = asRecord(row) ?? {};
-      const id = asString(item.id);
-      if (!id) return null;
-      return {
-        id,
-        label: asString(item.description) || asString(item.descripcion) || `Envío ${id}`,
-        plazo: asString(item.plazoEntrega),
-        total: asNumber(item.total),
-      } satisfies NbShippingQuote;
-    })
-    .filter((q): q is NbShippingQuote => q != null);
-  const datosBultos = parseDatosBultos(rec.datosBulto ?? rec.datosBultos);
-  return { quotes, datosBultos };
+  const quotes: NbShippingQuote[] = [];
+  for (const row of unwrapNbList(rec.cotizacion ?? rec)) {
+    const item = asRecord(row) ?? {};
+    const id = asString(item.id);
+    if (!id) continue;
+    quotes.push({
+      id,
+      label: asString(item.description) || asString(item.descripcion) || `Envío ${id}`,
+      plazo: asString(item.plazoEntrega),
+      total: asNumber(item.total),
+    });
+  }
+  return { quotes, datosBultos: parseDatosBultos(rec.datosBulto ?? rec.datosBultos) };
 }
 
 export function parseNbSubtotales(body: unknown): NbSubtotales {

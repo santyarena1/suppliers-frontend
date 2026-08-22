@@ -1,4 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   asNumber,
@@ -81,6 +82,10 @@ function mapAddress(raw: unknown): NbAddress | null {
 
 function publicAddress(address: NbAddress) {
   return { id: address.id, label: address.label, addressLine: address.addressLine, postalCode: address.postalCode };
+}
+
+function snapshotJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 
 function cartItemsFromBody(
@@ -416,12 +421,13 @@ export class NewBytesOrderService {
           total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
           errorMessage: message.slice(0, 500),
           items: prepared.items,
-          addressSnapshot:
+          addressSnapshot: snapshotJson(
             input.delivery === "pickup"
               ? { pickup: true, ...NB_PICKUP_BRANCH }
               : address
-                ? { id: address.id, ...address.raw, quote: selectedQuote, datosBultos }
-                : { shipping: true },
+                ? { id: address.id, ...address.raw, quote: selectedQuote ?? null, datosBultos: datosBultos ?? null }
+                : { shipping: true }
+          ),
         },
       });
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en NewBytes");
@@ -447,12 +453,19 @@ export class NewBytesOrderService {
         total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
         errorMessage: created ? null : "NewBytes no devolvió número de pedido",
         items: prepared.items,
-        addressSnapshot:
+        addressSnapshot: snapshotJson(
           input.delivery === "pickup"
             ? { pickup: true, ...NB_PICKUP_BRANCH }
             : address
-              ? { id: address.id, ...address.raw, quote: selectedQuote, datosBultos, dropShipping: input.dropShipping }
-              : { shipping: true },
+              ? {
+                  id: address.id,
+                  ...address.raw,
+                  quote: selectedQuote ?? null,
+                  datosBultos: datosBultos ?? null,
+                  dropShipping: input.dropShipping ?? false,
+                }
+              : { shipping: true }
+        ),
       },
     });
 
