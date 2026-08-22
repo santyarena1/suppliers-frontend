@@ -68,7 +68,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       tabFromQuery.current = true;
       if (initialTab === "invid-account") loadInvidAccount();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider]);
 
   const [invidOrders, setInvidOrders] = useState<InvidOrder[] | null>(null);

@@ -31,35 +31,38 @@ export default function ProviderCredentialForm({
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider]);
-
-  async function load() {
-    setLoading(true);
-    setResult(null);
-    const currentSchema = PROVIDER_CREDENTIAL_SCHEMAS[provider];
-    try {
-      const res = await credentialsApi.getByProvider(provider);
-      const parsed =
-        typeof res.data.credentialsJson === "string"
-          ? (JSON.parse(res.data.credentialsJson) as Record<string, string>)
-          : (res.data.credentialsJson as Record<string, string>);
-      if (currentSchema) {
-        setValues(valuesFromSaved(currentSchema, parsed));
-      } else {
-        const entries = Object.entries(parsed).map(([key, value]) => ({ key, value: String(value) }));
-        setGenericFields(entries.length > 0 ? entries : [{ key: "", value: "" }]);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setResult(null);
+      const currentSchema = PROVIDER_CREDENTIAL_SCHEMAS[provider];
+      try {
+        const res = await credentialsApi.getByProvider(provider);
+        if (cancelled) return;
+        const parsed =
+          typeof res.data.credentialsJson === "string"
+            ? (JSON.parse(res.data.credentialsJson) as Record<string, string>)
+            : (res.data.credentialsJson as Record<string, string>);
+        if (currentSchema) {
+          setValues(valuesFromSaved(currentSchema, parsed));
+        } else {
+          const entries = Object.entries(parsed).map(([key, value]) => ({ key, value: String(value) }));
+          setGenericFields(entries.length > 0 ? entries : [{ key: "", value: "" }]);
+        }
+        setHasCred(true);
+      } catch {
+        if (cancelled) return;
+        if (currentSchema) setValues(emptyValues(currentSchema));
+        else setGenericFields([{ key: "", value: "" }]);
+        setHasCred(false);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setHasCred(true);
-    } catch {
-      if (currentSchema) setValues(emptyValues(currentSchema));
-      else setGenericFields([{ key: "", value: "" }]);
-      setHasCred(false);
-    } finally {
-      setLoading(false);
-    }
-  }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [provider]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
