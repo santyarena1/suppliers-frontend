@@ -1,18 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   newBytesCheckoutApi,
   NewBytesAddress,
-  NewBytesCheckoutPreview,
+  NewBytesCartSnapshot,
   NewBytesDraftResult,
   NewBytesPaymentOption,
+  NewBytesShippingQuote,
 } from "@/lib/api";
 import { CartItem } from "@/lib/cart";
-import { formatUSD } from "@/lib/format";
+import { formatARS, formatUSD } from "@/lib/format";
 import NodoSpinner from "@/components/NodoSpinner";
-import { CheckCircle2, Loader2, Send } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  CreditCard,
+  MapPin,
+  Package,
+  Send,
+  Truck,
+} from "lucide-react";
 import Link from "next/link";
+
+type Delivery = "pickup" | "shipping";
+
+function errMessage(err: unknown, fallback: string) {
+  const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+  if (Array.isArray(msg)) return msg.join(" · ");
+  return msg || fallback;
+}
 
 export default function NewBytesDraftPanel({
   items,
@@ -21,18 +38,32 @@ export default function NewBytesDraftPanel({
   items: CartItem[];
   onCreated: () => void;
 }) {
+  const cartKey = items.map((it) => `${it.externalId}:${it.qty}`).join("|");
+  const cartItems = useMemo(
+    () => items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
+    // cartKey cubre identidad y cantidad; `items` cambia de referencia en cada render del carrito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cartKey]
+  );
+
   const [addresses, setAddresses] = useState<NewBytesAddress[]>([]);
   const [payments, setPayments] = useState<NewBytesPaymentOption[]>([]);
+  const [cart, setCart] = useState<NewBytesCartSnapshot | null>(null);
+  const [delivery, setDelivery] = useState<Delivery | "">("");
   const [addressId, setAddressId] = useState("");
+  const [quotes, setQuotes] = useState<NewBytesShippingQuote[]>([]);
+  const [medioDeEnvioId, setMedioDeEnvioId] = useState("");
+  const [dropShipping, setDropShipping] = useState(false);
+  const [dropShippingClientName, setDropShippingClientName] = useState("");
+  const [dropShippingClientEmail, setDropShippingClientEmail] = useState("");
   const [medioDePagoId, setMedioDePagoId] = useState("");
   const [notes, setNotes] = useState("");
   const [loadingMeta, setLoadingMeta] = useState(true);
-  const [metaError, setMetaError] = useState<string | null>(null);
-  const [previewing, setPreviewing] = useState(false);
+  const [quoting, setQuoting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [preview, setPreview] = useState<NewBytesCheckoutPreview | null>(null);
-  const [result, setResult] = useState<NewBytesDraftResult | null>(null);
+  const [metaError, setMetaError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<NewBytesDraftResult | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,60 +71,105 @@ export default function NewBytesDraftPanel({
       setLoadingMeta(true);
       setMetaError(null);
       try {
-        const [addrRes, payRes] = await Promise.all([
+        const [addrRes, payRes, cartRes] = await Promise.all([
           newBytesCheckoutApi.addresses(),
           newBytesCheckoutApi.payments(),
+          newBytesCheckoutApi.cart({ items: cartItems }),
         ]);
         if (cancelled) return;
         const addrs = addrRes.data ?? [];
-        const pays = payRes.data ?? [];
         setAddresses(addrs);
-        setPayments(pays);
-        const pickup = pays.find((p) => p.pickupOnly) ?? pays[0];
-        if (pickup) setMedioDePagoId(pickup.value);
+        setPayments(payRes.data ?? []);
+        setCart(cartRes.data);
         const def = addrs.find((a) => a.isDefault) ?? addrs[0];
         if (def) setAddressId(def.id);
       } catch (err: unknown) {
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        if (!cancelled) setMetaError(msg || "No se pudieron cargar direcciones / pagos de NewBytes. ¿Están user y password del portal?");
+        if (!cancelled) setMetaError(errMessage(err, "No se pudo armar el carrito en NewBytes. ¿Están user y password del portal?"));
       } finally {
         if (!cancelled) setLoadingMeta(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [cartItems]);
 
-  const payload = {
-    items: items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
-    medioDePagoId: Number(medioDePagoId),
-    notes: notes.trim() || undefined,
-  };
+  const filteredPayments = useMemo(() => {
+    if (delivery === "shipping") return payments.filter((p) => !p.pickupOnly);
+    return payments;
+  }, [payments, delivery]);
 
-  async function handlePreview() {
-    setError(null);
-    setResult(null);
-    setPreviewing(true);
-    try {
-      const res = await newBytesCheckoutApi.preview(payload);
-      setPreview(res.data);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "No se pudo armar el preview en NewBytes");
-    } finally {
-      setPreviewing(false);
+  useEffect(() => {
+    if (medioDePagoId && !filteredPayments.some((p) => p.value === medioDePagoId)) {
+      setMedioDePagoId("");
     }
+  }, [filteredPayments, medioDePagoId]);
+
+  useEffect(() => {
+    if (delivery !== "shipping") {
+      setQuotes([]);
+      setMedioDeEnvioId("");
+      return;
+    }
+    if (!addressId || cartItems.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      setQuoting(true);
+      setError(null);
+      try {
+        const res = await newBytesCheckoutApi.shipping({ items: cartItems, addressId });
+        if (cancelled) return;
+        const next = res.data.quotes ?? [];
+        setQuotes(next);
+        setMedioDeEnvioId((current) => (next.some((q) => q.id === current) ? current : next[0]?.id ?? ""));
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setQuotes([]);
+          setMedioDeEnvioId("");
+          setError(errMessage(err, "No se pudo cotizar el envío en NewBytes"));
+        }
+      } finally {
+        if (!cancelled) setQuoting(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [delivery, addressId, cartItems]);
+
+  const selectedQuote = quotes.find((q) => q.id === medioDeEnvioId);
+  const selectedPayment = filteredPayments.find((p) => p.value === medioDePagoId);
+  const canSubmit =
+    Boolean(delivery) &&
+    Boolean(medioDePagoId) &&
+    !quoting &&
+    !submitting &&
+    (delivery === "pickup" || Boolean(addressId && medioDeEnvioId));
+
+  function checkoutPayload() {
+    return {
+      items: cartItems,
+      delivery: delivery as Delivery,
+      medioDePagoId: Number(medioDePagoId),
+      notes: notes.trim() || undefined,
+      ...(delivery === "shipping"
+        ? {
+            addressId,
+            medioDeEnvioId: Number(medioDeEnvioId),
+            dropShipping: dropShipping || undefined,
+            dropShippingClientName: dropShipping ? dropShippingClientName.trim() || undefined : undefined,
+            dropShippingClientEmail: dropShipping ? dropShippingClientEmail.trim() || undefined : undefined,
+          }
+        : {}),
+    };
   }
 
   async function handleSubmit() {
+    if (!canSubmit) return;
     setError(null);
     setSubmitting(true);
     try {
-      const res = await newBytesCheckoutApi.draft(payload);
+      const res = await newBytesCheckoutApi.draft(checkoutPayload());
       setResult(res.data);
       onCreated();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "No se pudo crear el pedido en NewBytes");
+      setError(errMessage(err, "No se pudo procesar el carrito en NewBytes"));
     } finally {
       setSubmitting(false);
     }
@@ -102,7 +178,7 @@ export default function NewBytesDraftPanel({
   if (loadingMeta) {
     return (
       <div className="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 flex items-center gap-2 text-xs text-sky-300">
-        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando checkout de NewBytes…
+        <NodoSpinner className="w-3.5 h-3.5" /> Armando el carrito en NewBytes…
       </div>
     );
   }
@@ -122,12 +198,14 @@ export default function NewBytesDraftPanel({
     return (
       <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4 flex flex-col gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-emerald-400">
-          <CheckCircle2 className="w-4 h-4" /> Pedido creado en NewBytes
+          <CheckCircle2 className="w-4 h-4" /> Pedido procesado en NewBytes
         </div>
         <p className="text-xs text-surface-300 leading-relaxed">{result.message}</p>
         <div className="text-xs text-surface-400 font-mono space-y-0.5">
           {result.webOrderNumber && <p>Ref: {result.webOrderNumber}</p>}
           {result.orderNumber && <p>Orden: {result.orderNumber}</p>}
+          {result.deliveryLabel && <p>Entrega: {result.deliveryLabel}</p>}
+          {result.paymentLabel && <p>Pago: {result.paymentLabel}</p>}
           {result.total != null && <p>Total: {formatUSD(Number(result.total))}</p>}
         </div>
       </div>
@@ -135,42 +213,190 @@ export default function NewBytesDraftPanel({
   }
 
   return (
-    <div className="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 flex flex-col gap-3">
+    <div className="bg-sky-500/5 border border-sky-500/20 rounded-2xl p-4 flex flex-col gap-4">
       <div>
-        <h3 className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Pedido NEW BYTES</h3>
+        <h3 className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Checkout New Bytes</h3>
         <p className="text-[11px] text-surface-400 mt-1 leading-relaxed">
-          Crea la orden en tu cuenta de NewBytes como retiro en sucursal (Av. Jujuy 1039, CABA).
-          Tarjeta y MercadoPago no se ofrecen desde Nodo porque redirigen a un cobro externo.
+          Esto no es un borrador: arma el carrito en tu cuenta NB, cotiza el envío si corresponde
+          y lo procesa. Tarjeta y MercadoPago no se cierran desde Nodo porque redirigen al cobro externo.
         </p>
       </div>
 
-      {addresses.length > 0 && (
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-surface-400">Dirección (referencia, el retiro usa la sucursal)</span>
-          <select
-            value={addressId}
-            onChange={(e) => { setAddressId(e.target.value); setPreview(null); }}
-            className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
-          >
-            {addresses.map((a) => (
-              <option key={a.id} value={a.id}>{a.label} — {a.addressLine}</option>
+      {cart && (
+        <section className="bg-surface-900/70 border border-surface-800 rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-surface-300 uppercase tracking-wider">
+            <Package className="w-3.5 h-3.5 text-sky-400" /> Carrito en NewBytes
+          </div>
+          <ul className="text-xs text-surface-300 space-y-1">
+            {cart.items.map((it) => (
+              <li key={`${it.code}-${it.qty}`} className="flex justify-between gap-2">
+                <span className="truncate">{it.qty} × {it.name}</span>
+                <span className="tabular-nums text-surface-400">{formatUSD(it.subtotal)}</span>
+              </li>
             ))}
-          </select>
-        </label>
+          </ul>
+          <div className="flex justify-between text-xs pt-1 border-t border-surface-800">
+            <span className="text-surface-400">Subtotal NB</span>
+            <span className="tabular-nums text-white font-semibold">{formatUSD(cart.total ?? cart.subtotal)}</span>
+          </div>
+          {!cart.stockOk && cart.availability?.issues?.length > 0 && (
+            <div className="flex gap-1.5 text-[11px] text-amber-300">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>{cart.availability.issues.map((i) => i.message).join(" · ")}</span>
+            </div>
+          )}
+        </section>
       )}
 
-      <label className="flex flex-col gap-1">
-        <span className="text-[11px] text-surface-400">Forma de pago</span>
-        <select
-          value={medioDePagoId}
-          onChange={(e) => { setMedioDePagoId(e.target.value); setPreview(null); }}
-          className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
-        >
-          {payments.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}{p.pickupOnly ? " (retiro)" : ""}</option>
-          ))}
-        </select>
-      </label>
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-surface-300 uppercase tracking-wider">
+          <Truck className="w-3.5 h-3.5 text-sky-400" /> 1. Entrega
+        </div>
+        <div className="grid grid-cols-1 gap-2">
+          <label className={`flex gap-2 items-start rounded-xl border px-3 py-2.5 cursor-pointer ${delivery === "pickup" ? "border-sky-500/50 bg-sky-500/10" : "border-surface-700 bg-surface-900/40"}`}>
+            <input
+              type="radio"
+              name="nb-delivery"
+              checked={delivery === "pickup"}
+              onChange={() => { setDelivery("pickup"); setError(null); }}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-xs text-white font-medium">Retiro en sucursal</span>
+              <span className="block text-[11px] text-surface-400 mt-0.5">
+                Av. Jujuy 1039, CABA · CP C1229ABF · gratis. Efectivo Caja solo sirve acá.
+              </span>
+            </span>
+          </label>
+          <label className={`flex gap-2 items-start rounded-xl border px-3 py-2.5 cursor-pointer ${delivery === "shipping" ? "border-sky-500/50 bg-sky-500/10" : "border-surface-700 bg-surface-900/40"}`}>
+            <input
+              type="radio"
+              name="nb-delivery"
+              checked={delivery === "shipping"}
+              onChange={() => { setDelivery("shipping"); setError(null); }}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-xs text-white font-medium">Envío a domicilio</span>
+              <span className="block text-[11px] text-surface-400 mt-0.5">
+                Cotiza contra una dirección de tu cuenta NB (Andreani, moto, camioneta, etc.).
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {delivery === "shipping" && (
+          <div className="flex flex-col gap-2 pl-1">
+            {addresses.length === 0 ? (
+              <p className="text-[11px] text-amber-300">
+                No hay direcciones en tu cuenta NewBytes. Cargalas en el portal y volvé a entrar al carrito.
+              </p>
+            ) : (
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-surface-400 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> Dirección (idDirCli)
+                </span>
+                <select
+                  value={addressId}
+                  onChange={(e) => setAddressId(e.target.value)}
+                  className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
+                >
+                  {addresses.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label} — {a.addressLine}{a.postalCode ? ` (${a.postalCode})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {quoting && (
+              <p className="text-[11px] text-sky-300 flex items-center gap-1.5">
+                <NodoSpinner className="w-3 h-3" /> Cotizando envío para este CP…
+              </p>
+            )}
+
+            {!quoting && quotes.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] text-surface-400">Medio de envío</span>
+                {quotes.map((q) => (
+                  <label
+                    key={q.id}
+                    className={`flex justify-between gap-2 items-start rounded-lg border px-2.5 py-2 cursor-pointer ${medioDeEnvioId === q.id ? "border-sky-500/50 bg-sky-500/10" : "border-surface-700"}`}
+                  >
+                    <span className="flex gap-2">
+                      <input
+                        type="radio"
+                        name="nb-shipping"
+                        checked={medioDeEnvioId === q.id}
+                        onChange={() => setMedioDeEnvioId(q.id)}
+                      />
+                      <span className="text-xs text-white">
+                        {q.label}
+                        {q.plazo ? <span className="block text-[11px] text-surface-400">{q.plazo}</span> : null}
+                      </span>
+                    </span>
+                    {q.total != null && (
+                      <span className="text-xs tabular-nums text-surface-200">{formatARS(q.total)}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <label className="flex items-start gap-2 text-xs text-surface-300">
+              <input
+                type="checkbox"
+                checked={dropShipping}
+                onChange={(e) => setDropShipping(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Dropshipping (marca blanca)
+                <span className="block text-[11px] text-surface-500">NewBytes despacha directo a tu cliente.</span>
+              </span>
+            </label>
+            {dropShipping && (
+              <div className="grid grid-cols-1 gap-2">
+                <input
+                  value={dropShippingClientName}
+                  onChange={(e) => setDropShippingClientName(e.target.value)}
+                  placeholder="Nombre del cliente final (opcional)"
+                  className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
+                />
+                <input
+                  value={dropShippingClientEmail}
+                  onChange={(e) => setDropShippingClientEmail(e.target.value)}
+                  placeholder="Email del cliente final (opcional)"
+                  className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-surface-300 uppercase tracking-wider">
+          <CreditCard className="w-3.5 h-3.5 text-sky-400" /> 2. Pago
+        </div>
+        {!delivery ? (
+          <p className="text-[11px] text-surface-500">Elegí retiro o envío para ver los medios de pago que aplican.</p>
+        ) : (
+          <select
+            value={medioDePagoId}
+            onChange={(e) => setMedioDePagoId(e.target.value)}
+            className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white"
+          >
+            <option value="">Elegí un medio de pago</option>
+            {filteredPayments.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}{p.pickupOnly ? " (solo retiro)" : ""}{p.interest ? ` · interés ${p.interest}%` : ""}
+              </option>
+            ))}
+          </select>
+        )}
+      </section>
 
       <label className="flex flex-col gap-1">
         <span className="text-[11px] text-surface-400">Nota para NewBytes (opcional)</span>
@@ -179,40 +405,39 @@ export default function NewBytesDraftPanel({
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
           className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-2 text-xs text-white resize-none"
-          placeholder="Ej. pedido de cliente X, retirar el viernes"
+          placeholder="Ej. retirar el viernes / horario de entrega"
         />
       </label>
 
-      {preview && (
+      {(delivery || selectedPayment) && (
         <div className="bg-surface-900/70 border border-surface-800 rounded-xl p-3 text-xs space-y-1">
-          <p className="text-surface-300">{preview.items.length} producto(s) · {preview.paymentLabel}</p>
-          <p className="text-surface-400">Entrega: {preview.suggestedDelivery?.label ?? "Retiro en sucursal"}</p>
-          {preview.total != null && (
-            <p className="tabular-nums text-white font-semibold">Total NewBytes: {formatUSD(preview.total)}</p>
+          <p className="text-surface-300">
+            {delivery === "pickup"
+              ? "Retiro en Av. Jujuy 1039, CABA"
+              : selectedQuote
+                ? `Envío: ${selectedQuote.label}${selectedQuote.plazo ? ` · ${selectedQuote.plazo}` : ""}`
+                : "Envío: falta cotizar"}
+          </p>
+          {selectedPayment && <p className="text-surface-400">Pago: {selectedPayment.label}</p>}
+          {selectedQuote?.total != null && (
+            <p className="text-surface-400">Costo de envío: {formatARS(selectedQuote.total)}</p>
+          )}
+          {cart?.total != null && (
+            <p className="tabular-nums text-white font-semibold">Total productos NB: {formatUSD(cart.total)}</p>
           )}
         </div>
       )}
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 
-      <div className="flex gap-2">
-        <button
-          onClick={handlePreview}
-          disabled={previewing || submitting || !medioDePagoId}
-          className="flex-1 flex items-center justify-center gap-1.5 border border-surface-700 hover:border-sky-500/40 text-surface-200 rounded-lg py-2 text-xs font-medium disabled:opacity-40"
-        >
-          {previewing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-          Revisar en NewBytes
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={submitting || previewing || !medioDePagoId}
-          className="flex-1 flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg py-2 text-xs font-semibold"
-        >
-          {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-          Crear pedido
-        </button>
-      </div>
+      <button
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+        className="flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg py-2.5 text-xs font-semibold"
+      >
+        {submitting ? <NodoSpinner className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+        {delivery === "pickup" ? "Procesar retiro en NewBytes" : "Procesar envío en NewBytes"}
+      </button>
     </div>
   );
 }

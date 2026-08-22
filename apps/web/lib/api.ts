@@ -377,18 +377,52 @@ export interface NewBytesCheckoutItem {
   price: number;
   subtotal: number;
 }
+export interface NewBytesShippingQuote {
+  id: string;
+  label: string;
+  plazo?: string;
+  total?: number;
+}
+export interface NewBytesDatosBultos {
+  weightKg: number;
+  sizeCm: string;
+  amount: number;
+}
+export interface NewBytesAvailability {
+  ok: boolean;
+  issues: { code?: string; message: string }[];
+}
+export interface NewBytesCartSnapshot {
+  items: NewBytesCheckoutItem[];
+  payments: NewBytesPaymentOption[];
+  addresses: NewBytesAddress[];
+  pickup: { value: "pickup"; label: string; addressLine: string; postalCode: string };
+  subtotal: number;
+  total?: number;
+  stockOk: boolean;
+  availability: NewBytesAvailability;
+  subtotales: Record<string, unknown> | null;
+  note: string;
+}
 export interface NewBytesCheckoutPreview {
   items: NewBytesCheckoutItem[];
   payments: NewBytesPaymentOption[];
   addresses: NewBytesAddress[];
+  delivery: "pickup" | "shipping";
+  pickup: { value: "pickup"; label: string; addressLine: string; postalCode: string } | null;
   address: { id: string; label: string; addressLine: string; postalCode?: string } | null;
+  quotes: NewBytesShippingQuote[];
+  selectedQuote: NewBytesShippingQuote | null;
+  datosBultos: NewBytesDatosBultos | null;
+  shippingTotal: number | null;
   paymentOption?: string;
   paymentLabel?: string;
-  deliveries: { value: string; label: string }[];
-  suggestedDelivery?: { value: string; label: string };
+  dropShipping: boolean;
   stockOk: boolean;
+  availability: NewBytesAvailability;
   subtotal: number;
   total?: number;
+  subtotales: Record<string, unknown> | null;
   note: string;
 }
 export interface NewBytesDraftResult {
@@ -421,12 +455,32 @@ export const newBytesAccountApi = {
     api.get<{ balance: number | null; movements: NewBytesComprobante[] }>("/providers/NEW_BYTES/account-statement"),
 };
 
+export type NewBytesCheckoutItemInput = { code: string; qty: number; name?: string };
+export type NewBytesCheckoutPayload = {
+  items: NewBytesCheckoutItemInput[];
+  delivery: "pickup" | "shipping";
+  medioDePagoId?: number;
+  addressId?: string;
+  medioDeEnvioId?: number;
+  notes?: string;
+  dropShipping?: boolean;
+  dropShippingClientName?: string;
+  dropShippingClientEmail?: string;
+};
+
 export const newBytesCheckoutApi = {
   addresses: () => api.get<NewBytesAddress[]>("/providers/NEW_BYTES/checkout/addresses"),
   payments: () => api.get<NewBytesPaymentOption[]>("/providers/NEW_BYTES/checkout/payments"),
-  preview: (body: { items: { code: string; qty: number }[]; medioDePagoId: number; addressId?: string; medioDeEnvioId?: number; notes?: string }) =>
+  cart: (body: { items: NewBytesCheckoutItemInput[] }) =>
+    api.post<NewBytesCartSnapshot>("/providers/NEW_BYTES/checkout/cart", body),
+  shipping: (body: { items: NewBytesCheckoutItemInput[]; addressId: string }) =>
+    api.post<{ address: NewBytesAddress; quotes: NewBytesShippingQuote[]; datosBultos: NewBytesDatosBultos | null }>(
+      "/providers/NEW_BYTES/checkout/shipping",
+      body
+    ),
+  preview: (body: NewBytesCheckoutPayload) =>
     api.post<NewBytesCheckoutPreview>("/providers/NEW_BYTES/checkout/preview", body),
-  draft: (body: { items: { code: string; qty: number; name?: string }[]; medioDePagoId: number; addressId?: string; medioDeEnvioId?: number; notes?: string }) =>
+  draft: (body: NewBytesCheckoutPayload & { medioDePagoId: number }) =>
     api.post<NewBytesDraftResult>("/providers/NEW_BYTES/checkout/draft", body),
   drafts: () => api.get<NewBytesNodoDraft[]>("/providers/NEW_BYTES/drafts"),
 };

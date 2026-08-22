@@ -2,13 +2,17 @@ import {
   applyDescription,
   descriptionMap,
   extractItemPatch,
+  buildNbProcessBody,
   extractProcessResult,
+  filterPaymentsForDelivery,
   mapCsvProduct,
   mapJsonProduct,
   mapPaymentOption,
   nbProductUrl,
   normalizeComprobante,
   normalizeOrderRow,
+  parseNbAvailability,
+  parseShippingQuote,
   pickBalanceFromClient,
 } from "./new-bytes.mapper";
 import { extractNbToken, parseNbCredentials, unwrapNbList } from "./new-bytes-client";
@@ -158,6 +162,72 @@ describe("new-bytes.mapper", () => {
     expect(patch.brand).toBe("Logitech");
     expect(patch.longDescription).toBe("Sensor 16K");
     expect(patch.ean).toBeUndefined();
+  });
+
+  it("el process de retiro solo manda note y medioDePagoId", () => {
+    expect(
+      buildNbProcessBody({
+        delivery: "pickup",
+        medioDePagoId: 4,
+        notes: "comentario",
+        addressId: "19337",
+        medioDeEnvioId: 3030,
+      })
+    ).toEqual({ note: "comentario", medioDePagoId: 4 });
+  });
+
+  it("el process de envío manda cotización, dirección, bultos y dropshipping", () => {
+    expect(
+      buildNbProcessBody({
+        delivery: "shipping",
+        medioDePagoId: 3,
+        notes: "",
+        postalCode: "1407",
+        medioDeEnvioId: 3030,
+        addressId: "19337",
+        datosBultos: { weightKg: 0.6, sizeCm: "12.16x12.16x12.16", amount: 1 },
+        dropShipping: true,
+        dropShippingClientName: "Moe Szyslak",
+        dropShippingClientEmail: "MoeSzyslak@gmail.com",
+      })
+    ).toEqual({
+      note: "",
+      medioDePagoId: 3,
+      codigoPostalFavorito: "1407",
+      mediodeEnvioId: 3030,
+      idDirCli: "19337",
+      datosBultos: { weightKg: 0.6, sizeCm: "12.16x12.16x12.16", amount: 1 },
+      dropShipping: true,
+      dpPayload: { clientName: "Moe Szyslak", clientEmail: "MoeSzyslak@gmail.com" },
+    });
+  });
+
+  it("Efectivo Caja no aparece entre los pagos de un envío", () => {
+    const payments = [
+      { value: "3", label: "Depósito en Banco", interest: 0, pickupOnly: false },
+      { value: "5", label: "Efectivo Caja", interest: 0, pickupOnly: true },
+    ];
+    expect(filterPaymentsForDelivery(payments, "shipping").map((p) => p.value)).toEqual(["3"]);
+    expect(filterPaymentsForDelivery(payments, "pickup").map((p) => p.value)).toEqual(["3", "5"]);
+  });
+
+  it("parsea la cotización de calcularEnvioPara como en la doc oficial", () => {
+    const parsed = parseShippingQuote({
+      cotizacion: [
+        { id: 4065, description: "A domicilio por Andreani", plazoEntrega: "entre mañana y el miércoles 17", total: 5114.4 },
+        { id: 3030, description: "Moto (Capital Federal)", plazoEntrega: "hoy", total: 3500 },
+      ],
+      datosBulto: { weightKg: 0.6, sizeCm: "12.16x12.16x12.16", amount: 1 },
+    });
+    expect(parsed.quotes).toHaveLength(2);
+    expect(parsed.quotes[0]).toMatchObject({ id: "4065", label: "A domicilio por Andreani", total: 5114.4 });
+    expect(parsed.datosBultos).toEqual({ weightKg: 0.6, sizeCm: "12.16x12.16x12.16", amount: 1 });
+  });
+
+  it("marca faltantes de availability si NewBytes dice available:false", () => {
+    const parsed = parseNbAvailability([{ productId: 108613, available: false, message: "Sin stock" }]);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.issues[0]).toMatchObject({ code: "108613", message: "Sin stock" });
   });
 });
 
