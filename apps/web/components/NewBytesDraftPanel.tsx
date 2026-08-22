@@ -22,6 +22,7 @@ import {
 } from "@/components/checkout/CheckoutForm";
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
+import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 
 type Delivery = "pickup" | "shipping";
 
@@ -64,7 +65,10 @@ export default function NewBytesDraftPanel({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<NewBytesDraftResult | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [background, setBackground] = useState(true);
   const submitLock = useRef(false);
+  const leftInBackground = useRef(false);
+  const jobs = usePendingOrders();
 
   useEffect(() => {
     let cancelled = false;
@@ -159,6 +163,7 @@ export default function NewBytesDraftPanel({
       delivery: delivery as Delivery,
       medioDePagoId: Number(medioDePagoId),
       notes: notes.trim() || undefined,
+      background: true,
       ...(delivery === "shipping"
         ? {
             addressId,
@@ -175,8 +180,27 @@ export default function NewBytesDraftPanel({
     if (!canSubmit || submitLock.current) return;
     setError(null);
     setResult(null);
+    leftInBackground.current = false;
     setConfirmOpen(true);
   }
+
+  useEffect(() => {
+    if (!result?.id || result.status !== "PENDING") return;
+    const job = jobs.find((j) => j.id === result.id);
+    if (!job || job.status === "PENDING") return;
+    if (job.status === "CREATED") {
+      setResult((prev) => prev ? {
+        ...prev,
+        status: "CREATED",
+        orderNumber: job.orderNumber ?? prev.orderNumber,
+        webOrderNumber: job.webOrderNumber ?? prev.webOrderNumber,
+        message: job.message,
+      } : prev);
+    } else {
+      setError(job.errorMessage || "No se pudo procesar el carrito en NewBytes");
+      setResult(null);
+    }
+  }, [jobs, result?.id, result?.status]);
 
   async function handleSubmit() {
     if (submitLock.current) return;
@@ -185,7 +209,17 @@ export default function NewBytesDraftPanel({
     setSubmitting(true);
     try {
       const res = await newBytesCheckoutApi.draft(checkoutPayload());
+      trackPendingOrder({
+        id: res.data.id,
+        provider: "NEW_BYTES",
+        status: res.data.status === "CREATED" ? "CREATED" : res.data.status === "FAILED" ? "FAILED" : "PENDING",
+        message: res.data.message,
+        webOrderNumber: res.data.webOrderNumber,
+        orderNumber: res.data.orderNumber,
+        startedAt: Date.now(),
+      });
       setResult(res.data);
+      if (background || leftInBackground.current) setConfirmOpen(false);
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo procesar el carrito en NewBytes"));
     } finally {
@@ -194,9 +228,14 @@ export default function NewBytesDraftPanel({
     }
   }
 
+  function leaveInBackground() {
+    leftInBackground.current = true;
+    setConfirmOpen(false);
+  }
+
   function finishOrder() {
     setConfirmOpen(false);
-    if (result) onCreated(result.message);
+    if (result?.status === "CREATED") onCreated(result.message);
   }
 
   if (loadingMeta) return <CheckoutLoading label="Cargando checkout NewBytes…" />;
@@ -363,8 +402,11 @@ export default function NewBytesDraftPanel({
         confirmLabel={delivery === "pickup" ? "Procesar retiro" : "Procesar envío"}
         loading={submitting}
         error={error}
+        background={background}
+        onBackgroundChange={setBackground}
         result={result ? {
           message: result.message,
+          status: result.status,
           refs: [
             result.webOrderNumber && `Ref ${result.webOrderNumber}`,
             result.orderNumber && `Orden ${result.orderNumber}`,
@@ -374,6 +416,7 @@ export default function NewBytesDraftPanel({
         onCancel={() => { if (!submitting) setConfirmOpen(false); }}
         onConfirm={handleSubmit}
         onDone={finishOrder}
+        onLeaveInBackground={leaveInBackground}
       />
     </div>
   );

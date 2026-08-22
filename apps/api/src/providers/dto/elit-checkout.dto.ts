@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ArrayMinSize, IsArray, IsInt, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
+import { ArrayMinSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
 
 export class ElitDraftItemDto {
   @IsString()
@@ -47,4 +47,8 @@ export class ElitCheckoutDraftDto extends ElitCheckoutPreviewDto {
   @Type(() => Number)
   @IsInt()
   warehouse!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  background?: boolean;
 }

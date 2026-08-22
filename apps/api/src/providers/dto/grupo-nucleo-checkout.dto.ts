@@ -93,4 +93,8 @@ export class GrupoNucleoCheckoutDraftDto extends GrupoNucleoCheckoutPreviewDto {
   @ValidateNested()
   @Type(() => GrupoNucleoCustomerDto)
   customer?: GrupoNucleoCustomerDto;
+
+  @IsOptional()
+  @IsBoolean()
+  background?: boolean;
 }

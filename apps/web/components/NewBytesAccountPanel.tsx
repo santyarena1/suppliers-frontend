@@ -207,8 +207,10 @@ function DraftsTable({ drafts, onOpen }: { drafts: NewBytesNodoDraft[]; onOpen: 
             <tr key={d.id}>
               <td className="px-2 py-2">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : "bg-red-500/10 text-red-400"
-                }`}>{d.status === "CREATED" ? "Creado" : d.status}</span>
+                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400"
+                    : d.status === "PENDING" ? "bg-amber-500/10 text-amber-400"
+                    : "bg-red-500/10 text-red-400"
+                }`}>{d.status === "CREATED" ? "Creado" : d.status === "PENDING" ? "Procesando" : d.status}</span>
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
               <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>

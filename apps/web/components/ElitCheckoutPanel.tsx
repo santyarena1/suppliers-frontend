@@ -18,6 +18,7 @@ import {
 } from "@/components/checkout/CheckoutForm";
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
+import { useBackgroundCheckout } from "@/lib/pendingOrders";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -47,9 +48,11 @@ export default function ElitCheckoutPanel({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ElitDraftResult | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const submitLock = useRef(false);
+  const {
+    background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
+    openConfirm, acceptResult, leaveInBackground, finishOrder,
+  } = useBackgroundCheckout<ElitDraftResult>("ELIT", "No se pudo crear el pedido en Elit");
 
   useEffect(() => {
     let cancelled = false;
@@ -95,8 +98,8 @@ export default function ElitCheckoutPanel({
     setError(null);
     setSubmitting(true);
     try {
-      const res = await elitCheckoutApi.draft(payload());
-      setResult(res.data);
+      const res = await elitCheckoutApi.draft({ ...payload(), background: true });
+      acceptResult(res.data);
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Elit"));
     } finally {
@@ -133,7 +136,7 @@ export default function ElitCheckoutPanel({
             ))}
           </CheckoutSelect>
         </CheckoutField>
-        <CheckoutSubmit onClick={() => { setError(null); setResult(null); setConfirmOpen(true); }} disabled={!canSubmit}>
+        <CheckoutSubmit onClick={() => { setError(null); openConfirm(); }} disabled={!canSubmit}>
           Confirmar Elit
         </CheckoutSubmit>
       </div>
@@ -164,7 +167,7 @@ export default function ElitCheckoutPanel({
           {" · "}Total {formatUSD(preview.total)}
         </p>
       )}
-      {error && !confirmOpen && <CheckoutError>{error}</CheckoutError>}
+      {(error || jobError) && !confirmOpen && <CheckoutError>{error || jobError}</CheckoutError>}
       <p className="text-[11px] text-surface-600">
         <Link href={providerOrdersHref("ELIT")} className="hover:text-surface-300 underline underline-offset-2">
           Ver historial de Elit
@@ -184,14 +187,18 @@ export default function ElitCheckoutPanel({
         ]}
         confirmLabel="Procesar en Elit"
         loading={submitting}
-        error={error}
+        error={error || jobError}
+        background={background}
+        onBackgroundChange={setBackground}
         result={result ? {
           message: result.message,
+          status: result.status,
           refs: [result.orderNumber && `Pedido ${result.orderNumber}`, result.total != null && `Total ${formatUSD(Number(result.total))}`].filter(Boolean) as string[],
         } : null}
         onCancel={() => { if (!submitting) setConfirmOpen(false); }}
         onConfirm={handleSubmit}
-        onDone={() => { setConfirmOpen(false); if (result) onCreated(result.message); }}
+        onDone={() => finishOrder(onCreated)}
+        onLeaveInBackground={leaveInBackground}
       />
     </div>
   );

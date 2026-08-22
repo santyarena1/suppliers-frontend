@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
@@ -11,6 +11,7 @@ import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
 import ElitCheckoutPanel from "@/components/ElitCheckoutPanel";
 import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
+import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
 import { useCart, CartItem } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { proxyImg, formatUSD } from "@/lib/format";
@@ -28,6 +29,7 @@ import {
   FileText, MessageCircle, Check, Copy, ChevronDown, History,
 } from "lucide-react";
 import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
+import type { PendingOrderProvider } from "@/lib/pendingOrders";
 
 type Totals = {
   subtotalUSD: number;
@@ -80,6 +82,13 @@ export default function CartPage() {
     const t = setTimeout(() => setNotice(null), 6000);
     return () => clearTimeout(t);
   }, [notice]);
+
+  const onBackgroundOrderCreated = useCallback((provider: PendingOrderProvider, message: string) => {
+    setNotice(message);
+    if (provider === "INVID") setInvidPreview(null);
+    setActiveTab("all");
+    clearProvider(provider);
+  }, [clearProvider]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -401,6 +410,10 @@ export default function CartPage() {
               {notice}
             </div>
           )}
+
+          <div className="flex-shrink-0 px-5 lg:px-8 pt-3 empty:hidden">
+            <PendingOrdersBanner onCreated={onBackgroundOrderCreated} />
+          </div>
 
           {items.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">

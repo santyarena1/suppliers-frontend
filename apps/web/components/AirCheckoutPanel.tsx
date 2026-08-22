@@ -14,6 +14,7 @@ import {
 } from "@/components/checkout/CheckoutForm";
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
+import { useBackgroundCheckout } from "@/lib/pendingOrders";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -49,9 +50,11 @@ export default function AirCheckoutPanel({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AirDraftResult | null>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const submitLock = useRef(false);
+  const {
+    background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
+    openConfirm, acceptResult, leaveInBackground, finishOrder,
+  } = useBackgroundCheckout<AirDraftResult>("AIR", "No se pudo enviar el pedido en Air");
 
   useEffect(() => {
     let cancelled = false;
@@ -96,8 +99,9 @@ export default function AirCheckoutPanel({
         entrega,
         transporte: needsTransporte ? transporte || undefined : undefined,
         notes: notes.trim() || undefined,
+        background: true,
       });
-      setResult(res.data);
+      acceptResult(res.data);
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo enviar el pedido en Air"));
     } finally {
@@ -134,7 +138,7 @@ export default function AirCheckoutPanel({
             {vendedores.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
           </CheckoutSelect>
         </CheckoutField>
-        <CheckoutSubmit onClick={() => { setError(null); setResult(null); setConfirmOpen(true); }} disabled={!canSubmit}>
+        <CheckoutSubmit onClick={() => { setError(null); openConfirm(); }} disabled={!canSubmit}>
           Enviar a Air
         </CheckoutSubmit>
       </div>
@@ -164,7 +168,7 @@ export default function AirCheckoutPanel({
       <p className="text-[11px] text-surface-500">
         Air no cobra desde Nodo: el canasto queda para que el vendedor lo cargue.
       </p>
-      {error && !confirmOpen && <CheckoutError>{error}</CheckoutError>}
+      {(error || jobError) && !confirmOpen && <CheckoutError>{error || jobError}</CheckoutError>}
       <p className="text-[11px] text-surface-600">
         <Link href={providerOrdersHref("AIR")} className="hover:text-surface-300 underline underline-offset-2">
           Ver historial de Air
@@ -184,11 +188,14 @@ export default function AirCheckoutPanel({
         ]}
         confirmLabel="Enviar a Air"
         loading={submitting}
-        error={error}
-        result={result ? { message: result.message, refs: [result.orderNumber].filter(Boolean) as string[] } : null}
+        error={error || jobError}
+        background={background}
+        onBackgroundChange={setBackground}
+        result={result ? { message: result.message, status: result.status, refs: [result.orderNumber].filter(Boolean) as string[] } : null}
         onCancel={() => { if (!submitting) setConfirmOpen(false); }}
         onConfirm={handleSubmit}
-        onDone={() => { setConfirmOpen(false); if (result) onCreated(result.message); }}
+        onDone={() => finishOrder(onCreated)}
+        onLeaveInBackground={leaveInBackground}
       />
     </div>
   );

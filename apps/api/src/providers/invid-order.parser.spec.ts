@@ -49,10 +49,28 @@ describe("invid-order.parser", () => {
     expect(result.orderNumber).toBe("12033");
   });
 
+  it("toma el Nro. de PEDIDO WEB asignado de mensaje.php", () => {
+    const html = `
+      <div class="alert alert-success"><h2>Gracias por tu pedido!</h2>
+      <b> El pedido fue grabado y enviado a INVID para su procesamiento.</b>
+      <b>Nro. de PEDIDO WEB asignado: 207071</b></div>`;
+    const result = parseSubmitResult(html);
+    expect(result.appearsSuccessful).toBe(true);
+    expect(result.webOrderNumber).toBe("207071");
+    expect(result.orderNumber).toBeUndefined();
+  });
+
   it("no marca éxito si Invid devolvió de nuevo el carrito", () => {
     const result = parseSubmitResult(CART_HTML);
     expect(result.appearsSuccessful).toBe(false);
     expect(result.errorMessage).toMatch(/sin confirmar/i);
+  });
+
+  it("no toma números del carrito aunque mencione pedido web", () => {
+    const html = `${CART_HTML}<p>Nro. de PEDIDO WEB asignado: 207070</p>`;
+    const result = parseSubmitResult(html);
+    expect(result.appearsSuccessful).toBe(false);
+    expect(result.webOrderNumber).toBeUndefined();
   });
 
   it("toma los hidden del form_envio y deja entrega_valida en 0 como el portal", () => {

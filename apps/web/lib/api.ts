@@ -368,7 +368,7 @@ export interface InvidDraftResult {
   paymentLabel: string | null;
   deliveryLabel: string | null;
   items: InvidCheckoutItem[];
-  total: number;
+  total: number | null;
   message: string;
 }
 export interface InvidNodoDraft {
@@ -403,8 +403,12 @@ export const invidCheckoutApi = {
     deliveryOption?: string;
     expresoId?: string;
     notes?: string;
-  }) => api.post<InvidDraftResult>("/providers/INVID/checkout/draft", body),
+    background?: boolean;
+  }) => api.post<InvidDraftResult>("/providers/INVID/checkout/draft", body, {
+    timeout: body.background ? 30_000 : 180_000,
+  }),
   drafts: () => api.get<InvidNodoDraft[]>("/providers/INVID/drafts"),
+  draftById: (id: string) => api.get<InvidNodoDraft>(`/providers/INVID/drafts/${id}`),
 };
 
 // --- NewBytes: pedidos, comprobantes y checkout (API oficial api.nb.com.ar) ---
@@ -557,6 +561,7 @@ export type NewBytesCheckoutPayload = {
   dropShipping?: boolean;
   dropShippingClientName?: string;
   dropShippingClientEmail?: string;
+  background?: boolean;
 };
 
 export const newBytesCheckoutApi = {
@@ -572,8 +577,11 @@ export const newBytesCheckoutApi = {
   preview: (body: NewBytesCheckoutPayload) =>
     api.post<NewBytesCheckoutPreview>("/providers/NEW_BYTES/checkout/preview", body),
   draft: (body: NewBytesCheckoutPayload & { medioDePagoId: number }) =>
-    api.post<NewBytesDraftResult>("/providers/NEW_BYTES/checkout/draft", body),
+    api.post<NewBytesDraftResult>("/providers/NEW_BYTES/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
   drafts: () => api.get<NewBytesNodoDraft[]>("/providers/NEW_BYTES/drafts"),
+  draftById: (id: string) => api.get<NewBytesNodoDraft>(`/providers/NEW_BYTES/drafts/${id}`),
 };
 
 export type NodoProviderDraft = NewBytesNodoDraft;
@@ -648,8 +656,12 @@ export const grupoNucleoCheckoutApi = {
     notes?: string;
     customerSale?: boolean;
     customer?: GnCustomer;
-  }) => api.post<GnDraftResult>("/providers/GRUPO_NUCLEO/checkout/draft", body),
+    background?: boolean;
+  }) => api.post<GnDraftResult>("/providers/GRUPO_NUCLEO/checkout/draft", body, {
+    timeout: body.background ? 30_000 : 180_000,
+  }),
   drafts: () => api.get<NodoProviderDraft[]>("/providers/GRUPO_NUCLEO/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/GRUPO_NUCLEO/drafts/${id}`),
 };
 
 export interface AirCheckoutPreview {
@@ -722,8 +734,12 @@ export const airCheckoutApi = {
     entrega: string;
     transporte?: string;
     notes?: string;
-  }) => api.post<AirDraftResult>("/providers/AIR/checkout/draft", body),
+    background?: boolean;
+  }) => api.post<AirDraftResult>("/providers/AIR/checkout/draft", body, {
+    timeout: body.background ? 30_000 : 180_000,
+  }),
   drafts: () => api.get<NodoProviderDraft[]>("/providers/AIR/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/AIR/drafts/${id}`),
 };
 
 export interface ElitCheckoutPreview {
@@ -861,9 +877,12 @@ export type ElitCheckoutPayload = {
 export const elitCheckoutApi = {
   preview: (body: ElitCheckoutPayload) =>
     api.post<ElitCheckoutPreview>("/providers/ELIT/checkout/preview", body),
-  draft: (body: ElitCheckoutPayload & { warehouse: number }) =>
-    api.post<ElitDraftResult>("/providers/ELIT/checkout/draft", body),
+  draft: (body: ElitCheckoutPayload & { warehouse: number; background?: boolean }) =>
+    api.post<ElitDraftResult>("/providers/ELIT/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
   drafts: () => api.get<NodoProviderDraft[]>("/providers/ELIT/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/ELIT/drafts/${id}`),
 };
 
 // --- Admin / Users ---

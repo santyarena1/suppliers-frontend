@@ -80,4 +80,8 @@ export class NewBytesCheckoutDraftDto extends NewBytesCheckoutPreviewDto {
   @Type(() => Number)
   @IsInt()
   medioDePagoId!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  background?: boolean;
 }

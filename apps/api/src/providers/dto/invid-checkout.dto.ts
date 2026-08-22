@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
+import { ArrayMinSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Min, MinLength, ValidateNested } from "class-validator";
 
 export class InvidDraftItemDto {
   @IsString()
@@ -51,4 +51,8 @@ export class InvidCheckoutDraftDto extends InvidCheckoutPreviewDto {
   @IsOptional()
   @IsString()
   payerEmail?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  background?: boolean;
 }

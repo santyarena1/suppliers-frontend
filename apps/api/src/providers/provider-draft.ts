@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import type { Prisma, ProviderOrder } from "@prisma/client";
 
 function num(value: Prisma.Decimal | null | undefined): number | null {
@@ -33,4 +34,34 @@ export async function listProviderDrafts(
   findMany: () => Promise<ProviderOrder[]>
 ) {
   return (await findMany()).map(mapProviderDraft);
+}
+
+export function pendingCheckoutResponse(id: string, items: unknown, message: string) {
+  return {
+    id,
+    status: "PENDING" as const,
+    orderNumber: null,
+    webOrderNumber: null,
+    paymentLabel: null,
+    deliveryLabel: null,
+    items,
+    total: null,
+    message,
+  };
+}
+
+export function runBackgroundDraft(
+  logger: Logger,
+  label: string,
+  id: string,
+  fulfill: () => Promise<unknown>,
+  markFailed: (message: string) => Promise<unknown>
+) {
+  setImmediate(() => {
+    fulfill().catch(async (err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error(`${label} ${id}: ${message}`);
+      await markFailed(message.slice(0, 500)).catch((updateErr) => logger.error(String(updateErr)));
+    });
+  });
 }

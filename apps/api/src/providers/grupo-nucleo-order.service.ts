@@ -1,8 +1,8 @@
-import { BadGatewayException, BadRequestException, Injectable } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { GrupoNucleoApiClient } from "./grupo-nucleo-client";
 import { asNumber, asRecord, asString, snapshotJson, unwrapList } from "./json-value";
-import { mapProviderDraft } from "./provider-draft";
+import { mapProviderDraft, pendingCheckoutResponse, runBackgroundDraft } from "./provider-draft";
 import { GN_DOC_TYPES, GN_PROVINCE_CODES } from "./dto/grupo-nucleo-checkout.dto";
 
 export const GN_PROVINCES: { value: number; label: string }[] = [
@@ -61,6 +61,7 @@ export interface GnDraftInput {
   notes?: string;
   customerSale?: boolean;
   customer?: GnCustomer;
+  background?: boolean;
 }
 
 export interface GnTax {
@@ -171,6 +172,8 @@ function arsFromUsd(usd: number, fx: number): number {
  */
 @Injectable()
 export class GrupoNucleoOrderService {
+  private readonly logger = new Logger(GrupoNucleoOrderService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   checkoutOptions() {
@@ -189,6 +192,13 @@ export class GrupoNucleoOrderService {
       take: 50,
     });
     return rows.map(mapProviderDraft);
+  }
+
+  async getDraft(userId: string, id: string) {
+    const row = await this.prisma.providerOrder.findFirst({
+      where: { id, userId, provider: "GRUPO_NUCLEO" },
+    });
+    return row ? mapProviderDraft(row) : null;
   }
 
   /** La API de GN no expone pedidos históricos ni cta cte — devolvemos copias de Nodo. */
@@ -264,6 +274,46 @@ export class GrupoNucleoOrderService {
   }
 
   async submitDraft(userId: string, credentials: Record<string, string>, input: GnDraftInput) {
+    if (input.customerSale) this.assertCustomer(input.customer);
+    if (input.background) {
+      const pending = await this.prisma.providerOrder.create({
+        data: {
+          userId,
+          provider: "GRUPO_NUCLEO",
+          status: "PENDING",
+          paymentOption: input.customerSale ? "customer" : "self",
+          paymentLabel: input.customerSale ? "Factura al cliente final" : "A mi nombre",
+          deliveryOption: "warehouse",
+          notes: input.notes,
+          items: input.items,
+          addressSnapshot: { customerSale: Boolean(input.customerSale), customer: input.customer ?? null },
+        },
+      });
+      runBackgroundDraft(
+        this.logger,
+        "GrupoNucleo draft background",
+        pending.id,
+        () => this.fulfillDraft(userId, credentials, input, pending.id),
+        (message) => this.prisma.providerOrder.update({
+          where: { id: pending.id },
+          data: { status: "FAILED", errorMessage: message },
+        })
+      );
+      return pendingCheckoutResponse(
+        pending.id,
+        input.items,
+        "El pedido se está creando en Grupo Núcleo. Podés seguir usando Nodo; el resultado aparece en el historial."
+      );
+    }
+    return this.fulfillDraft(userId, credentials, input);
+  }
+
+  private async fulfillDraft(
+    userId: string,
+    credentials: Record<string, string>,
+    input: GnDraftInput,
+    existingId?: string
+  ) {
     const preview = await this.preview(credentials, input);
     const api = await GrupoNucleoApiClient.login(credentials);
     const customerSale = Boolean(input.customerSale);
@@ -316,6 +366,7 @@ export class GrupoNucleoOrderService {
         customerSale,
         raw: null,
         errorMessage: message,
+        existingId,
       });
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en Grupo Núcleo");
     }
@@ -333,6 +384,7 @@ export class GrupoNucleoOrderService {
       errorMessage: created
         ? (parsed.faltantes.length > 0 ? `Faltantes: ${JSON.stringify(parsed.faltantes).slice(0, 300)}` : null)
         : parsed.errorDesc || "Grupo Núcleo no creó el pedido",
+      existingId,
     });
 
     if (!created) {
@@ -378,6 +430,7 @@ export class GrupoNucleoOrderService {
       customerSale: boolean;
       raw: unknown;
       errorMessage: string | null;
+      existingId?: string;
     }
   ) {
     const orderNumbers = asRecord(opts.raw) && Array.isArray((opts.raw as { pedidos?: { pedido?: string }[] }).pedidos)
@@ -386,28 +439,37 @@ export class GrupoNucleoOrderService {
     const warehouses = asRecord(opts.raw) && Array.isArray((opts.raw as { pedidos?: { centroDistribucion?: string }[] }).pedidos)
       ? ((opts.raw as { pedidos: { centroDistribucion?: string }[] }).pedidos.map((p) => p.centroDistribucion).filter(Boolean) as string[])
       : [];
+    const data = {
+      status: opts.status,
+      invidOrderNumber: orderNumbers[0] ?? null,
+      invidWebOrderNumber: orderNumbers.join(", ") || null,
+      paymentOption: opts.customerSale ? "customer" : "self",
+      paymentLabel: opts.customerSale ? "Factura al cliente final" : "A mi nombre",
+      deliveryOption: "warehouse",
+      deliveryLabel: warehouses.join(" · ") || "Centro de distribución GN",
+      notes: opts.input.notes,
+      subtotal: opts.preview.subtotalUsd,
+      total: opts.preview.subtotalUsd,
+      errorMessage: opts.errorMessage,
+      items: snapshotJson(opts.preview.items),
+      addressSnapshot: snapshotJson({
+        customerSale: opts.customerSale,
+        customer: opts.input.customer ?? null,
+        usdExchange: opts.preview.usdExchange,
+        raw: opts.raw,
+      }),
+    };
+    if (opts.existingId) {
+      return this.prisma.providerOrder.update({
+        where: { id: opts.existingId },
+        data,
+      });
+    }
     return this.prisma.providerOrder.create({
       data: {
         userId,
         provider: "GRUPO_NUCLEO",
-        status: opts.status,
-        invidOrderNumber: orderNumbers[0] ?? null,
-        invidWebOrderNumber: orderNumbers.join(", ") || null,
-        paymentOption: opts.customerSale ? "customer" : "self",
-        paymentLabel: opts.customerSale ? "Factura al cliente final" : "A mi nombre",
-        deliveryOption: "warehouse",
-        deliveryLabel: warehouses.join(" · ") || "Centro de distribución GN",
-        notes: opts.input.notes,
-        subtotal: opts.preview.subtotalUsd,
-        total: opts.preview.subtotalUsd,
-        errorMessage: opts.errorMessage,
-        items: snapshotJson(opts.preview.items),
-        addressSnapshot: snapshotJson({
-          customerSale: opts.customerSale,
-          customer: opts.input.customer ?? null,
-          usdExchange: opts.preview.usdExchange,
-          raw: opts.raw,
-        }),
+        ...data,
       },
     });
   }

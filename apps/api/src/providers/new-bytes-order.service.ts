@@ -41,6 +41,7 @@ export interface NewBytesDraftInput extends NewBytesCartItems {
   dropShipping?: boolean;
   dropShippingClientName?: string;
   dropShippingClientEmail?: string;
+  background?: boolean;
 }
 
 interface NbAddress {
@@ -164,6 +165,12 @@ export class NewBytesOrderService {
       take: 50,
     });
     return rows.map(mapProviderDraft);
+  }
+
+  async getDraft(userId: string, id: string) {
+    return this.prisma.providerOrder.findFirst({
+      where: { id, userId, provider: "NEW_BYTES" },
+    });
   }
 
   /** POST /v1/carrito/new — crea y activa el carrito. Si falla, vacía e intenta de nuevo. */
@@ -348,6 +355,50 @@ export class NewBytesOrderService {
   }
 
   async submitDraft(userId: string, credentials: Record<string, string>, input: NewBytesDraftInput) {
+    if (input.background) {
+      const pending = await this.prisma.providerOrder.create({
+        data: {
+          userId,
+          provider: "NEW_BYTES",
+          status: "PENDING",
+          paymentOption: String(input.medioDePagoId ?? ""),
+          deliveryOption: input.delivery,
+          notes: input.notes,
+          items: input.items,
+          addressSnapshot: input.addressId ? { id: input.addressId } : { delivery: input.delivery },
+        },
+      });
+      setImmediate(() => {
+        this.fulfillDraft(userId, credentials, input, pending.id).catch(async (err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          this.logger.error(`NewBytes draft background ${pending.id}: ${message}`);
+          await this.prisma.providerOrder.update({
+            where: { id: pending.id },
+            data: { status: "FAILED", errorMessage: message.slice(0, 500) },
+          }).catch((updateErr) => this.logger.error(String(updateErr)));
+        });
+      });
+      return {
+        id: pending.id,
+        status: "PENDING" as const,
+        orderNumber: null,
+        webOrderNumber: null,
+        paymentLabel: null,
+        deliveryLabel: null,
+        items: input.items,
+        total: null,
+        message: "El pedido se está creando en NewBytes. Podés seguir usando Nodo; el resultado aparece en el historial.",
+      };
+    }
+    return this.fulfillDraft(userId, credentials, input);
+  }
+
+  private async fulfillDraft(
+    userId: string,
+    credentials: Record<string, string>,
+    input: NewBytesDraftInput,
+    existingId?: string
+  ) {
     if (input.delivery !== "pickup" && input.delivery !== "shipping") {
       throw new BadRequestException("Elegí retiro en sucursal o envío a domicilio");
     }
@@ -408,68 +459,70 @@ export class NewBytesOrderService {
       processResult = extractProcessResult(body);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const record = await this.prisma.providerOrder.create({
-        data: {
-          userId,
-          provider: "NEW_BYTES",
-          status: "FAILED",
-          invidOrderNumber: null,
-          invidWebOrderNumber: null,
-          paymentOption: String(input.medioDePagoId),
-          paymentLabel: payment?.label,
-          deliveryOption: input.delivery === "pickup" ? "pickup" : String(input.medioDeEnvioId ?? ""),
-          deliveryLabel,
-          notes: input.notes,
-          total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
-          errorMessage: message.slice(0, 500),
-          items: prepared.items,
-          addressSnapshot: snapshotJson(
-            input.delivery === "pickup"
-              ? { pickup: true, ...NB_PICKUP_BRANCH }
-              : address
-                ? { id: address.id, ...address.raw, quote: selectedQuote ?? null, datosBultos: datosBultos ?? null }
-                : { shipping: true }
-          ),
-        },
-      });
-      throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en NewBytes");
-    }
-
-    const created = Boolean(processResult.orderId || processResult.branch);
-    const record = await this.prisma.providerOrder.create({
-      data: {
-        userId,
-        provider: "NEW_BYTES",
-        status: created ? "CREATED" : "FAILED",
-        invidOrderNumber: processResult.orderId ?? null,
-        invidWebOrderNumber:
-          processResult.branch && processResult.orderId
-            ? `${processResult.branch}-${processResult.orderId}`
-            : processResult.branch ?? null,
+      const failed = {
+        status: "FAILED",
+        invidOrderNumber: null as string | null,
+        invidWebOrderNumber: null as string | null,
         paymentOption: String(input.medioDePagoId),
         paymentLabel: payment?.label,
         deliveryOption: input.delivery === "pickup" ? "pickup" : String(input.medioDeEnvioId ?? ""),
         deliveryLabel,
         notes: input.notes,
-        subtotal: prepared.subtotales.subtotalUsd,
         total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
-        errorMessage: created ? null : "NewBytes no devolvió número de pedido",
+        errorMessage: message.slice(0, 500),
         items: prepared.items,
         addressSnapshot: snapshotJson(
           input.delivery === "pickup"
             ? { pickup: true, ...NB_PICKUP_BRANCH }
             : address
-              ? {
-                  id: address.id,
-                  ...address.raw,
-                  quote: selectedQuote ?? null,
-                  datosBultos: datosBultos ?? null,
-                  dropShipping: input.dropShipping ?? false,
-                }
+              ? { id: address.id, ...address.raw, quote: selectedQuote ?? null, datosBultos: datosBultos ?? null }
               : { shipping: true }
         ),
-      },
-    });
+      };
+      const record = existingId
+        ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
+        : await this.prisma.providerOrder.create({
+            data: { userId, provider: "NEW_BYTES", ...failed },
+          });
+      throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en NewBytes");
+    }
+
+    const created = Boolean(processResult.orderId || processResult.branch);
+    const saved = {
+      status: created ? "CREATED" : "FAILED",
+      invidOrderNumber: processResult.orderId ?? null,
+      invidWebOrderNumber:
+        processResult.branch && processResult.orderId
+          ? `${processResult.branch}-${processResult.orderId}`
+          : processResult.branch ?? null,
+      paymentOption: String(input.medioDePagoId),
+      paymentLabel: payment?.label,
+      deliveryOption: input.delivery === "pickup" ? "pickup" : String(input.medioDeEnvioId ?? ""),
+      deliveryLabel,
+      notes: input.notes,
+      subtotal: prepared.subtotales.subtotalUsd,
+      total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
+      errorMessage: created ? null : "NewBytes no devolvió número de pedido",
+      items: prepared.items,
+      addressSnapshot: snapshotJson(
+        input.delivery === "pickup"
+          ? { pickup: true, ...NB_PICKUP_BRANCH }
+          : address
+            ? {
+                id: address.id,
+                ...address.raw,
+                quote: selectedQuote ?? null,
+                datosBultos: datosBultos ?? null,
+                dropShipping: input.dropShipping ?? false,
+              }
+            : { shipping: true }
+      ),
+    };
+    const record = existingId
+      ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })
+      : await this.prisma.providerOrder.create({
+          data: { userId, provider: "NEW_BYTES", ...saved },
+        });
 
     if (!created) {
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en NewBytes");

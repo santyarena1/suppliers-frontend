@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException, Injectable } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AIR_DELIVERIES,
@@ -7,7 +7,7 @@ import {
   type AirCart,
 } from "./air-portal-client";
 import { snapshotJson } from "./json-value";
-import { mapProviderDraft } from "./provider-draft";
+import { mapProviderDraft, pendingCheckoutResponse, runBackgroundDraft } from "./provider-draft";
 
 export interface AirCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -20,6 +20,7 @@ export interface AirDraftInput extends AirCartItems {
   entrega: string;
   transporte?: string;
   notes?: string;
+  background?: boolean;
 }
 
 function publicCart(cart: AirCart) {
@@ -62,6 +63,8 @@ function deliveryLabel(value: string, transporte?: string) {
  */
 @Injectable()
 export class AirOrderService {
+  private readonly logger = new Logger(AirOrderService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async checkoutOptions(credentials: Record<string, string>) {
@@ -76,6 +79,13 @@ export class AirOrderService {
       take: 50,
     });
     return rows.map(mapProviderDraft);
+  }
+
+  async getDraft(userId: string, id: string) {
+    const row = await this.prisma.providerOrder.findFirst({
+      where: { id, userId, provider: "AIR" },
+    });
+    return row ? mapProviderDraft(row) : null;
   }
 
   private async syncCanasto(api: AirPortalClient, items: AirCartItems["items"]): Promise<AirCart> {
@@ -121,6 +131,44 @@ export class AirOrderService {
         "Drop Shipping de Air pide una dirección cargada en el portal. Usá retiro o transporte, o cargá el destino en air-intra.com."
       );
     }
+    if (input.background) {
+      const pending = await this.prisma.providerOrder.create({
+        data: {
+          userId,
+          provider: "AIR",
+          status: "PENDING",
+          paymentOption: input.pago,
+          deliveryOption: input.entrega,
+          notes: input.notes,
+          items: input.items,
+          addressSnapshot: { sucursal: input.sucursal, vendedor: input.vendedor, transporte: input.transporte ?? null },
+        },
+      });
+      runBackgroundDraft(
+        this.logger,
+        "Air draft background",
+        pending.id,
+        () => this.fulfillDraft(userId, credentials, input, pending.id),
+        (message) => this.prisma.providerOrder.update({
+          where: { id: pending.id },
+          data: { status: "FAILED", errorMessage: message },
+        })
+      );
+      return pendingCheckoutResponse(
+        pending.id,
+        input.items,
+        "El pedido se está enviando en Air. Podés seguir usando Nodo; el resultado aparece en el historial."
+      );
+    }
+    return this.fulfillDraft(userId, credentials, input);
+  }
+
+  private async fulfillDraft(
+    userId: string,
+    credentials: Record<string, string>,
+    input: AirDraftInput,
+    existingId?: string
+  ) {
     const api = await AirPortalClient.login(credentials);
     let cart = await this.syncCanasto(api, input.items);
     await api.setPrefer("sucursal", input.sucursal, cart.nrocompro);
@@ -136,51 +184,53 @@ export class AirOrderService {
       sendRaw = await api.sendPedido(cart.nrocompro);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const record = await this.prisma.providerOrder.create({
-        data: {
-          userId,
-          provider: "AIR",
-          status: "FAILED",
-          invidOrderNumber: cart.nrocompro,
-          paymentOption: input.pago,
-          paymentLabel: paymentLabel(input.pago),
-          deliveryOption: input.entrega,
-          deliveryLabel: deliveryLabel(input.entrega, input.transporte),
-          notes: input.notes,
-          subtotal: cart.subtotal,
-          total: cart.total,
-          errorMessage: message.slice(0, 500),
-          items: snapshotJson(publicCart(cart).items),
-          addressSnapshot: snapshotJson({ sucursal: input.sucursal, vendedor: input.vendedor, raw: null }),
-        },
-      });
-      throw new BadGatewayException(record.errorMessage || "No se pudo enviar el pedido en Air");
-    }
-
-    const record = await this.prisma.providerOrder.create({
-      data: {
-        userId,
-        provider: "AIR",
-        status: "CREATED",
+      const failed = {
+        status: "FAILED",
         invidOrderNumber: cart.nrocompro,
-        invidWebOrderNumber: cart.nrocompro,
         paymentOption: input.pago,
         paymentLabel: paymentLabel(input.pago),
         deliveryOption: input.entrega,
         deliveryLabel: deliveryLabel(input.entrega, input.transporte),
         notes: input.notes,
         subtotal: cart.subtotal,
-        impuestos: cart.iva21 + cart.iva105 + cart.ii,
         total: cart.total,
+        errorMessage: message.slice(0, 500),
         items: snapshotJson(publicCart(cart).items),
-        addressSnapshot: snapshotJson({
-          sucursal: input.sucursal,
-          vendedor: input.vendedor,
-          transporte: input.transporte ?? cart.transporte,
-          send: sendRaw,
-        }),
-      },
-    });
+        addressSnapshot: snapshotJson({ sucursal: input.sucursal, vendedor: input.vendedor, raw: null }),
+      };
+      const record = existingId
+        ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
+        : await this.prisma.providerOrder.create({
+            data: { userId, provider: "AIR", ...failed },
+          });
+      throw new BadGatewayException(record.errorMessage || "No se pudo enviar el pedido en Air");
+    }
+
+    const saved = {
+      status: "CREATED",
+      invidOrderNumber: cart.nrocompro,
+      invidWebOrderNumber: cart.nrocompro,
+      paymentOption: input.pago,
+      paymentLabel: paymentLabel(input.pago),
+      deliveryOption: input.entrega,
+      deliveryLabel: deliveryLabel(input.entrega, input.transporte),
+      notes: input.notes,
+      subtotal: cart.subtotal,
+      impuestos: cart.iva21 + cart.iva105 + cart.ii,
+      total: cart.total,
+      items: snapshotJson(publicCart(cart).items),
+      addressSnapshot: snapshotJson({
+        sucursal: input.sucursal,
+        vendedor: input.vendedor,
+        transporte: input.transporte ?? cart.transporte,
+        send: sendRaw,
+      }),
+    };
+    const record = existingId
+      ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })
+      : await this.prisma.providerOrder.create({
+          data: { userId, provider: "AIR", ...saved },
+        });
 
     return {
       id: record.id,

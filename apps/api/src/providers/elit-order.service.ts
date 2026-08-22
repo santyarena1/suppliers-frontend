@@ -1,6 +1,6 @@
-import { BadGatewayException, BadRequestException, Injectable } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { mapProviderDraft } from "./provider-draft";
+import { mapProviderDraft, pendingCheckoutResponse, runBackgroundDraft } from "./provider-draft";
 import {
   ElitWebClient,
   elitData,
@@ -14,6 +14,7 @@ export interface ElitCartItems {
   shippingMethod?: number;
   saleCondition?: number;
   shippingAddress?: string;
+  background?: boolean;
 }
 
 function publicSummary(summary: Record<string, unknown>, requested: ElitCartItems["items"]) {
@@ -85,6 +86,8 @@ function publicSummary(summary: Record<string, unknown>, requested: ElitCartItem
  */
 @Injectable()
 export class ElitOrderService {
+  private readonly logger = new Logger(ElitOrderService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listDrafts(userId: string) {
@@ -94,6 +97,13 @@ export class ElitOrderService {
       take: 50,
     });
     return rows.map(mapProviderDraft);
+  }
+
+  async getDraft(userId: string, id: string) {
+    const row = await this.prisma.providerOrder.findFirst({
+      where: { id, userId, provider: "ELIT" },
+    });
+    return row ? mapProviderDraft(row) : null;
   }
 
   private async syncCart(api: ElitWebClient, items: ElitCartItems["items"]) {
@@ -149,6 +159,43 @@ export class ElitOrderService {
 
   async submitDraft(userId: string, credentials: Record<string, string>, input: ElitCartItems) {
     if (input.warehouse == null) throw new BadRequestException("Elegí el depósito de Elit");
+    if (input.background) {
+      const pending = await this.prisma.providerOrder.create({
+        data: {
+          userId,
+          provider: "ELIT",
+          status: "PENDING",
+          paymentOption: String(input.saleCondition ?? ""),
+          deliveryOption: String(input.shippingMethod ?? ""),
+          items: input.items,
+          addressSnapshot: { warehouse: input.warehouse, shippingAddress: input.shippingAddress ?? null },
+        },
+      });
+      runBackgroundDraft(
+        this.logger,
+        "Elit draft background",
+        pending.id,
+        () => this.fulfillDraft(userId, credentials, input, pending.id),
+        (message) => this.prisma.providerOrder.update({
+          where: { id: pending.id },
+          data: { status: "FAILED", errorMessage: message },
+        })
+      );
+      return pendingCheckoutResponse(
+        pending.id,
+        input.items,
+        "El pedido se está creando en Elit. Podés seguir usando Nodo; el resultado aparece en el historial."
+      );
+    }
+    return this.fulfillDraft(userId, credentials, input);
+  }
+
+  private async fulfillDraft(
+    userId: string,
+    credentials: Record<string, string>,
+    input: ElitCartItems,
+    existingId?: string
+  ) {
     const preview = await this.preview(credentials, input);
     const api = await ElitWebClient.login(credentials);
     await this.syncCart(api, input.items);
@@ -160,46 +207,48 @@ export class ElitOrderService {
       raw = await api.postJson("cart/process", { warehouse: input.warehouse });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const record = await this.prisma.providerOrder.create({
-        data: {
-          userId,
-          provider: "ELIT",
-          status: "FAILED",
-          paymentOption: String(preview.saleCondition ?? ""),
-          paymentLabel: preview.saleConditions.find((p) => p.value === String(preview.saleCondition))?.label,
-          deliveryOption: String(preview.shippingMethod ?? ""),
-          deliveryLabel: preview.shippingLabel,
-          total: preview.total,
-          errorMessage: message.slice(0, 500),
-          items: snapshotJson(preview.items),
-          addressSnapshot: snapshotJson({ warehouse: input.warehouse, shippingAddress: preview.shippingAddress }),
-        },
-      });
+      const failed = {
+        status: "FAILED",
+        paymentOption: String(preview.saleCondition ?? ""),
+        paymentLabel: preview.saleConditions.find((p) => p.value === String(preview.saleCondition))?.label,
+        deliveryOption: String(preview.shippingMethod ?? ""),
+        deliveryLabel: preview.shippingLabel,
+        total: preview.total,
+        errorMessage: message.slice(0, 500),
+        items: snapshotJson(preview.items),
+        addressSnapshot: snapshotJson({ warehouse: input.warehouse, shippingAddress: preview.shippingAddress }),
+      };
+      const record = existingId
+        ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
+        : await this.prisma.providerOrder.create({
+            data: { userId, provider: "ELIT", ...failed },
+          });
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en Elit");
     }
 
     const rows = unwrapList(elitData(raw)).length ? unwrapList(elitData(raw)) : unwrapList(raw);
     const first = asRecord(rows[0]) ?? asRecord(elitData(raw)) ?? asRecord(raw) ?? {};
     const orderNumber = asString(first.number) || asString(first.internalNumber);
-    const record = await this.prisma.providerOrder.create({
-      data: {
-        userId,
-        provider: "ELIT",
-        status: orderNumber ? "CREATED" : "FAILED",
-        invidOrderNumber: orderNumber ?? null,
-        invidWebOrderNumber: asString(first.reference) || asString(first.invoiceNumber) || orderNumber || null,
-        paymentOption: String(preview.saleCondition ?? ""),
-        paymentLabel: preview.saleConditions.find((p) => p.value === String(preview.saleCondition))?.label,
-        deliveryOption: String(preview.shippingMethod ?? ""),
-        deliveryLabel: preview.shippingLabel,
-        subtotal: preview.subtotal,
-        impuestos: preview.vat + preview.internalTax + preview.perceptions,
-        total: preview.total,
-        errorMessage: orderNumber ? null : "Elit no devolvió número de pedido",
-        items: snapshotJson(preview.items),
-        addressSnapshot: snapshotJson({ warehouse: input.warehouse, shippingAddress: preview.shippingAddress, raw: first }),
-      },
-    });
+    const saved = {
+      status: orderNumber ? "CREATED" : "FAILED",
+      invidOrderNumber: orderNumber ?? null,
+      invidWebOrderNumber: asString(first.reference) || asString(first.invoiceNumber) || orderNumber || null,
+      paymentOption: String(preview.saleCondition ?? ""),
+      paymentLabel: preview.saleConditions.find((p) => p.value === String(preview.saleCondition))?.label,
+      deliveryOption: String(preview.shippingMethod ?? ""),
+      deliveryLabel: preview.shippingLabel,
+      subtotal: preview.subtotal,
+      impuestos: preview.vat + preview.internalTax + preview.perceptions,
+      total: preview.total,
+      errorMessage: orderNumber ? null : "Elit no devolvió número de pedido",
+      items: snapshotJson(preview.items),
+      addressSnapshot: snapshotJson({ warehouse: input.warehouse, shippingAddress: preview.shippingAddress, raw: first }),
+    };
+    const record = existingId
+      ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })
+      : await this.prisma.providerOrder.create({
+          data: { userId, provider: "ELIT", ...saved },
+        });
     if (!orderNumber) {
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en Elit");
     }
