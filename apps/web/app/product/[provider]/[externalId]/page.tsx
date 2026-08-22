@@ -199,7 +199,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         </div>
                       </DetailRow>
                       <DetailRow label="Precio base (USD)">
-                        <span className="text-sm font-bold text-white tabular-nums">{formatUSD(basePriceUSD)}</span>
+                        <span className="text-sm font-bold text-white tabular-nums">{formatUSD(pricing?.unitNet ?? 0)}</span>
                       </DetailRow>
                       <DetailRow label="Cotización aplicada">
                         {currentRate ? (
