@@ -11,9 +11,11 @@ export class CreateUserDto {
   @IsEmail()
   email!: string;
 
+  /** Si se omite, la plataforma genera una y la devuelve una única vez. */
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  password!: string;
+  password?: string;
 
   @IsIn(ROLES)
   role!: UserRole;

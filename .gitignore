@@ -38,6 +38,9 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# credenciales de entornos anotadas al vuelo
+*-admin-password.txt
+
 # vercel
 .vercel
 

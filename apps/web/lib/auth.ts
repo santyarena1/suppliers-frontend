@@ -45,7 +45,48 @@ export function saveSession(token: string, user: SessionUser) {
 export function clearSession() {
   localStorage.removeItem("token");
   localStorage.removeItem("user");
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_USER_KEY);
   deleteCookie(COOKIE);
+}
+
+// ---------- Suplantación ----------
+//
+// Mientras el superadmin navega como otro usuario, su propia sesión queda
+// guardada aparte para poder devolvérsela sin obligarlo a entrar de nuevo.
+
+const ADMIN_TOKEN_KEY = "impersonation_admin_token";
+const ADMIN_USER_KEY = "impersonation_admin_user";
+
+export function startImpersonation(token: string, user: SessionUser) {
+  const currentToken = localStorage.getItem("token");
+  const currentUser = localStorage.getItem("user");
+  if (currentToken && currentUser) {
+    localStorage.setItem(ADMIN_TOKEN_KEY, currentToken);
+    localStorage.setItem(ADMIN_USER_KEY, currentUser);
+  }
+  saveSession(token, user);
+}
+
+/** El administrador detrás de la sesión actual, o `null` si no hay suplantación. */
+export function getImpersonator(): SessionUser | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(ADMIN_USER_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+/** Devuelve la sesión original. `false` si ya no queda nada que restaurar. */
+export function stopImpersonation(): boolean {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  const user = localStorage.getItem(ADMIN_USER_KEY);
+  if (!token || !user) return false;
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_USER_KEY);
+  localStorage.setItem("token", token);
+  localStorage.setItem("user", user);
+  writeCookie(COOKIE, "1", ONE_DAY);
+  return true;
 }
 
 export function isAdmin(): boolean {

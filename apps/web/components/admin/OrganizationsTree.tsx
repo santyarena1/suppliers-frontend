@@ -20,6 +20,7 @@ import {
   TenantUserRelations,
   tenantsApi,
 } from "@/lib/api";
+import EnterAsButton from "./EnterAsButton";
 import {
   Building2,
   ChevronRight,
@@ -1083,13 +1084,21 @@ function UserRelationsPanel({
           <span className="w-7 h-7 rounded-md bg-surface-800 flex items-center justify-center">
             <UserRound className="w-3.5 h-3.5 text-surface-300" />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold text-white truncate">{member?.username ?? "Persona"}</h2>
             <p className="text-[11px] text-surface-500 truncate">
               {member?.email}
               {member ? ` · ${TENANT_ROLE_LABELS[member.tenantRole]} en ${tenant.name}` : ""}
             </p>
           </div>
+          {member && (
+            <EnterAsButton
+              userId={member.userId}
+              role={member.platformRole}
+              onError={(message) => showToast(message, false)}
+              className="shrink-0 px-2.5 py-1.5"
+            />
+          )}
         </div>
         {member?.managedBrands && member.managedBrands.length > 0 && (
           <p className="text-[11px] text-surface-400 mt-3">

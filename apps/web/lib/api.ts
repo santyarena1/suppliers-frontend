@@ -1,4 +1,5 @@
 import axios from "axios";
+import { stopImpersonation } from "./auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -32,6 +33,13 @@ api.interceptors.response.use(
     // queda viva mientras el token del cliente ya no sirve, arma un rebote
     // infinito entre las dos rutas.
     if (typeof window !== "undefined" && error?.response?.status === 401 && window.location.pathname !== "/login") {
+      // Si el que venció es un token de suplantación, el administrador sigue
+      // teniendo su propia sesión guardada: se lo devuelve a su cuenta en vez
+      // de echarlo de la plataforma.
+      if (stopImpersonation()) {
+        window.location.href = "/admin?impersonacion=vencida";
+        return Promise.reject(error);
+      }
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       document.cookie = "tgs_auth=; Path=/; Max-Age=0; SameSite=Lax";
@@ -1021,21 +1029,38 @@ export interface ModulePermission {
   allowed: boolean;
 }
 
+/** Sesión de otro usuario emitida para el superadmin. */
+export interface ImpersonationSession {
+  token: string;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    role: UserRole;
+    active: boolean;
+    brandId?: string;
+  };
+}
+
 export const adminApi = {
   listUsers: () => api.get<AdminUser[]>("/admin/users"),
+  // Omitir `password` hace que la plataforma genere una y la devuelva en
+  // `generatedPassword`. Es la única vez que puede leerse.
   createUser: (data: {
     username: string;
     email: string;
-    password: string;
+    password?: string;
     role: UserRole;
     brandId?: string;
     active?: boolean;
     endDate?: string;
-  }) => api.post<AdminUser>("/admin/users", data),
+  }) => api.post<AdminUser & { generatedPassword?: string }>("/admin/users", data),
   updateUser: (userId: string, data: { username?: string; email?: string; brandId?: string | null }) =>
     api.put<{ id: string; username: string; email: string; role: UserRole; brandId: string | null }>(`/admin/users/${userId}`, data),
-  resetPassword: (userId: string, password: string) =>
-    api.put<{ id: string }>(`/admin/users/${userId}/password`, { password }),
+  resetPassword: (userId: string, password?: string) =>
+    api.put<{ id: string; generatedPassword?: string }>(`/admin/users/${userId}/password`, { password }),
+  impersonate: (userId: string) =>
+    api.post<ImpersonationSession>(`/admin/users/${userId}/impersonate`, {}),
   updateRole: (userId: string, role: UserRole) =>
     api.put<{ id: string; role: UserRole }>(`/admin/users/${userId}/role`, { role }),
   updateActiveStatus: (userId: string, active: boolean) =>

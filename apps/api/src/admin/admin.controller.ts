@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { ALL_PROVIDERS, type JwtPayload, type Provider } from "@nodo/shared";
+import { AuthService } from "../auth/auth.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -31,7 +32,8 @@ function assertProvider(value: string): Provider {
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
-    private readonly usersService: UsersService
+    private readonly usersService: UsersService,
+    private readonly authService: AuthService
   ) {}
 
   // Listar usuarios ya lo expone UsersController en GET /admin/users (se
@@ -54,6 +56,12 @@ export class AdminController {
   @Put("users/:id/password")
   resetPassword(@Param("id") id: string, @Body() dto: ResetPasswordDto) {
     return this.adminService.resetPassword(id, dto.password);
+  }
+
+  /** Devuelve una sesión del usuario indicado para ver la plataforma como él. */
+  @Post("users/:id/impersonate")
+  impersonate(@Param("id") id: string, @CurrentUser() me: JwtPayload) {
+    return this.authService.impersonate(id, me);
   }
 
   @Put("users/:id/active-status")

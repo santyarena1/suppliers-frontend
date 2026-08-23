@@ -13,6 +13,8 @@ import {
   UserRole,
 } from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import EnterAsButton from "./EnterAsButton";
+import GeneratedPassword from "./GeneratedPassword";
 import {
   Building2,
   Boxes,
@@ -371,6 +373,7 @@ function UserDetail({
   const [brandId, setBrandId] = useState(user.brandId ?? "");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+  const [generated, setGenerated] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [perms, setPerms] = useState<ModulePermission[]>([]);
@@ -444,10 +447,16 @@ function UserDetail({
       showToast("Las contraseñas no coinciden", false);
       return;
     }
+    await applyNewPassword(password);
+  }
+
+  /** Sin argumento, la plataforma genera la contraseña y la devuelve una sola vez. */
+  async function applyNewPassword(value?: string) {
     setResetting(true);
     try {
-      await adminApi.resetPassword(user.id, password);
+      const { data } = await adminApi.resetPassword(user.id, value);
       showToast("Contraseña de Nodo reseteada");
+      setGenerated(data.generatedPassword ?? null);
       setPassword("");
       setPassword2("");
     } catch (err) {
@@ -553,6 +562,12 @@ function UserDetail({
           >
             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar datos"}
           </button>
+          <EnterAsButton
+            userId={user.id}
+            role={user.role}
+            onError={(message) => showToast(message, false)}
+            className="px-3 py-2"
+          />
           <button
             type="button"
             onClick={remove}
@@ -588,13 +603,25 @@ function UserDetail({
             placeholder="Repetir contraseña"
             className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500"
           />
-          <button
-            type="submit"
-            disabled={resetting}
-            className="flex items-center justify-center gap-2 bg-surface-800 hover:bg-surface-700 disabled:opacity-40 text-white text-xs font-semibold rounded-lg py-2 transition-all"
-          >
-            {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Resetear contraseña"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={resetting}
+              className="flex-1 flex items-center justify-center gap-2 bg-surface-800 hover:bg-surface-700 disabled:opacity-40 text-white text-xs font-semibold rounded-lg py-2 transition-all"
+            >
+              {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Resetear contraseña"}
+            </button>
+            <button
+              type="button"
+              onClick={() => applyNewPassword()}
+              disabled={resetting}
+              title="Generar una contraseña y mostrarla una sola vez"
+              className="px-3 rounded-lg border border-surface-700 text-surface-300 hover:border-brand-500/40 hover:text-white disabled:opacity-40 text-xs font-semibold transition-all"
+            >
+              Generar
+            </button>
+          </div>
+          {generated && <GeneratedPassword password={generated} onDismiss={() => setGenerated(null)} />}
         </form>
 
         <div className="border border-surface-800 rounded-xl p-3 flex flex-col gap-3">
@@ -682,27 +709,55 @@ function CreateUserModal({
     endDate: "",
   });
   const [saving, setSaving] = useState(false);
+  const [created, setCreated] = useState<{ username: string; generatedPassword?: string } | null>(null);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      await adminApi.createUser({
+      const { data } = await adminApi.createUser({
         username: form.username,
         email: form.email,
-        password: form.password,
+        // Vacío significa que la genere la plataforma.
+        password: form.password || undefined,
         role: form.role,
         brandId: form.brandId || undefined,
         active: form.active,
         endDate: form.endDate || undefined,
       });
       showToast("Usuario creado");
-      onCreated();
+      // Con contraseña generada el modal se queda abierto: es la única
+      // oportunidad de copiarla antes de que desaparezca.
+      if (data.generatedPassword) {
+        setCreated({ username: data.username, generatedPassword: data.generatedPassword });
+      } else {
+        onCreated();
+      }
     } catch (err) {
       showToast(errMsg(err, "Error al crear el usuario"), false);
     } finally {
       setSaving(false);
     }
+  }
+
+  if (created?.generatedPassword) {
+    return (
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm flex flex-col gap-4">
+          <h3 className="text-sm font-semibold text-white">
+            Contraseña de <span className="text-brand-400">{created.username}</span>
+          </h3>
+          <GeneratedPassword password={created.generatedPassword} onDismiss={onCreated} />
+          <button
+            type="button"
+            onClick={onCreated}
+            className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
+          >
+            Listo
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -715,7 +770,7 @@ function CreateUserModal({
         <form onSubmit={handleCreate} className="flex flex-col gap-3">
           <input required placeholder="Usuario" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
           <input required type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
-          <input required type="password" minLength={8} placeholder="Contraseña Nodo (mín. 8)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
+          <input type="password" minLength={8} placeholder="Contraseña (vacío = generar una)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500" />
           <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
             <option value="ROLE_USER">Usuario</option>
             <option value="ROLE_ADMIN">Administrador</option>

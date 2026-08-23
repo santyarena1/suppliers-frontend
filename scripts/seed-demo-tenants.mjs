@@ -38,12 +38,12 @@ async function call(method, path, body) {
 /** Las organizaciones del catálogo con las que arranca el sistema. */
 const ORGANIZATIONS = [
   {
-    // El comercio real de pruebas: `testuser1` ya existe y tiene credenciales
-    // cargadas de varios proveedores, así que se lo adopta en vez de recrearlo.
+    // El comercio de pruebas de siempre. En producción `testuser1` ya existe y
+    // tiene credenciales cargadas, así que se lo adopta; en un entorno vacío se crea.
     name: "Comercio de Pruebas",
     type: "RETAILER",
     contactEmail: "pruebas@nodo.test",
-    members: [{ username: "testuser1", role: "OWNER", title: "Encargado de compras", existing: true }],
+    members: [{ username: "testuser1", role: "OWNER", title: "Encargado de compras" }],
   },
   {
     name: "Tecno Store Palermo",
@@ -148,12 +148,13 @@ async function main() {
         console.log(`  = ${member.username}`);
         continue;
       }
+      // Si la persona ya tiene cuenta en la plataforma se la suma a la organización;
+      // si no, se crea junto con la membresía.
+      const account = existingUsers.get(member.username);
       try {
-        if (member.existing) {
-          const user = existingUsers.get(member.username);
-          if (!user) throw new Error("el usuario no existe en la plataforma");
+        if (account) {
           await call("POST", `/admin/tenants/${tenant.id}/members`, {
-            userId: user.id,
+            userId: account.id,
             role: member.role,
             title: member.title,
           });

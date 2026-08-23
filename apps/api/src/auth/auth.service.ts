@@ -1,10 +1,22 @@
-import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
 import type { JwtPayload } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
+
+/**
+ * Una sesión suplantada es una herramienta de diagnóstico, no una sesión de
+ * trabajo: dura poco para que un token olvidado en un equipo deje de servir solo.
+ */
+const IMPERSONATION_EXPIRES_IN = "1h";
 
 @Injectable()
 export class AuthService {
@@ -53,5 +65,63 @@ export class AuthService {
 
     const token = await this.jwt.signAsync(payload);
     return { token };
+  }
+
+  /**
+   * Emite una sesión de `targetUserId` a nombre de un administrador, para poder
+   * ver la plataforma exactamente como la ve esa persona.
+   *
+   * El token resultante lleva marcado quién lo pidió, así ninguna acción hecha
+   * durante la suplantación aparece como si la hubiera hecho el usuario real.
+   */
+  async impersonate(targetUserId: string, admin: JwtPayload) {
+    if (targetUserId === admin.userId) {
+      throw new BadRequestException("Ya estás usando tu propia cuenta");
+    }
+    if (admin.impersonatedBy) {
+      throw new BadRequestException("Volvé a tu cuenta antes de entrar como otro usuario");
+    }
+
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target) throw new NotFoundException("Usuario no encontrado");
+    // Que un administrador pueda volverse otro administrador borraría la
+    // diferencia entre ambos en la auditoría.
+    if (target.role === "ROLE_ADMIN") {
+      throw new BadRequestException("No se puede entrar como otro administrador");
+    }
+
+    const payload: JwtPayload = {
+      sub: target.username,
+      userId: target.id,
+      role: target.role,
+      email: target.email,
+      ...(target.brandId ? { brandId: target.brandId } : {}),
+      impersonatedBy: admin.userId,
+      impersonatedByUsername: admin.sub,
+    };
+
+    const token = await this.jwt.signAsync(payload, { expiresIn: IMPERSONATION_EXPIRES_IN });
+
+    await this.prisma.auditLogEntry.create({
+      data: {
+        entityType: "User",
+        entityId: target.id,
+        action: "IMPERSONATE",
+        performedById: admin.userId,
+        changes: { targetUsername: target.username, targetRole: target.role },
+      },
+    });
+
+    return {
+      token,
+      user: {
+        id: target.id,
+        username: target.username,
+        email: target.email,
+        role: target.role,
+        active: target.active,
+        ...(target.brandId ? { brandId: target.brandId } : {}),
+      },
+    };
   }
 }

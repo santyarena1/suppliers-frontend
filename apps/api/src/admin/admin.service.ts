@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { ALL_PROVIDERS, DEFAULT_MODULES_BY_ROLE, MODULE_KEYS, type ModuleKey, type Provider, type UserRole } from "@nodo/shared";
+import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
@@ -26,7 +27,8 @@ export class AdminService {
       );
     }
     if (dto.brandId) await this.assertBrandExists(dto.brandId);
-    const passwordHash = await argon2.hash(dto.password);
+    const password = dto.password ?? generatePassword();
+    const passwordHash = await argon2.hash(password);
     const user = await this.prisma.user.create({
       data: {
         username: dto.username,
@@ -38,7 +40,14 @@ export class AdminService {
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
       },
     });
-    return { id: user.id, username: user.username, email: user.email, role: user.role };
+    return {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      // Solo cuando la generó la plataforma: es la única vez que puede verse.
+      ...(dto.password ? {} : { generatedPassword: password }),
+    };
   }
 
   async updateUser(userId: string, dto: UpdateUserDto) {
@@ -64,11 +73,16 @@ export class AdminService {
     return user;
   }
 
-  async resetPassword(userId: string, password: string) {
+  async resetPassword(userId: string, password?: string) {
     await this.assertUserExists(userId);
-    const passwordHash = await argon2.hash(password);
+    const nextPassword = password ?? generatePassword();
+    const passwordHash = await argon2.hash(nextPassword);
     await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
-    return { id: userId };
+    return {
+      id: userId,
+      // Solo cuando la generó la plataforma: es la única vez que puede verse.
+      ...(password ? {} : { generatedPassword: nextPassword }),
+    };
   }
 
   async updateRole(userId: string, dto: UpdateRoleDto) {
