@@ -35,7 +35,7 @@ export default function CategoryStrip({
   onSelect,
 }: {
   categories: CategoryCount[];
-  onSelect: (category: string) => void;
+  onSelect: (categoryId: string, label: string) => void;
 }) {
   if (categories.length === 0) return null;
 
@@ -52,9 +52,9 @@ export default function CategoryStrip({
             const Icon = iconFor(c.category);
             return (
               <button
-                key={c.category}
+                key={c.id}
                 type="button"
-                onClick={() => onSelect(c.category)}
+                onClick={() => onSelect(c.id, c.category)}
                 className="flex flex-col items-center gap-2 min-w-[72px] sm:min-w-[80px] group"
               >
                 <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center group-hover:border-brand-500 group-hover:bg-brand-600/20 transition-all">

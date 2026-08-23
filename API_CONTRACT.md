@@ -67,6 +67,24 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`.
 
+### [FEATURE] Búsqueda con filtros (proveedor, marca, categoría)
+- **Método**: GET
+- **Ruta**: `/search?q=&providers=&brandIds=&categoryIds=`
+- **Auth**: Bearer usuario con organización
+- **Body / Params**: `q` busca en nombre, marca, categoría, SKU, part number y EAN · `providers` coma-separado · `brandIds` y `categoryIds` IDs canónicos
+- **Respuesta esperada**: `ProductDTO[]` con `canonicalBrand` y `canonicalCategory` cuando existen
+- **Estado**: IMPLEMENTADO
+- **Notas**: También `GET /catalog/brands`, `GET /catalog/by-brand?brandId=`, `GET /catalog/by-category?categoryId=` (antes `category` texto crudo).
+
+### [FEATURE] Unificación de marcas del catálogo (superadmin)
+- **Método**: GET | POST | PUT
+- **Ruta**: `/admin/catalog/brands`, `/admin/catalog/brands/duplicates`, `/admin/catalog/brands/merge`, `/admin/catalog/brands/aliases`, `/admin/catalog/reindex`
+- **Auth**: Bearer ROLE_ADMIN
+- **Body / Params**: merge `{ sourceIds, targetId }` · alias `{ provider, rawBrand, canonicalBrandId }`
+- **Respuesta esperada**: lista de marcas canónicas con conteos y alias · reindex `{ products: number }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Las marcas canónicas son globales (distintas del módulo B2B `BrandAccount`). En cada sync se crean alias automáticos; el admin unifica duplicados.
+
 ## Pendiente (futuro)
 
 

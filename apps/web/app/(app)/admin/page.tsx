@@ -9,15 +9,16 @@ import {
 import { isAdmin, getUser } from "@/lib/auth";
 import UsersManagement from "@/components/admin/UsersManagement";
 import OrganizationsTree from "@/components/admin/OrganizationsTree";
+import CatalogBrandsTab from "@/components/admin/CatalogBrandsTab";
 import {
   Users, ShieldCheck, Boxes, Building2, Image as ImageIcon,
-  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette, Network,
+  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette, Network, Tags,
 } from "lucide-react";
 import {
   BANNER_SLOTS, BRAND_PRESET_LABELS, BRAND_PRESETS, applyBrandPreset, type BrandPreset, type BannerSlot,
 } from "@/lib/brand-presets";
 
-type Tab = "organizations" | "users" | "permissions" | "providers" | "brands" | "banners" | "appearance";
+type Tab = "organizations" | "users" | "permissions" | "providers" | "brands" | "catalogBrands" | "banners" | "appearance";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "organizations", label: "Organizaciones", icon: <Network className="w-3.5 h-3.5" /> },
@@ -25,6 +26,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "permissions", label: "Permisos", icon: <ShieldCheck className="w-3.5 h-3.5" /> },
   { key: "providers", label: "Proveedores", icon: <Boxes className="w-3.5 h-3.5" /> },
   { key: "brands", label: "Marcas", icon: <Building2 className="w-3.5 h-3.5" /> },
+  { key: "catalogBrands", label: "Marcas catálogo", icon: <Tags className="w-3.5 h-3.5" /> },
   { key: "banners", label: "Banners", icon: <ImageIcon className="w-3.5 h-3.5" /> },
   { key: "appearance", label: "Apariencia", icon: <Palette className="w-3.5 h-3.5" /> },
 ];
@@ -91,6 +93,7 @@ export default function AdminPage() {
             {tab === "permissions" && <PermissionsTab showToast={showToast} />}
             {tab === "providers" && <ProvidersTab showToast={showToast} />}
             {tab === "brands" && <BrandsTab showToast={showToast} />}
+            {tab === "catalogBrands" && <CatalogBrandsTab showToast={showToast} />}
             {tab === "banners" && <BannersTab showToast={showToast} />}
             {tab === "appearance" && <AppearanceTab showToast={showToast} />}
           </div>

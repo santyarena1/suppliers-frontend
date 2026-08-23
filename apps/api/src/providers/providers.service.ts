@@ -6,7 +6,7 @@ import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct } from "./types";
-import { UpdateProviderConfigDto } from "./dto/update-config.dto";
+import { CatalogNormalizeService } from "../catalog/catalog-normalize.service";
 
 /** Lo que pertenece a la oferta de una organización y no a la ficha del producto. */
 const OFFER_FIELDS = new Set([
@@ -27,7 +27,8 @@ export class ProvidersService {
     private readonly prisma: PrismaService,
     private readonly credentials: CredentialsService,
     private readonly registry: ProviderRegistry,
-    private readonly visibility: TenantVisibilityService
+    private readonly visibility: TenantVisibilityService,
+    private readonly catalogNormalize: CatalogNormalizeService
   ) {}
 
   async getConfig(tenantId: string, provider: Provider) {
@@ -302,8 +303,21 @@ export class ProvidersService {
     // upserts satura el pool de conexiones de Postgres (33 conexiones) y
     // todo el sync falla con timeout. Se procesa de a tandas chicas.
     const CHUNK_SIZE = 25;
+    const brandMap = new Map<string, string | null>();
+    const categoryMap = new Map<string, string | null>();
+
     for (let i = 0; i < items.length; i += CHUNK_SIZE) {
       const chunk = items.slice(i, i + CHUNK_SIZE);
+      for (const item of chunk) {
+        const rawBrand = item.brand?.trim();
+        if (rawBrand && !brandMap.has(rawBrand)) {
+          brandMap.set(rawBrand, await this.catalogNormalize.resolveBrand(provider, rawBrand));
+        }
+        const rawCategory = item.category?.trim();
+        if (rawCategory && !categoryMap.has(rawCategory)) {
+          categoryMap.set(rawCategory, await this.catalogNormalize.resolveCategory(provider, rawCategory));
+        }
+      }
       await Promise.all(
         chunk.map(async (item) => {
           const ficha = {
@@ -314,6 +328,8 @@ export class ProvidersService {
             brand: item.brand,
             category: item.category,
             subcategory: item.subcategory,
+            canonicalBrandId: item.brand?.trim() ? brandMap.get(item.brand.trim()) ?? null : null,
+            canonicalCategoryId: item.category?.trim() ? categoryMap.get(item.category.trim()) ?? null : null,
             description: item.description,
             longDescription: item.longDescription,
             imageUrl: item.imageUrl,
@@ -415,15 +431,34 @@ export class ProvidersService {
   async search(tenantId: string, provider: Provider, name: string) {
     if (!(await this.isProviderVisible(provider))) return [];
     if (!(await this.visibility.isLinked(tenantId, provider))) return [];
+    const q = name.trim();
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
           tenantId,
           provider,
           active: true,
-          product: { name: { contains: name, mode: "insensitive" } },
+          product: q
+            ? {
+                OR: [
+                  { name: { contains: q, mode: "insensitive" } },
+                  { brand: { contains: q, mode: "insensitive" } },
+                  { category: { contains: q, mode: "insensitive" } },
+                  { sku: { contains: q, mode: "insensitive" } },
+                  { partNumber: { contains: q, mode: "insensitive" } },
+                  { ean: { contains: q, mode: "insensitive" } },
+                ],
+              }
+            : undefined,
         },
-        include: { product: true },
+        include: {
+          product: {
+            include: {
+              canonicalBrand: { select: { id: true, displayName: true } },
+              canonicalCategory: { select: { id: true, displayName: true } },
+            },
+          },
+        },
         orderBy: { product: { name: "asc" } },
         take: 200,
       }),
@@ -432,13 +467,77 @@ export class ProvidersService {
     return offers.map((offer) => toProductView(offer.product, offer, rules));
   }
 
+  async searchGlobal(
+    tenantId: string,
+    opts: {
+      q?: string;
+      providers?: string[];
+      brandIds?: string[];
+      categoryIds?: string[];
+      take?: number;
+    }
+  ) {
+    const readable = await this.readableProviders(tenantId);
+    const providers = opts.providers?.length
+      ? opts.providers.filter((p) => readable.includes(p))
+      : readable;
+    if (!providers.length) return [];
+
+    const q = opts.q?.trim();
+    const productWhere: Record<string, unknown> = {};
+    if (q) {
+      productWhere.OR = [
+        { name: { contains: q, mode: "insensitive" } },
+        { brand: { contains: q, mode: "insensitive" } },
+        { category: { contains: q, mode: "insensitive" } },
+        { sku: { contains: q, mode: "insensitive" } },
+        { partNumber: { contains: q, mode: "insensitive" } },
+        { ean: { contains: q, mode: "insensitive" } },
+      ];
+    }
+    if (opts.brandIds?.length) productWhere.canonicalBrandId = { in: opts.brandIds };
+    if (opts.categoryIds?.length) productWhere.canonicalCategoryId = { in: opts.categoryIds };
+
+    const [offers, rules] = await Promise.all([
+      this.prisma.tenantProductOffer.findMany({
+        where: {
+          tenantId,
+          active: true,
+          provider: { in: providers },
+          ...(Object.keys(productWhere).length ? { product: productWhere } : {}),
+        },
+        include: {
+          product: {
+            include: {
+              canonicalBrand: { select: { id: true, displayName: true } },
+              canonicalCategory: { select: { id: true, displayName: true } },
+            },
+          },
+        },
+        orderBy: { product: { name: "asc" } },
+        take: Math.min(Math.max(opts.take ?? 200, 1), 500),
+      }),
+      this.rulesByProvider(tenantId),
+    ]);
+    return offers.map((offer) =>
+      toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES)
+    );
+  }
+
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
   async getProduct(tenantId: string, provider: Provider, externalId: string) {
     if (!(await this.isProviderVisible(provider))) return null;
     if (!(await this.visibility.isLinked(tenantId, provider))) return null;
     const offer = await this.prisma.tenantProductOffer.findUnique({
       where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
-      include: { product: true },
+      include: {
+        product: {
+          include: {
+            canonicalBrand: { select: { id: true, displayName: true } },
+            canonicalCategory: { select: { id: true, displayName: true } },
+          },
+        },
+      },
     });
     if (!offer) return null;
     return toProductView(offer.product, offer, await this.rulesFor(tenantId, provider));
@@ -519,20 +618,41 @@ export class ProvidersService {
   async getCategories(tenantId: string) {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
-    const rows = await this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
-      SELECT ficha.category AS category, COUNT(*) AS count
+    const rows = await this.prisma.$queryRaw<{ id: string; displayName: string; count: bigint }[]>`
+      SELECT cc.id AS id, cc."displayName" AS "displayName", COUNT(*) AS count
       FROM "TenantProductOffer" oferta
       JOIN "ProviderSyncCache" ficha
         ON ficha.provider = oferta.provider AND ficha."externalId" = oferta."externalId"
+      JOIN "CanonicalCategory" cc ON cc.id = ficha."canonicalCategoryId"
       WHERE oferta."tenantId" = ${tenantId}
         AND oferta.active
-        AND ficha.category IS NOT NULL
+        AND ficha."canonicalCategoryId" IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
-      GROUP BY ficha.category
+      GROUP BY cc.id, cc."displayName"
       ORDER BY count DESC
       LIMIT 60
     `;
-    return rows.map((r) => ({ category: r.category, count: Number(r.count) }));
+    return rows.map((r) => ({ id: r.id, category: r.displayName, count: Number(r.count) }));
+  }
+
+  async getBrands(tenantId: string) {
+    const providers = await this.readableProviders(tenantId);
+    if (providers.length === 0) return [];
+    const rows = await this.prisma.$queryRaw<{ id: string; displayName: string; count: bigint }[]>`
+      SELECT cb.id AS id, cb."displayName" AS "displayName", COUNT(*) AS count
+      FROM "TenantProductOffer" oferta
+      JOIN "ProviderSyncCache" ficha
+        ON ficha.provider = oferta.provider AND ficha."externalId" = oferta."externalId"
+      JOIN "CanonicalBrand" cb ON cb.id = ficha."canonicalBrandId"
+      WHERE oferta."tenantId" = ${tenantId}
+        AND oferta.active
+        AND ficha."canonicalBrandId" IS NOT NULL
+        AND oferta.provider = ANY(${providers}::text[])
+      GROUP BY cb.id, cb."displayName"
+      ORDER BY count DESC
+      LIMIT 80
+    `;
+    return rows.map((r) => ({ id: r.id, brand: r.displayName, count: Number(r.count) }));
   }
 
   /** Muestra de productos con stock entre proveedores visibles, para destacados de la landing. */
@@ -542,7 +662,14 @@ export class ProvidersService {
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: { tenantId, active: true, stock: { gt: 0 }, provider: { in: providers } },
-        include: { product: true },
+        include: {
+          product: {
+            include: {
+              canonicalBrand: { select: { id: true, displayName: true } },
+              canonicalCategory: { select: { id: true, displayName: true } },
+            },
+          },
+        },
         orderBy: { syncedAt: "desc" },
         take: Math.min(Math.max(take, 1), 60),
       }),
@@ -552,13 +679,52 @@ export class ProvidersService {
   }
 
   /** Productos de una categoría, cruzando todos los proveedores visibles — clic en la grilla de categorías de la landing. */
-  async getByCategory(tenantId: string, category: string, take: number) {
+  async getByCategory(tenantId: string, categoryId: string, take: number) {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
-        where: { tenantId, active: true, provider: { in: providers }, product: { category } },
-        include: { product: true },
+        where: {
+          tenantId,
+          active: true,
+          provider: { in: providers },
+          product: { canonicalCategoryId: categoryId },
+        },
+        include: {
+          product: {
+            include: {
+              canonicalBrand: { select: { id: true, displayName: true } },
+              canonicalCategory: { select: { id: true, displayName: true } },
+            },
+          },
+        },
+        orderBy: { product: { name: "asc" } },
+        take: Math.min(Math.max(take, 1), 200),
+      }),
+      this.rulesByProvider(tenantId),
+    ]);
+    return offers.map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES));
+  }
+
+  async getByBrand(tenantId: string, brandId: string, take: number) {
+    const providers = await this.readableProviders(tenantId);
+    if (providers.length === 0) return [];
+    const [offers, rules] = await Promise.all([
+      this.prisma.tenantProductOffer.findMany({
+        where: {
+          tenantId,
+          active: true,
+          provider: { in: providers },
+          product: { canonicalBrandId: brandId },
+        },
+        include: {
+          product: {
+            include: {
+              canonicalBrand: { select: { id: true, displayName: true } },
+              canonicalCategory: { select: { id: true, displayName: true } },
+            },
+          },
+        },
         orderBy: { product: { name: "asc" } },
         take: Math.min(Math.max(take, 1), 200),
       }),

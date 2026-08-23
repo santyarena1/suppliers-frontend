@@ -99,6 +99,11 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
           <p className="product-card-title text-sm leading-snug line-clamp-2 font-medium transition-colors min-h-[2.3rem]">
             {product.name}
           </p>
+          {(product.canonicalBrand?.displayName || product.brand) && (
+            <p className="product-card-meta text-[10px] mt-0.5 truncate">
+              {product.canonicalBrand?.displayName ?? product.brand}
+            </p>
+          )}
         </Link>
 
         <div className="flex items-end justify-between gap-2 mt-auto pt-2.5 border-t product-card-divider">

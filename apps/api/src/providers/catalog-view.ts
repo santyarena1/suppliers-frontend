@@ -17,6 +17,8 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   stockStatus: string | null;
   active: boolean;
   needsResync: boolean;
+  canonicalBrand?: { id: string; displayName: string } | null;
+  canonicalCategory?: { id: string; displayName: string } | null;
 };
 
 /**
@@ -29,15 +31,20 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
  * vez de tener que resincronizar el catálogo entero.
  */
 export function toProductView(
-  product: ProviderSyncCache,
+  product: ProviderSyncCache & {
+    canonicalBrand?: { id: string; displayName: string } | null;
+    canonicalCategory?: { id: string; displayName: string } | null;
+  },
   offer: TenantProductOffer,
   rules: OfferRules = NO_RULES
 ): ProductView {
-  const { id: _id, updatedAt: _updatedAt, ...ficha } = product;
+  const { id: _id, updatedAt: _updatedAt, canonicalBrand, canonicalCategory, ...ficha } = product;
   const rawStock = offer.stock;
 
   return {
     ...ficha,
+    canonicalBrand,
+    canonicalCategory,
     price: withMarkup(offer.price, rules.markupPercent),
     finalPrice: withMarkup(offer.finalPrice, rules.markupPercent),
     currency: offer.currency,

@@ -48,24 +48,29 @@ function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
+  const [selectedBrandIds, setSelectedBrandIds] = useState<Set<string>>(new Set());
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(new Set());
+  const [filterBrands, setFilterBrands] = useState<{ id: string; brand: string; count: number }[]>([]);
+  const [filterCategories, setFilterCategories] = useState<{ id: string; category: string; count: number }[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
-  async function handleCategoryClick(category: string) {
+  async function handleCategoryClick(categoryId: string, label: string) {
     setError("");
     setLoading(true);
     setSearched(true);
-    setQuery(category);
-    setActiveQuery(category);
+    setQuery(label);
+    setActiveQuery(label);
     setRefineText("");
     setMinPrice("");
     setMaxPrice("");
+    setSelectedCategoryIds(new Set([categoryId]));
     try {
-      const res = await catalogApi.byCategory(category);
+      const res = await catalogApi.byCategory(categoryId);
       const data = Array.isArray(res.data) ? res.data : [];
       setResults(data);
-      persistResults(category, data);
+      persistResults(label, data);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || "Error al consultar la categoría");
@@ -110,8 +115,12 @@ function SearchPage() {
     setMinPrice("");
     setMaxPrice("");
     try {
-      const res = await searchApi.all(query.trim(), {
-        providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
+      const providers = searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider);
+      const res = await searchApi.global({
+        q: query.trim(),
+        providers,
+        brandIds: selectedBrandIds.size ? [...selectedBrandIds] : undefined,
+        categoryIds: selectedCategoryIds.size ? [...selectedCategoryIds] : undefined,
       });
       const data = res.data;
       setResults(data);
@@ -131,7 +140,10 @@ function SearchPage() {
     let arr = results;
     if (refineText.trim()) {
       const q = refineText.toLowerCase();
-      arr = arr.filter((p) => p.name?.toLowerCase().includes(q));
+      arr = arr.filter((p) => {
+        const brand = p.canonicalBrand?.displayName ?? p.brand ?? "";
+        return p.name?.toLowerCase().includes(q) || brand.toLowerCase().includes(q);
+      });
     }
     if (hideNoImage) arr = arr.filter((p) => !!p.imageUrl);
     if (minPrice) {
@@ -181,6 +193,16 @@ function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchable.length, touchedFilters]);
 
+  useEffect(() => {
+    if (!showFilters) return;
+    Promise.all([catalogApi.brands(), catalogApi.categories()])
+      .then(([b, c]) => {
+        setFilterBrands(Array.isArray(b.data) ? b.data.slice(0, 50) : []);
+        setFilterCategories(Array.isArray(c.data) ? c.data.slice(0, 50) : []);
+      })
+      .catch(() => {});
+  }, [showFilters]);
+
   const autoSearched = useRef(false);
   useEffect(() => {
     if (initialQ && !autoSearched.current) {
@@ -190,7 +212,10 @@ function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ]);
 
-  const unselectedCount = searchable.length - selectedProviders.size;
+  const activeFilterCount =
+    (searchable.length - selectedProviders.size) +
+    selectedBrandIds.size +
+    selectedCategoryIds.size;
   const hasInResultsFilter = refineText || minPrice || maxPrice || hideNoImage;
 
   return (
@@ -229,15 +254,15 @@ function SearchPage() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
-                  showFilters || unselectedCount > 0
+                  showFilters || activeFilterCount > 0
                     ? "border-brand-500 text-brand-400 bg-brand-600/10"
                     : "border-surface-700 text-surface-400 hover:text-surface-200"
                 }`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
-                {unselectedCount > 0 && (
+                {activeFilterCount > 0 && (
                   <span className="bg-brand-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] leading-none">
-                    {selectedProviders.size}
+                    {activeFilterCount}
                   </span>
                 )}
               </button>
@@ -262,35 +287,90 @@ function SearchPage() {
 
           {/* Provider filters bar */}
           {showFilters && (
-            <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 flex-wrap flex-1">
-                  {searchable.length === 0 && (
-                    <span className="text-xs text-surface-500">
-                      Todavía no estás conectado con ningún proveedor.
-                    </span>
-                  )}
-                  {searchable.map(({ provider, name }) => (
-                    <button
-                      key={provider}
-                      onClick={() => toggleProvider(provider)}
-                      className={`text-[11px] font-medium px-2 py-1 rounded border transition-all ${
-                        selectedProviders.has(provider)
-                          ? `${PROVIDER_COLOR[provider]} bg-current/10 border-current/30`
-                          : "text-surface-600 bg-transparent border-surface-800 hover:border-surface-600 hover:text-surface-400"
-                      }`}
-                      style={selectedProviders.has(provider) ? { borderColor: "currentColor" } : {}}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set(searchable.map((p) => p.provider))); }} className="text-xs text-surface-400 hover:text-white">Todos</button>
-                  <span className="text-surface-700">·</span>
-                  <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set()); }} className="text-xs text-surface-400 hover:text-white">Ninguno</button>
+            <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3 space-y-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1.5">Proveedor</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                    {searchable.length === 0 && (
+                      <span className="text-xs text-surface-500">
+                        Todavía no estás conectado con ningún proveedor.
+                      </span>
+                    )}
+                    {searchable.map(({ provider, name }) => (
+                      <button
+                        key={provider}
+                        onClick={() => toggleProvider(provider)}
+                        className={`text-[11px] font-medium px-2 py-1 rounded border transition-all ${
+                          selectedProviders.has(provider)
+                            ? `${PROVIDER_COLOR[provider]} bg-current/10 border-current/30`
+                            : "text-surface-600 bg-transparent border-surface-800 hover:border-surface-600 hover:text-surface-400"
+                        }`}
+                        style={selectedProviders.has(provider) ? { borderColor: "currentColor" } : {}}
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set(searchable.map((p) => p.provider))); }} className="text-xs text-surface-400 hover:text-white">Todos</button>
+                    <span className="text-surface-700">·</span>
+                    <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set()); }} className="text-xs text-surface-400 hover:text-white">Ninguno</button>
+                  </div>
                 </div>
               </div>
+
+              {filterBrands.length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1.5">Marca</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterBrands.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setSelectedBrandIds((prev) => {
+                          const next = new Set(prev);
+                          next.has(b.id) ? next.delete(b.id) : next.add(b.id);
+                          return next;
+                        })}
+                        className={`text-[11px] px-2 py-1 rounded border ${
+                          selectedBrandIds.has(b.id)
+                            ? "border-brand-500 bg-brand-600/15 text-brand-300"
+                            : "border-surface-800 text-surface-500 hover:border-surface-600"
+                        }`}
+                      >
+                        {b.brand}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filterCategories.length > 0 && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1.5">Categoría</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filterCategories.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelectedCategoryIds((prev) => {
+                          const next = new Set(prev);
+                          next.has(c.id) ? next.delete(c.id) : next.add(c.id);
+                          return next;
+                        })}
+                        className={`text-[11px] px-2 py-1 rounded border ${
+                          selectedCategoryIds.has(c.id)
+                            ? "border-brand-500 bg-brand-600/15 text-brand-300"
+                            : "border-surface-800 text-surface-500 hover:border-surface-600"
+                        }`}
+                      >
+                        {c.category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

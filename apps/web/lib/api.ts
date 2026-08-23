@@ -156,6 +156,8 @@ export interface ProductDTO {
   brand?: string | null;
   category?: string | null;
   subcategory?: string | null;
+  canonicalBrand?: { id: string; displayName: string } | null;
+  canonicalCategory?: { id: string; displayName: string } | null;
   description?: string | null;
   longDescription?: string | null;
   stock?: number | null;
@@ -200,6 +202,20 @@ export interface SearchAllOptions {
 }
 
 export const searchApi = {
+  global: (params: {
+    q: string;
+    providers?: Provider[];
+    brandIds?: string[];
+    categoryIds?: string[];
+  }) =>
+    api.get<ProductDTO[]>("/search", {
+      params: {
+        q: params.q,
+        providers: params.providers?.length ? params.providers.join(",") : undefined,
+        brandIds: params.brandIds?.length ? params.brandIds.join(",") : undefined,
+        categoryIds: params.categoryIds?.length ? params.categoryIds.join(",") : undefined,
+      },
+    }),
   all: async (name: string, opts: SearchAllOptions = {}) => {
     // Buscar en un proveedor que no está vinculado no devolvería nada igual; sin la
     // lista, serían catorce pedidos al pedo en cada búsqueda.
@@ -1045,7 +1061,14 @@ export interface PricePoint {
 }
 
 export interface CategoryCount {
+  id: string;
   category: string;
+  count: number;
+}
+
+export interface BrandCount {
+  id: string;
+  brand: string;
   count: number;
 }
 
@@ -1055,8 +1078,12 @@ export const catalogApi = {
   priceHistory: (provider: Provider, externalId: string) =>
     api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`),
   categories: () => api.get<CategoryCount[]>("/catalog/categories"),
+  brands: () => api.get<BrandCount[]>("/catalog/brands"),
   featured: (take = 24) => api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
-  byCategory: (category: string, take = 60) => api.get<ProductDTO[]>("/catalog/by-category", { params: { category, take } }),
+  byCategory: (categoryId: string, take = 60) =>
+    api.get<ProductDTO[]>("/catalog/by-category", { params: { categoryId, take } }),
+  byBrand: (brandId: string, take = 60) =>
+    api.get<ProductDTO[]>("/catalog/by-brand", { params: { brandId, take } }),
   providerDisplay: () => api.get<ProviderDisplay[]>("/catalog/provider-display"),
 };
 
@@ -1197,6 +1224,27 @@ export const adminApi = {
   getPlatformSettings: () => api.get<PlatformSettings>("/admin/platform/settings"),
   updatePlatformSettings: (brandPreset: BrandPreset) =>
     api.put<PlatformSettings>("/admin/platform/settings", { brandPreset }),
+};
+
+export interface CanonicalCatalogBrand {
+  id: string;
+  displayName: string;
+  slug: string;
+  logoUrl: string | null;
+  productCount: number;
+  aliasCount: number;
+  aliases: { id: string; provider: string; rawBrand: string }[];
+}
+
+export const catalogAdminApi = {
+  listBrands: () => api.get<CanonicalCatalogBrand[]>("/admin/catalog/brands"),
+  brandDuplicates: () =>
+    api.get<{ normalizedKey: string; canonicalIds: string[]; displayNames: string[]; count: number }[]>(
+      "/admin/catalog/brands/duplicates"
+    ),
+  mergeBrands: (sourceIds: string[], targetId: string) =>
+    api.post<{ ok: boolean }>("/admin/catalog/brands/merge", { sourceIds, targetId }),
+  reindex: () => api.post<{ products: number }>("/admin/catalog/reindex"),
 };
 
 // --- Organizaciones (multi-tenant) ---

@@ -513,6 +513,30 @@ export class ProvidersController {
   // superadmin— no tiene nada que ver acá. Devuelve vacío en vez de fallar: es la
   // respuesta honesta, y para mirar el catálogo de alguien está "entrar como".
 
+  @Get("search")
+  searchGlobal(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Query("q") q?: string,
+    @Query("providers") providers?: string,
+    @Query("brandIds") brandIds?: string,
+    @Query("categoryIds") categoryIds?: string,
+    @Query("take") take?: string
+  ) {
+    if (!tenant) return [];
+    const providerList = providers
+      ? providers.split(",").map((p) => p.trim()).filter(Boolean)
+      : undefined;
+    const brandList = brandIds ? brandIds.split(",").map((b) => b.trim()).filter(Boolean) : undefined;
+    const categoryList = categoryIds ? categoryIds.split(",").map((c) => c.trim()).filter(Boolean) : undefined;
+    return this.providersService.searchGlobal(tenant.tenantId, {
+      q,
+      providers: providerList,
+      brandIds: brandList,
+      categoryIds: categoryList,
+      take: take ? Number(take) : undefined,
+    });
+  }
+
   @Get("search/provider/:provider")
   search(
     @CurrentTenantOrNone() tenant: TenantContext | null,
@@ -560,14 +584,31 @@ export class ProvidersController {
     return this.providersService.getFeatured(tenant.tenantId, take ? Number(take) : 24);
   }
 
+  @Get("catalog/brands")
+  getBrands(@CurrentTenantOrNone() tenant: TenantContext | null) {
+    if (!tenant) return [];
+    return this.providersService.getBrands(tenant.tenantId);
+  }
+
+  @Get("catalog/by-brand")
+  getByBrand(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Query("brandId") brandId: string,
+    @Query("take") take?: string
+  ) {
+    if (!brandId) throw new BadRequestException("Falta el parámetro brandId");
+    if (!tenant) return [];
+    return this.providersService.getByBrand(tenant.tenantId, brandId, take ? Number(take) : 60);
+  }
+
   @Get("catalog/by-category")
   getByCategory(
     @CurrentTenantOrNone() tenant: TenantContext | null,
-    @Query("category") category: string,
+    @Query("categoryId") categoryId: string,
     @Query("take") take?: string
   ) {
-    if (!category) throw new BadRequestException("Falta el parámetro category");
+    if (!categoryId) throw new BadRequestException("Falta el parámetro categoryId");
     if (!tenant) return [];
-    return this.providersService.getByCategory(tenant.tenantId, category, take ? Number(take) : 60);
+    return this.providersService.getByCategory(tenant.tenantId, categoryId, take ? Number(take) : 60);
   }
 }

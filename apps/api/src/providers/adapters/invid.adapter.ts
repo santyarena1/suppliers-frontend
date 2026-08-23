@@ -148,9 +148,9 @@ export class InvidAdapter implements ProviderAdapter {
     }
     if (items.length === 0) throw new BadGatewayException("Invid devolvió un catálogo vacío");
 
-    // 3) Enriquecer con imagen real recorriendo la tienda web (no rompe si falla).
+    // 3) Enriquecer con imagen y categoría recorriendo la tienda web (no rompe si falla).
     try {
-      const images = await crawlCategoryImages(sessionCookie);
+      const { images, categories } = await crawlCategoryMeta(sessionCookie);
       for (const item of items) {
         const code = normalizeCode(item.externalId);
         const img = images.get(code);
@@ -158,6 +158,8 @@ export class InvidAdapter implements ProviderAdapter {
           item.imageUrl = img;
           item.productUrl = `${SITE_BASE}/x---det--${code}`;
         }
+        const cat = categories.get(code);
+        if (cat) item.category = cat;
       }
     } catch {
       // Sin imagen no rompe la sincronización — el catálogo en sí ya se sincronizó.
@@ -300,13 +302,17 @@ function normalizeCode(raw: string): string {
   return Number.isFinite(n) ? String(n).padStart(7, "0") : raw;
 }
 
-/** Recorre las páginas de listado por categoría de la tienda y arma un mapa
- * código de producto -> URL de imagen, usando la cookie de sesión ya logueada. */
-async function crawlCategoryImages(sessionCookie: string): Promise<Map<string, string>> {
+/** Recorre listados por categoría: imagen y categoría canónica por código de producto. */
+async function crawlCategoryMeta(sessionCookie: string): Promise<{
+  images: Map<string, string>;
+  categories: Map<string, string>;
+}> {
   const images = new Map<string, string>();
+  const categories = new Map<string, string>();
   const imgRe = /<img[^>]+src="((?:https:\/\/www\.invidcomputers\.com\/)?thumb\/(\d{16})[^"]*)"/g;
 
   for (const slug of CATEGORY_SLUGS) {
+    const categoryLabel = slugToCategoryLabel(slug);
     for (let page = 0; page < IMAGE_MAX_PAGES_PER_CATEGORY; page++) {
       const offset = page * 20;
       let html: string;
@@ -328,12 +334,18 @@ async function crawlCategoryImages(sessionCookie: string): Promise<Map<string, s
         const code = String(parseInt(m[2], 10)).padStart(7, "0");
         const path = m[1].split("?")[0];
         images.set(code, path.startsWith("http") ? path : `${SITE_BASE}/${path}`);
+        categories.set(code, categoryLabel);
         found++;
       }
       if (found === 0) break; // última página de esta categoría
     }
   }
-  return images;
+  return { images, categories };
+}
+
+function slugToCategoryLabel(slug: string): string {
+  const part = slug.split("--")[0] ?? slug;
+  return part.replace(/-/g, " ");
 }
 
 function mapProduct(row: unknown[]): NormalizedProduct {

@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 
 interface SearchLandingProps {
-  onCategoryClick: (category: string) => void;
+  onCategoryClick: (categoryId: string, label: string) => void;
   onSearchSuggestion?: (q: string) => void;
 }
 
