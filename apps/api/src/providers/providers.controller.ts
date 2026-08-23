@@ -3,6 +3,8 @@ import { AuthGuard } from "@nestjs/passport";
 import type { FastifyRequest } from "fastify";
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { Roles } from "../common/decorators/roles.decorator";
+import { RolesGuard } from "../common/guards/roles.guard";
 import { CredentialsService } from "../credentials/credentials.service";
 import { ProvidersService } from "./providers.service";
 import { FileImportService } from "./file-import.service";
@@ -35,7 +37,9 @@ function assertProvider(value: string): Provider {
   return value as Provider;
 }
 
-@UseGuards(AuthGuard("jwt"))
+// `RolesGuard` deja pasar todo lo que no declare `@Roles`, así que sumarlo acá no
+// restringe nada por sí solo: habilita marcar endpoints sueltos.
+@UseGuards(AuthGuard("jwt"), RolesGuard)
 @Controller()
 export class ProvidersController {
   constructor(
@@ -430,11 +434,17 @@ export class ProvidersController {
     return this.providersService.updateConfig(user.userId, assertProvider(provider), dto);
   }
 
+  // Estos dos borran filas de `ProviderSyncCache`, que es una tabla compartida por
+  // toda la plataforma: un solo llamado deja sin catálogo a todos los comercios.
+  // Hasta que el catálogo esté separado por organización, son de superadmin.
+
+  @Roles("ROLE_ADMIN")
   @Post("providers/:provider/clear-zero-stock")
   clearZeroStock(@Param("provider") provider: string) {
     return this.providersService.clearZeroStock(assertProvider(provider));
   }
 
+  @Roles("ROLE_ADMIN")
   @Delete("providers/:provider/products")
   deleteAllProducts(@Param("provider") provider: string) {
     return this.providersService.deleteAllProducts(assertProvider(provider));

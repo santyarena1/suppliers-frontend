@@ -9,6 +9,7 @@ import {
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
   invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile
 } from "@/lib/api";
+import { isAdmin } from "@/lib/auth";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
@@ -134,6 +135,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [clearingZeroStock, setClearingZeroStock] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  // Borrar el catálogo lo vacía para toda la plataforma, no solo para quien lo pide.
+  const [canPurge, setCanPurge] = useState(false);
+
+  useEffect(() => { setCanPurge(isAdmin()); }, []);
 
   async function loadConfig() {
     if (!implemented) return;
@@ -563,14 +568,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       </form>
                     )}
 
-                    {!loadingConfig && config && (
+                    {!loadingConfig && config && canPurge && (
                       <div className="border border-red-500/20 rounded-xl p-5 flex flex-col gap-4 mt-5">
                         <div className="flex items-center gap-2 text-sm font-semibold text-red-400">
                           <AlertTriangle className="w-4 h-4" />
                           Zona de peligro
                         </div>
                         <p className="text-xs text-surface-500">
-                          Acciones inmediatas sobre nuestra base para {provider.replace(/_/g, " ")}, sin esperar a la próxima sincronización. No se pueden deshacer.
+                          El catálogo de {provider.replace(/_/g, " ")} lo comparten todos los comercios, así que estas acciones los afectan a todos. No se pueden deshacer.
                         </p>
 
                         <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">
