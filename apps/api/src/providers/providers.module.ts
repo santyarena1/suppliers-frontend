@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { CredentialsModule } from "../credentials/credentials.module";
+import { TenantsModule } from "../tenants/tenants.module";
 import { ProvidersController } from "./providers.controller";
 import { ProvidersService } from "./providers.service";
 import { ProviderRegistry } from "./provider-registry";
@@ -23,7 +24,7 @@ import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
 
 @Module({
-  imports: [CredentialsModule],
+  imports: [CredentialsModule, TenantsModule],
   controllers: [ProvidersController],
   providers: [
     ProvidersService,
