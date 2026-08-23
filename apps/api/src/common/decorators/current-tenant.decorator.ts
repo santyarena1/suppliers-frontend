@@ -18,3 +18,14 @@ export const CurrentTenant = createParamDecorator((_data: unknown, ctx: Executio
   }
   return request.tenant;
 });
+
+/**
+ * Igual que `CurrentTenant`, pero devuelve `null` en vez de cortar.
+ *
+ * Para las lecturas del catálogo: no tener organización no es un error, es no tener
+ * catálogo. El endpoint responde vacío, que es la verdad.
+ */
+export const CurrentTenantOrNone = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): TenantContext | null =>
+    ctx.switchToHttp().getRequest<RequestWithTenant>().tenant ?? null
+);

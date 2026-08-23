@@ -56,6 +56,9 @@ export const TENANT_ROLES_BY_TYPE: Record<TenantType, readonly TenantRole[]> = {
 /** Roles que pueden confirmar una orden sin aprobación de un tercero. */
 export const TENANT_ROLES_CAN_CONFIRM_ORDERS: readonly TenantRole[] = ["OWNER", "ADMIN", "BUYER"];
 
+/** Roles que pueden vaciar el catálogo de la organización. */
+export const TENANT_ROLES_CAN_PURGE_CATALOG: readonly TenantRole[] = ["OWNER", "ADMIN"];
+
 export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   PENDING: "Pendiente",
   ACTIVE: "Activo",

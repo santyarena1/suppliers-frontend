@@ -64,37 +64,56 @@ de la persona que la cargó.
 Cada fase se despliega primero a staging, se verifica con un script, y recién después
 se mergea a `main`. Ninguna fase depende de que la siguiente esté lista.
 
-### Fase 0 — Cerrar el borrado del catálogo
+### Fase 0 — Cerrar el borrado del catálogo — **hecha**
 
-Restringir los dos endpoints destructivos a `ROLE_ADMIN`. Es independiente de todo lo
-demás y tapa el agujero más grave. Sin cambios de esquema.
+Los dos endpoints destructivos quedaron restringidos a `ROLE_ADMIN`, y el frontend
+esconde la zona de peligro para el resto. Verifica `scripts/check-catalog-guard.mjs`.
 
-### Fase 1 — La organización en la sesión
+### Fase 1 — La organización en la sesión — **hecha**
 
-- Toda persona queda con una membresía: a los usuarios existentes sin organización se
-  les crea un `RETAILER` propio en la migración.
-- El JWT suma `tenantId` y `tenantRole`, tanto en el login como en la suplantación.
-- Un helper de contexto resuelve la organización para que el código de negocio la
-  consulte sin repetir la búsqueda.
+El token lleva `tenantId`, `tenantName`, `tenantType` y `tenantRole`, tanto al iniciar
+sesión como al entrar como otro usuario. `TenantContextService` los resuelve y cae a la
+base cuando el token no los trae, para que las sesiones viejas sigan sirviendo hasta que
+venzan. La migración le dio organización propia a quien no tenía; el superadmin queda
+afuera a propósito. Verifica `scripts/check-tenant-session.mjs`.
 
-Sin cambios de comportamiento visible. Es el cimiento de las fases siguientes.
+### Fase 2 — Credenciales por organización — **hecha**
 
-### Fase 2 — Credenciales por organización
+`Credential` y `ProviderSyncConfig` pasaron a `(tenantId, …)`. `TenantGuard` deja la
+organización en el request y `@CurrentTenant()` la exige; el guard nunca rechaza, así el
+superadmin sigue usando lo que no la necesita. El cron de sincronización corre por
+organización y saltea las inactivas. Las filas duplicadas dentro de una organización y
+las que no tenían organización posible quedaron anotadas en la auditoría con su
+contenido cifrado antes de borrarse. Verifica
+`scripts/check-credentials-by-tenant.mjs`.
 
-- `Credential` pasa de `(userId, providerName)` a `(tenantId, providerName)`.
-- La migración asigna cada credencial a la organización de su dueño. Si dos personas de
-  la misma organización cargaron credenciales del mismo proveedor, queda la más
-  reciente y las otras se registran en la auditoría.
-- Todo lo que hoy pide credenciales por usuario pasa a pedirlas por organización.
+### Fase 3 — Precio y stock por organización — **hecha**
 
-### Fase 3 — Precio y stock por organización
+`ProviderSyncCache` quedó como la ficha del producto —qué es, cómo se llama, la foto— y
+`TenantProductOffer` guarda qué cuesta y cuánto hay para cada organización. El historial
+de precio también pasó a ser por organización: cada comercio compra con su cuenta y su
+lista, así que la serie de uno no dice nada sobre la de otro.
 
-La fase grande. Separar la ficha de la oferta, mover la sincronización a escribir
-ofertas por organización, y aplicar markup y umbral en la lectura.
+La sincronización guarda el precio **crudo** del proveedor. El markup y el umbral de
+stock mínimo se aplican al leer, en `catalog-view.ts`: cambiarlos se ve al instante en
+toda la plataforma, volver atrás es cambiar un número en vez de resincronizar el
+catálogo entero, y la configuración de un comercio ya no puede alterar lo que ve otro.
+Las acciones sobre faltantes y sobre stock cero borran u ocultan ofertas, no fichas.
 
-Los precios que hay hoy en la base traen el markup adentro y no hay forma de saber de
-quién eran, así que la migración los copia a la oferta de la organización que
-sincronizó último y los marca como pendientes de resincronizar.
+Dos consecuencias visibles:
+
+- Un comercio solo ve los productos que sincronizó con su propia cuenta. Sin oferta no
+  hay precio que mostrar, y un precio traído con la cuenta de otro no sería el suyo.
+- El superadmin no pertenece a ninguna organización, así que el catálogo le da vacío. No
+  es un error: para mirar el catálogo de alguien está "entrar como".
+
+Los precios que había traían el markup adentro y no hay forma de saber cuál era el
+crudo. La migración se los atribuye a la organización que sincronizó ese proveedor por
+última vez —la que de verdad los trajo— y los marca con `needsResync` hasta la próxima
+sincronización real. Verifica `scripts/check-offers-by-tenant.mjs`.
+
+Como el borrado de catálogo ya no afecta a nadie más, volvió a la organización: lo puede
+hacer un `OWNER` o un `ADMIN` del comercio, no un vendedor.
 
 ### Fase 4 — Búsqueda cerrada
 

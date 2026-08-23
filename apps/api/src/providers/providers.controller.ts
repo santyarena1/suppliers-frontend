@@ -2,12 +2,13 @@ import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, 
 import { AuthGuard } from "@nestjs/passport";
 import type { FastifyRequest } from "fastify";
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
-import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
+import { CurrentTenant, CurrentTenantOrNone } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { CredentialsService } from "../credentials/credentials.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
+import { TENANT_ROLES_CAN_PURGE_CATALOG } from "@nodo/shared";
+import { assertTenantRole } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { ProvidersService } from "./providers.service";
 import { FileImportService } from "./file-import.service";
@@ -463,52 +464,81 @@ export class ProvidersController {
     return this.providersService.updateConfig(tenant.tenantId, assertProvider(provider), dto);
   }
 
-  // Estos dos borran filas de `ProviderSyncCache`, que es una tabla compartida por
-  // toda la plataforma: un solo llamado deja sin catálogo a todos los comercios.
-  // Hasta que el catálogo esté separado por organización, son de superadmin.
+  // Estos dos ya no tocan el catálogo de nadie más: borran las ofertas de esta
+  // organización y dejan intacta la ficha, que es de toda la plataforma. Aun así
+  // vacían el catálogo del comercio entero, así que son del dueño.
 
-  @Roles("ROLE_ADMIN")
   @Post("providers/:provider/clear-zero-stock")
-  clearZeroStock(@Param("provider") provider: string) {
-    return this.providersService.clearZeroStock(assertProvider(provider));
+  clearZeroStock(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    assertTenantRole(tenant, TENANT_ROLES_CAN_PURGE_CATALOG);
+    return this.providersService.clearZeroStock(tenant.tenantId, assertProvider(provider));
   }
 
-  @Roles("ROLE_ADMIN")
   @Delete("providers/:provider/products")
-  deleteAllProducts(@Param("provider") provider: string) {
-    return this.providersService.deleteAllProducts(assertProvider(provider));
+  deleteAllProducts(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    assertTenantRole(tenant, TENANT_ROLES_CAN_PURGE_CATALOG);
+    return this.providersService.deleteAllProducts(tenant.tenantId, assertProvider(provider));
   }
+
+  // El catálogo es de la organización, así que quien no pertenece a ninguna —el
+  // superadmin— no tiene nada que ver acá. Devuelve vacío en vez de fallar: es la
+  // respuesta honesta, y para mirar el catálogo de alguien está "entrar como".
 
   @Get("search/provider/:provider")
-  search(@Param("provider") provider: string, @Query("name") name = "") {
-    return this.providersService.search(assertProvider(provider), name);
+  search(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Param("provider") provider: string,
+    @Query("name") name = ""
+  ) {
+    if (!tenant) return [];
+    return this.providersService.search(tenant.tenantId, assertProvider(provider), name);
   }
 
   @Get("providers/:provider/products/:externalId")
-  async getProduct(@Param("provider") provider: string, @Param("externalId") externalId: string) {
-    const product = await this.providersService.getProduct(assertProvider(provider), externalId);
+  async getProduct(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Param("externalId") externalId: string
+  ) {
+    const product = await this.providersService.getProduct(
+      tenant.tenantId,
+      assertProvider(provider),
+      externalId
+    );
     if (!product) throw new NotFoundException("Producto no encontrado");
     return product;
   }
 
   @Get("providers/:provider/products/:externalId/price-history")
-  getPriceHistory(@Param("provider") provider: string, @Param("externalId") externalId: string) {
-    return this.providersService.getPriceHistory(assertProvider(provider), externalId);
+  getPriceHistory(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Param("provider") provider: string,
+    @Param("externalId") externalId: string
+  ) {
+    if (!tenant) return [];
+    return this.providersService.getPriceHistory(tenant.tenantId, assertProvider(provider), externalId);
   }
 
   @Get("catalog/categories")
-  getCategories() {
-    return this.providersService.getCategories();
+  getCategories(@CurrentTenantOrNone() tenant: TenantContext | null) {
+    if (!tenant) return [];
+    return this.providersService.getCategories(tenant.tenantId);
   }
 
   @Get("catalog/featured")
-  getFeatured(@Query("take") take?: string) {
-    return this.providersService.getFeatured(take ? Number(take) : 24);
+  getFeatured(@CurrentTenantOrNone() tenant: TenantContext | null, @Query("take") take?: string) {
+    if (!tenant) return [];
+    return this.providersService.getFeatured(tenant.tenantId, take ? Number(take) : 24);
   }
 
   @Get("catalog/by-category")
-  getByCategory(@Query("category") category: string, @Query("take") take?: string) {
+  getByCategory(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Query("category") category: string,
+    @Query("take") take?: string
+  ) {
     if (!category) throw new BadRequestException("Falta el parámetro category");
-    return this.providersService.getByCategory(category, take ? Number(take) : 60);
+    if (!tenant) return [];
+    return this.providersService.getByCategory(tenant.tenantId, category, take ? Number(take) : 60);
   }
 }

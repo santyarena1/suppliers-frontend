@@ -1132,6 +1132,9 @@ export const TENANT_ROLES_BY_TYPE: Record<TenantType, TenantRole[]> = {
   BRAND: ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL", "VIEWER"],
 };
 
+/** Roles que pueden vaciar el catálogo de la organización. */
+export const TENANT_ROLES_CAN_PURGE_CATALOG: TenantRole[] = ["OWNER", "ADMIN"];
+
 export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   PENDING: "Pendiente",
   ACTIVE: "Activo",

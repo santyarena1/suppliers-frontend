@@ -7,9 +7,10 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
-  invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile
+  invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile,
+  TENANT_ROLES_CAN_PURGE_CATALOG
 } from "@/lib/api";
-import { isAdmin } from "@/lib/auth";
+import { getTenant, isAdmin } from "@/lib/auth";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
@@ -135,10 +136,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [clearingZeroStock, setClearingZeroStock] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
-  // Borrar el catálogo lo vacía para toda la plataforma, no solo para quien lo pide.
+  // Vacía el catálogo de toda la organización, no solo el de quien lo pide.
   const [canPurge, setCanPurge] = useState(false);
 
-  useEffect(() => { setCanPurge(isAdmin()); }, []);
+  useEffect(() => {
+    const role = getTenant()?.role;
+    setCanPurge(isAdmin() || (!!role && TENANT_ROLES_CAN_PURGE_CATALOG.includes(role)));
+  }, []);
 
   async function loadConfig() {
     if (!implemented) return;
@@ -575,7 +579,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           Zona de peligro
                         </div>
                         <p className="text-xs text-surface-500">
-                          El catálogo de {provider.replace(/_/g, " ")} lo comparten todos los comercios, así que estas acciones los afectan a todos. No se pueden deshacer.
+                          Estas acciones vacían el catálogo de {provider.replace(/_/g, " ")} para toda tu organización y no se pueden deshacer. Hay que volver a sincronizar para recuperarlo.
                         </p>
 
                         <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">

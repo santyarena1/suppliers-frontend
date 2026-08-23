@@ -1,8 +1,9 @@
 /**
- * Verifica que solo un administrador pueda vaciar el catálogo de un proveedor.
+ * Verifica que vaciar el catálogo de un proveedor no sea cosa de cualquiera.
  *
- * `ProviderSyncCache` es una tabla compartida por toda la plataforma: hasta que el
- * catálogo esté separado por organización, borrarlo afecta a todos los comercios.
+ * Desde que el catálogo está separado por organización el borrado ya no afecta a
+ * toda la plataforma, pero sigue dejando sin catálogo al comercio entero: es del
+ * dueño, no de un vendedor.
  *
  * Uso: API_URL=... ADMIN_PASSWORD=... node scripts/check-catalog-guard.mjs
  */
@@ -49,24 +50,13 @@ async function main() {
   const userToken = (await call("POST", `/admin/users/${target.id}/impersonate`, adminToken)).payload.data.token;
 
   const clear = await call("POST", `/providers/${PROVIDER}/clear-zero-stock`, userToken);
-  check("Un usuario común no puede limpiar el catálogo", clear.status === 403, `HTTP ${clear.status}`);
+  check("Un vendedor no puede limpiar el catálogo de su comercio", clear.status === 403, `HTTP ${clear.status}`);
 
   const wipe = await call("DELETE", `/providers/${PROVIDER}/products`, userToken);
-  check("Un usuario común no puede borrar el catálogo", wipe.status === 403, `HTTP ${wipe.status}`);
+  check("Un vendedor no puede borrar el catálogo de su comercio", wipe.status === 403, `HTTP ${wipe.status}`);
 
   const search = await call("GET", `/search/provider/${PROVIDER}?name=a`, userToken);
-  check("Un usuario común sí puede buscar", search.status === 200, `HTTP ${search.status}`);
-
-  // El lado positivo solo se prueba si no hay nada que perder: el endpoint borra de
-  // verdad, y este script no puede vaciar un catálogo real por accidente.
-  const status = await call("GET", `/providers/${PROVIDER}/status`, adminToken);
-  const stored = status.payload.data?.productsInDb ?? status.payload.data?.total ?? null;
-  if (stored === 0) {
-    const asAdmin = await call("POST", `/providers/${PROVIDER}/clear-zero-stock`, adminToken);
-    check("El administrador sí puede", asAdmin.status === 200 || asAdmin.status === 201, `HTTP ${asAdmin.status}`);
-  } else {
-    console.log(`·    El administrador sí puede — sin probar: ${PROVIDER} tiene ${stored ?? "?"} productos y el endpoint borra de verdad`);
-  }
+  check("Un vendedor sí puede buscar", search.status === 200, `HTTP ${search.status}`);
 
   const failed = checks.filter((ok) => !ok).length;
   console.log(`\n${checks.length - failed}/${checks.length} verificaciones pasaron`);
