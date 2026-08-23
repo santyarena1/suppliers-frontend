@@ -115,12 +115,28 @@ sincronización real. Verifica `scripts/check-offers-by-tenant.mjs`.
 Como el borrado de catálogo ya no afecta a nadie más, volvió a la organización: lo puede
 hacer un `OWNER` o un `ADMIN` del comercio, no un vendedor.
 
-### Fase 4 — Búsqueda cerrada
+### Fase 4 — Descubrimiento cerrado — **hecha**
 
-La búsqueda pasa a filtrar por `TenantLink`: un comercio solo ve los distribuidores con
-los que tiene vínculo. Para no dejar a nadie sin catálogo de un día para el otro, la
-migración crea un vínculo por cada credencial existente: si ya tenés cuenta con un
-distribuidor, estás vinculado.
+Cada proveedor pasó a ser también una organización de tipo distribuidor, con su nombre
+normalizado y su `providerKey`. `TenantVisibilityService` decide qué proveedores existen
+para un comercio: los que tiene vinculados por `TenantLink` y los que pagaron publicidad.
+El resto no aparece en ninguna pantalla ni responde por API — pedir el estado de un
+proveedor no vinculado da 404, no 403, porque un "no tenés permiso" ya confirmaría que
+existe.
+
+La publicidad paga solo da presencia: el comercio ve que el distribuidor existe y puede
+cargarle su cuenta, y hacerlo lo deja vinculado. Para todo lo demás está el canje de
+`TenantAccessCode` en `POST /my/redeem-code`: el código se entrega por fuera de NODO,
+todos los rechazos responden lo mismo para que nadie pueda enumerar organizaciones
+probando códigos, y el nombre se revela recién cuando el canje sale bien.
+
+Para no dejar a nadie sin catálogo de un día para el otro, la migración da por vinculado
+a todo el que ya venía usando un proveedor: credencial cargada, configuración de
+sincronización u ofertas existentes. Verifica `scripts/check-closed-discovery.mjs`.
+
+En el frontend, `GET /my/providers` es la única fuente de la lista: el dashboard de
+proveedores, los filtros de búsqueda, la navegación lateral, la home, diagnósticos y la
+tira de logos salen todos de ahí. Los paneles de superadmin siguen viendo todo.
 
 ### Fase 5 — Carrito y órdenes por organización
 

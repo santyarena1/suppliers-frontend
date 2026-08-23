@@ -18,6 +18,7 @@ import {
   UpdateTenantDto,
   UpsertLinkDto,
 } from "./dto/tenant.dto";
+import type { TenantContext } from "./tenant-context.service";
 
 const MEMBERSHIP_INCLUDE = {
   user: {
@@ -39,6 +40,12 @@ function generateAccessCode(): string {
   const bytes = randomBytes(12);
   const chars = Array.from(bytes, (byte) => CODE_ALPHABET[byte % CODE_ALPHABET.length]);
   return `${chars.slice(0, 4).join("")}-${chars.slice(4, 8).join("")}-${chars.slice(8, 12).join("")}`;
+}
+
+/** El código se dicta por teléfono o se copia de un papel: llega como llega. */
+function normalizeAccessCode(raw: string): string {
+  const limpio = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return [limpio.slice(0, 4), limpio.slice(4, 8), limpio.slice(8, 12)].filter(Boolean).join("-");
 }
 
 @Injectable()
@@ -413,6 +420,65 @@ export class TenantsService {
     const code = await this.prisma.tenantAccessCode.findUnique({ where: { id: codeId } });
     if (!code) throw new NotFoundException("Código no encontrado");
     return this.prisma.tenantAccessCode.update({ where: { id: codeId }, data: { revoked: true } });
+  }
+
+  /**
+   * Canjea un código y deja vinculado al comercio con quien lo emitió.
+   *
+   * Es la única puerta de entrada a un proveedor que el comercio no conocía. Por eso
+   * el código no dice nada hasta que se canjea: todos los rechazos responden lo mismo,
+   * así nadie puede probar códigos al voleo para averiguar qué organizaciones existen.
+   * Recién cuando el canje sale bien se revela el nombre.
+   */
+  async redeemAccessCode(client: TenantContext, userId: string, rawCode: string) {
+    const invalido = new BadRequestException("El código no es válido o ya se usó");
+    const code = await this.prisma.tenantAccessCode.findUnique({
+      where: { code: normalizeAccessCode(rawCode) },
+      include: { tenant: true },
+    });
+
+    if (!code) throw invalido;
+    if (code.revoked) throw invalido;
+    if (code.expiresAt && code.expiresAt.getTime() < Date.now()) throw invalido;
+    if (code.usedCount >= code.maxUses) throw invalido;
+    if (!code.tenant.active) throw invalido;
+    if (code.tenantId === client.tenantId) throw invalido;
+    if (client.tenantType !== "RETAILER") throw invalido;
+
+    const [link] = await this.prisma.$transaction([
+      this.prisma.tenantLink.upsert({
+        where: {
+          clientTenantId_supplierTenantId: {
+            clientTenantId: client.tenantId,
+            supplierTenantId: code.tenantId,
+          },
+        },
+        create: {
+          clientTenantId: client.tenantId,
+          supplierTenantId: code.tenantId,
+          status: "ACTIVE",
+        },
+        update: { status: "ACTIVE" },
+      }),
+      this.prisma.tenantAccessCode.update({
+        where: { id: code.id },
+        data: { usedCount: { increment: 1 } },
+      }),
+      this.prisma.tenantAccessCodeRedemption.create({
+        data: {
+          accessCodeId: code.id,
+          redeemedByUserId: userId,
+          redeemedByTenantId: client.tenantId,
+        },
+      }),
+    ]);
+
+    return {
+      linkId: link.id,
+      tenantName: code.tenant.name,
+      tenantType: code.tenant.type,
+      provider: code.tenant.providerKey,
+    };
   }
 
   // ---------- Alcance del Product Manager ----------

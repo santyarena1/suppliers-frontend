@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Provider } from "@nodo/shared";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { SaveCredentialDto } from "./dto/save-credential.dto";
 
 /**
@@ -13,7 +14,8 @@ import { SaveCredentialDto } from "./dto/save-credential.dto";
 export class CredentialsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService
+    private readonly crypto: CryptoService,
+    private readonly visibility: TenantVisibilityService
   ) {}
 
   async ofTenant(tenantId: string) {
@@ -41,6 +43,10 @@ export class CredentialsService {
   }
 
   async save(tenantId: string, savedById: string, dto: SaveCredentialDto) {
+    // No se puede cargar la cuenta de un distribuidor que para este comercio no
+    // existe. Si lo descubrió por publicidad, cargarla lo deja vinculado.
+    await this.visibility.ensureLinked(tenantId, dto.providerName);
+
     const encrypted = this.crypto.encrypt(JSON.stringify(dto.credentials));
     const row = await this.prisma.credential.upsert({
       where: { tenantId_providerName: { tenantId, providerName: dto.providerName } },

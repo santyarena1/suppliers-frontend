@@ -7,7 +7,8 @@ import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
-import { searchApi, catalogApi, ALL_PROVIDERS, ProductDTO, Provider } from "@/lib/api";
+import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
+import { useMyProviders } from "@/lib/myProviders";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
 import { parsePrice, proxyImg } from "@/lib/format";
@@ -37,7 +38,12 @@ function SearchPage() {
   const initialQ = searchParams?.get("q") || "";
   const [query, setQuery] = useState(initialQ);
   const [activeQuery, setActiveQuery] = useState("");
-  const [selectedProviders, setSelectedProviders] = useState<Set<Provider>>(new Set(ALL_PROVIDERS));
+  // Solo se puede buscar en los proveedores con los que el comercio está vinculado:
+  // del resto no hay catálogo, y ni siquiera tiene por qué saber que existen.
+  const { providers: myProviders } = useMyProviders();
+  const searchable = myProviders.filter((p) => p.linked);
+  const [selectedProviders, setSelectedProviders] = useState<Set<Provider>>(new Set());
+  const [touchedFilters, setTouchedFilters] = useState(false);
   const [results, setResults] = useState<ProductDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -85,6 +91,7 @@ function SearchPage() {
   }, [results]);
 
   const toggleProvider = useCallback((p: Provider) => {
+    setTouchedFilters(true);
     setSelectedProviders((prev) => {
       const next = new Set(prev);
       next.has(p) ? next.delete(p) : next.add(p);
@@ -103,16 +110,10 @@ function SearchPage() {
     setMinPrice("");
     setMaxPrice("");
     try {
-      let data: ProductDTO[];
-      if (selectedProviders.size === ALL_PROVIDERS.length) {
-        const res = await searchApi.all(query.trim());
-        data = res.data;
-      } else {
-        const filters: Record<string, boolean> = {};
-        ALL_PROVIDERS.forEach((p) => { filters[p] = selectedProviders.has(p); });
-        const res = await searchApi.filtered(query.trim(), filters);
-        data = res.data;
-      }
+      const res = await searchApi.all(query.trim(), {
+        providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
+      });
+      const data = res.data;
       setResults(data);
       persistResults(query.trim(), data);
       trackSearch(query.trim());
@@ -172,6 +173,14 @@ function SearchPage() {
 
   useEffect(() => { setCollapsedProviders(new Set()); }, [activeQuery]);
 
+  // Al entrar, todos los proveedores del comercio están seleccionados. Si la lista
+  // llega después, se completa sola; si ya tocaste los filtros, no se pisa.
+  useEffect(() => {
+    if (touchedFilters || searchable.length === 0) return;
+    setSelectedProviders(new Set(searchable.map((p) => p.provider)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchable.length, touchedFilters]);
+
   const autoSearched = useRef(false);
   useEffect(() => {
     if (initialQ && !autoSearched.current) {
@@ -181,7 +190,7 @@ function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ]);
 
-  const unselectedCount = ALL_PROVIDERS.length - selectedProviders.size;
+  const unselectedCount = searchable.length - selectedProviders.size;
   const hasInResultsFilter = refineText || minPrice || maxPrice || hideNoImage;
 
   return (
@@ -256,25 +265,30 @@ function SearchPage() {
             <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 flex-wrap flex-1">
-                  {ALL_PROVIDERS.map((p) => (
+                  {searchable.length === 0 && (
+                    <span className="text-xs text-surface-500">
+                      Todavía no estás conectado con ningún proveedor.
+                    </span>
+                  )}
+                  {searchable.map(({ provider, name }) => (
                     <button
-                      key={p}
-                      onClick={() => toggleProvider(p)}
+                      key={provider}
+                      onClick={() => toggleProvider(provider)}
                       className={`text-[11px] font-medium px-2 py-1 rounded border transition-all ${
-                        selectedProviders.has(p)
-                          ? `${PROVIDER_COLOR[p]} bg-current/10 border-current/30`
+                        selectedProviders.has(provider)
+                          ? `${PROVIDER_COLOR[provider]} bg-current/10 border-current/30`
                           : "text-surface-600 bg-transparent border-surface-800 hover:border-surface-600 hover:text-surface-400"
                       }`}
-                      style={selectedProviders.has(p) ? { borderColor: "currentColor" } : {}}
+                      style={selectedProviders.has(provider) ? { borderColor: "currentColor" } : {}}
                     >
-                      {p.replace(/_/g, " ")}
+                      {name}
                     </button>
                   ))}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button onClick={() => setSelectedProviders(new Set(ALL_PROVIDERS))} className="text-xs text-surface-400 hover:text-white">Todos</button>
+                  <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set(searchable.map((p) => p.provider))); }} className="text-xs text-surface-400 hover:text-white">Todos</button>
                   <span className="text-surface-700">·</span>
-                  <button onClick={() => setSelectedProviders(new Set())} className="text-xs text-surface-400 hover:text-white">Ninguno</button>
+                  <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set()); }} className="text-xs text-surface-400 hover:text-white">Ninguno</button>
                 </div>
               </div>
             </div>

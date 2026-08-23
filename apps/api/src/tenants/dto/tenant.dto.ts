@@ -188,6 +188,12 @@ export class UpsertLinkDto {
   notes?: string | null;
 }
 
+export class RedeemAccessCodeDto {
+  @IsString()
+  @MaxLength(40)
+  code!: string;
+}
+
 export class CreateAccessCodeDto {
   @IsOptional()
   @IsString()

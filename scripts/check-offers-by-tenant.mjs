@@ -69,21 +69,21 @@ async function main() {
   await call("PUT", `/providers/${PROVIDER}/config`, tokenPropio, { priceMarkupPercent: 0 });
 
   const yaTiene = (await call("GET", `/providers/${PROVIDER}/status`, tokenPropio)).payload.data;
-  if (!yaTiene?.totalProducts) {
+  if (!yaTiene?.total) {
     console.log("Sincronizando (puede tardar varios minutos)...");
     const sync = await call("POST", `/providers/${PROVIDER}/sync`, tokenPropio);
     check("La sincronización termina bien", sync.status === 200 || sync.status === 201, `HTTP ${sync.status}`);
   } else {
-    console.log(`La organización ya tenía ${yaTiene.totalProducts} productos, no se resincroniza.\n`);
+    console.log(`La organización ya tenía ${yaTiene.total} productos, no se resincroniza.\n`);
   }
 
   const estadoPropio = (await call("GET", `/providers/${PROVIDER}/status`, tokenPropio)).payload.data;
-  check("La organización que sincronizó tiene catálogo", (estadoPropio?.totalProducts ?? 0) > 0,
-    `${estadoPropio?.totalProducts} productos`);
+  check("La organización que sincronizó tiene catálogo", (estadoPropio?.total ?? 0) > 0,
+    `${estadoPropio?.total} productos`);
 
   const estadoAjeno = (await call("GET", `/providers/${PROVIDER}/status`, tokenAjeno)).payload.data;
-  check(`${otra.name} sigue sin catálogo de ${PROVIDER}`, (estadoAjeno?.totalProducts ?? 0) === 0,
-    `${estadoAjeno?.totalProducts} productos`);
+  check(`${otra.name} sigue sin catálogo de ${PROVIDER}`, (estadoAjeno?.total ?? 0) === 0,
+    `${estadoAjeno?.total} productos`);
 
   // Un término cualquiera que casi seguro aparezca en cualquier catálogo de tecnología.
   const termino = process.env.TERMINO ?? "a";

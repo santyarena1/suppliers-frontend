@@ -2,23 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { catalogApi, type ProviderDisplay } from "@/lib/api";
-import { ALL_PROVIDERS } from "@/lib/api";
+import { useMyProviders } from "@/lib/myProviders";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 
+/**
+ * Solo los proveedores del comercio: la tira de logos no puede delatar quién más
+ * existe en NODO.
+ */
 export default function PartnerCarousel() {
-  const [partners, setPartners] = useState<ProviderDisplay[]>([]);
+  const { providers: mine } = useMyProviders();
+  const [display, setDisplay] = useState<ProviderDisplay[]>([]);
 
   useEffect(() => {
     catalogApi.providerDisplay()
-      .then((res) => {
-        const visible = res.data.filter((p) => p.visible && (p.logoUrl || true));
-        const ordered = ALL_PROVIDERS
-          .map((id) => visible.find((p) => p.provider === id))
-          .filter((p): p is ProviderDisplay => !!p);
-        setPartners(ordered.length > 0 ? ordered : visible);
-      })
-      .catch(() => setPartners([]));
+      .then((res) => setDisplay(res.data.filter((p) => p.visible)))
+      .catch(() => setDisplay([]));
   }, []);
+
+  const partners = mine
+    .filter(({ provider }) => display.some((d) => d.provider === provider))
+    .map(({ provider, name }) => ({
+      provider,
+      name,
+      logoUrl: display.find((d) => d.provider === provider)?.logoUrl ?? null,
+    }));
 
   if (partners.length === 0) return null;
 
@@ -40,12 +47,12 @@ export default function PartnerCarousel() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={p.logoUrl}
-                  alt={p.provider}
+                  alt={p.name}
                   className="h-8 w-auto max-w-[120px] object-contain object-left grayscale hover:grayscale-0 transition-all"
                 />
               ) : (
                 <span className={`text-sm font-bold whitespace-nowrap ${PROVIDER_TEXT_COLOR[p.provider] || "text-surface-400"}`}>
-                  {p.provider.replace(/_/g, " ")}
+                  {p.name}
                 </span>
               )}
             </div>

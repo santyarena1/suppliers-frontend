@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { IMPLEMENTED_PROVIDERS, providersApi, type ProviderStatus } from "@/lib/api";
+import { loadLinkedProviders, providersApi, type ProviderStatus } from "@/lib/api";
 
 export type ProviderStatusMap = Partial<Record<string, ProviderStatus>>;
 
@@ -14,11 +14,12 @@ async function load(force = false): Promise<ProviderStatusMap> {
   if (!force && cache && Date.now() - fetchedAt < TTL_MS) return cache;
   if (!force && inflight) return inflight;
 
-  inflight = Promise.allSettled(IMPLEMENTED_PROVIDERS.map((p) => providersApi.status(p)))
-    .then((results) => {
+  inflight = loadLinkedProviders()
+    .then(async (providers) => {
+      const results = await Promise.allSettled(providers.map((p) => providersApi.status(p)));
       const map: ProviderStatusMap = {};
       results.forEach((r, i) => {
-        if (r.status === "fulfilled") map[IMPLEMENTED_PROVIDERS[i]] = r.value.data;
+        if (r.status === "fulfilled") map[providers[i]] = r.value.data;
       });
       cache = map;
       fetchedAt = Date.now();

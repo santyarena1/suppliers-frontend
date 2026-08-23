@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
-import { ALL_PROVIDERS, Provider, searchApi, credentialsApi } from "@/lib/api";
+import { Provider, searchApi, credentialsApi } from "@/lib/api";
+import { useLinkedProviders } from "@/lib/myProviders";
 import { PROVIDER_TEXT_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
 import {
   CheckCircle2, XCircle, Loader2, AlertTriangle, Activity,
@@ -30,6 +31,8 @@ export default function DiagnosticsPage() {
   const [runningAll, setRunningAll] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [scope, setScope] = useState<"all" | "configured">("configured");
+  // Solo tiene sentido diagnosticar los proveedores del comercio.
+  const { providers: myProviders } = useLinkedProviders();
 
   useEffect(() => {
     credentialsApi.mine().then((res) => {
@@ -71,11 +74,11 @@ export default function DiagnosticsPage() {
   async function runAll() {
     if (runningAll) return;
     setRunningAll(true);
-    const targets = scope === "all" ? ALL_PROVIDERS : ALL_PROVIDERS.filter((p) => configuredProviders.has(p));
+    const targets = scope === "all" ? myProviders : myProviders.filter((p) => configuredProviders.has(p));
     // Mark non-configured as no_cred if testing only configured
     const noCred: Record<string, ProviderResult> = {};
     if (scope === "configured") {
-      ALL_PROVIDERS.filter((p) => !configuredProviders.has(p)).forEach((p) => {
+      myProviders.filter((p) => !configuredProviders.has(p)).forEach((p) => {
         noCred[p] = { status: "no_cred" };
       });
     }
@@ -179,7 +182,7 @@ export default function DiagnosticsPage() {
                             : "border-surface-700 text-surface-400 hover:text-surface-200"
                         }`}
                       >
-                        Todos los proveedores ({ALL_PROVIDERS.length})
+                        Todos los proveedores ({myProviders.length})
                       </button>
                     </div>
                   </div>
@@ -219,11 +222,11 @@ export default function DiagnosticsPage() {
               <section className="bg-surface-900 border border-surface-800 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-surface-800 flex items-center justify-between">
                   <h2 className="text-sm font-semibold text-white">Resultados por proveedor</h2>
-                  {tested > 0 && <span className="text-xs text-surface-500">{tested} de {scope === "configured" ? configuredProviders.size : ALL_PROVIDERS.length} testeado{tested !== 1 ? "s" : ""}</span>}
+                  {tested > 0 && <span className="text-xs text-surface-500">{tested} de {scope === "configured" ? configuredProviders.size : myProviders.length} testeado{tested !== 1 ? "s" : ""}</span>}
                 </div>
 
                 <div className="divide-y divide-surface-800">
-                  {ALL_PROVIDERS
+                  {myProviders
                     .filter((p) => scope === "all" || configuredProviders.has(p) || results[p])
                     .map((p) => {
                       const result = results[p];

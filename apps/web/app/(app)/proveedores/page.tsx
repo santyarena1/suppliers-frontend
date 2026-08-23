@@ -1,33 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
-import { ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, providersApi, ProviderStatus, canSyncProvider } from "@/lib/api";
+import RedeemAccessCode from "@/components/RedeemAccessCode";
+import {
+  invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
+  canSyncProvider, type VisibleProvider
+} from "@/lib/api";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
-import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, XCircle } from "lucide-react";
+import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, Sparkles, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
 export default function ProveedoresPage() {
+  const [visible, setVisible] = useState<VisibleProvider[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<Provider | null>(null);
   const [syncResult, setSyncResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
 
-  async function loadStatuses() {
-    const results = await Promise.allSettled(IMPLEMENTED_PROVIDERS.map((p) => providersApi.status(p)));
+  const load = useCallback(async (force = false) => {
+    if (force) invalidateMyProviders();
+    const mine = await loadMyProviders(force);
+    setVisible(mine);
+
+    const linked = mine.filter((p) => p.linked).map((p) => p.provider);
+    const results = await Promise.allSettled(linked.map((p) => providersApi.status(p)));
     const map: StatusMap = {};
     results.forEach((r, i) => {
-      if (r.status === "fulfilled") map[IMPLEMENTED_PROVIDERS[i]] = r.value.data;
+      if (r.status === "fulfilled") map[linked[i]] = r.value.data;
     });
     setStatuses(map);
     setLoading(false);
-  }
+  }, []);
 
-  useEffect(() => { loadStatuses(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   async function handleSync(provider: Provider, e: React.MouseEvent) {
     e.preventDefault();
@@ -37,7 +47,7 @@ export default function ProveedoresPage() {
     try {
       const res = await providersApi.sync(provider);
       setSyncResult((prev) => ({ ...prev, [provider]: { ok: true, msg: `${res.data.synced.toLocaleString("es-AR")} productos` } }));
-      await loadStatuses();
+      await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSyncResult((prev) => ({ ...prev, [provider]: { ok: false, msg: msg || "Error al sincronizar" } }));
@@ -46,7 +56,8 @@ export default function ProveedoresPage() {
     }
   }
 
-  const pending = ALL_PROVIDERS.filter((p) => !IMPLEMENTED_PROVIDERS.includes(p));
+  const linked = visible.filter((p) => p.linked);
+  const advertised = visible.filter((p) => !p.linked);
 
   return (
     <>
@@ -64,15 +75,22 @@ export default function ProveedoresPage() {
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
               <section>
                 <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-3">
-                  Integrados — {IMPLEMENTED_PROVIDERS.length}
+                  Tus proveedores — {linked.length}
                 </h2>
                 {loading ? (
                   <div className="flex items-center justify-center py-16">
                     <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
                   </div>
+                ) : linked.length === 0 ? (
+                  <div className="border border-surface-800 rounded-xl p-8 text-center flex flex-col gap-2">
+                    <p className="text-sm text-surface-300">Todavía no estás conectado con ningún proveedor.</p>
+                    <p className="text-xs text-surface-500">
+                      Pedile un código de acceso al distribuidor con el que ya trabajás y canjealo acá abajo.
+                    </p>
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {IMPLEMENTED_PROVIDERS.map((provider) => {
+                    {linked.map(({ provider, name, accountManager }) => {
                       const s = statuses[provider];
                       const result = syncResult[provider];
                       const isSyncing = syncing === provider;
@@ -83,7 +101,7 @@ export default function ProveedoresPage() {
                         >
                           <Link href={`/proveedores/${provider}`} className="flex items-center justify-between">
                             <span className={`text-sm font-bold ${PROVIDER_TEXT_COLOR[provider] || "text-surface-200"}`}>
-                              {provider.replace(/_/g, " ")}
+                              {name}
                             </span>
                             {s?.hasCredentials ? (
                               <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
@@ -110,6 +128,12 @@ export default function ProveedoresPage() {
                               {s?.lastSyncedAt ? relativeTime(s.lastSyncedAt) : "nunca sincronizado"}
                             </span>
                           </Link>
+
+                          {accountManager && (
+                            <p className="text-[11px] text-surface-500 -mt-1">
+                              Tu vendedor: {accountManager.name} · {accountManager.email}
+                            </p>
+                          )}
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
                             <Link
@@ -149,23 +173,35 @@ export default function ProveedoresPage() {
                 )}
               </section>
 
+              {advertised.length > 0 && (
+                <section>
+                  <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-widest mb-3">
+                    Podés conectarte — {advertised.length}
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {advertised.map(({ provider, name }) => (
+                      <Link
+                        key={provider}
+                        href={`/proveedores/${provider}?tab=credentials`}
+                        className="bg-surface-900 border border-surface-800 hover:border-surface-600 rounded-xl p-4 flex items-center justify-between gap-3 transition-all"
+                      >
+                        <span className={`text-sm font-bold ${PROVIDER_TEXT_COLOR[provider] || "text-surface-200"}`}>
+                          {name}
+                        </span>
+                        <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400">
+                          <Sparkles className="w-3 h-3" /> Cargá tu cuenta
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               <section>
                 <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-widest mb-3">
-                  Conectar nuevo — {pending.length} disponibles
+                  Conectar con un código
                 </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
-                  {pending.map((provider) => (
-                    <div
-                      key={provider}
-                      title="Todavía no tiene integración real"
-                      className="border border-surface-800 rounded-lg px-3 py-2.5 opacity-50 cursor-not-allowed"
-                    >
-                      <span className="text-[11px] font-bold text-surface-500 block truncate">
-                        {provider.replace(/_/g, " ")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <RedeemAccessCode onRedeemed={() => load(true)} />
               </section>
             </div>
           </div>

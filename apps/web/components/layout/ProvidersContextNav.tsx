@@ -1,8 +1,9 @@
 "use client";
 
 import { LayoutDashboard } from "lucide-react";
-import { IMPLEMENTED_PROVIDERS, canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
+import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
+import { useMyProviders } from "@/lib/myProviders";
 import { useProviderStatuses } from "@/lib/providerStatus";
 import ContextNav, { type ContextNavItem } from "./ContextNav";
 
@@ -14,13 +15,15 @@ function dotFor(status?: ProviderStatus) {
 
 export default function ProvidersContextNav({ children }: { children: React.ReactNode }) {
   const statuses = useProviderStatuses();
+  const { providers } = useMyProviders();
+  const linked = providers.filter((p) => p.linked);
 
   const items: ContextNavItem[] = [
     { href: "/proveedores", label: "Dashboard", icon: LayoutDashboard, exact: true },
-    { href: "#activos", label: `Activos — ${IMPLEMENTED_PROVIDERS.length}`, kind: "heading" },
-    ...IMPLEMENTED_PROVIDERS.map((provider) => ({
+    { href: "#activos", label: `Activos — ${linked.length}`, kind: "heading" },
+    ...linked.map(({ provider, name }) => ({
       href: `/proveedores/${provider}`,
-      label: provider.replace(/_/g, " "),
+      label: name,
       exact: true,
       dotClass: dotFor(statuses[provider]),
       colorClass: PROVIDER_TEXT_COLOR[provider as Provider] || "",

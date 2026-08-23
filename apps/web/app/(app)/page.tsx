@@ -6,7 +6,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
-import { ALL_PROVIDERS, credentialsApi, Provider } from "@/lib/api";
+import { credentialsApi, Provider } from "@/lib/api";
+import { useMyProviders } from "@/lib/myProviders";
 import { usePrefs } from "@/lib/prefs";
 import { useCart } from "@/lib/cart";
 import { getRecentSearches, getTopSearches, SearchEntry, trackSearch } from "@/lib/history";
@@ -70,6 +71,7 @@ export default function HomePage() {
   const [top, setTop] = useState<SearchEntry[]>([]);
   const [heroIdx, setHeroIdx] = useState(0);
   const [configuredProviders, setConfiguredProviders] = useState<Set<Provider>>(new Set());
+  const { providers: myProviders } = useMyProviders();
 
   useEffect(() => {
     setRecent(getRecentSearches(6));
@@ -168,7 +170,7 @@ export default function HomePage() {
 
               {/* Stats */}
               <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <StatCard label="Proveedores activos" value={configuredProviders.size} total={ALL_PROVIDERS.length} icon={Building2} href="/proveedores" accent="brand" />
+                <StatCard label="Proveedores activos" value={configuredProviders.size} total={myProviders.length} icon={Building2} href="/proveedores" accent="brand" />
                 <StatCard label={`Dólar ${dollarLabel(dollarType)}`} value={currentRate ? `$${currentRate.venta.toLocaleString("es-AR")}` : "—"} icon={DollarSign} accent="emerald" detail={currency === "USD" ? "Mostrando en USD" : "Convertido a ARS"} />
                 <StatCard label="Carrito" value={totalCount} detail={cartProviders.length > 0 ? `${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}` : "Vacío"} icon={ShoppingCart} href="/cart" accent="orange" />
                 <StatCard label="Búsquedas guardadas" value={top.length} detail="Historial local" icon={Clock} accent="purple" />
@@ -254,28 +256,40 @@ export default function HomePage() {
                     Administrar <ArrowRight className="w-3 h-3" />
                   </Link>
                 } />
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
-                  {ALL_PROVIDERS.map((p) => {
-                    const configured = configuredProviders.has(p);
-                    return (
-                      <button
-                        key={p}
-                        onClick={() => router.push(configured ? `/proveedores/${p}` : `/proveedores/${p}?tab=credentials`)}
-                        className={`relative bg-surface-900 border rounded-lg p-3 transition-all hover:scale-[1.02] text-left ${
-                          configured ? "border-surface-700 hover:border-brand-500" : "border-surface-800 hover:border-surface-600 opacity-70"
-                        }`}
-                      >
-                        <span className={`text-[11px] font-bold leading-tight block ${PROVIDER_TEXT_COLOR[p] || "text-surface-400"}`}>
-                          {p.replace(/_/g, " ")}
-                        </span>
-                        <span className={`text-[9px] mt-1 flex items-center gap-1 ${configured ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-emerald-500 dark:bg-emerald-400" : "bg-surface-700"}`} />
-                          {configured ? "Configurado" : "Sin credencial"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                {myProviders.length === 0 ? (
+                  <div className="bg-surface-900 border border-surface-800 rounded-xl p-5">
+                    <p className="text-sm text-surface-400">
+                      Todavía no estás conectado con ningún proveedor.{" "}
+                      <Link href="/proveedores" className="text-brand-400 hover:text-brand-300">
+                        Canjeá el código que te dieron
+                      </Link>{" "}
+                      para empezar.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                    {myProviders.map(({ provider: p, name }) => {
+                      const configured = configuredProviders.has(p);
+                      return (
+                        <button
+                          key={p}
+                          onClick={() => router.push(configured ? `/proveedores/${p}` : `/proveedores/${p}?tab=credentials`)}
+                          className={`relative bg-surface-900 border rounded-lg p-3 transition-all hover:scale-[1.02] text-left ${
+                            configured ? "border-surface-700 hover:border-brand-500" : "border-surface-800 hover:border-surface-600 opacity-70"
+                          }`}
+                        >
+                          <span className={`text-[11px] font-bold leading-tight block ${PROVIDER_TEXT_COLOR[p] || "text-surface-400"}`}>
+                            {name}
+                          </span>
+                          <span className={`text-[9px] mt-1 flex items-center gap-1 ${configured ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-emerald-500 dark:bg-emerald-400" : "bg-surface-700"}`} />
+                            {configured ? "Configurado" : "Sin credencial"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </section>
 
               {/* CTAs */}

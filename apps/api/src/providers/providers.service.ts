@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from "@nes
 import type { Provider } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { CredentialsService } from "../credentials/credentials.service";
+import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct } from "./types";
@@ -25,7 +26,8 @@ export class ProvidersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly credentials: CredentialsService,
-    private readonly registry: ProviderRegistry
+    private readonly registry: ProviderRegistry,
+    private readonly visibility: TenantVisibilityService
   ) {}
 
   async getConfig(tenantId: string, provider: Provider) {
@@ -54,6 +56,7 @@ export class ProvidersService {
   }
 
   async updateConfig(tenantId: string, provider: Provider, dto: UpdateProviderConfigDto) {
+    await this.visibility.assertLinked(tenantId, provider);
     return this.prisma.providerSyncConfig.upsert({
       where: { tenantId_provider: { tenantId, provider } },
       create: { tenantId, provider, ...dto },
@@ -62,6 +65,7 @@ export class ProvidersService {
   }
 
   async sync(tenantId: string, provider: Provider) {
+    await this.visibility.assertLinked(tenantId, provider);
     const adapter = this.registry.get(provider);
     if (!adapter) {
       throw new BadRequestException(
@@ -149,6 +153,7 @@ export class ProvidersService {
 
   /** Igual que sync(), pero la fuente de productos es un archivo Excel/CSV subido a mano en vez de la API del proveedor. */
   async importFromRows(tenantId: string, provider: Provider, items: NormalizedProduct[]) {
+    await this.visibility.assertLinked(tenantId, provider);
     return this.runSync(tenantId, provider, async (onPage) => {
       await onPage(items);
     });
@@ -377,6 +382,7 @@ export class ProvidersService {
   }
 
   async status(tenantId: string, provider: Provider) {
+    await this.visibility.assertVisible(tenantId, provider);
     const [credential, total, withStock, last] = await Promise.all([
       this.credentials.findByProvider(tenantId, provider),
       this.prisma.tenantProductOffer.count({ where: { tenantId, provider, active: true } }),
@@ -408,6 +414,7 @@ export class ProvidersService {
    */
   async search(tenantId: string, provider: Provider, name: string) {
     if (!(await this.isProviderVisible(provider))) return [];
+    if (!(await this.visibility.isLinked(tenantId, provider))) return [];
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
@@ -428,6 +435,7 @@ export class ProvidersService {
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
   async getProduct(tenantId: string, provider: Provider, externalId: string) {
     if (!(await this.isProviderVisible(provider))) return null;
+    if (!(await this.visibility.isLinked(tenantId, provider))) return null;
     const offer = await this.prisma.tenantProductOffer.findUnique({
       where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
       include: { product: true },
@@ -509,7 +517,8 @@ export class ProvidersService {
    * traerse el catálogo entero a memoria para contarlo acá.
    */
   async getCategories(tenantId: string) {
-    const hidden = [...(await this.hiddenProviders())];
+    const providers = await this.readableProviders(tenantId);
+    if (providers.length === 0) return [];
     const rows = await this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
       SELECT ficha.category AS category, COUNT(*) AS count
       FROM "TenantProductOffer" oferta
@@ -518,7 +527,7 @@ export class ProvidersService {
       WHERE oferta."tenantId" = ${tenantId}
         AND oferta.active
         AND ficha.category IS NOT NULL
-        AND NOT (oferta.provider = ANY(${hidden}::text[]))
+        AND oferta.provider = ANY(${providers}::text[])
       GROUP BY ficha.category
       ORDER BY count DESC
       LIMIT 60
@@ -528,10 +537,11 @@ export class ProvidersService {
 
   /** Muestra de productos con stock entre proveedores visibles, para destacados de la landing. */
   async getFeatured(tenantId: string, take: number) {
-    const hidden = await this.hiddenProviders();
+    const providers = await this.readableProviders(tenantId);
+    if (providers.length === 0) return [];
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
-        where: { tenantId, active: true, stock: { gt: 0 }, provider: { notIn: [...hidden] } },
+        where: { tenantId, active: true, stock: { gt: 0 }, provider: { in: providers } },
         include: { product: true },
         orderBy: { syncedAt: "desc" },
         take: Math.min(Math.max(take, 1), 60),
@@ -543,10 +553,11 @@ export class ProvidersService {
 
   /** Productos de una categoría, cruzando todos los proveedores visibles — clic en la grilla de categorías de la landing. */
   async getByCategory(tenantId: string, category: string, take: number) {
-    const hidden = await this.hiddenProviders();
+    const providers = await this.readableProviders(tenantId);
+    if (providers.length === 0) return [];
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
-        where: { tenantId, active: true, provider: { notIn: [...hidden] }, product: { category } },
+        where: { tenantId, active: true, provider: { in: providers }, product: { category } },
         include: { product: true },
         orderBy: { product: { name: "asc" } },
         take: Math.min(Math.max(take, 1), 200),
@@ -554,6 +565,18 @@ export class ProvidersService {
       this.rulesByProvider(tenantId),
     ]);
     return offers.map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES));
+  }
+
+  /**
+   * Proveedores de los que esta organización puede leer catálogo: los que tiene
+   * vinculados, menos los que el superadmin escondió de toda la plataforma.
+   */
+  private async readableProviders(tenantId: string): Promise<string[]> {
+    const [linked, hidden] = await Promise.all([
+      this.visibility.linkedProviderKeys(tenantId),
+      this.hiddenProviders(),
+    ]);
+    return linked.filter((provider) => !hidden.has(provider));
   }
 
   /**

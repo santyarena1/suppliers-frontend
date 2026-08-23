@@ -201,7 +201,9 @@ export interface SearchAllOptions {
 
 export const searchApi = {
   all: async (name: string, opts: SearchAllOptions = {}) => {
-    const providers = opts.providers ?? IMPLEMENTED_PROVIDERS;
+    // Buscar en un proveedor que no está vinculado no devolvería nada igual; sin la
+    // lista, serían catorce pedidos al pedo en cada búsqueda.
+    const providers = opts.providers ?? (await loadLinkedProviders());
     const results = await Promise.allSettled(
       providers.map(async (p) => {
         try {
@@ -224,10 +226,77 @@ export const searchApi = {
   byProvider: (provider: Provider, name: string) =>
     api.get<ProductDTO[]>(`/search/provider/${provider}`, { params: { name } }),
   filtered: async (name: string, filters: Record<string, boolean>, opts: SearchAllOptions = {}) => {
-    const providers = IMPLEMENTED_PROVIDERS.filter((p) => filters[p]);
+    const providers = (await loadLinkedProviders()).filter((p) => filters[p]);
     return searchApi.all(name, { ...opts, providers });
   },
 };
+
+// --- Mi organización ---
+/** Un proveedor tal como lo ve un comercio, y por qué lo ve. */
+export interface VisibleProvider {
+  provider: Provider;
+  name: string;
+  /** Hay vínculo: se le puede cargar la cuenta y traer catálogo. */
+  linked: boolean;
+  /** Aparece solo porque el distribuidor pagó publicidad. */
+  advertised: boolean;
+  accountManager: { name: string; email: string } | null;
+  discountPercent: number | null;
+}
+
+export interface RedeemedCode {
+  linkId: string;
+  tenantName: string;
+  tenantType: TenantType;
+  provider: Provider | null;
+}
+
+export const myApi = {
+  providers: () => api.get<VisibleProvider[]>("/my/providers"),
+  redeemCode: (code: string) => api.post<RedeemedCode>("/my/redeem-code", { code }),
+};
+
+/**
+ * Los proveedores que existen para esta organización, cacheados: la lista cambia poco
+ * y la piden varias pantallas al mismo tiempo.
+ */
+let visibleProviders: { list: VisibleProvider[]; at: number } | null = null;
+let visibleProvidersInflight: Promise<VisibleProvider[]> | null = null;
+const VISIBLE_PROVIDERS_TTL_MS = 60_000;
+
+export async function loadMyProviders(force = false): Promise<VisibleProvider[]> {
+  if (!force && visibleProviders && Date.now() - visibleProviders.at < VISIBLE_PROVIDERS_TTL_MS) {
+    return visibleProviders.list;
+  }
+  if (!force && visibleProvidersInflight) return visibleProvidersInflight;
+
+  visibleProvidersInflight = myApi
+    .providers()
+    .then((r) => {
+      visibleProviders = { list: r.data, at: Date.now() };
+      return r.data;
+    })
+    .catch(() => visibleProviders?.list ?? [])
+    .finally(() => {
+      visibleProvidersInflight = null;
+    });
+
+  return visibleProvidersInflight;
+}
+
+export function invalidateMyProviders() {
+  visibleProviders = null;
+  visibleProvidersInflight = null;
+}
+
+/** Solo los vinculados: de los publicitados todavía no hay catálogo que traer. */
+export async function loadLinkedProviders(): Promise<Provider[]> {
+  return (await loadMyProviders()).filter((p) => p.linked).map((p) => p.provider);
+}
+
+export function cachedMyProviders(): VisibleProvider[] | null {
+  return visibleProviders?.list ?? null;
+}
 
 // --- Credentials ---
 export const credentialsApi = {
