@@ -26,10 +26,19 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `/admin/users`, `/admin/users/:id`, `/admin/users/:id/password`, `/admin/users/:id/role`, `/admin/users/:id/active-status`, `/admin/users/:id/end-date`
 - **Auth**: Bearer ROLE_ADMIN
-- **Body / Params**: crear `{ username, email, password, role, brandId?, active?, endDate? }` · editar `{ username?, email?, brandId? }` · password `{ password }` (mín. 8)
+- **Body / Params**: crear `{ username, email, password?, role, brandId?, active?, endDate? }` · editar `{ username?, email?, brandId? }` · password `{ password? }` (mín. 8)
 - **Respuesta esperada**: lista enriquecida con `brand`, `providers` (nombres, sin secretos), `brandAccesses`
 - **Estado**: IMPLEMENTADO
-- **Notas**: `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento.
+- **Notas**: `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse.
+
+### [FEATURE] Entrar como otro usuario (suplantación)
+- **Método**: POST
+- **Ruta**: `/admin/users/:id/impersonate`
+- **Auth**: Bearer ROLE_ADMIN
+- **Body / Params**: sin cuerpo (mandar `{}`: Fastify rechaza un `content-type` JSON vacío)
+- **Respuesta esperada**: `{ token, user: { id, username, email, role, active, brandId? } }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El token vale 1 hora y agrega al payload `impersonatedBy` e `impersonatedByUsername`, para que toda acción de esa sesión sea atribuible al administrador. Se rechaza contra otro `ROLE_ADMIN`, contra uno mismo, y desde una sesión ya suplantada. Cada uso queda en `AuditLogEntry` con acción `IMPERSONATE`.
 
 ### [FEATURE] Árbol de organizaciones (multi-tenant)
 - **Método**: GET | POST | PUT | DELETE
