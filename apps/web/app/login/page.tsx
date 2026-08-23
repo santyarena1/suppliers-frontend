@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
-import { saveSession } from "@/lib/auth";
+import { saveSession, sessionFromToken } from "@/lib/auth";
 import { invalidateMyModules } from "@/lib/permissions";
 import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
@@ -30,15 +30,8 @@ export default function LoginPage() {
     try {
       const res = await authApi.login(username, password);
       const token = res.data.token;
-      const payload = JSON.parse(atob(token.split(".")[1]));
       invalidateMyModules();
-      saveSession(token, {
-        username: payload.sub ?? username,
-        role: payload.role ?? payload.roles?.[0] ?? "ROLE_USER",
-        id: payload.userId ?? payload.id ?? "",
-        email: payload.email ?? undefined,
-        brandId: payload.brandId ?? undefined,
-      });
+      saveSession(token, sessionFromToken(token, username));
       router.push("/search");
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };

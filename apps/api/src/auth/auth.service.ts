@@ -7,8 +7,9 @@ import {
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as argon2 from "argon2";
-import type { JwtPayload } from "@nodo/shared";
+import type { JwtPayload, UserRole } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { TenantContextService } from "../tenants/tenant-context.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 
@@ -22,7 +23,8 @@ const IMPERSONATION_EXPIRES_IN = "1h";
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly jwt: JwtService
+    private readonly jwt: JwtService,
+    private readonly tenantContext: TenantContextService
   ) {}
 
   async register(dto: RegisterDto) {
@@ -55,16 +57,35 @@ export class AuthService {
       throw new UnauthorizedException("La cuenta venció");
     }
 
-    const payload: JwtPayload = {
+    const token = await this.jwt.signAsync(await this.payloadFor(user));
+    return { token };
+  }
+
+  /**
+   * Arma el contenido del token. La organización se resuelve acá, en el momento de
+   * emitirlo, para que el resto de la plataforma no tenga que buscarla en cada pedido.
+   */
+  private async payloadFor(
+    user: { id: string; username: string; email: string; role: UserRole; brandId: string | null },
+    extra: Partial<JwtPayload> = {}
+  ): Promise<JwtPayload> {
+    const tenant = await this.tenantContext.forUser(user.id);
+    return {
       sub: user.username,
       userId: user.id,
       role: user.role,
       email: user.email,
       ...(user.brandId ? { brandId: user.brandId } : {}),
+      ...(tenant
+        ? {
+            tenantId: tenant.tenantId,
+            tenantName: tenant.tenantName,
+            tenantType: tenant.tenantType,
+            tenantRole: tenant.tenantRole,
+          }
+        : {}),
+      ...extra,
     };
-
-    const token = await this.jwt.signAsync(payload);
-    return { token };
   }
 
   /**
@@ -90,15 +111,10 @@ export class AuthService {
       throw new BadRequestException("No se puede entrar como otro administrador");
     }
 
-    const payload: JwtPayload = {
-      sub: target.username,
-      userId: target.id,
-      role: target.role,
-      email: target.email,
-      ...(target.brandId ? { brandId: target.brandId } : {}),
+    const payload = await this.payloadFor(target, {
       impersonatedBy: admin.userId,
       impersonatedByUsername: admin.sub,
-    };
+    });
 
     const token = await this.jwt.signAsync(payload, { expiresIn: IMPERSONATION_EXPIRES_IN });
 
@@ -121,6 +137,10 @@ export class AuthService {
         role: target.role,
         active: target.active,
         ...(target.brandId ? { brandId: target.brandId } : {}),
+        tenantId: payload.tenantId ?? null,
+        tenantName: payload.tenantName ?? null,
+        tenantType: payload.tenantType ?? null,
+        tenantRole: payload.tenantRole ?? null,
       },
     };
   }

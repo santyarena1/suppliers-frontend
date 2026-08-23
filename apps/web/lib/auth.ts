@@ -20,6 +20,8 @@ export function getToken(): string | null {
 }
 
 export type UserRole = "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
+export type TenantType = "RETAILER" | "DISTRIBUTOR" | "BRAND";
+export type TenantRole = "OWNER" | "BUYER" | "SELLER" | "PRODUCT_MANAGER" | "MARKETING" | "COMMERCIAL" | "VIEWER";
 
 export interface SessionUser {
   username: string;
@@ -27,6 +29,46 @@ export interface SessionUser {
   id: string;
   email?: string;
   brandId?: string;
+  /** Organización de la persona. Ausente solo para el superadmin. */
+  tenantId?: string;
+  tenantName?: string;
+  tenantType?: TenantType;
+  tenantRole?: TenantRole;
+}
+
+/**
+ * Arma la sesión leyendo el token, que es quien tiene la verdad sobre la
+ * organización y el rol. Lo usan tanto el login como la suplantación, para que las
+ * dos entradas a la plataforma produzcan exactamente la misma sesión.
+ */
+export function sessionFromToken(token: string, fallbackUsername = ""): SessionUser {
+  let payload: Record<string, unknown> = {};
+  try {
+    payload = JSON.parse(atob(token.split(".")[1]));
+  } catch {
+    // Un token ilegible igual deja una sesión mínima; la API va a rechazarlo y el
+    // interceptor de 401 se encarga de mandar a login.
+  }
+  const str = (key: string) => (typeof payload[key] === "string" ? (payload[key] as string) : undefined);
+
+  return {
+    username: str("sub") ?? fallbackUsername,
+    role: (str("role") as UserRole) ?? "ROLE_USER",
+    id: str("userId") ?? "",
+    email: str("email"),
+    brandId: str("brandId"),
+    tenantId: str("tenantId"),
+    tenantName: str("tenantName"),
+    tenantType: str("tenantType") as TenantType | undefined,
+    tenantRole: str("tenantRole") as TenantRole | undefined,
+  };
+}
+
+/** La organización de quien está usando la plataforma, si pertenece a alguna. */
+export function getTenant(): { id: string; name: string; type: TenantType; role: TenantRole } | null {
+  const user = getUser();
+  if (!user?.tenantId || !user.tenantName || !user.tenantType || !user.tenantRole) return null;
+  return { id: user.tenantId, name: user.tenantName, type: user.tenantType, role: user.tenantRole };
 }
 
 export function getUser(): SessionUser | null {

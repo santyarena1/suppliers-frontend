@@ -1,3 +1,5 @@
+import type { TenantRole, TenantType } from "./tenants";
+
 export type UserRole = "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
 
 export interface JwtPayload {
@@ -6,6 +8,18 @@ export interface JwtPayload {
   role: UserRole;
   email: string;
   brandId?: string;
+  /**
+   * Organización a la que pertenece quien usa la sesión, y su rol adentro. Ausente
+   * solo para el superadmin, que es transversal y no pertenece a ninguna.
+   *
+   * `role` es el nivel de plataforma; el alcance real de negocio lo da esto. Las
+   * sesiones emitidas antes de que existieran estos campos no los traen, así que
+   * el backend siempre debe poder resolverlos contra la base.
+   */
+  tenantId?: string;
+  tenantName?: string;
+  tenantType?: TenantType;
+  tenantRole?: TenantRole;
   /**
    * Presente solo cuando un administrador está usando la plataforma como este
    * usuario. Guarda el id y el nombre de quien inició la suplantación, para que

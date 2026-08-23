@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Eye, Loader2 } from "lucide-react";
 import { adminApi } from "@/lib/api";
-import { startImpersonation, type UserRole } from "@/lib/auth";
+import { sessionFromToken, startImpersonation, type UserRole } from "@/lib/auth";
 
 interface Props {
   userId: string;
@@ -30,13 +30,7 @@ export default function EnterAsButton({ userId, role, onError, className = "", s
     setEntering(true);
     try {
       const { data } = await adminApi.impersonate(userId);
-      startImpersonation(data.token, {
-        id: data.user.id,
-        username: data.user.username,
-        email: data.user.email,
-        role: data.user.role,
-        brandId: data.user.brandId,
-      });
+      startImpersonation(data.token, sessionFromToken(data.token, data.user.username));
       window.location.href = "/";
     } catch (err) {
       const message =
