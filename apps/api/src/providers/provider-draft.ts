@@ -1,6 +1,24 @@
 import { Logger } from "@nestjs/common";
 import type { Prisma, ProviderOrder } from "@prisma/client";
 
+/**
+ * Quién arma el pedido y para qué organización. El pedido es de la organización;
+ * la persona queda registrada para saber quién lo armó y quién lo aprobó.
+ */
+export interface OrderAuthor {
+  userId: string;
+  tenantId: string;
+}
+
+/** Campos de dueño comunes a todo pedido nuevo. */
+export function orderOwner(author: OrderAuthor) {
+  return {
+    userId: author.userId,
+    tenantId: author.tenantId,
+    createdByUserId: author.userId,
+  };
+}
+
 function num(value: Prisma.Decimal | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);

@@ -256,6 +256,45 @@ export const myApi = {
   redeemCode: (code: string) => api.post<RedeemedCode>("/my/redeem-code", { code }),
 };
 
+export type OrderApprovalStatus = "NOT_REQUIRED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+
+/** Pedido de la organización, con la aprobación interna del comercio. */
+export interface TenantOrder {
+  id: string;
+  provider: Provider;
+  providerName: string;
+  status: string;
+  approvalStatus: OrderApprovalStatus;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  notes: string | null;
+  total: number | null;
+  errorMessage: string | null;
+  rejectionReason: string | null;
+  items: { name?: string; qty?: number; code?: string }[];
+  createdBy: string | null;
+  approvedBy: string | null;
+  approvalDecidedAt: string | null;
+  createdAt: string;
+}
+
+export interface PendingApprovals {
+  /** Quien mira puede firmar los pedidos que armaron otros. */
+  canApprove: boolean;
+  /** Lo que arme esta persona va a quedar esperando una firma. */
+  needsApproval: boolean;
+  orders: TenantOrder[];
+}
+
+export const ordersApi = {
+  list: () => api.get<TenantOrder[]>("/orders"),
+  pending: () => api.get<PendingApprovals>("/orders/pending-approval"),
+  approve: (id: string) => api.post<{ id: string; status: string; message: string }>(`/orders/${id}/approve`, {}),
+  reject: (id: string, reason?: string) => api.post<TenantOrder>(`/orders/${id}/reject`, { reason }),
+};
+
 /**
  * Los proveedores que existen para esta organización, cacheados: la lista cambia poco
  * y la piden varias pantallas al mismo tiempo.

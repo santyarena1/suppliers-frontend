@@ -21,6 +21,8 @@ import { AirAccountService } from "./air-account.service";
 import { AirOrderService } from "./air-order.service";
 import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
+import { OrderApprovalService } from "../orders/order-approval.service";
+import type { OrderAuthor } from "./provider-draft";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 import { InvidCheckoutDraftDto, InvidCheckoutPreviewDto } from "./dto/invid-checkout.dto";
 import {
@@ -58,8 +60,21 @@ export class ProvidersController {
     private readonly airAccountService: AirAccountService,
     private readonly airOrderService: AirOrderService,
     private readonly elitAccountService: ElitAccountService,
-    private readonly elitOrderService: ElitOrderService
+    private readonly elitOrderService: ElitOrderService,
+    private readonly orderApproval: OrderApprovalService
   ) {}
+
+  /**
+   * Un vendedor arma el pedido pero no lo confirma: queda guardado esperando que
+   * lo apruebe el dueño. Para el resto, `hold` devuelve `null` y el checkout sigue.
+   */
+  private hold(tenant: TenantContext, userId: string, provider: Provider, draft: { items?: unknown; notes?: string }) {
+    return this.orderApproval.hold(tenant, userId, provider, draft);
+  }
+
+  private author(user: { userId: string }, tenant: TenantContext): OrderAuthor {
+    return { userId: user.userId, tenantId: tenant.tenantId };
+  }
 
   // Las credenciales son de la organización: quien las pide es el comercio, no la
   // persona que las cargó.
@@ -125,13 +140,13 @@ export class ProvidersController {
   }
 
   @Get("providers/INVID/drafts")
-  invidDrafts(@CurrentUser() user: { userId: string }) {
-    return this.invidOrderService.listDrafts(user.userId);
+  invidDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.invidOrderService.listDrafts(tenant.tenantId);
   }
 
   @Get("providers/INVID/drafts/:id")
-  async invidDraft(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
-    const draft = await this.invidOrderService.getDraft(user.userId, id);
+  async invidDraft(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.invidOrderService.getDraft(tenant.tenantId, id);
     if (!draft) throw new NotFoundException("Borrador no encontrado");
     return draft;
   }
@@ -148,7 +163,9 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Body() dto: InvidCheckoutDraftDto
   ) {
-    return this.invidOrderService.submitDraft(user.userId, await this.invidCredentials(tenant), dto);
+    const held = await this.hold(tenant, user.userId, "INVID", dto);
+    if (held) return held;
+    return this.invidOrderService.submitDraft(this.author(user, tenant), await this.invidCredentials(tenant), dto);
   }
 
   /** Historial real de pedidos web de NewBytes (solo lectura). */
@@ -195,13 +212,13 @@ export class ProvidersController {
   }
 
   @Get("providers/NEW_BYTES/drafts")
-  newBytesDrafts(@CurrentUser() user: { userId: string }) {
-    return this.newBytesOrderService.listDrafts(user.userId);
+  newBytesDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesOrderService.listDrafts(tenant.tenantId);
   }
 
   @Get("providers/NEW_BYTES/drafts/:id")
-  async newBytesDraft(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
-    const draft = await this.newBytesOrderService.getDraft(user.userId, id);
+  async newBytesDraft(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.newBytesOrderService.getDraft(tenant.tenantId, id);
     if (!draft) throw new NotFoundException("Pedido no encontrado");
     return draft;
   }
@@ -230,7 +247,13 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Body() dto: NewBytesCheckoutDraftDto
   ) {
-    return this.newBytesOrderService.submitDraft(user.userId, await this.newBytesCredentials(tenant), dto);
+    const held = await this.hold(tenant, user.userId, "NEW_BYTES", dto);
+    if (held) return held;
+    return this.newBytesOrderService.submitDraft(
+      this.author(user, tenant),
+      await this.newBytesCredentials(tenant),
+      dto
+    );
   }
 
   private async credentialsOf(tenant: TenantContext, provider: Provider) {
@@ -244,21 +267,21 @@ export class ProvidersController {
   }
 
   @Get("providers/GRUPO_NUCLEO/drafts")
-  gnDrafts(@CurrentUser() user: { userId: string }) {
-    return this.grupoNucleoOrderService.listDrafts(user.userId);
+  gnDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.grupoNucleoOrderService.listDrafts(tenant.tenantId);
   }
 
   @Get("providers/GRUPO_NUCLEO/drafts/:id")
-  async gnDraftById(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
-    const draft = await this.grupoNucleoOrderService.getDraft(user.userId, id);
+  async gnDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.grupoNucleoOrderService.getDraft(tenant.tenantId, id);
     if (!draft) throw new NotFoundException("Pedido no encontrado");
     return draft;
   }
 
   /** La API de GN no expone historial/cta cte — devolvemos copias de Nodo. */
   @Get("providers/GRUPO_NUCLEO/account")
-  gnAccount(@CurrentUser() user: { userId: string }) {
-    return this.grupoNucleoOrderService.getAccount(user.userId);
+  gnAccount(@CurrentTenant() tenant: TenantContext) {
+    return this.grupoNucleoOrderService.getAccount(tenant.tenantId);
   }
 
   @Post("providers/GRUPO_NUCLEO/checkout/preview")
@@ -272,8 +295,10 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Body() dto: GrupoNucleoCheckoutDraftDto
   ) {
+    const held = await this.hold(tenant, user.userId, "GRUPO_NUCLEO", dto);
+    if (held) return held;
     return this.grupoNucleoOrderService.submitDraft(
-      user.userId,
+      this.author(user, tenant),
       await this.credentialsOf(tenant, "GRUPO_NUCLEO"),
       dto
     );
@@ -285,20 +310,20 @@ export class ProvidersController {
   }
 
   @Get("providers/AIR/drafts")
-  airDrafts(@CurrentUser() user: { userId: string }) {
-    return this.airOrderService.listDrafts(user.userId);
+  airDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.airOrderService.listDrafts(tenant.tenantId);
   }
 
   @Get("providers/AIR/drafts/:id")
-  async airDraftById(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
-    const draft = await this.airOrderService.getDraft(user.userId, id);
+  async airDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.airOrderService.getDraft(tenant.tenantId, id);
     if (!draft) throw new NotFoundException("Pedido no encontrado");
     return draft;
   }
 
   @Get("providers/AIR/account")
-  async airAccount(@CurrentUser() user: { userId: string }, @CurrentTenant() tenant: TenantContext) {
-    return this.airAccountService.getAccount(user.userId, await this.credentialsOf(tenant, "AIR"));
+  async airAccount(@CurrentTenant() tenant: TenantContext) {
+    return this.airAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "AIR"));
   }
 
   @Get("providers/AIR/documents")
@@ -325,24 +350,26 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Body() dto: AirCheckoutDraftDto
   ) {
-    return this.airOrderService.submitDraft(user.userId, await this.credentialsOf(tenant, "AIR"), dto);
+    const held = await this.hold(tenant, user.userId, "AIR", dto);
+    if (held) return held;
+    return this.airOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "AIR"), dto);
   }
 
   @Get("providers/ELIT/drafts")
-  elitDrafts(@CurrentUser() user: { userId: string }) {
-    return this.elitOrderService.listDrafts(user.userId);
+  elitDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.elitOrderService.listDrafts(tenant.tenantId);
   }
 
   @Get("providers/ELIT/drafts/:id")
-  async elitDraftById(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
-    const draft = await this.elitOrderService.getDraft(user.userId, id);
+  async elitDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.elitOrderService.getDraft(tenant.tenantId, id);
     if (!draft) throw new NotFoundException("Pedido no encontrado");
     return draft;
   }
 
   @Get("providers/ELIT/account")
-  async elitAccount(@CurrentUser() user: { userId: string }, @CurrentTenant() tenant: TenantContext) {
-    return this.elitAccountService.getAccount(user.userId, await this.credentialsOf(tenant, "ELIT"));
+  async elitAccount(@CurrentTenant() tenant: TenantContext) {
+    return this.elitAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "ELIT"));
   }
 
   @Get("providers/ELIT/salenotes/:number")
@@ -408,7 +435,9 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Body() dto: ElitCheckoutDraftDto
   ) {
-    return this.elitOrderService.submitDraft(user.userId, await this.credentialsOf(tenant, "ELIT"), dto);
+    const held = await this.hold(tenant, user.userId, "ELIT", dto);
+    if (held) return held;
+    return this.elitOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "ELIT"), dto);
   }
 
   @Post("providers/:provider/sync")

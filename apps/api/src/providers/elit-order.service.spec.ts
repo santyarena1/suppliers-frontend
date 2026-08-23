@@ -56,6 +56,8 @@ function stubApi() {
 const ITEMS = [{ code: "18636", qty: 1, name: "AP Cudy" }];
 const CREDS = { id: "12345", password: "x" };
 
+const AUTOR = { userId: "user-1", tenantId: "tenant-1" };
+
 describe("ElitOrderService", () => {
   let api: ReturnType<typeof stubApi>;
   let service: ElitOrderService;
@@ -120,12 +122,12 @@ describe("ElitOrderService", () => {
   });
 
   it("sin depósito no procesa", async () => {
-    await expect(service.submitDraft("user-1", CREDS, { items: ITEMS })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.submitDraft(AUTOR, CREDS, { items: ITEMS })).rejects.toBeInstanceOf(BadRequestException);
     expect(api.postJson.mock.calls.some((c) => c[0] === "cart/process")).toBe(false);
   });
 
   it("process manda solo warehouse y guarda el nro de NV", async () => {
-    const result = await service.submitDraft("user-1", CREDS, { items: ITEMS, warehouse: 9 });
+    const result = await service.submitDraft(AUTOR, CREDS, { items: ITEMS, warehouse: 9 });
     const processCall = api.postJson.mock.calls.find((c) => c[0] === "cart/process");
     expect(processCall?.[1]).toEqual({ warehouse: 9 });
     expect(result.orderNumber).toBe("9900123");
@@ -137,7 +139,7 @@ describe("ElitOrderService", () => {
       if (path === "cart/process") throw new Error("Elit POST cart/process → 422: X is not allowed");
       return { data: {} };
     });
-    await expect(service.submitDraft("user-1", CREDS, { items: ITEMS, warehouse: 9 })).rejects.toBeInstanceOf(
+    await expect(service.submitDraft(AUTOR, CREDS, { items: ITEMS, warehouse: 9 })).rejects.toBeInstanceOf(
       BadGatewayException,
     );
     expect(createOrder.mock.calls[0][0].data.status).toBe("FAILED");

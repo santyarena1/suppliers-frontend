@@ -18,7 +18,8 @@ export type PendingOrderProvider = "INVID" | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLE
 export type PendingOrderJob = {
   id: string;
   provider: PendingOrderProvider;
-  status: "PENDING" | "CREATED" | "FAILED";
+  /** PENDING_APPROVAL: lo armó un vendedor y espera la firma del dueño del comercio. */
+  status: "PENDING" | "PENDING_APPROVAL" | "CREATED" | "FAILED";
   message: string;
   webOrderNumber?: string | null;
   orderNumber?: string | null;
@@ -167,7 +168,11 @@ export function useBackgroundCheckout<T extends DraftLike>(
     trackPendingOrder({
       id: data.id,
       provider,
-      status: data.status === "CREATED" ? "CREATED" : data.status === "FAILED" ? "FAILED" : "PENDING",
+      status:
+        data.status === "CREATED" ? "CREATED"
+          : data.status === "FAILED" ? "FAILED"
+            : data.status === "PENDING_APPROVAL" ? "PENDING_APPROVAL"
+              : "PENDING",
       message: data.message,
       webOrderNumber: data.webOrderNumber,
       orderNumber: data.orderNumber,
@@ -184,7 +189,9 @@ export function useBackgroundCheckout<T extends DraftLike>(
 
   function finishOrder(onCreated: (message?: string) => void) {
     setConfirmOpen(false);
-    if (result?.status === "CREATED") onCreated(result.message);
+    // Un pedido a la espera de aprobación ya salió del carrito: se vacía igual que
+    // uno confirmado, y el seguimiento pasa a la pantalla de pedidos.
+    if (result?.status === "CREATED" || result?.status === "PENDING_APPROVAL") onCreated(result.message);
   }
 
   return {

@@ -1,7 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import axios, { type AxiosResponse } from "axios";
 import { PrismaService } from "../prisma/prisma.service";
-import { mapProviderDraft } from "./provider-draft";
+import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
 import {
   decodeEntities,
   parseCheckoutForm,
@@ -650,18 +650,18 @@ export class InvidOrderService {
     };
   }
 
-  async listDrafts(userId: string) {
+  async listDrafts(tenantId: string) {
     const rows = await this.prisma.providerOrder.findMany({
-      where: { userId, provider: "INVID" },
+      where: { tenantId, provider: "INVID" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
     return rows.map(mapProviderDraft);
   }
 
-  async getDraft(userId: string, id: string) {
+  async getDraft(tenantId: string, id: string) {
     return this.prisma.providerOrder.findFirst({
-      where: { id, userId, provider: "INVID" },
+      where: { id, tenantId, provider: "INVID" },
     });
   }
 
@@ -671,11 +671,11 @@ export class InvidOrderService {
    * "Nro. de PEDIDO WEB asignado: NNNNN". Eso es el éxito. La fila en
    * lista_pedidos tarda un rato más y no se usa para confirmar.
    */
-  async submitDraft(userId: string, credentials: Record<string, string>, input: InvidDraftInput) {
+  async submitDraft(author: OrderAuthor, credentials: Record<string, string>, input: InvidDraftInput) {
     if (input.background) {
       const pending = await this.prisma.providerOrder.create({
         data: {
-          userId,
+          ...orderOwner(author),
           provider: "INVID",
           status: "PENDING",
           paymentOption: input.paymentOption,
@@ -686,7 +686,7 @@ export class InvidOrderService {
         },
       });
       setImmediate(() => {
-        this.fulfillDraft(userId, credentials, input, pending.id).catch(async (err) => {
+        this.fulfillDraft(author, credentials, input, pending.id).catch(async (err) => {
           const message = err instanceof Error ? err.message : String(err);
           this.logger.error(`Invid draft background ${pending.id}: ${message}`);
           await this.prisma.providerOrder.update({
@@ -707,11 +707,16 @@ export class InvidOrderService {
         message: "El pedido se está creando en Invid. Podés seguir usando Nodo; el número de pedido web aparece en el historial cuando Invid lo confirma.",
       };
     }
-    return this.fulfillDraft(userId, credentials, input);
+    return this.fulfillDraft(author, credentials, input);
+  }
+
+  /** Envía a Invid un pedido que estaba esperando la aprobación del dueño del comercio. */
+  approveDraft(author: OrderAuthor, credentials: Record<string, string>, input: InvidDraftInput, orderId: string) {
+    return this.fulfillDraft(author, credentials, input, orderId);
   }
 
   private async fulfillDraft(
-    userId: string,
+    author: OrderAuthor,
     credentials: Record<string, string>,
     input: InvidDraftInput,
     existingId?: string
@@ -859,7 +864,7 @@ export class InvidOrderService {
     const record = existingId
       ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: payload })
       : await this.prisma.providerOrder.create({
-          data: { userId, provider: "INVID", ...payload },
+          data: { ...orderOwner(author), provider: "INVID", ...payload },
         });
 
     if (!created) {

@@ -61,6 +61,8 @@ function stubApi() {
 const ITEMS = [{ code: "1429", qty: 1, name: "Cable" }];
 const CREDS = { id: "1022", username: "u", password: "x" };
 
+const AUTOR = { userId: "user-1", tenantId: "tenant-1" };
+
 describe("GrupoNucleoOrderService", () => {
   let api: ReturnType<typeof stubApi>;
   let service: GrupoNucleoOrderService;
@@ -93,7 +95,7 @@ describe("GrupoNucleoOrderService", () => {
   });
 
   it("a mi nombre llama NewSelfSaleOrder con item_id/item_qty", async () => {
-    const result = await service.submitDraft("user-1", CREDS, { items: ITEMS, notes: "Nodo" });
+    const result = await service.submitDraft(AUTOR, CREDS, { items: ITEMS, notes: "Nodo" });
     expect(api.post).toHaveBeenCalledWith("API_V1_SSO/NewSelfSaleOrder", {
       nota: "Nodo",
       items: [{ item_id: 1429, item_qty: 1 }],
@@ -104,10 +106,10 @@ describe("GrupoNucleoOrderService", () => {
 
   it("factura al cliente final exige datos y manda precio ARS >= catálogo", async () => {
     await expect(
-      service.submitDraft("user-1", CREDS, { items: ITEMS, customerSale: true })
+      service.submitDraft(AUTOR, CREDS, { items: ITEMS, customerSale: true })
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    const result = await service.submitDraft("user-1", CREDS, {
+    const result = await service.submitDraft(AUTOR, CREDS, {
       items: ITEMS,
       customerSale: true,
       customer: {
@@ -141,7 +143,7 @@ describe("GrupoNucleoOrderService", () => {
       }
       return {};
     });
-    await expect(service.submitDraft("user-1", CREDS, { items: ITEMS })).rejects.toBeInstanceOf(BadGatewayException);
+    await expect(service.submitDraft(AUTOR, CREDS, { items: ITEMS })).rejects.toBeInstanceOf(BadGatewayException);
     expect(createOrder.mock.calls[0][0].data.status).toBe("FAILED");
   });
 });

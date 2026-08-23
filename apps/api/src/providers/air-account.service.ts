@@ -32,14 +32,14 @@ const AIR_HOSTS = ["www.air-intra.com", "air-intra.com"];
 export class AirAccountService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAccount(userId: string, credentials: Record<string, string>) {
+  async getAccount(tenantId: string, credentials: Record<string, string>) {
     const api = await AirPortalClient.login(credentials);
     const [debehaber, comprobantes, pendientes, drafts] = await Promise.all([
       api.getText(AIR_DEBEHABER_URL).catch(() => ""),
       api.getText(`${AIR_COMPROBANTES_URL}?t=250213`).catch(() => ""),
       api.getText(`${AIR_CPT_PENDIENTES_URL}?t=250213`).catch(() => ""),
       this.prisma.providerOrder.findMany({
-        where: { userId, provider: "AIR" },
+        where: { tenantId, provider: "AIR" },
         orderBy: { createdAt: "desc" },
         take: 50,
       }),

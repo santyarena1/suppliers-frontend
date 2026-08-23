@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { CheckCircle2, Loader2, X, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, X, XCircle } from "lucide-react";
+import { PROVIDER_LABELS } from "@/lib/api";
 import {
   dismissPendingOrder,
   patchPendingOrder,
@@ -41,16 +42,19 @@ export default function PendingOrdersBanner({
 }
 
 function JobRow({ job }: { job: PendingOrderJob }) {
-  const label = job.provider.replace(/_/g, " ");
+  const label = PROVIDER_LABELS[job.provider] ?? job.provider;
   const pending = job.status === "PENDING";
+  const esperandoFirma = job.status === "PENDING_APPROVAL";
   const ok = job.status === "CREATED";
   return (
     <div className={`flex items-start gap-2 px-3 py-2.5 border text-sm ${
       pending ? "border-sky-500/30 bg-sky-500/5 text-sky-200"
+        : esperandoFirma ? "border-amber-500/30 bg-amber-500/5 text-amber-200"
         : ok ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
         : "border-red-500/30 bg-red-500/5 text-red-300"
     }`}>
       {pending ? <Loader2 className="w-4 h-4 mt-0.5 flex-shrink-0 animate-spin" />
+        : esperandoFirma ? <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" />
         : ok ? <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
         : <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />}
       <div className="min-w-0 flex-1">
@@ -63,8 +67,11 @@ function JobRow({ job }: { job: PendingOrderJob }) {
         )}
       </div>
       <div className="flex items-center gap-2 flex-shrink-0">
-        <Link href={providerOrdersHref(job.provider)} className="text-[11px] underline underline-offset-2 opacity-80 hover:opacity-100">
-          Historial
+        <Link
+          href={esperandoFirma ? "/pedidos" : providerOrdersHref(job.provider)}
+          className="text-[11px] underline underline-offset-2 opacity-80 hover:opacity-100"
+        >
+          {esperandoFirma ? "Ver pedido" : "Historial"}
         </Link>
         <button type="button" onClick={() => dismissPendingOrder(job.id)} className="p-1 opacity-60 hover:opacity-100" aria-label="Cerrar">
           <X className="w-3.5 h-3.5" />

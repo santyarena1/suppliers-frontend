@@ -1,41 +1,53 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import type { TenantContext } from "../tenants/tenant-context.service";
+import { TenantGuard } from "../tenants/tenant.guard";
 import { CartService } from "./cart.service";
 import { AddCartItemDto } from "./dto/add-item.dto";
 import { UpdateCartItemDto } from "./dto/update-item.dto";
 
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuard("jwt"), TenantGuard)
 @Controller("cart")
 export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   @Get()
-  list(@CurrentUser() user: { userId: string }) {
-    return this.cartService.list(user.userId);
+  list(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: { userId: string }) {
+    return this.cartService.list(tenant, user.userId);
   }
 
   @Post("items")
-  addItem(@CurrentUser() user: { userId: string }, @Body() dto: AddCartItemDto) {
-    return this.cartService.addItem(user.userId, dto);
+  addItem(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: { userId: string },
+    @Body() dto: AddCartItemDto
+  ) {
+    return this.cartService.addItem(tenant, user.userId, dto);
   }
 
   @Patch("items/:id")
   updateItem(
+    @CurrentTenant() tenant: TenantContext,
     @CurrentUser() user: { userId: string },
     @Param("id") id: string,
     @Body() dto: UpdateCartItemDto
   ) {
-    return this.cartService.updateItem(user.userId, id, dto);
+    return this.cartService.updateItem(tenant, user.userId, id, dto);
   }
 
   @Delete("items/:id")
-  removeItem(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
-    return this.cartService.removeItem(user.userId, id);
+  removeItem(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: { userId: string },
+    @Param("id") id: string
+  ) {
+    return this.cartService.removeItem(tenant, user.userId, id);
   }
 
   @Delete()
-  clear(@CurrentUser() user: { userId: string }) {
-    return this.cartService.clear(user.userId);
+  clear(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: { userId: string }) {
+    return this.cartService.clear(tenant, user.userId);
   }
 }

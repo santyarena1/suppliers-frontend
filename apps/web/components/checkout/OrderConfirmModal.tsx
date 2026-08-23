@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { CheckoutSubmit } from "@/components/checkout/CheckoutForm";
-import { CheckCircle2, Loader2, X } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, X } from "lucide-react";
+import { PROVIDER_LABELS, type Provider } from "@/lib/api";
 import { providerOrdersHref } from "@/lib/providerOrders";
 
 export type OrderConfirmLine = { label: string; value: string };
@@ -50,6 +51,8 @@ export default function OrderConfirmModal({
   onLeaveInBackground?: () => void;
 }) {
   const pending = result?.status === "PENDING";
+  // Un vendedor no confirma solo: el pedido queda esperando al dueño del comercio.
+  const awaitingApproval = result?.status === "PENDING_APPROVAL";
   const done = Boolean(result) && !pending;
   const blocking = loading && !result;
   const canLeave = Boolean(onLeaveInBackground) && (loading || pending);
@@ -69,7 +72,9 @@ export default function OrderConfirmModal({
 
   const extra = items.length > 6 ? items.length - 6 : 0;
   const shown = extra > 0 ? items.slice(0, 6) : items;
-  const historyHref = providerOrdersHref(provider);
+  const historyHref = awaitingApproval ? "/pedidos" : providerOrdersHref(provider);
+  const historyLabel = awaitingApproval ? "Ver pedidos" : "Ver historial";
+  const providerName = PROVIDER_LABELS[provider as Provider] ?? provider;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -91,10 +96,16 @@ export default function OrderConfirmModal({
         <div className="px-5 py-4 border-b border-surface-800 flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-surface-500">
-              {provider.replace(/_/g, " ")}
+              {providerName}
             </p>
             <h2 id="order-confirm-title" className="text-base font-semibold text-white mt-1 tracking-tight">
-              {done ? "Pedido creado" : loading || pending ? "Creando pedido" : title}
+              {awaitingApproval
+                ? "Pedido a la espera de aprobación"
+                : done
+                  ? "Pedido creado"
+                  : loading || pending
+                    ? "Creando pedido"
+                    : title}
             </h2>
           </div>
           <button
@@ -113,8 +124,10 @@ export default function OrderConfirmModal({
         <div className="px-5 py-4 flex flex-col gap-4">
           {done ? (
             <div className="flex flex-col gap-2">
-              <p className="flex items-start gap-2 text-sm text-emerald-400">
-                <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <p className={`flex items-start gap-2 text-sm ${awaitingApproval ? "text-amber-300" : "text-emerald-400"}`}>
+                {awaitingApproval
+                  ? <Clock className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  : <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />}
                 <span>{result?.message}</span>
               </p>
               {result?.refs && result.refs.length > 0 && (
@@ -190,7 +203,7 @@ export default function OrderConfirmModal({
                 onClick={onDone}
                 className="flex-1 h-10 inline-flex items-center justify-center bg-white text-black hover:bg-surface-100 rounded-sm text-sm font-semibold"
               >
-                Ver historial
+                {historyLabel}
               </Link>
             </>
           ) : pending || loading ? (

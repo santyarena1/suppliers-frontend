@@ -7,7 +7,7 @@ import {
   type AirCart,
 } from "./air-portal-client";
 import { snapshotJson } from "./json-value";
-import { mapProviderDraft, pendingCheckoutResponse, runBackgroundDraft } from "./provider-draft";
+import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 
 export interface AirCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -72,18 +72,18 @@ export class AirOrderService {
     return api.checkoutOptions();
   }
 
-  async listDrafts(userId: string) {
+  async listDrafts(tenantId: string) {
     const rows = await this.prisma.providerOrder.findMany({
-      where: { userId, provider: "AIR" },
+      where: { tenantId, provider: "AIR" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
     return rows.map(mapProviderDraft);
   }
 
-  async getDraft(userId: string, id: string) {
+  async getDraft(tenantId: string, id: string) {
     const row = await this.prisma.providerOrder.findFirst({
-      where: { id, userId, provider: "AIR" },
+      where: { id, tenantId, provider: "AIR" },
     });
     return row ? mapProviderDraft(row) : null;
   }
@@ -123,7 +123,7 @@ export class AirOrderService {
     };
   }
 
-  async submitDraft(userId: string, credentials: Record<string, string>, input: AirDraftInput) {
+  async submitDraft(author: OrderAuthor, credentials: Record<string, string>, input: AirDraftInput) {
     if (!input.vendedor) throw new BadRequestException("Elegí un vendedor de Air");
     if (!input.sucursal) throw new BadRequestException("Elegí una sucursal de Air");
     if (input.entrega === "05") {
@@ -134,7 +134,7 @@ export class AirOrderService {
     if (input.background) {
       const pending = await this.prisma.providerOrder.create({
         data: {
-          userId,
+          ...orderOwner(author),
           provider: "AIR",
           status: "PENDING",
           paymentOption: input.pago,
@@ -148,7 +148,7 @@ export class AirOrderService {
         this.logger,
         "Air draft background",
         pending.id,
-        () => this.fulfillDraft(userId, credentials, input, pending.id),
+        () => this.fulfillDraft(author, credentials, input, pending.id),
         (message) => this.prisma.providerOrder.update({
           where: { id: pending.id },
           data: { status: "FAILED", errorMessage: message },
@@ -160,11 +160,16 @@ export class AirOrderService {
         "El pedido se está enviando en Air. Podés seguir usando Nodo; el resultado aparece en el historial."
       );
     }
-    return this.fulfillDraft(userId, credentials, input);
+    return this.fulfillDraft(author, credentials, input);
+  }
+
+  /** Envía a Air un pedido que estaba esperando la aprobación del dueño del comercio. */
+  approveDraft(author: OrderAuthor, credentials: Record<string, string>, input: AirDraftInput, orderId: string) {
+    return this.fulfillDraft(author, credentials, input, orderId);
   }
 
   private async fulfillDraft(
-    userId: string,
+    author: OrderAuthor,
     credentials: Record<string, string>,
     input: AirDraftInput,
     existingId?: string
@@ -201,7 +206,7 @@ export class AirOrderService {
       const record = existingId
         ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
         : await this.prisma.providerOrder.create({
-            data: { userId, provider: "AIR", ...failed },
+            data: { ...orderOwner(author), provider: "AIR", ...failed },
           });
       throw new BadGatewayException(record.errorMessage || "No se pudo enviar el pedido en Air");
     }
@@ -229,7 +234,7 @@ export class AirOrderService {
     const record = existingId
       ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })
       : await this.prisma.providerOrder.create({
-          data: { userId, provider: "AIR", ...saved },
+          data: { ...orderOwner(author), provider: "AIR", ...saved },
         });
 
     return {

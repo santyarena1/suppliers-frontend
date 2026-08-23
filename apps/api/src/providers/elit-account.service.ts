@@ -31,13 +31,13 @@ export interface ElitPaymentOperationInput {
 export class ElitAccountService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getAccount(userId: string, credentials: Record<string, string>) {
+  async getAccount(tenantId: string, credentials: Record<string, string>) {
     const api = await ElitWebClient.login(credentials);
     const [pedidosRsc, cta, drafts, saleNotesApi, paymentsApi] = await Promise.all([
       api.getRsc("/mi-cuenta/pedidos").catch(() => ""),
       api.getRsc("/mi-cuenta/cuenta-corriente").catch(() => ""),
       this.prisma.providerOrder.findMany({
-        where: { userId, provider: "ELIT" },
+        where: { tenantId, provider: "ELIT" },
         orderBy: { createdAt: "desc" },
         take: 50,
       }),

@@ -2,7 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable, Logger } from "@n
 import { PrismaService } from "../prisma/prisma.service";
 import { GrupoNucleoApiClient } from "./grupo-nucleo-client";
 import { asNumber, asRecord, asString, snapshotJson, unwrapList } from "./json-value";
-import { mapProviderDraft, pendingCheckoutResponse, runBackgroundDraft } from "./provider-draft";
+import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 import { GN_DOC_TYPES, GN_PROVINCE_CODES } from "./dto/grupo-nucleo-checkout.dto";
 
 export const GN_PROVINCES: { value: number; label: string }[] = [
@@ -185,25 +185,25 @@ export class GrupoNucleoOrderService {
     };
   }
 
-  async listDrafts(userId: string) {
+  async listDrafts(tenantId: string) {
     const rows = await this.prisma.providerOrder.findMany({
-      where: { userId, provider: "GRUPO_NUCLEO" },
+      where: { tenantId, provider: "GRUPO_NUCLEO" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
     return rows.map(mapProviderDraft);
   }
 
-  async getDraft(userId: string, id: string) {
+  async getDraft(tenantId: string, id: string) {
     const row = await this.prisma.providerOrder.findFirst({
-      where: { id, userId, provider: "GRUPO_NUCLEO" },
+      where: { id, tenantId, provider: "GRUPO_NUCLEO" },
     });
     return row ? mapProviderDraft(row) : null;
   }
 
   /** La API de GN no expone pedidos históricos ni cta cte — devolvemos copias de Nodo. */
-  async getAccount(userId: string) {
-    const drafts = await this.listDrafts(userId);
+  async getAccount(tenantId: string) {
+    const drafts = await this.listDrafts(tenantId);
     return {
       orders: [],
       movements: [],
@@ -273,12 +273,12 @@ export class GrupoNucleoOrderService {
     };
   }
 
-  async submitDraft(userId: string, credentials: Record<string, string>, input: GnDraftInput) {
+  async submitDraft(author: OrderAuthor, credentials: Record<string, string>, input: GnDraftInput) {
     if (input.customerSale) this.assertCustomer(input.customer);
     if (input.background) {
       const pending = await this.prisma.providerOrder.create({
         data: {
-          userId,
+          ...orderOwner(author),
           provider: "GRUPO_NUCLEO",
           status: "PENDING",
           paymentOption: input.customerSale ? "customer" : "self",
@@ -293,7 +293,7 @@ export class GrupoNucleoOrderService {
         this.logger,
         "GrupoNucleo draft background",
         pending.id,
-        () => this.fulfillDraft(userId, credentials, input, pending.id),
+        () => this.fulfillDraft(author, credentials, input, pending.id),
         (message) => this.prisma.providerOrder.update({
           where: { id: pending.id },
           data: { status: "FAILED", errorMessage: message },
@@ -305,11 +305,16 @@ export class GrupoNucleoOrderService {
         "El pedido se está creando en Grupo Núcleo. Podés seguir usando Nodo; el resultado aparece en el historial."
       );
     }
-    return this.fulfillDraft(userId, credentials, input);
+    return this.fulfillDraft(author, credentials, input);
+  }
+
+  /** Envía a Grupo Núcleo un pedido que estaba esperando la aprobación del dueño del comercio. */
+  approveDraft(author: OrderAuthor, credentials: Record<string, string>, input: GnDraftInput, orderId: string) {
+    return this.fulfillDraft(author, credentials, input, orderId);
   }
 
   private async fulfillDraft(
-    userId: string,
+    author: OrderAuthor,
     credentials: Record<string, string>,
     input: GnDraftInput,
     existingId?: string
@@ -359,7 +364,7 @@ export class GrupoNucleoOrderService {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const record = await this.saveOrder(userId, {
+      const record = await this.saveOrder(author, {
         status: "FAILED",
         input,
         preview,
@@ -375,7 +380,7 @@ export class GrupoNucleoOrderService {
     const created = parsed.error === 0 && parsed.pedidos.some((p) => p.pedido);
     const orderNumbers = parsed.pedidos.map((p) => p.pedido).filter(Boolean);
     const warehouses = parsed.pedidos.map((p) => p.centroDistribucion).filter(Boolean);
-    const record = await this.saveOrder(userId, {
+    const record = await this.saveOrder(author, {
       status: created ? "CREATED" : "FAILED",
       input,
       preview,
@@ -422,7 +427,7 @@ export class GrupoNucleoOrderService {
   }
 
   private saveOrder(
-    userId: string,
+    author: OrderAuthor,
     opts: {
       status: string;
       input: GnDraftInput;
@@ -467,7 +472,7 @@ export class GrupoNucleoOrderService {
     }
     return this.prisma.providerOrder.create({
       data: {
-        userId,
+        ...orderOwner(author),
         provider: "GRUPO_NUCLEO",
         ...data,
       },

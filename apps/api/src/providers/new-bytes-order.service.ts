@@ -25,7 +25,7 @@ import {
   type NbShippingQuote,
   type NbSubtotales,
 } from "./new-bytes.mapper";
-import { mapProviderDraft } from "./provider-draft";
+import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
 import { snapshotJson } from "./json-value";
 
 export interface NewBytesCartItems {
@@ -154,18 +154,18 @@ export class NewBytesOrderService {
       .filter((p): p is NbPaymentOption => p != null);
   }
 
-  async listDrafts(userId: string) {
+  async listDrafts(tenantId: string) {
     const rows = await this.prisma.providerOrder.findMany({
-      where: { userId, provider: "NEW_BYTES" },
+      where: { tenantId, provider: "NEW_BYTES" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
     return rows.map(mapProviderDraft);
   }
 
-  async getDraft(userId: string, id: string) {
+  async getDraft(tenantId: string, id: string) {
     return this.prisma.providerOrder.findFirst({
-      where: { id, userId, provider: "NEW_BYTES" },
+      where: { id, tenantId, provider: "NEW_BYTES" },
     });
   }
 
@@ -361,11 +361,11 @@ export class NewBytesOrderService {
     };
   }
 
-  async submitDraft(userId: string, credentials: Record<string, string>, input: NewBytesDraftInput) {
+  async submitDraft(author: OrderAuthor, credentials: Record<string, string>, input: NewBytesDraftInput) {
     if (input.background) {
       const pending = await this.prisma.providerOrder.create({
         data: {
-          userId,
+          ...orderOwner(author),
           provider: "NEW_BYTES",
           status: "PENDING",
           paymentOption: String(input.medioDePagoId ?? ""),
@@ -376,7 +376,7 @@ export class NewBytesOrderService {
         },
       });
       setImmediate(() => {
-        this.fulfillDraft(userId, credentials, input, pending.id).catch(async (err) => {
+        this.fulfillDraft(author, credentials, input, pending.id).catch(async (err) => {
           const message = err instanceof Error ? err.message : String(err);
           this.logger.error(`NewBytes draft background ${pending.id}: ${message}`);
           await this.prisma.providerOrder.update({
@@ -397,11 +397,16 @@ export class NewBytesOrderService {
         message: "El pedido se está creando en NewBytes. Podés seguir usando Nodo; el resultado aparece en el historial.",
       };
     }
-    return this.fulfillDraft(userId, credentials, input);
+    return this.fulfillDraft(author, credentials, input);
+  }
+
+  /** Envía a NewBytes un pedido que estaba esperando la aprobación del dueño del comercio. */
+  approveDraft(author: OrderAuthor, credentials: Record<string, string>, input: NewBytesDraftInput, orderId: string) {
+    return this.fulfillDraft(author, credentials, input, orderId);
   }
 
   private async fulfillDraft(
-    userId: string,
+    author: OrderAuthor,
     credentials: Record<string, string>,
     input: NewBytesDraftInput,
     existingId?: string
@@ -489,7 +494,7 @@ export class NewBytesOrderService {
       const record = existingId
         ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
         : await this.prisma.providerOrder.create({
-            data: { userId, provider: "NEW_BYTES", ...failed },
+            data: { ...orderOwner(author), provider: "NEW_BYTES", ...failed },
           });
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en NewBytes");
     }
@@ -528,7 +533,7 @@ export class NewBytesOrderService {
     const record = existingId
       ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })
       : await this.prisma.providerOrder.create({
-          data: { userId, provider: "NEW_BYTES", ...saved },
+          data: { ...orderOwner(author), provider: "NEW_BYTES", ...saved },
         });
 
     if (!created) {

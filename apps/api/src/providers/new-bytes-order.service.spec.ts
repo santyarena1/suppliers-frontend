@@ -57,6 +57,8 @@ function stubApi() {
 const ITEMS = [{ code: "108613", qty: 1, name: "RTX 3070" }];
 const CREDS = { user: "nb", password: "x" };
 
+const AUTOR = { userId: "user-1", tenantId: "tenant-1" };
+
 describe("NewBytesOrderService", () => {
   let api: ReturnType<typeof stubApi>;
   let service: NewBytesOrderService;
@@ -93,7 +95,7 @@ describe("NewBytesOrderService", () => {
 
   it("no cae a retiro si falta medio de envío: hay que elegir entrega", async () => {
     await expect(
-      service.submitDraft("user-1", CREDS, {
+      service.submitDraft(AUTOR, CREDS, {
         items: ITEMS,
         delivery: "shipping",
         medioDePagoId: 3,
@@ -104,7 +106,7 @@ describe("NewBytesOrderService", () => {
   });
 
   it("el process de retiro no manda dirección ni cotización", async () => {
-    const result = await service.submitDraft("user-1", CREDS, {
+    const result = await service.submitDraft(AUTOR, CREDS, {
       items: ITEMS,
       delivery: "pickup",
       medioDePagoId: 5,
@@ -119,7 +121,7 @@ describe("NewBytesOrderService", () => {
   });
 
   it("el process de envío manda mediodeEnvioId, idDirCli y datosBultos", async () => {
-    await service.submitDraft("user-1", CREDS, {
+    await service.submitDraft(AUTOR, CREDS, {
       items: ITEMS,
       delivery: "shipping",
       medioDePagoId: 3,
@@ -144,7 +146,7 @@ describe("NewBytesOrderService", () => {
 
   it("rechaza Efectivo Caja cuando la entrega es envío", async () => {
     await expect(
-      service.submitDraft("user-1", CREDS, {
+      service.submitDraft(AUTOR, CREDS, {
         items: ITEMS,
         delivery: "shipping",
         medioDePagoId: 5,

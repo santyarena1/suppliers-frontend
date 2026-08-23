@@ -22,6 +22,7 @@ import { AirAccountService } from "./air-account.service";
 import { AirOrderService } from "./air-order.service";
 import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
+import { OrderApprovalService } from "../orders/order-approval.service";
 
 @Module({
   imports: [CredentialsModule, TenantsModule],
@@ -46,6 +47,15 @@ import { ElitOrderService } from "./elit-order.service";
     AirAccountService,
     AirOrderService,
     ElitAccountService,
+    ElitOrderService,
+    OrderApprovalService,
+  ],
+  exports: [
+    OrderApprovalService,
+    InvidOrderService,
+    NewBytesOrderService,
+    GrupoNucleoOrderService,
+    AirOrderService,
     ElitOrderService,
   ],
 })

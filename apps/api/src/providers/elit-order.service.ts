@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { mapProviderDraft, pendingCheckoutResponse, runBackgroundDraft } from "./provider-draft";
+import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 import {
   ElitWebClient,
   elitData,
@@ -99,18 +99,18 @@ export class ElitOrderService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async listDrafts(userId: string) {
+  async listDrafts(tenantId: string) {
     const rows = await this.prisma.providerOrder.findMany({
-      where: { userId, provider: "ELIT" },
+      where: { tenantId, provider: "ELIT" },
       orderBy: { createdAt: "desc" },
       take: 50,
     });
     return rows.map(mapProviderDraft);
   }
 
-  async getDraft(userId: string, id: string) {
+  async getDraft(tenantId: string, id: string) {
     const row = await this.prisma.providerOrder.findFirst({
-      where: { id, userId, provider: "ELIT" },
+      where: { id, tenantId, provider: "ELIT" },
     });
     return row ? mapProviderDraft(row) : null;
   }
@@ -166,12 +166,12 @@ export class ElitOrderService {
     };
   }
 
-  async submitDraft(userId: string, credentials: Record<string, string>, input: ElitCartItems) {
+  async submitDraft(author: OrderAuthor, credentials: Record<string, string>, input: ElitCartItems) {
     if (input.warehouse == null) throw new BadRequestException("Elegí el depósito de Elit");
     if (input.background) {
       const pending = await this.prisma.providerOrder.create({
         data: {
-          userId,
+          ...orderOwner(author),
           provider: "ELIT",
           status: "PENDING",
           paymentOption: String(input.saleCondition ?? ""),
@@ -184,7 +184,7 @@ export class ElitOrderService {
         this.logger,
         "Elit draft background",
         pending.id,
-        () => this.fulfillDraft(userId, credentials, input, pending.id),
+        () => this.fulfillDraft(author, credentials, input, pending.id),
         (message) => this.prisma.providerOrder.update({
           where: { id: pending.id },
           data: { status: "FAILED", errorMessage: message },
@@ -196,11 +196,16 @@ export class ElitOrderService {
         "El pedido se está creando en Elit. Podés seguir usando Nodo; el resultado aparece en el historial."
       );
     }
-    return this.fulfillDraft(userId, credentials, input);
+    return this.fulfillDraft(author, credentials, input);
+  }
+
+  /** Envía a Elit un pedido que estaba esperando la aprobación del dueño del comercio. */
+  approveDraft(author: OrderAuthor, credentials: Record<string, string>, input: ElitCartItems, orderId: string) {
+    return this.fulfillDraft(author, credentials, input, orderId);
   }
 
   private async fulfillDraft(
-    userId: string,
+    author: OrderAuthor,
     credentials: Record<string, string>,
     input: ElitCartItems,
     existingId?: string
@@ -230,7 +235,7 @@ export class ElitOrderService {
       const record = existingId
         ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
         : await this.prisma.providerOrder.create({
-            data: { userId, provider: "ELIT", ...failed },
+            data: { ...orderOwner(author), provider: "ELIT", ...failed },
           });
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en Elit");
     }
@@ -256,7 +261,7 @@ export class ElitOrderService {
     const record = existingId
       ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })
       : await this.prisma.providerOrder.create({
-          data: { userId, provider: "ELIT", ...saved },
+          data: { ...orderOwner(author), provider: "ELIT", ...saved },
         });
     if (!orderNumber) {
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en Elit");

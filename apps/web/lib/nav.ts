@@ -1,5 +1,5 @@
 import {
-  Home, Search, ShoppingCart, Boxes, Building2, Shield,
+  Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
   Settings, Activity, Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -26,6 +26,7 @@ export type NavItemId =
   | "home"
   | "search"
   | "cart"
+  | "orders"
   | "providers"
   | "brands-portal"
   | "brands-panel"
@@ -66,6 +67,15 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search" },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers" },
 
+  {
+    id: "orders",
+    href: "/pedidos",
+    label: "Pedidos",
+    icon: ClipboardList,
+    module: "cart",
+    tenantTypes: ["RETAILER"],
+    section: "providers",
+  },
   {
     id: "providers",
     href: "/proveedores",

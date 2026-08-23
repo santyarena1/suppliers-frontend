@@ -49,25 +49,25 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: `tenantRole` es el alcance dentro de la organización y `platformRole` el nivel de acceso a Nodo. El lado cliente de un vínculo siempre es un comercio. Ver `docs/ARQUITECTURA_TENANTS.md`.
 
+### [FEATURE] Proveedores visibles y canje de código de vinculación
+- **Método**: GET | POST
+- **Ruta**: `/my/providers`, `/my/redeem-code`
+- **Auth**: Bearer usuario con organización
+- **Body / Params**: canje `{ code }`
+- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
+- **Estado**: IMPLEMENTADO
+- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
+
+### [FEATURE] Pedidos de la organización y aprobación
+- **Método**: GET | POST
+- **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/:id/approve`, `/orders/:id/reject`
+- **Auth**: Bearer usuario con organización · aprobar y rechazar, solo OWNER o ADMIN
+- **Body / Params**: rechazo `{ reason? }`
+- **Respuesta esperada**: pedido con `{ id, provider, providerName, status, approvalStatus, createdBy, approvedBy, total, items }` · `/orders/pending-approval` devuelve `{ canApprove, needsApproval, orders }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`.
+
 ## Pendiente (futuro)
-
-### [FEATURE] Canje de código de vinculación por el comercio
-- **Método**: POST
-- **Ruta**: `/tenants/redeem-code`
-- **Auth**: Bearer usuario del comercio
-- **Body / Params**: `{ code }`
-- **Respuesta esperada**: `{ tenantName, type }` recién después del canje
-- **Estado**: PENDIENTE
-- **Notas**: No debe revelar la organización de origen antes de canjear, ni permitir enumerar códigos.
-
-### [FEATURE] Aprobación de órdenes del comercio
-- **Método**: GET | PUT
-- **Ruta**: `/orders/pending-approval`, `/orders/:id/approval`
-- **Auth**: Bearer OWNER o ADMIN del comercio
-- **Body / Params**: `{ decision: "APPROVED" | "REJECTED" }`
-- **Respuesta esperada**: orden con `approvalStatus`, `createdByUserId`, `approvedByUserId`
-- **Estado**: PENDIENTE
-- **Notas**: Las columnas ya existen en `ProviderOrder`; falta el flujo end to end.
 
 
 ### [FEATURE] Upload de imágenes para banners

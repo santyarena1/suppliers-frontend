@@ -53,8 +53,14 @@ export const TENANT_ROLES_BY_TYPE: Record<TenantType, readonly TenantRole[]> = {
   BRAND: ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL", "VIEWER"],
 };
 
+/** Roles que pueden armar un pedido (con o sin aprobación posterior). */
+export const TENANT_ROLES_CAN_ORDER: readonly TenantRole[] = ["OWNER", "ADMIN", "BUYER", "SELLER"];
+
 /** Roles que pueden confirmar una orden sin aprobación de un tercero. */
 export const TENANT_ROLES_CAN_CONFIRM_ORDERS: readonly TenantRole[] = ["OWNER", "ADMIN", "BUYER"];
+
+/** Roles que pueden aprobar el pedido que armó otra persona de la organización. */
+export const TENANT_ROLES_CAN_APPROVE_ORDERS: readonly TenantRole[] = ["OWNER", "ADMIN"];
 
 /** Roles que pueden vaciar el catálogo de la organización. */
 export const TENANT_ROLES_CAN_PURGE_CATALOG: readonly TenantRole[] = ["OWNER", "ADMIN"];

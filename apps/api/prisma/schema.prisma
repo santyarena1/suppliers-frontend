@@ -31,6 +31,8 @@ model User {
   savedCredentials Credential[]
   cartItems        CartItem[]
   providerOrders   ProviderOrder[]
+  ordersCreated    ProviderOrder[]     @relation("OrderCreatedBy")
+  ordersApproved   ProviderOrder[]     @relation("OrderApprovedBy")
   favorites        BrandFavorite[]
   notifications    BrandNotification[]
   accesses         BrandAccess[]       @relation("AccessUser")
@@ -99,6 +101,8 @@ model Tenant {
   syncConfigs   ProviderSyncConfig[]
   offers        TenantProductOffer[]
   priceHistory  ProductPriceHistory[]
+  cartItems     CartItem[]
+  orders        ProviderOrder[]
 
   @@index([type, active])
 }
@@ -390,10 +394,15 @@ model ProviderSyncConfig {
   @@unique([tenantId, provider])
 }
 
+// El carrito es personal (dos vendedores del mismo comercio no se pisan) pero
+// vive dentro de una organización: si alguien cambia de organización, su carrito
+// anterior no lo sigue.
 model CartItem {
   id         String   @id @default(uuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   provider   String
   externalId String
   name       String
@@ -403,7 +412,8 @@ model CartItem {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([userId, provider, externalId])
+  @@unique([userId, tenantId, provider, externalId])
+  @@index([tenantId])
 }
 
 // Borrador de pedido creado en Nodo y enviado al portal del proveedor.
@@ -414,6 +424,8 @@ model ProviderOrder {
   id                  String              @id @default(uuid())
   userId              String
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId            String
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   provider            String
   status              String
   invidOrderNumber    String?
@@ -434,12 +446,20 @@ model ProviderOrder {
   // confirma; queda en PENDING_APPROVAL hasta que lo aprueba el dueño.
   approvalStatus      OrderApprovalStatus @default(NOT_REQUIRED)
   createdByUserId     String?
+  createdBy           User?               @relation("OrderCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   approvedByUserId    String?
+  approvedBy          User?               @relation("OrderApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   approvalDecidedAt   DateTime?
+  rejectionReason     String?
+  /// Pedido tal cual lo armó el vendedor. Al aprobarlo se reenvía al proveedor
+  /// con estos mismos datos, para que nadie edite lo aprobado por el camino.
+  draftInput          Json?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
   @@index([userId, provider, createdAt])
+  @@index([tenantId, provider, createdAt])
+  @@index([tenantId, approvalStatus])
   @@index([approvalStatus])
 }
 

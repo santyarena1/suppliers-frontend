@@ -35,6 +35,8 @@ function cart(over: Record<string, unknown> = {}) {
   };
 }
 
+const AUTOR = { userId: "user-1", tenantId: "tenant-1" };
+
 describe("AirOrderService", () => {
   let api: {
     getPedido: jest.Mock;
@@ -94,7 +96,7 @@ describe("AirOrderService", () => {
 
   it("send_pedido exige vendedor y rechaza dropshipping sin dirección del portal", async () => {
     await expect(
-      service.submitDraft("u1", { user: "u", pass: "p" }, {
+      service.submitDraft(AUTOR, { user: "u", pass: "p" }, {
         items: [{ code: "ABC", qty: 2 }],
         sucursal: "SUC06",
         vendedor: "",
@@ -104,7 +106,7 @@ describe("AirOrderService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     await expect(
-      service.submitDraft("u1", { user: "u", pass: "p" }, {
+      service.submitDraft(AUTOR, { user: "u", pass: "p" }, {
         items: [{ code: "ABC", qty: 2 }],
         sucursal: "SUC06",
         vendedor: "01",
@@ -115,7 +117,7 @@ describe("AirOrderService", () => {
   });
 
   it("envía el canasto al vendedor (send_pedido), no cobra", async () => {
-    const result = await service.submitDraft("u1", { user: "u", pass: "p" }, {
+    const result = await service.submitDraft(AUTOR, { user: "u", pass: "p" }, {
       items: [{ code: "ABC", qty: 2, name: "Mouse" }],
       sucursal: "SUC06",
       vendedor: "01",

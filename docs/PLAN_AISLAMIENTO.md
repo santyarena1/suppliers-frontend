@@ -138,12 +138,31 @@ En el frontend, `GET /my/providers` es la única fuente de la lista: el dashboar
 proveedores, los filtros de búsqueda, la navegación lateral, la home, diagnósticos y la
 tira de logos salen todos de ahí. Los paneles de superadmin siguen viendo todo.
 
-### Fase 5 — Carrito y órdenes por organización
+### Fase 5 — Carrito y órdenes por organización — **hecha**
 
-- El carrito deja de vivir en el navegador y pasa a la API, acotado por organización.
-- `ProviderOrder` suma `tenantId` y se activan los campos de aprobación, que hoy
-  existen en el esquema pero no los usa ningún código.
-- Un `SELLER` que arma un pedido lo deja en `PENDING_APPROVAL`; lo confirma un `OWNER`.
+El carrito de la API pasó a ser personal dentro de una organización: dos vendedores del
+mismo local no se pisan, pero quien cambia de comercio no se lleva lo que había juntado.
+El carrito que usa hoy la web sigue viviendo en el navegador; el de la API queda listo
+para cuando se mude.
+
+`ProviderOrder` es de la organización y se activaron los campos de aprobación que ya
+existían en el esquema. Un vendedor arma el pedido y **no** se manda al proveedor:
+`OrderApprovalService.hold` lo guarda con el borrador completo en `draftInput` y lo deja
+en `PENDING_APPROVAL`. Cuando un `OWNER` o un `ADMIN` lo aprueba, ese mismo borrador se
+reenvía tal cual al proveedor —nadie lo edita por el camino— y la fila que ya existía se
+completa con el resultado. Los roles salen de `packages/shared/src/tenants.ts`:
+`TENANT_ROLES_CAN_ORDER`, `TENANT_ROLES_CAN_CONFIRM_ORDERS` (dueño, administrador y
+comprador confirman solos) y `TENANT_ROLES_CAN_APPROVE_ORDERS` (dueño y administrador
+firman lo de otro). El rol de solo lectura no arma pedidos.
+
+Los cinco checkouts (`INVID`, `NEW_BYTES`, `GRUPO_NUCLEO`, `AIR`, `ELIT`) pasan por la
+retención antes de tocar las credenciales del proveedor, y los historiales de borradores
+y de cuenta dejaron de ser por persona para ser por organización. La pantalla `/pedidos`
+muestra lo que espera firma y el historial, y el modal de confirmación y el aviso del
+carrito distinguen "esperando aprobación" de "confirmado".
+
+Verifica `scripts/check-orders-approval.mjs`. El envío real al proveedor no se prueba
+automáticamente: mandaría un pedido de verdad.
 
 ## Reparto de trabajo
 

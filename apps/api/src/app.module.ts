@@ -12,6 +12,7 @@ import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
 import { CredentialsModule } from "./credentials/credentials.module";
 import { CartModule } from "./cart/cart.module";
+import { OrdersModule } from "./orders/orders.module";
 import { HealthModule } from "./health/health.module";
 import { ProvidersModule } from "./providers/providers.module";
 import { AdminModule } from "./admin/admin.module";
@@ -39,6 +40,7 @@ import { TenantsModule } from "./tenants/tenants.module";
     UsersModule,
     CredentialsModule,
     CartModule,
+    OrdersModule,
     HealthModule,
     ProvidersModule,
     AdminModule,
