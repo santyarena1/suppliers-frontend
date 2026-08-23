@@ -54,7 +54,7 @@ export default function ProveedoresPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Dashboard de Proveedores</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Cada usuario carga su propia cuenta de cada proveedor — entrá a uno para conectar credenciales, sincronizar y ver el catálogo
+            Las cuentas son de tu organización — entrá a un proveedor para conectar credenciales, sincronizar y ver el catálogo
           </p>
         </div>
         <PrefsPanel />

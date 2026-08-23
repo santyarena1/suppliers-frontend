@@ -21,7 +21,18 @@ export class UsersService {
         updatedAt: true,
         brandId: true,
         brand: { select: { id: true, name: true, slug: true } },
-        credentials: { select: { providerName: true, updatedAt: true } },
+        // Los proveedores configurados son los de la organización de la persona,
+        // no los que cargó ella: la cuenta en el distribuidor es del comercio.
+        memberships: {
+          where: { active: true },
+          orderBy: { createdAt: "asc" },
+          take: 1,
+          select: {
+            tenant: {
+              select: { id: true, name: true, credentials: { select: { providerName: true } } },
+            },
+          },
+        },
         accesses: {
           select: {
             brandId: true,
@@ -32,25 +43,30 @@ export class UsersService {
       },
       orderBy: { createdAt: "desc" },
     });
-    return users.map((user) => ({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      active: user.active,
-      endDate: user.endDate,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      brandId: user.brandId,
-      brand: user.brand,
-      providers: user.credentials.map((c) => c.providerName),
-      brandAccesses: user.accesses.map((a) => ({
-        brandId: a.brandId,
-        brandName: a.brand.name,
-        brandSlug: a.brand.slug,
-        status: a.status,
-      })),
-    }));
+    return users.map((user) => {
+      const tenant = user.memberships[0]?.tenant ?? null;
+      return {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        active: user.active,
+        endDate: user.endDate,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        brandId: user.brandId,
+        brand: user.brand,
+        tenantId: tenant?.id ?? null,
+        tenantName: tenant?.name ?? null,
+        providers: tenant?.credentials.map((c) => c.providerName) ?? [],
+        brandAccesses: user.accesses.map((a) => ({
+          brandId: a.brandId,
+          brandName: a.brand.name,
+          brandSlug: a.brand.slug,
+          status: a.status,
+        })),
+      };
+    });
   }
 
   private async assertExists(userId: string) {

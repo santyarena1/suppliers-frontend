@@ -26,7 +26,7 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   NEW_BYTES: {
     title: "Conectar tu cuenta de NewBytes",
     intro:
-      "Cada usuario de Nodo carga la suya. Se guarda cifrada y no se comparte con el resto: cuando otro compañero entre, va a completar esta misma pantalla con su usuario de nb.com.ar.",
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo, así que tus compañeros no tienen que volver a cargarla.",
     extra:
       "Usuario y contraseña del portal habilitan catálogo completo, pedidos y cuenta corriente. El token de lista de precios es un respaldo opcional (solo catálogo CSV).",
     portalUrl: "https://www.nb.com.ar",
@@ -65,7 +65,7 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   INVID: {
     title: "Conectar tu cuenta de Invid",
     intro:
-      "Cada usuario de Nodo carga la suya. Se guarda cifrada y no se comparte con el resto.",
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra: "Usuario y contraseña del portal invidcomputers.com.",
     portalUrl: "https://www.invidcomputers.com",
     portalLabel: "invidcomputers.com",
@@ -93,7 +93,7 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   AIR: {
     title: "Conectar tu cuenta de Air",
     intro:
-      "Cada usuario de Nodo carga la suya. Se guarda cifrada y no se comparte con el resto.",
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra: "Usuario y contraseña del portal www.air-intra.com.",
     portalUrl: "https://www.air-intra.com",
     portalLabel: "www.air-intra.com",
@@ -121,7 +121,7 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   ELIT: {
     title: "Conectar tu cuenta de ELIT",
     intro:
-      "Cada usuario de Nodo carga la suya. Se guarda cifrada y no se comparte con el resto.",
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
       "User ID y token sincronizan el catálogo (clientes.elit.com.ar). Nro. de cliente y contraseña del portal habilitan pedidos y cuenta corriente en elit.com.ar.",
     portalUrl: "https://www.elit.com.ar",
@@ -176,7 +176,7 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   GRUPO_NUCLEO: {
     title: "Conectar tu cuenta de Grupo Núcleo",
     intro:
-      "Cada usuario de Nodo carga la suya. Se guarda cifrada y no se comparte con el resto.",
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra: "ID de empresa, usuario y contraseña de la API de Grupo Núcleo.",
     fields: [
       {

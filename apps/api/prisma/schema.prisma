@@ -28,13 +28,13 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  credentials    Credential[]
-  cartItems      CartItem[]
-  providerOrders ProviderOrder[]
-  favorites      BrandFavorite[]
-  notifications  BrandNotification[]
-  accesses       BrandAccess[]       @relation("AccessUser")
-  auditLogs      AuditLogEntry[]
+  savedCredentials Credential[]
+  cartItems        CartItem[]
+  providerOrders   ProviderOrder[]
+  favorites        BrandFavorite[]
+  notifications    BrandNotification[]
+  accesses         BrandAccess[]       @relation("AccessUser")
+  auditLogs        AuditLogEntry[]
 
   memberships          TenantMembership[]
   managedAccounts      TenantLink[]          @relation("AccountManager")
@@ -95,6 +95,8 @@ model Tenant {
   supplierLinks TenantLink[]          @relation("LinkClient")
   clientLinks   TenantLink[]          @relation("LinkSupplier")
   pmScopes      ProductManagerScope[]
+  credentials   Credential[]
+  syncConfigs   ProviderSyncConfig[]
 
   @@index([type, active])
 }
@@ -180,16 +182,21 @@ model ProductManagerScope {
   @@unique([tenantId, userId, brandName])
 }
 
+// La cuenta en el distribuidor es del comercio, no de la persona que la cargó:
+// si el encargado de compras se va, la organización sigue comprando. `savedById`
+// queda solo como rastro de quién la cargó por última vez.
 model Credential {
   id                   String   @id @default(uuid())
-  userId               String
-  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId             String
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  savedById            String?
+  savedBy              User?    @relation(fields: [savedById], references: [id], onDelete: SetNull)
   providerName         String
   credentialsEncrypted String
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  @@unique([userId, providerName])
+  @@unique([tenantId, providerName])
 }
 
 // Catálogo completo de cada proveedor, sincronizado en background (no se
@@ -315,11 +322,14 @@ enum ZeroStockAction {
   DELETE
 }
 
-// Configuración de sincronización por usuario y proveedor — equivalente a la
-// pestaña "Configuración" de cada proveedor en AcuStock.
+// Configuración de sincronización por organización y proveedor — equivalente a la
+// pestaña "Configuración" de cada proveedor en AcuStock. Va junto a la credencial:
+// el markup y el umbral de stock son decisiones comerciales del comercio, no de
+// quien las cargó.
 model ProviderSyncConfig {
   id                   String               @id @default(uuid())
-  userId               String
+  tenantId             String
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   provider             String
   enabled              Boolean              @default(false)
   syncIntervalMinutes  Int                  @default(60)
@@ -337,7 +347,7 @@ model ProviderSyncConfig {
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
-  @@unique([userId, provider])
+  @@unique([tenantId, provider])
 }
 
 model CartItem {

@@ -17,17 +17,17 @@ export class ProvidersService {
     private readonly registry: ProviderRegistry
   ) {}
 
-  async getConfig(userId: string, provider: Provider) {
+  async getConfig(tenantId: string, provider: Provider) {
     const config = await this.prisma.providerSyncConfig.findUnique({
-      where: { userId_provider: { userId, provider } },
+      where: { tenantId_provider: { tenantId, provider } },
     });
-    return config ?? this.defaultConfig(userId, provider);
+    return config ?? this.defaultConfig(tenantId, provider);
   }
 
-  private defaultConfig(userId: string, provider: Provider) {
+  private defaultConfig(tenantId: string, provider: Provider) {
     return {
       id: null,
-      userId,
+      tenantId,
       provider,
       enabled: false,
       syncIntervalMinutes: 60,
@@ -42,15 +42,15 @@ export class ProvidersService {
     };
   }
 
-  async updateConfig(userId: string, provider: Provider, dto: UpdateProviderConfigDto) {
+  async updateConfig(tenantId: string, provider: Provider, dto: UpdateProviderConfigDto) {
     return this.prisma.providerSyncConfig.upsert({
-      where: { userId_provider: { userId, provider } },
-      create: { userId, provider, ...dto },
+      where: { tenantId_provider: { tenantId, provider } },
+      create: { tenantId, provider, ...dto },
       update: { ...dto },
     });
   }
 
-  async sync(userId: string, provider: Provider) {
+  async sync(tenantId: string, provider: Provider) {
     const adapter = this.registry.get(provider);
     if (!adapter) {
       throw new BadRequestException(
@@ -58,7 +58,7 @@ export class ProvidersService {
       );
     }
 
-    const stored = await this.credentials.getByProvider(userId, provider).catch(() => null);
+    const stored = await this.credentials.findByProvider(tenantId, provider);
     if (!stored && !adapter.publicCatalog) {
       throw new NotFoundException(`No hay credenciales guardadas para ${provider}`);
     }
@@ -66,7 +66,7 @@ export class ProvidersService {
     const credentials = stored ? (JSON.parse(stored.credentialsJson) as Record<string, string>) : {};
     const syncedExternalIds: string[] = [];
 
-    const result = await this.runSync(userId, provider, async (onPage) => {
+    const result = await this.runSync(tenantId, provider, async (onPage) => {
       await adapter.syncAll(credentials, async (items) => {
         syncedExternalIds.push(...items.map((i) => i.externalId));
         await onPage(items);
@@ -75,9 +75,9 @@ export class ProvidersService {
 
     // Enriquecimiento lento (ej. scrapear ficha por producto) — no bloquea
     // la respuesta de este sync ni el próximo, corre solo en background y
-    // se salta si ya hay uno corriendo para este proveedor+usuario.
+    // se salta si ya hay uno corriendo para este proveedor+organización.
     if (adapter.enrichDetails) {
-      const key = `${userId}:${provider}`;
+      const key = `${tenantId}:${provider}`;
       if (!this.enrichRunning.has(key)) {
         this.enrichRunning.add(key);
         adapter
@@ -113,18 +113,18 @@ export class ProvidersService {
   }
 
   /** Igual que sync(), pero la fuente de productos es un archivo Excel/CSV subido a mano en vez de la API del proveedor. */
-  async importFromRows(userId: string, provider: Provider, items: NormalizedProduct[]) {
-    return this.runSync(userId, provider, async (onPage) => {
+  async importFromRows(tenantId: string, provider: Provider, items: NormalizedProduct[]) {
+    return this.runSync(tenantId, provider, async (onPage) => {
       await onPage(items);
     });
   }
 
   private async runSync(
-    userId: string,
+    tenantId: string,
     provider: Provider,
     run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>
   ) {
-    const config = await this.getConfig(userId, provider);
+    const config = await this.getConfig(tenantId, provider);
     const markup = Number(config.priceMarkupPercent) || 0;
     const minStock = config.minStockThreshold || 0;
 
@@ -140,8 +140,8 @@ export class ProvidersService {
       });
     } catch (err) {
       await this.prisma.providerSyncConfig.upsert({
-        where: { userId_provider: { userId, provider } },
-        create: { userId, provider, lastSyncError: errorMessage(err) },
+        where: { tenantId_provider: { tenantId, provider } },
+        create: { tenantId, provider, lastSyncError: errorMessage(err) },
         update: { lastSyncError: errorMessage(err) },
       });
       throw err;
@@ -155,8 +155,8 @@ export class ProvidersService {
     const updated = Math.max(0, count - created);
 
     await this.prisma.providerSyncConfig.upsert({
-      where: { userId_provider: { userId, provider } },
-      create: { userId, provider, lastSyncedAt: new Date(), lastSyncError: null, lastSyncCreated: created, lastSyncUpdated: updated },
+      where: { tenantId_provider: { tenantId, provider } },
+      create: { tenantId, provider, lastSyncedAt: new Date(), lastSyncError: null, lastSyncCreated: created, lastSyncUpdated: updated },
       update: { lastSyncedAt: new Date(), lastSyncError: null, lastSyncCreated: created, lastSyncUpdated: updated },
     });
 
@@ -288,12 +288,9 @@ export class ProvidersService {
     }
   }
 
-  async status(userId: string, provider: Provider) {
-    const [hasCredentials, total, withStock, last] = await Promise.all([
-      this.credentials.getByProvider(userId, provider).then(
-        () => true,
-        () => false
-      ),
+  async status(tenantId: string, provider: Provider) {
+    const [credential, total, withStock, last] = await Promise.all([
+      this.credentials.findByProvider(tenantId, provider),
       this.prisma.providerSyncCache.count({ where: { provider, active: true } }),
       this.prisma.providerSyncCache.count({ where: { provider, active: true, stock: { gt: 0 } } }),
       this.prisma.providerSyncCache.findFirst({
@@ -307,7 +304,7 @@ export class ProvidersService {
       provider,
       implemented: Boolean(this.registry.get(provider)),
       publicCatalog: Boolean(this.registry.get(provider)?.publicCatalog),
-      hasCredentials,
+      hasCredentials: Boolean(credential),
       total,
       withStock,
       lastSyncedAt: last?.syncedAt ?? null,
@@ -406,7 +403,9 @@ export class ProvidersService {
 
   /** Usado por el cron de sincronización automática. */
   async findDueConfigs() {
-    const configs = await this.prisma.providerSyncConfig.findMany({ where: { enabled: true } });
+    const configs = await this.prisma.providerSyncConfig.findMany({
+      where: { enabled: true, tenant: { active: true } },
+    });
     const now = Date.now();
     return configs.filter((c) => {
       if (!c.lastSyncedAt) return true;

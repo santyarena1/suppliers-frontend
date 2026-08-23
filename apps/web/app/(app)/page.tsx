@@ -280,7 +280,7 @@ export default function HomePage() {
 
               {/* CTAs */}
               <section className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-                <CtaCard href="/proveedores" icon={Key} title="Cargar cuentas" description="Cada usuario conecta su usuario y contraseña de cada proveedor" color="brand" />
+                <CtaCard href="/proveedores" icon={Key} title="Cargar cuentas" description="Conectá el usuario y la contraseña de tu organización en cada proveedor" color="brand" />
                 <CtaCard href="/cart" icon={ShoppingCart} title="Ver carrito" description={`${totalCount} ${totalCount === 1 ? "unidad" : "unidades"} de ${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}`} color="emerald" />
                 <CtaCard href="/search" icon={Package} title="Buscar productos" description="Consultá precios actualizados de los proveedores configurados" color="orange" />
               </section>

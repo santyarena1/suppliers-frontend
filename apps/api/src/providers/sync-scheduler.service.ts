@@ -3,7 +3,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import type { Provider } from "@nodo/shared";
 import { ProvidersService } from "./providers.service";
 
-/** Corre cada 5 minutos, sincroniza los proveedores que el usuario dejó
+/** Corre cada 5 minutos, sincroniza los proveedores que cada organización dejó
  * habilitados y cuyo intervalo configurado ya venció. Reemplaza tener que
  * apretar "Sincronizar ahora" a mano. */
 @Injectable()
@@ -21,7 +21,7 @@ export class SyncSchedulerService {
       const due = await this.providersService.findDueConfigs();
       for (const config of due) {
         try {
-          const result = await this.providersService.sync(config.userId, config.provider as Provider);
+          const result = await this.providersService.sync(config.tenantId, config.provider as Provider);
           this.logger.log(`Auto-sync ${config.provider}: ${result.synced} productos`);
         } catch (err) {
           this.logger.warn(

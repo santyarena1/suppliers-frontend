@@ -2,10 +2,13 @@ import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, 
 import { AuthGuard } from "@nestjs/passport";
 import type { FastifyRequest } from "fastify";
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { CredentialsService } from "../credentials/credentials.service";
+import type { TenantContext } from "../tenants/tenant-context.service";
+import { TenantGuard } from "../tenants/tenant.guard";
 import { ProvidersService } from "./providers.service";
 import { FileImportService } from "./file-import.service";
 import { InvidAccountService } from "./invid-account.service";
@@ -39,7 +42,7 @@ function assertProvider(value: string): Provider {
 
 // `RolesGuard` deja pasar todo lo que no declare `@Roles`, así que sumarlo acá no
 // restringe nada por sí solo: habilita marcar endpoints sueltos.
-@UseGuards(AuthGuard("jwt"), RolesGuard)
+@UseGuards(AuthGuard("jwt"), RolesGuard, TenantGuard)
 @Controller()
 export class ProvidersController {
   constructor(
@@ -57,35 +60,37 @@ export class ProvidersController {
     private readonly elitOrderService: ElitOrderService
   ) {}
 
-  private async invidCredentials(userId: string) {
-    const stored = await this.credentialsService.getByProvider(userId, "INVID");
+  // Las credenciales son de la organización: quien las pide es el comercio, no la
+  // persona que las cargó.
+  private async invidCredentials(tenant: TenantContext) {
+    const stored = await this.credentialsService.getByProvider(tenant.tenantId, "INVID");
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
-  private async newBytesCredentials(userId: string) {
-    const stored = await this.credentialsService.getByProvider(userId, "NEW_BYTES");
+  private async newBytesCredentials(tenant: TenantContext) {
+    const stored = await this.credentialsService.getByProvider(tenant.tenantId, "NEW_BYTES");
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
   /** Historial real de pedidos de Invid (solo lectura) — usa la credencial del portal ya guardada. */
   @Get("providers/INVID/orders")
-  async invidOrders(@CurrentUser() user: { userId: string }) {
-    return this.invidAccountService.getOrders(await this.invidCredentials(user.userId));
+  async invidOrders(@CurrentTenant() tenant: TenantContext) {
+    return this.invidAccountService.getOrders(await this.invidCredentials(tenant));
   }
 
   /** Saldo y movimientos reales de cuenta corriente de Invid (solo lectura). */
   @Get("providers/INVID/account-statement")
-  async invidAccountStatement(@CurrentUser() user: { userId: string }) {
-    return this.invidAccountService.getAccountStatement(await this.invidCredentials(user.userId));
+  async invidAccountStatement(@CurrentTenant() tenant: TenantContext) {
+    return this.invidAccountService.getAccountStatement(await this.invidCredentials(tenant));
   }
 
   @Get("providers/INVID/documents")
-  async invidDocument(@CurrentUser() user: { userId: string }, @Query("href") href: string) {
-    return this.invidAccountService.getDocument(await this.invidCredentials(user.userId), href);
+  async invidDocument(@CurrentTenant() tenant: TenantContext, @Query("href") href: string) {
+    return this.invidAccountService.getDocument(await this.invidCredentials(tenant), href);
   }
 
   @Post("providers/INVID/payments/attach")
-  async invidPaymentAttach(@CurrentUser() user: { userId: string }, @Req() req: FastifyRequest) {
+  async invidPaymentAttach(@CurrentTenant() tenant: TenantContext, @Req() req: FastifyRequest) {
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();
@@ -97,15 +102,15 @@ export class ProvidersController {
       else if (typeof val === "string") extra[k] = val;
     }
     return this.invidAccountService.attachPayment(
-      await this.invidCredentials(user.userId),
+      await this.invidCredentials(tenant),
       { filename: file.filename, mimetype: file.mimetype, buffer },
       extra
     );
   }
 
   @Get("providers/INVID/checkout/addresses")
-  async invidAddresses(@CurrentUser() user: { userId: string }) {
-    return this.invidOrderService.getAddresses(await this.invidCredentials(user.userId));
+  async invidAddresses(@CurrentTenant() tenant: TenantContext) {
+    return this.invidOrderService.getAddresses(await this.invidCredentials(tenant));
   }
 
   @Get("providers/INVID/checkout/payments")
@@ -131,57 +136,61 @@ export class ProvidersController {
   }
 
   @Post("providers/INVID/checkout/preview")
-  async invidCheckoutPreview(@CurrentUser() user: { userId: string }, @Body() dto: InvidCheckoutPreviewDto) {
-    return this.invidOrderService.preview(await this.invidCredentials(user.userId), dto);
+  async invidCheckoutPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: InvidCheckoutPreviewDto) {
+    return this.invidOrderService.preview(await this.invidCredentials(tenant), dto);
   }
 
   /** Crea el borrador en Invid (pedido pendiente) y guarda una copia en Nodo. */
   @Post("providers/INVID/checkout/draft")
-  async invidCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: InvidCheckoutDraftDto) {
-    return this.invidOrderService.submitDraft(user.userId, await this.invidCredentials(user.userId), dto);
+  async invidCheckoutDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: InvidCheckoutDraftDto
+  ) {
+    return this.invidOrderService.submitDraft(user.userId, await this.invidCredentials(tenant), dto);
   }
 
   /** Historial real de pedidos web de NewBytes (solo lectura). */
   @Get("providers/NEW_BYTES/orders")
-  async newBytesOrders(@CurrentUser() user: { userId: string }) {
-    return this.newBytesAccountService.getOrders(await this.newBytesCredentials(user.userId));
+  async newBytesOrders(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesAccountService.getOrders(await this.newBytesCredentials(tenant));
   }
 
   /** Órdenes de compra reales de NewBytes (las que genera el checkout). */
   @Get("providers/NEW_BYTES/purchase-orders")
-  async newBytesPurchaseOrders(@CurrentUser() user: { userId: string }) {
-    return this.newBytesAccountService.getPurchaseOrders(await this.newBytesCredentials(user.userId));
+  async newBytesPurchaseOrders(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesAccountService.getPurchaseOrders(await this.newBytesCredentials(tenant));
   }
 
   /** Comprobantes / cuenta corriente de NewBytes (solo lectura). */
   @Get("providers/NEW_BYTES/account-statement")
-  async newBytesAccountStatement(@CurrentUser() user: { userId: string }) {
-    return this.newBytesAccountService.getAccountStatement(await this.newBytesCredentials(user.userId));
+  async newBytesAccountStatement(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesAccountService.getAccountStatement(await this.newBytesCredentials(tenant));
   }
 
   @Get("providers/NEW_BYTES/profile")
-  async newBytesProfile(@CurrentUser() user: { userId: string }) {
-    return this.newBytesAccountService.getProfile(await this.newBytesCredentials(user.userId));
+  async newBytesProfile(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesAccountService.getProfile(await this.newBytesCredentials(tenant));
   }
 
   @Get("providers/NEW_BYTES/documents")
-  async newBytesDocument(@CurrentUser() user: { userId: string }, @Query("voucherId") voucherId: string) {
-    return this.newBytesAccountService.getDocument(await this.newBytesCredentials(user.userId), voucherId);
+  async newBytesDocument(@CurrentTenant() tenant: TenantContext, @Query("voucherId") voucherId: string) {
+    return this.newBytesAccountService.getDocument(await this.newBytesCredentials(tenant), voucherId);
   }
 
   @Get("providers/NEW_BYTES/orders/:id")
-  async newBytesOrderDetail(@CurrentUser() user: { userId: string }, @Param("id") id: string) {
-    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(user.userId), id);
+  async newBytesOrderDetail(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(tenant), id);
   }
 
   @Get("providers/NEW_BYTES/checkout/addresses")
-  async newBytesAddresses(@CurrentUser() user: { userId: string }) {
-    return this.newBytesOrderService.getAddresses(await this.newBytesCredentials(user.userId));
+  async newBytesAddresses(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesOrderService.getAddresses(await this.newBytesCredentials(tenant));
   }
 
   @Get("providers/NEW_BYTES/checkout/payments")
-  async newBytesPayments(@CurrentUser() user: { userId: string }) {
-    return this.newBytesOrderService.getPayments(await this.newBytesCredentials(user.userId));
+  async newBytesPayments(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesOrderService.getPayments(await this.newBytesCredentials(tenant));
   }
 
   @Get("providers/NEW_BYTES/drafts")
@@ -198,29 +207,33 @@ export class ProvidersController {
 
   /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */
   @Post("providers/NEW_BYTES/checkout/cart")
-  async newBytesCheckoutCart(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutCartDto) {
-    return this.newBytesOrderService.syncCart(await this.newBytesCredentials(user.userId), dto);
+  async newBytesCheckoutCart(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutCartDto) {
+    return this.newBytesOrderService.syncCart(await this.newBytesCredentials(tenant), dto);
   }
 
   /** GET /carrito/calcularEnvioPara/{cp}/{idDirCli} sobre el carrito armado. */
   @Post("providers/NEW_BYTES/checkout/shipping")
-  async newBytesCheckoutShipping(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutShippingDto) {
-    return this.newBytesOrderService.quoteShippingForAddress(await this.newBytesCredentials(user.userId), dto);
+  async newBytesCheckoutShipping(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutShippingDto) {
+    return this.newBytesOrderService.quoteShippingForAddress(await this.newBytesCredentials(tenant), dto);
   }
 
   @Post("providers/NEW_BYTES/checkout/preview")
-  async newBytesCheckoutPreview(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutPreviewDto) {
-    return this.newBytesOrderService.preview(await this.newBytesCredentials(user.userId), dto);
+  async newBytesCheckoutPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutPreviewDto) {
+    return this.newBytesOrderService.preview(await this.newBytesCredentials(tenant), dto);
   }
 
   /** POST /carrito/process: retiro ({ note, medioDePagoId }) o envío (cotización + idDirCli). */
   @Post("providers/NEW_BYTES/checkout/draft")
-  async newBytesCheckoutDraft(@CurrentUser() user: { userId: string }, @Body() dto: NewBytesCheckoutDraftDto) {
-    return this.newBytesOrderService.submitDraft(user.userId, await this.newBytesCredentials(user.userId), dto);
+  async newBytesCheckoutDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: NewBytesCheckoutDraftDto
+  ) {
+    return this.newBytesOrderService.submitDraft(user.userId, await this.newBytesCredentials(tenant), dto);
   }
 
-  private async credentialsOf(userId: string, provider: Provider) {
-    const stored = await this.credentialsService.getByProvider(userId, provider);
+  private async credentialsOf(tenant: TenantContext, provider: Provider) {
+    const stored = await this.credentialsService.getByProvider(tenant.tenantId, provider);
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
@@ -248,22 +261,26 @@ export class ProvidersController {
   }
 
   @Post("providers/GRUPO_NUCLEO/checkout/preview")
-  async gnPreview(@CurrentUser() user: { userId: string }, @Body() dto: GrupoNucleoCheckoutPreviewDto) {
-    return this.grupoNucleoOrderService.preview(await this.credentialsOf(user.userId, "GRUPO_NUCLEO"), dto);
+  async gnPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: GrupoNucleoCheckoutPreviewDto) {
+    return this.grupoNucleoOrderService.preview(await this.credentialsOf(tenant, "GRUPO_NUCLEO"), dto);
   }
 
   @Post("providers/GRUPO_NUCLEO/checkout/draft")
-  async gnDraft(@CurrentUser() user: { userId: string }, @Body() dto: GrupoNucleoCheckoutDraftDto) {
+  async gnDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: GrupoNucleoCheckoutDraftDto
+  ) {
     return this.grupoNucleoOrderService.submitDraft(
       user.userId,
-      await this.credentialsOf(user.userId, "GRUPO_NUCLEO"),
+      await this.credentialsOf(tenant, "GRUPO_NUCLEO"),
       dto
     );
   }
 
   @Get("providers/AIR/checkout/options")
-  async airCheckoutOptions(@CurrentUser() user: { userId: string }) {
-    return this.airOrderService.checkoutOptions(await this.credentialsOf(user.userId, "AIR"));
+  async airCheckoutOptions(@CurrentTenant() tenant: TenantContext) {
+    return this.airOrderService.checkoutOptions(await this.credentialsOf(tenant, "AIR"));
   }
 
   @Get("providers/AIR/drafts")
@@ -279,18 +296,18 @@ export class ProvidersController {
   }
 
   @Get("providers/AIR/account")
-  async airAccount(@CurrentUser() user: { userId: string }) {
-    return this.airAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "AIR"));
+  async airAccount(@CurrentUser() user: { userId: string }, @CurrentTenant() tenant: TenantContext) {
+    return this.airAccountService.getAccount(user.userId, await this.credentialsOf(tenant, "AIR"));
   }
 
   @Get("providers/AIR/documents")
-  async airDocument(@CurrentUser() user: { userId: string }, @Query("href") href: string) {
-    return this.airAccountService.getDocument(await this.credentialsOf(user.userId, "AIR"), href);
+  async airDocument(@CurrentTenant() tenant: TenantContext, @Query("href") href: string) {
+    return this.airAccountService.getDocument(await this.credentialsOf(tenant, "AIR"), href);
   }
 
   @Post("providers/AIR/checkout/preview")
-  async airPreview(@CurrentUser() user: { userId: string }, @Body() dto: AirCheckoutPreviewDto) {
-    return this.airOrderService.preview(await this.credentialsOf(user.userId, "AIR"), {
+  async airPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: AirCheckoutPreviewDto) {
+    return this.airOrderService.preview(await this.credentialsOf(tenant, "AIR"), {
       items: dto.items,
       sucursal: dto.sucursal ?? "",
       vendedor: dto.vendedor ?? "",
@@ -302,8 +319,12 @@ export class ProvidersController {
   }
 
   @Post("providers/AIR/checkout/draft")
-  async airDraft(@CurrentUser() user: { userId: string }, @Body() dto: AirCheckoutDraftDto) {
-    return this.airOrderService.submitDraft(user.userId, await this.credentialsOf(user.userId, "AIR"), dto);
+  async airDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: AirCheckoutDraftDto
+  ) {
+    return this.airOrderService.submitDraft(user.userId, await this.credentialsOf(tenant, "AIR"), dto);
   }
 
   @Get("providers/ELIT/drafts")
@@ -319,44 +340,44 @@ export class ProvidersController {
   }
 
   @Get("providers/ELIT/account")
-  async elitAccount(@CurrentUser() user: { userId: string }) {
-    return this.elitAccountService.getAccount(user.userId, await this.credentialsOf(user.userId, "ELIT"));
+  async elitAccount(@CurrentUser() user: { userId: string }, @CurrentTenant() tenant: TenantContext) {
+    return this.elitAccountService.getAccount(user.userId, await this.credentialsOf(tenant, "ELIT"));
   }
 
   @Get("providers/ELIT/salenotes/:number")
-  async elitSaleNote(@CurrentUser() user: { userId: string }, @Param("number") number: string) {
-    return this.elitAccountService.getSaleNote(await this.credentialsOf(user.userId, "ELIT"), number);
+  async elitSaleNote(@CurrentTenant() tenant: TenantContext, @Param("number") number: string) {
+    return this.elitAccountService.getSaleNote(await this.credentialsOf(tenant, "ELIT"), number);
   }
 
   @Get("providers/ELIT/documents")
   async elitDocument(
-    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
     @Query("form") form: string,
     @Query("number") number: string,
     @Query("kind") kind?: string
   ) {
-    return this.elitAccountService.getDocument(await this.credentialsOf(user.userId, "ELIT"), { form, number, kind });
+    return this.elitAccountService.getDocument(await this.credentialsOf(tenant, "ELIT"), { form, number, kind });
   }
 
   @Get("providers/ELIT/payments")
-  async elitPayments(@CurrentUser() user: { userId: string }) {
-    return this.elitAccountService.getPayments(await this.credentialsOf(user.userId, "ELIT"));
+  async elitPayments(@CurrentTenant() tenant: TenantContext) {
+    return this.elitAccountService.getPayments(await this.credentialsOf(tenant, "ELIT"));
   }
 
   /** Bancos y tipos de operación. No usar GET /account/payments?include=options (crea un informe vacío). */
   @Get("providers/ELIT/payments/options")
-  async elitPaymentOptions(@CurrentUser() user: { userId: string }) {
-    return this.elitAccountService.getPaymentOptions(await this.credentialsOf(user.userId, "ELIT"));
+  async elitPaymentOptions(@CurrentTenant() tenant: TenantContext) {
+    return this.elitAccountService.getPaymentOptions(await this.credentialsOf(tenant, "ELIT"));
   }
 
   @Post("providers/ELIT/payments/operation")
-  async elitPaymentOperation(@CurrentUser() user: { userId: string }, @Body() dto: ElitPaymentOperationDto) {
-    return this.elitAccountService.createPaymentOperation(await this.credentialsOf(user.userId, "ELIT"), dto);
+  async elitPaymentOperation(@CurrentTenant() tenant: TenantContext, @Body() dto: ElitPaymentOperationDto) {
+    return this.elitAccountService.createPaymentOperation(await this.credentialsOf(tenant, "ELIT"), dto);
   }
 
   @Post("providers/ELIT/payments/operation/:id/attach")
   async elitPaymentAttach(
-    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
     @Param("id") id: string,
     @Req() req: FastifyRequest
   ) {
@@ -364,30 +385,34 @@ export class ProvidersController {
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();
     return this.elitAccountService.attachPaymentOperation(
-      await this.credentialsOf(user.userId, "ELIT"),
+      await this.credentialsOf(tenant, "ELIT"),
       id,
       { filename: file.filename, mimetype: file.mimetype, buffer }
     );
   }
 
   @Post("providers/ELIT/payments/finish")
-  async elitPaymentFinish(@CurrentUser() user: { userId: string }) {
-    return this.elitAccountService.finishPayment(await this.credentialsOf(user.userId, "ELIT"));
+  async elitPaymentFinish(@CurrentTenant() tenant: TenantContext) {
+    return this.elitAccountService.finishPayment(await this.credentialsOf(tenant, "ELIT"));
   }
 
   @Post("providers/ELIT/checkout/preview")
-  async elitPreview(@CurrentUser() user: { userId: string }, @Body() dto: ElitCheckoutPreviewDto) {
-    return this.elitOrderService.preview(await this.credentialsOf(user.userId, "ELIT"), dto);
+  async elitPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: ElitCheckoutPreviewDto) {
+    return this.elitOrderService.preview(await this.credentialsOf(tenant, "ELIT"), dto);
   }
 
   @Post("providers/ELIT/checkout/draft")
-  async elitDraft(@CurrentUser() user: { userId: string }, @Body() dto: ElitCheckoutDraftDto) {
-    return this.elitOrderService.submitDraft(user.userId, await this.credentialsOf(user.userId, "ELIT"), dto);
+  async elitDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: ElitCheckoutDraftDto
+  ) {
+    return this.elitOrderService.submitDraft(user.userId, await this.credentialsOf(tenant, "ELIT"), dto);
   }
 
   @Post("providers/:provider/sync")
-  sync(@CurrentUser() user: { userId: string }, @Param("provider") provider: string) {
-    return this.providersService.sync(user.userId, assertProvider(provider));
+  sync(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    return this.providersService.sync(tenant.tenantId, assertProvider(provider));
   }
 
   /**
@@ -397,7 +422,11 @@ export class ProvidersController {
    * guardado (markup, stock mínimo, historial de precio) que un sync real.
    */
   @Post("providers/:provider/import")
-  async importFile(@CurrentUser() user: { userId: string }, @Param("provider") provider: string, @Req() req: FastifyRequest) {
+  async importFile(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Req() req: FastifyRequest
+  ) {
     const prov = assertProvider(provider);
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
@@ -411,27 +440,27 @@ export class ProvidersController {
       );
     }
 
-    const result = await this.providersService.importFromRows(user.userId, prov, items);
+    const result = await this.providersService.importFromRows(tenant.tenantId, prov, items);
     return { ...result, rowsInFile: rows.length, rowsSkipped: skipped, unmappedColumns };
   }
 
   @Get("providers/:provider/status")
-  status(@CurrentUser() user: { userId: string }, @Param("provider") provider: string) {
-    return this.providersService.status(user.userId, assertProvider(provider));
+  status(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    return this.providersService.status(tenant.tenantId, assertProvider(provider));
   }
 
   @Get("providers/:provider/config")
-  getConfig(@CurrentUser() user: { userId: string }, @Param("provider") provider: string) {
-    return this.providersService.getConfig(user.userId, assertProvider(provider));
+  getConfig(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    return this.providersService.getConfig(tenant.tenantId, assertProvider(provider));
   }
 
   @Put("providers/:provider/config")
   updateConfig(
-    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
     @Param("provider") provider: string,
     @Body() dto: UpdateProviderConfigDto
   ) {
-    return this.providersService.updateConfig(user.userId, assertProvider(provider), dto);
+    return this.providersService.updateConfig(tenant.tenantId, assertProvider(provider), dto);
   }
 
   // Estos dos borran filas de `ProviderSyncCache`, que es una tabla compartida por

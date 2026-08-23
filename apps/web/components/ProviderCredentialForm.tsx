@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Pencil, Trash2, XCircle } from "lucide-react";
 import { credentialsApi, type Provider } from "@/lib/api";
+import { getTenant } from "@/lib/auth";
 import {
   PROVIDER_CREDENTIAL_SCHEMAS,
   emptyValues,
@@ -30,6 +31,10 @@ export default function ProviderCredentialForm({
   const [deleting, setDeleting] = useState(false);
   const [hasCred, setHasCred] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  // La sesión vive en el navegador, así que recién está disponible después de montar.
+  const [tenant, setTenant] = useState<{ name: string } | null>(null);
+
+  useEffect(() => setTenant(getTenant()), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,7 +96,8 @@ export default function ProviderCredentialForm({
   }
 
   async function handleDelete() {
-    if (!window.confirm(`¿Eliminar la cuenta de ${provider.replace(/_/g, " ")} de tu usuario de Nodo?`)) return;
+    const owner = tenant ? tenant.name : "tu organización";
+    if (!window.confirm(`¿Eliminar la cuenta de ${provider.replace(/_/g, " ")} de ${owner}?`)) return;
     setDeleting(true);
     setResult(null);
     try {
@@ -99,7 +105,7 @@ export default function ProviderCredentialForm({
       if (schema) setValues(emptyValues(schema));
       else setGenericFields([{ key: "", value: "" }]);
       setHasCred(false);
-      setResult({ ok: true, msg: "Cuenta eliminada de tu usuario" });
+      setResult({ ok: true, msg: "Cuenta eliminada" });
       onChanged?.();
     } catch {
       setResult({ ok: false, msg: "Error al eliminar la cuenta" });
@@ -129,8 +135,13 @@ export default function ProviderCredentialForm({
             </h2>
             <p className="text-xs text-surface-400 mt-1 leading-relaxed">
               {schema?.intro ??
-                `Credenciales de acceso a la API de ${provider.replace(/_/g, " ")}. Se guardan cifradas y son solo tuyas — cada usuario carga las suyas.`}
+                `Credenciales de acceso a la API de ${provider.replace(/_/g, " ")}. Se guardan cifradas y las comparte todo tu equipo.`}
             </p>
+            {tenant && (
+              <p className="text-xs text-surface-500 mt-2 leading-relaxed">
+                Se guarda en <span className="text-surface-300">{tenant.name}</span>, así que la ve todo tu equipo.
+              </p>
+            )}
             {schema?.extra && <p className="text-xs text-surface-500 mt-2 leading-relaxed">{schema.extra}</p>}
             {schema?.portalUrl && (
               <a

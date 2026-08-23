@@ -1,7 +1,10 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { ALL_PROVIDERS, type JwtPayload, type Provider } from "@nodo/shared";
+import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import type { TenantContext } from "../tenants/tenant-context.service";
+import { TenantGuard } from "../tenants/tenant.guard";
 import { CredentialsService } from "./credentials.service";
 import { SaveCredentialDto } from "./dto/save-credential.dto";
 
@@ -12,28 +15,28 @@ function assertProvider(value: string): Provider {
   return value as Provider;
 }
 
-@UseGuards(AuthGuard("jwt"))
+@UseGuards(AuthGuard("jwt"), TenantGuard)
 @Controller("credentials")
 export class CredentialsController {
   constructor(private readonly credentialsService: CredentialsService) {}
 
   @Get("me")
-  mine(@CurrentUser() user: { userId: string }) {
-    return this.credentialsService.mine(user.userId);
+  mine(@CurrentTenant() tenant: TenantContext) {
+    return this.credentialsService.ofTenant(tenant.tenantId);
   }
 
   @Get(":providerName")
-  getByProvider(@CurrentUser() user: { userId: string }, @Param("providerName") providerName: string) {
-    return this.credentialsService.getByProvider(user.userId, assertProvider(providerName));
+  getByProvider(@CurrentTenant() tenant: TenantContext, @Param("providerName") providerName: string) {
+    return this.credentialsService.getByProvider(tenant.tenantId, assertProvider(providerName));
   }
 
   @Post()
-  save(@CurrentUser() user: { userId: string }, @Body() dto: SaveCredentialDto) {
-    return this.credentialsService.save(user.userId, dto);
+  save(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: JwtPayload, @Body() dto: SaveCredentialDto) {
+    return this.credentialsService.save(tenant.tenantId, user.userId, dto);
   }
 
   @Delete(":providerName")
-  delete(@CurrentUser() user: { userId: string }, @Param("providerName") providerName: string) {
-    return this.credentialsService.delete(user.userId, assertProvider(providerName));
+  delete(@CurrentTenant() tenant: TenantContext, @Param("providerName") providerName: string) {
+    return this.credentialsService.delete(tenant.tenantId, assertProvider(providerName));
   }
 }
