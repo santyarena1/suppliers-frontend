@@ -500,36 +500,30 @@ export class ProvidersService {
     return row?.visible ?? true;
   }
 
-  /** Categorías distintas con conteo, cruzando todos los proveedores visibles — para la landing de Búsqueda. */
+  /**
+   * Categorías distintas con conteo, cruzando todos los proveedores visibles — para la
+   * landing de Búsqueda.
+   *
+   * Va en SQL crudo porque hay que agrupar por un campo de la ficha contando ofertas
+   * de la organización, y el `groupBy` de Prisma no cruza tablas: la alternativa era
+   * traerse el catálogo entero a memoria para contarlo acá.
+   */
   async getCategories(tenantId: string) {
-    const hidden = await this.hiddenProviders();
-    const rows = await this.prisma.tenantProductOffer.groupBy({
-      by: ["provider", "externalId"],
-      where: { tenantId, active: true, provider: { notIn: [...hidden] } },
-      _count: { _all: true },
-    });
-    if (rows.length === 0) return [];
-
-    // `groupBy` no puede agrupar por un campo de la ficha, así que se cuentan las
-    // categorías de los productos que la organización realmente tiene.
-    const counts = new Map<string, number>();
-    const CHUNK = 1000;
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
-      const products = await this.prisma.providerSyncCache.findMany({
-        where: { OR: chunk.map((r) => ({ provider: r.provider, externalId: r.externalId })) },
-        select: { category: true },
-      });
-      for (const { category } of products) {
-        if (!category) continue;
-        counts.set(category, (counts.get(category) ?? 0) + 1);
-      }
-    }
-
-    return [...counts.entries()]
-      .map(([category, count]) => ({ category, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 60);
+    const hidden = [...(await this.hiddenProviders())];
+    const rows = await this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
+      SELECT ficha.category AS category, COUNT(*) AS count
+      FROM "TenantProductOffer" oferta
+      JOIN "ProviderSyncCache" ficha
+        ON ficha.provider = oferta.provider AND ficha."externalId" = oferta."externalId"
+      WHERE oferta."tenantId" = ${tenantId}
+        AND oferta.active
+        AND ficha.category IS NOT NULL
+        AND NOT (oferta.provider = ANY(${hidden}::text[]))
+      GROUP BY ficha.category
+      ORDER BY count DESC
+      LIMIT 60
+    `;
+    return rows.map((r) => ({ category: r.category, count: Number(r.count) }));
   }
 
   /** Muestra de productos con stock entre proveedores visibles, para destacados de la landing. */
