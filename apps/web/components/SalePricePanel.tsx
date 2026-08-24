@@ -747,20 +747,19 @@ function RetailDetailModal({
       ? (displayPrice / costArs - 1) * 100
       : null;
 
-  const chartData = useMemo(() => {
-    if (!detail?.priceHistory?.length) return [];
-    return detail.priceHistory.map((h) => {
-      const price = repairImplausibleSalePrice(h.price, costArs);
-      return {
-        date: new Date(h.changedAt).toLocaleDateString("es-AR", {
-          day: "2-digit",
-          month: "short",
-        }),
-        price,
-        fullDate: new Date(h.changedAt).toLocaleString("es-AR"),
-      };
-    });
-  }, [detail, costArs]);
+  const chartData = !detail?.priceHistory?.length
+    ? []
+    : detail.priceHistory.map((h) => {
+        const price = repairImplausibleSalePrice(h.price, costArs);
+        return {
+          date: new Date(h.changedAt).toLocaleDateString("es-AR", {
+            day: "2-digit",
+            month: "short",
+          }),
+          price,
+          fullDate: new Date(h.changedAt).toLocaleString("es-AR"),
+        };
+      });
 
   return (
     <>
