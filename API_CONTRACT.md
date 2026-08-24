@@ -80,10 +80,10 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Método**: GET | PUT
 - **Ruta**: `/providers/:provider/config` · los mismos campos viajan en `GET /my/providers` como `purchase`
 - **Auth**: Bearer, organización comercio (RETAILER) para usarlas en búsqueda/carrito; la config la guarda el tenant actual
-- **Body / Params**: `{ acceptsOffline?: boolean, acceptsScheme?: boolean, ivaAdjustment?: "REMOVE" | "HALF" | "FLAT_10_5" | null, schemeDiscountPercent?: number | null }` además de los campos de sync ya existentes
-- **Respuesta esperada**: `ProviderConfig` con esos campos. `GET /my/providers` incluye `{ purchase: { acceptsOffline, acceptsScheme, ivaAdjustment, schemeDiscountPercent } }` por proveedor
+- **Body / Params**: `{ acceptsOffline?: boolean, acceptsScheme?: boolean, offlineIvaAdjustment?: "REMOVE" | "HALF" | "FLAT_10_5" | null, schemeIvaAdjustment?: "REMOVE" | "HALF" | "FLAT_10_5" | null, schemeDiscountPercent?: number | null }` además de los campos de sync ya existentes
+- **Respuesta esperada**: `ProviderConfig` con esos campos. `GET /my/providers` incluye `{ purchase: { acceptsOffline, acceptsScheme, offlineIvaAdjustment, schemeIvaAdjustment, schemeDiscountPercent } }` por proveedor
 - **Estado**: IMPLEMENTADO
-- **Notas**: Offline = compra sin facturar (antes “.com”); no se crea carrito en el portal, solo un mensaje para el vendedor. Esquema = facturado, con % extra que carga el comercio; al portal los ítems van sueltos. Si offline o esquema está activo, `ivaAdjustment` es obligatorio. Solo se recalcula IVA (internos/IIBB no se tocan). `HALF` sin alícuota de IVA en el producto no inventa 21%.
+- **Notas**: Offline = compra sin facturar (antes “.com”); no se crea carrito en el portal, solo un mensaje para el vendedor. **Sin percepciones (IIBB); internos sí.** Esquema = facturado, con % extra que carga el comercio una vez por distribuidor (no aplica a ítems sueltos del carrito online); al portal los ítems van sueltos. El IVA de offline y el de esquema son independientes. Si offline está activo, `offlineIvaAdjustment` es obligatorio; si esquema está activo, `schemeIvaAdjustment` es obligatorio. Si el proveedor no informa alícuota de IVA (p. ej. Ceven), offline/esquema quedan deshabilitados: no se inventa 21%, 0% ni 10,5%. En el carrito se puede mover un ítem entre online y offline, y crear un esquema desde el carrito online.
 
 ## Pendiente (futuro)
 

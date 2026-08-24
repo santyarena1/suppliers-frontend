@@ -3,6 +3,8 @@ import {
   applySchemeDiscount,
   computePurchaseUnit,
   ivaPoints,
+  parsePurchasePolicy,
+  providerHasIvaRate,
 } from "@nodo/shared";
 
 describe("ivaPoints", () => {
@@ -15,21 +17,33 @@ describe("ivaPoints", () => {
   });
 });
 
-describe("adjustedIvaPoints", () => {
-  it("REMOVE pone IVA en 0 aunque no haya alícuota original", () => {
-    expect(adjustedIvaPoints(21, "REMOVE")).toEqual({ points: 0, missingIva: false });
-    expect(adjustedIvaPoints(null, "REMOVE")).toEqual({ points: 0, missingIva: false });
+describe("providerHasIvaRate", () => {
+  it("habilita solo proveedores que informan alícuota", () => {
+    expect(providerHasIvaRate("NEW_BYTES")).toBe(true);
+    expect(providerHasIvaRate("ELIT")).toBe(true);
+    expect(providerHasIvaRate("CEVEN")).toBe(false);
+    expect(providerHasIvaRate("NEW_TREE")).toBe(false);
   });
+});
 
-  it("HALF divide la alícuota y avisa si falta", () => {
-    expect(adjustedIvaPoints(21, "HALF")).toEqual({ points: 10.5, missingIva: false });
-    expect(adjustedIvaPoints(10.5, "HALF")).toEqual({ points: 5.25, missingIva: false });
+describe("adjustedIvaPoints", () => {
+  it("sin alícuota original no inventa REMOVE ni FLAT", () => {
+    expect(adjustedIvaPoints(null, "REMOVE")).toEqual({ points: null, missingIva: true });
+    expect(adjustedIvaPoints(null, "FLAT_10_5")).toEqual({ points: null, missingIva: true });
     expect(adjustedIvaPoints(null, "HALF")).toEqual({ points: null, missingIva: true });
   });
 
-  it("FLAT_10_5 ignora la alícuota original", () => {
+  it("REMOVE pone IVA en 0 cuando hay alícuota", () => {
+    expect(adjustedIvaPoints(21, "REMOVE")).toEqual({ points: 0, missingIva: false });
+  });
+
+  it("HALF divide la alícuota", () => {
+    expect(adjustedIvaPoints(21, "HALF")).toEqual({ points: 10.5, missingIva: false });
+    expect(adjustedIvaPoints(10.5, "HALF")).toEqual({ points: 5.25, missingIva: false });
+  });
+
+  it("FLAT_10_5 normaliza cuando hay alícuota original", () => {
     expect(adjustedIvaPoints(21, "FLAT_10_5")).toEqual({ points: 10.5, missingIva: false });
-    expect(adjustedIvaPoints(null, "FLAT_10_5")).toEqual({ points: 10.5, missingIva: false });
   });
 });
 
@@ -48,6 +62,20 @@ describe("computePurchaseUnit", () => {
     expect(r.iibbAmount).toBe(2);
     expect(r.gross).toBe(107);
     expect(r.missingIva).toBe(false);
+  });
+
+  it("offline descarta percepciones y conserva internos", () => {
+    const r = computePurchaseUnit({
+      net: 100,
+      ivaPercent: 21,
+      internosAmount: 5,
+      iibbAmount: 8,
+      ivaAdjustment: "REMOVE",
+      dropPerceptions: true,
+    });
+    expect(r.internosAmount).toBe(5);
+    expect(r.iibbAmount).toBe(0);
+    expect(r.gross).toBe(105);
   });
 
   it("deja la mitad del IVA sobre el neto", () => {
@@ -101,14 +129,41 @@ describe("computePurchaseUnit", () => {
     expect(r.gross).toBe(103.45);
   });
 
-  it("HALF sin alícuota no inventa 21%", () => {
-    const r = computePurchaseUnit({
-      net: 50,
-      ivaPercent: null,
-      ivaAdjustment: "HALF",
+  it("sin alícuota no inventa IVA ni con REMOVE ni con FLAT", () => {
+    for (const mode of ["REMOVE", "HALF", "FLAT_10_5"] as const) {
+      const r = computePurchaseUnit({
+        net: 50,
+        ivaPercent: null,
+        ivaAdjustment: mode,
+        iibbAmount: 3,
+      });
+      expect(r.missingIva).toBe(true);
+      expect(r.ivaAmount).toBeNull();
+      expect(r.gross).toBe(53);
+    }
+  });
+});
+
+describe("parsePurchasePolicy", () => {
+  it("separa IVA de offline y de esquema", () => {
+    const p = parsePurchasePolicy({
+      acceptsOffline: true,
+      acceptsScheme: true,
+      offlineIvaAdjustment: "REMOVE",
+      schemeIvaAdjustment: "HALF",
+      schemeDiscountPercent: 8,
     });
-    expect(r.missingIva).toBe(true);
-    expect(r.ivaAmount).toBeNull();
-    expect(r.gross).toBe(50);
+    expect(p.offlineIvaAdjustment).toBe("REMOVE");
+    expect(p.schemeIvaAdjustment).toBe("HALF");
+    expect(p.schemeDiscountPercent).toBe(8);
+  });
+
+  it("si llega el campo viejo, lo copia a los dos", () => {
+    const p = parsePurchasePolicy({
+      acceptsOffline: true,
+      ivaAdjustment: "FLAT_10_5",
+    });
+    expect(p.offlineIvaAdjustment).toBe("FLAT_10_5");
+    expect(p.schemeIvaAdjustment).toBe("FLAT_10_5");
   });
 });

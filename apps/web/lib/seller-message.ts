@@ -39,8 +39,8 @@ export function buildSellerMessage(opts: {
     const policy = policies[provider];
     const group = items.filter((it) => it.provider === provider);
     lines.push(`*${providerLabel(provider)}*`);
-    if (group.some((it) => it.channel === "offline") && policy?.ivaAdjustment) {
-      lines.push(`IVA: ${IVA_ADJUSTMENT_LABELS[policy.ivaAdjustment]}`);
+    if (group.some((it) => it.channel === "offline") && policy?.offlineIvaAdjustment) {
+      lines.push(`IVA offline: ${IVA_ADJUSTMENT_LABELS[policy.offlineIvaAdjustment]}`);
     }
     const offline = group.filter((it) => it.channel === "offline");
     const online = group.filter((it) => it.channel !== "offline");
@@ -62,7 +62,8 @@ export function buildSellerMessage(opts: {
         const name = scheme?.name || "Esquema";
         const disc = policy?.schemeDiscountPercent;
         const discBit = disc ? ` (desc. ${formatPct(disc)})` : "";
-        lines.push(`${name}${discBit}:`);
+        const ivaBit = policy?.schemeIvaAdjustment ? ` · IVA ${IVA_ADJUSTMENT_LABELS[policy.schemeIvaAdjustment]}` : "";
+        lines.push(`${name}${discBit}${ivaBit}:`);
         pushItems(lines, online.filter((it) => it.schemeId === id), policy, fmt);
       }
     }

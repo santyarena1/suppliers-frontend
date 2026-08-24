@@ -33,9 +33,11 @@ import {
 } from "@/lib/api";
 import {
   Trash2, Minus, Plus, Download, AlertTriangle, ImageOff,
-  FileText, MessageCircle, Check, Copy, ChevronDown, History, StickyNote, ShoppingCart,
+  FileText, MessageCircle, Check, Copy, ChevronDown, History, StickyNote, ShoppingCart, Layers, ArrowRightLeft,
 } from "lucide-react";
 import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
+import { SchemePicker } from "@/components/SchemePicker";
+import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import type { PendingOrderProvider } from "@/lib/pendingOrders";
 
 type PerceptionLine = { label: string; amount: number };
@@ -77,6 +79,11 @@ const EMPTY_TOTALS: Totals = {
   productCount: 0,
   perceptionLines: [],
 };
+
+function cartPerception(item: CartItem, siblings: CartItem[], extra?: TaxExtra) {
+  if (item.channel === "offline") return null;
+  return linePerceptionFromOrder(item, siblings, extra);
+}
 
 export default function CartPage() {
   const {
@@ -278,7 +285,7 @@ export default function CartPage() {
       for (const it of its) {
         const extra = extraFor(prov);
         const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
-        const perc = linePerceptionFromOrder(it, its, extra);
+        const perc = cartPerception(it, its, extra);
         const onProduct = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) > 0.0001;
         const gross = pricing.gross + (!onProduct && perc ? perc.unitAmount * it.qty : 0);
         const unit = withIva ? gross / it.qty : pricing.unitNet;
@@ -365,7 +372,7 @@ export default function CartPage() {
         const taxLines = pricing.lines;
         const iva = taxByKind(taxLines, "iva");
         const internos = taxByKind(taxLines, "internos");
-        const iibb = linePerceptionFromOrder(it, siblings, extra);
+        const iibb = cartPerception(it, siblings, extra);
         const onProduct = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) > 0.0001;
         const gross = pricing.gross + (!onProduct && iibb ? iibb.unitAmount * it.qty : 0);
         return [
@@ -404,7 +411,7 @@ export default function CartPage() {
         const siblings = viewByProvider[it.provider] ?? [it];
         const extra = extraFor(it.provider);
         const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
-        const perc = linePerceptionFromOrder(it, siblings, extra);
+        const perc = cartPerception(it, siblings, extra);
         const onProduct = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) > 0.0001;
         return {
           provider: it.provider,
@@ -631,6 +638,7 @@ export default function CartPage() {
                     <ProviderSection
                       key={prov}
                       provider={prov}
+                      channel={channelTab}
                       items={viewByProvider[prov]}
                       schemes={schemes.filter((s) => s.provider === prov)}
                       totals={providerTotals[prov]}
@@ -645,6 +653,7 @@ export default function CartPage() {
                 ) : (
                   <ProviderSection
                     provider={activeTab}
+                    channel={channelTab}
                     items={shownItems}
                     schemes={schemes.filter((s) => s.provider === activeTab)}
                     totals={shownTotals}
@@ -904,9 +913,10 @@ function SummaryBar({
 }
 
 function ProviderSection({
-  provider, items, schemes, totals, extra, fmt, withIva, setQty, remove, onClearProvider,
+  provider, channel, items, schemes, totals, extra, fmt, withIva, setQty, remove, onClearProvider,
 }: {
   provider: string;
+  channel: "online" | "offline";
   items: CartItem[];
   schemes: CartScheme[];
   totals: Totals;
@@ -918,7 +928,10 @@ function ProviderSection({
   onClearProvider: () => void;
 }) {
   const display = useProviderDisplay();
+  const policy = usePurchasePolicy(provider);
+  const [createOpen, setCreateOpen] = useState(false);
   if (!items || items.length === 0) return null;
+  const canCreateScheme = channel === "online" && policy.acceptsScheme && providerHasIvaRate(provider);
   const color = PROVIDER_COLOR[provider] || "text-surface-400 bg-surface-400/10 border-surface-400/30";
   const logoUrl = display.logoUrl(provider);
   const loose = items.filter((it) => !it.schemeId);
@@ -949,6 +962,16 @@ function ProviderSection({
           </span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          {canCreateScheme && (
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-1 text-xs font-medium text-violet-300 hover:text-white border border-violet-500/30 hover:border-violet-400/50 rounded-md px-2 py-1"
+            >
+              <Layers className="w-3 h-3" />
+              Crear esquema
+            </button>
+          )}
           <span className="text-[15px] font-medium text-white tabular-nums">{fmt(totals.totalUSD)}</span>
           <button onClick={onClearProvider} className="text-surface-600 hover:text-red-400 transition-colors" title="Quitar proveedor">
             <Trash2 className="w-4 h-4" />
@@ -987,12 +1010,96 @@ function ProviderSection({
         ))}
       </div>
 
-      {provider === "INVID" && items.every((it) => !linePerceptionFromOrder(it, items, extra)) && (
+      {channel === "online" && provider === "INVID" && items.every((it) => !cartPerception(it, items, extra)) && (
         <p className="text-xs text-surface-500 mt-2">
           Las percepciones de Invid aparecen al validar stock.
         </p>
       )}
+
+      {createOpen && (
+        <CreateSchemeFromCart provider={provider} items={items} onClose={() => setCreateOpen(false)} />
+      )}
     </section>
+  );
+}
+
+function CreateSchemeFromCart({
+  provider, items, onClose,
+}: {
+  provider: string;
+  items: CartItem[];
+  onClose: () => void;
+}) {
+  const { createScheme, move } = useCart();
+  const loose = items.filter((it) => !it.schemeId);
+  const [name, setName] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(loose.map((it) => cartItemKey(it))));
+
+  function toggle(k: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  }
+
+  function submit() {
+    const scheme = createScheme(provider, name.trim() || undefined);
+    for (const it of items) {
+      if (selected.has(cartItemKey(it))) {
+        move(it, { channel: "online", schemeId: scheme.id });
+      }
+    }
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
+      <div
+        className="bg-surface-900 border border-surface-700 rounded-xl max-w-md w-full p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-sm font-semibold text-white">Crear esquema</h3>
+        <p className="text-xs text-surface-500 mt-1 mb-3">
+          Agrupa ítems de este distribuidor. Al portal van sueltos; el vendedor ve el esquema en el mensaje.
+        </p>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Nombre del esquema"
+          className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 mb-3"
+        />
+        {loose.length > 0 ? (
+          <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto mb-4">
+            {loose.map((it) => {
+              const k = cartItemKey(it);
+              return (
+                <label key={k} className="flex items-start gap-2 text-sm text-surface-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(k)}
+                    onChange={() => toggle(k)}
+                    className="mt-0.5"
+                  />
+                  <span className="line-clamp-2">{it.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-surface-500 mb-4">No hay ítems sueltos. Creá el esquema y después mové productos con “A esquema”.</p>
+        )}
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="flex-1 border border-surface-700 text-surface-300 rounded-md py-2 text-sm">
+            Cancelar
+          </button>
+          <button type="button" onClick={submit} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white rounded-md py-2 text-sm font-medium">
+            Crear
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1007,12 +1114,14 @@ function CartLine({
   setQty: (ref: CartRef, qty: number) => void;
   remove: (ref: CartRef) => void;
 }) {
+  const { move } = useCart();
   const policy = usePurchasePolicy(item.provider);
+  const [pickOpen, setPickOpen] = useState(false);
   const pricing = purchaseLinePricing(item, policy, priceModeForCartItem(item), item.qty);
   const taxLines = pricing.lines;
   const iva = taxByKind(taxLines, "iva");
   const internos = taxByKind(taxLines, "internos");
-  const iibb = linePerceptionFromOrder(item, siblings, extra);
+  const iibb = cartPerception(item, siblings, extra);
   const others = taxLines.filter((l) => l.kind === "other" && l.unitAmount > 0);
   const onProduct = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) > 0.0001;
   const percExtra = !onProduct && iibb ? iibb.unitAmount * item.qty : 0;
@@ -1020,6 +1129,10 @@ function CartLine({
   const href = `/product/${encodeURIComponent(item.provider)}/${encodeURIComponent(item.externalId)}`;
   const sku = item.sku || item.partNumber || item.externalId;
   const ref: CartRef = { provider: item.provider, externalId: item.externalId, channel: item.channel, schemeId: item.schemeId };
+  const hasIva = providerHasIvaRate(item.provider);
+  const canMoveOffline = item.channel !== "offline" && hasIva && policy.acceptsOffline;
+  const canMoveOnline = item.channel === "offline";
+  const canScheme = item.channel !== "offline" && hasIva && policy.acceptsScheme;
 
   return (
     <div className="py-4 md:grid md:grid-cols-[minmax(0,1.5fr)_80px_100px_100px_100px_100px_110px_36px] md:gap-3 md:items-center">
@@ -1048,6 +1161,59 @@ function CartLine({
             <p className="text-xs text-surface-500 mt-0.5">
               {others.map((o) => `${o.label} ${formatAlicuota(o.percent)} ${fmt(o.unitAmount * item.qty, 2)}`).join(" · ")}
             </p>
+          )}
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {canMoveOffline && (
+              <button
+                type="button"
+                onClick={() => move(ref, { channel: "offline" })}
+                className="inline-flex items-center gap-1 text-[11px] text-amber-200/90 hover:text-white border border-amber-500/30 hover:border-amber-400/50 rounded px-1.5 py-0.5"
+              >
+                <ArrowRightLeft className="w-3 h-3" />
+                Pasar a offline
+              </button>
+            )}
+            {canMoveOnline && (
+              <button
+                type="button"
+                onClick={() => move(ref, { channel: "online", schemeId: null })}
+                className="inline-flex items-center gap-1 text-[11px] text-brand-300 hover:text-white border border-brand-500/30 hover:border-brand-400/50 rounded px-1.5 py-0.5"
+              >
+                <ArrowRightLeft className="w-3 h-3" />
+                Pasar a online
+              </button>
+            )}
+            {canScheme && (
+              <button
+                type="button"
+                onClick={() => setPickOpen(true)}
+                className="inline-flex items-center gap-1 text-[11px] text-violet-300 hover:text-white border border-violet-500/30 hover:border-violet-400/50 rounded px-1.5 py-0.5"
+              >
+                <Layers className="w-3 h-3" />
+                {item.schemeId ? "Cambiar esquema" : "A esquema"}
+              </button>
+            )}
+            {canScheme && item.schemeId && (
+              <button
+                type="button"
+                onClick={() => move(ref, { channel: "online", schemeId: null })}
+                className="text-[11px] text-surface-500 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+              >
+                Sacar del esquema
+              </button>
+            )}
+          </div>
+          {pickOpen && (
+            <SchemePicker
+              provider={item.provider}
+              title="Mover a un esquema"
+              hint="El descuento de esquema de este distribuidor se aplica a estos ítems. Al portal van sueltos."
+              onPick={(s) => {
+                move(ref, { channel: "online", schemeId: s.id });
+                setPickOpen(false);
+              }}
+              onClose={() => setPickOpen(false)}
+            />
           )}
           <div className="md:hidden mt-2.5 grid grid-cols-3 gap-x-3 gap-y-1">
             <TaxCell label="IVA" line={iva} qty={item.qty} fmt={fmt} />

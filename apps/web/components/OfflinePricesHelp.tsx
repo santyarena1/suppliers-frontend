@@ -39,10 +39,13 @@ export function OfflinePricesHelpModal({ onClose }: { onClose: () => void }) {
             El <span className="text-white font-medium">pedido offline</span> es una compra sin facturar (lo que antes se llamaba “.com”).
           </p>
           <p>
-            Si el distribuidor la acepta, el precio se recalcula según el tratamiento de IVA que configuraste: descontar el IVA, dejar la mitad, o normalizar todos a 10,5%. Internos y percepciones no se tocan.
+            Si el distribuidor la acepta, el precio se recalcula con el IVA de offline que configuraste (distinto del IVA de esquema). Internos sí; percepciones (IIBB) no. Si el producto no trae alícuota de IVA, no se inventa nada.
           </p>
           <p>
             El pedido offline no se carga en el portal: se arma un mensaje para mandarle al vendedor.
+          </p>
+          <p>
+            Si un producto no cambia de precio, ese distribuidor todavía no tiene el pedido offline activado en su configuración.
           </p>
         </div>
         <button

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import type { Provider } from "@nodo/shared";
+import { providerHasIvaRate, type Provider } from "@nodo/shared";
 import type { IvaAdjustment } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CredentialsService } from "../credentials/credentials.service";
@@ -51,7 +51,8 @@ export class ProvidersService {
       minStockThreshold: 0,
       acceptsOffline: false,
       acceptsScheme: false,
-      ivaAdjustment: null as IvaAdjustment | null,
+      offlineIvaAdjustment: null as IvaAdjustment | null,
+      schemeIvaAdjustment: null as IvaAdjustment | null,
       schemeDiscountPercent: null as number | null,
       lastSyncedAt: null as Date | null,
       lastSyncError: null as string | null,
@@ -68,8 +69,14 @@ export class ProvidersService {
     const merged = {
       acceptsOffline: dto.acceptsOffline ?? current?.acceptsOffline ?? false,
       acceptsScheme: dto.acceptsScheme ?? current?.acceptsScheme ?? false,
-      ivaAdjustment:
-        dto.ivaAdjustment !== undefined ? dto.ivaAdjustment : (current?.ivaAdjustment ?? null),
+      offlineIvaAdjustment:
+        dto.offlineIvaAdjustment !== undefined
+          ? dto.offlineIvaAdjustment
+          : (current?.offlineIvaAdjustment ?? null),
+      schemeIvaAdjustment:
+        dto.schemeIvaAdjustment !== undefined
+          ? dto.schemeIvaAdjustment
+          : (current?.schemeIvaAdjustment ?? null),
       schemeDiscountPercent:
         dto.schemeDiscountPercent !== undefined
           ? dto.schemeDiscountPercent
@@ -77,10 +84,16 @@ export class ProvidersService {
             ? null
             : Number(current.schemeDiscountPercent),
     };
-    if ((merged.acceptsOffline || merged.acceptsScheme) && !merged.ivaAdjustment) {
+    if ((merged.acceptsOffline || merged.acceptsScheme) && !providerHasIvaRate(provider)) {
       throw new BadRequestException(
-        "Si este distribuidor acepta pedido offline o esquema, hay que elegir cómo tratar el IVA."
+        "Este distribuidor no informa alícuota de IVA: no se puede configurar pedido offline ni esquema."
       );
+    }
+    if (merged.acceptsOffline && !merged.offlineIvaAdjustment) {
+      throw new BadRequestException("Si acepta pedido offline, hay que elegir cómo tratar el IVA de offline.");
+    }
+    if (merged.acceptsScheme && !merged.schemeIvaAdjustment) {
+      throw new BadRequestException("Si acepta esquema, hay que elegir cómo tratar el IVA de esquema.");
     }
     const data = { ...dto, ...merged };
     const saved = await this.prisma.providerSyncConfig.upsert({
@@ -663,6 +676,7 @@ function serializeSyncConfig<T extends object>(c: T) {
     schemeDiscountPercent: row.schemeDiscountPercent == null ? null : Number(row.schemeDiscountPercent),
     acceptsOffline: Boolean(row.acceptsOffline),
     acceptsScheme: Boolean(row.acceptsScheme),
-    ivaAdjustment: (row.ivaAdjustment as IvaAdjustment | null | undefined) ?? null,
+    offlineIvaAdjustment: (row.offlineIvaAdjustment as IvaAdjustment | null | undefined) ?? null,
+    schemeIvaAdjustment: (row.schemeIvaAdjustment as IvaAdjustment | null | undefined) ?? null,
   };
 }

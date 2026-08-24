@@ -47,6 +47,8 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
   const ars = convert(displayUsd).amount;
   const listed = linePricing(product);
   const showingOffline = pricing.adjusted && pricing.mode === "offline";
+  const wantsOffline = priceMode === "offline";
+  const offlineUnavailable = wantsOffline && !showingOffline;
 
   const primary = currency === "USD" ? formatUSD(displayUsd) : formatARS(ars);
   const secondary = currency === "USD"
@@ -87,11 +89,13 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
           <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md ${
             showingOffline
               ? "bg-amber-500 text-black border border-amber-300/40"
+              : offlineUnavailable
+              ? "bg-black/70 text-amber-200 border border-amber-500/30"
               : withIva
               ? "bg-brand-600 text-white border border-brand-400/40"
               : "bg-black/70 text-white border border-white/10"
           }`}>
-            {showingOffline ? "Offline" : withIva ? `+ ${taxLabel(product)}` : "Sin imp."}
+            {showingOffline ? "Offline" : offlineUnavailable ? "Sin offline" : withIva ? `+ ${taxLabel(product)}` : "Sin imp."}
           </span>
 
           {product.locationAir && (
@@ -141,7 +145,11 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
             >
               <DollarSign className="w-3.5 h-3.5" />
             </button>
-            <AddToCartButton product={product} variant="icon" />
+            <AddToCartButton
+              product={product}
+              variant="icon"
+              channel={showingOffline ? "offline" : "online"}
+            />
           </div>
         </div>
 

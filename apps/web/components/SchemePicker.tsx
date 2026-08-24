@@ -8,10 +8,14 @@ export function SchemePicker({
   provider,
   onPick,
   onClose,
+  title = "Agregar a un esquema",
+  hint = "El agrupado es solo para vos. Al portal el ítem va suelto; el vendedor ve el esquema en el mensaje.",
 }: {
   provider: string;
   onPick: (scheme: CartScheme) => void;
   onClose: () => void;
+  title?: string;
+  hint?: string;
 }) {
   const { schemesFor, createScheme } = useCart();
   const schemes = schemesFor(provider);
@@ -30,10 +34,8 @@ export function SchemePicker({
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <h3 className="text-sm font-semibold text-white">Agregar a un esquema</h3>
-            <p className="text-xs text-surface-500 mt-1">
-              El agrupado es solo para vos. Al portal el ítem va suelto; el vendedor ve el esquema en el mensaje.
-            </p>
+            <h3 className="text-sm font-semibold text-white">{title}</h3>
+            <p className="text-xs text-surface-500 mt-1">{hint}</p>
           </div>
           <button type="button" onClick={onClose} className="text-surface-500 hover:text-white">
             <X className="w-4 h-4" />

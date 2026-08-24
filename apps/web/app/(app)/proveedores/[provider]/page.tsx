@@ -158,7 +158,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         ...res.data,
         acceptsOffline: Boolean(res.data.acceptsOffline),
         acceptsScheme: Boolean(res.data.acceptsScheme),
-        ivaAdjustment: res.data.ivaAdjustment ?? null,
+        offlineIvaAdjustment: res.data.offlineIvaAdjustment ?? null,
+        schemeIvaAdjustment: res.data.schemeIvaAdjustment ?? null,
         schemeDiscountPercent: res.data.schemeDiscountPercent ?? null,
       });
     } catch {
@@ -184,7 +185,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         minStockThreshold: Number(config.minStockThreshold) || 0,
         acceptsOffline: Boolean(config.acceptsOffline),
         acceptsScheme: Boolean(config.acceptsScheme),
-        ivaAdjustment: config.ivaAdjustment,
+        offlineIvaAdjustment: config.offlineIvaAdjustment,
+        schemeIvaAdjustment: config.schemeIvaAdjustment,
         schemeDiscountPercent:
           config.schemeDiscountPercent == null || config.schemeDiscountPercent === ""
             ? null
@@ -573,7 +575,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         </div>
 
                         {isRetailer && (
-                          <ProviderPurchaseConfig config={config} onChange={setConfig} />
+                          <ProviderPurchaseConfig provider={provider} config={config} onChange={setConfig} />
                         )}
 
                         {config.lastSyncError && (

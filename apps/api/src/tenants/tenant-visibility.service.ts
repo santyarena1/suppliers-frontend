@@ -1,11 +1,12 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import type { IvaAdjustment, Provider } from "@nodo/shared";
+import { providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type PurchasePolicyView = {
   acceptsOffline: boolean;
   acceptsScheme: boolean;
-  ivaAdjustment: IvaAdjustment | null;
+  offlineIvaAdjustment: IvaAdjustment | null;
+  schemeIvaAdjustment: IvaAdjustment | null;
   schemeDiscountPercent: number | null;
 };
 
@@ -57,7 +58,7 @@ export class TenantVisibilityService {
           advertised: false,
           accountManager: null,
           discountPercent: null,
-          purchase: purchaseFromConfig(ownConfig),
+          purchase: purchaseFromConfig(propio.providerKey, ownConfig),
         },
       ];
     }
@@ -89,7 +90,8 @@ export class TenantVisibilityService {
           provider: true,
           acceptsOffline: true,
           acceptsScheme: true,
-          ivaAdjustment: true,
+          offlineIvaAdjustment: true,
+          schemeIvaAdjustment: true,
           schemeDiscountPercent: true,
         },
       }),
@@ -109,7 +111,7 @@ export class TenantVisibilityService {
           ? { name: link.accountManager.username, email: link.accountManager.email }
           : null,
         discountPercent: link.discountPercent == null ? null : Number(link.discountPercent),
-        purchase: purchaseFromConfig(configByProvider.get(key)),
+        purchase: purchaseFromConfig(key, configByProvider.get(key)),
       });
     }
 
@@ -125,7 +127,7 @@ export class TenantVisibilityService {
         advertised: true,
         accountManager: null,
         discountPercent: null,
-        purchase: purchaseFromConfig(null),
+        purchase: purchaseFromConfig(key, null),
       });
     }
 
@@ -197,22 +199,33 @@ export class TenantVisibilityService {
 const EMPTY_PURCHASE: PurchasePolicyView = {
   acceptsOffline: false,
   acceptsScheme: false,
-  ivaAdjustment: null,
+  offlineIvaAdjustment: null,
+  schemeIvaAdjustment: null,
   schemeDiscountPercent: null,
 };
 
-function purchaseFromConfig(config: {
-  acceptsOffline: boolean;
-  acceptsScheme: boolean;
-  ivaAdjustment: string | null;
-  schemeDiscountPercent: unknown;
-} | null | undefined): PurchasePolicyView {
-  if (!config) return { ...EMPTY_PURCHASE };
-  const adj = config.ivaAdjustment;
+function asAdj(value: unknown): IvaAdjustment | null {
+  return value === "REMOVE" || value === "HALF" || value === "FLAT_10_5" ? value : null;
+}
+
+function purchaseFromConfig(
+  provider: string,
+  config: {
+    acceptsOffline: boolean;
+    acceptsScheme: boolean;
+    offlineIvaAdjustment?: string | null;
+    schemeIvaAdjustment?: string | null;
+    ivaAdjustment?: string | null;
+    schemeDiscountPercent: unknown;
+  } | null | undefined
+): PurchasePolicyView {
+  if (!config || !providerHasIvaRate(provider)) return { ...EMPTY_PURCHASE };
+  const legacy = asAdj(config.ivaAdjustment);
   return {
     acceptsOffline: config.acceptsOffline,
     acceptsScheme: config.acceptsScheme,
-    ivaAdjustment: adj === "REMOVE" || adj === "HALF" || adj === "FLAT_10_5" ? adj : null,
+    offlineIvaAdjustment: asAdj(config.offlineIvaAdjustment) ?? legacy,
+    schemeIvaAdjustment: asAdj(config.schemeIvaAdjustment) ?? legacy,
     schemeDiscountPercent:
       config.schemeDiscountPercent == null ? null : Number(config.schemeDiscountPercent),
   };

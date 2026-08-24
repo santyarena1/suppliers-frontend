@@ -2,10 +2,8 @@
  * Precios de pedido offline y compra en esquema.
  *
  * Partimos del costo neto (sin impuestos) y de la alícuota de IVA del producto.
- * Internos e IIBB no se tocan. El descuento de esquema se aplica sobre el neto
- * y después se recalcula el IVA.
- *
- * Alícuota: 21 = 21%. No inventamos 21% si el producto no trajo IVA.
+ * El descuento extra es solo de esquema. Offline no aplica percepciones (IIBB);
+ * los internos sí quedan. Sin alícuota de IVA no se inventa nada.
  */
 
 export const IVA_ADJUSTMENTS = ["REMOVE", "HALF", "FLAT_10_5"] as const;
@@ -17,17 +15,33 @@ export const IVA_ADJUSTMENT_LABELS: Record<IvaAdjustment, string> = {
   FLAT_10_5: "Normalizar todos los IVA a 10,5%",
 };
 
+/** Proveedores cuyo catálogo trae alícuota de IVA. El resto no puede usar offline/esquema. */
+export const PROVIDERS_WITH_IVA_RATE = [
+  "NEW_BYTES",
+  "ELIT",
+  "GRUPO_NUCLEO",
+  "AIR",
+  "INVID",
+  "DIAPSTORE",
+] as const;
+
+export function providerHasIvaRate(provider: string): boolean {
+  return (PROVIDERS_WITH_IVA_RATE as readonly string[]).includes(provider);
+}
+
 export type PurchasePolicy = {
   acceptsOffline: boolean;
   acceptsScheme: boolean;
-  ivaAdjustment: IvaAdjustment | null;
+  offlineIvaAdjustment: IvaAdjustment | null;
+  schemeIvaAdjustment: IvaAdjustment | null;
   schemeDiscountPercent: number | null;
 };
 
 export const EMPTY_PURCHASE_POLICY: PurchasePolicy = {
   acceptsOffline: false,
   acceptsScheme: false,
-  ivaAdjustment: null,
+  offlineIvaAdjustment: null,
+  schemeIvaAdjustment: null,
   schemeDiscountPercent: null,
 };
 
@@ -41,6 +55,8 @@ export type PurchasePriceInput = {
   ivaAdjustment: IvaAdjustment;
   /** Solo esquema. 8 = 8% sobre el neto. */
   schemeDiscountPercent?: number | null;
+  /** Offline: percepciones (IIBB) no aplican. Internos sí. */
+  dropPerceptions?: boolean;
 };
 
 export type PurchasePriceResult = {
@@ -51,7 +67,7 @@ export type PurchasePriceResult = {
   iibbAmount: number;
   otherAmount: number;
   gross: number;
-  /** true cuando el modo necesita la alícuota original y el producto no la trae. */
+  /** true cuando falta la alícuota original: no se aplica ningún ajuste de IVA. */
   missingIva: boolean;
   schemeDiscountPercent: number;
 };
@@ -77,16 +93,16 @@ export function ivaPoints(raw: number | null | undefined): number | null {
 }
 
 /**
- * Alícuota resultante. `HALF` sin alícuota original no se puede calcular.
- * `REMOVE` y `FLAT_10_5` no necesitan el IVA original.
+ * Alícuota resultante. Sin alícuota original no se aplica REMOVE / HALF / FLAT:
+ * no se inventa 0%, 10,5% ni 21%.
  */
 export function adjustedIvaPoints(
   originalPoints: number | null,
   mode: IvaAdjustment
 ): { points: number | null; missingIva: boolean } {
+  if (originalPoints == null) return { points: null, missingIva: true };
   if (mode === "REMOVE") return { points: 0, missingIva: false };
   if (mode === "FLAT_10_5") return { points: FLAT_IVA, missingIva: false };
-  if (originalPoints == null) return { points: null, missingIva: true };
   return { points: round4(originalPoints / 2), missingIva: false };
 }
 
@@ -106,7 +122,7 @@ export function computePurchaseUnit(input: PurchasePriceInput): PurchasePriceRes
   const { points, missingIva } = adjustedIvaPoints(original, input.ivaAdjustment);
   const ivaAmount = points == null ? null : round4(net * (points / 100));
   const internosAmount = asMoney(input.internosAmount);
-  const iibbAmount = asMoney(input.iibbAmount);
+  const iibbAmount = input.dropPerceptions ? 0 : asMoney(input.iibbAmount);
   const otherAmount = asMoney(input.otherAmount);
   const ivaForGross = ivaAmount ?? 0;
   const gross = round4(net + ivaForGross + internosAmount + iibbAmount + otherAmount);
@@ -128,12 +144,21 @@ export function isIvaAdjustment(value: unknown): value is IvaAdjustment {
   return typeof value === "string" && (IVA_ADJUSTMENTS as readonly string[]).includes(value);
 }
 
+function asAdj(value: unknown): IvaAdjustment | null {
+  return isIvaAdjustment(value) ? value : null;
+}
+
 export function parsePurchasePolicy(raw: {
   acceptsOffline?: boolean | null;
   acceptsScheme?: boolean | null;
+  offlineIvaAdjustment?: string | null;
+  schemeIvaAdjustment?: string | null;
+  /** Compat: un solo IVA compartido, anterior a la separación. */
   ivaAdjustment?: string | null;
   schemeDiscountPercent?: number | string | null;
-}): PurchasePolicy {
+} | null | undefined): PurchasePolicy {
+  if (!raw) return { ...EMPTY_PURCHASE_POLICY };
+  const legacy = asAdj(raw.ivaAdjustment);
   const schemeRaw = raw.schemeDiscountPercent;
   const schemeNum =
     schemeRaw == null || schemeRaw === ""
@@ -142,7 +167,8 @@ export function parsePurchasePolicy(raw: {
   return {
     acceptsOffline: Boolean(raw.acceptsOffline),
     acceptsScheme: Boolean(raw.acceptsScheme),
-    ivaAdjustment: isIvaAdjustment(raw.ivaAdjustment) ? raw.ivaAdjustment : null,
+    offlineIvaAdjustment: asAdj(raw.offlineIvaAdjustment) ?? legacy,
+    schemeIvaAdjustment: asAdj(raw.schemeIvaAdjustment) ?? legacy,
     schemeDiscountPercent:
       schemeNum == null || !Number.isFinite(schemeNum) ? null : schemeNum,
   };

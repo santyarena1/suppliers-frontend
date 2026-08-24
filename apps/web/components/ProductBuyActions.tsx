@@ -8,12 +8,13 @@ import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
 import { formatUSD } from "@/lib/format";
 import { SchemePicker } from "@/components/SchemePicker";
-import { IVA_ADJUSTMENT_LABELS } from "@/lib/purchase-pricing";
+import { IVA_ADJUSTMENT_LABELS, providerHasIvaRate } from "@/lib/purchase-pricing";
 
 export default function ProductBuyActions({ product, qty }: { product: ProductDTO; qty: number }) {
   const { add, items, createScheme, schemesFor } = useCart();
   const retailer = useIsRetailer();
   const policy = usePurchasePolicy(product.provider);
+  const hasIva = providerHasIvaRate(product.provider);
   const [flash, setFlash] = useState<"cart" | "scheme" | "offline" | null>(null);
   const [pickOpen, setPickOpen] = useState(false);
 
@@ -33,6 +34,8 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
 
   const offlinePricing = purchaseLinePricing(product, policy, "offline", qty);
   const schemePricing = purchaseLinePricing(product, policy, "scheme", qty);
+  const showScheme = retailer && hasIva && policy.acceptsScheme;
+  const showOffline = retailer && hasIva && policy.acceptsOffline;
 
   function flashKind(kind: "cart" | "scheme" | "offline") {
     setFlash(kind);
@@ -80,7 +83,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
         <p className="text-[11px] text-emerald-400 text-center">Ya tenés {onlineLoose.qty} en el carrito online</p>
       )}
 
-      {retailer && policy.acceptsScheme && (
+      {showScheme && (
         <>
           <button
             type="button"
@@ -98,13 +101,14 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             <p className="text-[11px] text-violet-300/80 text-center tabular-nums">
               Con esquema: {formatUSD(schemePricing.gross)}
               {policy.schemeDiscountPercent ? ` · desc. ${policy.schemeDiscountPercent}%` : ""}
+              {policy.schemeIvaAdjustment ? ` · ${IVA_ADJUSTMENT_LABELS[policy.schemeIvaAdjustment]}` : ""}
               {schemePricing.missingIva ? " · falta alícuota de IVA" : ""}
             </p>
           )}
         </>
       )}
 
-      {retailer && policy.acceptsOffline && (
+      {showOffline && (
         <>
           <button
             type="button"
@@ -121,7 +125,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
           {offlinePricing.adjusted && (
             <p className="text-[11px] text-amber-200/80 text-center tabular-nums">
               Precio offline: {formatUSD(offlinePricing.gross)}
-              {policy.ivaAdjustment ? ` · ${IVA_ADJUSTMENT_LABELS[policy.ivaAdjustment]}` : ""}
+              {policy.offlineIvaAdjustment ? ` · ${IVA_ADJUSTMENT_LABELS[policy.offlineIvaAdjustment]}` : ""}
               {offlinePricing.missingIva ? " · falta alícuota de IVA" : ""}
             </p>
           )}

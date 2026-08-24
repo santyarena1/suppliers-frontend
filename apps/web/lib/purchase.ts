@@ -5,6 +5,7 @@ import { useMyProviders } from "@/lib/myProviders";
 import {
   EMPTY_PURCHASE_POLICY,
   parsePurchasePolicy,
+  providerHasIvaRate,
   type PurchasePolicy,
 } from "@/lib/purchase-pricing";
 
@@ -22,14 +23,21 @@ export function useIsRetailer(): boolean {
 export function usePurchasePolicy(provider: string): PurchasePolicy {
   const { providers } = useMyProviders();
   const found = providers.find((p) => p.provider === provider);
-  return parsePurchasePolicy(found?.purchase);
+  const parsed = parsePurchasePolicy(found?.purchase);
+  if (!providerHasIvaRate(provider)) {
+    return { ...parsed, acceptsOffline: false, acceptsScheme: false };
+  }
+  return parsed;
 }
 
 export function usePurchasePolicies(): Record<string, PurchasePolicy> {
   const { providers } = useMyProviders();
   const map: Record<string, PurchasePolicy> = {};
   for (const p of providers) {
-    map[p.provider] = parsePurchasePolicy(p.purchase);
+    const parsed = parsePurchasePolicy(p.purchase);
+    map[p.provider] = providerHasIvaRate(p.provider)
+      ? parsed
+      : { ...parsed, acceptsOffline: false, acceptsScheme: false };
   }
   return map;
 }

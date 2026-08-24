@@ -237,6 +237,8 @@ export const searchApi = {
 };
 
 // --- Mi organización ---
+export type IvaAdjustment = "REMOVE" | "HALF" | "FLAT_10_5";
+
 /** Un proveedor tal como lo ve un comercio, y por qué lo ve. */
 export interface VisibleProvider {
   provider: Provider;
@@ -251,7 +253,8 @@ export interface VisibleProvider {
   purchase?: {
     acceptsOffline: boolean;
     acceptsScheme: boolean;
-    ivaAdjustment: "REMOVE" | "HALF" | "FLAT_10_5" | null;
+    offlineIvaAdjustment: IvaAdjustment | null;
+    schemeIvaAdjustment: IvaAdjustment | null;
     schemeDiscountPercent: number | null;
   };
 }
@@ -315,6 +318,8 @@ let visibleProviders: { list: VisibleProvider[]; at: number } | null = null;
 let visibleProvidersInflight: Promise<VisibleProvider[]> | null = null;
 const VISIBLE_PROVIDERS_TTL_MS = 60_000;
 
+export const MY_PROVIDERS_UPDATED = "nodo:my-providers-updated";
+
 export async function loadMyProviders(force = false): Promise<VisibleProvider[]> {
   if (!force && visibleProviders && Date.now() - visibleProviders.at < VISIBLE_PROVIDERS_TTL_MS) {
     return visibleProviders.list;
@@ -338,6 +343,9 @@ export async function loadMyProviders(force = false): Promise<VisibleProvider[]>
 export function invalidateMyProviders() {
   visibleProviders = null;
   visibleProvidersInflight = null;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(MY_PROVIDERS_UPDATED));
+  }
 }
 
 /** Solo los vinculados: de los publicitados todavía no hay catálogo que traer. */
@@ -383,8 +391,6 @@ export function canSyncProvider(status?: ProviderStatus | null): boolean {
 export type MissingProductAction = "KEEP" | "OUT_OF_STOCK" | "HIDE" | "DELETE";
 export type ZeroStockAction = "KEEP" | "HIDE" | "DELETE";
 
-export type IvaAdjustment = "REMOVE" | "HALF" | "FLAT_10_5";
-
 export interface ProviderConfig {
   provider: Provider;
   enabled: boolean;
@@ -395,7 +401,8 @@ export interface ProviderConfig {
   minStockThreshold: number;
   acceptsOffline: boolean;
   acceptsScheme: boolean;
-  ivaAdjustment: IvaAdjustment | null;
+  offlineIvaAdjustment: IvaAdjustment | null;
+  schemeIvaAdjustment: IvaAdjustment | null;
   schemeDiscountPercent: number | string | null;
   lastSyncedAt: string | null;
   lastSyncError: string | null;

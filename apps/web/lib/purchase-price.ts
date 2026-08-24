@@ -34,6 +34,8 @@ export function priceModeForCartItem(item: {
 /**
  * Precio de lista, offline o esquema. Si el distribuidor no tiene esa modalidad
  * configurada, se muestra el precio de lista.
+ * El % de descuento solo aplica a ítems en esquema, no a sueltos del carrito online.
+ * Offline: sin percepciones; internos sí.
  */
 export function purchaseLinePricing(
   product: TaxableProduct,
@@ -42,10 +44,15 @@ export function purchaseLinePricing(
   qty = 1
 ): PurchaseLinePricing {
   const base = linePricing(product, 1);
-  const canOffline = Boolean(policy?.acceptsOffline && policy.ivaAdjustment);
-  const canScheme = Boolean(policy?.acceptsScheme && policy.ivaAdjustment);
+  const canOffline = Boolean(policy?.acceptsOffline && policy.offlineIvaAdjustment);
+  const canScheme = Boolean(policy?.acceptsScheme && policy.schemeIvaAdjustment);
   const useOffline = mode === "offline" && canOffline;
   const useScheme = mode === "scheme" && canScheme;
+  const ivaAdjustment = useScheme
+    ? policy!.schemeIvaAdjustment
+    : useOffline
+      ? policy!.offlineIvaAdjustment
+      : null;
 
   if (!useOffline && !useScheme) {
     const listed = linePricing(product, qty);
@@ -62,8 +69,9 @@ export function purchaseLinePricing(
     internosAmount: internos?.unitAmount ?? 0,
     iibbAmount: iibb?.unitAmount ?? 0,
     otherAmount: otherAmount(lines),
-    ivaAdjustment: policy!.ivaAdjustment!,
+    ivaAdjustment: ivaAdjustment!,
     schemeDiscountPercent: useScheme ? policy!.schemeDiscountPercent : 0,
+    dropPerceptions: useOffline,
   });
 
   const nextLines: TaxLine[] = [];
@@ -78,7 +86,7 @@ export function purchaseLinePricing(
   if (internos && unit.internosAmount > 0.00005) {
     nextLines.push({ ...internos, unitAmount: unit.internosAmount });
   }
-  if (iibb && unit.iibbAmount > 0.00005) {
+  if (!useOffline && iibb && unit.iibbAmount > 0.00005) {
     nextLines.push({ ...iibb, unitAmount: unit.iibbAmount });
   }
   for (const line of lines.filter((l) => l.kind === "other")) {

@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, Max, Min } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, Max, Min, ValidateIf } from "class-validator";
 import { IvaAdjustment, MissingProductAction, ZeroStockAction } from "@prisma/client";
 
 export class UpdateProviderConfigDto {
@@ -41,9 +41,13 @@ export class UpdateProviderConfigDto {
   @IsBoolean()
   acceptsScheme?: boolean;
 
-  @IsOptional()
+  @ValidateIf((_, v) => v != null)
   @IsEnum(IvaAdjustment)
-  ivaAdjustment?: IvaAdjustment | null;
+  offlineIvaAdjustment?: IvaAdjustment | null;
+
+  @ValidateIf((_, v) => v != null)
+  @IsEnum(IvaAdjustment)
+  schemeIvaAdjustment?: IvaAdjustment | null;
 
   @IsOptional()
   @Type(() => Number)

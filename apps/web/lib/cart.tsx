@@ -42,6 +42,7 @@ interface CartContextValue {
   remove: (ref: CartRef) => void;
   setQty: (ref: CartRef, qty: number) => void;
   patchItem: (ref: CartRef, data: Partial<Pick<CartItem, "taxes" | "finalPrice">>) => void;
+  move: (from: CartRef, to: { channel: CartChannel; schemeId?: string | null }) => void;
   clear: (channel?: CartChannel) => void;
   clearProvider: (provider: string, channel?: CartChannel) => void;
   has: (ref: CartRef) => boolean;
@@ -189,6 +190,31 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prev) => prev.map((it) => (cartItemKey(it) === k ? { ...it, ...data } : it)));
   }, []);
 
+  const move = useCallback((from: CartRef, to: { channel: CartChannel; schemeId?: string | null }) => {
+    const src = normalizeRef(from);
+    const dest = normalizeRef({
+      provider: src.provider,
+      externalId: src.externalId,
+      channel: to.channel,
+      schemeId: to.channel === "offline" ? null : (to.schemeId ?? null),
+    });
+    if (cartItemKey(src) === cartItemKey(dest)) return;
+    setItems((prev) => {
+      const srcIdx = prev.findIndex((it) => cartItemKey(it) === cartItemKey(src));
+      if (srcIdx < 0) return prev;
+      const moving = prev[srcIdx];
+      const destKey = cartItemKey(dest);
+      const destIdx = prev.findIndex((it) => cartItemKey(it) === destKey);
+      const next = prev.filter((_, i) => i !== srcIdx);
+      if (destIdx >= 0) {
+        const adjDest = destIdx > srcIdx ? destIdx - 1 : destIdx;
+        next[adjDest] = { ...next[adjDest], qty: next[adjDest].qty + moving.qty };
+        return next;
+      }
+      return [...next, { ...moving, channel: dest.channel, schemeId: dest.schemeId }];
+    });
+  }, []);
+
   const clear = useCallback((channel?: CartChannel) => {
     if (!channel) {
       setItems([]);
@@ -260,6 +286,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         remove,
         setQty,
         patchItem,
+        move,
         clear,
         clearProvider,
         has,

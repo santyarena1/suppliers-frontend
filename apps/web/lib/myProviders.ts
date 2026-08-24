@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { cachedMyProviders, loadMyProviders, type Provider, type VisibleProvider } from "@/lib/api";
+import {
+  cachedMyProviders,
+  loadMyProviders,
+  MY_PROVIDERS_UPDATED,
+  type Provider,
+  type VisibleProvider,
+} from "@/lib/api";
 
 /**
  * Los proveedores que existen para la organización de quien está usando NODO.
@@ -17,13 +23,21 @@ export function useMyProviders(): { providers: VisibleProvider[]; loading: boole
 
   useEffect(() => {
     let alive = true;
-    loadMyProviders().then((list) => {
+
+    function apply(list: VisibleProvider[]) {
       if (!alive) return;
       setProviders(list);
       setLoading(false);
-    });
+    }
+
+    void loadMyProviders().then(apply);
+    function onUpdated() {
+      void loadMyProviders(true).then(apply);
+    }
+    window.addEventListener(MY_PROVIDERS_UPDATED, onUpdated);
     return () => {
       alive = false;
+      window.removeEventListener(MY_PROVIDERS_UPDATED, onUpdated);
     };
   }, []);
 
