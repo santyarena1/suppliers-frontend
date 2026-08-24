@@ -403,13 +403,6 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               </aside>
             </div>
 
-            {/* Referencia de mercado */}
-            <SalePricePanel
-              variant="inline"
-              seedQuery={product.name}
-              costUsd={pricing.unitNet}
-            />
-
             {(product.description || product.longDescription) && (
               <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
                 <h2 className="text-sm font-semibold text-white mb-3">Descripción</h2>
@@ -484,6 +477,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 </div>
               </section>
             )}
+
+            {/* Referencia de mercado — al final */}
+            <SalePricePanel
+              variant="inline"
+              seedQuery={product.name}
+              costUsd={pricing.unitNet}
+            />
           </div>
         )}
       </div>
