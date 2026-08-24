@@ -73,6 +73,14 @@ enum TenantLinkStatus {
   REVOKED
 }
 
+/// Cómo se recalcula el IVA en pedidos offline y en esquema.
+/// Solo se toca IVA; internos e IIBB quedan igual.
+enum IvaAdjustment {
+  REMOVE // Descontar el IVA completo
+  HALF // Dejar la mitad del IVA de cada producto
+  FLAT_10_5 // Normalizar todos los IVA a 10,5%
+}
+
 model Tenant {
   id                 String        @id @default(uuid())
   /// Nombre normalizado, es lo único que se muestra en pantalla.
@@ -384,6 +392,14 @@ model ProviderSyncConfig {
   // sin stock (aplica zeroStockAction). 0 = desactivado. Mismo concepto que
   // el "stock mínimo del proveedor" de AcuStock.
   minStockThreshold    Int                  @default(0)
+  /// El comercio (tipo 1) marca si este distribuidor acepta pedido offline (sin facturar).
+  acceptsOffline       Boolean              @default(false)
+  /// El comercio marca si este distribuidor acepta compra en esquema (facturado, con descuento extra).
+  acceptsScheme        Boolean              @default(false)
+  /// Obligatorio cuando acceptsOffline o acceptsScheme. Misma regla de IVA para las dos.
+  ivaAdjustment        IvaAdjustment?
+  /// % extra que informó el vendedor, solo para ítems en esquema. Lo carga el comercio.
+  schemeDiscountPercent Decimal?            @db.Decimal(6, 2)
   lastSyncedAt         DateTime?
   lastSyncError        String?
   lastSyncCreated      Int                  @default(0)

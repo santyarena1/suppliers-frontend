@@ -11,19 +11,19 @@ import {
 } from "@/lib/checkoutWarmup";
 
 export default function ProviderCartPreloader() {
-  const { byProvider, hydrated } = useCart();
+  const { onlineByProvider, hydrated } = useCart();
 
   useEffect(() => {
     if (!hydrated || !getToken()) return;
     for (const provider of WARM_PROVIDERS) {
-      const items = byProvider[provider] ?? [];
+      const items = onlineByProvider[provider] ?? [];
       if (items.length === 0) {
         forgetCheckoutWarmup(provider);
         continue;
       }
       ensureCheckoutWarmup(provider, cartLinesFromItems(items), 600);
     }
-  }, [hydrated, byProvider]);
+  }, [hydrated, onlineByProvider]);
 
   return null;
 }

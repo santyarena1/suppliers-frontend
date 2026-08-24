@@ -1,6 +1,6 @@
 "use client";
 
-import { useCart } from "@/lib/cart";
+import { useCart, type CartRef } from "@/lib/cart";
 import { ProductDTO } from "@/lib/api";
 import { Check, Plus, Minus } from "lucide-react";
 import { useState } from "react";
@@ -8,18 +8,23 @@ import { useState } from "react";
 interface Props {
   product: ProductDTO;
   variant?: "icon" | "full" | "inline";
+  channel?: "online" | "offline";
+  schemeId?: string | null;
 }
 
-export default function AddToCartButton({ product, variant = "icon" }: Props) {
+export default function AddToCartButton({ product, variant = "icon", channel = "online", schemeId = null }: Props) {
   const { add, has, items, setQty, remove } = useCart();
-  const inCart = has(product.provider, product.externalId);
-  const item = items.find((i) => i.provider === product.provider && i.externalId === product.externalId);
+  const ref: CartRef = { provider: product.provider, externalId: product.externalId, channel, schemeId };
+  const inCart = has(ref);
+  const item = items.find(
+    (i) => i.provider === product.provider && i.externalId === product.externalId && (i.channel ?? "online") === channel && (i.schemeId ?? null) === schemeId
+  );
   const [flash, setFlash] = useState(false);
 
   function handleAdd(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    add(product, 1);
+    add(product, 1, { channel, schemeId });
     setFlash(true);
     setTimeout(() => setFlash(false), 600);
   }
@@ -31,8 +36,8 @@ export default function AddToCartButton({ product, variant = "icon" }: Props) {
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (item.qty <= 1) remove(product.provider, product.externalId);
-            else setQty(product.provider, product.externalId, item.qty - 1);
+            if (item.qty <= 1) remove(ref);
+            else setQty(ref, item.qty - 1);
           }}
           className="text-surface-400 hover:text-white p-1 rounded transition-colors"
         >
@@ -40,7 +45,7 @@ export default function AddToCartButton({ product, variant = "icon" }: Props) {
         </button>
         <span className="text-xs font-semibold text-white min-w-[1.25rem] text-center tabular-nums">{item.qty}</span>
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(product, 1); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(product, 1, { channel, schemeId }); }}
           className="text-surface-400 hover:text-white p-1 rounded transition-colors"
         >
           <Plus className="w-3 h-3" />

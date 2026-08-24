@@ -80,7 +80,7 @@ export default function InvidDraftPanel({
         lineInternos: quoted.internos,
         percepcionPercent: next.percepcionPercent,
       });
-      patchItem("INVID", cartItem.externalId, {
+      patchItem({ provider: "INVID", externalId: cartItem.externalId, channel: cartItem.channel, schemeId: cartItem.schemeId }, {
         taxes,
         finalPrice: grossFromTaxLines(cartItem, taxes),
       });

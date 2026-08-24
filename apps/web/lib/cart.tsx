@@ -4,31 +4,74 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo } 
 import { ProductDTO } from "@/lib/api";
 import { extractTaxLines } from "@/lib/tax";
 
+export type CartChannel = "online" | "offline";
+
+export interface CartScheme {
+  id: string;
+  name: string;
+  provider: string;
+}
+
 export interface CartItem extends ProductDTO {
   qty: number;
   addedAt: number;
+  channel: CartChannel;
+  schemeId: string | null;
 }
+
+export type CartRef = {
+  provider: string;
+  externalId: string;
+  channel?: CartChannel;
+  schemeId?: string | null;
+};
+
+export type AddToCartOpts = {
+  channel?: CartChannel;
+  schemeId?: string | null;
+};
 
 interface CartContextValue {
   items: CartItem[];
+  schemes: CartScheme[];
   totalCount: number;
+  onlineCount: number;
+  offlineCount: number;
   hydrated: boolean;
-  add: (product: ProductDTO, qty?: number) => void;
-  remove: (provider: string, externalId: string) => void;
-  setQty: (provider: string, externalId: string, qty: number) => void;
-  patchItem: (provider: string, externalId: string, data: Partial<Pick<CartItem, "taxes" | "finalPrice">>) => void;
-  clear: () => void;
-  clearProvider: (provider: string) => void;
-  has: (provider: string, externalId: string) => boolean;
+  add: (product: ProductDTO, qty?: number, opts?: AddToCartOpts) => CartItem;
+  remove: (ref: CartRef) => void;
+  setQty: (ref: CartRef, qty: number) => void;
+  patchItem: (ref: CartRef, data: Partial<Pick<CartItem, "taxes" | "finalPrice">>) => void;
+  clear: (channel?: CartChannel) => void;
+  clearProvider: (provider: string, channel?: CartChannel) => void;
+  has: (ref: CartRef) => boolean;
   byProvider: Record<string, CartItem[]>;
+  onlineByProvider: Record<string, CartItem[]>;
+  offlineByProvider: Record<string, CartItem[]>;
+  createScheme: (provider: string, name?: string) => CartScheme;
+  renameScheme: (id: string, name: string) => void;
+  deleteScheme: (id: string) => void;
+  schemesFor: (provider: string) => CartScheme[];
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-const STORAGE_KEY = "tgs_cart_v1";
+const STORAGE_KEY = "tgs_cart_v2";
+const LEGACY_KEY = "tgs_cart_v1";
 
-function key(provider: string, externalId: string) {
-  return `${provider}::${externalId}`;
+export function cartItemKey(ref: CartRef): string {
+  const channel = ref.channel ?? "online";
+  const schemeId = ref.schemeId ?? "";
+  return `${channel}::${ref.provider}::${schemeId}::${ref.externalId}`;
+}
+
+function normalizeRef(ref: CartRef): Required<CartRef> {
+  return {
+    provider: ref.provider,
+    externalId: ref.externalId,
+    channel: ref.channel ?? "online",
+    schemeId: ref.schemeId ?? null,
+  };
 }
 
 function compactProduct(product: ProductDTO): ProductDTO {
@@ -36,92 +79,199 @@ function compactProduct(product: ProductDTO): ProductDTO {
   return { ...rest, taxes: extractTaxLines(product) };
 }
 
+function migrateLegacy(raw: unknown): { items: CartItem[]; schemes: CartScheme[] } {
+  if (Array.isArray(raw)) {
+    return {
+      items: (raw as Array<CartItem & { channel?: CartChannel; schemeId?: string | null }>).map((it) => ({
+        ...compactProduct(it),
+        qty: it.qty,
+        addedAt: it.addedAt,
+        channel: it.channel === "offline" ? "offline" : "online",
+        schemeId: it.schemeId ?? null,
+      })),
+      schemes: [],
+    };
+  }
+  if (raw && typeof raw === "object") {
+    const o = raw as { items?: CartItem[]; schemes?: CartScheme[] };
+    return {
+      items: (o.items ?? []).map((it) => ({
+        ...compactProduct(it),
+        qty: it.qty,
+        addedAt: it.addedAt,
+        channel: it.channel === "offline" ? "offline" : "online",
+        schemeId: it.schemeId ?? null,
+      })),
+      schemes: Array.isArray(o.schemes) ? o.schemes : [],
+    };
+  }
+  return { items: [], schemes: [] };
+}
+
+function groupByProvider(list: CartItem[]): Record<string, CartItem[]> {
+  const map: Record<string, CartItem[]> = {};
+  for (const it of list) {
+    if (!map[it.provider]) map[it.provider] = [];
+    map[it.provider].push(it);
+  }
+  return map;
+}
+
+function nextSchemeName(existing: CartScheme[], provider: string): string {
+  const n = existing.filter((s) => s.provider === provider).length + 1;
+  return `Esquema ${n}`;
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [schemes, setSchemes] = useState<CartScheme[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored) as CartItem[];
-        setItems(parsed.map((it) => {
-          const compacted = compactProduct(it);
-          return { ...compacted, qty: it.qty, addedAt: it.addedAt };
-        }));
+        const parsed = migrateLegacy(JSON.parse(stored));
+        setItems(parsed.items);
+        setSchemes(parsed.schemes);
       }
-    } catch { /**/ }
+    } catch { /* ignore */ }
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  }, [items, hydrated]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, schemes }));
+  }, [items, schemes, hydrated]);
 
-  const add = useCallback((product: ProductDTO, qty = 1) => {
+  const add = useCallback((product: ProductDTO, qty = 1, opts: AddToCartOpts = {}): CartItem => {
+    const ref = normalizeRef({
+      provider: product.provider,
+      externalId: product.externalId,
+      channel: opts.channel,
+      schemeId: opts.schemeId,
+    });
+    const k = cartItemKey(ref);
+    const compact = compactProduct(product);
+    let result: CartItem = { ...compact, qty, addedAt: Date.now(), channel: ref.channel, schemeId: ref.schemeId };
     setItems((prev) => {
-      const k = key(product.provider, product.externalId);
-      const idx = prev.findIndex((it) => key(it.provider, it.externalId) === k);
-      const compact = compactProduct(product);
+      const idx = prev.findIndex((it) => cartItemKey(it) === k);
       if (idx >= 0) {
         const next = [...prev];
         const current = next[idx];
-        next[idx] = {
+        result = {
           ...current,
           ...(current.taxes?.length ? {} : compact),
           qty: current.qty + qty,
+          channel: ref.channel,
+          schemeId: ref.schemeId,
         };
+        next[idx] = result;
         return next;
       }
-      return [...prev, { ...compact, qty, addedAt: Date.now() }];
+      return [...prev, result];
     });
+    return result;
   }, []);
 
-  const remove = useCallback((provider: string, externalId: string) => {
-    const k = key(provider, externalId);
-    setItems((prev) => prev.filter((it) => key(it.provider, it.externalId) !== k));
+  const remove = useCallback((ref: CartRef) => {
+    const k = cartItemKey(normalizeRef(ref));
+    setItems((prev) => prev.filter((it) => cartItemKey(it) !== k));
   }, []);
 
-  const setQty = useCallback((provider: string, externalId: string, qty: number) => {
-    const k = key(provider, externalId);
-    setItems((prev) => prev.map((it) => key(it.provider, it.externalId) === k ? { ...it, qty: Math.max(1, qty) } : it));
+  const setQty = useCallback((ref: CartRef, qty: number) => {
+    const k = cartItemKey(normalizeRef(ref));
+    setItems((prev) => prev.map((it) => (cartItemKey(it) === k ? { ...it, qty: Math.max(1, qty) } : it)));
   }, []);
 
-  const patchItem = useCallback((
-    provider: string,
-    externalId: string,
-    data: Partial<Pick<CartItem, "taxes" | "finalPrice">>
-  ) => {
-    const k = key(provider, externalId);
-    setItems((prev) => prev.map((it) => (
-      key(it.provider, it.externalId) === k ? { ...it, ...data } : it
-    )));
+  const patchItem = useCallback((ref: CartRef, data: Partial<Pick<CartItem, "taxes" | "finalPrice">>) => {
+    const k = cartItemKey(normalizeRef(ref));
+    setItems((prev) => prev.map((it) => (cartItemKey(it) === k ? { ...it, ...data } : it)));
   }, []);
 
-  const clear = useCallback(() => setItems([]), []);
-  const clearProvider = useCallback((provider: string) => {
-    setItems((prev) => prev.filter((it) => it.provider !== provider));
-  }, []);
-
-  const has = useCallback((provider: string, externalId: string) => {
-    const k = key(provider, externalId);
-    return items.some((it) => key(it.provider, it.externalId) === k);
-  }, [items]);
-
-  const totalCount = items.reduce((sum, it) => sum + it.qty, 0);
-
-  const byProvider = useMemo(() => {
-    const map: Record<string, CartItem[]> = {};
-    for (const it of items) {
-      if (!map[it.provider]) map[it.provider] = [];
-      map[it.provider].push(it);
+  const clear = useCallback((channel?: CartChannel) => {
+    if (!channel) {
+      setItems([]);
+      return;
     }
-    return map;
+    setItems((prev) => prev.filter((it) => it.channel !== channel));
+  }, []);
+
+  const clearProvider = useCallback((provider: string, channel?: CartChannel) => {
+    setItems((prev) => prev.filter((it) => {
+      if (it.provider !== provider) return true;
+      if (channel && it.channel !== channel) return true;
+      return false;
+    }));
+  }, []);
+
+  const has = useCallback((ref: CartRef) => {
+    const k = cartItemKey(normalizeRef(ref));
+    return items.some((it) => cartItemKey(it) === k);
   }, [items]);
+
+  const createScheme = useCallback((provider: string, name?: string): CartScheme => {
+    const scheme: CartScheme = {
+      id: typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `sch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: (name ?? "").trim() || nextSchemeName(schemes, provider),
+      provider,
+    };
+    setSchemes((prev) => {
+      const named = { ...scheme, name: scheme.name || nextSchemeName(prev, provider) };
+      return [...prev, named];
+    });
+    return scheme;
+  }, [schemes]);
+
+  const renameScheme = useCallback((id: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSchemes((prev) => prev.map((s) => (s.id === id ? { ...s, name: trimmed } : s)));
+  }, []);
+
+  const deleteScheme = useCallback((id: string) => {
+    setSchemes((prev) => prev.filter((s) => s.id !== id));
+    setItems((prev) => prev.filter((it) => it.schemeId !== id));
+  }, []);
+
+  const schemesFor = useCallback((provider: string) => schemes.filter((s) => s.provider === provider), [schemes]);
+
+  const onlineItems = useMemo(() => items.filter((it) => it.channel !== "offline"), [items]);
+  const offlineItems = useMemo(() => items.filter((it) => it.channel === "offline"), [items]);
+  const totalCount = items.reduce((sum, it) => sum + it.qty, 0);
+  const onlineCount = onlineItems.reduce((sum, it) => sum + it.qty, 0);
+  const offlineCount = offlineItems.reduce((sum, it) => sum + it.qty, 0);
+  const byProvider = useMemo(() => groupByProvider(items), [items]);
+  const onlineByProvider = useMemo(() => groupByProvider(onlineItems), [onlineItems]);
+  const offlineByProvider = useMemo(() => groupByProvider(offlineItems), [offlineItems]);
 
   return (
-    <CartContext.Provider value={{ items, totalCount, hydrated, add, remove, setQty, patchItem, clear, clearProvider, has, byProvider }}>
+    <CartContext.Provider
+      value={{
+        items,
+        schemes,
+        totalCount,
+        onlineCount,
+        offlineCount,
+        hydrated,
+        add,
+        remove,
+        setQty,
+        patchItem,
+        clear,
+        clearProvider,
+        has,
+        byProvider,
+        onlineByProvider,
+        offlineByProvider,
+        createScheme,
+        renameScheme,
+        deleteScheme,
+        schemesFor,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );

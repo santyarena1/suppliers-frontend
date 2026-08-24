@@ -37,6 +37,9 @@ export function mapCevenItem(p: CevenItem): NormalizedProduct {
   const price = typeof p.onlinecustomerprice === "number" ? p.onlinecustomerprice : undefined;
   const stock = typeof p.quantityavailable === "number" ? p.quantityavailable : undefined;
   const imageUrl = p.itemimages_detail?.urls?.[0]?.url;
+  const extra = p as CevenItem & Record<string, unknown>;
+  const ivaRaw = extra.taxrate ?? extra.taxRate ?? extra.custitem_iva ?? extra.custitem_alicuota_iva;
+  const ivaPercent = typeof ivaRaw === "number" && Number.isFinite(ivaRaw) ? ivaRaw : undefined;
   return {
     externalId: String(p.internalid),
     sku: p.itemid || undefined,
@@ -45,6 +48,7 @@ export function mapCevenItem(p: CevenItem): NormalizedProduct {
     description: p.storedescription ? stripHtml(p.storedescription) : undefined,
     price,
     currency: price != null ? "ARS" : undefined,
+    ivaPercent,
     stock,
     stockStatus: p.isinstock === false ? (p.outofstockmessage || "Sin stock") : undefined,
     imageUrl,

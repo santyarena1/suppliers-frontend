@@ -1,5 +1,6 @@
+import { Type } from "class-transformer";
 import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, Max, Min } from "class-validator";
-import { MissingProductAction, ZeroStockAction } from "@prisma/client";
+import { IvaAdjustment, MissingProductAction, ZeroStockAction } from "@prisma/client";
 
 export class UpdateProviderConfigDto {
   @IsOptional()
@@ -31,4 +32,23 @@ export class UpdateProviderConfigDto {
   @Min(0)
   @Max(100000)
   minStockThreshold?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptsOffline?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  acceptsScheme?: boolean;
+
+  @IsOptional()
+  @IsEnum(IvaAdjustment)
+  ivaAdjustment?: IvaAdjustment | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  schemeDiscountPercent?: number | null;
 }

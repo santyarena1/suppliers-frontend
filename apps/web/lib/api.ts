@@ -247,6 +247,13 @@ export interface VisibleProvider {
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
+  /** Pedido offline / esquema que configuró este comercio para el distribuidor. */
+  purchase?: {
+    acceptsOffline: boolean;
+    acceptsScheme: boolean;
+    ivaAdjustment: "REMOVE" | "HALF" | "FLAT_10_5" | null;
+    schemeDiscountPercent: number | null;
+  };
 }
 
 export interface RedeemedCode {
@@ -376,6 +383,8 @@ export function canSyncProvider(status?: ProviderStatus | null): boolean {
 export type MissingProductAction = "KEEP" | "OUT_OF_STOCK" | "HIDE" | "DELETE";
 export type ZeroStockAction = "KEEP" | "HIDE" | "DELETE";
 
+export type IvaAdjustment = "REMOVE" | "HALF" | "FLAT_10_5";
+
 export interface ProviderConfig {
   provider: Provider;
   enabled: boolean;
@@ -384,6 +393,10 @@ export interface ProviderConfig {
   zeroStockAction: ZeroStockAction;
   priceMarkupPercent: number | string;
   minStockThreshold: number;
+  acceptsOffline: boolean;
+  acceptsScheme: boolean;
+  ivaAdjustment: IvaAdjustment | null;
+  schemeDiscountPercent: number | string | null;
   lastSyncedAt: string | null;
   lastSyncError: string | null;
   lastSyncCreated: number;

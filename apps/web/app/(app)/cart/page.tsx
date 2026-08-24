@@ -10,14 +10,15 @@ import ElitCheckoutPanel from "@/components/ElitCheckoutPanel";
 import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
 import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
-import { useCart, CartItem } from "@/lib/cart";
+import { useCart, CartItem, cartItemKey, type CartRef, type CartScheme } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
+import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
+import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
+import { buildSellerMessage } from "@/lib/seller-message";
 import { proxyImg, formatUSD } from "@/lib/format";
 import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR, PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import {
-  linePricing,
-  extractTaxLines,
   taxByKind,
   formatAlicuota,
   perceptionGroupLabel,
@@ -32,7 +33,7 @@ import {
 } from "@/lib/api";
 import {
   Trash2, Minus, Plus, Download, AlertTriangle, ImageOff,
-  FileText, MessageCircle, Check, Copy, ChevronDown, History,
+  FileText, MessageCircle, Check, Copy, ChevronDown, History, StickyNote, ShoppingCart,
 } from "lucide-react";
 import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
 import type { PendingOrderProvider } from "@/lib/pendingOrders";
@@ -78,8 +79,14 @@ const EMPTY_TOTALS: Totals = {
 };
 
 export default function CartPage() {
-  const { items, byProvider, setQty, remove, clear, clearProvider, totalCount } = useCart();
+  const {
+    items, schemes, onlineByProvider, offlineByProvider,
+    setQty, remove, clear, clearProvider, onlineCount, offlineCount,
+  } = useCart();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
+  const retailer = useIsRetailer();
+  const policies = usePurchasePolicies();
+  const [channelTab, setChannelTab] = useState<"online" | "offline">("online");
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
   const [elitPreview, setElitPreview] = useState<ElitCheckoutPreview | null>(null);
   const [nbSnapshot, setNbSnapshot] = useState<NewBytesCartSnapshot | null>(null);
@@ -93,9 +100,16 @@ export default function CartPage() {
   const exportRef = useRef<HTMLDivElement>(null);
   const pedidosRef = useRef<HTMLDivElement>(null);
 
+  const viewByProvider = channelTab === "offline" ? offlineByProvider : onlineByProvider;
+  const viewItems = useMemo(
+    () => (channelTab === "offline" ? items.filter((it) => it.channel === "offline") : items.filter((it) => it.channel !== "offline")),
+    [items, channelTab]
+  );
+  const showOfflineTab = retailer && (offlineCount > 0 || Object.values(policies).some((p) => p.acceptsOffline));
+
   useEffect(() => {
-    if (activeTab !== "all" && !byProvider[activeTab]?.length) setActiveTab("all");
-  }, [activeTab, byProvider]);
+    if (activeTab !== "all" && !viewByProvider[activeTab]?.length) setActiveTab("all");
+  }, [activeTab, viewByProvider]);
 
   useEffect(() => {
     if (!notice) return;
@@ -107,7 +121,7 @@ export default function CartPage() {
     setNotice(message);
     if (provider === "INVID") setInvidPreview(null);
     setActiveTab("all");
-    clearProvider(provider);
+    clearProvider(provider, "online");
   }, [clearProvider]);
 
   useEffect(() => {
@@ -120,17 +134,17 @@ export default function CartPage() {
   }, []);
 
   const sortedProviders = useMemo(
-    () => Object.keys(byProvider).sort(),
-    [byProvider]
+    () => Object.keys(viewByProvider).sort(),
+    [viewByProvider]
   );
 
   function totalsFor(its: CartItem[], extra?: TaxExtra): Totals {
     let subtotalUSD = 0, ivaUSD = 0, internosUSD = 0, iibbUSD = 0, otherUSD = 0;
     const perceptionLines: PerceptionLine[] = [...(extra?.perceptionLines ?? [])];
     for (const it of its) {
-      const pricing = linePricing(it, it.qty);
+      const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
       subtotalUSD += pricing.net;
-      for (const line of extractTaxLines(it)) {
+      for (const line of pricing.lines) {
         const amt = line.unitAmount * it.qty;
         if (line.kind === "iva") ivaUSD += amt;
         else if (line.kind === "internos") internosUSD += amt;
@@ -167,9 +181,9 @@ export default function CartPage() {
     };
   }
 
-  const invidLines = useMemo(() => cartLinesFromItems(byProvider.INVID ?? []), [byProvider.INVID]);
-  const elitLines = useMemo(() => cartLinesFromItems(byProvider.ELIT ?? []), [byProvider.ELIT]);
-  const nbLines = useMemo(() => cartLinesFromItems(byProvider.NEW_BYTES ?? []), [byProvider.NEW_BYTES]);
+  const invidLines = useMemo(() => cartLinesFromItems(onlineByProvider.INVID ?? []), [onlineByProvider.INVID]);
+  const elitLines = useMemo(() => cartLinesFromItems(onlineByProvider.ELIT ?? []), [onlineByProvider.ELIT]);
+  const nbLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_BYTES ?? []), [onlineByProvider.NEW_BYTES]);
   const invidWarm = useCheckoutWarmup("INVID", invidLines);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines);
   const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines);
@@ -198,6 +212,9 @@ export default function CartPage() {
     : undefined;
 
   function extraFor(provider: string): TaxExtra | undefined {
+    if (channelTab === "offline") return undefined;
+    const its = onlineByProvider[provider] ?? [];
+    if (its.some((it) => it.schemeId)) return undefined;
     if (provider === "INVID") return invidExtra;
     if (provider === "ELIT") return elitExtra;
     if (provider === "NEW_BYTES") return nbExtra;
@@ -205,8 +222,8 @@ export default function CartPage() {
   }
 
   const grand = useMemo(() => {
-    const tot = totalsFor(items);
-    const parts = Object.entries(byProvider).map(([p, its]) => totalsFor(its, extraFor(p)));
+    const tot = totalsFor(viewItems);
+    const parts = Object.entries(viewByProvider).map(([p, its]) => totalsFor(its, extraFor(p)));
     if (parts.length === 0) return tot;
     return parts.reduce((acc, t) => ({
       subtotalUSD: acc.subtotalUSD + t.subtotalUSD,
@@ -222,14 +239,14 @@ export default function CartPage() {
       productCount: acc.productCount + t.productCount,
       perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
     }), { ...EMPTY_TOTALS });
-  }, [items, byProvider, withIva, invidQuoted, elitQuoted, nbQuoted]);
+  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, channelTab, policies]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
-    for (const [p, its] of Object.entries(byProvider)) {
+    for (const [p, its] of Object.entries(viewByProvider)) {
       m[p] = totalsFor(its, extraFor(p));
     }
     return m;
-  }, [byProvider, withIva, invidQuoted, elitQuoted, nbQuoted]);
+  }, [viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, channelTab, policies]);
 
   function fmt(usd: number, digits = currency === "USD" ? 2 : 0) {
     if (currency === "USD") return formatUSD(usd);
@@ -254,15 +271,15 @@ export default function CartPage() {
 
     const providersToShow = scope === "all" ? sortedProviders : [scope];
     for (const prov of providersToShow) {
-      const its = byProvider[prov];
+      const its = viewByProvider[prov];
       if (!its || its.length === 0) continue;
       const pt = providerTotals[prov];
       lines.push(`*${prov.replace(/_/g, " ")}*`);
       for (const it of its) {
         const extra = extraFor(prov);
-        const pricing = linePricing(it, it.qty);
+        const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
         const perc = linePerceptionFromOrder(it, its, extra);
-        const onProduct = (taxByKind(extractTaxLines(it), "iibb")?.unitAmount ?? 0) > 0.0001;
+        const onProduct = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) > 0.0001;
         const gross = pricing.gross + (!onProduct && perc ? perc.unitAmount * it.qty : 0);
         const unit = withIva ? gross / it.qty : pricing.unitNet;
         const subtotal = withIva ? gross : pricing.net;
@@ -270,7 +287,7 @@ export default function CartPage() {
         const qtyBit = it.qty > 1 ? ` x${it.qty}` : "";
         lines.push(`• ${nameTrim}${qtyBit}`);
         const taxes = [
-          ...extractTaxLines(it).filter((l) => l.kind !== "iibb" && l.unitAmount > 0),
+          ...pricing.lines.filter((l) => l.kind !== "iibb" && l.unitAmount > 0),
           ...(perc && perc.unitAmount > 0 ? [perc] : []),
         ]
           .map((l) => `${l.label} ${formatAlicuota(l.percent)} ${fmt(l.unitAmount * it.qty, 2)}`)
@@ -296,6 +313,23 @@ export default function CartPage() {
     lines.push(`*TOTAL: ${fmt(tot.totalUSD)}*${withIva ? "" : " (sin impuestos)"}`);
     if (currency === "ARS") lines.push(`(${formatUSD(tot.totalUSD)} USD)`);
     return lines.join("\n");
+  }
+
+  async function copySellerMessage() {
+    const txt = buildSellerMessage({
+      scopeProvider: activeTab === "all" ? undefined : activeTab,
+      items: viewItems,
+      schemes,
+      policies,
+      fmt,
+    });
+    if (!txt) return;
+    try {
+      await navigator.clipboard.writeText(txt);
+      setCopied(true);
+      setExportOpen(false);
+      setTimeout(() => setCopied(false), 2500);
+    } catch { /* ignore */ }
   }
 
   async function copyForWhatsApp() {
@@ -324,11 +358,11 @@ export default function CartPage() {
   function exportCSV() {
     const rows = [
       ["Proveedor", "ID", "Producto", "Cantidad", "Neto USD", "IVA %", "IVA USD", "Internos %", "Internos USD", "Perc. %", "Perc. USD", "Final USD"],
-      ...items.map((it) => {
-        const siblings = byProvider[it.provider] ?? [it];
+      ...viewItems.map((it) => {
+        const siblings = viewByProvider[it.provider] ?? [it];
         const extra = extraFor(it.provider);
-        const pricing = linePricing(it, it.qty);
-        const taxLines = extractTaxLines(it);
+        const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
+        const taxLines = pricing.lines;
         const iva = taxByKind(taxLines, "iva");
         const internos = taxByKind(taxLines, "internos");
         const iibb = linePerceptionFromOrder(it, siblings, extra);
@@ -366,19 +400,21 @@ export default function CartPage() {
       withIva,
       dollarRate: currentRate?.venta,
       dollarType,
-      items: items.map((it) => {
-        const siblings = byProvider[it.provider] ?? [it];
+      items: viewItems.map((it) => {
+        const siblings = viewByProvider[it.provider] ?? [it];
         const extra = extraFor(it.provider);
-        const pricing = linePricing(it, it.qty);
+        const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
         const perc = linePerceptionFromOrder(it, siblings, extra);
-        const onProduct = (taxByKind(extractTaxLines(it), "iibb")?.unitAmount ?? 0) > 0.0001;
+        const onProduct = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) > 0.0001;
         return {
           provider: it.provider,
           externalId: it.externalId,
           name: it.name,
           qty: it.qty,
+          channel: it.channel,
+          schemeId: it.schemeId,
           unitNetUSD: pricing.unitNet,
-          taxes: extractTaxLines(it),
+          taxes: pricing.lines,
           perception: perc,
           lineGrossUSD: pricing.gross + (!onProduct && perc ? perc.unitAmount * it.qty : 0),
         };
@@ -396,27 +432,59 @@ export default function CartPage() {
   }
 
   const tabsToShow: Array<{ key: string; label: string; count: number }> = [
-    { key: "all", label: "Todos", count: totalCount },
+    { key: "all", label: "Todos", count: channelTab === "offline" ? offlineCount : onlineCount },
     ...sortedProviders.map((p) => ({
       key: p,
       label: p.replace(/_/g, " "),
-      count: byProvider[p].reduce((s, it) => s + it.qty, 0),
+      count: viewByProvider[p].reduce((s, it) => s + it.qty, 0),
     })),
   ];
 
-  const shownItems = activeTab === "all" ? items : byProvider[activeTab] || [];
+  const shownItems = activeTab === "all" ? viewItems : viewByProvider[activeTab] || [];
   const shownTotals = (activeTab === "all" ? grand : providerTotals[activeTab]) ?? EMPTY_TOTALS;
 
   return (
     <>
           <header className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 py-3.5 flex items-center justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-white">Cotización</h1>
+              <h1 className="text-lg font-semibold tracking-tight text-white">
+                {channelTab === "offline" ? "Pedido offline" : "Cotización"}
+              </h1>
               <p className="text-xs text-surface-500 mt-0.5 tabular-nums">
-                {items.length === 0
-                  ? "Sin productos"
-                  : `${items.length} ${items.length === 1 ? "línea" : "líneas"} · ${totalCount} ${totalCount === 1 ? "unidad" : "unidades"} · ${sortedProviders.length} ${sortedProviders.length === 1 ? "proveedor" : "proveedores"}`}
+                {viewItems.length === 0
+                  ? channelTab === "offline" ? "Sin productos offline" : "Sin productos"
+                  : `${viewItems.length} ${viewItems.length === 1 ? "línea" : "líneas"} · ${shownTotals.itemCount} ${shownTotals.itemCount === 1 ? "unidad" : "unidades"} · ${sortedProviders.length} ${sortedProviders.length === 1 ? "proveedor" : "proveedores"}`}
               </p>
+              {showOfflineTab && (
+                <div className="flex gap-1 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setChannelTab("online"); setActiveTab("all"); }}
+                    className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border ${
+                      channelTab === "online"
+                        ? "border-brand-500 text-brand-300 bg-brand-500/10"
+                        : "border-surface-700 text-surface-500 hover:text-surface-200"
+                    }`}
+                  >
+                    <ShoppingCart className="w-3 h-3" />
+                    Online
+                    <span className="tabular-nums">{onlineCount}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setChannelTab("offline"); setActiveTab("all"); }}
+                    className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border ${
+                      channelTab === "offline"
+                        ? "border-amber-500 text-amber-300 bg-amber-500/10"
+                        : "border-surface-700 text-surface-500 hover:text-surface-200"
+                    }`}
+                  >
+                    <StickyNote className="w-3 h-3" />
+                    Offline
+                    <span className="tabular-nums">{offlineCount}</span>
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <PrefsPanel />
@@ -459,7 +527,7 @@ export default function CartPage() {
                   </div>
                 )}
               </div>
-              {items.length > 0 && (
+              {viewItems.length > 0 && (
                 <>
                   <div className="relative" ref={exportRef}>
                     <button
@@ -471,9 +539,12 @@ export default function CartPage() {
                       <ChevronDown className="w-3 h-3 text-surface-500" />
                     </button>
                     {exportOpen && (
-                      <div className="absolute right-0 top-full mt-1.5 w-48 bg-surface-900 border border-surface-700 rounded-md shadow-xl z-30 py-1">
+                      <div className="absolute right-0 top-full mt-1.5 w-56 bg-surface-900 border border-surface-700 rounded-md shadow-xl z-30 py-1">
+                        <button onClick={() => void copySellerMessage()} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800">
+                          <Copy className="w-3.5 h-3.5 text-surface-500" /> Mensaje para el vendedor
+                        </button>
                         <button onClick={copyForWhatsApp} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800">
-                          <Copy className="w-3.5 h-3.5 text-surface-500" /> Copiar para WhatsApp
+                          <Copy className="w-3.5 h-3.5 text-surface-500" /> Copiar cotización
                         </button>
                         <button onClick={shareWhatsApp} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-800">
                           <MessageCircle className="w-3.5 h-3.5 text-surface-500" /> Abrir WhatsApp
@@ -519,6 +590,17 @@ export default function CartPage() {
                 Ir a buscar
               </Link>
             </div>
+          ) : viewItems.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+              <p className="text-base text-surface-200">
+                {channelTab === "offline" ? "No hay productos en el pedido offline" : "No hay productos en el carrito online"}
+              </p>
+              <p className="text-sm text-surface-500 mt-2 max-w-md">
+                {channelTab === "offline"
+                  ? "El pedido offline no se carga en el portal: se copia un mensaje para el vendedor."
+                  : "Los ítems offline están en la otra pestaña."}
+              </p>
+            </div>
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden min-w-0">
               <div className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 bg-surface-950">
@@ -544,12 +626,13 @@ export default function CartPage() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-5 lg:px-8 py-6 flex flex-col gap-8">
-                {activeTab === "all" ? (
+                  {activeTab === "all" ? (
                   sortedProviders.map((prov) => (
                     <ProviderSection
                       key={prov}
                       provider={prov}
-                      items={byProvider[prov]}
+                      items={viewByProvider[prov]}
+                      schemes={schemes.filter((s) => s.provider === prov)}
                       totals={providerTotals[prov]}
                       extra={extraFor(prov)}
                       fmt={fmt}
@@ -563,6 +646,7 @@ export default function CartPage() {
                   <ProviderSection
                     provider={activeTab}
                     items={shownItems}
+                    schemes={schemes.filter((s) => s.provider === activeTab)}
                     totals={shownTotals}
                     extra={extraFor(activeTab)}
                     fmt={fmt}
@@ -624,67 +708,87 @@ export default function CartPage() {
                     </div>
                   )}
 
-                  {activeTab === "INVID" && byProvider.INVID?.length > 0 && (
+                  {channelTab === "online" && activeTab === "INVID" && onlineByProvider.INVID?.length > 0 && (
                     <InvidDraftPanel
                       compact
-                      items={byProvider.INVID}
+                      items={onlineByProvider.INVID}
                       onCreated={(message) => {
                         setInvidPreview(null);
                         setNotice(message || "Borrador creado en Invid");
                         setActiveTab("all");
-                        clearProvider("INVID");
+                        clearProvider("INVID", "online");
                       }}
                       onPreviewed={setInvidPreview}
                     />
                   )}
 
-                  {activeTab === "NEW_BYTES" && byProvider.NEW_BYTES?.length > 0 && (
+                  {channelTab === "online" && activeTab === "NEW_BYTES" && onlineByProvider.NEW_BYTES?.length > 0 && (
                     <NewBytesDraftPanel
                       compact
-                      items={byProvider.NEW_BYTES}
+                      items={onlineByProvider.NEW_BYTES}
                       onCreated={(message) => {
                         setNbSnapshot(null);
                         setNotice(message || "Pedido creado en NewBytes");
                         setActiveTab("all");
-                        clearProvider("NEW_BYTES");
+                        clearProvider("NEW_BYTES", "online");
                       }}
                       onPreviewed={setNbSnapshot}
                     />
                   )}
 
-                  {activeTab === "ELIT" && byProvider.ELIT?.length > 0 && (
+                  {channelTab === "online" && activeTab === "ELIT" && onlineByProvider.ELIT?.length > 0 && (
                     <ElitCheckoutPanel
-                      items={byProvider.ELIT}
+                      items={onlineByProvider.ELIT}
                       onCreated={(message) => {
                         setElitPreview(null);
                         setNotice(message || "Pedido creado en Elit");
                         setActiveTab("all");
-                        clearProvider("ELIT");
+                        clearProvider("ELIT", "online");
                       }}
                       onPreviewed={setElitPreview}
                     />
                   )}
 
-                  {activeTab === "GRUPO_NUCLEO" && byProvider.GRUPO_NUCLEO?.length > 0 && (
+                  {channelTab === "online" && activeTab === "GRUPO_NUCLEO" && onlineByProvider.GRUPO_NUCLEO?.length > 0 && (
                     <GrupoNucleoCheckoutPanel
-                      items={byProvider.GRUPO_NUCLEO}
+                      items={onlineByProvider.GRUPO_NUCLEO}
                       onCreated={(message) => {
                         setNotice(message || "Pedido creado en Grupo Núcleo");
                         setActiveTab("all");
-                        clearProvider("GRUPO_NUCLEO");
+                        clearProvider("GRUPO_NUCLEO", "online");
                       }}
                     />
                   )}
 
-                  {activeTab === "AIR" && byProvider.AIR?.length > 0 && (
+                  {channelTab === "online" && activeTab === "AIR" && onlineByProvider.AIR?.length > 0 && (
                     <AirCheckoutPanel
-                      items={byProvider.AIR}
+                      items={onlineByProvider.AIR}
                       onCreated={(message) => {
                         setNotice(message || "Canasto enviado a Air");
                         setActiveTab("all");
-                        clearProvider("AIR");
+                        clearProvider("AIR", "online");
                       }}
                     />
+                  )}
+                  {channelTab === "offline" && viewItems.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs text-amber-200/80">
+                        El pedido offline no se carga en el portal. Copiá el mensaje y mandáselo al vendedor.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void copySellerMessage()}
+                        className="self-start flex items-center gap-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-100 text-sm font-medium rounded-lg px-3 py-2"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        Copiar mensaje para el vendedor
+                      </button>
+                    </div>
+                  )}
+                  {channelTab === "online" && viewItems.some((it) => it.schemeId) && (
+                    <p className="text-xs text-violet-300/80">
+                      El portal recibe los ítems sueltos, sin agrupar. El esquema es para el vendedor: usá “Mensaje para el vendedor”.
+                    </p>
                   )}
                 </div>
               </footer>
@@ -702,8 +806,10 @@ export default function CartPage() {
                 </h3>
                 <p className="text-xs text-surface-400 mt-1">
                   {confirmClear === "all"
-                    ? "Se eliminan todas las líneas. No se puede deshacer."
-                    : `Se eliminan las líneas de ${confirmClear.replace(/_/g, " ")}.`}
+                    ? channelTab === "offline"
+                      ? "Se eliminan las líneas del pedido offline. El carrito online no se toca."
+                      : "Se eliminan las líneas del carrito online. El pedido offline no se toca."
+                    : `Se eliminan las líneas de ${confirmClear.replace(/_/g, " ")} en este carrito.`}
                 </p>
               </div>
             </div>
@@ -713,8 +819,8 @@ export default function CartPage() {
               </button>
               <button
                 onClick={() => {
-                  if (confirmClear === "all") clear();
-                  else clearProvider(confirmClear);
+                  if (confirmClear === "all") clear(channelTab);
+                  else clearProvider(confirmClear, channelTab);
                   setConfirmClear(null);
                   if (confirmClear !== "all") setActiveTab("all");
                 }}
@@ -798,22 +904,28 @@ function SummaryBar({
 }
 
 function ProviderSection({
-  provider, items, totals, extra, fmt, withIva, setQty, remove, onClearProvider,
+  provider, items, schemes, totals, extra, fmt, withIva, setQty, remove, onClearProvider,
 }: {
   provider: string;
   items: CartItem[];
+  schemes: CartScheme[];
   totals: Totals;
   extra?: TaxExtra;
   fmt: (n: number, digits?: number) => string;
   withIva: boolean;
-  setQty: (p: string, e: string, q: number) => void;
-  remove: (p: string, e: string) => void;
+  setQty: (ref: CartRef, qty: number) => void;
+  remove: (ref: CartRef) => void;
   onClearProvider: () => void;
 }) {
   const display = useProviderDisplay();
   if (!items || items.length === 0) return null;
   const color = PROVIDER_COLOR[provider] || "text-surface-400 bg-surface-400/10 border-surface-400/30";
   const logoUrl = display.logoUrl(provider);
+  const loose = items.filter((it) => !it.schemeId);
+  const schemeGroups = schemes
+    .map((s) => ({ scheme: s, items: items.filter((it) => it.schemeId === s.id) }))
+    .filter((g) => g.items.length > 0);
+  const orphanSchemeItems = items.filter((it) => it.schemeId && !schemes.some((s) => s.id === it.schemeId));
 
   return (
     <section>
@@ -856,17 +968,22 @@ function ProviderSection({
       </div>
 
       <div className="divide-y divide-surface-800/80">
-        {items.map((it) => (
-          <CartLine
-            key={`${it.provider}-${it.externalId}`}
-            item={it}
-            siblings={items}
-            extra={extra}
-            fmt={fmt}
-            withIva={withIva}
-            setQty={setQty}
-            remove={remove}
-          />
+        {loose.length > 0 && schemeGroups.length > 0 && (
+          <p className="pt-3 pb-1 text-[11px] uppercase tracking-wider text-surface-500">Sin esquema</p>
+        )}
+        {loose.map((it) => (
+          <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} />
+        ))}
+        {schemeGroups.map(({ scheme, items: grouped }) => (
+          <div key={scheme.id} className="pt-3">
+            <p className="text-[11px] uppercase tracking-wider text-violet-300/80 mb-1">{scheme.name}</p>
+            {grouped.map((it) => (
+              <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} />
+            ))}
+          </div>
+        ))}
+        {orphanSchemeItems.map((it) => (
+          <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} />
         ))}
       </div>
 
@@ -887,11 +1004,12 @@ function CartLine({
   extra?: TaxExtra;
   fmt: (n: number, digits?: number) => string;
   withIva: boolean;
-  setQty: (p: string, e: string, q: number) => void;
-  remove: (p: string, e: string) => void;
+  setQty: (ref: CartRef, qty: number) => void;
+  remove: (ref: CartRef) => void;
 }) {
-  const pricing = linePricing(item, item.qty);
-  const taxLines = extractTaxLines(item);
+  const policy = usePurchasePolicy(item.provider);
+  const pricing = purchaseLinePricing(item, policy, priceModeForCartItem(item), item.qty);
+  const taxLines = pricing.lines;
   const iva = taxByKind(taxLines, "iva");
   const internos = taxByKind(taxLines, "internos");
   const iibb = linePerceptionFromOrder(item, siblings, extra);
@@ -901,6 +1019,7 @@ function CartLine({
   const lineGross = pricing.gross + percExtra;
   const href = `/product/${encodeURIComponent(item.provider)}/${encodeURIComponent(item.externalId)}`;
   const sku = item.sku || item.partNumber || item.externalId;
+  const ref: CartRef = { provider: item.provider, externalId: item.externalId, channel: item.channel, schemeId: item.schemeId };
 
   return (
     <div className="py-4 md:grid md:grid-cols-[minmax(0,1.5fr)_80px_100px_100px_100px_100px_110px_36px] md:gap-3 md:items-center">
@@ -922,6 +1041,9 @@ function CartLine({
           {item.stockStatus?.toLowerCase().includes("bajo") && (
             <p className="text-xs text-amber-400/90 mt-0.5">Stock bajo</p>
           )}
+          {pricing.missingIva && (
+            <p className="text-xs text-amber-400/90 mt-0.5">Este producto no trajo alícuota de IVA</p>
+          )}
           {others.length > 0 && (
             <p className="text-xs text-surface-500 mt-0.5">
               {others.map((o) => `${o.label} ${formatAlicuota(o.percent)} ${fmt(o.unitAmount * item.qty, 2)}`).join(" · ")}
@@ -938,9 +1060,9 @@ function CartLine({
       <div className="mt-3 md:mt-0 flex md:justify-center">
         <QtyControl
           qty={item.qty}
-          onDec={() => item.qty <= 1 ? remove(item.provider, item.externalId) : setQty(item.provider, item.externalId, item.qty - 1)}
-          onInc={() => setQty(item.provider, item.externalId, item.qty + 1)}
-          onSet={(q) => setQty(item.provider, item.externalId, q)}
+          onDec={() => item.qty <= 1 ? remove(ref) : setQty(ref, item.qty - 1)}
+          onInc={() => setQty(ref, item.qty + 1)}
+          onSet={(q) => setQty(ref, q)}
         />
       </div>
 
@@ -955,7 +1077,7 @@ function CartLine({
       />
 
       <div className="hidden md:flex justify-end">
-        <button onClick={() => remove(item.provider, item.externalId)} className="text-surface-600 hover:text-red-400 p-1" title="Quitar">
+        <button onClick={() => remove(ref)} className="text-surface-600 hover:text-red-400 p-1" title="Quitar">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
@@ -964,7 +1086,7 @@ function CartLine({
         <span className="text-xs text-surface-500">Total línea</span>
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-white tabular-nums">{fmt(withIva ? lineGross : pricing.net, 2)}</span>
-          <button onClick={() => remove(item.provider, item.externalId)} className="text-surface-600 hover:text-red-400">
+          <button onClick={() => remove(ref)} className="text-surface-600 hover:text-red-400">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>

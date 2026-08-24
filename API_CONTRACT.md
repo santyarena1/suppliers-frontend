@@ -76,6 +76,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo. Cron (timezone `America/Argentina/Buenos_Aires`): **cada 5 min de 06:00 a 20:55** un batch de tiendas más viejas (`RETAIL_INGEST_DAY_BATCH`, default 8); **cada hora de 21:00 a 05:00** un batch mayor (`RETAIL_INGEST_NIGHT_BATCH`, default 20). Admin “Sincronizar todo” hace **full en background hasta terminar**; si hay un batch del cron, lo cancela al cerrar la tienda actual y encola el full. Progreso en `RetailIngestRun` (`storesDone/storesTotal`, `currentStoreName`, `heartbeatAt`). Ingesta más rápida: páginas de 100, upserts en paralelo, sin persistir `raw` del producto, historial limitado. `priceDivisor` por local corrige centavos (Multiplo). `RETAIL_INGEST_DISABLED=true` apaga el cron.
 
+### [FEATURE] Pedido offline y compras en esquema (comercio tipo 1)
+- **Método**: GET | PUT
+- **Ruta**: `/providers/:provider/config` · los mismos campos viajan en `GET /my/providers` como `purchase`
+- **Auth**: Bearer, organización comercio (RETAILER) para usarlas en búsqueda/carrito; la config la guarda el tenant actual
+- **Body / Params**: `{ acceptsOffline?: boolean, acceptsScheme?: boolean, ivaAdjustment?: "REMOVE" | "HALF" | "FLAT_10_5" | null, schemeDiscountPercent?: number | null }` además de los campos de sync ya existentes
+- **Respuesta esperada**: `ProviderConfig` con esos campos. `GET /my/providers` incluye `{ purchase: { acceptsOffline, acceptsScheme, ivaAdjustment, schemeDiscountPercent } }` por proveedor
+- **Estado**: IMPLEMENTADO
+- **Notas**: Offline = compra sin facturar (antes “.com”); no se crea carrito en el portal, solo un mensaje para el vendedor. Esquema = facturado, con % extra que carga el comercio; al portal los ítems van sueltos. Si offline o esquema está activo, `ivaAdjustment` es obligatorio. Solo se recalcula IVA (internos/IIBB no se tocan). `HALF` sin alícuota de IVA en el producto no inventa 21%.
+
 ## Pendiente (futuro)
 
 

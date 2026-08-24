@@ -50,7 +50,7 @@ const FIELD_MAP: { [K in keyof NormalizedProduct]?: (p: GnProduct) => Normalized
   longDescription: (p) => (p.item_desc_2 || undefined) as never,
   price: (p) => p.precioNeto_USD as never,
   currency: () => "USD" as never,
-  ivaPercent: (p) => sumTaxPercent(p.impuestos) as never,
+  ivaPercent: (p) => ivaPercentFromGnTaxes(p.impuestos) as never,
   finalPrice: (p) => grossFromTaxes(p.precioNeto_USD, p.impuestos) as never,
   stock: (p) => (p.stock_mdp ?? 0) + (p.stock_caba ?? 0) as never,
   imageUrl: (p) => p.url_imagenes?.[0]?.url as never,
@@ -62,10 +62,27 @@ const FIELD_MAP: { [K in keyof NormalizedProduct]?: (p: GnProduct) => Normalized
   dimensionsUnit: (p) => (p.alto_cm != null ? "cm" : undefined) as never,
   volume: (p) => p.volumen_cm3 as never,
   // Sin equivalente en Grupo Núcleo: stockStatus, productUrl,
-  // warranty, tags. El stock por depósito (mdp/caba) queda solo en `raw`,
-  // acá se suma en un único número. `ivaPercent` es la SUMA de todas las
-  // líneas de `impuestos[]` (IVA + internos, etc.), no solo la primera.
+  // warranty, tags. El stock por depósito (mdp/caba) queda solo en `raw`.
+  // `ivaPercent` es SOLO la línea de IVA de `impuestos[]`, no la suma con internos.
 };
+
+function foldTaxDesc(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function isIvaDesc(desc: string) {
+  const d = foldTaxDesc(desc);
+  return /iva|i\.v\.a/.test(d) && !/interno/.test(d);
+}
+
+/** Alícuota de IVA (puntos). Ignora internos / IIBB. */
+export function ivaPercentFromGnTaxes(impuestos: GnImpuesto[] | undefined): number | undefined {
+  if (!impuestos?.length) return undefined;
+  const ivaLines = impuestos.filter((t) => isIvaDesc(String(t.imp_desc ?? "")));
+  if (!ivaLines.length) return undefined;
+  const total = ivaLines.reduce((s, t) => s + (Number(t.imp_porcentaje) || 0), 0);
+  return Number.isFinite(total) ? total : undefined;
+}
 
 function sumTaxPercent(impuestos: GnImpuesto[] | undefined): number | undefined {
   if (!impuestos?.length) return undefined;

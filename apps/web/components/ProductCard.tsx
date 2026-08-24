@@ -9,6 +9,8 @@ import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { linePricing, taxLabel } from "@/lib/tax";
+import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
+import { usePurchasePolicy } from "@/lib/purchase";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
 
@@ -29,19 +31,22 @@ const PROVIDER_HUE: Record<string, string> = {
   DIAPSTORE:    "text-blue-400  bg-blue-400/10",
 };
 
-export default function ProductCard({ product }: { product: ProductDTO }) {
+export default function ProductCard({ product, priceMode = "list" }: { product: ProductDTO; priceMode?: PriceMode }) {
   const [imgErr, setImgErr] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
   const { currency, withIva, convert } = usePrefs();
   const display = useProviderDisplay();
+  const policy = usePurchasePolicy(product.provider);
   const color = PROVIDER_HUE[product.provider] || "text-surface-400 bg-surface-400/10";
   const logoUrl = display.logoUrl(product.provider);
   const customColor = display.textColor(product.provider);
   const href = `/product/${encodeURIComponent(product.provider)}/${encodeURIComponent(product.externalId)}`;
 
-  const pricing = linePricing(product);
+  const pricing = purchaseLinePricing(product, policy, priceMode);
   const displayUsd = withIva ? pricing.gross : pricing.net;
   const ars = convert(displayUsd).amount;
+  const listed = linePricing(product);
+  const showingOffline = pricing.adjusted && pricing.mode === "offline";
 
   const primary = currency === "USD" ? formatUSD(displayUsd) : formatARS(ars);
   const secondary = currency === "USD"
@@ -80,11 +85,13 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
           </span>
 
           <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md ${
-            withIva
+            showingOffline
+              ? "bg-amber-500 text-black border border-amber-300/40"
+              : withIva
               ? "bg-brand-600 text-white border border-brand-400/40"
               : "bg-black/70 text-white border border-white/10"
           }`}>
-            {withIva ? `+ ${taxLabel(product)}` : "Sin imp."}
+            {showingOffline ? "Offline" : withIva ? `+ ${taxLabel(product)}` : "Sin imp."}
           </span>
 
           {product.locationAir && (
@@ -111,9 +118,14 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
             {secondary && (
               <span className="product-card-meta text-[11px] tabular-nums mt-1">{secondary}</span>
             )}
+            {pricing.missingIva && showingOffline && (
+              <span className="product-card-meta text-[10px] text-amber-400 mt-0.5">Sin alícuota de IVA</span>
+            )}
+            {!showingOffline && (
             <span className="product-card-meta text-[10px] tabular-nums mt-0.5">
-              Base: {formatUSD(pricing.net)} {withIva ? "(s/imp)" : ""}
+              Base: {formatUSD(listed.net)} {withIva ? "(s/imp)" : ""}
             </span>
+            )}
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
@@ -142,7 +154,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
         open={saleOpen}
         onClose={() => setSaleOpen(false)}
         seedQuery={product.name}
-        costUsd={pricing.net}
+        costUsd={listed.net}
       />
     </div>
   );

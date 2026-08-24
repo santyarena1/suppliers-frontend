@@ -8,9 +8,10 @@ import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
   invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile,
-  TENANT_ROLES_CAN_PURGE_CATALOG
+  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
+import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
@@ -132,16 +133,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const [clearingZeroStock, setClearingZeroStock] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
   // Vacía el catálogo de toda la organización, no solo el de quien lo pide.
   const [canPurge, setCanPurge] = useState(false);
+  const [isRetailer, setIsRetailer] = useState(false);
 
   useEffect(() => {
-    const role = getTenant()?.role;
+    const tenant = getTenant();
+    const role = tenant?.role;
     setCanPurge(isAdmin() || (!!role && TENANT_ROLES_CAN_PURGE_CATALOG.includes(role)));
+    setIsRetailer(tenant?.type === "RETAILER");
   }, []);
 
   async function loadConfig() {
@@ -149,7 +154,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     setLoadingConfig(true);
     try {
       const res = await providersApi.getConfig(provider);
-      setConfig(res.data);
+      setConfig({
+        ...res.data,
+        acceptsOffline: Boolean(res.data.acceptsOffline),
+        acceptsScheme: Boolean(res.data.acceptsScheme),
+        ivaAdjustment: res.data.ivaAdjustment ?? null,
+        schemeDiscountPercent: res.data.schemeDiscountPercent ?? null,
+      });
     } catch {
       setConfig(null);
     } finally {
@@ -162,6 +173,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     if (!config) return;
     setSavingConfig(true);
     setConfigSaved(false);
+    setConfigError(null);
     try {
       const res = await providersApi.updateConfig(provider, {
         enabled: config.enabled,
@@ -170,10 +182,21 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         zeroStockAction: config.zeroStockAction,
         priceMarkupPercent: Number(config.priceMarkupPercent) || 0,
         minStockThreshold: Number(config.minStockThreshold) || 0,
+        acceptsOffline: Boolean(config.acceptsOffline),
+        acceptsScheme: Boolean(config.acceptsScheme),
+        ivaAdjustment: config.ivaAdjustment,
+        schemeDiscountPercent:
+          config.schemeDiscountPercent == null || config.schemeDiscountPercent === ""
+            ? null
+            : Number(config.schemeDiscountPercent),
       });
       setConfig(res.data);
+      invalidateMyProviders();
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 3000);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setConfigError(msg || "No se pudo guardar la configuración");
     } finally {
       setSavingConfig(false);
     }
@@ -549,6 +572,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           </div>
                         </div>
 
+                        {isRetailer && (
+                          <ProviderPurchaseConfig config={config} onChange={setConfig} />
+                        )}
+
                         {config.lastSyncError && (
                           <div className="flex items-start gap-2.5 bg-red-500/8 border border-red-500/20 text-red-400 text-xs rounded-lg px-3.5 py-2.5">
                             <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -567,6 +594,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         {configSaved && (
                           <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-emerald-500/8 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
                             <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Configuración guardada
+                          </div>
+                        )}
+                        {configError && (
+                          <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
+                            <XCircle className="w-4 h-4 flex-shrink-0" /> {configError}
                           </div>
                         )}
                       </form>

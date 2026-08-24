@@ -22,7 +22,7 @@ const HEADER_ALIASES: Record<keyof NormalizedProduct, string[]> = {
   price: ["precio", "price", "preciousd", "preciodolar", "costo"],
   finalPrice: ["preciofinal", "finalprice", "preciolista"],
   currency: ["moneda", "currency"],
-  ivaPercent: ["iva", "ivapercent", "alicuotaiva"],
+  ivaPercent: ["iva", "ivapercent", "alicuotaiva", "alicuota", "taxrate", "porcentajeiva"],
   stock: ["stock", "cantidad", "disponible", "existencia"],
   stockStatus: ["estadostock", "stockstatus", "estado"],
   imageUrl: ["imagen", "imageurl", "foto", "urlimagen"],
