@@ -92,6 +92,7 @@ export default function SalePricePanel({
   seedQuery,
   costUsd,
   variant = "drawer",
+  active: activeProp,
 }: {
   open?: boolean;
   onClose?: () => void;
@@ -99,9 +100,11 @@ export default function SalePricePanel({
   costUsd?: number | null;
   /** drawer = panel lateral (cards); inline = sección en la ficha de producto */
   variant?: "drawer" | "inline";
+  /** Controla si corre la búsqueda (accordion mobile cerrado → false). */
+  active?: boolean;
 }) {
   const inline = variant === "inline";
-  const active = inline || open;
+  const active = activeProp ?? (inline || open);
   const { convert } = usePrefs();
   const costArs = costUsd != null && costUsd > 0 ? convert(costUsd).amount : null;
   const initial = useMemo(() => simplifyQuery(seedQuery), [seedQuery]);
