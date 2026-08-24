@@ -58,17 +58,30 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
 
   useEffect(() => {
     setImgErr(false);
+    let cancelled = false;
     const found = find(providerName, extId);
     if (found) {
       setProduct(found);
       setLoading(false);
-      return;
+    } else {
+      setLoading(true);
     }
+    // Siempre pedimos la ficha completa: la búsqueda puede venir incompleta
+    // o desactualizada respecto a marca/categoría/stock/etc.
     catalogApi
       .getProduct(providerName as Provider, extId)
-      .then((res) => setProduct(res.data))
-      .catch(() => setProduct(null))
-      .finally(() => setLoading(false));
+      .then((res) => {
+        if (!cancelled && res.data) setProduct(res.data);
+      })
+      .catch(() => {
+        if (!cancelled && !found) setProduct(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [providerName, extId, find]);
 
   useEffect(() => {
@@ -180,6 +193,16 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${color}`}>
                   {providerName.replace(/_/g, " ")}
                 </span>
+                {product.brand && (
+                  <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200">
+                    {product.brand}
+                  </span>
+                )}
+                {(product.category || product.subcategory) && (
+                  <span className="text-xs text-surface-500">
+                    {[product.category, product.subcategory].filter(Boolean).join(" · ")}
+                  </span>
+                )}
                 <span className="font-mono text-xs text-surface-500">#{extId}</span>
                 <button
                   type="button"
@@ -194,6 +217,19 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               <h1 className="text-2xl sm:text-3xl font-bold text-white leading-snug text-balance tracking-tight">
                 {product.name}
               </h1>
+              {(product.stock != null || product.stockStatus) && (
+                <p className="mt-2 text-xs text-surface-400">
+                  {product.stock != null && (
+                    <span className={product.stock > 0 ? "text-emerald-400" : "text-amber-400"}>
+                      Stock: {product.stock}
+                    </span>
+                  )}
+                  {product.stock != null && product.stockStatus ? (
+                    <span className="text-surface-600"> · </span>
+                  ) : null}
+                  {product.stockStatus && <span>{product.stockStatus}</span>}
+                </p>
+              )}
             </div>
 
             {/* Imagen + card de precios */}
@@ -374,34 +410,48 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               costUsd={pricing.unitNet}
             />
 
+            {(product.description || product.longDescription) && (
+              <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+                <h2 className="text-sm font-semibold text-white mb-3">Descripción</h2>
+                {product.description && (
+                  <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+                    {product.description}
+                  </p>
+                )}
+                {product.longDescription &&
+                  product.longDescription !== product.description && (
+                    <p className="text-sm text-surface-400 leading-relaxed whitespace-pre-wrap mt-3">
+                      {product.longDescription}
+                    </p>
+                  )}
+              </section>
+            )}
+
             {/* Meta + evolución */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
                 <h2 className="text-sm font-semibold text-white mb-3">Datos del producto</h2>
                 <dl className="space-y-0">
-                  <MetaRow label="Proveedor">
-                    <span className={`text-xs font-bold ${PROVIDER_COLOR[providerName]?.split(" ")[0]}`}>
-                      {providerName.replace(/_/g, " ")}
-                    </span>
-                  </MetaRow>
-                  <MetaRow label="SKU / ID">
-                    <span className="text-xs font-mono text-surface-200">{extId}</span>
-                  </MetaRow>
-                  <MetaRow label="Impuestos detectados">
-                    <span className="text-xs text-surface-300">{taxLabel(product)}</span>
-                  </MetaRow>
-                  {product.imageUrl && (
-                    <MetaRow label="Imagen">
-                      <a
-                        href={product.imageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1"
-                      >
-                        Ver original <ExternalLink className="w-3 h-3" />
-                      </a>
+                  {productFacts(product, extId, providerName).map((row) => (
+                    <MetaRow key={row.label} label={row.label}>
+                      {row.href ? (
+                        <a
+                          href={row.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1"
+                        >
+                          {row.value} <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span
+                          className={`text-xs text-surface-200 ${row.mono ? "font-mono" : ""} ${row.strongColor ?? ""}`}
+                        >
+                          {row.value}
+                        </span>
+                      )}
                     </MetaRow>
-                  )}
+                  ))}
                 </dl>
               </section>
 
@@ -465,6 +515,89 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
       )}
     </>
   );
+}
+
+function present(v: unknown): boolean {
+  if (v == null) return false;
+  if (typeof v === "string") return v.trim().length > 0;
+  if (typeof v === "number") return Number.isFinite(v);
+  return true;
+}
+
+function formatDim(v: string | number | null | undefined): string | null {
+  if (!present(v)) return null;
+  const n = typeof v === "number" ? v : Number(v);
+  if (Number.isFinite(n)) return String(n);
+  return String(v).trim();
+}
+
+function productFacts(
+  product: ProductDTO,
+  extId: string,
+  providerName: string
+): { label: string; value: string; mono?: boolean; href?: string; strongColor?: string }[] {
+  const rows: { label: string; value: string; mono?: boolean; href?: string; strongColor?: string }[] = [];
+  const push = (
+    label: string,
+    value: unknown,
+    opts?: { mono?: boolean; href?: string; strongColor?: string }
+  ) => {
+    if (!present(value)) return;
+    rows.push({ label, value: String(value).trim(), ...opts });
+  };
+
+  push("Proveedor", providerName.replace(/_/g, " "), {
+    strongColor: PROVIDER_COLOR[providerName]?.split(" ")[0],
+  });
+  push("Marca", product.brand);
+  push("Categoría", product.category);
+  push("Subcategoría", product.subcategory);
+  push("ID externo", extId, { mono: true });
+  if (product.sku && product.sku !== extId) push("SKU", product.sku, { mono: true });
+  push("Part number", product.partNumber, { mono: true });
+  push("EAN", product.ean, { mono: true });
+  if (product.stock != null) push("Stock", product.stock);
+  push("Estado de stock", product.stockStatus);
+  push("Ubicación / depósito", product.locationAir);
+  push("Garantía", product.warranty);
+  push("Impuestos detectados", taxLabel(product));
+  if (product.ivaPercent != null && present(product.ivaPercent)) {
+    push("IVA %", `${formatAlicuota(Number(product.ivaPercent))}`);
+  }
+  push("Moneda del proveedor", product.currency);
+
+  const unit = product.weightUnit || "";
+  if (present(product.weight)) {
+    push("Peso", `${formatDim(product.weight)}${unit ? ` ${unit}` : ""}`);
+  }
+
+  const dims = [formatDim(product.height), formatDim(product.width), formatDim(product.length)].filter(
+    Boolean
+  ) as string[];
+  if (dims.length) {
+    const du = product.dimensionsUnit ? ` ${product.dimensionsUnit}` : "";
+    push("Dimensiones (A×L×P)", `${dims.join(" × ")}${du}`);
+  }
+  if (present(product.volume)) push("Volumen", String(product.volume));
+  push("Tags", product.tags);
+
+  if (product.productUrl) {
+    push("Ficha del proveedor", "Abrir enlace", { href: product.productUrl });
+  }
+  if (product.imageUrl) {
+    push("Imagen original", "Ver imagen", { href: product.imageUrl });
+  }
+  if (product.syncedAt) {
+    const d = new Date(product.syncedAt);
+    if (!Number.isNaN(d.getTime())) {
+      push(
+        "Última sync",
+        d.toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })
+      );
+    }
+  }
+
+  return rows;
 }
 
 function BreakdownRow({
