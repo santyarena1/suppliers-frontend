@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { RetailIngestService } from "./retail-ingest.service";
@@ -20,7 +20,12 @@ export class RetailController {
   @Get("retail/search")
   searchRetail(@Query("q") q = "", @Query("take") take?: string) {
     if (!q.trim()) throw new BadRequestException("Falta el parámetro q");
-    return this.search.search(q.trim(), take ? Number(take) : 30);
+    return this.search.search(q.trim(), take ? Number(take) : 60);
+  }
+
+  @Get("retail/products/:id")
+  getProduct(@Param("id") id: string) {
+    return this.search.getById(id);
   }
 
   @UseGuards(RolesGuard)

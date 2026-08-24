@@ -69,7 +69,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Referencias de precio de venta (locales)
 - **Método**: GET · POST (admin)
-- **Ruta**: `/retail/search?q=&take=` · `/admin/retail/ingest` · `/admin/retail/ingest/status`
+- **Ruta**: `/retail/search?q=&take=` · `/retail/products/:id` · `/admin/retail/ingest` · `/admin/retail/ingest/status`
 - **Auth**: Bearer usuario · ingest solo ROLE_ADMIN
 - **Body / Params**: `q` búsqueda amplia (tokens flexibles) · ingest sin body
 - **Respuesta esperada**: `{ query, tokens, results: [{ id, name, price, description, productUrl, imageUrl, categoryName, syncedAt, store: { name, logoUrl }, priceHistory: [...] }] }`

@@ -7,6 +7,7 @@ import Image from "next/image";
 import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
+import SalePricePanel from "@/components/SalePricePanel";
 import { useResults } from "@/lib/results";
 import { useCart } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
@@ -16,7 +17,7 @@ import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
 import { linePricing, taxLabel } from "@/lib/tax";
 import {
   ArrowLeft, Package, ImageOff, ChevronLeft, ChevronRight,
-  ZoomIn, X, Copy, ExternalLink, Sparkles, TrendingUp
+  ZoomIn, X, Copy, ExternalLink, Sparkles, TrendingUp, DollarSign,
 } from "lucide-react";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
 
@@ -38,6 +39,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const [zoom, setZoom] = useState(false);
   const [qty, setQty] = useState(1);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
+  const [saleOpen, setSaleOpen] = useState(false);
 
   useEffect(() => {
     const found = find(providerName, extId);
@@ -329,6 +331,18 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
 
                       <AddToCartButtonWithQty product={product} qty={qty} />
 
+                      <button
+                        type="button"
+                        onClick={() => setSaleOpen(true)}
+                        className="mt-3 w-full flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 border border-emerald-500/35 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200 transition-all"
+                      >
+                        <DollarSign className="w-4 h-4" />
+                        Ver precios de venta (referencia)
+                      </button>
+                      <p className="text-[10px] text-surface-500 mt-1.5 text-center leading-relaxed">
+                        Referencia de mercado en locales. Sirve para estimar margen; no es tu precio de compra.
+                      </p>
+
                       {cartItem && (
                         <p className="text-[11px] text-emerald-400 mt-2 text-center">
                           Ya tenés {cartItem.qty} unidad{cartItem.qty !== 1 ? "es" : ""} en el carrito
@@ -351,6 +365,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               </div>
             )}
           </div>
+
+      <SalePricePanel
+        open={saleOpen}
+        onClose={() => setSaleOpen(false)}
+        seedQuery={product?.name ?? ""}
+        costUsd={pricing?.unitNet ?? pricing?.net ?? null}
+      />
 
       {/* Zoom modal */}
       {zoom && product?.imageUrl && (

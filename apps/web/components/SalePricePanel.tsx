@@ -1,8 +1,29 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Loader2, Search, Store, X } from "lucide-react";
-import { retailApi, type RetailSearchHit } from "@/lib/api";
+import {
+  ExternalLink,
+  Loader2,
+  Search,
+  Store,
+  X,
+  ChevronRight,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  ReferenceLine,
+} from "recharts";
+import {
+  retailApi,
+  type RetailProductDetail,
+  type RetailSearchHit,
+} from "@/lib/api";
 import { formatARS, proxyImg } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 
@@ -42,21 +63,29 @@ export default function SalePricePanel({
   const [q, setQ] = useState(initial);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<RetailSearchHit[]>([]);
+  const [totalMatched, setTotalMatched] = useState(0);
   const [tokens, setTokens] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setQ(simplifyQuery(seedQuery));
+    if (open) {
+      setQ(simplifyQuery(seedQuery));
+      setSelectedId(null);
+    }
   }, [open, seedQuery]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (selectedId) setSelectedId(null);
+        else onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, selectedId]);
 
   useEffect(() => {
     if (!open || !q.trim()) return;
@@ -71,13 +100,15 @@ export default function SalePricePanel({
     setLoading(true);
     setError("");
     try {
-      const res = await retailApi.search(query, 30);
+      const res = await retailApi.search(query, 60);
       setResults(res.data.results ?? []);
       setTokens(res.data.tokens ?? []);
+      setTotalMatched(res.data.totalMatched ?? res.data.results?.length ?? 0);
     } catch (err: unknown) {
       const e = err as { message?: string };
       setError(e?.message || "No se pudo buscar referencias de venta");
       setResults([]);
+      setTotalMatched(0);
     } finally {
       setLoading(false);
     }
@@ -88,6 +119,7 @@ export default function SalePricePanel({
   const prices = results.map((r) => r.price).filter((n) => n > 0);
   const min = prices.length ? Math.min(...prices) : null;
   const max = prices.length ? Math.max(...prices) : null;
+  const storeCount = new Set(results.map((r) => r.store.id)).size;
 
   return (
     <>
@@ -98,7 +130,8 @@ export default function SalePricePanel({
         onClick={onClose}
       />
 
-      <aside className="fixed z-50 inset-x-0 bottom-0 max-h-[88vh] rounded-t-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:max-h-none md:w-[420px] md:rounded-none md:border-l md:border-t-0 md:border-b-0">
+      {/* min-h-0 + h-full: sin esto flex-1 overflow-y-auto no scrollea */}
+      <aside className="fixed z-50 inset-x-0 bottom-0 h-[88vh] max-h-[88vh] rounded-t-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:h-full md:max-h-none md:w-[420px] md:rounded-none md:border-l md:border-t-0 md:border-b-0">
         <header className="flex-shrink-0 border-b border-surface-800 px-4 py-3">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -112,7 +145,7 @@ export default function SalePricePanel({
             <button
               type="button"
               onClick={onClose}
-              className="text-surface-500 hover:text-white p-1 rounded-md"
+              className="text-surface-500 hover:text-white p-1 rounded-md flex-shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -140,20 +173,30 @@ export default function SalePricePanel({
             </p>
           )}
 
-          {(min != null || max != null) && (
+          {(min != null || results.length > 0) && (
             <p className="text-[11px] text-surface-300 mt-2">
-              Rango: <span className="font-semibold text-emerald-400">{formatARS(min!)}</span>
-              {max != null && max !== min && (
+              {min != null && (
                 <>
-                  {" "}– <span className="font-semibold text-emerald-400">{formatARS(max)}</span>
+                  Rango: <span className="font-semibold text-emerald-400">{formatARS(min)}</span>
+                  {max != null && max !== min && (
+                    <>
+                      {" "}
+                      – <span className="font-semibold text-emerald-400">{formatARS(max)}</span>
+                    </>
+                  )}
+                  <span className="text-surface-600"> · </span>
                 </>
               )}
-              <span className="text-surface-500"> · {results.length} refs.</span>
+              <span className="text-surface-400">
+                {results.length} mostrados
+                {totalMatched > results.length ? ` de ${totalMatched}` : ""}
+                {storeCount > 0 ? ` · ${storeCount} locales` : ""}
+              </span>
             </p>
           )}
         </header>
 
-        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 space-y-2 touch-pan-y">
           {loading && (
             <div className="flex justify-center py-10">
               <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
@@ -165,31 +208,42 @@ export default function SalePricePanel({
           {!loading && !error && results.length === 0 && (
             <p className="text-xs text-surface-500 text-center py-8 px-4">
               No encontramos referencias parecidas. Probá editar la búsqueda con menos palabras
-              (marca + modelo).
+              (marca + modelo). Si el catálogo todavía se está sincronizando, reintentá en unos
+              minutos.
             </p>
           )}
 
           {!loading &&
             results.map((hit) => (
-              <RetailHitCard key={hit.id} hit={hit} costUsd={costUsd} />
+              <RetailHitCard
+                key={hit.id}
+                hit={hit}
+                onOpen={() => setSelectedId(hit.id)}
+              />
             ))}
         </div>
       </aside>
+
+      {selectedId && (
+        <RetailDetailModal
+          productId={selectedId}
+          costUsd={costUsd}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
     </>
   );
 }
 
-function RetailHitCard({ hit, costUsd }: { hit: RetailSearchHit; costUsd?: number | null }) {
+function RetailHitCard({ hit, onOpen }: { hit: RetailSearchHit; onOpen: () => void }) {
   const [imgErr, setImgErr] = useState(false);
-  const { convert } = usePrefs();
-  const costArs = costUsd != null && costUsd > 0 ? convert(costUsd).amount : null;
-  const margin =
-    costArs != null && costArs > 0 && hit.price > 0
-      ? (hit.price / costArs - 1) * 100
-      : null;
 
   return (
-    <article className="rounded-xl border border-surface-800 bg-surface-900/80 p-3 flex gap-3">
+    <button
+      type="button"
+      onClick={onOpen}
+      className="w-full text-left rounded-xl border border-surface-800 bg-surface-900/80 p-3 flex gap-3 hover:border-surface-600 hover:bg-surface-900 transition-colors"
+    >
       <div className="w-14 h-14 rounded-lg bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
         {hit.imageUrl && !imgErr ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -208,12 +262,18 @@ function RetailHitCard({ hit, costUsd }: { hit: RetailSearchHit; costUsd?: numbe
         <div className="flex items-center gap-2 mb-1">
           {hit.store.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={proxyImg(hit.store.logoUrl)} alt="" className="w-4 h-4 object-contain rounded-sm" />
+            <img
+              src={proxyImg(hit.store.logoUrl)}
+              alt=""
+              className="w-4 h-4 object-contain rounded-sm"
+            />
           ) : (
             <Store className="w-3.5 h-3.5 text-surface-500" />
           )}
           <span className="text-[11px] font-semibold text-brand-300 truncate">{hit.store.name}</span>
-          <span className="text-[10px] text-surface-600 ml-auto flex-shrink-0">{timeAgo(hit.syncedAt)}</span>
+          <span className="text-[10px] text-surface-600 ml-auto flex-shrink-0">
+            {timeAgo(hit.syncedAt)}
+          </span>
         </div>
 
         <p className="text-xs text-surface-100 leading-snug line-clamp-2">{hit.name}</p>
@@ -222,52 +282,259 @@ function RetailHitCard({ hit, costUsd }: { hit: RetailSearchHit; costUsd?: numbe
           <p className="text-[10px] text-surface-500 mt-0.5 truncate">{hit.categoryName}</p>
         )}
 
-        {hit.description && (
-          <p className="text-[10px] text-surface-500 mt-1 line-clamp-2">{hit.description}</p>
-        )}
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <p className="text-sm font-bold text-emerald-400 tabular-nums">{formatARS(hit.price)}</p>
+          <span className="text-[10px] text-surface-500 flex items-center gap-0.5">
+            Detalle <ChevronRight className="w-3 h-3" />
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
 
-        <div className="flex items-end justify-between gap-2 mt-2">
-          <div>
-            <p className="text-sm font-bold text-emerald-400 tabular-nums">{formatARS(hit.price)}</p>
-            {margin != null && Number.isFinite(margin) && (
-              <p className={`text-[10px] tabular-nums ${margin >= 0 ? "text-emerald-500/80" : "text-amber-400/80"}`}>
-                vs tu costo: {margin >= 0 ? "+" : ""}
-                {margin.toFixed(0)}%
-              </p>
-            )}
-          </div>
-          {hit.productUrl && (
-            <a
-              href={hit.productUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[10px] text-surface-400 hover:text-white flex items-center gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
-              Ver local <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
+function RetailDetailModal({
+  productId,
+  costUsd,
+  onClose,
+}: {
+  productId: string;
+  costUsd?: number | null;
+  onClose: () => void;
+}) {
+  const { convert } = usePrefs();
+  const [loading, setLoading] = useState(true);
+  const [detail, setDetail] = useState<RetailProductDetail | null>(null);
+  const [error, setError] = useState("");
+  const [imgErr, setImgErr] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    retailApi
+      .getProduct(productId)
+      .then((r) => {
+        if (alive) setDetail(r.data);
+      })
+      .catch((err: unknown) => {
+        if (alive) {
+          setError((err as { message?: string })?.message || "No se pudo cargar el detalle");
+          setDetail(null);
+        }
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [productId]);
+
+  const costArs = costUsd != null && costUsd > 0 ? convert(costUsd).amount : null;
+  const margin =
+    detail && costArs != null && costArs > 0 && detail.price > 0
+      ? (detail.price / costArs - 1) * 100
+      : null;
+
+  const chartData = useMemo(() => {
+    if (!detail?.priceHistory?.length) return [];
+    return detail.priceHistory.map((h) => ({
+      date: new Date(h.changedAt).toLocaleDateString("es-AR", {
+        day: "2-digit",
+        month: "short",
+      }),
+      price: h.price,
+      fullDate: new Date(h.changedAt).toLocaleString("es-AR"),
+    }));
+  }, [detail]);
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Cerrar detalle"
+        className="fixed inset-0 z-[60] bg-black/60"
+        onClick={onClose}
+      />
+      <div className="fixed z-[70] inset-x-3 top-[8vh] bottom-[8vh] md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg md:max-h-[85vh] rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800 flex-shrink-0">
+          <p className="text-sm font-semibold text-white">Detalle de referencia</p>
+          <button type="button" onClick={onClose} className="text-surface-500 hover:text-white p-1">
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {hit.priceHistory.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-surface-800">
-            <p className="text-[10px] text-surface-500 mb-1">Historial reciente</p>
-            <ul className="space-y-0.5">
-              {hit.priceHistory.slice(0, 4).map((h, i) => (
-                <li key={`${hit.id}-h-${i}`} className="text-[10px] text-surface-400 flex justify-between gap-2">
-                  <span className="tabular-nums">
-                    {h.previousPrice != null ? `${formatARS(h.previousPrice)} → ` : ""}
-                    {formatARS(h.price)}
-                  </span>
-                  <span className="text-surface-600 flex-shrink-0">
-                    {new Date(h.changedAt).toLocaleDateString("es-AR")}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4">
+          {loading && (
+            <div className="flex justify-center py-16">
+              <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+            </div>
+          )}
+          {!loading && error && <p className="text-xs text-red-400 text-center py-8">{error}</p>}
+          {!loading && detail && (
+            <>
+              <div className="flex gap-3">
+                <div className="w-20 h-20 rounded-xl bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                  {detail.imageUrl && !imgErr ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={proxyImg(detail.imageUrl)}
+                      alt=""
+                      className="w-full h-full object-contain p-1.5"
+                      onError={() => setImgErr(true)}
+                    />
+                  ) : (
+                    <Store className="w-7 h-7 text-slate-400" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    {detail.store.logoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={proxyImg(detail.store.logoUrl)}
+                        alt=""
+                        className="w-4 h-4 object-contain"
+                      />
+                    )}
+                    <span className="text-xs font-semibold text-brand-300">{detail.store.name}</span>
+                  </div>
+                  <p className="text-sm text-white font-medium leading-snug">{detail.name}</p>
+                  {detail.categoryName && (
+                    <p className="text-[11px] text-surface-500 mt-1">{detail.categoryName}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-surface-800 bg-surface-900/60 p-4 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-surface-500">Precio de venta</p>
+                  <p className="text-xl font-bold text-emerald-400 tabular-nums mt-0.5">
+                    {formatARS(detail.price)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-surface-500">Vs tu costo</p>
+                  {margin != null && Number.isFinite(margin) ? (
+                    <>
+                      <p
+                        className={`text-xl font-bold tabular-nums mt-0.5 ${
+                          margin >= 0 ? "text-emerald-400" : "text-amber-400"
+                        }`}
+                      >
+                        {margin >= 0 ? "+" : ""}
+                        {margin.toFixed(0)}%
+                      </p>
+                      {costArs != null && (
+                        <p className="text-[10px] text-surface-500 mt-0.5">
+                          Costo ref. {formatARS(costArs)}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-surface-500 mt-1">Sin costo de compra</p>
+                  )}
+                </div>
+              </div>
+
+              {detail.description && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">
+                    Descripción
+                  </p>
+                  <p className="text-xs text-surface-300 leading-relaxed whitespace-pre-wrap">
+                    {detail.description}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-2">
+                  Historial de precio
+                </p>
+                {chartData.length >= 2 ? (
+                  <div className="h-52 rounded-xl border border-surface-800 bg-surface-900/40 p-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          tick={{ fontSize: 10, fill: "#71717a" }}
+                          axisLine={{ stroke: "#3f3f46" }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tick={{ fontSize: 10, fill: "#71717a" }}
+                          axisLine={false}
+                          tickLine={false}
+                          width={56}
+                          tickFormatter={(v) =>
+                            `$${Number(v).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
+                          }
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "#18181b",
+                            border: "1px solid #3f3f46",
+                            borderRadius: 8,
+                            fontSize: 12,
+                          }}
+                          labelStyle={{ color: "#a1a1aa" }}
+                          formatter={(value) => [
+                            formatARS(Number(value)),
+                            "Precio de venta",
+                          ]}
+                        />
+                        {costArs != null && costArs > 0 && (
+                          <ReferenceLine
+                            y={costArs}
+                            stroke="#f59e0b"
+                            strokeDasharray="4 4"
+                            label={{
+                              value: "Tu costo",
+                              fill: "#f59e0b",
+                              fontSize: 10,
+                              position: "insideTopRight",
+                            }}
+                          />
+                        )}
+                        <Line
+                          type="stepAfter"
+                          dataKey="price"
+                          stroke="#34d399"
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: "#34d399" }}
+                          activeDot={{ r: 5 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="text-xs text-surface-500 border border-dashed border-surface-800 rounded-xl px-3 py-6 text-center">
+                    Todavía no hay suficiente historial para graficar.
+                  </p>
+                )}
+              </div>
+
+              <p className="text-[10px] text-surface-600">
+                Actualizado {timeAgo(detail.syncedAt) || "recién"}
+              </p>
+
+              {detail.productUrl && (
+                <a
+                  href={detail.productUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold py-2.5 transition-colors"
+                >
+                  Ver en el local <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </article>
+    </>
   );
 }

@@ -1079,6 +1079,9 @@ export interface RetailSearchHit {
     name: string;
     logoUrl: string | null;
   };
+}
+
+export interface RetailProductDetail extends RetailSearchHit {
   priceHistory: {
     previousPrice: number | null;
     price: number;
@@ -1090,11 +1093,13 @@ export interface RetailSearchResponse {
   query: string;
   tokens: string[];
   results: RetailSearchHit[];
+  totalMatched?: number;
 }
 
 export const retailApi = {
-  search: (q: string, take = 30) =>
+  search: (q: string, take = 60) =>
     api.get<RetailSearchResponse>("/retail/search", { params: { q, take } }),
+  getProduct: (id: string) => api.get<RetailProductDetail>(`/retail/products/${id}`),
   triggerIngest: () => api.post<{ started: boolean; reason?: string }>("/admin/retail/ingest"),
   ingestStatus: () =>
     api.get<{
