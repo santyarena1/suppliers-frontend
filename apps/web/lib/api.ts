@@ -1100,21 +1100,68 @@ export const retailApi = {
   search: (q: string, take = 60) =>
     api.get<RetailSearchResponse>("/retail/search", { params: { q, take } }),
   getProduct: (id: string) => api.get<RetailProductDetail>(`/retail/products/${id}`),
-  triggerIngest: () => api.post<{ started: boolean; reason?: string }>("/admin/retail/ingest"),
+  triggerIngest: () =>
+    api.post<{ started: boolean; reason?: string }>("/admin/retail/ingest"),
+  triggerStoreIngest: (storeId: string) =>
+    api.post<{ started: boolean; reason?: string; productsUpserted?: number }>(
+      `/admin/retail/stores/${storeId}/ingest`
+    ),
   ingestStatus: () =>
     api.get<{
       running: boolean;
+      mode: "full" | "batch" | null;
       stores: number;
       products: number;
       lastRun: {
         id: string;
         status: string;
+        mode: string;
         startedAt: string;
         finishedAt: string | null;
+        storesTotal: number;
+        storesDone: number;
         productsUpserted: number;
+        currentStoreName: string | null;
+        heartbeatAt: string;
         errorMessage: string | null;
       } | null;
     }>("/admin/retail/ingest/status"),
+  listStores: () =>
+    api.get<
+      {
+        id: string;
+        externalId: number;
+        name: string;
+        logoUrl: string | null;
+        priceDivisor: number;
+        syncedAt: string;
+        productCount: number;
+        neverSynced: boolean;
+      }[]
+    >("/admin/retail/stores"),
+  listStoreProducts: (storeId: string, opts?: { q?: string; page?: number; take?: number }) =>
+    api.get<{
+      store: {
+        id: string;
+        name: string;
+        logoUrl: string | null;
+        priceDivisor: number;
+        syncedAt: string;
+      };
+      page: number;
+      take: number;
+      total: number;
+      products: {
+        id: string;
+        externalId: number;
+        name: string;
+        price: number;
+        categoryName: string | null;
+        imageUrl: string | null;
+        productUrl: string | null;
+        syncedAt: string;
+      }[];
+    }>(`/admin/retail/stores/${storeId}/products`, { params: opts }),
 };
 
 // --- Permisos por módulo del usuario actual ---

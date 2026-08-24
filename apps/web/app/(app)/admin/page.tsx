@@ -12,10 +12,12 @@ import OrganizationsTree from "@/components/admin/OrganizationsTree";
 import {
   Users, ShieldCheck, Boxes, Building2, Image as ImageIcon,
   Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette, Network, DollarSign,
+  ChevronLeft, ChevronRight, RefreshCw, Store, Search,
 } from "lucide-react";
 import {
   BANNER_SLOTS, BRAND_PRESET_LABELS, BRAND_PRESETS, applyBrandPreset, type BrandPreset, type BannerSlot,
 } from "@/lib/brand-presets";
+import { formatARS, proxyImg } from "@/lib/format";
 
 type Tab = "organizations" | "users" | "permissions" | "providers" | "brands" | "banners" | "appearance" | "retail";
 
@@ -570,41 +572,111 @@ function AppearanceTab({ showToast }: { showToast: (m: string, ok?: boolean) => 
 function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [syncingStoreId, setSyncingStoreId] = useState<string | null>(null);
   const [status, setStatus] = useState<{
     running: boolean;
+    mode: "full" | "batch" | null;
     stores: number;
     products: number;
     lastRun: {
       status: string;
+      mode: string;
       startedAt: string;
       finishedAt: string | null;
+      storesTotal: number;
+      storesDone: number;
       productsUpserted: number;
+      currentStoreName: string | null;
       errorMessage: string | null;
     } | null;
   } | null>(null);
+  const [stores, setStores] = useState<
+    {
+      id: string;
+      externalId: number;
+      name: string;
+      logoUrl: string | null;
+      priceDivisor: number;
+      syncedAt: string;
+      productCount: number;
+      neverSynced: boolean;
+    }[]
+  >([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string | null>(null);
+  const [storeQ, setStoreQ] = useState("");
+  const [prodQ, setProdQ] = useState("");
+  const [prodPage, setProdPage] = useState(1);
+  const [catalog, setCatalog] = useState<{
+    store: { id: string; name: string; priceDivisor: number; syncedAt: string };
+    total: number;
+    products: {
+      id: string;
+      name: string;
+      price: number;
+      categoryName: string | null;
+      imageUrl: string | null;
+      productUrl: string | null;
+      syncedAt: string;
+    }[];
+  } | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const loadStatus = useCallback(() => {
     retailApi
       .ingestStatus()
       .then((r) => setStatus(r.data))
-      .catch(() => setStatus(null))
+      .catch(() => setStatus(null));
+  }, []);
+
+  const loadStores = useCallback(() => {
+    retailApi
+      .listStores()
+      .then((r) => setStores(r.data))
+      .catch(() => setStores([]))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 15_000);
+    loadStatus();
+    loadStores();
+    const id = setInterval(() => {
+      loadStatus();
+      if (status?.running) loadStores();
+    }, status?.running ? 4_000 : 15_000);
     return () => clearInterval(id);
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadStatus, loadStores, status?.running]);
+
+  useEffect(() => {
+    if (!selectedStoreId) {
+      setCatalog(null);
+      return;
+    }
+    setCatalogLoading(true);
+    retailApi
+      .listStoreProducts(selectedStoreId, { q: prodQ, page: prodPage, take: 40 })
+      .then((r) => setCatalog(r.data))
+      .catch(() => setCatalog(null))
+      .finally(() => setCatalogLoading(false));
+  }, [selectedStoreId, prodQ, prodPage]);
 
   async function startIngest() {
     setStarting(true);
     try {
       const r = await retailApi.triggerIngest();
-      if (r.data.started) showToast("Ingesta de precios de venta iniciada");
-      else showToast(r.data.reason === "already_running" ? "Ya hay una ingesta en curso" : "No se inició", false);
-      load();
+      if (r.data.started) {
+        showToast(
+          r.data.reason === "queued_after_batch"
+            ? "Full encolado: termina el batch del cron y sigue hasta el final"
+            : "Sync full iniciado en segundo plano (sigue hasta terminar)"
+        );
+      } else {
+        showToast(
+          r.data.reason === "already_running" ? "Ya hay un sync full en curso" : "No se inició",
+          false
+        );
+      }
+      loadStatus();
     } catch (err) {
       showToast(errMsg(err, "Error al iniciar ingesta"), false);
     } finally {
@@ -612,7 +684,42 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
     }
   }
 
-  if (loading && !status) {
+  async function syncOneStore(storeId: string) {
+    setSyncingStoreId(storeId);
+    try {
+      const r = await retailApi.triggerStoreIngest(storeId);
+      if (r.data.started) {
+        showToast(`Local sincronizado · ${r.data.productsUpserted ?? 0} productos`);
+        loadStores();
+        loadStatus();
+        if (selectedStoreId === storeId) {
+          setProdPage(1);
+          const again = await retailApi.listStoreProducts(storeId, { q: prodQ, page: 1, take: 40 });
+          setCatalog(again.data);
+        }
+      } else {
+        showToast("Ya hay una ingesta en curso", false);
+      }
+    } catch (err) {
+      showToast(errMsg(err, "Error al sincronizar local"), false);
+    } finally {
+      setSyncingStoreId(null);
+    }
+  }
+
+  const filteredStores = stores.filter((s) =>
+    !storeQ.trim() ? true : s.name.toLowerCase().includes(storeQ.trim().toLowerCase())
+  );
+
+  const run = status?.lastRun;
+  const progressPct =
+    run && run.storesTotal > 0
+      ? Math.min(100, Math.round((run.storesDone / run.storesTotal) * 100))
+      : status?.running
+        ? 5
+        : 0;
+
+  if (loading && stores.length === 0 && !status) {
     return (
       <div className="flex justify-center py-16">
         <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
@@ -621,52 +728,229 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
   }
 
   return (
-    <div className="max-w-lg space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold text-white mb-1">Precios de venta (referencia)</h2>
-        <p className="text-xs text-surface-500 leading-relaxed">
-          Catálogo de precios de venta en locales, usado como referencia de mercado en el buscador
-          (botón $ en cada producto). Se actualiza solo en segundo plano: cada 5 min de 6 a 21 hs
-          (Argentina) y cada 1 h de noche, por tandas de locales. Los usuarios nunca pegan en vivo
-          a la fuente externa.
-        </p>
+    <div className="max-w-5xl space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-white mb-1">Precios de venta (referencia)</h2>
+          <p className="text-xs text-surface-500 leading-relaxed max-w-2xl">
+            Catálogo de precios en locales. El cron actualiza por tandas; “Sincronizar todo” hace un
+            full en segundo plano hasta terminar (si hay un batch del cron, lo corta y encola el full).
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void startIngest()}
+          disabled={starting || (status?.running && status.mode === "full")}
+          className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2.5 transition-all flex-shrink-0"
+        >
+          {starting || status?.running ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <RefreshCw className="w-4 h-4" />
+          )}
+          {status?.running && status.mode === "full"
+            ? "Full en curso…"
+            : status?.running && status.mode === "batch"
+              ? "Encolar full (corta batch)"
+              : "Sincronizar todo"}
+        </button>
       </div>
 
-      <div className="rounded-xl border border-surface-800 bg-surface-900/50 p-4 grid grid-cols-2 gap-3 text-sm">
+      <div className="rounded-xl border border-surface-800 bg-surface-900/50 p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
         <div>
           <p className="text-[10px] uppercase tracking-wider text-surface-500">Locales</p>
-          <p className="text-lg font-semibold text-white tabular-nums">{status?.stores ?? "—"}</p>
+          <p className="text-lg font-semibold text-white tabular-nums">{status?.stores ?? stores.length}</p>
         </div>
         <div>
           <p className="text-[10px] uppercase tracking-wider text-surface-500">Productos</p>
           <p className="text-lg font-semibold text-white tabular-nums">{status?.products ?? "—"}</p>
         </div>
         <div className="col-span-2">
-          <p className="text-[10px] uppercase tracking-wider text-surface-500">Última corrida</p>
-          {status?.lastRun ? (
-            <p className="text-xs text-surface-300 mt-0.5">
-              {status.lastRun.status}
-              {status.running ? " (en curso)" : ""} · {status.lastRun.productsUpserted} upserts ·{" "}
-              {new Date(status.lastRun.startedAt).toLocaleString("es-AR")}
-              {status.lastRun.errorMessage ? (
-                <span className="block text-red-400 mt-1">{status.lastRun.errorMessage}</span>
-              ) : null}
-            </p>
+          <p className="text-[10px] uppercase tracking-wider text-surface-500">Estado sync</p>
+          {run ? (
+            <div className="mt-0.5 space-y-1.5">
+              <p className="text-xs text-surface-300">
+                {run.status}
+                {status?.running ? ` · ${status.mode === "batch" ? "batch cron" : "full"}` : ""}
+                {run.currentStoreName ? ` · ${run.currentStoreName}` : ""}
+              </p>
+              <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
+                <div
+                  className="h-full bg-brand-500 transition-all"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-surface-500 tabular-nums">
+                {run.storesDone}/{run.storesTotal || "?"} locales · {run.productsUpserted} upserts ·{" "}
+                {new Date(run.startedAt).toLocaleString("es-AR")}
+              </p>
+              {run.errorMessage && (
+                <p className="text-[11px] text-red-400">{run.errorMessage}</p>
+              )}
+            </div>
           ) : (
             <p className="text-xs text-surface-500 mt-0.5">Todavía no corrió</p>
           )}
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => void startIngest()}
-        disabled={starting || status?.running}
-        className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2.5 transition-all"
-      >
-        {starting || status?.running ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-        {status?.running ? "Ingesta en curso…" : "Sincronizar ahora"}
-      </button>
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 min-h-[420px]">
+        <div className="rounded-xl border border-surface-800 bg-surface-950 flex flex-col overflow-hidden">
+          <div className="p-3 border-b border-surface-800 space-y-2">
+            <p className="text-xs font-semibold text-white flex items-center gap-1.5">
+              <Store className="w-3.5 h-3.5 text-brand-400" /> Locales ingeridos
+            </p>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
+              <input
+                value={storeQ}
+                onChange={(e) => setStoreQ(e.target.value)}
+                placeholder="Filtrar locales…"
+                className="w-full bg-surface-900 border border-surface-700 rounded-lg pl-8 pr-2 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {filteredStores.length === 0 ? (
+              <p className="text-xs text-surface-500 p-4 text-center">Sin locales todavía. Corré un sync.</p>
+            ) : (
+              filteredStores.map((s) => {
+                const selected = selectedStoreId === s.id;
+                return (
+                  <div
+                    key={s.id}
+                    className={`w-full text-left px-3 py-2.5 border-b border-surface-900 flex gap-2 items-start ${
+                      selected ? "bg-brand-600/10" : "hover:bg-surface-900/80"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedStoreId(s.id);
+                        setProdPage(1);
+                        setProdQ("");
+                      }}
+                      className="flex-1 min-w-0 text-left"
+                    >
+                      <p className="text-xs font-medium text-white truncate">{s.name}</p>
+                      <p className="text-[10px] text-surface-500 tabular-nums mt-0.5">
+                        {s.productCount} productos
+                        {s.neverSynced
+                          ? " · nunca sync"
+                          : ` · ${new Date(s.syncedAt).toLocaleString("es-AR")}`}
+                        {s.priceDivisor > 1 ? ` · ÷${s.priceDivisor}` : ""}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      title="Sincronizar este local"
+                      disabled={!!syncingStoreId || status?.running}
+                      onClick={() => void syncOneStore(s.id)}
+                      className="p-1.5 rounded-md text-surface-500 hover:text-white hover:bg-surface-800 disabled:opacity-40"
+                    >
+                      {syncingStoreId === s.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-surface-800 bg-surface-950 flex flex-col overflow-hidden">
+          {!selectedStoreId ? (
+            <div className="flex-1 flex items-center justify-center p-8 text-center">
+              <p className="text-xs text-surface-500">Elegí un local para ver su catálogo ingerido.</p>
+            </div>
+          ) : (
+            <>
+              <div className="p-3 border-b border-surface-800 flex flex-wrap items-center gap-2">
+                <div className="flex-1 min-w-[160px]">
+                  <p className="text-xs font-semibold text-white">{catalog?.store.name ?? "…"}</p>
+                  <p className="text-[10px] text-surface-500 tabular-nums">
+                    {catalog ? `${catalog.total} en catálogo` : ""}
+                    {catalog?.store.priceDivisor && catalog.store.priceDivisor > 1
+                      ? ` · precios ÷${catalog.store.priceDivisor}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
+                  <input
+                    value={prodQ}
+                    onChange={(e) => {
+                      setProdQ(e.target.value);
+                      setProdPage(1);
+                    }}
+                    placeholder="Buscar en este local…"
+                    className="w-52 bg-surface-900 border border-surface-700 rounded-lg pl-8 pr-2 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                {catalogLoading ? (
+                  <div className="flex justify-center py-16">
+                    <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                  </div>
+                ) : !catalog || catalog.products.length === 0 ? (
+                  <p className="text-xs text-surface-500 p-8 text-center">Sin productos en este local.</p>
+                ) : (
+                  <ul className="divide-y divide-surface-900">
+                    {catalog.products.map((p) => (
+                      <li key={p.id} className="px-3 py-2.5 flex gap-3 items-center">
+                        <div className="w-10 h-10 rounded-md bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+                          {p.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={proxyImg(p.imageUrl)} alt="" className="w-full h-full object-contain p-0.5" />
+                          ) : (
+                            <Store className="w-4 h-4 text-slate-400" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs text-surface-100 line-clamp-2 leading-snug">{p.name}</p>
+                          {p.categoryName && (
+                            <p className="text-[10px] text-surface-500 mt-0.5">{p.categoryName}</p>
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold text-emerald-400 tabular-nums flex-shrink-0">
+                          {formatARS(p.price)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {catalog && catalog.total > 40 && (
+                <div className="p-2 border-t border-surface-800 flex items-center justify-between">
+                  <button
+                    type="button"
+                    disabled={prodPage <= 1}
+                    onClick={() => setProdPage((p) => Math.max(1, p - 1))}
+                    className="p-1.5 rounded-md text-surface-400 hover:text-white disabled:opacity-30"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-[11px] text-surface-500 tabular-nums">
+                    Pág. {prodPage} / {Math.ceil(catalog.total / 40)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={prodPage >= Math.ceil(catalog.total / 40)}
+                    onClick={() => setProdPage((p) => p + 1)}
+                    className="p-1.5 rounded-md text-surface-400 hover:text-white disabled:opacity-30"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

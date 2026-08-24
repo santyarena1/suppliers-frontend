@@ -108,26 +108,24 @@ export function scoreRetailMatch(searchText: string, tokens: ScoredToken[]): Mat
 
 /**
  * ¿Pasa el umbral de relevancia?
- * Con tokens fuertes (raptor, cryo…) exigimos casi todos;
- * sin ellos, pedimos buena cobertura de la query.
+ * Exigimos señal de marca/modelo sin matar coincidencias parciales.
  */
 export function passesRelevanceGate(m: MatchScore, tokens: ScoredToken[]): boolean {
   if (tokens.length === 0 || m.hits === 0) return false;
 
   const strong = tokens.filter((t) => t.strong);
   if (strong.length >= 2) {
-    // Al menos 2 fuertes, o todos si hay pocos
-    const need = Math.min(strong.length, Math.max(2, Math.ceil(strong.length * 0.75)));
-    if (m.strongHits < need) return false;
-    return m.coverage >= 0.35 || m.strongHits === strong.length;
+    // Al menos 1 fuerte + algo más, o 2 fuertes
+    if (m.strongHits >= 2) return true;
+    if (m.strongHits >= 1 && m.hits >= 3) return true;
+    if (m.strongHits >= 1 && m.coverage >= 0.45) return true;
+    return false;
   }
 
   if (strong.length === 1) {
-    if (m.strongHits < 1) return false;
-    return m.hits >= 2 || tokens.length === 1;
+    return m.strongHits >= 1 && (m.hits >= 2 || tokens.length <= 2);
   }
 
-  // Solo tokens débiles: exigir la mayoría
-  const needHits = tokens.length >= 3 ? Math.ceil(tokens.length * 0.6) : tokens.length;
+  const needHits = tokens.length >= 3 ? Math.ceil(tokens.length * 0.5) : Math.max(1, tokens.length - 1);
   return m.hits >= needHits;
 }

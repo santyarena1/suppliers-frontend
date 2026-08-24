@@ -69,12 +69,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Referencias de precio de venta (locales)
 - **Método**: GET · POST (admin)
-- **Ruta**: `/retail/search?q=&take=` · `/retail/products/:id` · `/admin/retail/ingest` · `/admin/retail/ingest/status`
-- **Auth**: Bearer usuario · ingest solo ROLE_ADMIN
-- **Body / Params**: `q` búsqueda amplia (tokens flexibles) · ingest sin body
+- **Ruta**: `/retail/search?q=&take=` · `/retail/products/:id` · `/admin/retail/ingest` · `/admin/retail/ingest/status` · `/admin/retail/stores` · `/admin/retail/stores/:id/products` · `/admin/retail/stores/:id/ingest`
+- **Auth**: Bearer usuario · admin retail solo ROLE_ADMIN
+- **Body / Params**: `q` búsqueda · listado de productos de local con `q/page/take` · ingest sin body
 - **Respuesta esperada**: `{ query, tokens, results: [{ id, name, price, description, productUrl, imageUrl, categoryName, syncedAt, store: { name, logoUrl }, priceHistory: [...] }] }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo. Cron (timezone `America/Argentina/Buenos_Aires`): **cada 5 min de 06:00 a 20:55** un batch de tiendas más viejas (`RETAIL_INGEST_DAY_BATCH`, default 8); **cada hora de 21:00 a 05:00** un batch mayor (`RETAIL_INGEST_NIGHT_BATCH`, default 20). Admin “Sincronizar ahora” hace full. `RETAIL_INGEST_DISABLED=true` apaga el cron.
+- **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo. Cron (timezone `America/Argentina/Buenos_Aires`): **cada 5 min de 06:00 a 20:55** un batch de tiendas más viejas (`RETAIL_INGEST_DAY_BATCH`, default 8); **cada hora de 21:00 a 05:00** un batch mayor (`RETAIL_INGEST_NIGHT_BATCH`, default 20). Admin “Sincronizar todo” hace **full en background hasta terminar**; si hay un batch del cron, lo cancela al cerrar la tienda actual y encola el full. Progreso en `RetailIngestRun` (`storesDone/storesTotal`, `currentStoreName`, `heartbeatAt`). Ingesta más rápida: páginas de 100, upserts en paralelo, sin persistir `raw` del producto, historial limitado. `priceDivisor` por local corrige centavos (Multiplo). `RETAIL_INGEST_DISABLED=true` apaga el cron.
 
 ## Pendiente (futuro)
 

@@ -886,6 +886,8 @@ model RetailStore {
   name         String
   logoUrl      String?
   active       Boolean  @default(true)
+  /// Algunos locales publican centavos (*100). 100 = dividir al normalizar.
+  priceDivisor Int      @default(1)
   raw          Json?
   syncedAt     DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -910,6 +912,7 @@ model RetailProduct {
   /// Nombre normalizado en minúsculas sin acentos, para búsqueda amplia.
   searchText      String
   active          Boolean  @default(true)
+  /// Payload crudo omitido a propósito (pesado); no se persiste en ingest.
   raw             Json?
   syncedAt        DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -938,12 +941,17 @@ model RetailPriceHistory {
 }
 
 model RetailIngestRun {
-  id           String   @id @default(uuid())
-  startedAt    DateTime @default(now())
-  finishedAt   DateTime?
-  status       String   @default("RUNNING") // RUNNING | OK | ERROR
-  storesTotal  Int      @default(0)
-  storesDone   Int      @default(0)
-  productsUpserted Int  @default(0)
-  errorMessage String?
+  id               String   @id @default(uuid())
+  startedAt        DateTime @default(now())
+  finishedAt       DateTime?
+  /// RUNNING | OK | ERROR | CANCELLED
+  status           String   @default("RUNNING")
+  /// full | batch
+  mode             String   @default("full")
+  storesTotal      Int      @default(0)
+  storesDone       Int      @default(0)
+  productsUpserted Int      @default(0)
+  currentStoreName String?
+  heartbeatAt      DateTime @default(now())
+  errorMessage     String?
 }

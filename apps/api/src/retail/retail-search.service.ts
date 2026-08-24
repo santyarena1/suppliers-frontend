@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { isSaneRetailPrice, normalizeExternalPrice } from "./retail-price.util";
+import { coerceStoredRetailPrice, isSaneRetailPrice } from "./retail-price.util";
 import {
   extractSearchTokens,
   normalizeSearchText,
@@ -51,9 +51,8 @@ export class RetailSearchService {
       return { query, tokens: [], results: [], totalMatched: 0 };
     }
 
-    // Preferí tokens fuertes en el OR para no traer todo el catálogo de "cooler"/"rgb".
     const strong = tokenObjs.filter((t) => t.strong).map((t) => t.t);
-    const queryTokens = strong.length > 0 ? strong : tokens;
+    const queryTokens = [...new Set([...strong, ...tokens.slice(0, 4)])];
 
     const where: Prisma.RetailProductWhereInput = {
       active: true,
@@ -62,11 +61,13 @@ export class RetailSearchService {
       })),
     };
 
-    const poolSize = Math.min(Math.max(take * 10, 150), 600);
+    const poolSize = Math.min(Math.max(take * 12, 200), 800);
     const rows = await this.prisma.retailProduct.findMany({
       where,
       include: {
-        store: { select: { id: true, externalId: true, name: true, logoUrl: true } },
+        store: {
+          select: { id: true, externalId: true, name: true, logoUrl: true, priceDivisor: true },
+        },
       },
       take: poolSize,
     });
@@ -75,21 +76,20 @@ export class RetailSearchService {
       .map((row) => {
         const text = row.searchText || normalizeSearchText(row.name);
         const match = scoreRetailMatch(text, tokenObjs);
-        const price = normalizeExternalPrice(Number(row.price));
+        const price = coerceStoredRetailPrice(Number(row.price), row.store.priceDivisor ?? 1);
         return { row, match, price, score: match.score };
       })
       .filter((x) => passesRelevanceGate(x.match, tokenObjs))
       .filter((x) => isSaneRetailPrice(x.price))
       .sort((a, b) => b.score - a.score || a.price - b.price);
 
-    // Si hay matches fuertes, no rellenar con score bajo
     const topScore = scored[0]?.score ?? 0;
     const relevant =
-      topScore > 0
-        ? scored.filter((x) => x.score >= Math.max(topScore * 0.45, topScore - 20))
+      topScore > 0 && scored.length > take
+        ? scored.filter((x) => x.score >= topScore * 0.35)
         : scored;
 
-    const diversified = diversifyByStore(relevant, take, 3);
+    const diversified = diversifyByStore(relevant, take, 4);
 
     return {
       query,
@@ -107,7 +107,12 @@ export class RetailSearchService {
         categoryName: row.categoryName,
         syncedAt: row.syncedAt.toISOString(),
         score,
-        store: row.store,
+        store: {
+          id: row.store.id,
+          externalId: row.store.externalId,
+          name: row.store.name,
+          logoUrl: row.store.logoUrl,
+        },
       })),
     };
   }
@@ -116,7 +121,9 @@ export class RetailSearchService {
     const row = await this.prisma.retailProduct.findUnique({
       where: { id },
       include: {
-        store: { select: { id: true, externalId: true, name: true, logoUrl: true } },
+        store: {
+          select: { id: true, externalId: true, name: true, logoUrl: true, priceDivisor: true },
+        },
         priceHistory: {
           orderBy: { changedAt: "asc" },
           take: 60,
@@ -126,30 +133,37 @@ export class RetailSearchService {
     });
     if (!row || !row.active) throw new NotFoundException("Producto no encontrado");
 
+    const divisor = row.store.priceDivisor ?? 1;
     return {
       id: row.id,
       externalId: row.externalId,
       name: row.name,
       description: row.description,
-      price: normalizeExternalPrice(Number(row.price)),
+      price: coerceStoredRetailPrice(Number(row.price), divisor),
       currency: row.currency,
       productUrl: row.productUrl,
       imageUrl: row.imageUrl,
       categoryName: row.categoryName,
       syncedAt: row.syncedAt.toISOString(),
       score: 0,
-      store: row.store,
+      store: {
+        id: row.store.id,
+        externalId: row.store.externalId,
+        name: row.store.name,
+        logoUrl: row.store.logoUrl,
+      },
       priceHistory: row.priceHistory.map((h) => ({
         previousPrice:
-          h.previousPrice != null ? normalizeExternalPrice(Number(h.previousPrice)) : null,
-        price: normalizeExternalPrice(Number(h.price)),
+          h.previousPrice != null
+            ? coerceStoredRetailPrice(Number(h.previousPrice), divisor)
+            : null,
+        price: coerceStoredRetailPrice(Number(h.price), divisor),
         changedAt: h.changedAt.toISOString(),
       })),
     };
   }
 }
 
-/** Mezcla resultados para no saturar con un solo local. */
 function diversifyByStore<
   T extends { row: { id: string; store: { id: string } }; score: number }
 >(scored: T[], take: number, maxPerStoreFirstPass: number): T[] {
