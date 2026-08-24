@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
+  Eye,
+  EyeOff,
   Loader2,
   Search,
   Store,
   X,
-  ChevronRight,
 } from "lucide-react";
 import {
   LineChart,
@@ -26,6 +30,16 @@ import {
 } from "@/lib/api";
 import { formatARS, proxyImg } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
+import {
+  clearHiddenStoreIds,
+  loadHiddenStoreIds,
+  loadRememberHiddenStores,
+  loadRetailSort,
+  saveHiddenStoreIds,
+  saveRememberHiddenStores,
+  saveRetailSort,
+  type RetailSortKey,
+} from "@/lib/retailPanelPrefs";
 
 function simplifyQuery(name: string): string {
   return name
@@ -48,6 +62,24 @@ function timeAgo(iso: string): string {
   return `hace ${d}d`;
 }
 
+const SORT_OPTIONS: { value: RetailSortKey; label: string }[] = [
+  { value: "relevance", label: "Relevancia" },
+  { value: "price_asc", label: "Precio ↑" },
+  { value: "price_desc", label: "Precio ↓" },
+  { value: "store_asc", label: "Local A-Z" },
+];
+
+function sortHits(hits: RetailSearchHit[], sort: RetailSortKey): RetailSearchHit[] {
+  const arr = [...hits];
+  if (sort === "price_asc") return arr.sort((a, b) => a.price - b.price);
+  if (sort === "price_desc") return arr.sort((a, b) => b.price - a.price);
+  if (sort === "store_asc") {
+    return arr.sort((a, b) => a.store.name.localeCompare(b.store.name, "es") || a.price - b.price);
+  }
+  // relevance: API score desc, then price asc as tiebreak
+  return arr.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.price - b.price);
+}
+
 export default function SalePricePanel({
   open,
   onClose,
@@ -67,6 +99,21 @@ export default function SalePricePanel({
   const [tokens, setTokens] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const [sortBy, setSortBy] = useState<RetailSortKey>("relevance");
+  const [hiddenStoreIds, setHiddenStoreIds] = useState<string[]>([]);
+  const [rememberHidden, setRememberHidden] = useState(false);
+  const [storesOpen, setStoresOpen] = useState(false);
+  const prefsReady = useRef(false);
+  const activeSearchQ = useRef("");
+
+  useEffect(() => {
+    setSortBy(loadRetailSort());
+    const remember = loadRememberHiddenStores();
+    setRememberHidden(remember);
+    setHiddenStoreIds(remember ? loadHiddenStoreIds() : []);
+    prefsReady.current = true;
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -96,11 +143,55 @@ export default function SalePricePanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, q]);
 
+  function applyHidden(next: string[], persist: boolean) {
+    setHiddenStoreIds(next);
+    if (persist) saveHiddenStoreIds(next);
+  }
+
+  function toggleStoreHidden(storeId: string) {
+    setHiddenStoreIds((prev) => {
+      const next = prev.includes(storeId)
+        ? prev.filter((id) => id !== storeId)
+        : [...prev, storeId];
+      if (rememberHidden) saveHiddenStoreIds(next);
+      return next;
+    });
+  }
+
+  function setSort(next: RetailSortKey) {
+    setSortBy(next);
+    saveRetailSort(next);
+  }
+
+  function setRemember(on: boolean) {
+    setRememberHidden(on);
+    saveRememberHiddenStores(on);
+    if (on) {
+      saveHiddenStoreIds(hiddenStoreIds);
+    } else {
+      clearHiddenStoreIds();
+    }
+  }
+
   async function runSearch(query: string) {
+    const trimmed = query.trim();
+    if (!trimmed) return;
+
+    // Nueva búsqueda: si no se recuerda, limpia locales ocultos
+    if (
+      prefsReady.current &&
+      activeSearchQ.current &&
+      activeSearchQ.current.toLowerCase() !== trimmed.toLowerCase() &&
+      !rememberHidden
+    ) {
+      applyHidden([], false);
+    }
+    activeSearchQ.current = trimmed;
+
     setLoading(true);
     setError("");
     try {
-      const res = await retailApi.search(query, 60);
+      const res = await retailApi.search(trimmed, 60);
       setResults(res.data.results ?? []);
       setTokens(res.data.tokens ?? []);
       setTotalMatched(res.data.totalMatched ?? res.data.results?.length ?? 0);
@@ -114,12 +205,38 @@ export default function SalePricePanel({
     }
   }
 
+  const storesInResults = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; logoUrl: string | null; count: number }>();
+    for (const hit of results) {
+      const cur = map.get(hit.store.id);
+      if (cur) cur.count += 1;
+      else {
+        map.set(hit.store.id, {
+          id: hit.store.id,
+          name: hit.store.name,
+          logoUrl: hit.store.logoUrl,
+          count: 1,
+        });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [results]);
+
+  const visibleResults = useMemo(() => {
+    const hidden = new Set(hiddenStoreIds);
+    const filtered = results.filter((r) => !hidden.has(r.store.id));
+    return sortHits(filtered, sortBy);
+  }, [results, hiddenStoreIds, sortBy]);
+
   if (!open) return null;
 
-  const prices = results.map((r) => r.price).filter((n) => n > 0);
+  const prices = visibleResults.map((r) => r.price).filter((n) => n > 0);
   const min = prices.length ? Math.min(...prices) : null;
   const max = prices.length ? Math.max(...prices) : null;
-  const storeCount = new Set(results.map((r) => r.store.id)).size;
+  const storeCount = new Set(visibleResults.map((r) => r.store.id)).size;
+  const hiddenCount = hiddenStoreIds.filter((id) =>
+    storesInResults.some((s) => s.id === id),
+  ).length;
 
   return (
     <>
@@ -173,7 +290,117 @@ export default function SalePricePanel({
             </p>
           )}
 
-          {(min != null || results.length > 0) && (
+          <div className="mt-3 flex items-center gap-2">
+            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+              <ArrowUpDown className="w-3 h-3 text-surface-500 flex-shrink-0" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSort(e.target.value as RetailSortKey)}
+                className="w-full bg-surface-900 border border-surface-700 rounded-md px-2 py-1.5 text-[11px] text-surface-200 focus:outline-none focus:border-brand-500 cursor-pointer"
+                aria-label="Ordenar resultados"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStoresOpen((v) => !v)}
+              className={`flex items-center gap-1 text-[11px] font-medium px-2.5 py-1.5 rounded-md border transition-colors flex-shrink-0 ${
+                storesOpen || hiddenCount > 0
+                  ? "border-brand-500/40 bg-brand-600/10 text-brand-300"
+                  : "border-surface-700 text-surface-400 hover:text-surface-200"
+              }`}
+            >
+              <Store className="w-3 h-3" />
+              Locales
+              {hiddenCount > 0 && (
+                <span className="bg-brand-600 text-white rounded-full min-w-[1rem] h-4 px-1 flex items-center justify-center text-[9px] leading-none">
+                  {hiddenCount}
+                </span>
+              )}
+              <ChevronDown className={`w-3 h-3 transition-transform ${storesOpen ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+
+          {storesOpen && (
+            <div className="mt-2 rounded-lg border border-surface-800 bg-surface-900/70 p-2.5 space-y-2">
+              <label className="flex items-start gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberHidden}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="mt-0.5 rounded border-surface-600 bg-surface-800 text-brand-500 focus:ring-brand-500/30"
+                />
+                <span className="text-[11px] text-surface-300 leading-snug">
+                  Recordar locales ocultos entre búsquedas
+                  <span className="block text-[10px] text-surface-500 mt-0.5">
+                    Si está apagado, se reinician al buscar otra cosa.
+                  </span>
+                </span>
+              </label>
+
+              {storesInResults.length === 0 ? (
+                <p className="text-[10px] text-surface-500 px-0.5 py-1">
+                  Todavía no hay locales en estos resultados.
+                </p>
+              ) : (
+                <ul className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5">
+                  {storesInResults.map((store) => {
+                    const hidden = hiddenStoreIds.includes(store.id);
+                    return (
+                      <li key={store.id}>
+                        <button
+                          type="button"
+                          onClick={() => toggleStoreHidden(store.id)}
+                          className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                            hidden
+                              ? "bg-surface-950/80 text-surface-500"
+                              : "hover:bg-surface-800 text-surface-200"
+                          }`}
+                        >
+                          {store.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={proxyImg(store.logoUrl)}
+                              alt=""
+                              className={`w-4 h-4 object-contain rounded-sm flex-shrink-0 ${hidden ? "opacity-40" : ""}`}
+                            />
+                          ) : (
+                            <Store className={`w-3.5 h-3.5 flex-shrink-0 ${hidden ? "text-surface-600" : "text-surface-500"}`} />
+                          )}
+                          <span className={`text-[11px] truncate flex-1 ${hidden ? "line-through" : "font-medium"}`}>
+                            {store.name}
+                          </span>
+                          <span className="text-[10px] text-surface-600 tabular-nums">{store.count}</span>
+                          {hidden ? (
+                            <EyeOff className="w-3.5 h-3.5 text-surface-500 flex-shrink-0" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5 text-emerald-400/80 flex-shrink-0" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {hiddenStoreIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => applyHidden([], rememberHidden)}
+                  className="text-[10px] text-surface-400 hover:text-white"
+                >
+                  Mostrar todos los locales
+                </button>
+              )}
+            </div>
+          )}
+
+          {(min != null || visibleResults.length > 0 || results.length > 0) && (
             <p className="text-[11px] text-surface-300 mt-2">
               {min != null && (
                 <>
@@ -188,8 +415,9 @@ export default function SalePricePanel({
                 </>
               )}
               <span className="text-surface-400">
-                {results.length} mostrados
-                {totalMatched > results.length ? ` de ${totalMatched}` : ""}
+                {visibleResults.length} mostrados
+                {results.length !== visibleResults.length ? ` (${results.length - visibleResults.length} ocultos)` : ""}
+                {totalMatched > results.length ? ` · ${totalMatched} match` : ""}
                 {storeCount > 0 ? ` · ${storeCount} locales` : ""}
               </span>
             </p>
@@ -212,9 +440,21 @@ export default function SalePricePanel({
               minutos.
             </p>
           )}
+          {!loading && !error && results.length > 0 && visibleResults.length === 0 && (
+            <p className="text-xs text-surface-500 text-center py-8 px-4">
+              Todos los locales de estos resultados están ocultos.{" "}
+              <button
+                type="button"
+                onClick={() => applyHidden([], rememberHidden)}
+                className="text-brand-400 hover:text-brand-300 underline underline-offset-2"
+              >
+                Mostrar todos
+              </button>
+            </p>
+          )}
 
           {!loading &&
-            results.map((hit) => (
+            visibleResults.map((hit) => (
               <RetailHitCard
                 key={hit.id}
                 hit={hit}
