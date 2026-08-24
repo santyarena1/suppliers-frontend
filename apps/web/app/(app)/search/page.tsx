@@ -56,7 +56,7 @@ function SearchPage() {
   const retailer = useIsRetailer();
   const purchasePolicies = usePurchasePolicies();
   const searchable = myProviders.filter((p) => p.linked);
-  const anyOffline = searchable.some((p) => p.purchase?.acceptsOffline);
+  const anyOffline = searchable.some((p) => purchasePolicies[p.provider]?.acceptsOffline);
   const [showOfflinePrices, setShowOfflinePrices] = useState(false);
   const priceMode = retailer && showOfflinePrices ? "offline" as const : "list" as const;
   const [selectedProviders, setSelectedProviders] = useState<Set<Provider>>(new Set());

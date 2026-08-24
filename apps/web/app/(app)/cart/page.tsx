@@ -999,7 +999,7 @@ function ProviderSection({
         ))}
         {schemeGroups.map(({ scheme, items: grouped }) => (
           <div key={scheme.id} className="pt-3">
-            <p className="text-[11px] uppercase tracking-wider text-violet-300/80 mb-1">{scheme.name}</p>
+            <SchemeGroupHeader scheme={scheme} />
             {grouped.map((it) => (
               <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} />
             ))}
@@ -1020,6 +1020,55 @@ function ProviderSection({
         <CreateSchemeFromCart provider={provider} items={items} onClose={() => setCreateOpen(false)} />
       )}
     </section>
+  );
+}
+
+function SchemeGroupHeader({ scheme }: { scheme: CartScheme }) {
+  const { renameScheme, deleteScheme } = useCart();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(scheme.name);
+
+  function save() {
+    renameScheme(scheme.id, name);
+    setEditing(false);
+  }
+
+  return (
+    <div className="flex items-center gap-2 mb-1">
+      {editing ? (
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") {
+              setName(scheme.name);
+              setEditing(false);
+            }
+          }}
+          autoFocus
+          className="bg-surface-800 border border-violet-500/40 rounded px-2 py-0.5 text-[11px] text-violet-100 uppercase tracking-wider focus:outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-[11px] uppercase tracking-wider text-violet-300/80 hover:text-violet-100"
+          title="Renombrar esquema"
+        >
+          {scheme.name}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => deleteScheme(scheme.id)}
+        className="text-surface-600 hover:text-red-400"
+        title="Desarmar esquema (los productos quedan sueltos)"
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+    </div>
   );
 }
 

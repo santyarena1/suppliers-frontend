@@ -259,7 +259,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const deleteScheme = useCallback((id: string) => {
     setSchemes((prev) => prev.filter((s) => s.id !== id));
-    setItems((prev) => prev.filter((it) => it.schemeId !== id));
+    setItems((prev) => prev.map((it) => (it.schemeId === id ? { ...it, schemeId: null } : it)));
   }, []);
 
   const schemesFor = useCallback((provider: string) => schemes.filter((s) => s.provider === provider), [schemes]);
