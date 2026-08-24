@@ -32,6 +32,8 @@ import {
   Sparkles,
   TrendingUp,
   Check,
+  ChevronDown,
+  Store,
 } from "lucide-react";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
 
@@ -186,292 +188,282 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         )}
 
         {!loading && product && pricing && (
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-8">
-            {/* Bloque principal: todo menos locales */}
-            <div className="flex flex-col gap-8 order-1">
-            {/* Título a ancho completo */}
-            <div>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${color}`}>
-                  {providerName.replace(/_/g, " ")}
-                </span>
-                {product.brand && (
-                  <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200">
-                    {product.brand}
+          <>
+            {/* Todo el producto — sin locales */}
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${color}`}>
+                    {providerName.replace(/_/g, " ")}
                   </span>
-                )}
-                {(product.category || product.subcategory) && (
-                  <span className="text-xs text-surface-500">
-                    {[product.category, product.subcategory].filter(Boolean).join(" · ")}
-                  </span>
-                )}
-                <span className="font-mono text-xs text-surface-500">#{extId}</span>
-                <button
-                  type="button"
-                  onClick={copyId}
-                  className="inline-flex items-center gap-1 text-xs text-surface-500 hover:text-white transition-colors"
-                  title="Copiar ID"
-                >
-                  {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                  {copied ? "Copiado" : "Copiar"}
-                </button>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white leading-snug text-balance tracking-tight">
-                {product.name}
-              </h1>
-              {(product.stock != null || product.stockStatus) && (
-                <p className="mt-2 text-xs text-surface-400">
-                  {product.stock != null && (
-                    <span className={product.stock > 0 ? "text-emerald-400" : "text-amber-400"}>
-                      Stock: {product.stock}
+                  {product.brand && (
+                    <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200">
+                      {product.brand}
                     </span>
                   )}
-                  {product.stock != null && product.stockStatus ? (
-                    <span className="text-surface-600"> · </span>
-                  ) : null}
-                  {product.stockStatus && <span>{product.stockStatus}</span>}
-                </p>
-              )}
-            </div>
-
-            {/* Imagen + card de precios (en mobile: imagen arriba, card abajo) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
-              <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm order-1">
-                {product.imageUrl && !imgErr ? (
-                  <>
-                    <Image
-                      src={proxyImg(product.imageUrl, { trim: false })}
-                      alt={product.name}
-                      fill
-                      className="object-contain p-6 sm:p-8"
-                      unoptimized
-                      onError={() => setImgErr(true)}
-                      priority
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setZoom(true)}
-                      className="absolute top-3 right-3 bg-surface-950/80 hover:bg-surface-900 border border-surface-700 rounded-lg p-2 text-surface-300 hover:text-white transition-all"
-                      aria-label="Ampliar imagen"
-                    >
-                      <ZoomIn className="w-4 h-4" />
-                    </button>
-                  </>
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface-950 text-surface-600">
-                    {imgErr ? <ImageOff className="w-14 h-14" /> : <Package className="w-14 h-14" />}
-                    <span className="text-sm">Sin imagen disponible</span>
-                  </div>
+                  {(product.category || product.subcategory) && (
+                    <span className="text-xs text-surface-500">
+                      {[product.category, product.subcategory].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
+                  <span className="font-mono text-xs text-surface-500">#{extId}</span>
+                  <button
+                    type="button"
+                    onClick={copyId}
+                    className="inline-flex items-center gap-1 text-xs text-surface-500 hover:text-white transition-colors"
+                    title="Copiar ID"
+                  >
+                    {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {copied ? "Copiado" : "Copiar"}
+                  </button>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-snug text-balance tracking-tight">
+                  {product.name}
+                </h1>
+                {(product.stock != null || product.stockStatus) && (
+                  <p className="mt-2 text-xs text-surface-400">
+                    {product.stock != null && (
+                      <span className={product.stock > 0 ? "text-emerald-400" : "text-amber-400"}>
+                        Stock: {product.stock}
+                      </span>
+                    )}
+                    {product.stock != null && product.stockStatus ? (
+                      <span className="text-surface-600"> · </span>
+                    ) : null}
+                    {product.stockStatus && <span>{product.stockStatus}</span>}
+                  </p>
                 )}
               </div>
 
-              <aside className="order-2 flex flex-col gap-4 lg:sticky lg:top-16">
-                <div className="rounded-2xl border border-surface-800 bg-surface-900/80 overflow-hidden">
-                  <div className="px-5 pt-5 pb-4 border-b border-surface-800">
-                    <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">
-                      {withIva ? "Precio con impuestos" : "Precio sin impuestos"}
-                      {qty > 1 ? ` · ${qty} u.` : ""}
-                    </p>
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight">
-                        {currency === "USD" ? formatUSD(conv.amount) : formatARS(conv.amount)}
-                      </span>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
+                <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm">
+                  {product.imageUrl && !imgErr ? (
+                    <>
+                      <Image
+                        src={proxyImg(product.imageUrl, { trim: false })}
+                        alt={product.name}
+                        fill
+                        className="object-contain p-6 sm:p-8"
+                        unoptimized
+                        onError={() => setImgErr(true)}
+                        priority
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setZoom(true)}
+                        className="absolute top-3 right-3 bg-surface-950/80 hover:bg-surface-900 border border-surface-700 rounded-lg p-2 text-surface-300 hover:text-white transition-all"
+                        aria-label="Ampliar imagen"
+                      >
+                        <ZoomIn className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface-950 text-surface-600">
+                      {imgErr ? <ImageOff className="w-14 h-14" /> : <Package className="w-14 h-14" />}
+                      <span className="text-sm">Sin imagen disponible</span>
                     </div>
-                    {currency === "ARS" ? (
-                      <p className="text-sm text-surface-400 tabular-nums mt-1.5">
-                        {formatUSD(displayUSD)}
-                        {currentRate && (
-                          <>
-                            <span className="text-surface-600"> · </span>
-                            Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
-                          </>
-                        )}
+                  )}
+                </div>
+
+                <aside className="flex flex-col gap-4 lg:sticky lg:top-16">
+                  <div className="rounded-2xl border border-surface-800 bg-surface-900/80 overflow-hidden">
+                    <div className="px-5 pt-5 pb-4 border-b border-surface-800">
+                      <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">
+                        {withIva ? "Precio con impuestos" : "Precio sin impuestos"}
+                        {qty > 1 ? ` · ${qty} u.` : ""}
                       </p>
-                    ) : (
-                      unitConv.amount > 0 && (
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight">
+                          {currency === "USD" ? formatUSD(conv.amount) : formatARS(conv.amount)}
+                        </span>
+                      </div>
+                      {currency === "ARS" ? (
                         <p className="text-sm text-surface-400 tabular-nums mt-1.5">
-                          ≈ {formatARS(unitConv.amount)}
-                          {qty > 1 ? " c/u" : ""}
+                          {formatUSD(displayUSD)}
+                          {currentRate && (
+                            <>
+                              <span className="text-surface-600"> · </span>
+                              Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
+                            </>
+                          )}
                         </p>
-                      )
-                    )}
-                  </div>
-
-                  <div className="px-5 py-4 space-y-2.5 text-xs">
-                    <p className="text-[10px] uppercase tracking-wider text-surface-500 font-medium">
-                      Desglose de costo
-                    </p>
-
-                    <BreakdownRow
-                      label="Precio de lista (USD)"
-                      value={formatUSD(pricing.unitNet)}
-                      hint="Costo del proveedor"
-                    />
-                    {currentRate && (
-                      <BreakdownRow
-                        label={`Cotización · ${dollarLabel(dollarType)}`}
-                        value={`$${currentRate.venta.toLocaleString("es-AR")}`}
-                        hint="Tipo de cambio aplicado"
-                      />
-                    )}
-                    <BreakdownRow
-                      label="Costo en ARS (sin imp.)"
-                      value={formatARS(unitNetConv.amount)}
-                    />
-
-                    {taxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
-                      <BreakdownRow
-                        key={`${line.kind}-${line.label}`}
-                        label={`${line.label}${line.percent != null ? ` ${formatAlicuota(line.percent)}` : ""}`}
-                        value={`+ ${money(line.unitAmount)}`}
-                        muted
-                      />
-                    ))}
-                    {taxLines.every((l) => l.unitAmount <= 0.0001) && pricing.tax > 0 && (
-                      <BreakdownRow label={taxLabel(product)} value={`+ ${money(pricing.tax / qty)}`} muted />
-                    )}
-
-                    <div className="border-t border-surface-800 pt-2.5 mt-1">
-                      <BreakdownRow
-                        label="Costo unitario final"
-                        value={money(pricing.unitGross)}
-                        strong
-                      />
-                      {qty > 1 && (
-                        <BreakdownRow
-                          label={`Total × ${qty}`}
-                          value={money(pricing.gross)}
-                          strong
-                        />
+                      ) : (
+                        unitConv.amount > 0 && (
+                          <p className="text-sm text-surface-400 tabular-nums mt-1.5">
+                            ≈ {formatARS(unitConv.amount)}
+                            {qty > 1 ? " c/u" : ""}
+                          </p>
+                        )
                       )}
                     </div>
-                    <p className="text-[10px] text-surface-600 leading-relaxed pt-1">
-                      El desglose usa tu cotización y preferencias de impuestos. El margen vs locales
-                      se calcula sobre el costo sin impuestos.
-                    </p>
-                  </div>
 
-                  <div className="px-5 pb-5 space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs text-surface-400">Cantidad</span>
-                      <div className="flex items-center gap-0.5 bg-surface-800 border border-surface-700 rounded-lg p-0.5">
-                        <button
-                          type="button"
-                          onClick={() => setQty((q) => Math.max(1, q - 1))}
-                          className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <input
-                          type="number"
-                          value={qty}
-                          min={1}
-                          onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                          className="w-12 bg-transparent text-white text-sm font-semibold text-center focus:outline-none tabular-nums"
+                    <div className="px-5 py-4 space-y-2.5 text-xs">
+                      <p className="text-[10px] uppercase tracking-wider text-surface-500 font-medium">
+                        Desglose de costo
+                      </p>
+
+                      <BreakdownRow
+                        label="Precio de lista (USD)"
+                        value={formatUSD(pricing.unitNet)}
+                        hint="Costo del proveedor"
+                      />
+                      {currentRate && (
+                        <BreakdownRow
+                          label={`Cotización · ${dollarLabel(dollarType)}`}
+                          value={`$${currentRate.venta.toLocaleString("es-AR")}`}
+                          hint="Tipo de cambio aplicado"
                         />
-                        <button
-                          type="button"
-                          onClick={() => setQty((q) => q + 1)}
-                          className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
+                      )}
+                      <BreakdownRow
+                        label="Costo en ARS (sin imp.)"
+                        value={formatARS(unitNetConv.amount)}
+                      />
+
+                      {taxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
+                        <BreakdownRow
+                          key={`${line.kind}-${line.label}`}
+                          label={`${line.label}${line.percent != null ? ` ${formatAlicuota(line.percent)}` : ""}`}
+                          value={`+ ${money(line.unitAmount)}`}
+                          muted
+                        />
+                      ))}
+                      {taxLines.every((l) => l.unitAmount <= 0.0001) && pricing.tax > 0 && (
+                        <BreakdownRow label={taxLabel(product)} value={`+ ${money(pricing.tax / qty)}`} muted />
+                      )}
+
+                      <div className="border-t border-surface-800 pt-2.5 mt-1">
+                        <BreakdownRow
+                          label="Costo unitario final"
+                          value={money(pricing.unitGross)}
+                          strong
+                        />
+                        {qty > 1 && (
+                          <BreakdownRow
+                            label={`Total × ${qty}`}
+                            value={money(pricing.gross)}
+                            strong
+                          />
+                        )}
                       </div>
+                      <p className="text-[10px] text-surface-600 leading-relaxed pt-1">
+                        El desglose usa tu cotización y preferencias de impuestos. El margen vs locales
+                        se calcula sobre el costo sin impuestos.
+                      </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={addToCart}
-                      className="w-full bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-xl py-3 transition-all"
-                    >
-                      {addedFlash ? "Agregado al carrito" : `Agregar al carrito · ${qty}`}
-                    </button>
-                    {cartItem && (
-                      <p className="text-[11px] text-emerald-400 text-center">
-                        Ya tenés {cartItem.qty} en el carrito
-                      </p>
-                    )}
+                    <div className="px-5 pb-5 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs text-surface-400">Cantidad</span>
+                        <div className="flex items-center gap-0.5 bg-surface-800 border border-surface-700 rounded-lg p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => setQty((q) => Math.max(1, q - 1))}
+                            className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <input
+                            type="number"
+                            value={qty}
+                            min={1}
+                            onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            className="w-12 bg-transparent text-white text-sm font-semibold text-center focus:outline-none tabular-nums"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setQty((q) => q + 1)}
+                            className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={addToCart}
+                        className="w-full bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-xl py-3 transition-all"
+                      >
+                        {addedFlash ? "Agregado al carrito" : `Agregar al carrito · ${qty}`}
+                      </button>
+                      {cartItem && (
+                        <p className="text-[11px] text-emerald-400 text-center">
+                          Ya tenés {cartItem.qty} en el carrito
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => void searchSameName()}
-                  className="flex items-center justify-center gap-2 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-xl py-2.5 transition-all"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Buscar similares en otros proveedores
-                </button>
-              </aside>
-            </div>
+                  <button
+                    type="button"
+                    onClick={() => void searchSameName()}
+                    className="flex items-center justify-center gap-2 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-xl py-2.5 transition-all"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Buscar similares en otros proveedores
+                  </button>
+                </aside>
+              </div>
 
-            {(product.description || product.longDescription) && (
-              <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-                <h2 className="text-sm font-semibold text-white mb-3">Descripción</h2>
-                {product.description && (
-                  <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-                    {product.description}
-                  </p>
-                )}
-                {product.longDescription &&
-                  product.longDescription !== product.description && (
-                    <p className="text-sm text-surface-400 leading-relaxed whitespace-pre-wrap mt-3">
-                      {product.longDescription}
+              {(product.description || product.longDescription) && (
+                <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+                  <h2 className="text-sm font-semibold text-white mb-3">Descripción</h2>
+                  {product.description && (
+                    <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+                      {product.description}
                     </p>
                   )}
-              </section>
-            )}
-
-            {/* Datos técnicos en 2 columnas */}
-            <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
-
-            {/* Evolución de precio — debajo de lo técnico */}
-            <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-              <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-brand-400" />
-                Evolución de precio
-              </h2>
-              {priceHistory.length >= 2 ? (
-                <div className="h-56 sm:h-64">
-                  <PriceHistoryChart points={priceHistory} fillHeight />
-                </div>
-              ) : priceHistory.length === 1 ? (
-                <p className="text-xs text-surface-500 leading-relaxed">
-                  Hay un único precio registrado ({formatUSD(Number(priceHistory[0].price) || 0)}).
-                  El gráfico aparece cuando haya al menos un cambio en próximas sincronizaciones.
-                </p>
-              ) : (
-                <p className="text-xs text-surface-500 leading-relaxed">
-                  Todavía no hay variación registrada. El gráfico se arma cuando el precio cambie
-                  en próximas sincronizaciones.
-                </p>
+                  {product.longDescription &&
+                    product.longDescription !== product.description && (
+                      <p className="text-sm text-surface-400 leading-relaxed whitespace-pre-wrap mt-3">
+                        {product.longDescription}
+                      </p>
+                    )}
+                </section>
               )}
-            </section>
 
-            {related.length > 0 && (
-              <section>
+              <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
+
+              <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
                 <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-brand-400" />
-                  Relacionados
+                  <TrendingUp className="w-4 h-4 text-brand-400" />
+                  Evolución de precio
                 </h2>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {related.map((p, i) => (
-                    <RelatedCard key={`${p.provider}-${p.externalId}-${i}`} product={p} />
-                  ))}
-                </div>
+                {priceHistory.length >= 2 ? (
+                  <div className="h-56 sm:h-64">
+                    <PriceHistoryChart points={priceHistory} fillHeight />
+                  </div>
+                ) : priceHistory.length === 1 ? (
+                  <p className="text-xs text-surface-500 leading-relaxed">
+                    Hay un único precio registrado ({formatUSD(Number(priceHistory[0].price) || 0)}).
+                    El gráfico aparece cuando haya al menos un cambio en próximas sincronizaciones.
+                  </p>
+                ) : (
+                  <p className="text-xs text-surface-500 leading-relaxed">
+                    Todavía no hay variación registrada. El gráfico se arma cuando el precio cambie
+                    en próximas sincronizaciones.
+                  </p>
+                )}
               </section>
-            )}
+
+              {related.length > 0 && (
+                <section>
+                  <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-brand-400" />
+                    Relacionados
+                  </h2>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {related.map((p, i) => (
+                      <RelatedCard key={`${p.provider}-${p.externalId}-${i}`} product={p} />
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
 
-            {/* Locales: siempre al final (mobile y desktop) */}
-            <div className="order-last w-full pb-8">
-              <SalePricePanel
-                variant="inline"
-                seedQuery={product.name}
-                costUsd={pricing.unitNet}
-              />
-            </div>
-          </div>
+            {/* Locales: footer separado, siempre debajo de TODO el producto (mobile incluido) */}
+            <LocalesFooter seedQuery={product.name} costUsd={pricing.unitNet} />
+          </>
         )}
       </div>
 
@@ -501,6 +493,54 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         </div>
       )}
     </>
+  );
+}
+
+function LocalesFooter({
+  seedQuery,
+  costUsd,
+}: {
+  seedQuery: string;
+  costUsd: number;
+}) {
+  // En mobile arranca cerrado: la búsqueda de locales no invade el medio de la ficha.
+  // En desktop (lg+) siempre abierta.
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setOpen(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  return (
+    <section
+      id="precios-locales"
+      className="w-full border-t border-surface-800 bg-surface-950/80 mt-2"
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8 pb-16">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="lg:hidden w-full flex items-center justify-between gap-3 rounded-xl border border-surface-700 bg-surface-900 px-4 py-3.5 text-left"
+          aria-expanded={open}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <Store className="w-4 h-4 text-brand-400 flex-shrink-0" />
+            <span className="text-sm font-semibold text-white">Precios de venta en locales</span>
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        <div className={`${open ? "block mt-4 lg:mt-0" : "hidden"} lg:block`}>
+          <SalePricePanel variant="inline" seedQuery={seedQuery} costUsd={costUsd} active={open} />
+        </div>
+      </div>
+    </section>
   );
 }
 
