@@ -403,13 +403,6 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               </aside>
             </div>
 
-            {/* Referencia de mercado */}
-            <SalePricePanel
-              variant="inline"
-              seedQuery={product.name}
-              costUsd={pricing.unitNet}
-            />
-
             {(product.description || product.longDescription) && (
               <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
                 <h2 className="text-sm font-semibold text-white mb-3">Descripción</h2>
@@ -427,49 +420,31 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               </section>
             )}
 
-            {/* Meta + evolución */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-                <h2 className="text-sm font-semibold text-white mb-3">Datos del producto</h2>
-                <dl className="space-y-0">
-                  {productFacts(product, extId, providerName).map((row) => (
-                    <MetaRow key={row.label} label={row.label}>
-                      {row.href ? (
-                        <a
-                          href={row.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1"
-                        >
-                          {row.value} <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ) : (
-                        <span
-                          className={`text-xs text-surface-200 ${row.mono ? "font-mono" : ""} ${row.strongColor ?? ""}`}
-                        >
-                          {row.value}
-                        </span>
-                      )}
-                    </MetaRow>
-                  ))}
-                </dl>
-              </section>
+            {/* Datos técnicos en 2 columnas */}
+            <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
 
-              <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-                <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-brand-400" />
-                  Evolución de precio
-                </h2>
-                {priceHistory.length >= 2 ? (
-                  <PriceHistoryChart points={priceHistory} />
-                ) : (
-                  <p className="text-xs text-surface-500 leading-relaxed">
-                    Todavía no hay variación registrada. El gráfico se arma cuando el precio cambie
-                    en próximas sincronizaciones.
-                  </p>
-                )}
-              </section>
-            </div>
+            {/* Evolución de precio — debajo de lo técnico */}
+            <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+              <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-brand-400" />
+                Evolución de precio
+              </h2>
+              {priceHistory.length >= 2 ? (
+                <div className="h-56 sm:h-64">
+                  <PriceHistoryChart points={priceHistory} fillHeight />
+                </div>
+              ) : priceHistory.length === 1 ? (
+                <p className="text-xs text-surface-500 leading-relaxed">
+                  Hay un único precio registrado ({formatUSD(Number(priceHistory[0].price) || 0)}).
+                  El gráfico aparece cuando haya al menos un cambio en próximas sincronizaciones.
+                </p>
+              ) : (
+                <p className="text-xs text-surface-500 leading-relaxed">
+                  Todavía no hay variación registrada. El gráfico se arma cuando el precio cambie
+                  en próximas sincronizaciones.
+                </p>
+              )}
+            </section>
 
             {related.length > 0 && (
               <section>
@@ -484,6 +459,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 </div>
               </section>
             )}
+
+            {/* Referencia de mercado — al final */}
+            <SalePricePanel
+              variant="inline"
+              seedQuery={product.name}
+              costUsd={pricing.unitNet}
+            />
           </div>
         )}
       </div>
@@ -514,6 +496,62 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         </div>
       )}
     </>
+  );
+}
+
+function ProductFactsGrid({
+  product,
+  extId,
+  providerName,
+}: {
+  product: ProductDTO;
+  extId: string;
+  providerName: string;
+}) {
+  const facts = productFacts(product, extId, providerName);
+  if (facts.length === 0) return null;
+  const mid = Math.ceil(facts.length / 2);
+  const columns = [facts.slice(0, mid), facts.slice(mid)];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {columns.map((col, colIdx) => (
+        <section
+          key={colIdx}
+          className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5"
+        >
+          <h2
+            className={`text-sm font-semibold text-white mb-3 ${
+              colIdx === 1 ? "md:invisible md:select-none" : ""
+            }`}
+          >
+            {colIdx === 0 ? "Datos del producto" : "Más datos"}
+          </h2>
+          <dl className="space-y-0">
+            {col.map((row) => (
+              <MetaRow key={row.label} label={row.label}>
+                {row.href ? (
+                  <a
+                    href={row.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1"
+                  >
+                    {row.value} <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span
+                    className={`text-xs text-surface-200 ${row.mono ? "font-mono" : ""} ${row.strongColor ?? ""}`}
+                  >
+                    {row.value}
+                  </span>
+                )}
+              </MetaRow>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </div>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   isCentsBasedStore,
   isSaneRetailPrice,
   normalizeExternalPrice,
+  repairImplausibleRetailPrice,
 } from "./retail-price.util";
 import {
   extractSearchTokens,
@@ -24,18 +25,26 @@ describe("Multiplo centavos (últimos 2 dígitos)", () => {
     expect(normalizeExternalPrice(1218600000, 100)).toBe(12186000);
   });
 
-  it("corrige crudos viejos en DB sin doble-dividir pesos", () => {
+  it("corrige solo crudos enormes, no pesos mid-range", () => {
     expect(coerceStoredRetailPrice(37384476, 100)).toBeCloseTo(373844.76, 2);
-    expect(coerceStoredRetailPrice(1500000, 100)).toBe(15000);
-    // Ya normalizado
-    expect(coerceStoredRetailPrice(373844.76, 100)).toBeCloseTo(373844.76, 2);
+    // Gabinete ya en pesos: NO dividir (antes → 3405)
+    expect(coerceStoredRetailPrice(340500, 100)).toBe(340500);
     expect(coerceStoredRetailPrice(15000, 100)).toBe(15000);
+    expect(coerceStoredRetailPrice(373844.76, 100)).toBeCloseTo(373844.76, 2);
     expect(coerceStoredRetailPrice(12186000, 100)).toBe(12186000);
   });
 
-  it("detecta divisor por muestra", () => {
+  it("detecta divisor solo con mediana absurda", () => {
     expect(detectPriceDivisor([1.2e9, 1.1e9, 1.0e9, 9e8, 8e8])).toBe(100);
     expect(detectPriceDivisor([15000, 18000, 22000, 19000, 21000])).toBe(1);
+    // Catálogo ARS normal (≥100k) NO es centavos
+    expect(detectPriceDivisor([340500, 380000, 410000, 290000, 355000])).toBe(1);
+  });
+
+  it("repara falso ÷100 vs costo", () => {
+    expect(repairImplausibleRetailPrice(3405, 296_000)).toBe(340500);
+    expect(repairImplausibleRetailPrice(340500, 296_000)).toBe(340500);
+    expect(repairImplausibleRetailPrice(15000, 12000)).toBe(15000);
   });
 
   it("sanidad", () => {

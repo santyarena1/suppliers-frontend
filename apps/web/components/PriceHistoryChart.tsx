@@ -4,14 +4,21 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { PricePoint } from "@/lib/api";
 import { parsePrice } from "@/lib/format";
 
-export default function PriceHistoryChart({ points }: { points: PricePoint[] }) {
+export default function PriceHistoryChart({
+  points,
+  fillHeight = false,
+}: {
+  points: PricePoint[];
+  /** Usa altura del contenedor padre en vez de h-48 fijo */
+  fillHeight?: boolean;
+}) {
   const data = points.map((p) => ({
     date: new Date(p.capturedAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short" }),
-    price: parsePrice(p.price),
+    price: parsePrice(p.finalPrice ?? p.price),
   }));
 
   return (
-    <div className="h-48 -ml-2">
+    <div className={fillHeight ? "h-full -ml-2" : "h-48 -ml-2"}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />

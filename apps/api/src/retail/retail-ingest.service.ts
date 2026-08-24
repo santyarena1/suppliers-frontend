@@ -325,7 +325,8 @@ export class RetailIngestService implements OnModuleInit {
         name,
         logoUrl,
         active: true,
-        ...(cents ? { priceDivisor: 100 } : {}),
+        // Forzar divisor correcto: evita falsos positivos de detectPriceDivisor viejos
+        priceDivisor: cents ? 100 : 1,
         raw: store as object,
       },
     });
