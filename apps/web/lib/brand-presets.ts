@@ -186,7 +186,7 @@ export const BANNER_SLOT_RECOMMENDED: Record<
   strip: {
     width: 1920,
     height: 280,
-    hint: "Banda ancha debajo de todo el collage.",
+    hint: "Banda ancha debajo de todo el bento.",
   },
 };
 
