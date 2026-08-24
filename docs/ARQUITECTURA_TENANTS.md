@@ -154,17 +154,23 @@ En pantalla, siempre nombres normalizados. Nunca slugs ni claves internas.
 
 ## 6. Fases
 
+El aislamiento (3a–5) quedó cerrado en `docs/PLAN_AISLAMIENTO.md` y ya está
+en producción. Lo que falta del comercio está en `docs/PLAN_TIPO1.md` (visión
+a validar). Distribuidores, marcas, publicidad y chat no se arrancan hasta
+cerrar Tipo 1.
+
 | Fase | Contenido | Estado |
 |---|---|---|
 | 1 | Modelo de datos: `Tenant`, `TenantMembership`, `TenantLink`, `TenantAccessCode`, `ProductManagerScope`, campos de aprobación en `ProviderOrder`. | Hecho |
 | 2 | Superadmin: árbol de organizaciones, alta y edición de organizaciones y membresías, datos semilla de ejemplo. | Hecho |
-| 3a | Partir el catálogo: ficha del producto global, precio y stock por organización. Arregla el bug del markup compartido. | Pendiente |
-| 3b | Mover `Credential`, `ProviderSyncConfig`, `CartItem` y `ProviderOrder` de `userId` a `tenantId`. | Pendiente |
-| 3c | Organización y rol interno en el JWT, y guard de membresía además del guard de rol de plataforma. | Pendiente |
-| 3d | Filtrar la búsqueda por los `TenantLink` activos del comercio. | Pendiente |
-| 4 | Aprobación de órdenes end to end en la interfaz del comercio. | Pendiente |
-| 5 | Códigos y QR de vinculación: generación, canje anónimo y auditoría. | Pendiente |
-| 6 | Panel del distribuidor: cartera de clientes por vendedor, descuentos, resumen de órdenes. | Pendiente |
-| 7 | Panel de la marca: acciones comerciales dirigidas, objetivos y reportes. | Pendiente |
-| 8 | Publicidad paga y descubrimiento controlado. | Pendiente |
-| 9 | Chat entre comercio y vendedor del distribuidor. | Pendiente |
+| 3a | Ficha global, precio y stock por organización. | Hecho |
+| 3b | `Credential`, `ProviderSyncConfig`, `CartItem` y `ProviderOrder` por organización. | Hecho (el carrito de la web todavía no usa la API) |
+| 3c | Organización y rol interno en el JWT, más guard de membresía. | Hecho |
+| 3d | Búsqueda filtrada por `TenantLink`. | Hecho |
+| 4 | Aprobación de órdenes en la interfaz del comercio. | Hecho en API y `/pedidos`; la UI aún no distingue roles |
+| 5 | Códigos de vinculación: generación, canje anónimo y auditoría. | Hecho el código escrito. QR queda para Tipo 2 |
+| T1 | Cerrar el comercio: roles en pantalla, equipo propio, carrito en servidor. | Visión en `docs/PLAN_TIPO1.md` |
+| 6 | Panel del distribuidor: cartera por vendedor, descuentos, resumen de órdenes. | Después de Tipo 1 |
+| 7 | Panel de la marca: acciones comerciales, objetivos y reportes. | Después de Tipo 2 |
+| 8 | Publicidad paga y descubrimiento controlado. | Después de Tipo 2 |
+| 9 | Chat entre comercio y vendedor del distribuidor. | Después de Tipo 2 |
