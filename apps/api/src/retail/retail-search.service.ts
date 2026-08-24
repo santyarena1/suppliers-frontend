@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
-import { coerceStoredRetailPrice, isSaneRetailPrice } from "./retail-price.util";
+import { coerceStoredRetailPrice, isSaneRetailPrice, isCentsBasedStore, repairPricesAgainstPeers } from "./retail-price.util";
 import {
   extractSearchTokens,
   normalizeSearchText,
@@ -76,25 +76,35 @@ export class RetailSearchService {
       .map((row) => {
         const text = row.searchText || normalizeSearchText(row.name);
         const match = scoreRetailMatch(text, tokenObjs);
-        const price = coerceStoredRetailPrice(Number(row.price), row.store.priceDivisor ?? 1);
-        return { row, match, price, score: match.score };
+        const centsStore = isCentsBasedStore(row.store.name, row.store.externalId);
+        const price = coerceStoredRetailPrice(Number(row.price), row.store.priceDivisor ?? 1, {
+          storeName: row.store.name,
+          storeExternalId: row.store.externalId,
+        });
+        return { row, match, price, centsStore, score: match.score };
       })
-      .filter((x) => passesRelevanceGate(x.match, tokenObjs))
+      .filter((x) => passesRelevanceGate(x.match, tokenObjs));
+
+    const repairedPrices = repairPricesAgainstPeers(
+      scored.map((x) => ({ price: x.price, centsStore: x.centsStore }))
+    );
+    const withRepaired = scored
+      .map((x, i) => ({ ...x, price: repairedPrices[i] ?? x.price }))
       .filter((x) => isSaneRetailPrice(x.price))
       .sort((a, b) => b.score - a.score || a.price - b.price);
 
-    const topScore = scored[0]?.score ?? 0;
+    const topScore = withRepaired[0]?.score ?? 0;
     const relevant =
-      topScore > 0 && scored.length > take
-        ? scored.filter((x) => x.score >= topScore * 0.35)
-        : scored;
+      topScore > 0 && withRepaired.length > take
+        ? withRepaired.filter((x) => x.score >= topScore * 0.35)
+        : withRepaired;
 
     const diversified = diversifyByStore(relevant, take, 4);
 
     return {
       query,
       tokens,
-      totalMatched: scored.length,
+      totalMatched: withRepaired.length,
       results: diversified.map(({ row, score, price }) => ({
         id: row.id,
         externalId: row.externalId,
@@ -134,12 +144,13 @@ export class RetailSearchService {
     if (!row || !row.active) throw new NotFoundException("Producto no encontrado");
 
     const divisor = row.store.priceDivisor ?? 1;
+    const priceOpts = { storeName: row.store.name, storeExternalId: row.store.externalId };
     return {
       id: row.id,
       externalId: row.externalId,
       name: row.name,
       description: row.description,
-      price: coerceStoredRetailPrice(Number(row.price), divisor),
+      price: coerceStoredRetailPrice(Number(row.price), divisor, priceOpts),
       currency: row.currency,
       productUrl: row.productUrl,
       imageUrl: row.imageUrl,
@@ -155,9 +166,9 @@ export class RetailSearchService {
       priceHistory: row.priceHistory.map((h) => ({
         previousPrice:
           h.previousPrice != null
-            ? coerceStoredRetailPrice(Number(h.previousPrice), divisor)
+            ? coerceStoredRetailPrice(Number(h.previousPrice), divisor, priceOpts)
             : null,
-        price: coerceStoredRetailPrice(Number(h.price), divisor),
+        price: coerceStoredRetailPrice(Number(h.price), divisor, priceOpts),
         changedAt: h.changedAt.toISOString(),
       })),
     };

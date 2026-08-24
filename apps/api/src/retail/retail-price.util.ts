@@ -1,69 +1,74 @@
 /**
- * Normaliza precios crudos de la fuente externa.
- * Multiplo: los últimos 2 dígitos son siempre centavos → ÷100.
+ * Normalización de precios retail (Precio Líder).
+ *
+ * Hechos verificados contra la API en vivo:
+ * - Multiplo (id 31): publica centavos enteros (p.ej. 1_218_600_000 → $12.186.000).
+ * - El resto de locales publican pesos ARS (p.ej. gabinete 4500X ≈ 330_000–380_000).
+ *
+ * Un auto-detect viejo marcó varios locales como ÷100 y guardó precios /100
+ * (340_500 → 3_405). Por eso la precisión importa: NUNCA ÷100 fuera de Multiplo.
  */
 
-/** Tiendas que publican el precio en centavos (últimos 2 dígitos). */
+/** Solo Multiplo publica centavos. No inferir por muestra de precios. */
 export function isCentsBasedStore(name: string, externalId?: number): boolean {
   if (externalId === 31) return true;
-  return /multiplo/i.test(name.trim());
+  return /multiplo/i.test(String(name ?? "").trim());
 }
 
-/** Crudo → pesos. Con divisor 100: siempre /100 (últimos 2 = centavos). */
+/** Divisor efectivo: ignora priceDivisor viejo/errado en DB. */
+export function resolvePriceDivisor(name: string, externalId?: number): number {
+  return isCentsBasedStore(name, externalId) ? 100 : 1;
+}
+
+/** Crudo de la API → pesos ARS para persistir. */
 export function normalizeExternalPrice(precio: unknown, divisor = 1): number {
   const n = typeof precio === "number" ? precio : Number(precio);
   if (!Number.isFinite(n) || n <= 0) return 0;
 
-  if (divisor > 1) return n / divisor;
+  if (divisor > 1) return roundMoney(n / divisor);
 
-  // Fallback genérico: enteros absurdo ≥ 25M
-  if (Number.isInteger(n) && n >= 25_000_000) return n / 100;
+  // Safety net: crudo absurdo sin divisor (legado / Multiplo sin marcar)
+  if (Number.isInteger(n) && n >= 25_000_000) return roundMoney(n / 100);
   return n;
 }
 
 /**
  * Valor en DB → pesos para UI.
- * Solo corrige crudos legados claramente en centavos (≥25M).
- * No tocar 100k–5M: un gabinete ya en pesos (~340.000) se destruía a ~3.400.
+ * - Multiplo (divisor 100): solo ÷100 si el número sigue en escala de centavos crudos (≥25M).
+ * - Cualquier otro: nunca ÷100 por divisor de tienda (puede estar mal en DB).
  */
-export function coerceStoredRetailPrice(price: number, divisor = 1): number {
+export function coerceStoredRetailPrice(
+  price: number,
+  divisor = 1,
+  opts?: { storeName?: string; storeExternalId?: number }
+): number {
   if (!Number.isFinite(price) || price <= 0) return 0;
 
-  if (divisor > 1) {
-    if (isStillCentavosScale(price)) return price / divisor;
+  const cents = opts
+    ? isCentsBasedStore(opts.storeName ?? "", opts.storeExternalId)
+    : divisor > 1;
+
+  if (cents) {
+    if (Number.isInteger(price) && price >= 25_000_000) return roundMoney(price / 100);
     return price;
   }
 
-  if (Number.isInteger(price) && price >= 25_000_000) return price / 100;
+  // No-cents: si quedó un crudo absurdo (≥25M), corregir; si no, devolver tal cual.
+  if (Number.isInteger(price) && price >= 25_000_000) return roundMoney(price / 100);
   return price;
 }
 
 /**
- * ¿Sigue en escala de centavos crudos?
- * Multiplo crudo típico: 37_384_476, 1_218_600_000
- * Ya en pesos: 15_000, 373_844.76, 340_500, 12_186_000
- */
-function isStillCentavosScale(price: number): boolean {
-  if (!Number.isInteger(price)) return false;
-  // Entero enorme → casi seguro crudo (centavos pegados)
-  return price >= 25_000_000;
-}
-
-/**
- * Auto-detectar divisor solo con señal fuerte.
- * Precios ARS normales (100k–2M) NO son centavos — no marcar ÷100.
+ * @deprecated Solo tests / diagnóstico. NO usar en ingest: genera falsos positivos.
+ * Los catálogos ARS normales tienen enteros ≥100k (gabinetes, notebooks).
  */
 export function detectPriceDivisor(samplePrices: number[]): number {
   const prices = samplePrices.filter((p) => Number.isFinite(p) && p > 0);
   if (prices.length < 5) return 1;
 
-  const intRatio =
-    prices.filter((p) => Number.isInteger(p) || p === Math.floor(p)).length / prices.length;
-  if (intRatio < 0.85) return 1;
-
   const sorted = [...prices].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
-  // Solo medianes absurdas en escala de centavos (p.ej. 50M+ = $500k+)
+  // Solo medianes típicas de Multiplo (centavos de PCs armadas)
   if (median >= 50_000_000) return 100;
   return 1;
 }
@@ -75,8 +80,7 @@ export function isSaneRetailPrice(price: number): boolean {
 }
 
 /**
- * Si el precio quedó ~100× chico vs el costo (falso ÷100), lo recompone.
- * Útil cuando el divisor de la tienda quedó mal marcado en DB.
+ * Recompone un precio ~100× chico vs el costo de compra (falso ÷100).
  */
 export function repairImplausibleRetailPrice(
   saleArs: number,
@@ -86,8 +90,57 @@ export function repairImplausibleRetailPrice(
   if (costArs == null || !(costArs > 0)) return saleArs;
 
   const scaled = saleArs * 100;
-  const tooCheap = saleArs < costArs * 0.08;
-  const scaledPlausible = scaled >= costArs * 0.35 && scaled <= costArs * 4;
-  if (tooCheap && scaledPlausible) return scaled;
+  if (saleArs < costArs * 0.08 && scaled >= costArs * 0.35 && scaled <= costArs * 4) {
+    return roundMoney(scaled);
+  }
   return saleArs;
+}
+
+/**
+ * Dentro de un resultado de búsqueda: si un precio no-cents está ~100× bajo
+ * respecto a la mediana del resto, recompone ×100.
+ */
+export function repairPricesAgainstPeers(
+  items: { price: number; centsStore: boolean }[]
+): number[] {
+  const peerPrices = items
+    .filter((i) => !i.centsStore && i.price > 0)
+    .map((i) => i.price)
+    .sort((a, b) => a - b);
+
+  if (peerPrices.length < 3) return items.map((i) => i.price);
+
+  const median = peerPrices[Math.floor(peerPrices.length / 2)] ?? 0;
+  if (!(median > 0)) return items.map((i) => i.price);
+
+  return items.map((i) => {
+    if (i.centsStore || !(i.price > 0)) return i.price;
+    const scaled = i.price * 100;
+    const tooCheap = i.price < median * 0.05;
+    const scaledOk = scaled >= median * 0.25 && scaled <= median * 4;
+    if (tooCheap && scaledOk) return roundMoney(scaled);
+    return i.price;
+  });
+}
+
+/**
+ * ¿El catálogo de un local no-cents parece haber sido dividido por 100?
+ * Usa el tramo caro (top precios): en locales de PC suele ser ≥200k–millones.
+ * Tras un falso ÷100 el top queda en ~2k–50k.
+ */
+export function catalogLooksFalselyDivided(samplePrices: number[]): boolean {
+  const prices = samplePrices.filter((p) => Number.isFinite(p) && p > 0).sort((a, b) => b - a);
+  if (prices.length < 8) return false;
+
+  const top = prices.slice(0, Math.min(25, prices.length));
+  const mid = top[Math.floor(top.length / 2)] ?? 0;
+  if (!(mid > 0)) return false;
+
+  // Top-mediana demasiado baja para un local de hardware, pero ×100 vuelve a zona sana
+  const scaled = mid * 100;
+  return mid < 100_000 && scaled >= 200_000 && scaled <= 20_000_000;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
 }
