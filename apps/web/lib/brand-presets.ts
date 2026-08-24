@@ -99,6 +99,10 @@ export const BANNER_SLOTS = [
 
 export type BannerSlot = (typeof BANNER_SLOTS)[number]["value"];
 
+/**
+ * Clases legacy de grid (admin fallback / listas).
+ * El collage orgánico usa `BANNER_SLOT_COLLAGE`.
+ */
 export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
   hero_main: "md:col-span-2 md:row-span-2 min-h-[200px] md:min-h-[280px]",
   hero_side: "md:col-span-2 md:row-span-2 min-h-[200px] md:min-h-[280px]",
@@ -109,29 +113,74 @@ export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
   strip: "md:col-span-4 min-h-[100px]",
 };
 
-/** Medidas recomendadas (px) para que el recorte se vea nítido en el grid del buscador. */
+/**
+ * Collage en desktop: posiciones absolutas que se cruzan.
+ * En mobile se apilan con el mismo orden visual pero sin overlap extremo.
+ */
+export const BANNER_SLOT_COLLAGE: Record<
+  BannerSlot,
+  { desktop: string; mobile: string }
+> = {
+  hero_main: {
+    desktop:
+      "md:absolute md:left-0 md:top-0 md:w-[62%] md:h-[62%] md:z-[20] md:-rotate-2 md:rounded-[1.75rem]",
+    mobile: "relative w-full min-h-[180px] rounded-2xl -rotate-1 z-[20]",
+  },
+  hero_side: {
+    desktop:
+      "md:absolute md:right-[-1%] md:top-[6%] md:w-[46%] md:h-[54%] md:z-[28] md:rotate-[3deg] md:rounded-[1.5rem]",
+    mobile: "relative w-[92%] ml-auto min-h-[150px] rounded-2xl rotate-2 -mt-6 z-[28]",
+  },
+  tile_1: {
+    desktop:
+      "md:absolute md:left-[4%] md:top-[52%] md:w-[30%] md:h-[32%] md:z-[34] md:rotate-[4deg] md:rounded-2xl",
+    mobile: "relative w-[88%] min-h-[120px] rounded-2xl rotate-2 -mt-4 z-[34]",
+  },
+  tile_2: {
+    desktop:
+      "md:absolute md:left-[30%] md:top-[48%] md:w-[28%] md:h-[30%] md:z-[36] md:-rotate-[3deg] md:rounded-2xl",
+    mobile: "relative w-[90%] ml-auto min-h-[120px] rounded-2xl -rotate-2 -mt-5 z-[36]",
+  },
+  tile_3: {
+    desktop:
+      "md:absolute md:right-[18%] md:top-[50%] md:w-[26%] md:h-[28%] md:z-[32] md:rotate-[2deg] md:rounded-2xl",
+    mobile: "relative w-[86%] min-h-[110px] rounded-2xl rotate-1 -mt-4 z-[32]",
+  },
+  tile_4: {
+    desktop:
+      "md:absolute md:right-[2%] md:top-[56%] md:w-[24%] md:h-[26%] md:z-[38] md:-rotate-[4deg] md:rounded-2xl",
+    mobile: "relative w-[84%] ml-auto min-h-[110px] rounded-2xl -rotate-1 -mt-4 z-[38]",
+  },
+  strip: {
+    desktop:
+      "md:absolute md:left-[6%] md:bottom-0 md:w-[88%] md:h-[18%] md:z-[42] md:rotate-[-1deg] md:rounded-2xl",
+    mobile: "relative w-full min-h-[88px] rounded-2xl -rotate-1 -mt-3 z-[42]",
+  },
+};
+
+/** Medidas recomendadas (px) para que el recorte se vea nítido en el collage. */
 export const BANNER_SLOT_RECOMMENDED: Record<
   BannerSlot,
   { width: number; height: number; hint: string }
 > = {
   hero_main: {
-    width: 1200,
-    height: 700,
-    hint: "Ocupa 2×2 del grid. Preferí horizontal amplio.",
+    width: 1400,
+    height: 900,
+    hint: "Pieza grande que se cruza con el hero lateral. Preferí horizontal amplio.",
   },
   hero_side: {
-    width: 1200,
-    height: 700,
-    hint: "Misma proporción que el hero principal (lado derecho).",
+    width: 1000,
+    height: 900,
+    hint: "Se solapa arriba a la derecha del hero principal.",
   },
-  tile_1: { width: 600, height: 300, hint: "Tile chico 2:1." },
-  tile_2: { width: 600, height: 300, hint: "Tile chico 2:1." },
-  tile_3: { width: 600, height: 300, hint: "Tile chico 2:1." },
-  tile_4: { width: 600, height: 300, hint: "Tile chico 2:1." },
+  tile_1: { width: 700, height: 520, hint: "Tile inferior izquierdo, levemente girado." },
+  tile_2: { width: 680, height: 500, hint: "Tile central, se cruza con tile 1 y 3." },
+  tile_3: { width: 640, height: 480, hint: "Tile medio-derecho." },
+  tile_4: { width: 600, height: 460, hint: "Tile derecho, el más alto en el stack." },
   strip: {
     width: 1920,
-    height: 240,
-    hint: "Banda full width debajo del grid.",
+    height: 320,
+    hint: "Banda inferior que cruza por encima de los tiles.",
   },
 };
 
