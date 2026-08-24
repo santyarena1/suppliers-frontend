@@ -609,6 +609,7 @@ function RetailHitCard({
   best?: boolean;
 }) {
   const [imgErr, setImgErr] = useState(false);
+  const [logoErr, setLogoErr] = useState(false);
   const matchLabel = `${Math.round(matchRatio * 100)}% match`;
 
   return (
@@ -621,13 +622,15 @@ function RetailHitCard({
           : "border-surface-800 bg-surface-900/80 hover:border-surface-600 hover:bg-surface-900"
       }`}
     >
-      <div className="w-14 h-14 rounded-lg bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
+      <div className="w-14 h-14 rounded-lg bg-white flex-shrink-0 overflow-hidden flex items-center justify-center border border-surface-200/20">
         {hit.imageUrl && !imgErr ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={proxyImg(hit.imageUrl)}
+            src={proxyImg(hit.imageUrl, { trim: false })}
             alt=""
-            className="w-full h-full object-contain p-1"
+            className="w-full h-full object-contain p-1.5"
+            loading="lazy"
+            decoding="async"
             onError={() => setImgErr(true)}
           />
         ) : (
@@ -637,12 +640,15 @@ function RetailHitCard({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-1">
-          {hit.store.logoUrl ? (
+          {hit.store.logoUrl && !logoErr ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={proxyImg(hit.store.logoUrl)}
+              src={proxyImg(hit.store.logoUrl, { trim: false })}
               alt=""
-              className="w-4 h-4 object-contain rounded-sm"
+              className="w-4 h-4 object-contain rounded-sm bg-white/90 p-px"
+              loading="lazy"
+              decoding="async"
+              onError={() => setLogoErr(true)}
             />
           ) : (
             <Store className="w-3.5 h-3.5 text-surface-500" />
