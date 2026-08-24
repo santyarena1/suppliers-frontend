@@ -81,16 +81,21 @@ function sortHits(hits: RetailSearchHit[], sort: RetailSortKey): RetailSearchHit
 }
 
 export default function SalePricePanel({
-  open,
+  open = true,
   onClose,
   seedQuery,
   costUsd,
+  variant = "drawer",
 }: {
-  open: boolean;
-  onClose: () => void;
+  open?: boolean;
+  onClose?: () => void;
   seedQuery: string;
   costUsd?: number | null;
+  /** drawer = panel lateral (cards); inline = sección en la ficha de producto */
+  variant?: "drawer" | "inline";
 }) {
+  const inline = variant === "inline";
+  const active = inline || open;
   const initial = useMemo(() => simplifyQuery(seedQuery), [seedQuery]);
   const [q, setQ] = useState(initial);
   const [loading, setLoading] = useState(false);
@@ -100,14 +105,22 @@ export default function SalePricePanel({
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const [sortBy, setSortBy] = useState<RetailSortKey>("relevance");
-  const [hiddenStoreIds, setHiddenStoreIds] = useState<string[]>([]);
-  const [rememberHidden, setRememberHidden] = useState(false);
+  const [sortBy, setSortBy] = useState<RetailSortKey>(() =>
+    typeof window !== "undefined" ? loadRetailSort() : "relevance",
+  );
+  const [hiddenStoreIds, setHiddenStoreIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    return loadRememberHiddenStores() ? loadHiddenStoreIds() : [];
+  });
+  const [rememberHidden, setRememberHidden] = useState(() =>
+    typeof window !== "undefined" ? loadRememberHiddenStores() : false,
+  );
   const [storesOpen, setStoresOpen] = useState(false);
-  const prefsReady = useRef(false);
+  const prefsReady = useRef(typeof window !== "undefined");
   const activeSearchQ = useRef("");
 
   useEffect(() => {
+    if (prefsReady.current) return;
     setSortBy(loadRetailSort());
     const remember = loadRememberHiddenStores();
     setRememberHidden(remember);
@@ -116,32 +129,32 @@ export default function SalePricePanel({
   }, []);
 
   useEffect(() => {
-    if (open) {
+    if (active) {
       setQ(simplifyQuery(seedQuery));
       setSelectedId(null);
     }
-  }, [open, seedQuery]);
+  }, [active, seedQuery]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!active || inline) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (selectedId) setSelectedId(null);
-        else onClose();
+        else onClose?.();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, selectedId]);
+  }, [active, inline, onClose, selectedId]);
 
   useEffect(() => {
-    if (!open || !q.trim()) return;
+    if (!active || !q.trim()) return;
     const handle = setTimeout(() => {
       void runSearch(q);
     }, 280);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, q]);
+  }, [active, q]);
 
   function applyHidden(next: string[], persist: boolean) {
     setHiddenStoreIds(next);
@@ -228,7 +241,7 @@ export default function SalePricePanel({
     return sortHits(filtered, sortBy);
   }, [results, hiddenStoreIds, sortBy]);
 
-  if (!open) return null;
+  if (!active) return null;
 
   const prices = visibleResults
     .map((r) => r.price)
@@ -240,34 +253,28 @@ export default function SalePricePanel({
     storesInResults.some((s) => s.id === id),
   ).length;
 
-  return (
-    <>
-      <button
-        type="button"
-        aria-label="Cerrar"
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px]"
-        onClick={onClose}
-      />
-
-      {/* min-h-0 + h-full: sin esto flex-1 overflow-y-auto no scrollea */}
-      <aside className="fixed z-50 inset-x-0 bottom-0 h-[88vh] max-h-[88vh] rounded-t-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:h-full md:max-h-none md:w-[420px] md:rounded-none md:border-l md:border-t-0 md:border-b-0">
-        <header className="flex-shrink-0 border-b border-surface-800 px-4 py-3">
+  const toolbar = (
+        <header className={`flex-shrink-0 ${inline ? "" : "border-b border-surface-800 px-4 py-3"}`}>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-white">Precios de venta encontrados</p>
-              <p className="text-[11px] text-surface-400 mt-1 leading-relaxed">
+              <p className={`font-semibold text-white ${inline ? "text-base" : "text-sm"}`}>
+                Precios de venta en locales
+              </p>
+              <p className="text-[11px] text-surface-400 mt-1 leading-relaxed max-w-3xl">
                 Referencia de mercado en locales de computación. Sirve para estimar a cuánto se
                 vende el producto afuera y calcular margen. No es tu precio de compra ni una oferta
                 de NODO.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="text-surface-500 hover:text-white p-1 rounded-md flex-shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {!inline && (
+              <button
+                type="button"
+                onClick={() => onClose?.()}
+                className="text-surface-500 hover:text-white p-1 rounded-md flex-shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           <form
@@ -425,8 +432,13 @@ export default function SalePricePanel({
             </p>
           )}
         </header>
+  );
 
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 space-y-2 touch-pan-y">
+  const body = (
+        <div className={inline
+          ? "mt-4"
+          : "flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y"
+        }>
           {loading && (
             <div className="flex justify-center py-10">
               <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
@@ -455,15 +467,54 @@ export default function SalePricePanel({
             </p>
           )}
 
-          {!loading &&
-            visibleResults.map((hit) => (
-              <RetailHitCard
-                key={hit.id}
-                hit={hit}
-                onOpen={() => setSelectedId(hit.id)}
-              />
-            ))}
+          {!loading && visibleResults.length > 0 && (
+            <div className={inline
+              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+              : "space-y-2"
+            }>
+              {visibleResults.map((hit) => (
+                <RetailHitCard
+                  key={hit.id}
+                  hit={hit}
+                  onOpen={() => setSelectedId(hit.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
+  );
+
+  if (inline) {
+    return (
+      <>
+        <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
+          {toolbar}
+          {body}
+        </section>
+        {selectedId && (
+          <RetailDetailModal
+            productId={selectedId}
+            costUsd={costUsd}
+            onClose={() => setSelectedId(null)}
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Cerrar"
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px]"
+        onClick={() => onClose?.()}
+      />
+
+      {/* min-h-0 + h-full: sin esto flex-1 overflow-y-auto no scrollea */}
+      <aside className="fixed z-50 inset-x-0 bottom-0 h-[88vh] max-h-[88vh] rounded-t-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:h-full md:max-h-none md:w-[420px] md:rounded-none md:border-l md:border-t-0 md:border-b-0">
+        {toolbar}
+        {body}
       </aside>
 
       {selectedId && (
