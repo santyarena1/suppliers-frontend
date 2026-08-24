@@ -14,7 +14,8 @@ export function formatUSD(n: number): string {
   return new Intl.NumberFormat("es-AR", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
 }
 
-export function proxyImg(url: string | undefined | null): string {
+export function proxyImg(url: string | undefined | null, opts?: { trim?: boolean }): string {
   if (!url) return "";
-  return `/img-proxy?url=${encodeURIComponent(url)}`;
+  const trim = opts?.trim === false ? "&trim=0" : "";
+  return `/img-proxy?url=${encodeURIComponent(url)}${trim}`;
 }
