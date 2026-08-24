@@ -626,8 +626,9 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
         <h2 className="text-sm font-semibold text-white mb-1">Precios de venta (referencia)</h2>
         <p className="text-xs text-surface-500 leading-relaxed">
           Catálogo de precios de venta en locales, usado como referencia de mercado en el buscador
-          (botón $ en cada producto). Se actualiza solo en segundo plano; los usuarios nunca pegan
-          en vivo a la fuente externa.
+          (botón $ en cada producto). Se actualiza solo en segundo plano: cada 5 min de 6 a 21 hs
+          (Argentina) y cada 1 h de noche, por tandas de locales. Los usuarios nunca pegan en vivo
+          a la fuente externa.
         </p>
       </div>
 
