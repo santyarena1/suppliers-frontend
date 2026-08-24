@@ -7,6 +7,8 @@ import { useToast } from "@/components/brands/useToast";
 import RoleGuard from "@/components/RoleGuard";
 import { BRAND_PANEL_NAV } from "@/lib/brands/nav";
 import { brandPanelApi, type BrandAccount } from "@/lib/brands";
+import { assetsApi } from "@/lib/api";
+import { assetUrl } from "@/lib/assets";
 import { Loader2, Upload } from "lucide-react";
 
 export default function MarcaPerfilPage() {
@@ -52,8 +54,9 @@ export default function MarcaPerfilPage() {
 
   async function uploadLogo(file: File) {
     try {
-      const { logoUrl } = await brandPanelApi.uploadLogo(file);
-      setProfile((p) => p ? { ...p, logoUrl } : p);
+      const { url } = await assetsApi.upload(file);
+      const updated = await brandPanelApi.updateProfile({ logoUrl: url });
+      setProfile(updated);
       showToast("Logo actualizado");
     } catch { showToast("Error al subir logo", false); }
   }
@@ -65,7 +68,7 @@ export default function MarcaPerfilPage() {
           <form onSubmit={save} className="max-w-xl space-y-5">
             <div className="flex items-center gap-4">
               {profile.logoUrl ? (
-                <img src={profile.logoUrl} alt="" className="w-20 h-20 rounded-xl object-contain bg-white/5 border border-surface-700" />
+                <img src={assetUrl(profile.logoUrl)} alt="" className="w-20 h-20 rounded-xl object-contain bg-white/5 border border-surface-700" />
               ) : (
                 <div className="w-20 h-20 rounded-xl bg-surface-800 border border-surface-700" />
               )}

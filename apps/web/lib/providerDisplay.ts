@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { catalogApi, ProviderDisplay } from "./api";
 import { PROVIDER_TEXT_COLOR } from "./providerColors";
+import { assetUrl } from "./assets";
 
 let cache: Record<string, ProviderDisplay> | null = null;
 let inflight: Promise<Record<string, ProviderDisplay>> | null = null;
@@ -42,7 +43,10 @@ export function useProviderDisplay() {
   }, []);
 
   return {
-    logoUrl: (provider: string): string | null => map[provider]?.logoUrl ?? null,
+    logoUrl: (provider: string): string | null => {
+      const raw = map[provider]?.logoUrl ?? null;
+      return raw ? assetUrl(raw) : null;
+    },
     textColor: (provider: string): string | null => map[provider]?.textColor ?? null,
     /** Clase Tailwind de fallback si no hay color custom cargado. */
     fallbackClass: (provider: string): string => PROVIDER_TEXT_COLOR[provider] || "text-surface-400",

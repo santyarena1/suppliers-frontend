@@ -18,6 +18,7 @@ import { ProvidersModule } from "./providers/providers.module";
 import { AdminModule } from "./admin/admin.module";
 import { TenantsModule } from "./tenants/tenants.module";
 import { RetailModule } from "./retail/retail.module";
+import { AssetsModule } from "./assets/assets.module";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { RetailModule } from "./retail/retail.module";
     AdminModule,
     TenantsModule,
     RetailModule,
+    AssetsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

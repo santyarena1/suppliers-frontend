@@ -96,6 +96,11 @@ export async function uploadAuthedFile(path: string, file: File, extra?: Record<
   return body.data ?? body;
 }
 
+export const assetsApi = {
+  upload: (file: File) =>
+    uploadAuthedFile("/assets/upload", file) as Promise<{ url: string }>,
+};
+
 // --- Types ---
 export type Provider =
   | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE"

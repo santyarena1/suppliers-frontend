@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Banner } from "@/lib/api";
 import { BANNER_SLOT_GRID_CLASS, type BannerSlot } from "@/lib/brand-presets";
+import { assetUrl } from "@/lib/assets";
 
 const SLOT_ORDER: BannerSlot[] = [
   "hero_main", "hero_side", "tile_1", "tile_2", "tile_3", "tile_4", "strip",
@@ -15,7 +16,7 @@ function BannerTile({ banner }: { banner: Banner }) {
     <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={banner.imageUrl}
+        src={assetUrl(banner.imageUrl)}
         alt={banner.title || "Promoción"}
         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
       />

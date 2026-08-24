@@ -79,11 +79,11 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 ## Pendiente (futuro)
 
 
-### [FEATURE] Upload de imágenes para banners
+### [FEATURE] Upload de imágenes (assets)
 - **Método**: POST
-- **Ruta**: `/admin/banners/upload`
-- **Auth**: Bearer admin
-- **Body / Params**: `multipart file`
-- **Respuesta esperada**: `{ imageUrl: string }`
-- **Estado**: PENDIENTE
-- **Notas**: Hoy los banners usan URL externa de imagen.
+- **Ruta**: `/assets/upload`
+- **Auth**: Bearer token requerido (cualquier usuario autenticado)
+- **Body / Params**: `multipart/form-data` con campo `file` (imagen JPEG, PNG, WebP, GIF o SVG, máx. 5 MB)
+- **Respuesta esperada**: `{ url: "/uploads/<uuid>.ext" }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Los archivos se sirven en `GET /uploads/<filename>` (público, sin auth). Banners y logos aceptan URL externa o path `/uploads/...`.
