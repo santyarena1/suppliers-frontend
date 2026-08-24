@@ -174,8 +174,30 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
 
         {!loading && product && pricing && (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-            {/* Hero: galería + compra */}
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)] gap-6 lg:gap-8 items-start">
+            {/* Título a ancho completo */}
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${color}`}>
+                  {providerName.replace(/_/g, " ")}
+                </span>
+                <span className="font-mono text-xs text-surface-500">#{extId}</span>
+                <button
+                  type="button"
+                  onClick={copyId}
+                  className="inline-flex items-center gap-1 text-xs text-surface-500 hover:text-white transition-colors"
+                  title="Copiar ID"
+                >
+                  {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  {copied ? "Copiado" : "Copiar"}
+                </button>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white leading-snug text-balance tracking-tight">
+                {product.name}
+              </h1>
+            </div>
+
+            {/* Imagen + card de precios */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
               <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm">
                 {product.imageUrl && !imgErr ? (
                   <>
@@ -203,34 +225,9 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                     <span className="text-sm">Sin imagen disponible</span>
                   </div>
                 )}
-                <span className={`absolute top-3 left-3 text-[10px] font-bold px-2 py-1 rounded-md border backdrop-blur-sm ${color}`}>
-                  {providerName.replace(/_/g, " ")}
-                </span>
               </div>
 
               <aside className="lg:sticky lg:top-16 flex flex-col gap-4">
-                <div>
-                  <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border mb-2 ${color}`}>
-                    {providerName.replace(/_/g, " ")}
-                  </span>
-                  <h1 className="text-xl sm:text-2xl font-bold text-white leading-snug text-balance tracking-tight">
-                    {product.name}
-                  </h1>
-                  <div className="mt-2 flex items-center gap-2 text-xs text-surface-500">
-                    <span className="font-mono">#{extId}</span>
-                    <button
-                      type="button"
-                      onClick={copyId}
-                      className="inline-flex items-center gap-1 text-surface-500 hover:text-white transition-colors"
-                      title="Copiar ID"
-                    >
-                      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      {copied ? "Copiado" : "Copiar"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Precio + desglose */}
                 <div className="rounded-2xl border border-surface-800 bg-surface-900/80 overflow-hidden">
                   <div className="px-5 pt-5 pb-4 border-b border-surface-800">
                     <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">
