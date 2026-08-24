@@ -384,6 +384,7 @@ export interface BrandProfileInput {
   contactEmail?: string;
   contactPhone?: string;
   website?: string;
+  logoUrl?: string;
 }
 
 export interface AdminBrandInput {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { catalogApi, type ProviderDisplay } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
+import { assetUrl } from "@/lib/assets";
 
 /**
  * Solo los proveedores del comercio: la tira de logos no puede delatar quién más
@@ -46,7 +47,7 @@ export default function PartnerCarousel() {
               {p.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={p.logoUrl}
+                  src={assetUrl(p.logoUrl)}
                   alt={p.name}
                   className="h-8 w-auto max-w-[120px] object-contain object-left grayscale hover:grayscale-0 transition-all"
                 />

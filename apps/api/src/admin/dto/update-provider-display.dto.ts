@@ -1,4 +1,5 @@
-import { IsBoolean, IsOptional, IsString, IsUrl, Matches } from "class-validator";
+import { IsBoolean, IsOptional, IsString, Matches } from "class-validator";
+import { IsImageUrlOrUploadPath } from "../../common/validators/image-url.validator";
 
 export class UpdateProviderDisplayDto {
   @IsOptional()
@@ -6,7 +7,7 @@ export class UpdateProviderDisplayDto {
   visible?: boolean;
 
   @IsOptional()
-  @IsUrl({}, { message: "logoUrl debe ser una URL válida" })
+  @IsImageUrlOrUploadPath({ message: "logoUrl debe ser una URL válida o un path /uploads/..." })
   logoUrl?: string;
 
   @IsOptional()

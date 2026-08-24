@@ -5,6 +5,9 @@ import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
 import helmet from "@fastify/helmet";
 import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
+import { existsSync, mkdirSync } from "fs";
+import { join } from "path";
 import { AppModule } from "./app.module";
 
 /**
@@ -26,6 +29,14 @@ async function bootstrap() {
 
   await app.register(helmet as any);
   await app.register(multipart as any, { limits: { fileSize: 20 * 1024 * 1024 } });
+
+  const uploadsRoot = join(process.cwd(), "uploads");
+  if (!existsSync(uploadsRoot)) mkdirSync(uploadsRoot, { recursive: true });
+  await app.register(fastifyStatic as any, {
+    root: uploadsRoot,
+    prefix: "/uploads/",
+    decorateReply: false,
+  });
 
   const allowedOrigins = (config.get<string>("CORS_ORIGIN") ?? "http://localhost:3000")
     .split(",")

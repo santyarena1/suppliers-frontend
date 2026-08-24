@@ -10,6 +10,7 @@ import { useToast } from "@/components/brands/useToast";
 import RoleGuard from "@/components/RoleGuard";
 import { USER_BRANDS_NAV } from "@/lib/brands/nav";
 import { userBrandsApi, type BrandAccount } from "@/lib/brands";
+import { assetUrl } from "@/lib/assets";
 import { Loader2, Grid3X3, Newspaper, Megaphone, FolderOpen, GraduationCap } from "lucide-react";
 
 export default function MarcaDetallePage() {
@@ -64,7 +65,7 @@ export default function MarcaDetallePage() {
           <div className="space-y-6">
             <div className="flex items-start gap-5">
               {brand.logoUrl && (
-                <img src={brand.logoUrl} alt="" className="w-20 h-20 rounded-xl object-contain bg-white/5 border border-surface-700" />
+                <img src={assetUrl(brand.logoUrl)} alt="" className="w-20 h-20 rounded-xl object-contain bg-white/5 border border-surface-700" />
               )}
               <div>
                 <h2 className="text-xl font-semibold text-white">{brand.name}</h2>
