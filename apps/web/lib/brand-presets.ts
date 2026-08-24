@@ -89,12 +89,12 @@ export function applyBrandPreset(preset: BrandPreset) {
 
 export const BANNER_SLOTS = [
   { value: "hero_main", label: "Hero principal (grande)" },
-  { value: "hero_side", label: "Hero lateral (vertical)" },
+  { value: "hero_side", label: "Hero lateral" },
   { value: "tile_1", label: "Tile 1" },
   { value: "tile_2", label: "Tile 2" },
   { value: "tile_3", label: "Tile 3" },
   { value: "tile_4", label: "Tile 4" },
-  { value: "strip", label: "Banda ancha (full width)" },
+  { value: "strip", label: "Banda ancha" },
 ] as const;
 
 export type BannerSlot = (typeof BANNER_SLOTS)[number]["value"];
@@ -108,3 +108,33 @@ export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
   tile_4: "min-h-[120px]",
   strip: "md:col-span-4 min-h-[100px]",
 };
+
+/** Medidas recomendadas (px) para que el recorte se vea nítido en el grid del buscador. */
+export const BANNER_SLOT_RECOMMENDED: Record<
+  BannerSlot,
+  { width: number; height: number; hint: string }
+> = {
+  hero_main: {
+    width: 1200,
+    height: 700,
+    hint: "Ocupa 2×2 del grid. Preferí horizontal amplio.",
+  },
+  hero_side: {
+    width: 1200,
+    height: 700,
+    hint: "Misma proporción que el hero principal (lado derecho).",
+  },
+  tile_1: { width: 600, height: 300, hint: "Tile chico 2:1." },
+  tile_2: { width: 600, height: 300, hint: "Tile chico 2:1." },
+  tile_3: { width: 600, height: 300, hint: "Tile chico 2:1." },
+  tile_4: { width: 600, height: 300, hint: "Tile chico 2:1." },
+  strip: {
+    width: 1920,
+    height: 240,
+    hint: "Banda full width debajo del grid.",
+  },
+};
+
+export const BANNER_SLOT_ORDER: BannerSlot[] = [
+  "hero_main", "hero_side", "tile_1", "tile_2", "tile_3", "tile_4", "strip",
+];

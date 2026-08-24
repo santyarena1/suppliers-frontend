@@ -27,7 +27,10 @@ async function bootstrap() {
 
   const config = app.get(ConfigService);
 
-  await app.register(helmet as any);
+  await app.register(helmet as any, {
+    // Permite <img> desde el frontend (otro origen) hacia /uploads/*
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  });
   await app.register(multipart as any, { limits: { fileSize: 20 * 1024 * 1024 } });
 
   const uploadsRoot = join(process.cwd(), "uploads");
