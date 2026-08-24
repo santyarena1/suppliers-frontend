@@ -96,7 +96,8 @@ export default function DiagnosticsPanel() {
   function toggleExpand(p: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
-      next.has(p) ? next.delete(p) : next.add(p);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
       return next;
     });
   }

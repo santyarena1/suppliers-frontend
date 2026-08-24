@@ -10,7 +10,7 @@ import {
   PROVIDER_LABELS,
 } from "@/lib/api";
 import {
-  Loader2, Plus, Trash2, X, Image as ImageIcon,
+  Loader2, Plus, Trash2, X,
 } from "lucide-react";
 import {
   BANNER_SLOTS, BRAND_PRESET_LABELS, BRAND_PRESETS, applyBrandPreset, type BrandPreset, type BannerSlot,
