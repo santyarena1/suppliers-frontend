@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { isNavItemActive } from "@/lib/nav";
+import ProviderBadge from "@/components/ProviderBadge";
 
 export interface ContextNavItem {
   href: string;
@@ -12,6 +13,8 @@ export interface ContextNavItem {
   exact?: boolean;
   dotClass?: string;
   colorClass?: string;
+  /** Si está, muestra logo+color admin del proveedor. */
+  provider?: string;
   kind?: "link" | "heading";
 }
 
@@ -31,9 +34,29 @@ export default function ContextNav({ items, children }: Props) {
     }`;
   }
 
+  function renderLabel(item: ContextNavItem, active: boolean, compact = false) {
+    if (item.provider) {
+      return (
+        <ProviderBadge
+          provider={item.provider}
+          label={item.label}
+          variant={compact ? "logo-only" : "inline"}
+          size="sm"
+          className="!gap-1.5 min-w-0"
+          nameClassName={active ? "!text-brand-400" : ""}
+        />
+      );
+    }
+    return (
+      <span className={`truncate ${!active && item.colorClass ? item.colorClass : ""}`}>
+        {item.label}
+      </span>
+    );
+  }
+
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
-      <aside className="hidden lg:flex flex-shrink-0 w-48 border-r border-surface-800 bg-surface-950 flex-col overflow-y-auto">
+      <aside className="hidden lg:flex flex-shrink-0 w-52 border-r border-surface-800 bg-surface-950 flex-col overflow-y-auto">
         <nav className="px-3 py-4 flex flex-col gap-0.5">
           {items.map((item) => {
             if (item.kind === "heading") {
@@ -55,9 +78,7 @@ export default function ContextNav({ items, children }: Props) {
                   <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.dotClass}`} />
                 )}
                 {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
-                <span className={`truncate ${!active && item.colorClass ? item.colorClass : ""}`}>
-                  {item.label}
-                </span>
+                {renderLabel(item, active)}
               </Link>
             );
           })}
@@ -80,7 +101,7 @@ export default function ContextNav({ items, children }: Props) {
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.dotClass}`} />
                   )}
                   {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
-                  {item.label}
+                  {renderLabel(item, active, true)}
                 </Link>
               );
             })}
