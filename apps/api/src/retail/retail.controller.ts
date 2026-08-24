@@ -41,6 +41,14 @@ export class RetailController {
     return this.ingest.requestFullIngest();
   }
 
+  /** Repara precios ÷100 falsos en locales que no son Multiplo (inmediato, sin esperar sync). */
+  @UseGuards(RolesGuard)
+  @Roles("ROLE_ADMIN")
+  @Post("admin/retail/repair-prices")
+  repairPrices() {
+    return this.ingest.repairFalselyDividedCatalogs();
+  }
+
   @UseGuards(RolesGuard)
   @Roles("ROLE_ADMIN")
   @Post("admin/retail/stores/:id/ingest")
@@ -201,7 +209,10 @@ export class RetailController {
         id: r.id,
         externalId: r.externalId,
         name: r.name,
-        price: coerceStoredRetailPrice(Number(r.price), store.priceDivisor ?? 1),
+        price: coerceStoredRetailPrice(Number(r.price), store.priceDivisor ?? 1, {
+          storeName: store.name,
+          storeExternalId: store.externalId,
+        }),
         categoryName: r.categoryName,
         imageUrl: r.imageUrl,
         productUrl: r.productUrl,

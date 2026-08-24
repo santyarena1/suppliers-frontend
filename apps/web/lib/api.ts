@@ -1102,6 +1102,8 @@ export const retailApi = {
   getProduct: (id: string) => api.get<RetailProductDetail>(`/retail/products/${id}`),
   triggerIngest: () =>
     api.post<{ started: boolean; reason?: string }>("/admin/retail/ingest"),
+  repairPrices: () =>
+    api.post<{ storesRepaired: number; productsScaled: number }>("/admin/retail/repair-prices"),
   triggerStoreIngest: (storeId: string) =>
     api.post<{ started: boolean; reason?: string; productsUpserted?: number }>(
       `/admin/retail/stores/${storeId}/ingest`

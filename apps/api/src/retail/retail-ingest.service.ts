@@ -4,7 +4,12 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { RetailSourceClient, type ExternalProduct, type ExternalStore } from "./retail-source.client";
 import { normalizeSearchText } from "./retail-search.util";
-import { detectPriceDivisor, isCentsBasedStore, normalizeExternalPrice } from "./retail-price.util";
+import {
+  catalogLooksFalselyDivided,
+  isCentsBasedStore,
+  normalizeExternalPrice,
+  resolvePriceDivisor,
+} from "./retail-price.util";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -121,6 +126,8 @@ export class RetailIngestService implements OnModuleInit {
     this.activeRunId = run.id;
 
     try {
+      // Corrige divisor + precios ya divididos de más antes de re-sincronizar
+      await this.repairFalselyDividedCatalogs();
       const pageDelayMs = Math.max(0, Number(this.config.get("RETAIL_INGEST_PAGE_DELAY_MS") ?? 50));
       const count = await this.ingestStore(store.externalId, pageDelayMs, run.id);
       await this.prisma.retailStore.update({
@@ -202,6 +209,14 @@ export class RetailIngestService implements OnModuleInit {
       await mapPool(activeRemote, 4, async (store) => {
         await this.upsertStoreMeta(store);
       });
+
+      // Recompone catálogos que el auto-detect viejo dejó ÷100 (varios locales, no solo Multiplo)
+      const repair = await this.repairFalselyDividedCatalogs();
+      if (repair.storesRepaired > 0) {
+        this.logger.warn(
+          `Precios reparados: ${repair.storesRepaired} locales, ${repair.productsScaled} productos ×100`
+        );
+      }
 
       const ordered = await this.prisma.retailStore.findMany({
         where: {
@@ -309,7 +324,7 @@ export class RetailIngestService implements OnModuleInit {
   private async upsertStoreMeta(store: ExternalStore) {
     const name = store.nombre?.trim() || `Tienda ${store.id}`;
     const logoUrl = firstImage(store.imagenes);
-    const cents = isCentsBasedStore(name, store.id);
+    const divisor = resolvePriceDivisor(name, store.id);
     await this.prisma.retailStore.upsert({
       where: { externalId: store.id },
       create: {
@@ -317,7 +332,7 @@ export class RetailIngestService implements OnModuleInit {
         name,
         logoUrl,
         active: true,
-        priceDivisor: cents ? 100 : 1,
+        priceDivisor: divisor,
         raw: store as object,
         syncedAt: new Date(0),
       },
@@ -325,11 +340,81 @@ export class RetailIngestService implements OnModuleInit {
         name,
         logoUrl,
         active: true,
-        // Forzar divisor correcto: evita falsos positivos de detectPriceDivisor viejos
-        priceDivisor: cents ? 100 : 1,
+        // Siempre el divisor correcto (nunca confiar en un auto-detect viejo)
+        priceDivisor: divisor,
         raw: store as object,
       },
     });
+  }
+
+  /**
+   * Recompone catálogos no-Multiplo que quedaron ÷100 por el auto-detect viejo.
+   * Criterio: el tramo caro del local quedó &lt;100k pero ×100 vuelve a zona sana.
+   */
+  async repairFalselyDividedCatalogs(): Promise<{ storesRepaired: number; productsScaled: number }> {
+    const stores = await this.prisma.retailStore.findMany({
+      where: { active: true },
+      select: { id: true, name: true, externalId: true },
+    });
+
+    let storesRepaired = 0;
+    let productsScaled = 0;
+
+    for (const store of stores) {
+      if (isCentsBasedStore(store.name, store.externalId)) {
+        // Asegura divisor 100 en Multiplo
+        await this.prisma.retailStore.update({
+          where: { id: store.id },
+          data: { priceDivisor: 100 },
+        });
+        continue;
+      }
+
+      await this.prisma.retailStore.update({
+        where: { id: store.id },
+        data: { priceDivisor: 1 },
+      });
+
+      const sample = await this.prisma.retailProduct.findMany({
+        where: { storeId: store.id, active: true },
+        select: { price: true },
+        orderBy: { price: "desc" },
+        take: 40,
+      });
+      const prices = sample.map((p) => Number(p.price));
+      if (!catalogLooksFalselyDivided(prices)) continue;
+
+      const scaled = await this.prisma.$executeRaw`
+        UPDATE "RetailProduct"
+        SET price = price * 100
+        WHERE "storeId" = ${store.id}
+          AND price > 0
+          AND price < 100000
+      `;
+      await this.prisma.$executeRaw`
+        UPDATE "RetailPriceHistory" AS h
+        SET
+          price = h.price * 100,
+          "previousPrice" = CASE
+            WHEN h."previousPrice" IS NULL THEN NULL
+            ELSE h."previousPrice" * 100
+          END
+        FROM "RetailProduct" AS p
+        WHERE h."productId" = p.id
+          AND p."storeId" = ${store.id}
+          AND h.price > 0
+          AND h.price < 100000
+      `;
+
+      const n = typeof scaled === "number" ? scaled : 0;
+      storesRepaired += 1;
+      productsScaled += n;
+      this.logger.warn(
+        `Reparación ÷100 falso: ${store.name} (id externo ${store.externalId}) — ~${n} productos ×100`
+      );
+    }
+
+    return { storesRepaired, productsScaled };
   }
 
   private async ingestStore(
@@ -340,22 +425,21 @@ export class RetailIngestService implements OnModuleInit {
     const store = await this.prisma.retailStore.findUnique({ where: { externalId: externalStoreId } });
     if (!store) return 0;
 
-    let page = 1;
-    let upserted = 0;
-    let retries = 0;
-    let divisor = isCentsBasedStore(store.name, store.externalId)
-      ? 100
-      : store.priceDivisor > 1
-        ? store.priceDivisor
-        : 1;
-    let divisorDetected = divisor > 1;
-    if (divisor > 1 && store.priceDivisor !== divisor) {
+    // Única fuente de verdad: Multiplo = 100, resto = 1. Nunca auto-detect.
+    const divisor = resolvePriceDivisor(store.name, store.externalId);
+    if (store.priceDivisor !== divisor) {
       await this.prisma.retailStore.update({
         where: { id: store.id },
         data: { priceDivisor: divisor },
       });
-      this.logger.log(`Tienda ${store.name}: precios en centavos (÷${divisor})`);
+      if (divisor > 1) {
+        this.logger.log(`Tienda ${store.name}: precios en centavos (÷${divisor})`);
+      }
     }
+
+    let page = 1;
+    let upserted = 0;
+    let retries = 0;
     const productConcurrency = Math.max(
       2,
       Math.min(12, Number(this.config.get("RETAIL_INGEST_PRODUCT_CONCURRENCY") ?? 8))
@@ -382,22 +466,6 @@ export class RetailIngestService implements OnModuleInit {
       }
 
       if (!pageData) break;
-
-      if (!divisorDetected && pageData.products.length >= 5) {
-        divisor = detectPriceDivisor(pageData.products.map((p) => Number(p.precio)));
-        divisorDetected = true;
-        if (divisor !== store.priceDivisor) {
-          await this.prisma.retailStore.update({
-            where: { id: store.id },
-            data: { priceDivisor: divisor },
-          });
-          if (divisor > 1) {
-            this.logger.log(
-              `Tienda ${store.name}: precios detectados en centavos (÷${divisor})`
-            );
-          }
-        }
-      }
 
       await mapPool(pageData.products, productConcurrency, async (product) => {
         try {

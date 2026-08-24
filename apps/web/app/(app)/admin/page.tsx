@@ -572,6 +572,7 @@ function AppearanceTab({ showToast }: { showToast: (m: string, ok?: boolean) => 
 function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [repairing, setRepairing] = useState(false);
   const [syncingStoreId, setSyncingStoreId] = useState<string | null>(null);
   const [status, setStatus] = useState<{
     running: boolean;
@@ -684,6 +685,31 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
     }
   }
 
+  async function repairCentavos() {
+    setRepairing(true);
+    try {
+      const r = await retailApi.repairPrices();
+      showToast(
+        r.data.storesRepaired > 0
+          ? `Reparados ${r.data.storesRepaired} locales · ${r.data.productsScaled} productos ×100`
+          : "No había catálogos con ÷100 falso"
+      );
+      loadStores();
+      if (selectedStoreId) {
+        const again = await retailApi.listStoreProducts(selectedStoreId, {
+          q: prodQ,
+          page: prodPage,
+          take: 40,
+        });
+        setCatalog(again.data);
+      }
+    } catch (err) {
+      showToast(errMsg(err, "Error al reparar precios"), false);
+    } finally {
+      setRepairing(false);
+    }
+  }
+
   async function syncOneStore(storeId: string) {
     setSyncingStoreId(storeId);
     try {
@@ -737,23 +763,35 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
             full en segundo plano hasta terminar (si hay un batch del cron, lo corta y encola el full).
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void startIngest()}
-          disabled={starting || (status?.running && status.mode === "full")}
-          className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2.5 transition-all flex-shrink-0"
-        >
-          {starting || status?.running ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          {status?.running && status.mode === "full"
-            ? "Full en curso…"
-            : status?.running && status.mode === "batch"
-              ? "Encolar full (corta batch)"
-              : "Sincronizar todo"}
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => void repairCentavos()}
+            disabled={repairing || status?.running}
+            className="flex items-center justify-center gap-2 border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 disabled:opacity-40 text-amber-200 text-sm font-semibold rounded-lg px-4 py-2.5 transition-all"
+            title="Corrige locales que quedaron con precios ÷100 por error (no toca Multiplo)"
+          >
+            {repairing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Reparar ÷100 falsos
+          </button>
+          <button
+            type="button"
+            onClick={() => void startIngest()}
+            disabled={starting || (status?.running && status.mode === "full")}
+            className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2.5 transition-all"
+          >
+            {starting || status?.running ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {status?.running && status.mode === "full"
+              ? "Full en curso…"
+              : status?.running && status.mode === "batch"
+                ? "Encolar full (corta batch)"
+                : "Sincronizar todo"}
+          </button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-surface-800 bg-surface-900/50 p-4 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
