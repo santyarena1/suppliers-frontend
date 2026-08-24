@@ -26,41 +26,45 @@ nivel de acceso a Nodo. **El alcance funcional lo define siempre la membresía.*
 Estas definiciones ya están resueltas y condicionan el diseño. No volver a abrirlas sin
 acordarlo.
 
-- **Las credenciales de proveedor son de la organización, no de la persona.** El `OWNER`
-  del comercio carga la cuenta de cada distribuidor y todo el comercio compra con ella.
-  Implica mover `Credential` de `userId` a `tenantId`.
-- **El precio de un producto es por comercio.** La API del proveedor devuelve el precio de
-  la cuenta autenticada, así que no existe "el precio de un producto de New Bytes".
-  `ProviderSyncCache` se parte en dos: la ficha del producto (nombre, SKU, imágenes,
-  especificaciones) sigue siendo global, y precio y stock pasan a una tabla por
-  organización. Hoy esto es un bug real: el markup configurado por un usuario se escribe
-  en el catálogo global y contamina lo que ven los demás.
+- **Las credenciales de proveedor son de la organización, no de la persona.** El
+  administrador del comercio carga la cuenta de cada distribuidor y todo el comercio
+  compra con ella.
+- **El precio de un producto es por comercio.** La ficha es global; precio y stock van
+  por organización. El markup se aplica al leer.
 - **Una persona pertenece a una sola organización.** El esquema soporta varias membresías,
-  pero el producto asume una. No hay selector de organización activa y el JWT lleva una
-  sola. Si alguna vez hace falta, se habilita sin migrar datos.
+  pero el producto asume una.
+- **En un comercio no hay “Dueño”.** El que manda es el Administrador (`ADMIN`). Ver
+  `docs/PLAN_TIPO1.md`.
+- **El carrito del comercio es uno, compartido y persistido en la API.**
+- **El descuento de cuenta lo define el distribuidor**, no el comercio.
 
 ## 2. Los tres tipos de cliente
 
 ### Tipo 1 — Comercio (`TenantType.RETAILER`)
 
-El caso que hoy representa `testuser`: un local, su dueño o su encargado de compras.
+El caso que hoy representa `testuser`: un local y su administrador o encargado de compras.
 
-| Rol interno | Alcance |
-|---|---|
-| `OWNER` | Control total: credenciales de proveedores, usuarios internos, confirmación de órdenes, vínculos comerciales. |
-| `BUYER` | Busca, compara y arma órdenes. Confirma solo si el `OWNER` le habilita la aprobación. |
-| `SELLER` | Arma carritos y deja las órdenes en `PENDING_APPROVAL`. Nunca confirma. |
-| `VIEWER` | Solo lectura. |
+En pantalla, nunca “Dueño”. Roles: Administrador, Comprador, Vendedor, Solo lectura.
+
+| Rol interno | En pantalla | Alcance |
+|---|---|---|
+| `ADMIN` | Administrador | Control total: equipo, credenciales, markup, firma de pedidos, tilde del comprador, vínculos. |
+| `BUYER` | Comprador | Busca y arma el carrito. Confirma solo si el administrador le dio vía libre. |
+| `SELLER` | Vendedor | Arma el carrito compartido. Nunca confirma: queda en `PENDING_APPROVAL`. |
+| `VIEWER` | Solo lectura | Ve catálogo, pedidos y vínculos. No toca carrito ni cuentas. |
 
 Reglas:
 
 - Ve la búsqueda agregada **únicamente** de los proveedores con `TenantLink` activo.
-- Los proveedores no vinculados no existen para él: no aparecen en filtros, ni en listados,
-  ni en mensajes de error. Excepciones: publicidad paga del proveedor, o canje de código.
-- Si la organización tiene un solo usuario, ese `OWNER` concentra todo y las órdenes nacen
-  con `approvalStatus = NOT_REQUIRED`.
-- Cada comercio tiene un vendedor asignado por distribuidor
-  (`TenantLink.accountManagerId`), que es el punto de contacto comercial.
+- Los proveedores no vinculados no existen para él. Excepciones: publicidad paga, o canje
+  de código (en el celular, también escaneando el QR que generó el mayorista).
+- Si el comercio tiene un solo administrador, las órdenes que él confirma nacen
+  `NOT_REQUIRED`.
+- El carrito es uno por local, en la API, compartido entre quien puede pedir.
+- Cada comercio puede tener un vendedor asignado por distribuidor
+  (`TenantLink.accountManagerId`), visible para el local. El descuento de ese vínculo
+  no lo gestiona el comercio.
+- El cierre de este tipo está en `docs/PLAN_TIPO1.md`.
 
 ### Tipo 2 — Distribuidor (`TenantType.DISTRIBUTOR`)
 

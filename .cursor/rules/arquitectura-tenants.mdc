@@ -17,7 +17,7 @@ membresía**. Nunca resolver permisos de negocio mirando solo `User.role`.
 
 | Tipo de cliente | `TenantType` | Roles internos (`TenantRole`) |
 |---|---|---|
-| 1 — Comercio / local | `RETAILER` | `OWNER`, `BUYER`, `SELLER`, `VIEWER` |
+| 1 — Comercio / local | `RETAILER` | `ADMIN`, `BUYER`, `SELLER`, `VIEWER` (en pantalla: Administrador, Comprador, Vendedor, Solo lectura; nunca “Dueño”) |
 | 2 — Distribuidor / proveedor | `DISTRIBUTOR` | `OWNER`, `SELLER`, `PRODUCT_MANAGER`, `VIEWER` |
 | 3 — Marca | `BRAND` | `OWNER`, `MARKETING`, `COMMERCIAL`, `VIEWER` |
 
@@ -29,6 +29,10 @@ membresía**. Nunca resolver permisos de negocio mirando solo `User.role`.
 - El precio de un producto es **por comercio**: la ficha del producto es global, el precio
   y el stock van por organización.
 - Una persona pertenece a **una sola** organización.
+- En un comercio el que manda es el **Administrador** (`ADMIN`). No hay rol “Dueño”.
+- El carrito del comercio es **uno y compartido**, persistido en la API.
+- El descuento de cuenta lo define el distribuidor, no el comercio.
+- Cerrar el Tipo 1: `docs/PLAN_TIPO1.md`.
 
 ## Reglas innegociables
 
@@ -42,8 +46,10 @@ membresía**. Nunca resolver permisos de negocio mirando solo `User.role`.
 3. **Códigos de vinculación anónimos.** El endpoint de canje nunca revela a qué
    organización pertenece un código antes de canjearlo, ni permite enumerar códigos.
 4. **Aprobación de órdenes.** Un `SELLER` de un `RETAILER` arma el carrito pero no
-   confirma: la orden queda en `PENDING_APPROVAL` y solo `OWNER`/`ADMIN` de esa
-   organización la aprueba. Si no hay `SELLER`, la orden nace `NOT_REQUIRED`.
+   confirma: la orden queda en `PENDING_APPROVAL` y solo un `ADMIN` de esa
+   organización la aprueba. Un `BUYER` confirma solo si el administrador le dio
+   vía libre; si no, también espera firma. Si confirma quien puede, la orden nace
+   `NOT_REQUIRED`.
 5. **Alcance del Product Manager.** Un `PRODUCT_MANAGER` opera solo sobre las marcas de
    su `ProductManagerScope`, y solo dentro de su propio distribuidor.
 6. **Nada de slugs en la interfaz.** En pantalla siempre nombre normalizado
