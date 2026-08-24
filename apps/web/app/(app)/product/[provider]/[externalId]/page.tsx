@@ -186,7 +186,9 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         )}
 
         {!loading && product && pricing && (
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-8">
+            {/* Bloque principal: todo menos locales */}
+            <div className="flex flex-col gap-8 order-1">
             {/* Título a ancho completo */}
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -232,9 +234,9 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               )}
             </div>
 
-            {/* Imagen + card de precios */}
+            {/* Imagen + card de precios (en mobile: imagen arriba, card abajo) */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
-              <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm">
+              <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm order-1">
                 {product.imageUrl && !imgErr ? (
                   <>
                     <Image
@@ -263,7 +265,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 )}
               </div>
 
-              <aside className="lg:sticky lg:top-16 flex flex-col gap-4">
+              <aside className="order-2 flex flex-col gap-4 lg:sticky lg:top-16">
                 <div className="rounded-2xl border border-surface-800 bg-surface-900/80 overflow-hidden">
                   <div className="px-5 pt-5 pb-4 border-b border-surface-800">
                     <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">
@@ -459,13 +461,16 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 </div>
               </section>
             )}
+            </div>
 
-            {/* Referencia de mercado — al final */}
-            <SalePricePanel
-              variant="inline"
-              seedQuery={product.name}
-              costUsd={pricing.unitNet}
-            />
+            {/* Locales: siempre al final (mobile y desktop) */}
+            <div className="order-last w-full pb-8">
+              <SalePricePanel
+                variant="inline"
+                seedQuery={product.name}
+                costUsd={pricing.unitNet}
+              />
+            </div>
           </div>
         )}
       </div>
