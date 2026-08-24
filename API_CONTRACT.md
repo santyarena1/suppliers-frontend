@@ -74,7 +74,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `q` búsqueda amplia (tokens flexibles) · ingest sin body
 - **Respuesta esperada**: `{ query, tokens, results: [{ id, name, price, description, productUrl, imageUrl, categoryName, syncedAt, store: { name, logoUrl }, priceHistory: [...] }] }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo; un cron (`RETAIL_INGEST_CRON`, default cada 6h) puebla `RetailStore` / `RetailProduct` / `RetailPriceHistory`.
+- **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo. Cron (timezone `America/Argentina/Buenos_Aires`): **cada 5 min de 06:00 a 20:55** un batch de tiendas más viejas (`RETAIL_INGEST_DAY_BATCH`, default 8); **cada hora de 21:00 a 05:00** un batch mayor (`RETAIL_INGEST_NIGHT_BATCH`, default 20). Admin “Sincronizar ahora” hace full. `RETAIL_INGEST_DISABLED=true` apaga el cron.
 
 ## Pendiente (futuro)
 

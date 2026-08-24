@@ -34,55 +34,94 @@ export class RetailIngestService {
     return this.running;
   }
 
-  async runFullIngest(): Promise<{ runId: string; productsUpserted: number }> {
+  /** Sync completo de todas las tiendas (botón admin). */
+  async runFullIngest(): Promise<{ runId: string; productsUpserted: number; storesDone: number }> {
+    return this.runIngest({ mode: "full" });
+  }
+
+  /**
+   * Sync incremental: refresca las N tiendas con catálogo más viejo.
+   * Así un tick cada 5 min sí mueve precios sin esperar un full de horas.
+   */
+  async runBatchIngest(maxStores: number): Promise<{ runId: string; productsUpserted: number; storesDone: number }> {
+    return this.runIngest({ mode: "batch", maxStores: Math.max(1, maxStores) });
+  }
+
+  private async runIngest(opts: {
+    mode: "full" | "batch";
+    maxStores?: number;
+  }): Promise<{ runId: string; productsUpserted: number; storesDone: number }> {
     if (this.running) {
       this.logger.warn("Ingesta retail ya en curso — se omite");
       const last = await this.prisma.retailIngestRun.findFirst({ orderBy: { startedAt: "desc" } });
-      return { runId: last?.id ?? "", productsUpserted: last?.productsUpserted ?? 0 };
+      return {
+        runId: last?.id ?? "",
+        productsUpserted: last?.productsUpserted ?? 0,
+        storesDone: last?.storesDone ?? 0,
+      };
     }
 
     this.running = true;
     const run = await this.prisma.retailIngestRun.create({ data: { status: "RUNNING" } });
     let productsUpserted = 0;
+    let storesDone = 0;
 
     const concurrency = Math.max(1, Math.min(3, Number(this.config.get("RETAIL_INGEST_CONCURRENCY") ?? 2)));
-    const pageDelayMs = Math.max(0, Number(this.config.get("RETAIL_INGEST_PAGE_DELAY_MS") ?? 250));
+    const pageDelayMs = Math.max(0, Number(this.config.get("RETAIL_INGEST_PAGE_DELAY_MS") ?? 200));
 
     try {
-      const stores = await this.client.listStores();
-      const active = stores.filter((s) => {
+      const remoteStores = await this.client.listStores();
+      const activeRemote = remoteStores.filter((s) => {
         const estado = s.estado?.nombre?.toLowerCase();
         if (!estado) return true;
         return estado === "activa" || estado === "activo" || estado === "active";
       });
 
-      await this.prisma.retailIngestRun.update({
-        where: { id: run.id },
-        data: { storesTotal: active.length },
-      });
-
-      // Upsert tiendas primero
-      for (const store of active) {
-        await this.upsertStore(store);
+      for (const store of activeRemote) {
+        await this.upsertStoreMeta(store);
       }
 
-      // Procesar tiendas con concurrencia limitada
+      // Prioridad: catálogo más viejo primero (syncedAt se actualiza al terminar productos).
+      const ordered = await this.prisma.retailStore.findMany({
+        where: {
+          active: true,
+          externalId: { in: activeRemote.map((s) => s.id) },
+        },
+        orderBy: { syncedAt: "asc" },
+        select: { id: true, externalId: true, name: true },
+      });
+
+      const targets =
+        opts.mode === "full" ? ordered : ordered.slice(0, opts.maxStores ?? 6);
+
+      await this.prisma.retailIngestRun.update({
+        where: { id: run.id },
+        data: { storesTotal: targets.length },
+      });
+
       let idx = 0;
       const workers = Array.from({ length: concurrency }, async () => {
-        while (idx < active.length) {
+        while (idx < targets.length) {
           const current = idx++;
-          const store = active[current];
+          const store = targets[current];
           try {
-            const count = await this.ingestStore(store.id, pageDelayMs);
+            const count = await this.ingestStore(store.externalId, pageDelayMs);
             productsUpserted += count;
+            await this.prisma.retailStore.update({
+              where: { id: store.id },
+              data: { syncedAt: new Date() },
+            });
           } catch (err) {
             this.logger.warn(
-              `Ingesta tienda ${store.id} (${store.nombre}) falló: ${err instanceof Error ? err.message : String(err)}`
+              `Ingesta tienda ${store.externalId} (${store.name}) falló: ${
+                err instanceof Error ? err.message : String(err)
+              }`
             );
           }
+          storesDone += 1;
           await this.prisma.retailIngestRun.update({
             where: { id: run.id },
-            data: { storesDone: { increment: 1 }, productsUpserted },
+            data: { storesDone, productsUpserted },
           });
         }
       });
@@ -94,15 +133,24 @@ export class RetailIngestService {
           status: "OK",
           finishedAt: new Date(),
           productsUpserted,
+          storesDone,
         },
       });
-      this.logger.log(`Ingesta retail OK: ${productsUpserted} productos`);
-      return { runId: run.id, productsUpserted };
+      this.logger.log(
+        `Ingesta retail ${opts.mode} OK: ${storesDone} tiendas, ${productsUpserted} productos`
+      );
+      return { runId: run.id, productsUpserted, storesDone };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this.prisma.retailIngestRun.update({
         where: { id: run.id },
-        data: { status: "ERROR", finishedAt: new Date(), errorMessage: message, productsUpserted },
+        data: {
+          status: "ERROR",
+          finishedAt: new Date(),
+          errorMessage: message,
+          productsUpserted,
+          storesDone,
+        },
       });
       this.logger.error(`Ingesta retail ERROR: ${message}`);
       throw err;
@@ -111,23 +159,26 @@ export class RetailIngestService {
     }
   }
 
-  private async upsertStore(store: ExternalStore) {
+  /** Metadata de tienda: no toca syncedAt (eso marca frescura del catálogo). */
+  private async upsertStoreMeta(store: ExternalStore) {
+    const name = store.nombre?.trim() || `Tienda ${store.id}`;
+    const logoUrl = firstImage(store.imagenes);
     await this.prisma.retailStore.upsert({
       where: { externalId: store.id },
       create: {
         externalId: store.id,
-        name: store.nombre?.trim() || `Tienda ${store.id}`,
-        logoUrl: firstImage(store.imagenes),
+        name,
+        logoUrl,
         active: true,
         raw: store as object,
-        syncedAt: new Date(),
+        // Epoch → entra primero en el batch de “más viejas”.
+        syncedAt: new Date(0),
       },
       update: {
-        name: store.nombre?.trim() || `Tienda ${store.id}`,
-        logoUrl: firstImage(store.imagenes),
+        name,
+        logoUrl,
         active: true,
         raw: store as object,
-        syncedAt: new Date(),
       },
     });
   }
@@ -150,7 +201,9 @@ export class RetailIngestService {
         if (retries > 3) throw err;
         const wait = 500 * 2 ** (retries - 1);
         this.logger.warn(
-          `Retry página ${page} tienda ${externalStoreId} en ${wait}ms: ${err instanceof Error ? err.message : String(err)}`
+          `Retry página ${page} tienda ${externalStoreId} en ${wait}ms: ${
+            err instanceof Error ? err.message : String(err)
+          }`
         );
         await sleep(wait);
         continue;
