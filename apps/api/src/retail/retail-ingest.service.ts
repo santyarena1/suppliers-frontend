@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { RetailSourceClient, type ExternalProduct, type ExternalStore } from "./retail-source.client";
 import { normalizeSearchText } from "./retail-search.util";
+import { normalizeExternalPrice } from "./retail-price.util";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -234,8 +235,8 @@ export class RetailIngestService {
     const name = (product.nombre || "").trim();
     if (!name || !product.id) return;
 
-    const price = Number(product.precio);
-    const safePrice = Number.isFinite(price) ? price : 0;
+    const price = normalizeExternalPrice(product.precio);
+    const safePrice = Number.isFinite(price) && price > 0 ? price : 0;
     const searchText = normalizeSearchText(`${name} ${categoryName(product) ?? ""}`);
 
     const row = await this.prisma.retailProduct.upsert({
@@ -281,13 +282,19 @@ export class RetailIngestService {
         create: {
           productId: row.id,
           externalId: h.id,
-          previousPrice: h.precioAnterior != null ? new Prisma.Decimal(h.precioAnterior) : null,
-          price: new Prisma.Decimal(h.precioActual),
+          previousPrice:
+            h.precioAnterior != null
+              ? new Prisma.Decimal(normalizeExternalPrice(h.precioAnterior))
+              : null,
+          price: new Prisma.Decimal(normalizeExternalPrice(h.precioActual)),
           changedAt,
         },
         update: {
-          previousPrice: h.precioAnterior != null ? new Prisma.Decimal(h.precioAnterior) : null,
-          price: new Prisma.Decimal(h.precioActual),
+          previousPrice:
+            h.precioAnterior != null
+              ? new Prisma.Decimal(normalizeExternalPrice(h.precioAnterior))
+              : null,
+          price: new Prisma.Decimal(normalizeExternalPrice(h.precioActual)),
           changedAt,
         },
       });

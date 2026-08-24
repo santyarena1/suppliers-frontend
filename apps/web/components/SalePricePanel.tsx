@@ -230,7 +230,9 @@ export default function SalePricePanel({
 
   if (!open) return null;
 
-  const prices = visibleResults.map((r) => r.price).filter((n) => n > 0);
+  const prices = visibleResults
+    .map((r) => r.price)
+    .filter((n) => n > 0 && n <= 25_000_000);
   const min = prices.length ? Math.min(...prices) : null;
   const max = prices.length ? Math.max(...prices) : null;
   const storeCount = new Set(visibleResults.map((r) => r.store.id)).size;
