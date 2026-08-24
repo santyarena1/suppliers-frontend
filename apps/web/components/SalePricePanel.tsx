@@ -560,8 +560,8 @@ export default function SalePricePanel({
 
   if (inline) {
     return (
-      <>
-        <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
+      <div className="w-full">
+        <section className="bg-surface-900 border border-surface-800 rounded-2xl p-4 sm:p-5">
           {toolbar}
           {body}
         </section>
@@ -572,7 +572,7 @@ export default function SalePricePanel({
             onClose={() => setSelectedId(null)}
           />
         )}
-      </>
+      </div>
     );
   }
 
