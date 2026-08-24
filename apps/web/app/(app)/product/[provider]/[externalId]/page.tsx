@@ -108,7 +108,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
           {/* Header */}
           <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-6 py-3 flex items-center justify-between">
             <button
-              onClick={() => router.back()}
+              onClick={() => {
+                if (query.trim()) {
+                  router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+                } else {
+                  router.back();
+                }
+              }}
               className="flex items-center gap-1.5 text-xs text-surface-400 hover:text-white transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ProductCard from "@/components/ProductCard";
 import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
@@ -33,7 +33,15 @@ export default function SearchPageWrapper() {
 }
 
 function SearchPage() {
-  const { setResults: persistResults } = useResults();
+  const router = useRouter();
+  const {
+    setResults: persistResults,
+    results: storedResults,
+    query: storedQuery,
+    hydrated,
+    getUiState,
+    setUiState,
+  } = useResults();
   const searchParams = useSearchParams();
   const initialQ = searchParams?.get("q") || "";
   const [query, setQuery] = useState(initialQ);
@@ -51,6 +59,21 @@ function SearchPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const restoredRef = useRef(false);
+  const lastUrlQRef = useRef<string | null>(null);
+
+  function syncSearchUrl(q: string) {
+    const trimmed = q.trim();
+    const next = trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : "/search";
+    const current = typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "";
+    lastUrlQRef.current = trimmed;
+    if (current !== next) {
+      router.replace(next, { scroll: false });
+    }
+  }
 
   async function handleCategoryClick(category: string) {
     setError("");
@@ -66,6 +89,8 @@ function SearchPage() {
       const data = Array.isArray(res.data) ? res.data : [];
       setResults(data);
       persistResults(category, data);
+      setUiState({ refineText: "", minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
+      syncSearchUrl(category);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || "Error al consultar la categoría");
@@ -99,24 +124,27 @@ function SearchPage() {
     });
   }, []);
 
-  async function handleSearch(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (!query.trim()) return;
+  async function runSearch(term: string, opts?: { track?: boolean }) {
+    const q = term.trim();
+    if (!q) return;
     setError("");
     setLoading(true);
     setSearched(true);
-    setActiveQuery(query.trim());
+    setQuery(q);
+    setActiveQuery(q);
     setRefineText("");
     setMinPrice("");
     setMaxPrice("");
     try {
-      const res = await searchApi.all(query.trim(), {
+      const res = await searchApi.all(q, {
         providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
       });
       const data = res.data;
       setResults(data);
-      persistResults(query.trim(), data);
-      trackSearch(query.trim());
+      persistResults(q, data);
+      setUiState({ refineText: "", minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
+      if (opts?.track !== false) trackSearch(q);
+      syncSearchUrl(q);
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || "Error al consultar la API");
@@ -124,6 +152,34 @@ function SearchPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSearch(e?: React.FormEvent) {
+    e?.preventDefault();
+    await runSearch(query);
+  }
+
+  function restoreFromStore(q: string, r: ProductDTO[]) {
+    const ui = getUiState();
+    setQuery(q);
+    setActiveQuery(q);
+    setResults(r);
+    setSearched(true);
+    setError("");
+    if (ui?.sortBy) setSortBy(ui.sortBy);
+    if (ui?.viewMode) setViewMode(ui.viewMode);
+    if (typeof ui?.refineText === "string") setRefineText(ui.refineText);
+    if (typeof ui?.minPrice === "string") setMinPrice(ui.minPrice);
+    if (typeof ui?.maxPrice === "string") setMaxPrice(ui.maxPrice);
+    if (typeof ui?.hideNoImage === "boolean") setHideNoImage(ui.hideNoImage);
+    syncSearchUrl(q);
+    // Restaurar scroll después del paint
+    requestAnimationFrame(() => {
+      const top = ui?.scrollTop ?? 0;
+      if (scrollRef.current && top > 0) {
+        scrollRef.current.scrollTop = top;
+      }
+    });
   }
 
   // Apply in-results filters + sort
@@ -181,14 +237,71 @@ function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchable.length, touchedFilters]);
 
-  const autoSearched = useRef(false);
+  // Restaurar la última búsqueda al volver (producto → atrás, o /search sin q).
   useEffect(() => {
-    if (initialQ && !autoSearched.current) {
-      autoSearched.current = true;
-      handleSearch();
+    if (!hydrated || restoredRef.current) return;
+    restoredRef.current = true;
+
+    const urlQ = initialQ.trim();
+    const cachedQ = storedQuery.trim();
+    const sameAsCache =
+      !!urlQ &&
+      !!cachedQ &&
+      urlQ.toLowerCase() === cachedQ.toLowerCase() &&
+      storedResults.length > 0;
+
+    if (sameAsCache || (!urlQ && cachedQ && storedResults.length > 0)) {
+      restoreFromStore(urlQ || cachedQ, storedResults);
+      return;
+    }
+
+    lastUrlQRef.current = urlQ;
+    if (urlQ) {
+      void runSearch(urlQ, { track: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  // Si cambia ?q= desde afuera (home, link) y no es un sync nuestro, buscar de nuevo.
+  useEffect(() => {
+    if (!hydrated || !restoredRef.current) return;
+    const urlQ = initialQ.trim();
+    if (urlQ === (lastUrlQRef.current ?? "")) return;
+    lastUrlQRef.current = urlQ;
+    if (!urlQ) return;
+    if (urlQ.toLowerCase() === activeQuery.trim().toLowerCase() && results.length > 0) return;
+    void runSearch(urlQ, { track: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ]);
+
+  // Persistir filtros / vista / scroll mientras hay una búsqueda activa.
+  useEffect(() => {
+    if (!searched) return;
+    setUiState({
+      sortBy,
+      viewMode,
+      refineText,
+      minPrice,
+      maxPrice,
+      hideNoImage,
+    });
+  }, [searched, sortBy, viewMode, refineText, minPrice, maxPrice, hideNoImage, setUiState]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !searched) return;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        setUiState({ scrollTop: el.scrollTop });
+        ticking = false;
+      });
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [searched, setUiState]);
 
   const unselectedCount = searchable.length - selectedProviders.size;
   const hasInResultsFilter = refineText || minPrice || maxPrice || hideNoImage;
@@ -295,9 +408,9 @@ function SearchPage() {
           )}
 
           {/* Results area */}
-          <div className="flex-1 overflow-y-auto">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto">
             {/* In-results filters bar */}
-            {searched && !loading && results.length > 0 && (
+            {searched && !loading && hydrated && results.length > 0 && (
               <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800 px-6 py-2.5 flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                   <div className="relative flex-1 max-w-xs">
@@ -377,21 +490,23 @@ function SearchPage() {
             )}
 
             <div className="px-6 py-5">
-              {loading && (
+              {(!hydrated || loading) && (
                 <div className="flex flex-col items-center justify-center py-32 gap-3">
                   <div className="w-10 h-10 rounded-full border-2 border-surface-700 border-t-brand-500 animate-spin" />
-                  <p className="text-sm text-surface-400">Consultando proveedores...</p>
+                  <p className="text-sm text-surface-400">
+                    {loading ? "Consultando proveedores..." : "Cargando…"}
+                  </p>
                 </div>
               )}
 
-              {!loading && error && (
+              {hydrated && !loading && error && (
                 <div className="flex items-start gap-3 bg-red-500/8 border border-red-500/15 rounded-xl p-5 max-w-lg">
                   <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
                   <p className="text-sm text-red-300">{error}</p>
                 </div>
               )}
 
-              {!loading && searched && !error && results.length === 0 && (
+              {hydrated && !loading && searched && !error && results.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
                   <Package className="w-9 h-9 text-surface-700 mb-1" />
                   <p className="text-sm font-medium text-surface-300">Sin resultados</p>
@@ -399,12 +514,12 @@ function SearchPage() {
                 </div>
               )}
 
-              {!loading && !searched && (
+              {hydrated && !loading && !searched && (
                 <SearchLanding onCategoryClick={handleCategoryClick} />
               )}
 
               {/* Grid */}
-              {!loading && filtered.length > 0 && viewMode === "grid" && (
+              {hydrated && !loading && filtered.length > 0 && viewMode === "grid" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                   {filtered.map((product, i) => (
                     <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} />
@@ -413,12 +528,12 @@ function SearchPage() {
               )}
 
               {/* List */}
-              {!loading && filtered.length > 0 && viewMode === "list" && (
+              {hydrated && !loading && filtered.length > 0 && viewMode === "list" && (
                 <ListView items={filtered} />
               )}
 
               {/* Grouped */}
-              {!loading && filtered.length > 0 && viewMode === "grouped" && (
+              {hydrated && !loading && filtered.length > 0 && viewMode === "grouped" && (
                 <div className="flex flex-col gap-5">
                   {Object.entries(groupedByProvider).sort((a, b) => b[1].length - a[1].length).map(([prov, items]) => {
                     const collapsed = collapsedProviders.has(prov);
