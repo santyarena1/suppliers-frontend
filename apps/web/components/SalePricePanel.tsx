@@ -40,6 +40,11 @@ import {
   saveRetailSort,
   type RetailSortKey,
 } from "@/lib/retailPanelPrefs";
+import {
+  BEST_MATCH_THRESHOLD,
+  marginVsCostPercent,
+  providerNameMatchRatio,
+} from "@/lib/retailMatch";
 
 function simplifyQuery(name: string): string {
   return name
@@ -96,6 +101,8 @@ export default function SalePricePanel({
 }) {
   const inline = variant === "inline";
   const active = inline || open;
+  const { convert } = usePrefs();
+  const costArs = costUsd != null && costUsd > 0 ? convert(costUsd).amount : null;
   const initial = useMemo(() => simplifyQuery(seedQuery), [seedQuery]);
   const [q, setQ] = useState(initial);
   const [loading, setLoading] = useState(false);
@@ -238,17 +245,40 @@ export default function SalePricePanel({
   const visibleResults = useMemo(() => {
     const hidden = new Set(hiddenStoreIds);
     const filtered = results.filter((r) => !hidden.has(r.store.id));
-    return sortHits(filtered, sortBy);
-  }, [results, hiddenStoreIds, sortBy]);
+    const enriched = filtered.map((hit) => ({
+      hit,
+      matchRatio: providerNameMatchRatio(seedQuery, hit.name),
+      marginPct: marginVsCostPercent(hit.price, costArs),
+    }));
+    const sortedHits = sortHits(
+      enriched.map((e) => e.hit),
+      sortBy,
+    );
+    const map = new Map(enriched.map((e) => [e.hit.id, e]));
+    return sortedHits.map((hit) => map.get(hit.id)!);
+  }, [results, hiddenStoreIds, sortBy, seedQuery, costArs]);
+
+  const bestMatches = useMemo(
+    () =>
+      [...visibleResults]
+        .filter((x) => x.matchRatio >= BEST_MATCH_THRESHOLD)
+        .sort((a, b) => b.matchRatio - a.matchRatio || a.hit.price - b.hit.price),
+    [visibleResults],
+  );
+
+  const otherMatches = useMemo(() => {
+    const bestIds = new Set(bestMatches.map((x) => x.hit.id));
+    return visibleResults.filter((x) => !bestIds.has(x.hit.id));
+  }, [visibleResults, bestMatches]);
 
   if (!active) return null;
 
   const prices = visibleResults
-    .map((r) => r.price)
+    .map((r) => r.hit.price)
     .filter((n) => n > 0 && n <= 25_000_000);
   const min = prices.length ? Math.min(...prices) : null;
   const max = prices.length ? Math.max(...prices) : null;
-  const storeCount = new Set(visibleResults.map((r) => r.store.id)).size;
+  const storeCount = new Set(visibleResults.map((r) => r.hit.store.id)).size;
   const hiddenCount = hiddenStoreIds.filter((id) =>
     storesInResults.some((s) => s.id === id),
   ).length;
@@ -468,17 +498,54 @@ export default function SalePricePanel({
           )}
 
           {!loading && visibleResults.length > 0 && (
-            <div className={inline
-              ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-              : "space-y-2"
-            }>
-              {visibleResults.map((hit) => (
-                <RetailHitCard
-                  key={hit.id}
-                  hit={hit}
-                  onOpen={() => setSelectedId(hit.id)}
-                />
-              ))}
+            <div className="space-y-4">
+              {bestMatches.length > 0 && (
+                <div>
+                  <p className="text-[11px] font-semibold text-emerald-300 mb-2 px-0.5">
+                    Mejores coincidencias
+                    <span className="text-surface-500 font-normal"> · ≥85% de palabras del proveedor</span>
+                  </p>
+                  <div className={inline
+                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                    : "space-y-2"
+                  }>
+                    {bestMatches.map(({ hit, matchRatio, marginPct }) => (
+                      <RetailHitCard
+                        key={hit.id}
+                        hit={hit}
+                        matchRatio={matchRatio}
+                        marginPct={marginPct}
+                        best
+                        onOpen={() => setSelectedId(hit.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {otherMatches.length > 0 && (
+                <div>
+                  {bestMatches.length > 0 && (
+                    <p className="text-[11px] font-semibold text-surface-400 mb-2 px-0.5">
+                      Otras referencias
+                    </p>
+                  )}
+                  <div className={inline
+                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                    : "space-y-2"
+                  }>
+                    {otherMatches.map(({ hit, matchRatio, marginPct }) => (
+                      <RetailHitCard
+                        key={hit.id}
+                        hit={hit}
+                        matchRatio={matchRatio}
+                        marginPct={marginPct}
+                        onOpen={() => setSelectedId(hit.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -528,14 +595,31 @@ export default function SalePricePanel({
   );
 }
 
-function RetailHitCard({ hit, onOpen }: { hit: RetailSearchHit; onOpen: () => void }) {
+function RetailHitCard({
+  hit,
+  onOpen,
+  matchRatio,
+  marginPct,
+  best = false,
+}: {
+  hit: RetailSearchHit;
+  onOpen: () => void;
+  matchRatio: number;
+  marginPct: number | null;
+  best?: boolean;
+}) {
   const [imgErr, setImgErr] = useState(false);
+  const matchLabel = `${Math.round(matchRatio * 100)}% match`;
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="w-full text-left rounded-xl border border-surface-800 bg-surface-900/80 p-3 flex gap-3 hover:border-surface-600 hover:bg-surface-900 transition-colors"
+      className={`w-full text-left rounded-xl border p-3 flex gap-3 transition-colors ${
+        best
+          ? "border-emerald-500/35 bg-emerald-500/5 hover:border-emerald-500/55 hover:bg-emerald-500/10"
+          : "border-surface-800 bg-surface-900/80 hover:border-surface-600 hover:bg-surface-900"
+      }`}
     >
       <div className="w-14 h-14 rounded-lg bg-white flex-shrink-0 overflow-hidden flex items-center justify-center">
         {hit.imageUrl && !imgErr ? (
@@ -575,9 +659,26 @@ function RetailHitCard({ hit, onOpen }: { hit: RetailSearchHit; onOpen: () => vo
           <p className="text-[10px] text-surface-500 mt-0.5 truncate">{hit.categoryName}</p>
         )}
 
-        <div className="flex items-center justify-between gap-2 mt-2">
-          <p className="text-sm font-bold text-emerald-400 tabular-nums">{formatARS(hit.price)}</p>
-          <span className="text-[10px] text-surface-500 flex items-center gap-0.5">
+        <div className="flex items-end justify-between gap-2 mt-2">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-emerald-400 tabular-nums">{formatARS(hit.price)}</p>
+            <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+              <span className={`text-[10px] tabular-nums ${best ? "text-emerald-300/90" : "text-surface-500"}`}>
+                {matchLabel}
+              </span>
+              {marginPct != null && Number.isFinite(marginPct) && (
+                <span
+                  className={`text-[10px] font-semibold tabular-nums ${
+                    marginPct >= 0 ? "text-emerald-400" : "text-amber-400"
+                  }`}
+                >
+                  vs costo {marginPct >= 0 ? "+" : ""}
+                  {marginPct.toFixed(0)}%
+                </span>
+              )}
+            </div>
+          </div>
+          <span className="text-[10px] text-surface-500 flex items-center gap-0.5 flex-shrink-0">
             Detalle <ChevronRight className="w-3 h-3" />
           </span>
         </div>

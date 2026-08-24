@@ -800,6 +800,17 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
             <p className="text-xs font-semibold text-white flex items-center gap-1.5">
               <Store className="w-3.5 h-3.5 text-brand-400" /> Locales ingeridos
             </p>
+            <div className="flex flex-wrap gap-2 text-[10px]">
+              <span className="inline-flex items-center gap-1 text-emerald-300">
+                <span className="w-2 h-2 rounded-sm bg-emerald-500/70" /> Listo
+              </span>
+              <span className="inline-flex items-center gap-1 text-amber-300">
+                <span className="w-2 h-2 rounded-sm bg-amber-500/70" /> En proceso
+              </span>
+              <span className="inline-flex items-center gap-1 text-surface-400">
+                <span className="w-2 h-2 rounded-sm bg-surface-600" /> Falta
+              </span>
+            </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
               <input
@@ -816,11 +827,22 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
             ) : (
               filteredStores.map((s) => {
                 const selected = selectedStoreId === s.id;
+                const inProgress =
+                  syncingStoreId === s.id ||
+                  (!!status?.running &&
+                    !!status.lastRun?.currentStoreName &&
+                    status.lastRun.currentStoreName.toLowerCase() === s.name.toLowerCase());
+                const done = !s.neverSynced && s.productCount > 0 && !inProgress;
+                const rowBg = inProgress
+                  ? "bg-amber-500/15 border-l-2 border-l-amber-400"
+                  : done
+                    ? "bg-emerald-500/10 border-l-2 border-l-emerald-400"
+                    : "bg-surface-900/60 border-l-2 border-l-surface-600";
                 return (
                   <div
                     key={s.id}
-                    className={`w-full text-left px-3 py-2.5 border-b border-surface-900 flex gap-2 items-start ${
-                      selected ? "bg-brand-600/10" : "hover:bg-surface-900/80"
+                    className={`w-full text-left px-3 py-2.5 border-b border-surface-900/80 flex gap-2 items-start ${rowBg} ${
+                      selected ? "ring-1 ring-inset ring-brand-500/40" : ""
                     }`}
                   >
                     <button
@@ -833,11 +855,17 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
                       className="flex-1 min-w-0 text-left"
                     >
                       <p className="text-xs font-medium text-white truncate">{s.name}</p>
-                      <p className="text-[10px] text-surface-500 tabular-nums mt-0.5">
-                        {s.productCount} productos
-                        {s.neverSynced
-                          ? " · nunca sync"
-                          : ` · ${new Date(s.syncedAt).toLocaleString("es-AR")}`}
+                      <p className="text-[10px] text-surface-400 tabular-nums mt-0.5">
+                        {inProgress
+                          ? "Sincronizando…"
+                          : done
+                            ? `${s.productCount} productos`
+                            : s.neverSynced
+                              ? "Sin sincronizar"
+                              : "Sin productos"}
+                        {!inProgress && !s.neverSynced && s.productCount > 0
+                          ? ` · ${new Date(s.syncedAt).toLocaleString("es-AR")}`
+                          : ""}
                         {s.priceDivisor > 1 ? ` · ÷${s.priceDivisor}` : ""}
                       </p>
                     </button>
@@ -846,10 +874,10 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
                       title="Sincronizar este local"
                       disabled={!!syncingStoreId || status?.running}
                       onClick={() => void syncOneStore(s.id)}
-                      className="p-1.5 rounded-md text-surface-500 hover:text-white hover:bg-surface-800 disabled:opacity-40"
+                      className="p-1.5 rounded-md text-surface-500 hover:text-white hover:bg-black/20 disabled:opacity-40"
                     >
-                      {syncingStoreId === s.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {syncingStoreId === s.id || inProgress ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-300" />
                       ) : (
                         <RefreshCw className="w-3.5 h-3.5" />
                       )}
