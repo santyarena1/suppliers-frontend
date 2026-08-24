@@ -12,7 +12,7 @@ import { useCart } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint } from "@/lib/api";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
-import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
+import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import {
   linePricing,
   taxLabel,
@@ -126,7 +126,6 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const unitNetConv = useMemo(() => convert(pricing?.unitNet ?? 0), [convert, pricing?.unitNet]);
 
   const cartItem = cartItems.find((i) => i.provider === providerName && i.externalId === extId);
-  const color = PROVIDER_COLOR[providerName] || "text-surface-400 bg-surface-400/10 border-surface-400/30";
 
   function copyId() {
     void navigator.clipboard.writeText(extId);
@@ -193,9 +192,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded border ${color}`}>
-                    {providerName.replace(/_/g, " ")}
-                  </span>
+                  <ProviderBadge provider={providerName} variant="inline" size="md" chip />
                   {product.brand && (
                     <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200">
                       {product.brand}
@@ -629,9 +626,7 @@ function productFacts(
     rows.push({ label, value: String(value).trim(), ...opts });
   };
 
-  push("Proveedor", providerName.replace(/_/g, " "), {
-    strongColor: PROVIDER_COLOR[providerName]?.split(" ")[0],
-  });
+  push("Proveedor", providerLabel(providerName));
   push("Marca", product.brand);
   push("Categoría", product.category);
   push("Subcategoría", product.subcategory);

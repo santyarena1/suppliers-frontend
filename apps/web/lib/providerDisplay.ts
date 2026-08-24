@@ -24,6 +24,12 @@ async function load(): Promise<Record<string, ProviderDisplay>> {
   return inflight;
 }
 
+/** Invalidar tras editar logos/colores en Configuración. */
+export function invalidateProviderDisplayCache() {
+  cache = null;
+  inflight = null;
+}
+
 /**
  * Devuelve logo/color por proveedor, priorizando lo configurado por el
  * superadmin (`ProviderDisplayConfig`) y cayendo a los defaults estáticos de

@@ -13,8 +13,7 @@ import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
 import { useCart, CartItem } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { proxyImg, formatUSD } from "@/lib/format";
-import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR, PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
-import { useProviderDisplay } from "@/lib/providerDisplay";
+import ProviderBadge from "@/components/ProviderBadge";
 import {
   linePricing,
   extractTaxLines,
@@ -439,7 +438,7 @@ export default function CartPage() {
                         onClick={() => setPedidosOpen(false)}
                         className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-900"
                       >
-                        <span className={PROVIDER_TEXT_COLOR[p] || "text-surface-200"}>{p.replace(/_/g, " ")}</span>
+                        <ProviderBadge provider={p} variant="inline" size="sm" />
                         <span className="text-[11px] text-surface-500">Pedidos</span>
                       </Link>
                     ))}
@@ -452,7 +451,7 @@ export default function CartPage() {
                         onClick={() => setPedidosOpen(false)}
                         className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-surface-300 hover:bg-surface-900"
                       >
-                        <span>{p.replace(/_/g, " ")}</span>
+                        <ProviderBadge provider={p} variant="inline" size="sm" />
                         <span className="text-[11px] text-surface-600">Cuenta</span>
                       </Link>
                     ))}
@@ -603,9 +602,7 @@ export default function CartPage() {
                               onClick={() => setActiveTab(p)}
                               className="h-9 px-2.5 inline-flex items-center gap-2 text-sm hover:bg-surface-900 transition-colors"
                             >
-                              <span className={`font-medium ${PROVIDER_TEXT_COLOR[p] || "text-surface-300"}`}>
-                                {p.replace(/_/g, " ")}
-                              </span>
+                              <ProviderBadge provider={p} variant="inline" size="sm" />
                               <span className="tabular-nums text-surface-300">{fmt(t.totalUSD)}</span>
                             </button>
                             <Link
@@ -810,28 +807,13 @@ function ProviderSection({
   remove: (p: string, e: string) => void;
   onClearProvider: () => void;
 }) {
-  const display = useProviderDisplay();
   if (!items || items.length === 0) return null;
-  const color = PROVIDER_COLOR[provider] || "text-surface-400 bg-surface-400/10 border-surface-400/30";
-  const logoUrl = display.logoUrl(provider);
 
   return (
     <section>
       <div className="flex items-center justify-between gap-3 pb-3 border-b border-surface-800">
         <div className="flex items-center gap-2.5 min-w-0">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt="" className="w-5 h-5 object-contain rounded-sm" />
-          ) : (
-            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${color}`}>
-              {provider.replace(/_/g, " ")}
-            </span>
-          )}
-          {logoUrl && (
-            <span className={`text-sm font-semibold tracking-wide ${PROVIDER_TEXT_COLOR[provider] || "text-white"}`}>
-              {provider.replace(/_/g, " ")}
-            </span>
-          )}
+          <ProviderBadge provider={provider} variant="inline" size="md" />
           <span className="text-xs text-surface-500 tabular-nums">
             {totals.productCount} {totals.productCount === 1 ? "línea" : "líneas"} · {totals.itemCount} u.
           </span>

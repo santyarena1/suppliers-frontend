@@ -10,7 +10,7 @@ import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
   canSyncProvider, type VisibleProvider
 } from "@/lib/api";
-import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
+import ProviderBadge from "@/components/ProviderBadge";
 import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, Sparkles, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
@@ -99,10 +99,8 @@ export default function ProveedoresPage() {
                           key={provider}
                           className="bg-surface-900 border border-surface-800 hover:border-surface-600 rounded-xl p-4 transition-all flex flex-col gap-3"
                         >
-                          <Link href={`/proveedores/${provider}`} className="flex items-center justify-between">
-                            <span className={`text-sm font-bold ${PROVIDER_TEXT_COLOR[provider] || "text-surface-200"}`}>
-                              {name}
-                            </span>
+                          <Link href={`/proveedores/${provider}`} className="flex items-center justify-between gap-3">
+                            <ProviderBadge provider={provider} label={name} variant="inline" size="md" />
                             {s?.hasCredentials ? (
                               <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                                 <CheckCircle2 className="w-3 h-3" /> Configurado
@@ -185,9 +183,7 @@ export default function ProveedoresPage() {
                         href={`/proveedores/${provider}?tab=credentials`}
                         className="bg-surface-900 border border-surface-800 hover:border-surface-600 rounded-xl p-4 flex items-center justify-between gap-3 transition-all"
                       >
-                        <span className={`text-sm font-bold ${PROVIDER_TEXT_COLOR[provider] || "text-surface-200"}`}>
-                          {name}
-                        </span>
+                        <ProviderBadge provider={provider} label={name} variant="inline" size="md" />
                         <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400">
                           <Sparkles className="w-3 h-3" /> Cargá tu cuenta
                         </span>

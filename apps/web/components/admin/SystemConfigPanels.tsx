@@ -25,6 +25,7 @@ import {
 } from "@/lib/brand-presets";
 import ImageUploadField from "@/components/ImageUploadField";
 import { assetUrl } from "@/lib/assets";
+import { invalidateProviderDisplayCache } from "@/lib/providerDisplay";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
@@ -49,6 +50,7 @@ export function ProvidersTab({ showToast }: { showToast: ConfigToast }) {
     setRows((prev) => prev.map((r) => (r.provider === provider ? { ...r, ...patch } : r)));
     try {
       await adminApi.updateProviderDisplay(provider, patch);
+      invalidateProviderDisplayCache();
     } catch (err) {
       showToast(errMsg(err, "Error al guardar"), false);
       load();

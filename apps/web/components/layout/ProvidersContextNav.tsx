@@ -2,7 +2,6 @@
 
 import { LayoutDashboard } from "lucide-react";
 import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
-import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { useMyProviders } from "@/lib/myProviders";
 import { useProviderStatuses } from "@/lib/providerStatus";
 import ContextNav, { type ContextNavItem } from "./ContextNav";
@@ -25,8 +24,8 @@ export default function ProvidersContextNav({ children }: { children: React.Reac
       href: `/proveedores/${provider}`,
       label: name,
       exact: true,
-      dotClass: dotFor(statuses[provider]),
-      colorClass: PROVIDER_TEXT_COLOR[provider as Provider] || "",
+      provider,
+      dotClass: dotFor(statuses[provider as Provider]),
     })),
   ];
 
