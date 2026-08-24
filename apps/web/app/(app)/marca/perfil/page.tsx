@@ -9,6 +9,7 @@ import { BRAND_PANEL_NAV } from "@/lib/brands/nav";
 import { brandPanelApi, type BrandAccount } from "@/lib/brands";
 import { assetsApi } from "@/lib/api";
 import { assetUrl } from "@/lib/assets";
+import ImageUploadPreviewModal from "@/components/ImageUploadPreviewModal";
 import { Loader2, Upload } from "lucide-react";
 
 export default function MarcaPerfilPage() {
@@ -16,6 +17,8 @@ export default function MarcaPerfilPage() {
   const logoRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [draftLogo, setDraftLogo] = useState<File | null>(null);
   const [profile, setProfile] = useState<BrandAccount | null>(null);
   const [form, setForm] = useState({ description: "", commercialData: "", contactEmail: "", contactPhone: "", website: "" });
 
@@ -53,12 +56,15 @@ export default function MarcaPerfilPage() {
   }
 
   async function uploadLogo(file: File) {
+    setUploadingLogo(true);
     try {
       const { url } = await assetsApi.upload(file);
       const updated = await brandPanelApi.updateProfile({ logoUrl: url });
       setProfile(updated);
+      setDraftLogo(null);
       showToast("Logo actualizado");
     } catch { showToast("Error al subir logo", false); }
+    finally { setUploadingLogo(false); }
   }
 
   return (
@@ -75,13 +81,21 @@ export default function MarcaPerfilPage() {
               <div>
                 <p className="font-semibold text-white text-lg">{profile.name}</p>
                 <input ref={logoRef} type="file" accept="image/*" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadLogo(f); }} />
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setDraftLogo(f); e.target.value = ""; }} />
                 <button type="button" onClick={() => logoRef.current?.click()}
                   className="flex items-center gap-1 text-xs text-brand-400 hover:underline mt-1">
                   <Upload className="w-3 h-3" /> Cambiar logo
                 </button>
               </div>
             </div>
+            {draftLogo && (
+              <ImageUploadPreviewModal
+                file={draftLogo}
+                uploading={uploadingLogo}
+                onCancel={() => { if (!uploadingLogo) setDraftLogo(null); }}
+                onConfirm={uploadLogo}
+              />
+            )}
             {(["description", "commercialData", "contactEmail", "contactPhone", "website"] as const).map((field) => (
               <div key={field}>
                 <label className="text-xs text-surface-400 block mb-1">{field}</label>

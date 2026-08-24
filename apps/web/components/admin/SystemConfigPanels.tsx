@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   adminApi,
   ProviderDisplay,
@@ -13,7 +13,15 @@ import {
   Loader2, Plus, Trash2, X,
 } from "lucide-react";
 import {
-  BANNER_SLOTS, BRAND_PRESET_LABELS, BRAND_PRESETS, applyBrandPreset, type BrandPreset, type BannerSlot,
+  BANNER_SLOTS,
+  BANNER_SLOT_GRID_CLASS,
+  BANNER_SLOT_ORDER,
+  BANNER_SLOT_RECOMMENDED,
+  BRAND_PRESET_LABELS,
+  BRAND_PRESETS,
+  applyBrandPreset,
+  type BrandPreset,
+  type BannerSlot,
 } from "@/lib/brand-presets";
 import ImageUploadField from "@/components/ImageUploadField";
 import { assetUrl } from "@/lib/assets";
@@ -170,6 +178,10 @@ export function BrandsTab({ showToast }: { showToast: ConfigToast }) {
 
 // ---------- Banners ----------
 
+function slotLabel(slot: BannerSlot) {
+  return BANNER_SLOTS.find((s) => s.value === slot)?.label ?? slot;
+}
+
 export function BannersTab({ showToast }: { showToast: ConfigToast }) {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -192,6 +204,31 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const occupiedBySlot = useMemo(() => {
+    const map = new Map<string, Banner>();
+    for (const b of banners) {
+      if (b.position !== form.position) continue;
+      if (!b.slot) continue;
+      // Preferir activo si hay varios en el mismo slot
+      const prev = map.get(b.slot);
+      if (!prev || (b.active && !prev.active)) map.set(b.slot, b);
+    }
+    return map;
+  }, [banners, form.position]);
+
+  function openCreate(slot?: BannerSlot) {
+    setForm((prev) => ({
+      ...prev,
+      slot: slot ?? prev.slot,
+      imageUrl: "",
+      title: "",
+      subtitle: "",
+      linkUrl: "",
+      order: 0,
+    }));
+    setShowCreate(true);
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -199,7 +236,15 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
       await adminApi.createBanner(form);
       showToast("Banner creado");
       setShowCreate(false);
-      setForm({ position: "search", slot: "hero_main", imageUrl: "", title: "", subtitle: "", linkUrl: "", order: 0 });
+      setForm((prev) => ({
+        ...prev,
+        slot: "hero_main",
+        imageUrl: "",
+        title: "",
+        subtitle: "",
+        linkUrl: "",
+        order: 0,
+      }));
       load();
     } catch (err) {
       showToast(errMsg(err, "Error al crear el banner"), false);
@@ -228,69 +273,157 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
     }
   }
 
+  const selectedSize = BANNER_SLOT_RECOMMENDED[form.slot];
+
   return (
-    <div className="max-w-3xl">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-sm font-semibold text-white">Banners ({banners.length})</h2>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg px-3 py-2 transition-all"
-        >
-          <Plus className="w-3.5 h-3.5" /> Nuevo banner
-        </button>
+    <div className="max-w-4xl">
+      <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+        <div>
+          <h2 className="text-sm font-semibold text-white">Banners ({banners.length})</h2>
+          <p className="text-xs text-surface-500 mt-0.5">
+            Tocá un espacio del maquetado para cargar la imagen en ese lugar.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={form.position}
+            onChange={(e) => setForm({ ...form, position: e.target.value as "home" | "search" })}
+            className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500"
+          >
+            <option value="search">Vista: Buscador</option>
+            <option value="home">Vista: Home</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => openCreate()}
+            className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg px-3 py-2 transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" /> Nuevo banner
+          </button>
+        </div>
+      </div>
+
+      {/* Maquetado del grid — mismo layout que el buscador */}
+      <div className="mb-6 border border-surface-800 rounded-2xl p-3 sm:p-4 bg-surface-900/40">
+        <p className="text-[10px] uppercase tracking-wider text-surface-500 font-semibold mb-3">
+          Maquetado · {form.position === "search" ? "Buscador" : "Home"}
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-min">
+          {BANNER_SLOT_ORDER.map((slot) => {
+            const meta = BANNER_SLOT_RECOMMENDED[slot];
+            const occupied = occupiedBySlot.get(slot);
+            const selected = showCreate && form.slot === slot;
+            return (
+              <button
+                key={slot}
+                type="button"
+                onClick={() => openCreate(slot)}
+                className={`relative overflow-hidden rounded-xl border text-left transition-all ${BANNER_SLOT_GRID_CLASS[slot]} ${
+                  selected
+                    ? "border-brand-500 ring-1 ring-brand-500/40 bg-brand-600/10"
+                    : occupied
+                      ? "border-surface-700 bg-surface-900 hover:border-brand-500/50"
+                      : "border-dashed border-surface-700 bg-surface-950/80 hover:border-brand-500/60 hover:bg-brand-600/5"
+                }`}
+              >
+                {occupied?.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={assetUrl(occupied.imageUrl)}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover opacity-70"
+                  />
+                ) : null}
+                <div className={`relative z-10 p-3 flex flex-col justify-between h-full min-h-[inherit] ${occupied?.imageUrl ? "bg-gradient-to-t from-black/75 via-black/30 to-black/10" : ""}`}>
+                  <div>
+                    <p className={`text-xs font-semibold ${occupied ? "text-white" : "text-surface-300"}`}>
+                      {slotLabel(slot)}
+                    </p>
+                    <p className={`text-[10px] mt-0.5 ${occupied ? "text-white/70" : "text-surface-500"}`}>
+                      {meta.width}×{meta.height}px
+                    </p>
+                  </div>
+                  <p className={`text-[10px] mt-2 leading-snug ${occupied ? "text-white/60" : "text-surface-600"}`}>
+                    {occupied ? (occupied.active ? "Cargado · tocá para reemplazar / crear otro" : "Inactivo") : "Vacío · tocá para cargar"}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
       ) : banners.length === 0 ? (
-        <p className="text-xs text-surface-500 border border-surface-800 rounded-xl px-4 py-6 text-center">Todavía no hay banners cargados.</p>
+        <p className="text-xs text-surface-500 border border-surface-800 rounded-xl px-4 py-6 text-center">
+          Todavía no hay banners. Elegí un espacio del maquetado para empezar.
+        </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {banners.map((b) => (
-            <div key={b.id} className="flex items-center gap-3 border border-surface-800 rounded-xl px-4 py-3">
-              <div className="w-16 h-10 rounded bg-surface-800 flex-shrink-0 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={assetUrl(b.imageUrl)} alt="" className="w-full h-full object-cover" />
+          {banners.map((b) => {
+            const size = b.slot ? BANNER_SLOT_RECOMMENDED[b.slot as BannerSlot] : null;
+            return (
+              <div key={b.id} className="flex items-center gap-3 border border-surface-800 rounded-xl px-4 py-3">
+                <div className="w-16 h-10 rounded bg-surface-800 flex-shrink-0 overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={assetUrl(b.imageUrl)} alt="" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-surface-200 truncate">{b.title || "(sin título)"}</p>
+                  <p className="text-[11px] text-surface-500">
+                    {b.position === "home" ? "Home" : "Buscador"}
+                    {b.slot ? ` · ${slotLabel(b.slot as BannerSlot)}` : ""}
+                    {size ? ` · ${size.width}×${size.height}` : ""}
+                    {` · orden ${b.order}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => toggleActive(b)}
+                  className={`text-xs font-medium px-2.5 py-1.5 rounded-md border flex-shrink-0 ${
+                    b.active ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-red-500/10 border-red-500/25 text-red-400"
+                  }`}
+                >
+                  {b.active ? "Activo" : "Inactivo"}
+                </button>
+                <button onClick={() => remove(b)} className="text-surface-500 hover:text-red-400 transition-colors flex-shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-surface-200 truncate">{b.title || "(sin título)"}</p>
-                <p className="text-[11px] text-surface-500">
-                  {b.position === "home" ? "Home" : "Buscador"}
-                  {b.slot ? ` · ${b.slot}` : ""} · orden {b.order}
-                </p>
-              </div>
-              <button
-                onClick={() => toggleActive(b)}
-                className={`text-xs font-medium px-2.5 py-1.5 rounded-md border flex-shrink-0 ${
-                  b.active ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-red-500/10 border-red-500/25 text-red-400"
-                }`}
-              >
-                {b.active ? "Activo" : "Inactivo"}
-              </button>
-              <button onClick={() => remove(b)} className="text-surface-500 hover:text-red-400 transition-colors flex-shrink-0">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-md">
+          <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-white">Nuevo banner</h3>
-              <button onClick={() => setShowCreate(false)} className="text-surface-500 hover:text-white"><X className="w-4 h-4" /></button>
+              <button type="button" onClick={() => setShowCreate(false)} className="text-surface-500 hover:text-white"><X className="w-4 h-4" /></button>
             </div>
             <form onSubmit={handleCreate} className="flex flex-col gap-3">
+              <div className="rounded-xl border border-surface-800 bg-surface-900/50 p-3">
+                <p className="text-xs font-medium text-white">{slotLabel(form.slot)}</p>
+                <p className="text-[11px] text-brand-400 mt-1">
+                  Medida recomendada: <span className="font-semibold">{selectedSize.width}×{selectedSize.height}px</span>
+                </p>
+                <p className="text-[10px] text-surface-500 mt-1 leading-snug">{selectedSize.hint}</p>
+              </div>
+
               <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value as "home" | "search" })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
                 <option value="home">Home</option>
                 <option value="search">Buscador</option>
               </select>
               <select value={form.slot} onChange={(e) => setForm({ ...form, slot: e.target.value as BannerSlot })} className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500">
-                {BANNER_SLOTS.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
+                {BANNER_SLOTS.map((s) => {
+                  const size = BANNER_SLOT_RECOMMENDED[s.value];
+                  return (
+                    <option key={s.value} value={s.value}>
+                      {s.label} · {size.width}×{size.height}
+                    </option>
+                  );
+                })}
               </select>
               <ImageUploadField
                 required

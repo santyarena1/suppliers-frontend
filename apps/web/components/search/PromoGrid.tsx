@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import type { Banner } from "@/lib/api";
-import { BANNER_SLOT_GRID_CLASS, type BannerSlot } from "@/lib/brand-presets";
+import {
+  BANNER_SLOT_GRID_CLASS,
+  BANNER_SLOT_ORDER,
+  type BannerSlot,
+} from "@/lib/brand-presets";
 import { assetUrl } from "@/lib/assets";
-
-const SLOT_ORDER: BannerSlot[] = [
-  "hero_main", "hero_side", "tile_1", "tile_2", "tile_3", "tile_4", "strip",
-];
 
 function BannerTile({ banner }: { banner: Banner }) {
   const slot = (banner.slot as BannerSlot) || "tile_1";
@@ -53,11 +53,13 @@ function BannerTile({ banner }: { banner: Banner }) {
 }
 
 export default function PromoGrid({ banners }: { banners: Banner[] }) {
-  if (banners.length === 0) return null;
+  // Sin banners no maquetamos huecos vacíos.
+  const usable = banners.filter((b) => b.active !== false && !!b.imageUrl?.trim());
+  if (usable.length === 0) return null;
 
-  const sorted = [...banners].sort((a, b) => {
-    const ai = SLOT_ORDER.indexOf((a.slot as BannerSlot) || "tile_1");
-    const bi = SLOT_ORDER.indexOf((b.slot as BannerSlot) || "tile_1");
+  const sorted = [...usable].sort((a, b) => {
+    const ai = BANNER_SLOT_ORDER.indexOf((a.slot as BannerSlot) || "tile_1");
+    const bi = BANNER_SLOT_ORDER.indexOf((b.slot as BannerSlot) || "tile_1");
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.order - b.order;
   });
 

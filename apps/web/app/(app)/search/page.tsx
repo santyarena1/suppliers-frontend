@@ -41,6 +41,7 @@ function SearchPage() {
     hydrated,
     getUiState,
     setUiState,
+    clearResults,
   } = useResults();
   const searchParams = useSearchParams();
   const initialQ = searchParams?.get("q") || "";
@@ -159,6 +160,21 @@ function SearchPage() {
     await runSearch(query);
   }
 
+  function resetToHome() {
+    clearResults();
+    setQuery("");
+    setActiveQuery("");
+    setResults([]);
+    setSearched(false);
+    setError("");
+    setRefineText("");
+    setMinPrice("");
+    setMaxPrice("");
+    setHideNoImage(false);
+    setLoading(false);
+    syncSearchUrl("");
+  }
+
   function restoreFromStore(q: string, r: ProductDTO[]) {
     const ui = getUiState();
     setQuery(q);
@@ -263,16 +279,48 @@ function SearchPage() {
   }, [hydrated]);
 
   // Si cambia ?q= desde afuera (home, link) y no es un sync nuestro, buscar de nuevo.
+  // Si ?q= queda vacío (sidebar → Búsqueda / clear), volver al landing.
   useEffect(() => {
     if (!hydrated || !restoredRef.current) return;
     const urlQ = initialQ.trim();
     if (urlQ === (lastUrlQRef.current ?? "")) return;
     lastUrlQRef.current = urlQ;
-    if (!urlQ) return;
+    if (!urlQ) {
+      setQuery("");
+      setActiveQuery("");
+      setResults([]);
+      setSearched(false);
+      setError("");
+      setRefineText("");
+      setMinPrice("");
+      setMaxPrice("");
+      setHideNoImage(false);
+      return;
+    }
     if (urlQ.toLowerCase() === activeQuery.trim().toLowerCase() && results.length > 0) return;
     void runSearch(urlQ, { track: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ]);
+
+  // Si el sidebar limpia el store estando en /search, salir a landing.
+  useEffect(() => {
+    if (!hydrated || !restoredRef.current) return;
+    if (storedQuery || storedResults.length > 0) return;
+    if (!searched && results.length === 0) return;
+    const urlQ = initialQ.trim();
+    if (urlQ) return;
+    setQuery("");
+    setActiveQuery("");
+    setResults([]);
+    setSearched(false);
+    setError("");
+    setRefineText("");
+    setMinPrice("");
+    setMaxPrice("");
+    setHideNoImage(false);
+    lastUrlQRef.current = "";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, storedQuery, storedResults.length]);
 
   // Persistir filtros / vista / scroll mientras hay una búsqueda activa.
   useEffect(() => {
@@ -321,7 +369,15 @@ function SearchPage() {
                   className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-8 py-2 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
                 />
                 {query && (
-                  <button type="button" onClick={() => setQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-300">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (searched) resetToHome();
+                      else setQuery("");
+                    }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-300"
+                    title={searched ? "Volver al inicio" : "Limpiar"}
+                  >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}

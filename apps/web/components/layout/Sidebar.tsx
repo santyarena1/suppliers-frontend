@@ -7,6 +7,7 @@ import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, X } from "lucide-react"
 import { clearSession, getUser, type UserRole } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules } from "@/lib/permissions";
+import { useResults } from "@/lib/results";
 import {
   NAV_SECTIONS,
   type NavItemDef,
@@ -50,6 +51,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const { totalCount, byProvider } = useCart();
   const providerCount = Object.keys(byProvider).length;
   const myModules = useMyModules();
+  const { clearResults } = useResults();
 
   const [collapsed, setCollapsed] = useState(false);
   const [openSection, setOpenSection] = useState<NavSectionId | null>(null);
@@ -109,11 +111,22 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
       ? `${providerCount} prov.`
       : undefined;
 
+    function onNavClick(e: React.MouseEvent<HTMLAnchorElement>) {
+      onCloseMobile();
+      // Re-tocar Búsqueda estando ya en el módulo: limpiar y volver al landing.
+      if (item.id === "search" && pathname.startsWith("/search")) {
+        e.preventDefault();
+        clearResults();
+        router.push("/search");
+      }
+    }
+
     return (
       <Link
         key={item.id}
         href={item.href}
         title={opts?.collapsed ? item.label : undefined}
+        onClick={onNavClick}
         className={`flex items-center gap-2.5 rounded-md text-sm transition-all relative ${
           opts?.collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
         } ${

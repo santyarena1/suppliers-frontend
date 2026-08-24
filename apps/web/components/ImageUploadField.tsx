@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Loader2, Upload } from "lucide-react";
 import { assetsApi } from "@/lib/api";
 import { assetUrl } from "@/lib/assets";
+import ImageUploadPreviewModal from "@/components/ImageUploadPreviewModal";
 
 interface ImageUploadFieldProps {
   value: string;
@@ -31,14 +32,16 @@ export default function ImageUploadField({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftFile, setDraftFile] = useState<File | null>(null);
 
-  async function handleFile(file: File) {
+  async function confirmUpload(file: File) {
     setUploading(true);
     setError(null);
     try {
       const { url } = await assetsApi.upload(file);
       onChange(url);
       onCommit?.(url);
+      setDraftFile(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al subir");
     } finally {
@@ -46,7 +49,36 @@ export default function ImageUploadField({
     }
   }
 
-  const preview = value ? assetUrl(value) : "";
+  const previewSrc = value ? assetUrl(value) : "";
+
+  const fileInput = (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="image/*"
+      className="hidden"
+      onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (f) {
+          setError(null);
+          setDraftFile(f);
+        }
+        e.target.value = "";
+      }}
+    />
+  );
+
+  const modal = draftFile && (
+    <ImageUploadPreviewModal
+      file={draftFile}
+      uploading={uploading}
+      onCancel={() => {
+        if (!uploading) setDraftFile(null);
+      }}
+      onConfirm={confirmUpload}
+    />
+  );
+
   const inputCls =
     "bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500";
   const fullInputCls =
@@ -64,17 +96,7 @@ export default function ImageUploadField({
           required={required}
           className={`flex-1 min-w-0 ${inputCls}`}
         />
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
-            e.target.value = "";
-          }}
-        />
+        {fileInput}
         <button
           type="button"
           disabled={uploading}
@@ -84,7 +106,12 @@ export default function ImageUploadField({
         >
           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
         </button>
-        {error && <span className="text-[10px] text-red-400 truncate max-w-[80px]" title={error}>{error}</span>}
+        {error && !draftFile && (
+          <span className="text-[10px] text-red-400 truncate max-w-[80px]" title={error}>
+            {error}
+          </span>
+        )}
+        {modal}
       </div>
     );
   }
@@ -93,10 +120,10 @@ export default function ImageUploadField({
     <div className={className}>
       {label && <label className="text-xs text-surface-400 block mb-1">{label}</label>}
       <div className="flex gap-3 items-start">
-        {preview ? (
+        {previewSrc ? (
           <div className="w-20 h-20 rounded-lg bg-surface-800 border border-surface-700 overflow-hidden flex-shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={preview} alt="" className="w-full h-full object-cover" />
+            <img src={previewSrc} alt="" className="w-full h-full object-contain" />
           </div>
         ) : (
           <div className="w-20 h-20 rounded-lg bg-surface-800 border border-surface-700 flex-shrink-0 flex items-center justify-center text-surface-600">
@@ -113,17 +140,7 @@ export default function ImageUploadField({
               required={required}
               className={fullInputCls}
             />
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
-                e.target.value = "";
-              }}
-            />
+            {fileInput}
             <button
               type="button"
               disabled={uploading}
@@ -134,10 +151,13 @@ export default function ImageUploadField({
               Subir desde PC
             </button>
           </div>
-          {error && <p className="text-[11px] text-red-400">{error}</p>}
-          <p className="text-[10px] text-surface-600">JPG, PNG, WebP, GIF o SVG · máx. 5 MB. También podés pegar una URL externa.</p>
+          {error && !draftFile && <p className="text-[11px] text-red-400">{error}</p>}
+          <p className="text-[10px] text-surface-600">
+            JPG, PNG, WebP, GIF o SVG · máx. 5 MB. Vas a ver una preview antes de subir.
+          </p>
         </div>
       </div>
+      {modal}
     </div>
   );
 }
