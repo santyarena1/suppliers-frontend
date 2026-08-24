@@ -43,7 +43,8 @@ import {
 import {
   BEST_MATCH_THRESHOLD,
   marginVsCostPercent,
-  providerNameMatchRatio,
+  queryMatchRatio,
+  repairImplausibleSalePrice,
 } from "@/lib/retailMatch";
 
 function simplifyQuery(name: string): string {
@@ -245,18 +246,24 @@ export default function SalePricePanel({
   const visibleResults = useMemo(() => {
     const hidden = new Set(hiddenStoreIds);
     const filtered = results.filter((r) => !hidden.has(r.store.id));
-    const enriched = filtered.map((hit) => ({
-      hit,
-      matchRatio: providerNameMatchRatio(seedQuery, hit.name),
-      marginPct: marginVsCostPercent(hit.price, costArs),
-    }));
+    // Match vs la query que el usuario escribió (no el nombre largo del proveedor)
+    const matchAgainst = q.trim() || seedQuery;
+    const enriched = filtered.map((hit) => {
+      const price = repairImplausibleSalePrice(hit.price, costArs);
+      const fixed = price !== hit.price ? { ...hit, price } : hit;
+      return {
+        hit: fixed,
+        matchRatio: queryMatchRatio(matchAgainst, hit.name),
+        marginPct: marginVsCostPercent(price, costArs),
+      };
+    });
     const sortedHits = sortHits(
       enriched.map((e) => e.hit),
       sortBy,
     );
     const map = new Map(enriched.map((e) => [e.hit.id, e]));
     return sortedHits.map((hit) => map.get(hit.id)!);
-  }, [results, hiddenStoreIds, sortBy, seedQuery, costArs]);
+  }, [results, hiddenStoreIds, sortBy, seedQuery, q, costArs]);
 
   const bestMatches = useMemo(
     () =>
@@ -503,7 +510,7 @@ export default function SalePricePanel({
                 <div>
                   <p className="text-[11px] font-semibold text-emerald-300 mb-2 px-0.5">
                     Mejores coincidencias
-                    <span className="text-surface-500 font-normal"> · ≥85% de palabras del proveedor</span>
+                    <span className="text-surface-500 font-normal"> · ≥85% de palabras de la búsqueda</span>
                   </p>
                   <div className={inline
                     ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
@@ -732,22 +739,28 @@ function RetailDetailModal({
   }, [productId]);
 
   const costArs = costUsd != null && costUsd > 0 ? convert(costUsd).amount : null;
+  const displayPrice = detail
+    ? repairImplausibleSalePrice(detail.price, costArs)
+    : 0;
   const margin =
-    detail && costArs != null && costArs > 0 && detail.price > 0
-      ? (detail.price / costArs - 1) * 100
+    detail && costArs != null && costArs > 0 && displayPrice > 0
+      ? (displayPrice / costArs - 1) * 100
       : null;
 
   const chartData = useMemo(() => {
     if (!detail?.priceHistory?.length) return [];
-    return detail.priceHistory.map((h) => ({
-      date: new Date(h.changedAt).toLocaleDateString("es-AR", {
-        day: "2-digit",
-        month: "short",
-      }),
-      price: h.price,
-      fullDate: new Date(h.changedAt).toLocaleString("es-AR"),
-    }));
-  }, [detail]);
+    return detail.priceHistory.map((h) => {
+      const price = repairImplausibleSalePrice(h.price, costArs);
+      return {
+        date: new Date(h.changedAt).toLocaleDateString("es-AR", {
+          day: "2-digit",
+          month: "short",
+        }),
+        price,
+        fullDate: new Date(h.changedAt).toLocaleString("es-AR"),
+      };
+    });
+  }, [detail, costArs]);
 
   return (
     <>
@@ -811,7 +824,7 @@ function RetailDetailModal({
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-surface-500">Precio de venta</p>
                   <p className="text-xl font-bold text-emerald-400 tabular-nums mt-0.5">
-                    {formatARS(detail.price)}
+                    {formatARS(displayPrice)}
                   </p>
                 </div>
                 <div>

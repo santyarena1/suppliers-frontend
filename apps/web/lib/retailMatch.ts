@@ -51,3 +51,27 @@ export function marginVsCostPercent(saleArs: number, costArs: number | null | un
   if (costArs == null || !(costArs > 0) || !(saleArs > 0)) return null;
   return (saleArs / costArs - 1) * 100;
 }
+
+/**
+ * Precio de local ~100× bajo vs costo (falso ÷100) → recompone ×100.
+ */
+export function repairImplausibleSalePrice(
+  saleArs: number,
+  costArs: number | null | undefined
+): number {
+  if (!Number.isFinite(saleArs) || saleArs <= 0) return saleArs;
+  if (costArs == null || !(costArs > 0)) return saleArs;
+  const scaled = saleArs * 100;
+  if (saleArs < costArs * 0.08 && scaled >= costArs * 0.35 && scaled <= costArs * 4) {
+    return scaled;
+  }
+  return saleArs;
+}
+
+/**
+ * % de tokens de la búsqueda activa que aparecen en el título del local.
+ * Con 1 palabra (“4500x”), cualquier título que la contenga = 100%.
+ */
+export function queryMatchRatio(query: string, retailName: string): number {
+  return providerNameMatchRatio(query, retailName);
+}
