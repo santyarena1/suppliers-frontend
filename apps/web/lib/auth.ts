@@ -21,7 +21,7 @@ export function getToken(): string | null {
 
 export type UserRole = "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
 export type TenantType = "RETAILER" | "DISTRIBUTOR" | "BRAND";
-export type TenantRole = "OWNER" | "BUYER" | "SELLER" | "PRODUCT_MANAGER" | "MARKETING" | "COMMERCIAL" | "VIEWER";
+export type TenantRole = "OWNER" | "ADMIN" | "BUYER" | "SELLER" | "PRODUCT_MANAGER" | "MARKETING" | "COMMERCIAL" | "VIEWER";
 
 export interface SessionUser {
   username: string;
@@ -78,10 +78,18 @@ export function getUser(): SessionUser | null {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+export const SESSION_EVENT = "nodo-session";
+
+function emitSession() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
 export function saveSession(token: string, user: SessionUser) {
   localStorage.setItem("token", token);
   localStorage.setItem("user", JSON.stringify(user));
   writeCookie(COOKIE, "1", ONE_DAY);
+  emitSession();
 }
 
 export function clearSession() {
@@ -90,6 +98,7 @@ export function clearSession() {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
   localStorage.removeItem(ADMIN_USER_KEY);
   deleteCookie(COOKIE);
+  emitSession();
 }
 
 // ---------- Suplantación ----------
@@ -128,6 +137,7 @@ export function stopImpersonation(): boolean {
   localStorage.setItem("token", token);
   localStorage.setItem("user", user);
   writeCookie(COOKIE, "1", ONE_DAY);
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_EVENT));
   return true;
 }
 

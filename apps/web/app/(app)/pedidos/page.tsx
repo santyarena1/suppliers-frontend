@@ -11,7 +11,7 @@ import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
 
 /**
  * Pedidos de la organización. Un vendedor arma el pedido y lo deja firmado acá;
- * el dueño o un administrador lo aprueba y recién entonces sale al proveedor.
+ * el administrador lo aprueba y recién entonces sale al proveedor.
  */
 export default function PedidosPage() {
   const [orders, setOrders] = useState<TenantOrder[]>([]);
@@ -206,7 +206,7 @@ function OrderCard({
           </>
         ) : esperando ? (
           <p className="text-[11px] text-surface-500 py-1">
-            Lo tiene que aprobar el dueño o un administrador de tu organización.
+            Lo tiene que aprobar un administrador de tu organización.
           </p>
         ) : (
           <Link

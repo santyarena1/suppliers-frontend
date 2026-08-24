@@ -18,7 +18,7 @@ export type PendingOrderProvider = "INVID" | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLE
 export type PendingOrderJob = {
   id: string;
   provider: PendingOrderProvider;
-  /** PENDING_APPROVAL: lo armó un vendedor y espera la firma del dueño del comercio. */
+  /** PENDING_APPROVAL: lo armó un vendedor o un comprador y espera la firma del administrador. */
   status: "PENDING" | "PENDING_APPROVAL" | "CREATED" | "FAILED";
   message: string;
   webOrderNumber?: string | null;

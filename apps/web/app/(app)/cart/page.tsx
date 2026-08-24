@@ -78,7 +78,7 @@ const EMPTY_TOTALS: Totals = {
 };
 
 export default function CartPage() {
-  const { items, byProvider, setQty, remove, clear, clearProvider, totalCount } = useCart();
+  const { items, byProvider, setQty, remove, clear, clearProvider, totalCount, canMutate } = useCart();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
   const [elitPreview, setElitPreview] = useState<ElitCheckoutPreview | null>(null);
@@ -624,7 +624,7 @@ export default function CartPage() {
                     </div>
                   )}
 
-                  {activeTab === "INVID" && byProvider.INVID?.length > 0 && (
+                  {canMutate && activeTab === "INVID" && byProvider.INVID?.length > 0 && (
                     <InvidDraftPanel
                       compact
                       items={byProvider.INVID}
@@ -638,7 +638,7 @@ export default function CartPage() {
                     />
                   )}
 
-                  {activeTab === "NEW_BYTES" && byProvider.NEW_BYTES?.length > 0 && (
+                  {canMutate && activeTab === "NEW_BYTES" && byProvider.NEW_BYTES?.length > 0 && (
                     <NewBytesDraftPanel
                       compact
                       items={byProvider.NEW_BYTES}
@@ -652,7 +652,7 @@ export default function CartPage() {
                     />
                   )}
 
-                  {activeTab === "ELIT" && byProvider.ELIT?.length > 0 && (
+                  {canMutate && activeTab === "ELIT" && byProvider.ELIT?.length > 0 && (
                     <ElitCheckoutPanel
                       items={byProvider.ELIT}
                       onCreated={(message) => {
@@ -665,7 +665,7 @@ export default function CartPage() {
                     />
                   )}
 
-                  {activeTab === "GRUPO_NUCLEO" && byProvider.GRUPO_NUCLEO?.length > 0 && (
+                  {canMutate && activeTab === "GRUPO_NUCLEO" && byProvider.GRUPO_NUCLEO?.length > 0 && (
                     <GrupoNucleoCheckoutPanel
                       items={byProvider.GRUPO_NUCLEO}
                       onCreated={(message) => {
@@ -676,7 +676,7 @@ export default function CartPage() {
                     />
                   )}
 
-                  {activeTab === "AIR" && byProvider.AIR?.length > 0 && (
+                  {canMutate && activeTab === "AIR" && byProvider.AIR?.length > 0 && (
                     <AirCheckoutPanel
                       items={byProvider.AIR}
                       onCreated={(message) => {

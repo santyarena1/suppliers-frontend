@@ -11,6 +11,7 @@ import {
   TENANT_ROLES_CAN_PURGE_CATALOG
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
+import { canManageCommerce } from "@/lib/commerce";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
@@ -138,10 +139,12 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
   // Vacía el catálogo de toda la organización, no solo el de quien lo pide.
   const [canPurge, setCanPurge] = useState(false);
+  const [canManage, setCanManage] = useState(false);
 
   useEffect(() => {
     const role = getTenant()?.role;
     setCanPurge(isAdmin() || (!!role && TENANT_ROLES_CAN_PURGE_CATALOG.includes(role)));
+    setCanManage(isAdmin() || canManageCommerce());
   }, []);
 
   async function loadConfig() {
@@ -398,6 +401,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           Este catálogo es público: se sincroniza sin login. Los precios son los que publica el sitio (lista, no necesariamente mayorista).
                         </p>
                       )}
+                      {canManage && (
                       <button
                         onClick={handleSync}
                         disabled={syncing || !canSyncProvider(status)}
@@ -406,6 +410,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         {syncing ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
                         {syncing ? "Sincronizando..." : "Sincronizar ahora"}
                       </button>
+                      )}
+                      {!canManage && (
+                        <p className="text-xs text-surface-500">El catálogo se actualiza solo. El administrador puede sincronizar a mano si hace falta.</p>
+                      )}
                       {syncing && <SyncProgressBar />}
                       {syncResult && (
                         <div className={`flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 ${
@@ -419,6 +427,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       )}
                     </div>
 
+                    {canManage && (
                     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-3">
                       <div className="flex items-center gap-2 text-sm font-semibold text-white">
                         <FileSpreadsheet className="w-4 h-4 text-brand-700 dark:text-brand-400" />
@@ -436,6 +445,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       </label>
                       {importing && <SyncProgressBar />}
                     </div>
+                    )}
                   </div>
                 )}
 
@@ -558,7 +568,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                         <button
                           type="submit"
-                          disabled={savingConfig}
+                          disabled={savingConfig || !canManage}
                           className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                         >
                           {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

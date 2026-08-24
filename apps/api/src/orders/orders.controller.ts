@@ -26,7 +26,7 @@ export class OrdersController {
   async pending(@CurrentTenant() tenant: TenantContext) {
     return {
       canApprove: this.approval.canApprove(tenant),
-      needsApproval: this.approval.needsApproval(tenant),
+      needsApproval: await this.approval.needsApproval(tenant),
       orders: await this.orders.pending(tenant),
     };
   }

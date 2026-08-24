@@ -2,9 +2,8 @@
  * Verifica la fase 5 del plan de aislamiento: el carrito y los pedidos son de la
  * organización, y un vendedor no confirma solo.
  *
- * Un vendedor arma el pedido y queda esperando la firma del dueño; el dueño lo ve,
- * lo puede rechazar, y nadie de otra organización se entera de que existe. El envío
- * real al proveedor no se prueba acá: mandaría un pedido de verdad.
+ * Un vendedor arma el pedido y queda esperando la firma del administrador; el
+ * administrador lo ve, lo puede rechazar, y nadie de otra organización se entera.
  *
  * Las sesiones se obtienen con "entrar como", así que alcanza con la del superadmin.
  *
@@ -68,21 +67,21 @@ async function main() {
     (t) => t.members.some((m) => m.tenantRole === "SELLER") &&
       t.members.some((m) => m.tenantRole === "OWNER" || m.tenantRole === "ADMIN")
   );
-  if (!conVendedor) throw new Error("Hace falta un comercio con un vendedor y un dueño");
+  if (!conVendedor) throw new Error("Hace falta un comercio con un vendedor y un administrador");
   const ajeno = comercios.find((t) => t.id !== conVendedor.id);
   if (!ajeno) throw new Error("Hace falta un segundo comercio para probar el aislamiento");
 
   const vendedor = conVendedor.members.find((m) => m.tenantRole === "SELLER");
-  const dueño = conVendedor.members.find((m) => m.tenantRole === "OWNER" || m.tenantRole === "ADMIN");
+  const administrador = conVendedor.members.find((m) => m.tenantRole === "OWNER" || m.tenantRole === "ADMIN");
 
-  console.log(`Comercio: ${conVendedor.name} (vendedor ${vendedor.username}, dueño ${dueño.username})`);
+  console.log(`Comercio: ${conVendedor.name} (vendedor ${vendedor.username}, administrador ${administrador.username})`);
   console.log(`Comercio ajeno: ${ajeno.name}\n`);
 
   const sesion = async (userId) =>
     (await call("POST", `/admin/users/${userId}/impersonate`, adminToken)).payload.data?.token;
 
   const tokenVendedor = await sesion(vendedor.userId);
-  const tokenDueño = await sesion(dueño.userId);
+  const tokenAdmin = await sesion(administrador.userId);
   const tokenAjeno = await sesion(ajeno.members[0].userId);
 
   const proveedores = (await call("GET", "/my/providers", tokenVendedor)).payload.data ?? [];
@@ -121,7 +120,7 @@ async function main() {
     propioVendedor?.needsApproval === true && propioVendedor?.canApprove === false,
     `necesita firma: ${propioVendedor?.needsApproval}, puede firmar: ${propioVendedor?.canApprove}`);
 
-  const propioDueño = (await call("GET", "/orders/pending-approval", tokenDueño)).payload.data;
+  const propioDueño = (await call("GET", "/orders/pending-approval", tokenAdmin)).payload.data;
   check("El dueño puede firmar y lo suyo no necesita firma",
     propioDueño?.canApprove === true && propioDueño?.needsApproval === false,
     `puede firmar: ${propioDueño?.canApprove}, necesita firma: ${propioDueño?.needsApproval}`);
@@ -149,17 +148,17 @@ async function main() {
 
   // ---------- El dueño decide ----------
 
-  const rechazo = await call("POST", `/orders/${pedidoId}/reject`, tokenDueño, {
+  const rechazo = await call("POST", `/orders/${pedidoId}/reject`, tokenAdmin, {
     reason: "Prueba automática",
   });
   check("El dueño lo rechaza", rechazo.payload.data?.approvalStatus === "REJECTED",
     rechazo.payload.data?.rejectionReason ?? `HTTP ${rechazo.status}`);
 
-  const reintento = await call("POST", `/orders/${pedidoId}/approve`, tokenDueño);
+  const reintento = await call("POST", `/orders/${pedidoId}/approve`, tokenAdmin);
   check("Un pedido ya resuelto no se puede aprobar después", reintento.status === 400,
     reintento.payload.message ?? `HTTP ${reintento.status}`);
 
-  const pendientesFinal = (await call("GET", "/orders/pending-approval", tokenDueño)).payload.data;
+  const pendientesFinal = (await call("GET", "/orders/pending-approval", tokenAdmin)).payload.data;
   check("Deja de estar esperando",
     !(pendientesFinal?.orders ?? []).some((o) => o.id === pedidoId),
     `${(pendientesFinal?.orders ?? []).length} esperando`);

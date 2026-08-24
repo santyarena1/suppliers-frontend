@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -14,8 +14,8 @@ export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   @Get()
-  list(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: { userId: string }) {
-    return this.cartService.list(tenant, user.userId);
+  list(@CurrentTenant() tenant: TenantContext) {
+    return this.cartService.list(tenant);
   }
 
   @Post("items")
@@ -47,7 +47,10 @@ export class CartController {
   }
 
   @Delete()
-  clear(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: { userId: string }) {
-    return this.cartService.clear(tenant, user.userId);
+  clear(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("provider") provider?: string
+  ) {
+    return this.cartService.clear(tenant, provider);
   }
 }

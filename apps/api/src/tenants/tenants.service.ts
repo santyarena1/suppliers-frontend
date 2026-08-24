@@ -7,13 +7,16 @@ import {
   type TenantRole,
   type TenantType,
 } from "@nodo/shared";
+import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateAccessCodeDto,
   CreateMembershipDto,
   CreateTenantDto,
   CreateTenantUserDto,
+  InviteTeamMemberDto,
   SetProductManagerScopeDto,
+  UpdateCommerceDto,
   UpdateMembershipDto,
   UpdateTenantDto,
   UpsertLinkDto,
@@ -86,6 +89,7 @@ export class TenantsService {
       contactPhone: tenant.contactPhone,
       notes: tenant.notes,
       advertisingEnabled: tenant.advertisingEnabled,
+      buyerCanConfirm: tenant.buyerCanConfirm,
       active: tenant.active,
       createdAt: tenant.createdAt,
       members: tenant.memberships.map((membership) => ({
@@ -274,7 +278,9 @@ export class TenantsService {
       );
     }
 
-    const passwordHash = await argon2.hash(dto.password);
+    const generated = !dto.password;
+    const password = dto.password ?? generatePassword();
+    const passwordHash = await argon2.hash(password);
     // El rol de plataforma se deriva del tipo de organización: las marcas
     // acceden al módulo de Marcas, el resto entra como usuario común.
     const platformRole = tenant.type === "BRAND" ? UserRole.ROLE_BRAND : UserRole.ROLE_USER;
@@ -296,7 +302,7 @@ export class TenantsService {
       },
       include: MEMBERSHIP_INCLUDE,
     });
-    return membership;
+    return generated ? { ...membership, generatedPassword: password } : membership;
   }
 
   async updateMember(membershipId: string, dto: UpdateMembershipDto) {
@@ -306,11 +312,11 @@ export class TenantsService {
     });
     if (!membership) throw new NotFoundException("Membresía no encontrada");
     if (dto.role) this.assertRoleAllowed(membership.tenant.type, dto.role);
-    if (dto.role && dto.role !== "OWNER" && membership.role === "OWNER") {
-      await this.assertNotLastOwner(membership.tenantId, membershipId);
+    if (dto.role && this.isManagerRole(membership.tenant.type, membership.role) && !this.isManagerRole(membership.tenant.type, dto.role)) {
+      await this.assertNotLastManager(membership.tenantId, membership.tenant.type, membershipId);
     }
-    if (dto.active === false && membership.role === "OWNER") {
-      await this.assertNotLastOwner(membership.tenantId, membershipId);
+    if (dto.active === false && this.isManagerRole(membership.tenant.type, membership.role)) {
+      await this.assertNotLastManager(membership.tenantId, membership.tenant.type, membershipId);
     }
 
     return this.prisma.tenantMembership.update({
@@ -325,9 +331,14 @@ export class TenantsService {
   }
 
   async removeMember(membershipId: string) {
-    const membership = await this.prisma.tenantMembership.findUnique({ where: { id: membershipId } });
+    const membership = await this.prisma.tenantMembership.findUnique({
+      where: { id: membershipId },
+      include: { tenant: true },
+    });
     if (!membership) throw new NotFoundException("Membresía no encontrada");
-    if (membership.role === "OWNER") await this.assertNotLastOwner(membership.tenantId, membershipId);
+    if (this.isManagerRole(membership.tenant.type, membership.role)) {
+      await this.assertNotLastManager(membership.tenantId, membership.tenant.type, membershipId);
+    }
 
     await this.prisma.$transaction([
       this.prisma.productManagerScope.deleteMany({
@@ -606,12 +617,118 @@ export class TenantsService {
     }
   }
 
-  private async assertNotLastOwner(tenantId: string, exceptMembershipId: string) {
+  /** En un comercio manda el administrador; en el resto, el gerente. */
+  private managerRoles(type: TenantType): TenantRole[] {
+    return type === "RETAILER" ? ["ADMIN", "OWNER"] : ["OWNER"];
+  }
+
+  private isManagerRole(type: TenantType, role: TenantRole) {
+    return this.managerRoles(type).includes(role);
+  }
+
+  private async assertNotLastManager(tenantId: string, type: TenantType, exceptMembershipId: string) {
     const others = await this.prisma.tenantMembership.count({
-      where: { tenantId, role: "OWNER", active: true, id: { not: exceptMembershipId } },
+      where: {
+        tenantId,
+        role: { in: this.managerRoles(type) },
+        active: true,
+        id: { not: exceptMembershipId },
+      },
     });
     if (others === 0) {
-      throw new BadRequestException("La organización tiene que conservar al menos un dueño activo");
+      throw new BadRequestException(
+        type === "RETAILER"
+          ? "El local tiene que conservar al menos un administrador activo"
+          : "La organización tiene que conservar al menos un gerente activo"
+      );
     }
+  }
+
+  // ---------- El comercio sobre sí mismo ----------
+
+  async ownProfile(tenant: TenantContext) {
+    const row = await this.prisma.tenant.findUnique({
+      where: { id: tenant.tenantId },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        contactEmail: true,
+        contactPhone: true,
+        buyerCanConfirm: true,
+      },
+    });
+    if (!row) throw new NotFoundException("Organización no encontrada");
+    return { ...row, role: tenant.tenantRole };
+  }
+
+  async updateOwnProfile(tenant: TenantContext, dto: UpdateCommerceDto) {
+    if (dto.name && dto.name.trim()) await this.assertTenantNameFree(dto.name, tenant.tenantId);
+    const row = await this.prisma.tenant.update({
+      where: { id: tenant.tenantId },
+      data: {
+        ...(dto.name === undefined ? {} : { name: dto.name.trim() }),
+        ...(dto.contactEmail === undefined ? {} : { contactEmail: dto.contactEmail }),
+        ...(dto.contactPhone === undefined ? {} : { contactPhone: dto.contactPhone }),
+      },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        contactEmail: true,
+        contactPhone: true,
+        buyerCanConfirm: true,
+      },
+    });
+    return { ...row, role: tenant.tenantRole };
+  }
+
+  async setBuyerCanConfirm(tenant: TenantContext, buyerCanConfirm: boolean) {
+    if (tenant.tenantType !== "RETAILER") {
+      throw new BadRequestException("El tilde del comprador solo aplica a un comercio");
+    }
+    const row = await this.prisma.tenant.update({
+      where: { id: tenant.tenantId },
+      data: { buyerCanConfirm },
+      select: { buyerCanConfirm: true },
+    });
+    return row;
+  }
+
+  async listTeam(tenant: TenantContext) {
+    const members = await this.prisma.tenantMembership.findMany({
+      where: { tenantId: tenant.tenantId },
+      include: MEMBERSHIP_INCLUDE,
+      orderBy: { createdAt: "asc" },
+    });
+    return members.map((membership) => this.serializeMember(membership));
+  }
+
+  async inviteTeamMember(tenant: TenantContext, dto: InviteTeamMemberDto) {
+    this.assertRoleAllowed(tenant.tenantType, dto.role);
+    const membership = await this.createMemberUser(tenant.tenantId, {
+      username: dto.username,
+      email: dto.email,
+      role: dto.role,
+      title: dto.title,
+    } as CreateTenantUserDto);
+    const generatedPassword =
+      "generatedPassword" in membership && typeof membership.generatedPassword === "string"
+        ? membership.generatedPassword
+        : undefined;
+    return { ...this.serializeMember(membership), generatedPassword };
+  }
+
+  async updateOwnMember(tenant: TenantContext, membershipId: string, dto: UpdateMembershipDto) {
+    const membership = await this.prisma.tenantMembership.findUnique({ where: { id: membershipId } });
+    if (!membership || membership.tenantId !== tenant.tenantId) {
+      throw new NotFoundException("Persona no encontrada en este local");
+    }
+    const updated = await this.updateMember(membershipId, dto);
+    return this.serializeMember(updated);
+  }
+
+  async deactivateOwnMember(tenant: TenantContext, membershipId: string) {
+    return this.updateOwnMember(tenant, membershipId, { active: false });
   }
 }

@@ -51,20 +51,20 @@ async function main() {
   const tree = (await call("GET", "/admin/tenants", adminToken)).payload.data;
   const tenants = (tree.tenants ?? tree).filter((t) => (t.members ?? []).length > 0);
 
-  const dueño = (t) => t.members.find((m) => m.tenantRole === "OWNER") ?? t.members[0];
-  const conDueño = tenants.find((t) => dueño(t));
-  if (!conDueño) throw new Error("No hay ninguna organización con personas para probar");
-  const otra = tenants.find((t) => t.id !== conDueño.id);
+  const administrador = (t) => t.members.find((m) => m.tenantRole === "ADMIN" || m.tenantRole === "OWNER") ?? t.members[0];
+  const conAdmin = tenants.find((t) => administrador(t));
+  if (!conAdmin) throw new Error("No hay ninguna organización con personas para probar");
+  const otra = tenants.find((t) => t.id !== conAdmin.id);
   if (!otra) throw new Error("Hace falta una segunda organización para probar el aislamiento");
 
-  console.log(`Organización que sincroniza: ${conDueño.name}`);
+  console.log(`Organización que sincroniza: ${conAdmin.name}`);
   console.log(`Organización ajena: ${otra.name}\n`);
 
   const sesion = async (userId) =>
     (await call("POST", `/admin/users/${userId}/impersonate`, adminToken)).payload.data?.token;
 
-  const tokenPropio = await sesion(dueño(conDueño).userId);
-  const tokenAjeno = await sesion(dueño(otra).userId);
+  const tokenPropio = await sesion(administrador(conAdmin).userId);
+  const tokenAjeno = await sesion(administrador(otra).userId);
 
   await call("PUT", `/providers/${PROVIDER}/config`, tokenPropio, { priceMarkupPercent: 0 });
 

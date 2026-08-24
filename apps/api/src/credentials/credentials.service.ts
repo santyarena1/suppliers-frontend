@@ -53,6 +53,11 @@ export class CredentialsService {
       create: { tenantId, savedById, providerName: dto.providerName, credentialsEncrypted: encrypted },
       update: { credentialsEncrypted: encrypted, savedById },
     });
+    await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId, provider: dto.providerName } },
+      create: { tenantId, provider: dto.providerName, enabled: true },
+      update: { enabled: true },
+    });
     return {
       providerName: row.providerName as Provider,
       credentialsJson: this.crypto.decrypt(row.credentialsEncrypted),

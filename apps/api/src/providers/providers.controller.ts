@@ -7,7 +7,7 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { CredentialsService } from "../credentials/credentials.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
-import { TENANT_ROLES_CAN_PURGE_CATALOG } from "@nodo/shared";
+import { TENANT_ROLES_CAN_MANAGE_COMMERCE, TENANT_ROLES_CAN_PURGE_CATALOG } from "@nodo/shared";
 import { assertTenantRole } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { ProvidersService } from "./providers.service";
@@ -66,7 +66,7 @@ export class ProvidersController {
 
   /**
    * Un vendedor arma el pedido pero no lo confirma: queda guardado esperando que
-   * lo apruebe el dueño. Para el resto, `hold` devuelve `null` y el checkout sigue.
+   * lo apruebe un administrador. Para el resto, `hold` devuelve `null` y el checkout sigue.
    */
   private hold(tenant: TenantContext, userId: string, provider: Provider, draft: { items?: unknown; notes?: string }) {
     return this.orderApproval.hold(tenant, userId, provider, draft);
@@ -442,6 +442,7 @@ export class ProvidersController {
 
   @Post("providers/:provider/sync")
   sync(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
     return this.providersService.sync(tenant.tenantId, assertProvider(provider));
   }
 
@@ -458,6 +459,7 @@ export class ProvidersController {
     @Req() req: FastifyRequest
   ) {
     const prov = assertProvider(provider);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();
@@ -490,12 +492,13 @@ export class ProvidersController {
     @Param("provider") provider: string,
     @Body() dto: UpdateProviderConfigDto
   ) {
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
     return this.providersService.updateConfig(tenant.tenantId, assertProvider(provider), dto);
   }
 
   // Estos dos ya no tocan el catálogo de nadie más: borran las ofertas de esta
   // organización y dejan intacta la ficha, que es de toda la plataforma. Aun así
-  // vacían el catálogo del comercio entero, así que son del dueño.
+  // vacían el catálogo del comercio entero, así que son del administrador.
 
   @Post("providers/:provider/clear-zero-stock")
   clearZeroStock(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {

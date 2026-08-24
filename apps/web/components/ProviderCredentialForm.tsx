@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Pencil, Trash2, XCircle } from "lucide-react";
 import { credentialsApi, type Provider } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
+import { canManageCommerce } from "@/lib/commerce";
 import {
   PROVIDER_CREDENTIAL_SCHEMAS,
   emptyValues,
@@ -33,8 +34,12 @@ export default function ProviderCredentialForm({
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
   // La sesión vive en el navegador, así que recién está disponible después de montar.
   const [tenant, setTenant] = useState<{ name: string } | null>(null);
+  const [manage, setManage] = useState(false);
 
-  useEffect(() => setTenant(getTenant()), []);
+  useEffect(() => {
+    setTenant(getTenant());
+    setManage(canManageCommerce());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -173,6 +178,12 @@ export default function ProviderCredentialForm({
           <div className="flex justify-center py-8">
             <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
           </div>
+        ) : !manage ? (
+          <p className="text-sm text-surface-300">
+            {hasCred
+              ? "Hay una cuenta cargada. La ve todo el equipo; solo el administrador la cambia."
+              : "La cuenta la carga el administrador del local."}
+          </p>
         ) : schema && schema.fields.length === 0 ? (
           <p className="text-xs text-surface-400">
             No hace falta cargar usuario: el catálogo se sincroniza desde la pestaña Sincronización.

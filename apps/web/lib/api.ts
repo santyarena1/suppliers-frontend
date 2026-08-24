@@ -179,17 +179,21 @@ export interface CredentialResponse {
 }
 
 export interface RegisterResponse {
-  id: string;
-  username: string;
-  role: "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
+  token: string;
+  generatedPassword?: string;
 }
 
 // --- Auth ---
 export const authApi = {
   login: (username: string, password: string) =>
     api.post<{ token: string }>("/auth/login", { username, password }),
-  register: (username: string, email: string, password: string) =>
-    api.post<RegisterResponse>("/auth/register", { username, email, password }),
+  register: (commerceName: string, username: string, email: string, password?: string) =>
+    api.post<RegisterResponse>("/auth/register", {
+      commerceName,
+      username,
+      email,
+      ...(password ? { password } : {}),
+    }),
 };
 
 // --- Search ---
@@ -241,7 +245,7 @@ export interface VisibleProvider {
   /** Aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
-  discountPercent: number | null;
+  hasCredentials: boolean;
 }
 
 export interface RedeemedCode {
@@ -251,9 +255,59 @@ export interface RedeemedCode {
   provider: Provider | null;
 }
 
+export interface CommerceProfile {
+  id: string;
+  name: string;
+  type: TenantType;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  buyerCanConfirm: boolean;
+  role: TenantRole;
+}
+
 export const myApi = {
   providers: () => api.get<VisibleProvider[]>("/my/providers"),
   redeemCode: (code: string) => api.post<RedeemedCode>("/my/redeem-code", { code }),
+  commerce: () => api.get<CommerceProfile>("/my/commerce"),
+  updateCommerce: (data: { name?: string; contactEmail?: string | null; contactPhone?: string | null }) =>
+    api.put<CommerceProfile>("/my/commerce", data),
+  setBuyerCanConfirm: (buyerCanConfirm: boolean) =>
+    api.put<{ buyerCanConfirm: boolean }>("/my/commerce/orders", { buyerCanConfirm }),
+  team: () => api.get<TenantMember[]>("/my/team"),
+  inviteMember: (data: { username: string; email: string; role: TenantRole; title?: string }) =>
+    api.post<TenantMember & { generatedPassword?: string }>("/my/team", data),
+  updateMember: (membershipId: string, data: Partial<{ role: TenantRole; title: string | null; active: boolean }>) =>
+    api.put<TenantMember>(`/my/team/${membershipId}`, data),
+};
+
+export interface CartApiItem {
+  id: string;
+  provider: string;
+  externalId: string;
+  name: string;
+  price: string;
+  imageUrl: string;
+  quantity: number;
+  snapshot: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const cartApi = {
+  list: () => api.get<CartApiItem[]>("/cart"),
+  add: (data: {
+    provider: string;
+    externalId: string;
+    name: string;
+    price: string;
+    imageUrl: string;
+    quantity?: number;
+    snapshot?: Record<string, unknown>;
+  }) => api.post<CartApiItem>("/cart/items", data),
+  update: (id: string, data: { quantity?: number; snapshot?: Record<string, unknown> }) =>
+    api.patch<CartApiItem>(`/cart/items/${id}`, data),
+  remove: (id: string) => api.delete(`/cart/items/${id}`),
+  clear: (provider?: string) => api.delete("/cart", { params: provider ? { provider } : {} }),
 };
 
 export type OrderApprovalStatus = "NOT_REQUIRED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
@@ -1224,7 +1278,7 @@ export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
 };
 
 export const TENANT_ROLE_LABELS: Record<TenantRole, string> = {
-  OWNER: "Dueño",
+  OWNER: "Gerente",
   ADMIN: "Administrador",
   BUYER: "Comprador",
   SELLER: "Vendedor",
@@ -1234,11 +1288,20 @@ export const TENANT_ROLE_LABELS: Record<TenantRole, string> = {
   VIEWER: "Solo lectura",
 };
 
+export function tenantRoleLabel(role: TenantRole, tenantType?: TenantType): string {
+  if (tenantType === "RETAILER" && role === "OWNER") return TENANT_ROLE_LABELS.ADMIN;
+  return TENANT_ROLE_LABELS[role];
+}
+
 export const TENANT_ROLES_BY_TYPE: Record<TenantType, TenantRole[]> = {
-  RETAILER: ["OWNER", "ADMIN", "BUYER", "SELLER", "VIEWER"],
+  RETAILER: ["ADMIN", "BUYER", "SELLER", "VIEWER"],
   DISTRIBUTOR: ["OWNER", "ADMIN", "SELLER", "PRODUCT_MANAGER", "VIEWER"],
   BRAND: ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL", "VIEWER"],
 };
+
+export const TENANT_ROLES_CAN_ORDER: TenantRole[] = ["OWNER", "ADMIN", "BUYER", "SELLER"];
+export const TENANT_ROLES_CAN_APPROVE_ORDERS: TenantRole[] = ["OWNER", "ADMIN"];
+export const TENANT_ROLES_CAN_MANAGE_COMMERCE: TenantRole[] = ["OWNER", "ADMIN"];
 
 /** Roles que pueden vaciar el catálogo de la organización. */
 export const TENANT_ROLES_CAN_PURGE_CATALOG: TenantRole[] = ["OWNER", "ADMIN"];
@@ -1294,6 +1357,7 @@ export interface TenantNode {
   contactPhone: string | null;
   notes: string | null;
   advertisingEnabled: boolean;
+  buyerCanConfirm?: boolean;
   active: boolean;
   createdAt: string;
   members: TenantMember[];

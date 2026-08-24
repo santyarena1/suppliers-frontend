@@ -598,17 +598,37 @@ export class ProvidersService {
     return { provider, deleted: res.count };
   }
 
-  /** Usado por el cron de sincronización automática. */
-  async findDueConfigs() {
-    const configs = await this.prisma.providerSyncConfig.findMany({
-      where: { enabled: true, tenant: { active: true } },
-    });
+  /** Usado por el cron de sincronización automática. Si hay cuenta, corre. */
+  async findDueConfigs(): Promise<{ tenantId: string; provider: string }[]> {
+    const [configs, credenciales] = await Promise.all([
+      this.prisma.providerSyncConfig.findMany({
+        where: { tenant: { active: true } },
+      }),
+      this.prisma.credential.findMany({
+        where: { tenant: { active: true } },
+        select: { tenantId: true, providerName: true },
+      }),
+    ]);
+    const conCuenta = new Set(credenciales.map((row) => `${row.tenantId}::${row.providerName}`));
     const now = Date.now();
-    return configs.filter((c) => {
-      if (!c.lastSyncedAt) return true;
-      const dueAt = c.lastSyncedAt.getTime() + c.syncIntervalMinutes * 60_000;
-      return now >= dueAt;
-    });
+    const due: { tenantId: string; provider: string }[] = [];
+
+    for (const c of configs) {
+      const hasAccount = conCuenta.has(`${c.tenantId}::${c.provider}`);
+      if (!c.enabled && !hasAccount) continue;
+      if (!c.lastSyncedAt || now >= c.lastSyncedAt.getTime() + c.syncIntervalMinutes * 60_000) {
+        due.push({ tenantId: c.tenantId, provider: c.provider });
+      }
+    }
+
+    const already = new Set(due.map((c) => `${c.tenantId}::${c.provider}`));
+    const conConfig = new Set(configs.map((c) => `${c.tenantId}::${c.provider}`));
+    for (const cred of credenciales) {
+      const key = `${cred.tenantId}::${cred.providerName}`;
+      if (already.has(key) || conConfig.has(key)) continue;
+      due.push({ tenantId: cred.tenantId, provider: cred.providerName });
+    }
+    return due;
   }
 }
 

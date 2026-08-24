@@ -11,10 +11,12 @@ interface Props {
 }
 
 export default function AddToCartButton({ product, variant = "icon" }: Props) {
-  const { add, has, items, setQty, remove } = useCart();
+  const { add, has, items, setQty, remove, canMutate } = useCart();
   const inCart = has(product.provider, product.externalId);
   const item = items.find((i) => i.provider === product.provider && i.externalId === product.externalId);
   const [flash, setFlash] = useState(false);
+
+  if (!canMutate) return null;
 
   function handleAdd(e: React.MouseEvent) {
     e.preventDefault();

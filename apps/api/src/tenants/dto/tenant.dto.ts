@@ -149,13 +149,58 @@ export class CreateTenantUserDto extends CreateMembershipDto {
   @IsEmail()
   email!: string;
 
+  /** Si no viene, se genera y se devuelve una sola vez. */
+  @IsOptional()
+  @ValidateIf((_, value) => value != null && value !== "")
   @IsString()
   @MinLength(8)
-  password!: string;
+  password?: string;
 
   @IsOptional()
   @IsUUID()
   declare userId: string;
+}
+
+/** El administrador del comercio invita a alguien de su equipo. */
+export class InviteTeamMemberDto {
+  @IsString()
+  @MinLength(3)
+  @MaxLength(60)
+  username!: string;
+
+  @IsEmail()
+  email!: string;
+
+  @IsIn(TENANT_ROLES as unknown as string[])
+  role!: TenantRole;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  title?: string;
+}
+
+export class UpdateCommerceDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsEmail()
+  contactEmail?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  contactPhone?: string | null;
+}
+
+export class UpdateBuyerCanConfirmDto {
+  @IsBoolean()
+  buyerCanConfirm!: boolean;
 }
 
 export class UpsertLinkDto {

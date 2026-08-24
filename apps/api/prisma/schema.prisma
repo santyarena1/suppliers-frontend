@@ -56,8 +56,8 @@ enum TenantType {
 }
 
 enum TenantRole {
-  OWNER // Dueño o gerente: control total dentro de su organización
-  ADMIN // Administrador operativo delegado
+  OWNER // Gerente de un distribuidor o una marca
+  ADMIN // Quien manda el comercio; también administrador operativo delegado
   BUYER // Comprador de un comercio
   SELLER // Vendedor (de comercio o de distribuidor)
   PRODUCT_MANAGER // PM de marcas dentro de un distribuidor
@@ -88,6 +88,9 @@ model Tenant {
   notes              String?
   /// Publicidad paga contratada: habilita que comercios no vinculados la descubran.
   advertisingEnabled Boolean       @default(false)
+  /// Si el comprador del comercio puede confirmar pedidos sin espera de firma.
+  /// Solo aplica a RETAILER. El vendedor nunca confirma, con o sin este tilde.
+  buyerCanConfirm    Boolean       @default(false)
   active             Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -394,9 +397,8 @@ model ProviderSyncConfig {
   @@unique([tenantId, provider])
 }
 
-// El carrito es personal (dos vendedores del mismo comercio no se pisan) pero
-// vive dentro de una organización: si alguien cambia de organización, su carrito
-// anterior no lo sigue.
+// Un carrito por comercio, compartido: lo ven juntos administrador, comprador y
+// vendedor, en cualquier dispositivo. `userId` es quién lo tocó por última vez.
 model CartItem {
   id         String   @id @default(uuid())
   userId     String
@@ -409,10 +411,12 @@ model CartItem {
   price      String
   imageUrl   String
   quantity   Int      @default(1)
+  /// Ficha compacta del producto (impuestos, marca, stock) para armar el pedido.
+  snapshot   Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([userId, tenantId, provider, externalId])
+  @@unique([tenantId, provider, externalId])
   @@index([tenantId])
 }
 

@@ -10,6 +10,7 @@ import * as argon2 from "argon2";
 import type { JwtPayload, UserRole } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenants/tenant-context.service";
+import { generatePassword } from "../common/generate-password";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 
@@ -37,12 +38,34 @@ export class AuthService {
       );
     }
 
-    const passwordHash = await argon2.hash(dto.password);
-    const user = await this.prisma.user.create({
-      data: { username: dto.username, email: dto.email, passwordHash },
+    const nameClash = await this.prisma.tenant.findFirst({
+      where: { name: dto.commerceName.trim() },
+    });
+    if (nameClash) throw new ConflictException("Ya existe un comercio con ese nombre");
+
+    const generated = !dto.password;
+    const password = dto.password ?? generatePassword();
+    const passwordHash = await argon2.hash(password);
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: {
+          name: dto.commerceName.trim(),
+          type: "RETAILER",
+          contactEmail: dto.email,
+        },
+      });
+      const created = await tx.user.create({
+        data: { username: dto.username, email: dto.email, passwordHash },
+      });
+      await tx.tenantMembership.create({
+        data: { tenantId: tenant.id, userId: created.id, role: "ADMIN" },
+      });
+      return created;
     });
 
-    return { id: user.id, username: user.username, role: user.role };
+    const token = await this.jwt.signAsync(await this.payloadFor(user));
+    return generated ? { token, generatedPassword: password } : { token };
   }
 
   async login(dto: LoginDto) {

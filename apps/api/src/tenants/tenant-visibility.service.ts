@@ -11,7 +11,8 @@ export interface VisibleProvider {
   /** `true` cuando aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
-  discountPercent: number | null;
+  /** `true` cuando el comercio ya cargó usuario y contraseña de ese mayorista. */
+  hasCredentials: boolean;
 }
 
 /**
@@ -44,12 +45,12 @@ export class TenantVisibilityService {
           linked: true,
           advertised: false,
           accountManager: null,
-          discountPercent: null,
+          hasCredentials: true,
         },
       ];
     }
 
-    const [links, publicitados] = await Promise.all([
+    const [links, publicitados, credenciales] = await Promise.all([
       this.prisma.tenantLink.findMany({
         where: {
           clientTenantId: tenantId,
@@ -70,8 +71,13 @@ export class TenantVisibilityService {
         },
         select: { id: true, name: true, providerKey: true },
       }),
+      this.prisma.credential.findMany({
+        where: { tenantId },
+        select: { providerName: true },
+      }),
     ]);
 
+    const conCuenta = new Set(credenciales.map((row) => row.providerName));
     const visibles = new Map<string, VisibleProvider>();
 
     for (const link of links) {
@@ -84,7 +90,7 @@ export class TenantVisibilityService {
         accountManager: link.accountManager
           ? { name: link.accountManager.username, email: link.accountManager.email }
           : null,
-        discountPercent: link.discountPercent == null ? null : Number(link.discountPercent),
+        hasCredentials: conCuenta.has(key),
       });
     }
 
@@ -99,7 +105,7 @@ export class TenantVisibilityService {
         linked: false,
         advertised: true,
         accountManager: null,
-        discountPercent: null,
+        hasCredentials: conCuenta.has(key),
       });
     }
 

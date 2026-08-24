@@ -6,8 +6,8 @@ import type { TenantContext } from "./tenant-context.service";
  * Corta si quien hace el pedido no tiene el rol necesario dentro de su organización.
  *
  * El rol de plataforma (`ROLE_USER`, `ROLE_ADMIN`) dice qué es la persona para NODO;
- * este dice qué puede hacer adentro de su comercio. Un vendedor y su dueño son los
- * dos `ROLE_USER`, y sin embargo uno no debería poder vaciar el catálogo del otro.
+ * este dice qué puede hacer adentro de su comercio. Un vendedor y su administrador
+ * son los dos `ROLE_USER`, y sin embargo uno no debería poder vaciar el catálogo del otro.
  */
 export function assertTenantRole(tenant: TenantContext, allowed: readonly TenantRole[]) {
   if (allowed.includes(tenant.tenantRole)) return;

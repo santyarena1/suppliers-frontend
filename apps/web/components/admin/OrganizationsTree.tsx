@@ -9,8 +9,8 @@ import {
   PROVIDER_LABELS,
   Provider,
   TENANT_LINK_STATUS_LABELS,
-  TENANT_ROLE_LABELS,
   TENANT_ROLES_BY_TYPE,
+  tenantRoleLabel,
   TENANT_TYPE_LABELS,
   TenantLinkStatus,
   TenantNode,
@@ -360,7 +360,7 @@ function TenantBranch({
           {roleGroups.map(({ role, members }) => (
             <div key={role}>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-surface-500 mb-1">
-                {TENANT_ROLE_LABELS[role]}
+                {tenantRoleLabel(role, tenant.type)}
               </p>
               <div className="flex flex-col">
                 {members.map((member) => {
@@ -703,7 +703,7 @@ function MembersSection({
               >
                 {roles.map((role) => (
                   <option key={role} value={role}>
-                    {TENANT_ROLE_LABELS[role]}
+                    {tenantRoleLabel(role, tenant.type)}
                   </option>
                 ))}
               </select>
@@ -1088,7 +1088,7 @@ function UserRelationsPanel({
             <h2 className="text-sm font-semibold text-white truncate">{member?.username ?? "Persona"}</h2>
             <p className="text-[11px] text-surface-500 truncate">
               {member?.email}
-              {member ? ` · ${TENANT_ROLE_LABELS[member.tenantRole]} en ${tenant.name}` : ""}
+              {member ? ` · ${tenantRoleLabel(member.tenantRole, tenant.type)} en ${tenant.name}` : ""}
             </p>
           </div>
           {member && (
@@ -1120,7 +1120,7 @@ function UserRelationsPanel({
                   {organization.tenant.name} · {TENANT_TYPE_LABELS[organization.tenant.type]}
                 </h3>
                 <p className="text-[11px] text-surface-500 mb-3">
-                  Rol interno: {TENANT_ROLE_LABELS[organization.role]}
+                  Rol interno: {tenantRoleLabel(organization.role, organization.tenant.type)}
                   {organization.title ? ` · ${organization.title}` : ""}
                 </p>
 
@@ -1130,7 +1130,7 @@ function UserRelationsPanel({
                   items={organization.colleagues.map((colleague) => ({
                     key: colleague.membershipId,
                     primary: colleague.username,
-                    secondary: `${TENANT_ROLE_LABELS[colleague.tenantRole]}${colleague.title ? ` · ${colleague.title}` : ""}`,
+                    secondary: `${tenantRoleLabel(colleague.tenantRole, organization.tenant.type)}${colleague.title ? ` · ${colleague.title}` : ""}`,
                   }))}
                 />
 
@@ -1373,7 +1373,9 @@ function AddMemberModal({
 }) {
   const roles = TENANT_ROLES_BY_TYPE[tenant.type];
   const [mode, setMode] = useState<"new" | "existing">("new");
-  const [role, setRole] = useState<TenantRole>(roles.includes("OWNER") ? "OWNER" : roles[0]);
+  const [role, setRole] = useState<TenantRole>(
+    tenant.type === "RETAILER" ? "ADMIN" : roles.includes("OWNER") ? "OWNER" : roles[0]
+  );
   const [title, setTitle] = useState("");
   const [form, setForm] = useState({ username: "", email: "", password: "" });
   const [existingId, setExistingId] = useState("");
@@ -1468,7 +1470,7 @@ function AddMemberModal({
             <select value={role} onChange={(e) => setRole(e.target.value as TenantRole)} className={inputClass}>
               {roles.map((option) => (
                 <option key={option} value={option}>
-                  {TENANT_ROLE_LABELS[option]}
+                  {tenantRoleLabel(option, tenant.type)}
                 </option>
               ))}
             </select>

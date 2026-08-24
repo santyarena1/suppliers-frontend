@@ -3,7 +3,6 @@ import type { Prisma, ProviderOrder } from "@prisma/client";
 import {
   PROVIDER_LABELS,
   TENANT_ROLES_CAN_APPROVE_ORDERS,
-  TENANT_ROLES_CAN_CONFIRM_ORDERS,
   TENANT_ROLES_CAN_ORDER,
   type Provider,
 } from "@nodo/shared";
@@ -33,7 +32,7 @@ interface DraftLike {
 /**
  * Aprobación interna del comercio (ver docs/ARQUITECTURA_TENANTS.md): un vendedor
  * arma el pedido pero no lo manda al proveedor. Queda guardado tal cual, y recién
- * cuando lo aprueba el dueño o un administrador se envía con esos mismos datos.
+ * cuando lo aprueba un administrador se envía con esos mismos datos.
  */
 @Injectable()
 export class OrderApprovalService {
@@ -49,8 +48,16 @@ export class OrderApprovalService {
     }
   }
 
-  needsApproval(tenant: TenantContext) {
-    return !TENANT_ROLES_CAN_CONFIRM_ORDERS.includes(tenant.tenantRole);
+  async needsApproval(tenant: TenantContext) {
+    if (tenant.tenantRole === "ADMIN" || tenant.tenantRole === "OWNER") return false;
+    if (tenant.tenantRole === "BUYER") {
+      const row = await this.prisma.tenant.findUnique({
+        where: { id: tenant.tenantId },
+        select: { buyerCanConfirm: true },
+      });
+      return !row?.buyerCanConfirm;
+    }
+    return true;
   }
 
   canApprove(tenant: TenantContext) {
@@ -68,7 +75,7 @@ export class OrderApprovalService {
     draft: DraftLike
   ): Promise<HeldOrder | null> {
     this.assertCanOrder(tenant);
-    if (!this.needsApproval(tenant)) return null;
+    if (!(await this.needsApproval(tenant))) return null;
     await this.visibility.assertLinked(tenant.tenantId, provider);
 
     const items = Array.isArray(draft.items) ? draft.items : [];
@@ -102,7 +109,7 @@ export class OrderApprovalService {
       deliveryLabel: null,
       items,
       total: null,
-      message: `El pedido de ${PROVIDER_LABELS[provider]} quedó guardado esperando que lo apruebe un responsable de ${tenant.tenantName}. Hasta entonces no se manda al proveedor.`,
+      message: `El pedido de ${PROVIDER_LABELS[provider]} quedó guardado esperando que lo apruebe un administrador de ${tenant.tenantName}. Hasta entonces no se manda al proveedor.`,
     };
   }
 
@@ -131,11 +138,11 @@ export class OrderApprovalService {
     return row;
   }
 
-  /** Solo el dueño o un administrador de la organización aprueban lo de otro. */
+  /** Solo un administrador de la organización aprueba lo de otro. */
   async assertApprovable(tenant: TenantContext, id: string) {
     if (!this.canApprove(tenant)) {
       throw new ForbiddenException(
-        `Solo el dueño o un administrador de ${tenant.tenantName} pueden aprobar pedidos`
+        `Solo un administrador de ${tenant.tenantName} puede aprobar pedidos`
       );
     }
     const order = await this.getOwn(tenant, id);

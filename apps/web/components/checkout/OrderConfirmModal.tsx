@@ -51,7 +51,7 @@ export default function OrderConfirmModal({
   onLeaveInBackground?: () => void;
 }) {
   const pending = result?.status === "PENDING";
-  // Un vendedor no confirma solo: el pedido queda esperando al dueño del comercio.
+  // Un vendedor no confirma solo: el pedido queda esperando al administrador del comercio.
   const awaitingApproval = result?.status === "PENDING_APPROVAL";
   const done = Boolean(result) && !pending;
   const blocking = loading && !result;
@@ -100,7 +100,7 @@ export default function OrderConfirmModal({
             </p>
             <h2 id="order-confirm-title" className="text-base font-semibold text-white mt-1 tracking-tight">
               {awaitingApproval
-                ? "Pedido a la espera de aprobación"
+                ? "Pedido a la espera del administrador"
                 : done
                   ? "Pedido creado"
                   : loading || pending

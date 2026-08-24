@@ -138,11 +138,12 @@ Tenant (RETAILER)  ──TenantLink──▶  Tenant (DISTRIBUTOR)
 
 `ProviderOrder` incorpora `createdByUserId`, `approvedByUserId` y `approvalStatus`:
 
-- `NOT_REQUIRED` — la armó alguien con poder de confirmar.
-- `PENDING_APPROVAL` — la armó un `SELLER` del comercio; queda guardada en Nodo y en el
-  carrito del distribuidor, sin confirmar.
-- `APPROVED` — el `OWNER` la confirmó; recién ahí se emite al proveedor.
-- `REJECTED` — descartada por el `OWNER`.
+- `NOT_REQUIRED` — la armó alguien con poder de confirmar (administrador, o comprador
+  con vía libre).
+- `PENDING_APPROVAL` — la armó un vendedor, o un comprador sin vía libre; queda en Nodo
+  hasta que la firma un administrador.
+- `APPROVED` — el administrador la confirmó; recién ahí se emite al proveedor.
+- `REJECTED` — descartada por el administrador.
 
 ---
 
@@ -173,7 +174,7 @@ cerrar Tipo 1.
 | 3d | Búsqueda filtrada por `TenantLink`. | Hecho |
 | 4 | Aprobación de órdenes en la interfaz del comercio. | Hecho en API y `/pedidos`; la UI aún no distingue roles |
 | 5 | Códigos de vinculación: generación, canje anónimo y auditoría. | Hecho el código escrito. QR queda para Tipo 2 |
-| T1 | Cerrar el comercio: roles en pantalla, equipo propio, carrito en servidor. | Visión en `docs/PLAN_TIPO1.md` |
+| T1 | Cerrar el comercio: panel del local, alta, equipo, carrito compartido, roles. | Acordado en `docs/PLAN_TIPO1.md` |
 | 6 | Panel del distribuidor: cartera por vendedor, descuentos, resumen de órdenes. | Después de Tipo 1 |
 | 7 | Panel de la marca: acciones comerciales, objetivos y reportes. | Después de Tipo 2 |
 | 8 | Publicidad paga y descubrimiento controlado. | Después de Tipo 2 |

@@ -10,6 +10,7 @@ import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
   canSyncProvider, type VisibleProvider
 } from "@/lib/api";
+import { canManageCommerce } from "@/lib/commerce";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, Sparkles, XCircle } from "lucide-react";
 
@@ -21,6 +22,9 @@ export default function ProveedoresPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<Provider | null>(null);
   const [syncResult, setSyncResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [manage, setManage] = useState(false);
+
+  useEffect(() => { setManage(canManageCommerce()); }, []);
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateMyProviders();
@@ -141,8 +145,9 @@ export default function ProveedoresPage() {
                               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-lg py-1.5 transition-all"
                             >
                               {s?.hasCredentials ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
-                              {s?.hasCredentials ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
+                              {s?.hasCredentials ? "Ver" : manage ? (s?.publicCatalog ? "Sincronizar" : "Cargar cuenta") : "Ver"}
                             </Link>
+                            {manage && (
                             <button
                               onClick={(e) => handleSync(provider, e)}
                               disabled={isSyncing || !canSyncProvider(s)}
@@ -152,6 +157,7 @@ export default function ProveedoresPage() {
                               {isSyncing ? <NodoSpinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                               {isSyncing ? "Sincronizando" : "Sincronizar"}
                             </button>
+                            )}
                           </div>
 
                           {isSyncing && <SyncProgressBar />}
@@ -197,12 +203,14 @@ export default function ProveedoresPage() {
                 </section>
               )}
 
+              {manage && (
               <section>
                 <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-widest mb-3">
                   Conectar con un código
                 </h2>
                 <RedeemAccessCode onRedeemed={() => load(true)} />
               </section>
+              )}
             </div>
           </div>
     </>

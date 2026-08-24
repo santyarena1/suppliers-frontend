@@ -43,14 +43,14 @@ const ORGANIZATIONS = [
     name: "Comercio de Pruebas",
     type: "RETAILER",
     contactEmail: "pruebas@nodo.test",
-    members: [{ username: "testuser1", role: "OWNER", title: "Encargado de compras" }],
+    members: [{ username: "testuser1", role: "ADMIN", title: "Encargado de compras" }],
   },
   {
     name: "Tecno Store Palermo",
     type: "RETAILER",
     contactEmail: "compras@tecnostorepalermo.test",
     members: [
-      { username: "tecnostore.admin", role: "OWNER", title: "Dueño del local" },
+      { username: "tecnostore.admin", role: "ADMIN", title: "Administrador del local" },
       { username: "tecnostore.vendedor", role: "SELLER", title: "Vendedor de salón" },
     ],
   },
@@ -59,7 +59,7 @@ const ORGANIZATIONS = [
     type: "RETAILER",
     contactEmail: "compras@compumundorosario.test",
     members: [
-      { username: "compumundo.admin", role: "OWNER", title: "Encargado de compras" },
+      { username: "compumundo.admin", role: "ADMIN", title: "Encargado de compras" },
       { username: "compumundo.comprador", role: "BUYER", title: "Comprador" },
     ],
   },

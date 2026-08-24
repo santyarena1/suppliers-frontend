@@ -1,29 +1,31 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
+import { TENANT_ROLES_CAN_ORDER } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { AddCartItemDto } from "./dto/add-item.dto";
 import { UpdateCartItemDto } from "./dto/update-item.dto";
 
 /**
- * El carrito es personal —dos vendedores del mismo local arman el suyo— pero vive
- * dentro de una organización: al cambiar de comercio no se lleva lo que había juntado.
+ * Un carrito por comercio, compartido: lo que se agrega en el celular aparece en
+ * la caja. El de solo lectura puede verlo; no lo toca.
  */
 @Injectable()
 export class CartService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(tenant: TenantContext, userId: string) {
+  list(tenant: TenantContext) {
     return this.prisma.cartItem.findMany({
-      where: { userId, tenantId: tenant.tenantId },
+      where: { tenantId: tenant.tenantId },
       orderBy: { createdAt: "asc" },
     });
   }
 
   async addItem(tenant: TenantContext, userId: string, dto: AddCartItemDto) {
+    this.assertCanMutate(tenant);
     return this.prisma.cartItem.upsert({
       where: {
-        userId_tenantId_provider_externalId: {
-          userId,
+        tenantId_provider_externalId: {
           tenantId: tenant.tenantId,
           provider: dto.provider,
           externalId: dto.externalId,
@@ -38,33 +40,58 @@ export class CartService {
         price: dto.price,
         imageUrl: dto.imageUrl,
         quantity: dto.quantity,
+        snapshot: dto.snapshot as Prisma.InputJsonValue | undefined,
       },
-      update: { quantity: { increment: dto.quantity } },
+      update: {
+        userId,
+        quantity: { increment: dto.quantity },
+        name: dto.name,
+        price: dto.price,
+        imageUrl: dto.imageUrl,
+        ...(dto.snapshot === undefined ? {} : { snapshot: dto.snapshot as Prisma.InputJsonValue }),
+      },
     });
   }
 
-  private async assertOwnedItem(tenant: TenantContext, userId: string, itemId: string) {
+  private async assertOwnedItem(tenant: TenantContext, itemId: string) {
     const item = await this.prisma.cartItem.findUnique({ where: { id: itemId } });
     if (!item || item.tenantId !== tenant.tenantId) {
       throw new NotFoundException("Ítem no encontrado en el carrito");
     }
-    if (item.userId !== userId) throw new ForbiddenException("Este ítem no pertenece a tu carrito");
     return item;
   }
 
   async updateItem(tenant: TenantContext, userId: string, itemId: string, dto: UpdateCartItemDto) {
-    await this.assertOwnedItem(tenant, userId, itemId);
-    return this.prisma.cartItem.update({ where: { id: itemId }, data: { quantity: dto.quantity } });
+    this.assertCanMutate(tenant);
+    await this.assertOwnedItem(tenant, itemId);
+    return this.prisma.cartItem.update({
+      where: { id: itemId },
+      data: {
+        userId,
+        ...(dto.quantity === undefined ? {} : { quantity: dto.quantity }),
+        ...(dto.snapshot === undefined ? {} : { snapshot: dto.snapshot as Prisma.InputJsonValue }),
+      },
+    });
   }
 
   async removeItem(tenant: TenantContext, userId: string, itemId: string) {
-    await this.assertOwnedItem(tenant, userId, itemId);
+    this.assertCanMutate(tenant);
+    await this.assertOwnedItem(tenant, itemId);
     await this.prisma.cartItem.delete({ where: { id: itemId } });
     return { id: itemId };
   }
 
-  async clear(tenant: TenantContext, userId: string) {
-    await this.prisma.cartItem.deleteMany({ where: { userId, tenantId: tenant.tenantId } });
+  async clear(tenant: TenantContext, provider?: string) {
+    this.assertCanMutate(tenant);
+    await this.prisma.cartItem.deleteMany({
+      where: { tenantId: tenant.tenantId, ...(provider ? { provider } : {}) },
+    });
     return { cleared: true };
+  }
+
+  private assertCanMutate(tenant: TenantContext) {
+    if (!TENANT_ROLES_CAN_ORDER.includes(tenant.tenantRole)) {
+      throw new ForbiddenException(`Tu rol en ${tenant.tenantName} no puede modificar el carrito`);
+    }
   }
 }

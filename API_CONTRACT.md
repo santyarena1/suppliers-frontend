@@ -49,23 +49,50 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: `tenantRole` es el alcance dentro de la organización y `platformRole` el nivel de acceso a Nodo. El lado cliente de un vínculo siempre es un comercio. Ver `docs/ARQUITECTURA_TENANTS.md`.
 
+### [FEATURE] Alta pública de comercio
+- **Método**: POST
+- **Ruta**: `/auth/register`
+- **Auth**: pública (rate limit)
+- **Body / Params**: `{ commerceName, username, email, password? }`
+- **Respuesta esperada**: `{ token, generatedPassword? }` — entra directo. Si no mandó contraseña, se genera y se muestra una sola vez.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Crea la organización `RETAILER`, el usuario y la membresía `ADMIN`. El nombre del local choca en castellano: “Ya existe un comercio con ese nombre”.
+
+### [FEATURE] Panel del comercio (perfil, equipo, tilde del comprador)
+- **Método**: GET | PUT | POST
+- **Ruta**: `/my/commerce`, `/my/commerce/orders`, `/my/team`, `/my/team/:membershipId`
+- **Auth**: Bearer con organización · editar, solo ADMIN (u OWNER residual)
+- **Body / Params**: perfil `{ name?, contactEmail?, contactPhone? }` · tilde `{ buyerCanConfirm }` · invitar `{ username, email, role, title? }`
+- **Respuesta esperada**: perfil con `{ id, name, type, contactEmail, contactPhone, buyerCanConfirm, role }` · equipo como lista de miembros · al invitar, `generatedPassword` una sola vez
+- **Estado**: IMPLEMENTADO
+- **Notas**: El tilde se lee de la base al confirmar un pedido, no del JWT. Un comercio no puede quedar sin administrador activo. Roles de pantalla: Administrador, Comprador, Vendedor, Solo lectura. Nunca “Dueño”.
+
+### [FEATURE] Carrito compartido del local
+- **Método**: GET | POST | PATCH | DELETE
+- **Ruta**: `/cart`, `/cart/items`, `/cart/items/:id`
+- **Auth**: Bearer con organización · mutar, quien puede pedir (`ADMIN`, `BUYER`, `SELLER`)
+- **Body / Params**: alta `{ provider, externalId, name, price, imageUrl, quantity?, snapshot? }` · `DELETE /cart?provider=` vacía un proveedor
+- **Respuesta esperada**: ítems `{ id, provider, externalId, name, price, imageUrl, quantity, snapshot }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un carrito por comercio, no por persona. `VIEWER` puede GET, no muta. El superadmin no tiene carrito.
+
 ### [FEATURE] Proveedores visibles y canje de código de vinculación
 - **Método**: GET | POST
 - **Ruta**: `/my/providers`, `/my/redeem-code`
-- **Auth**: Bearer usuario con organización
+- **Auth**: Bearer usuario con organización · canje, solo ADMIN
 - **Body / Params**: canje `{ code }`
-- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
+- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, hasCredentials }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
 - **Estado**: IMPLEMENTADO
-- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
+- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. No incluye `discountPercent` (eso es del distribuidor). Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones. En el celular el comercio puede escanear el QR; el código lo genera el mayorista.
 
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
 - **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/:id/approve`, `/orders/:id/reject`
-- **Auth**: Bearer usuario con organización · aprobar y rechazar, solo OWNER o ADMIN
+- **Auth**: Bearer usuario con organización · aprobar y rechazar, solo ADMIN (u OWNER residual)
 - **Body / Params**: rechazo `{ reason? }`
 - **Respuesta esperada**: pedido con `{ id, provider, providerName, status, approvalStatus, createdBy, approvedBy, total, items }` · `/orders/pending-approval` devuelve `{ canApprove, needsApproval, orders }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`.
+- **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. El comprador confirma solo si `buyerCanConfirm` está prendido en el local (se lee de la base, no del token). Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_TIPO1.md`.
 
 ## Pendiente (futuro)
 
