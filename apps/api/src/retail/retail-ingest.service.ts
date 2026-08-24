@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { RetailSourceClient, type ExternalProduct, type ExternalStore } from "./retail-source.client";
 import { normalizeSearchText } from "./retail-search.util";
-import { detectPriceDivisor, normalizeExternalPrice } from "./retail-price.util";
+import { detectPriceDivisor, isCentsBasedStore, normalizeExternalPrice } from "./retail-price.util";
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -309,6 +309,7 @@ export class RetailIngestService implements OnModuleInit {
   private async upsertStoreMeta(store: ExternalStore) {
     const name = store.nombre?.trim() || `Tienda ${store.id}`;
     const logoUrl = firstImage(store.imagenes);
+    const cents = isCentsBasedStore(name, store.id);
     await this.prisma.retailStore.upsert({
       where: { externalId: store.id },
       create: {
@@ -316,6 +317,7 @@ export class RetailIngestService implements OnModuleInit {
         name,
         logoUrl,
         active: true,
+        priceDivisor: cents ? 100 : 1,
         raw: store as object,
         syncedAt: new Date(0),
       },
@@ -323,6 +325,7 @@ export class RetailIngestService implements OnModuleInit {
         name,
         logoUrl,
         active: true,
+        ...(cents ? { priceDivisor: 100 } : {}),
         raw: store as object,
       },
     });
@@ -339,8 +342,19 @@ export class RetailIngestService implements OnModuleInit {
     let page = 1;
     let upserted = 0;
     let retries = 0;
-    let divisor = store.priceDivisor > 1 ? store.priceDivisor : 1;
-    let divisorDetected = store.priceDivisor > 1;
+    let divisor = isCentsBasedStore(store.name, store.externalId)
+      ? 100
+      : store.priceDivisor > 1
+        ? store.priceDivisor
+        : 1;
+    let divisorDetected = divisor > 1;
+    if (divisor > 1 && store.priceDivisor !== divisor) {
+      await this.prisma.retailStore.update({
+        where: { id: store.id },
+        data: { priceDivisor: divisor },
+      });
+      this.logger.log(`Tienda ${store.name}: precios en centavos (÷${divisor})`);
+    }
     const productConcurrency = Math.max(
       2,
       Math.min(12, Number(this.config.get("RETAIL_INGEST_PRODUCT_CONCURRENCY") ?? 8))
