@@ -61,9 +61,10 @@ app/
   search/         — búsqueda de productos por proveedor
   product/        — detalle de producto
   cart/           — carrito
-  admin/          — panel de admin (gestión de usuarios)
+  configuracion/  — apariencia, preferencias y ajustes generales del sistema
+  admin/          — administración (orgs, usuarios, permisos, locales, diagnóstico)
   credentials/    — credenciales por proveedor
-  diagnostics/    — diagnóstico del sistema
+  diagnostics/    — redirect a /admin?tab=diagnostics
   api/            — route handlers de Next.js (proxies o utilidades)
 components/
   Navbar.tsx
