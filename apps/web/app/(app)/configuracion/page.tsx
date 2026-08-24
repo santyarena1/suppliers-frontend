@@ -1,10 +1,18 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { useTheme, THEME_OPTIONS, type Theme } from "@/lib/theme";
-import { getUser } from "@/lib/auth";
+import { getUser, isAdmin } from "@/lib/auth";
+import {
+  AppearanceTab,
+  BannersTab,
+  BrandsTab,
+  ProvidersTab,
+} from "@/components/admin/SystemConfigPanels";
 import {
   Settings, Palette, DollarSign, Receipt, Check, RefreshCw, Sun, Moon, Sparkles,
+  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle,
 } from "lucide-react";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
@@ -13,34 +21,87 @@ const THEME_ICONS: Record<Theme, React.ElementType> = {
   light: Sun,
 };
 
+type ConfigTab = "prefs" | "appearance" | "providers" | "brands" | "banners";
+
+const ADMIN_TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
+  { key: "appearance", label: "Identidad", icon: <Palette className="w-3.5 h-3.5" /> },
+  { key: "providers", label: "Proveedores", icon: <Boxes className="w-3.5 h-3.5" /> },
+  { key: "brands", label: "Marcas", icon: <Building2 className="w-3.5 h-3.5" /> },
+  { key: "banners", label: "Banners", icon: <ImageIcon className="w-3.5 h-3.5" /> },
+];
+
 export default function ConfiguracionPage() {
   const user = getUser();
+  const admin = isAdmin();
+  const [tab, setTab] = useState<ConfigTab>("prefs");
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const { theme, setTheme } = useTheme();
   const {
     currency, setCurrency, withIva, setWithIva,
     dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
   } = usePrefs();
 
+  useEffect(() => {
+    if (!admin && tab !== "prefs") setTab("prefs");
+  }, [admin, tab]);
+
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 4000);
+  }
+
   return (
     <>
-          <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-brand-600/15 border border-brand-500/25 flex items-center justify-center">
-                <Settings className="w-4 h-4 text-brand-400" />
-              </div>
-              <div>
-                <h1 className="text-base font-semibold text-white">Configuración</h1>
-                <p className="text-xs text-surface-500">
-                  Preferencias de {user?.username ?? "tu cuenta"}
-                </p>
-              </div>
-            </div>
-          </header>
+      <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-lg bg-brand-600/15 border border-brand-500/25 flex items-center justify-center">
+            <Settings className="w-4 h-4 text-brand-400" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold text-white">Configuración</h1>
+            <p className="text-xs text-surface-500">
+              Apariencia y preferencias{admin ? " · ajustes generales del sistema" : ` de ${user?.username ?? "tu cuenta"}`}
+            </p>
+          </div>
+        </div>
+      </header>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
+      {admin && (
+        <div className="flex-shrink-0 border-b border-surface-800 px-4 sm:px-6 flex gap-1 overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setTab("prefs")}
+            className={`flex items-center gap-1.5 text-xs font-medium px-3.5 py-2.5 border-b-2 -mb-px transition-all whitespace-nowrap ${
+              tab === "prefs"
+                ? "border-brand-500 text-brand-400"
+                : "border-transparent text-surface-500 hover:text-surface-300"
+            }`}
+          >
+            <Settings className="w-3.5 h-3.5" />
+            Preferencias
+          </button>
+          {ADMIN_TABS.map(({ key, label, icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`flex items-center gap-1.5 text-xs font-medium px-3.5 py-2.5 border-b-2 -mb-px transition-all whitespace-nowrap ${
+                tab === key
+                  ? "border-brand-500 text-brand-400"
+                  : "border-transparent text-surface-500 hover:text-surface-300"
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-              {/* Apariencia */}
+      <div className="flex-1 overflow-y-auto">
+        <div className={`mx-auto px-4 sm:px-6 py-6 ${tab === "prefs" ? "max-w-2xl" : "max-w-3xl"}`}>
+          {tab === "prefs" && (
+            <div className="flex flex-col gap-6">
               <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Palette className="w-4 h-4 text-brand-400" />
@@ -73,7 +134,6 @@ export default function ConfiguracionPage() {
                 </div>
               </section>
 
-              {/* Moneda e impuestos */}
               <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
@@ -176,7 +236,27 @@ export default function ConfiguracionPage() {
                 </div>
               </section>
             </div>
-          </div>
+          )}
+
+          {admin && tab === "appearance" && <AppearanceTab showToast={showToast} />}
+          {admin && tab === "providers" && <ProvidersTab showToast={showToast} />}
+          {admin && tab === "brands" && <BrandsTab showToast={showToast} />}
+          {admin && tab === "banners" && <BannersTab showToast={showToast} />}
+        </div>
+      </div>
+
+      {toast && (
+        <div
+          className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl border text-sm font-medium shadow-xl ${
+            toast.ok
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+              : "bg-red-500/10 border-red-500/20 text-red-300"
+          }`}
+        >
+          {toast.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+          {toast.msg}
+        </div>
+      )}
     </>
   );
 }

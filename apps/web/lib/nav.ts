@@ -1,6 +1,6 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
-  Settings, Activity, Users,
+  Settings, Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantType } from "@/lib/api";
@@ -13,11 +13,9 @@ import type { UserRole } from "@/lib/auth";
  * El resto vive en 3 secciones colapsables alineadas a los tipos de
  * organización (`TenantType`): Proveedores, Marcas, Sistema.
  *
- * Visibilidad:
- *  - `module` — permiso de plataforma (`GET /me/permissions`).
- *  - `tenantTypes` — cuando la sesión tenga membresía (fase 3 de tenants).
- *  - `roles` — fallback de plataforma hasta que exista esa membresía.
- * Superadmin (`ROLE_ADMIN` sin tenant) ve todo lo que su módulo permita.
+ * Sistema:
+ *  - Configuración — apariencia, preferencias y ajustes generales del sistema
+ *  - Administración — usuarios, orgs, locales/precios, diagnóstico
  */
 
 export type NavSectionId = "providers" | "brands" | "system";
@@ -32,7 +30,6 @@ export type NavItemId =
   | "brands-panel"
   | "brands-admin"
   | "settings"
-  | "diagnostics"
   | "admin";
 
 export interface NavItemDef {
@@ -117,15 +114,6 @@ export const NAV_ITEMS: NavItemDef[] = [
   },
 
   { id: "settings", href: "/configuracion", label: "Configuración", icon: Settings, section: "system" },
-  {
-    id: "diagnostics",
-    href: "/diagnostics",
-    label: "Diagnóstico",
-    icon: Activity,
-    module: "diagnostics",
-    roles: ["ROLE_ADMIN"],
-    section: "system",
-  },
   {
     id: "admin",
     href: "/admin",
