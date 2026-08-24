@@ -67,6 +67,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`.
 
+### [FEATURE] Referencias de precio de venta (locales)
+- **Método**: GET · POST (admin)
+- **Ruta**: `/retail/search?q=&take=` · `/admin/retail/ingest` · `/admin/retail/ingest/status`
+- **Auth**: Bearer usuario · ingest solo ROLE_ADMIN
+- **Body / Params**: `q` búsqueda amplia (tokens flexibles) · ingest sin body
+- **Respuesta esperada**: `{ query, tokens, results: [{ id, name, price, description, productUrl, imageUrl, categoryName, syncedAt, store: { name, logoUrl }, priceHistory: [...] }] }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo; un cron (`RETAIL_INGEST_CRON`, default cada 6h) puebla `RetailStore` / `RetailProduct` / `RetailPriceHistory`.
+
 ## Pendiente (futuro)
 
 

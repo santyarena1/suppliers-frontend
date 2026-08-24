@@ -1060,6 +1060,58 @@ export const catalogApi = {
   providerDisplay: () => api.get<ProviderDisplay[]>("/catalog/provider-display"),
 };
 
+// --- Referencias de precio de venta (locales) ---
+export interface RetailSearchHit {
+  id: string;
+  externalId: number;
+  name: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  productUrl: string | null;
+  imageUrl: string | null;
+  categoryName: string | null;
+  syncedAt: string;
+  score: number;
+  store: {
+    id: string;
+    externalId: number;
+    name: string;
+    logoUrl: string | null;
+  };
+  priceHistory: {
+    previousPrice: number | null;
+    price: number;
+    changedAt: string;
+  }[];
+}
+
+export interface RetailSearchResponse {
+  query: string;
+  tokens: string[];
+  results: RetailSearchHit[];
+}
+
+export const retailApi = {
+  search: (q: string, take = 30) =>
+    api.get<RetailSearchResponse>("/retail/search", { params: { q, take } }),
+  triggerIngest: () => api.post<{ started: boolean; reason?: string }>("/admin/retail/ingest"),
+  ingestStatus: () =>
+    api.get<{
+      running: boolean;
+      stores: number;
+      products: number;
+      lastRun: {
+        id: string;
+        status: string;
+        startedAt: string;
+        finishedAt: string | null;
+        productsUpserted: number;
+        errorMessage: string | null;
+      } | null;
+    }>("/admin/retail/ingest/status"),
+};
+
 // --- Permisos por módulo del usuario actual ---
 export type ModuleKey = "search" | "cart" | "credentials" | "providers" | "brands" | "diagnostics" | "admin";
 

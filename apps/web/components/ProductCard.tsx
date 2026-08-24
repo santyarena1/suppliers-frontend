@@ -1,7 +1,7 @@
 "use client";
 
 import { ProductDTO } from "@/lib/api";
-import { Package, ImageOff, MapPin } from "lucide-react";
+import { Package, ImageOff, MapPin, DollarSign } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
@@ -10,6 +10,7 @@ import { usePrefs } from "@/lib/prefs";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { linePricing, taxLabel } from "@/lib/tax";
 import AddToCartButton from "./AddToCartButton";
+import SalePricePanel from "./SalePricePanel";
 
 const PROVIDER_HUE: Record<string, string> = {
   NEW_BYTES:    "text-sky-400   bg-sky-400/10",
@@ -30,6 +31,7 @@ const PROVIDER_HUE: Record<string, string> = {
 
 export default function ProductCard({ product }: { product: ProductDTO }) {
   const [imgErr, setImgErr] = useState(false);
+  const [saleOpen, setSaleOpen] = useState(false);
   const { currency, withIva, convert } = usePrefs();
   const display = useProviderDisplay();
   const color = PROVIDER_HUE[product.provider] || "text-surface-400 bg-surface-400/10";
@@ -113,13 +115,35 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               Base: {formatUSD(pricing.net)} {withIva ? "(s/imp)" : ""}
             </span>
           </div>
-          <AddToCartButton product={product} variant="icon" />
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              type="button"
+              title="Ver precios de venta en locales (referencia de mercado)"
+              aria-label="Ver precios de venta"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setSaleOpen(true);
+              }}
+              className="w-8 h-8 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 flex items-center justify-center transition-colors"
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+            </button>
+            <AddToCartButton product={product} variant="icon" />
+          </div>
         </div>
 
         {product.externalId && (
           <span className="product-card-meta text-[9px] font-mono truncate">#{product.externalId}</span>
         )}
       </div>
+
+      <SalePricePanel
+        open={saleOpen}
+        onClose={() => setSaleOpen(false)}
+        seedQuery={product.name}
+        costUsd={pricing.net}
+      />
     </div>
   );
 }

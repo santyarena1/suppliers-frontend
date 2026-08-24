@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  adminApi, AdminUser, ProviderDisplay, BrandDisplay, Banner,
+  adminApi, retailApi, AdminUser, ProviderDisplay, BrandDisplay, Banner,
   ModulePermission, ModuleKey, ALL_PROVIDERS, PROVIDER_LABELS,
 } from "@/lib/api";
 import { isAdmin, getUser } from "@/lib/auth";
@@ -11,13 +11,13 @@ import UsersManagement from "@/components/admin/UsersManagement";
 import OrganizationsTree from "@/components/admin/OrganizationsTree";
 import {
   Users, ShieldCheck, Boxes, Building2, Image as ImageIcon,
-  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette, Network,
+  Loader2, CheckCircle2, XCircle, Zap, Plus, Trash2, X, Palette, Network, DollarSign,
 } from "lucide-react";
 import {
   BANNER_SLOTS, BRAND_PRESET_LABELS, BRAND_PRESETS, applyBrandPreset, type BrandPreset, type BannerSlot,
 } from "@/lib/brand-presets";
 
-type Tab = "organizations" | "users" | "permissions" | "providers" | "brands" | "banners" | "appearance";
+type Tab = "organizations" | "users" | "permissions" | "providers" | "brands" | "banners" | "appearance" | "retail";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "organizations", label: "Organizaciones", icon: <Network className="w-3.5 h-3.5" /> },
@@ -26,6 +26,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "providers", label: "Proveedores", icon: <Boxes className="w-3.5 h-3.5" /> },
   { key: "brands", label: "Marcas", icon: <Building2 className="w-3.5 h-3.5" /> },
   { key: "banners", label: "Banners", icon: <ImageIcon className="w-3.5 h-3.5" /> },
+  { key: "retail", label: "Precios venta", icon: <DollarSign className="w-3.5 h-3.5" /> },
   { key: "appearance", label: "Apariencia", icon: <Palette className="w-3.5 h-3.5" /> },
 ];
 
@@ -92,6 +93,7 @@ export default function AdminPage() {
             {tab === "providers" && <ProvidersTab showToast={showToast} />}
             {tab === "brands" && <BrandsTab showToast={showToast} />}
             {tab === "banners" && <BannersTab showToast={showToast} />}
+            {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "appearance" && <AppearanceTab showToast={showToast} />}
           </div>
 
@@ -558,6 +560,111 @@ function AppearanceTab({ showToast }: { showToast: (m: string, ok?: boolean) => 
         className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2.5 transition-all"
       >
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar para todos los usuarios"}
+      </button>
+    </div>
+  );
+}
+
+// ---------- Precios de venta (referencia de mercado) ----------
+
+function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
+  const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+  const [status, setStatus] = useState<{
+    running: boolean;
+    stores: number;
+    products: number;
+    lastRun: {
+      status: string;
+      startedAt: string;
+      finishedAt: string | null;
+      productsUpserted: number;
+      errorMessage: string | null;
+    } | null;
+  } | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    retailApi
+      .ingestStatus()
+      .then((r) => setStatus(r.data))
+      .catch(() => setStatus(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 15_000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  async function startIngest() {
+    setStarting(true);
+    try {
+      const r = await retailApi.triggerIngest();
+      if (r.data.started) showToast("Ingesta de precios de venta iniciada");
+      else showToast(r.data.reason === "already_running" ? "Ya hay una ingesta en curso" : "No se inició", false);
+      load();
+    } catch (err) {
+      showToast(errMsg(err, "Error al iniciar ingesta"), false);
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  if (loading && !status) {
+    return (
+      <div className="flex justify-center py-16">
+        <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-lg space-y-4">
+      <div>
+        <h2 className="text-sm font-semibold text-white mb-1">Precios de venta (referencia)</h2>
+        <p className="text-xs text-surface-500 leading-relaxed">
+          Catálogo de precios de venta en locales, usado como referencia de mercado en el buscador
+          (botón $ en cada producto). Se actualiza solo en segundo plano; los usuarios nunca pegan
+          en vivo a la fuente externa.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-surface-800 bg-surface-900/50 p-4 grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-surface-500">Locales</p>
+          <p className="text-lg font-semibold text-white tabular-nums">{status?.stores ?? "—"}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-surface-500">Productos</p>
+          <p className="text-lg font-semibold text-white tabular-nums">{status?.products ?? "—"}</p>
+        </div>
+        <div className="col-span-2">
+          <p className="text-[10px] uppercase tracking-wider text-surface-500">Última corrida</p>
+          {status?.lastRun ? (
+            <p className="text-xs text-surface-300 mt-0.5">
+              {status.lastRun.status}
+              {status.running ? " (en curso)" : ""} · {status.lastRun.productsUpserted} upserts ·{" "}
+              {new Date(status.lastRun.startedAt).toLocaleString("es-AR")}
+              {status.lastRun.errorMessage ? (
+                <span className="block text-red-400 mt-1">{status.lastRun.errorMessage}</span>
+              ) : null}
+            </p>
+          ) : (
+            <p className="text-xs text-surface-500 mt-0.5">Todavía no corrió</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => void startIngest()}
+        disabled={starting || status?.running}
+        className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2.5 transition-all"
+      >
+        {starting || status?.running ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+        {status?.running ? "Ingesta en curso…" : "Sincronizar ahora"}
       </button>
     </div>
   );

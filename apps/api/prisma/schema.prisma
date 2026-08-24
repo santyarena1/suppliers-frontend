@@ -874,3 +874,76 @@ model AuditLogEntry {
   @@index([entityType, entityId])
   @@index([brandId])
 }
+
+// --- Referencias de precio de venta (locales / retail) ---
+// Catálogo propio poblado por ingesta periódica. La UI nunca consulta la fuente
+// externa en vivo: siempre lee estas tablas.
+
+model RetailStore {
+  id           String   @id @default(uuid())
+  /// ID numérico de la tienda en la fuente externa.
+  externalId   Int      @unique
+  name         String
+  logoUrl      String?
+  active       Boolean  @default(true)
+  raw          Json?
+  syncedAt     DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  products     RetailProduct[]
+
+  @@index([active, name])
+}
+
+model RetailProduct {
+  id              String   @id @default(uuid())
+  /// ID del producto en la fuente externa.
+  externalId      Int      @unique
+  storeId         String
+  store           RetailStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  price           Decimal  @db.Decimal(14, 4)
+  currency        String   @default("ARS")
+  productUrl      String?
+  imageUrl        String?
+  categoryName    String?
+  /// Nombre normalizado en minúsculas sin acentos, para búsqueda amplia.
+  searchText      String
+  active          Boolean  @default(true)
+  raw             Json?
+  syncedAt        DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  priceHistory    RetailPriceHistory[]
+
+  @@index([storeId])
+  @@index([active, price])
+  @@index([categoryName])
+  @@index([searchText])
+  @@index([name])
+}
+
+model RetailPriceHistory {
+  id              String   @id @default(uuid())
+  productId       String
+  product         RetailProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// ID del cambio en la fuente (si viene).
+  externalId      Int?
+  previousPrice   Decimal? @db.Decimal(14, 4)
+  price           Decimal  @db.Decimal(14, 4)
+  changedAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@unique([productId, externalId])
+  @@index([productId, changedAt])
+}
+
+model RetailIngestRun {
+  id           String   @id @default(uuid())
+  startedAt    DateTime @default(now())
+  finishedAt   DateTime?
+  status       String   @default("RUNNING") // RUNNING | OK | ERROR
+  storesTotal  Int      @default(0)
+  storesDone   Int      @default(0)
+  productsUpserted Int  @default(0)
+  errorMessage String?
+}
