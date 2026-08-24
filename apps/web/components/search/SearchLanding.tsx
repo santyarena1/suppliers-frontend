@@ -71,11 +71,11 @@ export default function SearchLanding({ onCategoryClick }: SearchLandingProps) {
         </section>
       )}
 
-      {categories.length === 0 && featured.length === 0 && banners.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 gap-2 text-center rounded-2xl border border-dashed border-surface-700 bg-surface-900/30 px-6">
+      {categories.length === 0 && featured.length === 0 && banners.filter((b) => b.active !== false && b.imageUrl).length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 gap-2 text-center rounded-2xl border border-dashed border-surface-700 bg-surface-900/30 px-6">
           <p className="text-sm font-medium text-surface-300">Buscador mayorista NODO</p>
           <p className="text-xs text-surface-500 max-w-md">
-            Consultá precios en todos tus proveedores desde la barra de búsqueda. El admin puede cargar promociones en el grid superior.
+            Los espacios de arriba se van llenando a medida que el admin carga banners. Cada uno queda en su posición.
           </p>
         </div>
       )}

@@ -3,26 +3,56 @@
 import Link from "next/link";
 import type { Banner } from "@/lib/api";
 import {
-  BANNER_SLOT_GRID_CLASS,
+  BANNER_SLOT_COLLAGE,
   BANNER_SLOT_ORDER,
+  BANNER_SLOT_RECOMMENDED,
   type BannerSlot,
 } from "@/lib/brand-presets";
 import { assetUrl } from "@/lib/assets";
 
-function BannerTile({ banner }: { banner: Banner }) {
-  const slot = (banner.slot as BannerSlot) || "tile_1";
-  const gridClass = BANNER_SLOT_GRID_CLASS[slot] ?? "min-h-[120px]";
+function pickBanner(banners: Banner[], slot: BannerSlot): Banner | undefined {
+  const matches = banners.filter(
+    (b) => b.active !== false && !!b.imageUrl?.trim() && (b.slot as BannerSlot) === slot,
+  );
+  if (matches.length === 0) return undefined;
+  return [...matches].sort((a, b) => a.order - b.order)[0];
+}
+
+function SlotShell({
+  slot,
+  children,
+  filled,
+}: {
+  slot: BannerSlot;
+  children: React.ReactNode;
+  filled: boolean;
+}) {
+  const layout = BANNER_SLOT_COLLAGE[slot];
+  return (
+    <div
+      className={`${layout.mobile} ${layout.desktop} overflow-hidden border shadow-lg shadow-black/30 transition-transform duration-500 ${
+        filled
+          ? "border-surface-700/80 bg-surface-900 hover:z-50 hover:scale-[1.02]"
+          : "border-dashed border-surface-700/70 bg-surface-950/40"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function FilledBanner({ banner }: { banner: Banner }) {
   const inner = (
     <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={assetUrl(banner.imageUrl)}
         alt={banner.title || "Promoción"}
-        className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
       {(banner.title || banner.subtitle) && (
-        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
+        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
           {banner.title && (
             <p className="text-white text-sm sm:text-base font-bold leading-tight drop-shadow-md">
               {banner.title}
@@ -36,7 +66,7 @@ function BannerTile({ banner }: { banner: Banner }) {
     </>
   );
 
-  const cls = `group relative overflow-hidden rounded-2xl border border-surface-800 bg-surface-900 ${gridClass}`;
+  const cls = "group absolute inset-0 block";
 
   if (banner.linkUrl) {
     const external = banner.linkUrl.startsWith("http");
@@ -52,22 +82,47 @@ function BannerTile({ banner }: { banner: Banner }) {
   return <div className={cls}>{inner}</div>;
 }
 
-export default function PromoGrid({ banners }: { banners: Banner[] }) {
-  // Sin banners no maquetamos huecos vacíos.
-  const usable = banners.filter((b) => b.active !== false && !!b.imageUrl?.trim());
-  if (usable.length === 0) return null;
+function EmptyPlaceholder({ slot }: { slot: BannerSlot }) {
+  const size = BANNER_SLOT_RECOMMENDED[slot];
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-3 text-center pointer-events-none">
+      <span className="text-[10px] uppercase tracking-wider text-surface-600 font-semibold">
+        {slot.replace("_", " ")}
+      </span>
+      <span className="text-[10px] text-surface-700">
+        {size.width}×{size.height}
+      </span>
+    </div>
+  );
+}
 
-  const sorted = [...usable].sort((a, b) => {
-    const ai = BANNER_SLOT_ORDER.indexOf((a.slot as BannerSlot) || "tile_1");
-    const bi = BANNER_SLOT_ORDER.indexOf((b.slot as BannerSlot) || "tile_1");
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi) || a.order - b.order;
-  });
+type PromoGridProps = {
+  banners: Banner[];
+  /** Si true (default), reserva todos los slots aunque estén vacíos. */
+  keepSlots?: boolean;
+};
+
+/**
+ * Collage de banners: piezas giradas que se cruzan.
+ * Cada slot mantiene su posición fija — si cargás uno solo, no se reacomoda.
+ */
+export default function PromoGrid({ banners, keepSlots = true }: PromoGridProps) {
+  const bySlot = BANNER_SLOT_ORDER.map((slot) => ({
+    slot,
+    banner: pickBanner(banners, slot),
+  }));
+
+  const anyFilled = bySlot.some((s) => !!s.banner);
+  if (!keepSlots && !anyFilled) return null;
+  // Sin keepSlots y sin nada: no renderizar. Con keepSlots siempre mostramos el collage.
 
   return (
-    <section className="mb-6">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 auto-rows-min">
-        {sorted.map((banner) => (
-          <BannerTile key={banner.id} banner={banner} />
+    <section className="mb-8">
+      <div className="relative flex flex-col gap-0 md:block md:min-h-[460px] lg:min-h-[520px] md:pb-2">
+        {bySlot.map(({ slot, banner }) => (
+          <SlotShell key={slot} slot={slot} filled={!!banner}>
+            {banner ? <FilledBanner banner={banner} /> : keepSlots ? <EmptyPlaceholder slot={slot} /> : null}
+          </SlotShell>
         ))}
       </div>
     </section>

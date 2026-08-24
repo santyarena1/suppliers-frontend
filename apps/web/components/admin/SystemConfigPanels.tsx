@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import {
   BANNER_SLOTS,
-  BANNER_SLOT_GRID_CLASS,
+  BANNER_SLOT_COLLAGE,
   BANNER_SLOT_ORDER,
   BANNER_SLOT_RECOMMENDED,
   BRAND_PRESET_LABELS,
@@ -303,24 +303,25 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
         </div>
       </div>
 
-      {/* Maquetado del grid — mismo layout que el buscador */}
-      <div className="mb-6 border border-surface-800 rounded-2xl p-3 sm:p-4 bg-surface-900/40">
+      {/* Maquetado collage — mismo layout que el buscador */}
+      <div className="mb-6 border border-surface-800 rounded-2xl p-3 sm:p-4 bg-surface-900/40 overflow-hidden">
         <p className="text-[10px] uppercase tracking-wider text-surface-500 font-semibold mb-3">
-          Maquetado · {form.position === "search" ? "Buscador" : "Home"}
+          Maquetado · {form.position === "search" ? "Buscador" : "Home"} · tocá un espacio
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 auto-rows-min">
+        <div className="relative flex flex-col gap-0 md:block md:min-h-[380px] lg:min-h-[420px]">
           {BANNER_SLOT_ORDER.map((slot) => {
             const meta = BANNER_SLOT_RECOMMENDED[slot];
             const occupied = occupiedBySlot.get(slot);
             const selected = showCreate && form.slot === slot;
+            const layout = BANNER_SLOT_COLLAGE[slot];
             return (
               <button
                 key={slot}
                 type="button"
                 onClick={() => openCreate(slot)}
-                className={`relative overflow-hidden rounded-xl border text-left transition-all ${BANNER_SLOT_GRID_CLASS[slot]} ${
+                className={`${layout.mobile} ${layout.desktop} overflow-hidden border text-left transition-all shadow-md shadow-black/20 ${
                   selected
-                    ? "border-brand-500 ring-1 ring-brand-500/40 bg-brand-600/10"
+                    ? "border-brand-500 ring-1 ring-brand-500/40 bg-brand-600/10 z-50"
                     : occupied
                       ? "border-surface-700 bg-surface-900 hover:border-brand-500/50"
                       : "border-dashed border-surface-700 bg-surface-950/80 hover:border-brand-500/60 hover:bg-brand-600/5"
@@ -331,10 +332,10 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
                   <img
                     src={assetUrl(occupied.imageUrl)}
                     alt=""
-                    className="absolute inset-0 w-full h-full object-cover opacity-70"
+                    className="absolute inset-0 w-full h-full object-cover opacity-75"
                   />
                 ) : null}
-                <div className={`relative z-10 p-3 flex flex-col justify-between h-full min-h-[inherit] ${occupied?.imageUrl ? "bg-gradient-to-t from-black/75 via-black/30 to-black/10" : ""}`}>
+                <div className={`relative z-10 p-2.5 sm:p-3 flex flex-col justify-between h-full min-h-[100px] md:min-h-0 md:h-full ${occupied?.imageUrl ? "bg-gradient-to-t from-black/80 via-black/25 to-transparent" : ""}`}>
                   <div>
                     <p className={`text-xs font-semibold ${occupied ? "text-white" : "text-surface-300"}`}>
                       {slotLabel(slot)}
@@ -344,7 +345,7 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
                     </p>
                   </div>
                   <p className={`text-[10px] mt-2 leading-snug ${occupied ? "text-white/60" : "text-surface-600"}`}>
-                    {occupied ? (occupied.active ? "Cargado · tocá para reemplazar / crear otro" : "Inactivo") : "Vacío · tocá para cargar"}
+                    {occupied ? (occupied.active ? "Cargado" : "Inactivo") : "Vacío · cargar"}
                   </p>
                 </div>
               </button>
