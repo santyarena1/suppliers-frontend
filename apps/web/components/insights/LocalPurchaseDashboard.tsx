@@ -22,7 +22,7 @@ import {
 } from "@/lib/api";
 import { formatUSD, proxyImg } from "@/lib/format";
 import ProviderBadge from "@/components/ProviderBadge";
-import { ChannelPie, MixPie, RankBarChart, ShippingMonthChart, SpendAreaChart, WeekdayBars } from "./InsightCharts";
+import { ChannelPie, MixPie, MonthDayChart, RankBarChart, ShippingMonthChart, SpendAreaChart, WeekdayBars } from "./InsightCharts";
 import { UnifyNamedTable } from "./UnifyNamedTable";
 
 const PERIODS: { days: number; label: string }[] = [
@@ -66,6 +66,21 @@ function formatFreight(usd: number, ars: number) {
   if (usd > 0) parts.push(formatUSD(usd));
   if (ars > 0) parts.push(pesos(ars));
   return parts.join(" · ") || "—";
+}
+
+function periodPhrase(days: number) {
+  if (days === 0) return "en todo el historial";
+  if (days === 30) return "en los últimos 30 días";
+  if (days === 90) return "en los últimos 90 días";
+  if (days === 365) return "en los últimos 12 meses";
+  return `en los últimos ${days} días`;
+}
+
+function bandSpend(days: { day: number; spendUsd: number; orders: number }[], from: number, to: number) {
+  return days.filter((d) => d.day >= from && d.day <= to).reduce(
+    (s, d) => ({ spend: s.spend + d.spendUsd, orders: s.orders + d.orders }),
+    { spend: 0, orders: 0 }
+  );
 }
 
 function when(iso: string | null | undefined) {
@@ -134,6 +149,13 @@ export default function LocalPurchaseDashboard() {
     });
     return copy;
   }, [data, focus, q, sort]);
+
+  const focusRank = useMemo(() => {
+    if (!data || !focus) return null;
+    if (focus.kind === "provider") return data.byProvider.find((r) => r.key === focus.key) ?? null;
+    if (focus.kind === "brand") return data.byBrand.find((r) => r.key === focus.key) ?? null;
+    return data.byCategory.find((r) => r.key === focus.key) ?? null;
+  }, [data, focus]);
 
   function openRank(kind: "brand" | "category" | "provider", row: PurchaseRankRow) {
     setFocus({ kind, key: row.key, label: row.label });
@@ -237,7 +259,7 @@ export default function LocalPurchaseDashboard() {
             </p>
           )}
 
-          {tab === "resumen" && <Resumen data={data} onOpen={openRank} />}
+          {tab === "resumen" && <Resumen data={data} days={days} onOpen={openRank} />}
           {tab === "distribuidores" && (
             <RankDetail
               title="Distribuidores más comprados"
@@ -305,6 +327,9 @@ export default function LocalPurchaseDashboard() {
             <ProductsPanel
               products={products}
               focus={focus}
+              rank={focusRank}
+              data={data}
+              days={days}
               q={q}
               sort={sort}
               selected={selected}
@@ -326,15 +351,22 @@ export default function LocalPurchaseDashboard() {
 
 function Resumen({
   data,
+  days,
   onOpen,
 }: {
   data: PurchaseInsights;
+  days: number;
   onOpen: (kind: "brand" | "category" | "provider", row: PurchaseRankRow) => void;
 }) {
   const k = data.kpis;
   const delta = k.spendDeltaPercent;
   const up = delta != null && delta > 0;
   const down = delta != null && delta < 0;
+  const monthDays = data.byMonthDay ?? [];
+  const start = bandSpend(monthDays, 1, 10);
+  const mid = bandSpend(monthDays, 11, 20);
+  const end = bandSpend(monthDays, 21, 31);
+  const bandTotal = start.spend + mid.spend + end.spend;
 
   return (
     <div className="flex flex-col gap-4">
@@ -381,6 +413,30 @@ function Resumen({
           hint={`${qty(k.uniquePayments ?? data.ops?.kpis.uniquePayments ?? 0)} medios · ${qty(k.uniqueAddresses ?? data.ops?.kpis.uniqueAddresses ?? 0)} domicilios (después de unificar)`}
         />
       </div>
+
+      {monthDays.some((d) => d.spendUsd > 0) && (
+        <Card
+          title="En qué momento del mes se compra"
+          hint={`Suma de todos los meses ${periodPhrase(days)}. Día 1 a 31, hora de Argentina.`}
+        >
+          <MonthDayChart data={monthDays} />
+          <div className="grid grid-cols-3 gap-2 mt-3">
+            {[
+              { label: "Días 1–10", row: start },
+              { label: "Días 11–20", row: mid },
+              { label: "Días 21–31", row: end },
+            ].map((b) => (
+              <div key={b.label} className="bg-surface-950 border border-surface-800 rounded-lg px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-surface-500">{b.label}</p>
+                <p className="text-sm font-semibold text-white tabular-nums mt-0.5">{formatUSD(b.row.spend)}</p>
+                <p className="text-[11px] text-surface-500">
+                  {qty(b.row.orders)} ped. · {pct(bandTotal ? (b.row.spend / bandTotal) * 100 : 0)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {data.concentration.providers.top1 >= 60 && (
         <div className="flex items-start gap-2 border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-xs text-amber-100">
@@ -518,14 +574,119 @@ function RankDetail({
           </tbody>
         </table>
       </div>
-      {onRow && <p className="text-[10px] text-surface-600 mt-2">Clic en una fila para ver los productos de ese recorte.</p>}
+      {onRow && <p className="text-[10px] text-surface-600 mt-2">Clic en una fila para ver cuánto se gastó, en qué período y los productos.</p>}
     </Card>
+  );
+}
+
+function FocusHero({
+  focus,
+  rank,
+  data,
+  days,
+  products,
+}: {
+  focus: NonNullable<Focus>;
+  rank: PurchaseRankRow;
+  data: PurchaseInsights;
+  days: number;
+  products: PurchaseProductRow[];
+}) {
+  const kindLabel = focus.kind === "brand" ? "Marca" : focus.kind === "category" ? "Categoría" : "Distribuidor";
+  const delta = rank.spendDeltaPercent;
+  const up = delta != null && delta > 0;
+  const down = delta != null && delta < 0;
+  const uniqueSkus = new Set(products.map((p) => `${p.provider}:${p.sku}`)).size;
+  const providerRow = focus.kind === "provider" ? data.byProvider.find((p) => p.key === focus.key) : null;
+  const brandDist = focus.kind === "brand" ? data.brandProviders.filter((r) => r.brand === focus.key) : [];
+  const monthRows = (rank.byMonth ?? []).map((m) => ({
+    label: m.label,
+    spendUsd: m.spendUsd,
+    online: m.online ?? m.spendUsd,
+    offline: m.offline ?? 0,
+  }));
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Card
+        title={`${kindLabel}: ${rank.label}`}
+        hint={`Cuánto se compró ${periodPhrase(days)} en este local. No se mezclan otros comercios.`}
+      >
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Kpi
+            label="Gastado"
+            value={formatUSD(rank.spendUsd)}
+            hint={delta == null ? `${pct(rank.share)} del período` : `${up ? "+" : ""}${pct(delta)} vs período anterior`}
+            trend={up ? "up" : down ? "down" : undefined}
+          />
+          <Kpi label="Pedidos" value={qty(rank.orders)} hint={`Ticket ${formatUSD(rank.avgTicketUsd ?? 0)}`} />
+          <Kpi label="Unidades" value={qty(rank.units)} hint={`${qty(uniqueSkus)} SKUs distintos`} />
+          <Kpi
+            label="Última compra"
+            value={when(rank.lastBoughtAt)}
+            hint={
+              rank.previousSpendUsd != null
+                ? `Antes ${formatUSD(rank.previousSpendUsd)}`
+                : `${pct(rank.share)} del total comprado`
+            }
+          />
+          {(rank.onlineSpendUsd || rank.offlineSpendUsd) ? (
+            <Kpi
+              label="Portal / offline"
+              value={`${formatUSD(rank.onlineSpendUsd ?? 0)}`}
+              hint={`Offline ${formatUSD(rank.offlineSpendUsd ?? 0)}`}
+            />
+          ) : null}
+          {providerRow ? (
+            <Kpi
+              label="Catálogo de tu cuenta"
+              value={qty(providerRow.catalogSkus)}
+              hint={`${qty(providerRow.catalogInStock)} con stock`}
+            />
+          ) : null}
+        </div>
+      </Card>
+      {monthRows.length > 0 && (
+        <Card title="Evolución en el período" hint="Mes a mes de este recorte, no del local entero.">
+          <SpendAreaChart data={monthRows} />
+        </Card>
+      )}
+      {brandDist.length > 0 && (
+        <Card title="Dónde compraste esta marca">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-surface-500">
+                <tr className="border-b border-surface-800">
+                  <th className="text-left font-medium py-2">Distribuidor</th>
+                  <th className="text-right font-medium py-2">Unidades</th>
+                  <th className="text-right font-medium py-2">Comprado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {brandDist.map((row) => (
+                  <tr key={row.provider} className="border-b border-surface-800/60">
+                    <td className="py-1.5">
+                      <ProviderBadge provider={row.provider} size="sm" />
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">{qty(row.units)}</td>
+                    <td className="py-1.5 text-right tabular-nums text-white">{formatUSD(row.spendUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
 
 function ProductsPanel({
   products,
   focus,
+  rank,
+  data,
+  days,
   q,
   sort,
   selected,
@@ -537,6 +698,9 @@ function ProductsPanel({
 }: {
   products: PurchaseProductRow[];
   focus: Focus;
+  rank: PurchaseRankRow | null;
+  data: PurchaseInsights;
+  days: number;
   q: string;
   sort: ProductSort;
   selected: PurchaseProductRow | null;
@@ -575,6 +739,8 @@ function ProductsPanel({
           CSV
         </button>
       </div>
+
+      {focus && rank && <FocusHero focus={focus} rank={rank} data={data} days={days} products={products} />}
 
       <div className="grid lg:grid-cols-[1fr_280px] gap-3">
         <Card title={`${qty(products.length)} productos de este local`}>

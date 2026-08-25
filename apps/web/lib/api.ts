@@ -330,6 +330,20 @@ export interface PurchaseRankRow {
   groupId?: string | null;
   unified?: boolean;
   variants?: { key: string; label: string; orders: number }[];
+  avgTicketUsd?: number;
+  previousSpendUsd?: number | null;
+  spendDeltaPercent?: number | null;
+  onlineSpendUsd?: number;
+  offlineSpendUsd?: number;
+  byMonth?: {
+    month: string;
+    label: string;
+    spendUsd: number;
+    orders: number;
+    units: number;
+    online?: number;
+    offline?: number;
+  }[];
 }
 
 export type OpsAliasKind = "ADDRESS" | "PAYMENT" | "DELIVERY" | "WAREHOUSE";
@@ -431,6 +445,7 @@ export interface PurchaseInsights {
     online: number;
     offline: number;
   }[];
+  byMonthDay?: { day: number; label: string; spendUsd: number; orders: number; units: number }[];
   byWeekday: { weekday: number; label: string; spendUsd: number; orders: number }[];
   byProvider: (PurchaseRankRow & { provider: string; catalogSkus: number; catalogInStock: number })[];
   byBrand: PurchaseRankRow[];

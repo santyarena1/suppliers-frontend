@@ -245,21 +245,36 @@ export class OrdersService {
     const current = (truncated ? currentRows.slice(0, MAX_INSIGHT_ORDERS) : currentRows).map((row) =>
       this.toAnalyticsOrder(row)
     );
-    const catalog = await this.catalogLookupFor(tenant.tenantId, current);
-    const previousSpendUsd =
-      periodDays > 0
-        ? computePurchaseInsights(
-            previousRows.map((row) => this.toAnalyticsOrder(row)),
-            {},
-            { tenantName: tenant.tenantName, periodDays }
-          ).kpis.spendUsd
-        : null;
+    const catalog = await this.catalogLookupFor(tenant.tenantId, [
+      ...current,
+      ...previousRows.map((row) => this.toAnalyticsOrder(row)),
+    ]);
+    let previousSpendUsd: number | null = null;
+    let previousSpendBy: {
+      providers: Record<string, number>;
+      brands: Record<string, number>;
+      categories: Record<string, number>;
+    } | undefined;
+    if (periodDays > 0 && previousRows.length > 0) {
+      const previous = computePurchaseInsights(
+        previousRows.map((row) => this.toAnalyticsOrder(row)),
+        catalog,
+        { tenantName: tenant.tenantName, periodDays }
+      );
+      previousSpendUsd = previous.kpis.spendUsd;
+      previousSpendBy = {
+        providers: Object.fromEntries(previous.byProvider.map((r) => [r.key, r.spendUsd])),
+        brands: Object.fromEntries(previous.byBrand.map((r) => [r.key, r.spendUsd])),
+        categories: Object.fromEntries(previous.byCategory.map((r) => [r.key, r.spendUsd])),
+      };
+    }
 
     return computePurchaseInsights(current, catalog, {
       tenantName: tenant.tenantName,
       periodDays,
       truncated,
       previousSpendUsd,
+      previousSpendBy,
       catalogStats,
       opsAliases: indexOpsAliases(aliasRows),
     });

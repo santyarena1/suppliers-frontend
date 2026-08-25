@@ -150,6 +150,34 @@ export function WeekdayBars({
   );
 }
 
+export function MonthDayChart({
+  data,
+}: {
+  data: { day: number; label: string; spendUsd: number; orders: number }[];
+}) {
+  if (data.every((d) => d.spendUsd === 0)) return <EmptyChart text="Sin compras para armar el mes" />;
+  return (
+    <div className="h-52">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+          <XAxis dataKey="label" tick={TICK} axisLine={{ stroke: "#3f3f46" }} tickLine={false} interval={1} />
+          <YAxis tick={TICK} axisLine={false} tickLine={false} width={48} tickFormatter={(v) => usd(Number(v))} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value, name) => [
+              name === "orders" ? Number(value).toLocaleString("es-AR") : usd(Number(value)),
+              name === "orders" ? "Pedidos" : "Comprado",
+            ]}
+            labelFormatter={(label) => `Día ${label}`}
+          />
+          <Bar dataKey="spendUsd" fill="#a78bfa" radius={[3, 3, 0, 0]} maxBarSize={14} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 export function ShippingMonthChart({
   data,
 }: {

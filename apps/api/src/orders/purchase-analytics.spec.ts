@@ -147,6 +147,25 @@ describe("computePurchaseInsights", () => {
       expect.arrayContaining([expect.objectContaining({ brand: "Asus", provider: "ELIT", spendUsd: 200 })])
     );
     expect(report.recentOrders[0].id).toBe("c");
+
+    expect(report.byMonthDay).toHaveLength(31);
+    expect(report.byMonthDay[9]).toMatchObject({ day: 10, spendUsd: 224, orders: 2 });
+    expect(report.byMonthDay[11]).toMatchObject({ day: 12, spendUsd: 50, orders: 1 });
+    expect(elit?.avgTicketUsd).toBe(200);
+    expect(elit?.onlineSpendUsd).toBe(200);
+    expect(elit?.byMonth.some((m) => m.spendUsd === 200)).toBe(true);
+  });
+
+  it("compara el spend de una marca contra el período anterior", () => {
+    const report = computePurchaseInsights(orders, catalog, {
+      tenantName: "Local Centro",
+      periodDays: 90,
+      previousSpendBy: { brands: { Asus: 100 } },
+    });
+    const asus = report.byBrand.find((b) => b.key === "Asus");
+    expect(asus?.previousSpendUsd).toBe(100);
+    expect(asus?.spendDeltaPercent).toBe(100);
+    expect(asus?.avgTicketUsd).toBe(200);
   });
 
   it("un lote vacío no inventa compras de otro comercio", () => {
