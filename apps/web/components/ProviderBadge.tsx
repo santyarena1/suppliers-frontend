@@ -13,13 +13,13 @@ export function providerLabel(provider: string, override?: string): string {
 }
 
 const LOGO: Record<ProviderBadgeSize, string> = {
-  sm: "w-5 h-5",
+  sm: "w-4 h-4",
   md: "w-7 h-7",
   lg: "w-9 h-9",
 };
 
 const NAME: Record<ProviderBadgeSize, string> = {
-  sm: "text-[11px] font-semibold leading-tight",
+  sm: "text-[11px] font-semibold leading-none",
   md: "text-sm font-semibold leading-tight",
   lg: "text-base font-semibold leading-tight",
 };
@@ -62,7 +62,9 @@ export default function ProviderBadge({
     <img
       src={logoUrl}
       alt=""
-      className={`${LOGO[size]} object-contain flex-shrink-0 rounded-sm bg-white/90 p-0.5`}
+      className={`${LOGO[size]} object-contain flex-shrink-0 rounded-[3px] bg-white ${
+        size === "sm" ? "p-px" : "p-0.5"
+      }`}
     />
   ) : null;
 
@@ -101,7 +103,9 @@ export default function ProviderBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-2 min-w-0 ${chip ? `rounded-md border px-2 py-1 ${chipClass}` : ""} ${className}`}
+      className={`inline-flex items-center gap-2 min-w-0 ${
+        size === "sm" ? "h-5" : ""
+      } ${chip ? `rounded-md border px-2 py-1 ${chipClass}` : ""} ${className}`}
       title={name}
     >
       {logo}

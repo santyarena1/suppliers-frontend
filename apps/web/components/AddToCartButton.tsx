@@ -73,7 +73,7 @@ export default function AddToCartButton({ product, variant = "icon", channel = "
   return (
     <button
       onClick={handleAdd}
-      className={`flex items-center justify-center w-7 h-7 rounded-md transition-all ${
+      className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
         flash
           ? "bg-emerald-500 text-white scale-110"
           : inCart
