@@ -80,18 +80,23 @@ export const TENANT_ROLES_CAN_MANAGE_COMMERCE: readonly TenantRole[] = ["OWNER",
 /** Equipo, códigos, publicidad y asignación de vendedor en el distribuidor. */
 export const TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR: readonly TenantRole[] = ["OWNER", "ADMIN"];
 
-/**
- * Roles que el gerente invita desde su panel. Product Manager se asigna más
- * adelante, no desde acá.
- */
+/** Roles que el gerente invita desde su panel, incluido Product Manager. */
 export const TENANT_ROLES_INVITABLE_DISTRIBUTOR: readonly TenantRole[] = [
   "OWNER",
   "ADMIN",
   "SELLER",
+  "PRODUCT_MANAGER",
   "VIEWER",
 ];
 
-/** Cartera, pedidos de clientes y chat del mayorista. El PM todavía no. */
+/** Descuento por marca: gerente, administrador y el PM de esa marca. */
+export const TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS: readonly TenantRole[] = [
+  "OWNER",
+  "ADMIN",
+  "PRODUCT_MANAGER",
+];
+
+/** Cartera, pedidos de clientes y chat del mayorista. El PM no entra. */
 export const TENANT_ROLES_CAN_SEE_PORTFOLIO: readonly TenantRole[] = [
   "OWNER",
   "ADMIN",

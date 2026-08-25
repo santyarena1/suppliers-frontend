@@ -10,8 +10,9 @@ export function canManageCommerce() {
 }
 
 export function canMutateCart() {
-  const role = getTenant()?.role;
-  return !!role && (TENANT_ROLES_CAN_ORDER as readonly string[]).includes(role);
+  const tenant = getTenant();
+  if (tenant?.type !== "RETAILER") return false;
+  return (TENANT_ROLES_CAN_ORDER as readonly string[]).includes(tenant.role);
 }
 
 export function canApproveOrders() {

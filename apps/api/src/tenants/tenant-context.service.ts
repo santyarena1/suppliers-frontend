@@ -7,6 +7,7 @@ export interface TenantContext {
   tenantName: string;
   tenantType: TenantType;
   tenantRole: TenantRole;
+  userId: string;
 }
 
 /**
@@ -37,6 +38,7 @@ export class TenantContextService {
       tenantName: membership.tenant.name,
       tenantType: membership.tenant.type as TenantType,
       tenantRole: membership.role as TenantRole,
+      userId: membership.userId,
     };
   }
 
@@ -54,6 +56,7 @@ export class TenantContextService {
         tenantName: user.tenantName,
         tenantType: user.tenantType,
         tenantRole: user.tenantRole,
+        userId: user.userId,
       };
     }
     return this.forUser(user.userId);

@@ -3,7 +3,15 @@ import type { Provider } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
-import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
+import type { TenantContext } from "../tenants/tenant-context.service";
+import {
+  NO_RULES,
+  applyPrice,
+  normalizeBrandName,
+  toProductView,
+  toSheetView,
+  type OfferRules,
+} from "./catalog-view";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct } from "./types";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
@@ -408,17 +416,19 @@ export class ProvidersService {
   }
 
   /**
-   * Un comercio solo ve los productos que él mismo sincronizó con su cuenta: sin
-   * oferta no hay precio que mostrar, y un precio traído con la cuenta de otro no
-   * sería el suyo.
+   * Un comercio solo ve los productos que él mismo sincronizó con su cuenta.
+   * Un distribuidor ve la ficha de *su* catálogo, sin las otras integraciones.
    */
-  async search(tenantId: string, provider: Provider, name: string) {
+  async search(tenant: TenantContext, provider: Provider, name: string) {
     if (!(await this.isProviderVisible(provider))) return [];
-    if (!(await this.visibility.isLinked(tenantId, provider))) return [];
+    if (tenant.tenantType === "DISTRIBUTOR") {
+      return this.searchOwnCatalog(tenant, provider, name);
+    }
+    if (!(await this.visibility.isLinked(tenant.tenantId, provider))) return [];
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
-          tenantId,
+          tenantId: tenant.tenantId,
           provider,
           active: true,
           product: { name: { contains: name, mode: "insensitive" } },
@@ -427,72 +437,129 @@ export class ProvidersService {
         orderBy: { product: { name: "asc" } },
         take: 200,
       }),
-      this.rulesFor(tenantId, provider),
+      this.rulesFor(tenant, provider),
     ]);
     return offers.map((offer) => toProductView(offer.product, offer, rules));
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
-  async getProduct(tenantId: string, provider: Provider, externalId: string) {
+  async getProduct(tenant: TenantContext, provider: Provider, externalId: string) {
     if (!(await this.isProviderVisible(provider))) return null;
-    if (!(await this.visibility.isLinked(tenantId, provider))) return null;
+    if (tenant.tenantType === "DISTRIBUTOR") {
+      return this.getOwnCatalogProduct(tenant, provider, externalId);
+    }
+    if (!(await this.visibility.isLinked(tenant.tenantId, provider))) return null;
     const offer = await this.prisma.tenantProductOffer.findUnique({
-      where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
+      where: { tenantId_provider_externalId: { tenantId: tenant.tenantId, provider, externalId } },
       include: { product: true },
     });
     if (!offer) return null;
-    return toProductView(offer.product, offer, await this.rulesFor(tenantId, provider));
+    return toProductView(offer.product, offer, await this.rulesFor(tenant, provider));
   }
 
   /**
    * Serie de precios real de esta organización (solo puntos donde el precio
-   * efectivamente cambió). Se guarda cruda, así que el markup se aplica al leer y
-   * el gráfico sigue el precio de venta actual.
+   * efectivamente cambió). Se guarda cruda, así que descuento y markup se aplican
+   * al leer y el gráfico sigue el precio de venta actual.
    */
-  async getPriceHistory(tenantId: string, provider: Provider, externalId: string) {
-    const [points, rules] = await Promise.all([
+  async getPriceHistory(tenant: TenantContext, provider: Provider, externalId: string) {
+    const [points, rules, sheet] = await Promise.all([
       this.prisma.productPriceHistory.findMany({
-        where: { tenantId, provider, externalId },
+        where: { tenantId: tenant.tenantId, provider, externalId },
         orderBy: { capturedAt: "asc" },
         select: { price: true, finalPrice: true, currency: true, capturedAt: true },
       }),
-      this.rulesFor(tenantId, provider),
+      this.rulesFor(tenant, provider),
+      this.prisma.providerSyncCache.findUnique({
+        where: { provider_externalId: { provider, externalId } },
+        select: { brand: true },
+      }),
     ]);
+    const brandDiscount = rules.brandDiscounts.get(normalizeBrandName(sheet?.brand)) ?? 0;
     return points.map((point) => ({
       ...point,
-      price: withMarkup(point.price, rules.markupPercent),
-      finalPrice: withMarkup(point.finalPrice, rules.markupPercent),
+      price: applyPrice(point.price, rules.discountPercent, brandDiscount, rules.markupPercent),
+      finalPrice: applyPrice(point.finalPrice, rules.discountPercent, brandDiscount, rules.markupPercent),
     }));
   }
 
-  /** Markup y umbral configurados por la organización para un proveedor. */
-  private async rulesFor(tenantId: string, provider: Provider): Promise<OfferRules> {
-    const config = await this.prisma.providerSyncConfig.findUnique({
-      where: { tenantId_provider: { tenantId, provider } },
-      select: { priceMarkupPercent: true, minStockThreshold: true },
-    });
-    if (!config) return NO_RULES;
+  /** Markup, umbral y descuentos que hay que aplicar al leer este proveedor. */
+  private async rulesFor(tenant: TenantContext, provider: Provider): Promise<OfferRules> {
+    if (tenant.tenantType !== "RETAILER") return NO_RULES;
+    const [config, link] = await Promise.all([
+      this.prisma.providerSyncConfig.findUnique({
+        where: { tenantId_provider: { tenantId: tenant.tenantId, provider } },
+        select: { priceMarkupPercent: true, minStockThreshold: true },
+      }),
+      this.prisma.tenantLink.findFirst({
+        where: {
+          clientTenantId: tenant.tenantId,
+          status: "ACTIVE",
+          supplierTenant: { providerKey: provider },
+        },
+        select: { discountPercent: true, supplierTenantId: true },
+      }),
+    ]);
+    const brandDiscounts = await this.brandDiscountsOf(link?.supplierTenantId);
     return {
-      markupPercent: Number(config.priceMarkupPercent) || 0,
-      minStockThreshold: config.minStockThreshold || 0,
+      markupPercent: Number(config?.priceMarkupPercent) || 0,
+      minStockThreshold: config?.minStockThreshold || 0,
+      discountPercent: link?.discountPercent == null ? 0 : Number(link.discountPercent),
+      brandDiscounts,
     };
   }
 
   /** Igual que `rulesFor` pero para varios proveedores de una, en las vistas mezcladas. */
-  private async rulesByProvider(tenantId: string): Promise<Map<string, OfferRules>> {
-    const configs = await this.prisma.providerSyncConfig.findMany({
-      where: { tenantId },
-      select: { provider: true, priceMarkupPercent: true, minStockThreshold: true },
-    });
-    return new Map(
-      configs.map((c) => [
-        c.provider,
-        {
-          markupPercent: Number(c.priceMarkupPercent) || 0,
-          minStockThreshold: c.minStockThreshold || 0,
+  private async rulesByProvider(tenant: TenantContext): Promise<Map<string, OfferRules>> {
+    if (tenant.tenantType !== "RETAILER") return new Map();
+    const [configs, links] = await Promise.all([
+      this.prisma.providerSyncConfig.findMany({
+        where: { tenantId: tenant.tenantId },
+        select: { provider: true, priceMarkupPercent: true, minStockThreshold: true },
+      }),
+      this.prisma.tenantLink.findMany({
+        where: {
+          clientTenantId: tenant.tenantId,
+          status: "ACTIVE",
+          supplierTenant: { providerKey: { not: null } },
         },
-      ])
-    );
+        select: {
+          discountPercent: true,
+          supplierTenantId: true,
+          supplierTenant: { select: { providerKey: true } },
+        },
+      }),
+    ]);
+    const configBy = new Map(configs.map((c) => [c.provider, c]));
+    const supplierIds = [...new Set(links.map((link) => link.supplierTenantId))];
+    const brandRows = supplierIds.length
+      ? await this.prisma.tenantBrandDiscount.findMany({ where: { tenantId: { in: supplierIds } } })
+      : [];
+    const brandsBySupplier = new Map<string, Map<string, number>>();
+    for (const row of brandRows) {
+      const map = brandsBySupplier.get(row.tenantId) ?? new Map<string, number>();
+      map.set(normalizeBrandName(row.brandName), Number(row.discountPercent) || 0);
+      brandsBySupplier.set(row.tenantId, map);
+    }
+    const result = new Map<string, OfferRules>();
+    for (const link of links) {
+      const key = link.supplierTenant.providerKey;
+      if (!key) continue;
+      const config = configBy.get(key);
+      result.set(key, {
+        markupPercent: Number(config?.priceMarkupPercent) || 0,
+        minStockThreshold: config?.minStockThreshold || 0,
+        discountPercent: link.discountPercent == null ? 0 : Number(link.discountPercent),
+        brandDiscounts: brandsBySupplier.get(link.supplierTenantId) ?? new Map(),
+      });
+    }
+    return result;
+  }
+
+  private async brandDiscountsOf(supplierTenantId: string | undefined) {
+    if (!supplierTenantId) return new Map<string, number>();
+    const rows = await this.prisma.tenantBrandDiscount.findMany({ where: { tenantId: supplierTenantId } });
+    return new Map(rows.map((row) => [normalizeBrandName(row.brandName), Number(row.discountPercent) || 0]));
   }
 
   private async hiddenProviders(): Promise<Set<string>> {
@@ -516,15 +583,18 @@ export class ProvidersService {
    * de la organización, y el `groupBy` de Prisma no cruza tablas: la alternativa era
    * traerse el catálogo entero a memoria para contarlo acá.
    */
-  async getCategories(tenantId: string) {
-    const providers = await this.readableProviders(tenantId);
+  async getCategories(tenant: TenantContext) {
+    if (tenant.tenantType === "DISTRIBUTOR") {
+      return this.ownCatalogCategories(tenant);
+    }
+    const providers = await this.readableProviders(tenant.tenantId);
     if (providers.length === 0) return [];
     const rows = await this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
       SELECT ficha.category AS category, COUNT(*) AS count
       FROM "TenantProductOffer" oferta
       JOIN "ProviderSyncCache" ficha
         ON ficha.provider = oferta.provider AND ficha."externalId" = oferta."externalId"
-      WHERE oferta."tenantId" = ${tenantId}
+      WHERE oferta."tenantId" = ${tenant.tenantId}
         AND oferta.active
         AND ficha.category IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
@@ -536,33 +606,39 @@ export class ProvidersService {
   }
 
   /** Muestra de productos con stock entre proveedores visibles, para destacados de la landing. */
-  async getFeatured(tenantId: string, take: number) {
-    const providers = await this.readableProviders(tenantId);
+  async getFeatured(tenant: TenantContext, take: number) {
+    if (tenant.tenantType === "DISTRIBUTOR") {
+      return this.ownCatalogFeatured(tenant, take);
+    }
+    const providers = await this.readableProviders(tenant.tenantId);
     if (providers.length === 0) return [];
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
-        where: { tenantId, active: true, stock: { gt: 0 }, provider: { in: providers } },
+        where: { tenantId: tenant.tenantId, active: true, stock: { gt: 0 }, provider: { in: providers } },
         include: { product: true },
         orderBy: { syncedAt: "desc" },
         take: Math.min(Math.max(take, 1), 60),
       }),
-      this.rulesByProvider(tenantId),
+      this.rulesByProvider(tenant),
     ]);
     return offers.map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES));
   }
 
   /** Productos de una categoría, cruzando todos los proveedores visibles — clic en la grilla de categorías de la landing. */
-  async getByCategory(tenantId: string, category: string, take: number) {
-    const providers = await this.readableProviders(tenantId);
+  async getByCategory(tenant: TenantContext, category: string, take: number) {
+    if (tenant.tenantType === "DISTRIBUTOR") {
+      return this.ownCatalogByCategory(tenant, category, take);
+    }
+    const providers = await this.readableProviders(tenant.tenantId);
     if (providers.length === 0) return [];
     const [offers, rules] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
-        where: { tenantId, active: true, provider: { in: providers }, product: { category } },
+        where: { tenantId: tenant.tenantId, active: true, provider: { in: providers }, product: { category } },
         include: { product: true },
         orderBy: { product: { name: "asc" } },
         take: Math.min(Math.max(take, 1), 200),
       }),
-      this.rulesByProvider(tenantId),
+      this.rulesByProvider(tenant),
     ]);
     return offers.map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES));
   }
@@ -579,13 +655,134 @@ export class ProvidersService {
     return linked.filter((provider) => !hidden.has(provider));
   }
 
+  private async searchOwnCatalog(tenant: TenantContext, provider: Provider, name: string) {
+    const scope = await this.ownCatalogScope(tenant);
+    if (!scope || scope.provider !== provider) return [];
+    const products = await this.prisma.providerSyncCache.findMany({
+      where: {
+        provider,
+        name: { contains: name, mode: "insensitive" },
+        ...this.brandWhere(scope.brands),
+      },
+      orderBy: { name: "asc" },
+      take: 200,
+    });
+    return this.withLatestOffers(products);
+  }
+
+  private async getOwnCatalogProduct(tenant: TenantContext, provider: Provider, externalId: string) {
+    const scope = await this.ownCatalogScope(tenant);
+    if (!scope || scope.provider !== provider) return null;
+    const product = await this.prisma.providerSyncCache.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+    });
+    if (!product) return null;
+    if (scope.brands && !scope.brands.has(normalizeBrandName(product.brand))) return null;
+    const [view] = await this.withLatestOffers([product]);
+    return view ?? null;
+  }
+
+  private async ownCatalogCategories(tenant: TenantContext) {
+    const scope = await this.ownCatalogScope(tenant);
+    if (!scope) return [];
+    const rows = await this.prisma.providerSyncCache.groupBy({
+      by: ["category"],
+      where: {
+        provider: scope.provider,
+        category: { not: null },
+        ...this.brandWhere(scope.brands),
+      },
+      _count: { _all: true },
+    });
+    return rows
+      .filter((row) => row.category)
+      .map((row) => ({ category: row.category as string, count: row._count._all }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 60);
+  }
+
+  private async ownCatalogFeatured(tenant: TenantContext, take: number) {
+    const scope = await this.ownCatalogScope(tenant);
+    if (!scope) return [];
+    const products = await this.prisma.providerSyncCache.findMany({
+      where: { provider: scope.provider, ...this.brandWhere(scope.brands) },
+      orderBy: { syncedAt: "desc" },
+      take: Math.min(Math.max(take, 1), 60),
+    });
+    return this.withLatestOffers(products);
+  }
+
+  private async ownCatalogByCategory(tenant: TenantContext, category: string, take: number) {
+    const scope = await this.ownCatalogScope(tenant);
+    if (!scope) return [];
+    const products = await this.prisma.providerSyncCache.findMany({
+      where: { provider: scope.provider, category, ...this.brandWhere(scope.brands) },
+      orderBy: { name: "asc" },
+      take: Math.min(Math.max(take, 1), 200),
+    });
+    return this.withLatestOffers(products);
+  }
+
+  private brandWhere(brands: Set<string> | null) {
+    if (!brands) return {};
+    if (brands.size === 0) return { id: { in: [] as string[] } };
+    // `in` no acepta `mode: insensitive` en Prisma: se compara marca a marca.
+    return {
+      OR: [...brands].map((brand) => ({
+        brand: { equals: brand, mode: "insensitive" as const },
+      })),
+    };
+  }
+
+  /**
+   * Catálogo propio del mayorista. `brands === null` son todas; un set vacío es un
+   * Product Manager sin marcas asignadas (no ve nada).
+   */
+  private async ownCatalogScope(tenant: TenantContext): Promise<{ provider: string; brands: Set<string> | null } | null> {
+    const row = await this.prisma.tenant.findUnique({
+      where: { id: tenant.tenantId },
+      select: { providerKey: true, type: true },
+    });
+    if (row?.type !== "DISTRIBUTOR" || !row.providerKey) return null;
+    if (tenant.tenantRole !== "PRODUCT_MANAGER") {
+      return { provider: row.providerKey, brands: null };
+    }
+    const scopes = await this.prisma.productManagerScope.findMany({
+      where: { tenantId: tenant.tenantId, userId: tenant.userId },
+      select: { brandName: true },
+    });
+    return {
+      provider: row.providerKey,
+      brands: new Set(scopes.map((scope) => normalizeBrandName(scope.brandName)).filter(Boolean)),
+    };
+  }
+
+  private async withLatestOffers(products: import("@prisma/client").ProviderSyncCache[]) {
+    if (products.length === 0) return [];
+    const provider = products[0].provider;
+    const ids = products.map((p) => p.externalId);
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: { provider, externalId: { in: ids } },
+      orderBy: { syncedAt: "desc" },
+    });
+    const latest = new Map<string, (typeof offers)[number]>();
+    for (const offer of offers) {
+      if (!latest.has(offer.externalId)) latest.set(offer.externalId, offer);
+    }
+    return products.map((product) => toSheetView(product, latest.get(product.externalId) ?? null));
+  }
+
   /**
    * "Limpiar sin stock del proveedor" — saca ya mismo los productos sin stock, sin
    * esperar a la próxima sincronización. Solo afecta al catálogo de esta
    * organización; la ficha queda para el resto.
    */
   async clearZeroStock(tenantId: string, provider: Provider) {
-    const { minStockThreshold } = await this.rulesFor(tenantId, provider);
+    const config = await this.prisma.providerSyncConfig.findUnique({
+      where: { tenantId_provider: { tenantId, provider } },
+      select: { minStockThreshold: true },
+    });
+    const minStockThreshold = config?.minStockThreshold || 0;
     const res = await this.prisma.tenantProductOffer.deleteMany({
       where: { tenantId, provider, stock: { lte: Math.max(minStockThreshold, 0) } },
     });
@@ -630,12 +827,6 @@ export class ProvidersService {
     }
     return due;
   }
-}
-
-function withMarkup(value: unknown, markupPercent: number): number | null {
-  const price = numberOrNull(value);
-  if (price == null) return null;
-  return Math.round(price * (1 + markupPercent / 100) * 100) / 100;
 }
 
 function numberOrNull(value: unknown): number | null {

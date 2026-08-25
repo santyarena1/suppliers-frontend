@@ -8,7 +8,7 @@ import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
 import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
-import { useRetailerOnly } from "@/lib/useRetailerOnly";
+import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
@@ -34,7 +34,7 @@ export default function SearchPageWrapper() {
 }
 
 function SearchPage() {
-  useRetailerOnly();
+  const [ownCatalog, setOwnCatalog] = useState(false);
   const { setResults: persistResults } = useResults();
   const searchParams = useSearchParams();
   const initialQ = searchParams?.get("q") || "";
@@ -53,6 +53,10 @@ function SearchPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
+  useEffect(() => {
+    setOwnCatalog(getTenant()?.type === "DISTRIBUTOR");
+  }, []);
 
   async function handleCategoryClick(category: string) {
     setError("");
@@ -206,7 +210,7 @@ function SearchPage() {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder='Buscar producto...'
+                  placeholder={ownCatalog ? "Buscar en tu catálogo…" : "Buscar producto..."}
                   className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-8 py-2 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
                 />
                 {query && (
@@ -228,6 +232,7 @@ function SearchPage() {
             <div className="flex items-center gap-2 ml-auto">
               <PrefsPanel />
 
+              {!ownCatalog && (
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
@@ -243,6 +248,7 @@ function SearchPage() {
                   </span>
                 )}
               </button>
+              )}
 
               <div className="flex border border-surface-700 rounded-lg overflow-hidden">
                 {([
@@ -263,7 +269,7 @@ function SearchPage() {
           </header>
 
           {/* Provider filters bar */}
-          {showFilters && (
+          {showFilters && !ownCatalog && (
             <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 flex-wrap flex-1">
@@ -359,7 +365,7 @@ function SearchPage() {
                     {filtered.length !== results.length && (
                       <span className="text-surface-600"> / {results.length}</span>
                     )}
-                    {" "}productos · <span className="text-surface-200 font-semibold">{Object.keys(providerCounts).length}</span> prov.
+                    {" "}productos{ownCatalog ? "" : <> · <span className="text-surface-200 font-semibold">{Object.keys(providerCounts).length}</span> prov.</>}
                   </span>
                   <div className="flex items-center gap-1">
                     <ArrowUpDown className="w-3 h-3 text-surface-500" />
@@ -382,7 +388,7 @@ function SearchPage() {
               {loading && (
                 <div className="flex flex-col items-center justify-center py-32 gap-3">
                   <div className="w-10 h-10 rounded-full border-2 border-surface-700 border-t-brand-500 animate-spin" />
-                  <p className="text-sm text-surface-400">Consultando proveedores...</p>
+                  <p className="text-sm text-surface-400">{ownCatalog ? "Buscando en tu catálogo…" : "Consultando proveedores..."}</p>
                 </div>
               )}
 
@@ -402,7 +408,7 @@ function SearchPage() {
               )}
 
               {!loading && !searched && (
-                <SearchLanding onCategoryClick={handleCategoryClick} />
+                <SearchLanding onCategoryClick={handleCategoryClick} ownCatalog={ownCatalog} />
               )}
 
               {/* Grid */}

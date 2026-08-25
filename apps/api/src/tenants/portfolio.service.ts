@@ -200,7 +200,7 @@ export class PortfolioService {
   private assertCanSeePortfolio(tenant: TenantContext) {
     assertTenantType(tenant, ["DISTRIBUTOR"]);
     if (tenant.tenantRole === "PRODUCT_MANAGER") {
-      throw new ForbiddenException("El panel de Product Manager viene más adelante");
+      throw new ForbiddenException("El Product Manager no entra a la cartera");
     }
     assertTenantRole(tenant, TENANT_ROLES_CAN_SEE_PORTFOLIO);
   }

@@ -1,6 +1,6 @@
 /**
  * Control del Tipo 2: cartera del distribuidor, aislamiento del vendedor,
- * códigos, chat y publicidad.
+ * códigos, chat, publicidad, Product Manager, catálogo propio y descuentos.
  *
  * Uso: API_URL=... ADMIN_PASSWORD=... node scripts/check-tipo2.mjs
  */
@@ -178,9 +178,81 @@ async function main() {
     email: `dpm_${stamp}@nodo.test`,
     role: "PRODUCT_MANAGER",
   });
-  check("No se invita Product Manager desde el panel",
-    pm.status === 400 || pm.status === 403,
+  const pmData = dataOf(pm);
+  check("Se invita Product Manager desde el panel",
+    (pm.status === 200 || pm.status === 201) && Boolean(pmData?.generatedPassword),
     `HTTP ${pm.status}`);
+
+  const tokenPm = pmData?.generatedPassword
+    ? await login(`dpm_${stamp}`, pmData.generatedPassword)
+    : null;
+  check("El Product Manager entra", Boolean(tokenPm));
+
+  const pmCartera = await call("GET", "/my/clients", tokenPm);
+  check("El Product Manager no entra a la cartera",
+    pmCartera.status === 403,
+    `HTTP ${pmCartera.status}`);
+
+  const pmChat = await call("GET", "/my/chats", tokenPm);
+  check("El Product Manager no entra al chat",
+    pmChat.status === 403,
+    `HTTP ${pmChat.status}`);
+
+  const carritoMayorista = await call("POST", "/cart/items", tokenGerente, {
+    provider: "NEW_BYTES",
+    externalId: "control-no-cart",
+    name: "No",
+    price: "1",
+    imageUrl: "https://nodo.test/x.png",
+    quantity: 1,
+  });
+  check("El mayorista no agrega al carrito",
+    carritoMayorista.status === 403,
+    `HTTP ${carritoMayorista.status}`);
+
+  const searchAjeno = await call("GET", "/search/provider/ELIT?name=a", tokenGerente);
+  const searchAjenoItems = dataOf(searchAjeno);
+  check("La búsqueda de otra integración no devuelve nada",
+    searchAjeno.status === 200 && Array.isArray(searchAjenoItems) && searchAjenoItems.length === 0,
+    `HTTP ${searchAjeno.status} · ${Array.isArray(searchAjenoItems) ? searchAjenoItems.length : "?"} ítems`);
+
+  const pmSearchVacío = await call("GET", "/search/provider/NEW_BYTES?name=a", tokenPm);
+  const pmSearchItems = dataOf(pmSearchVacío);
+  check("Sin marcas asignadas el Product Manager no ve catálogo",
+    pmSearchVacío.status === 200 && Array.isArray(pmSearchItems) && pmSearchItems.length === 0,
+    `HTTP ${pmSearchVacío.status}`);
+
+  const descuentoAjeno = await call("PUT", "/my/brand-discounts", tokenPm, {
+    brandName: "GIGABYTE",
+    discountPercent: 10,
+  });
+  check("El Product Manager no carga descuento de una marca que no es suya",
+    descuentoAjeno.status === 403,
+    `HTTP ${descuentoAjeno.status}`);
+
+  const asignarMarcas = await call("PUT", `/my/team/${pmData?.membershipId}/brands`, tokenGerente, {
+    brandNames: ["GIGABYTE"],
+  });
+  check("El gerente asigna marcas al Product Manager",
+    asignarMarcas.status === 200 || asignarMarcas.status === 201,
+    `HTTP ${asignarMarcas.status}`);
+
+  const descuentoMarca = await call("PUT", "/my/brand-discounts", tokenPm, {
+    brandName: "GIGABYTE",
+    discountPercent: 7,
+  });
+  check("El Product Manager carga el descuento de su marca",
+    (descuentoMarca.status === 200 || descuentoMarca.status === 201)
+      && Number(dataOf(descuentoMarca)?.discountPercent) === 7,
+    `HTTP ${descuentoMarca.status}`);
+
+  const descuentoOtra = await call("PUT", "/my/brand-discounts", tokenPm, {
+    brandName: "ASUS",
+    discountPercent: 5,
+  });
+  check("El Product Manager no carga descuento de otra marca",
+    descuentoOtra.status === 403,
+    `HTTP ${descuentoOtra.status}`);
 
   const failed = checks.filter((ok) => !ok).length;
   console.log(`\n${checks.length - failed}/${checks.length} controles OK`);

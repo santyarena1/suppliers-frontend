@@ -101,7 +101,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `{ accountManagerId?, discountPercent?, notes? }`
 - **Respuesta esperada**: lista con `{ linkId, commerce, accountManager, discountPercent, orderSummary }` · pedidos `{ commerceName, status, approvalStatus, itemsCount, createdAt }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: NODO para el mayorista es cartera, no para comprar. El descuento se guarda acá y el comercio no lo ve; no se aplica al catálogo en esta tanda. Product Manager recibe 403. Ver `docs/PLAN_TIPO2.md`.
+- **Notas**: NODO para el mayorista es cartera y su catálogo, no para comprarle a otras integraciones. El descuento de cuenta se aplica al precio que lee el comercio; el local no ve el porcentaje. Product Manager recibe 403. Ver `docs/PLAN_TIPO2.md`.
 
 ### [FEATURE] Códigos de vinculación del mayorista
 - **Método**: GET | POST | DELETE
@@ -128,7 +128,25 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `{ body }` (máx. 2000)
 - **Respuesta esperada**: hilos `{ linkId, otherName, lastMessage }` · mensajes `{ id, body, mine, sender, createdAt }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un hilo por `TenantLink`. El vendedor del mayorista solo entra a los de *sus* clientes. Solo lectura mira, no escribe.
+- **Notas**: Un hilo por `TenantLink`. El vendedor del mayorista solo entra a los de *sus* clientes. Solo lectura mira, no escribe. El Product Manager no entra.
+
+### [FEATURE] Catálogo propio del distribuidor
+- **Método**: GET
+- **Ruta**: `/search/provider/:provider`, `/catalog/categories`, `/catalog/featured`, `/catalog/by-category`, `/providers/:provider/products/:externalId`
+- **Auth**: Bearer con organización `DISTRIBUTOR`
+- **Body / Params**: búsqueda `?name=`
+- **Respuesta esperada**: fichas de `ProviderSyncCache` de **su** `providerKey`. Otro proveedor → `[]`. Product Manager, solo sus marcas; sin marcas, vacío.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Sin carrito. El mayorista ve precio de lista. El comercio ve cuenta + marca + markup al leer. Ver `docs/PLAN_TIPO2.md`.
+
+### [FEATURE] Product Manager y descuentos por marca
+- **Método**: GET | PUT | POST
+- **Ruta**: `/my/team`, `/my/team/:membershipId/brands`, `/my/catalog-brands`, `/my/managed-brands`, `/my/brand-discounts`
+- **Auth**: Bearer · invitar y asignar marcas, Gerente o Administrador · descuentos, también Product Manager (solo las suyas)
+- **Body / Params**: invitar `{ username, email, role, title? }` · marcas `{ brandNames }` · descuento `{ brandName, discountPercent }`
+- **Respuesta esperada**: equipo con `managedBrands` · descuentos `{ brandName, discountPercent }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: No hay alta pública de distribuidor: lo crea el superadmin. Fórmula del precio del comercio: `crudo * (1 - cuenta/100) * (1 - marca/100) * (1 + markup/100)`.
 
 ## Pendiente (futuro)
 

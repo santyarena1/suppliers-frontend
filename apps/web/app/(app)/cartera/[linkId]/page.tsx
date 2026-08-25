@@ -113,7 +113,7 @@ export default function ClientePage() {
                   ) : (
                     <p className="text-sm text-surface-200">{data.discountPercent != null ? `${data.discountPercent}%` : "Sin descuento"}</p>
                   )}
-                  <p className="text-[11px] text-surface-600 mt-1">El comercio no ve este número. Todavía no se aplica al catálogo.</p>
+                  <p className="text-[11px] text-surface-600 mt-1">El comercio no ve este número. Se aplica al precio de catálogo al leerlo.</p>
                 </div>
               </section>
               {msg && <p className="text-xs text-surface-400 -mt-3">{msg}</p>}

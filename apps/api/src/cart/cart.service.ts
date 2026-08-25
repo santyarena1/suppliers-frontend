@@ -90,8 +90,12 @@ export class CartService {
   }
 
   private assertCanMutate(tenant: TenantContext) {
-    if (!TENANT_ROLES_CAN_ORDER.includes(tenant.tenantRole)) {
-      throw new ForbiddenException(`Tu rol en ${tenant.tenantName} no puede modificar el carrito`);
+    if (!TENANT_ROLES_CAN_ORDER.includes(tenant.tenantRole) || tenant.tenantType !== "RETAILER") {
+      throw new ForbiddenException(
+        tenant.tenantType === "RETAILER"
+          ? `Tu rol en ${tenant.tenantName} no puede modificar el carrito`
+          : "El carrito es del comercio"
+      );
     }
   }
 }

@@ -283,7 +283,19 @@ export const myApi = {
     api.put<TenantMember>(`/my/team/${membershipId}`, data),
   setAdvertising: (advertisingEnabled: boolean) =>
     api.put<{ advertisingEnabled: boolean }>("/my/advertising", { advertisingEnabled }),
+  catalogBrands: () => api.get<string[]>("/my/catalog-brands"),
+  managedBrands: () => api.get<string[]>("/my/managed-brands"),
+  setMemberBrands: (membershipId: string, brandNames: string[]) =>
+    api.put<{ membershipId: string; brandNames: string[] }>(`/my/team/${membershipId}/brands`, { brandNames }),
+  brandDiscounts: () => api.get<BrandDiscount[]>("/my/brand-discounts"),
+  upsertBrandDiscount: (data: { brandName: string; discountPercent: number }) =>
+    api.put<BrandDiscount>("/my/brand-discounts", data),
 };
+
+export interface BrandDiscount {
+  brandName: string;
+  discountPercent: number;
+}
 
 export interface PortfolioSeller {
   id: string;
@@ -1414,7 +1426,14 @@ export const TENANT_ROLES_CAN_ORDER: TenantRole[] = ["OWNER", "ADMIN", "BUYER", 
 export const TENANT_ROLES_CAN_APPROVE_ORDERS: TenantRole[] = ["OWNER", "ADMIN"];
 export const TENANT_ROLES_CAN_MANAGE_COMMERCE: TenantRole[] = ["OWNER", "ADMIN"];
 export const TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR: TenantRole[] = ["OWNER", "ADMIN"];
-export const TENANT_ROLES_INVITABLE_DISTRIBUTOR: TenantRole[] = ["OWNER", "ADMIN", "SELLER", "VIEWER"];
+export const TENANT_ROLES_INVITABLE_DISTRIBUTOR: TenantRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SELLER",
+  "PRODUCT_MANAGER",
+  "VIEWER",
+];
+export const TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS: TenantRole[] = ["OWNER", "ADMIN", "PRODUCT_MANAGER"];
 export const TENANT_ROLES_CAN_SEE_PORTFOLIO: TenantRole[] = ["OWNER", "ADMIN", "SELLER", "VIEWER"];
 
 /** Roles que pueden vaciar el catálogo de la organización. */

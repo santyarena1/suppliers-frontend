@@ -20,6 +20,8 @@ import {
 } from "@/lib/api";
 import RedeemAccessCode from "@/components/RedeemAccessCode";
 import GeneratedPassword from "@/components/admin/GeneratedPassword";
+import BrandDiscountsPanel from "@/components/BrandDiscountsPanel";
+import { canManageBrandDiscounts } from "@/lib/distributor";
 import {
   Settings, Palette, DollarSign, Receipt, Check, RefreshCw, Sun, Moon, Sparkles,
   Building2, Users, ClipboardList, Link2, Loader2, Megaphone,
@@ -31,7 +33,7 @@ const THEME_ICONS: Record<Theme, React.ElementType> = {
   light: Sun,
 };
 
-type Tab = "local" | "equipo" | "pedidos" | "vinculados" | "publicidad" | "preferencias";
+type Tab = "local" | "equipo" | "pedidos" | "vinculados" | "publicidad" | "marcas" | "preferencias";
 
 export default function ConfiguracionPage() {
   const user = getUser();
@@ -39,6 +41,7 @@ export default function ConfiguracionPage() {
   const isRetailer = tenant?.type === "RETAILER";
   const isDistributor = tenant?.type === "DISTRIBUTOR";
   const manage = canManageCommerce();
+  const brandDiscounts = canManageBrandDiscounts();
   const [tab, setTab] = useState<Tab>(isRetailer || isDistributor ? "local" : "preferencias");
 
   const tabs: { key: Tab; label: string; show: boolean }[] = [
@@ -47,6 +50,7 @@ export default function ConfiguracionPage() {
     { key: "pedidos", label: "Pedidos", show: isRetailer && manage },
     { key: "vinculados", label: "Proveedores vinculados", show: isRetailer },
     { key: "publicidad", label: "Publicidad", show: isDistributor && manage },
+    { key: "marcas", label: "Marcas", show: isDistributor && brandDiscounts },
     { key: "preferencias", label: "Preferencias", show: true },
   ];
 
@@ -89,6 +93,7 @@ export default function ConfiguracionPage() {
           {tab === "pedidos" && <PedidosTab />}
           {tab === "vinculados" && <VinculadosTab manage={manage} />}
           {tab === "publicidad" && <PublicidadTab />}
+          {tab === "marcas" && <BrandDiscountsPanel />}
           {tab === "preferencias" && <PreferenciasTab />}
         </div>
       </div>
@@ -196,6 +201,7 @@ function LocalTab({ manage }: { manage: boolean }) {
 function EquipoTab() {
   const tenant = getTenant();
   const [members, setMembers] = useState<TenantMember[]>([]);
+  const [catalogBrands, setCatalogBrands] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [invite, setInvite] = useState({ username: "", email: "", role: "SELLER" as TenantRole, title: "" });
   const [sending, setSending] = useState(false);
@@ -207,14 +213,20 @@ function EquipoTab() {
 
   const load = useCallback(async () => {
     try {
-      const res = await myApi.team();
-      setMembers(res.data ?? []);
+      const [team, brands] = await Promise.all([
+        myApi.team(),
+        tenant?.type === "DISTRIBUTOR"
+          ? myApi.catalogBrands().catch(() => ({ data: [] as string[] }))
+          : Promise.resolve({ data: [] as string[] }),
+      ]);
+      setMembers(team.data ?? []);
+      setCatalogBrands(brands.data ?? []);
     } catch {
       setMsg({ ok: false, text: "No se pudo cargar el equipo" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenant?.type]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -267,7 +279,7 @@ function EquipoTab() {
         <Users className="w-4 h-4 text-brand-400" />
         <h2 className="text-sm font-semibold text-white">Equipo</h2>
       </div>
-        <p className="text-xs text-surface-500 mb-4">Quién trabaja en la organización. Al invitar se genera una contraseña de una sola vez.</p>
+        <p className="text-xs text-surface-500 mb-4">Quién trabaja en la organización. Al invitar se genera una contraseña de una sola vez. Al Product Manager se le asignan marcas de este catálogo.</p>
 
       {loading ? (
         <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
@@ -277,7 +289,8 @@ function EquipoTab() {
             <p className="text-xs text-surface-500 px-3 py-3">Todavía no hay nadie más en el equipo.</p>
           )}
           {members.map((member) => (
-            <div key={member.membershipId} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+            <div key={member.membershipId} className="px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-2">
               <div className="flex-1 min-w-[140px]">
                 <p className="text-sm text-surface-200">{member.username}</p>
                 <p className="text-[11px] text-surface-500">{member.email}</p>
@@ -302,6 +315,15 @@ function EquipoTab() {
               >
                 {member.membershipActive ? "Desactivar" : "Activar"}
               </button>
+              </div>
+              {tenant?.type === "DISTRIBUTOR" && member.tenantRole === "PRODUCT_MANAGER" && (
+                <PmBrandsField
+                  member={member}
+                  catalog={catalogBrands}
+                  onError={(text) => setMsg({ ok: false, text })}
+                  onSaved={load}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -686,5 +708,96 @@ function PreferenciasTab() {
         </div>
       </section>
     </>
+  );
+}
+
+function PmBrandsField({
+  member,
+  catalog,
+  onError,
+  onSaved,
+}: {
+  member: TenantMember;
+  catalog: string[];
+  onError: (text: string) => void;
+  onSaved: () => void;
+}) {
+  const selected = member.managedBrands ?? [];
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const available = catalog.filter((name) => !selected.includes(name));
+
+  async function persist(brandNames: string[]) {
+    setSaving(true);
+    try {
+      await myApi.setMemberBrands(member.membershipId, brandNames);
+      await onSaved();
+    } catch (err: unknown) {
+      const text = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      onError(text || "No se pudieron guardar las marcas");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function add(name: string) {
+    const brand = name.trim();
+    if (!brand) return;
+    if (selected.includes(brand)) {
+      setDraft("");
+      return;
+    }
+    setDraft("");
+    await persist([...selected, brand]);
+  }
+
+  return (
+    <div className="mt-2 pl-0.5">
+      <p className="text-[11px] text-surface-500 mb-1.5">Marcas que administra</p>
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        {selected.length === 0 && (
+          <span className="text-[11px] text-surface-600">Ninguna: en búsqueda no ve productos.</span>
+        )}
+        {selected.map((brand) => (
+          <button
+            key={brand}
+            type="button"
+            disabled={saving}
+            onClick={() => void persist(selected.filter((item) => item !== brand))}
+            className="text-[11px] px-2 py-0.5 rounded-full border border-brand-500/30 text-brand-300 hover:border-red-400/50 hover:text-red-300"
+          >
+            {brand} ×
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void add(draft);
+            }
+          }}
+          list={`pm-brands-${member.membershipId}`}
+          placeholder="Agregar marca"
+          className="flex-1 bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white placeholder-surface-500 focus:outline-none focus:border-brand-500"
+        />
+        <datalist id={`pm-brands-${member.membershipId}`}>
+          {available.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+        <button
+          type="button"
+          disabled={saving || !draft.trim()}
+          onClick={() => void add(draft)}
+          className="text-xs text-brand-400 hover:text-brand-300 disabled:opacity-40"
+        >
+          {saving ? "…" : "Agregar"}
+        </button>
+      </div>
+    </div>
   );
 }

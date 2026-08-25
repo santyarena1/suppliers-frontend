@@ -265,6 +265,19 @@ export class SetProductManagerScopeDto {
   brandNames!: string[];
 }
 
+export class UpsertBrandDiscountDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  brandName!: string;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @Type(() => Number)
+  discountPercent!: number;
+}
+
 export class UpdateClientLinkDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

@@ -10,8 +10,8 @@ import type { UserRole } from "@/lib/auth";
  * Navegación declarativa del sidebar.
  *
  * Inicio / Búsqueda / Carrito van sueltos (acceso diario) para el comercio.
- * El distribuidor ve cartera, códigos, pedidos de clientes y chat: NODO para
- * ellos no es para comprar.
+ * El distribuidor busca **su** catálogo (sin carrito ni otras integraciones)
+ * y administra cartera, códigos, pedidos de clientes y chat.
  *
  * Visibilidad:
  *  - `module` — permiso de plataforma (`GET /me/permissions`).
@@ -79,7 +79,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     label: "Búsqueda",
     icon: Search,
     module: "search",
-    tenantTypes: ["RETAILER"],
+    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
   },
   {
     id: "cart",

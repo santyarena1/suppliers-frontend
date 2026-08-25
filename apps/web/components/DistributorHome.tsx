@@ -3,11 +3,46 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import BrandDiscountsPanel from "@/components/BrandDiscountsPanel";
 import { chatApi, portfolioApi, type PortfolioClient, type PortfolioSummary } from "@/lib/api";
-import { canManageDistributor, canSeePortfolio } from "@/lib/distributor";
-import { Briefcase, Loader2, MessageSquare, QrCode, ShoppingBag } from "lucide-react";
+import { canManageDistributor, canSeePortfolio, isProductManager } from "@/lib/distributor";
+import { Briefcase, Loader2, MessageSquare, QrCode, Search, ShoppingBag } from "lucide-react";
 
 export default function DistributorHome() {
+  if (isProductManager()) return <ProductManagerHome />;
+  return <PortfolioHome />;
+}
+
+function ProductManagerHome() {
+  return (
+    <>
+      <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-semibold text-white">Inicio</h1>
+          <p className="text-xs text-surface-500">Tus marcas dentro de este catálogo</p>
+        </div>
+        <PrefsPanel />
+      </header>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5">
+          <Link
+            href="/search"
+            className="flex items-center gap-3 bg-surface-900 border border-surface-800 hover:border-brand-500/40 rounded-2xl px-4 py-3 transition-colors"
+          >
+            <Search className="w-5 h-5 text-brand-400" />
+            <div>
+              <p className="text-sm font-medium text-white">Buscar en tus marcas</p>
+              <p className="text-xs text-surface-500">Solo el catálogo de este distribuidor, sin carrito ni otras integraciones.</p>
+            </div>
+          </Link>
+          <BrandDiscountsPanel />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PortfolioHome() {
   const [summary, setSummary] = useState<PortfolioSummary | null>(null);
   const [chats, setChats] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -28,29 +63,6 @@ export default function DistributorHome() {
       .finally(() => setLoading(false));
   }, [see]);
 
-  if (!see) {
-    return (
-      <>
-        <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-semibold text-white">Inicio</h1>
-            <p className="text-xs text-surface-500">Panel del Product Manager</p>
-          </div>
-          <PrefsPanel />
-        </header>
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-xl mx-auto px-4 py-16 text-center">
-            <p className="text-sm text-surface-300">El panel de Product Manager viene más adelante.</p>
-            <p className="text-xs text-surface-500 mt-2">Por ahora podés entrar a Configuración.</p>
-            <Link href="/configuracion" className="inline-block mt-4 text-sm text-brand-400 hover:text-brand-300">
-              Ir a Configuración
-            </Link>
-          </div>
-        </div>
-      </>
-    );
-  }
-
   const clients = summary?.clients ?? [];
   const pending = clients.reduce((n, c) => n + c.orderSummary.pendingApproval, 0);
 
@@ -69,7 +81,8 @@ export default function DistributorHome() {
             <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
           ) : (
             <>
-              <div className="grid sm:grid-cols-3 gap-3">
+              <div className="grid sm:grid-cols-4 gap-3">
+                <HomeCard href="/search" icon={Search} label="Catálogo" value="Buscar" />
                 <HomeCard href="/cartera" icon={Briefcase} label="Clientes" value={String(clients.length)} />
                 <HomeCard href="/pedidos-clientes" icon={ShoppingBag} label="Pedidos esperando" value={String(pending)} />
                 <HomeCard href="/chat" icon={MessageSquare} label="Conversaciones" value={String(chats)} />

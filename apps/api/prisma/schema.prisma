@@ -108,6 +108,7 @@ model Tenant {
   cartItems     CartItem[]
   orders        ProviderOrder[]
   linkMessages  TenantLinkMessage[]
+  brandDiscounts TenantBrandDiscount[]
 
   @@index([type, active])
 }
@@ -210,6 +211,21 @@ model ProductManagerScope {
   createdAt DateTime @default(now())
 
   @@unique([tenantId, userId, brandName])
+}
+
+/// Descuento de una marca dentro del catálogo del distribuidor. Lo carga el
+/// gerente o el Product Manager de esa marca. Se aplica al leer, encima del
+/// descuento de cuenta del comercio.
+model TenantBrandDiscount {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brandName       String
+  discountPercent Decimal  @db.Decimal(6, 2)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, brandName])
+  @@index([tenantId])
 }
 
 // La cuenta en el distribuidor es del comercio, no de la persona que la cargó:

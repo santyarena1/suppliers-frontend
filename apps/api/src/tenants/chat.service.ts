@@ -128,7 +128,7 @@ export class ChatService {
       return { ...base, accountManagerId: userId };
     }
     if (tenant.tenantRole === "PRODUCT_MANAGER") {
-      throw new ForbiddenException("El panel de Product Manager viene más adelante");
+      throw new ForbiddenException("El Product Manager no entra al chat de la cartera");
     }
     return base;
   }

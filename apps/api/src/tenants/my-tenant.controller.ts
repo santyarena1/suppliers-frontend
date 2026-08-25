@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { JwtPayload } from "@nodo/shared";
-import { TENANT_ROLES_CAN_MANAGE_COMMERCE, TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR } from "@nodo/shared";
+import { TENANT_ROLES_CAN_MANAGE_COMMERCE, TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR, TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS } from "@nodo/shared";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { ChatService } from "./chat.service";
@@ -10,11 +10,13 @@ import {
   InviteTeamMemberDto,
   PostLinkMessageDto,
   RedeemAccessCodeDto,
+  SetProductManagerScopeDto,
   UpdateAdvertisingDto,
   UpdateBuyerCanConfirmDto,
   UpdateClientLinkDto,
   UpdateCommerceDto,
   UpdateMembershipDto,
+  UpsertBrandDiscountDto,
 } from "./dto/tenant.dto";
 import { PortfolioService } from "./portfolio.service";
 import type { TenantContext } from "./tenant-context.service";
@@ -84,6 +86,44 @@ export class MyTenantController {
     assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
     if (dto.role) this.portfolio.assertInvitableRole(tenant, dto.role);
     return this.tenants.updateOwnMember(tenant, membershipId, dto);
+  }
+
+  @Put("team/:membershipId/brands")
+  setMemberBrands(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("membershipId") membershipId: string,
+    @Body() dto: SetProductManagerScopeDto
+  ) {
+    assertTenantType(tenant, ["DISTRIBUTOR"]);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR);
+    return this.tenants.setOwnMemberBrands(tenant, membershipId, dto);
+  }
+
+  @Get("catalog-brands")
+  catalogBrands(@CurrentTenant() tenant: TenantContext) {
+    assertTenantType(tenant, ["DISTRIBUTOR"]);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR);
+    return this.tenants.catalogBrands(tenant);
+  }
+
+  @Get("managed-brands")
+  managedBrands(@CurrentTenant() tenant: TenantContext) {
+    assertTenantType(tenant, ["DISTRIBUTOR"]);
+    return this.tenants.managedBrands(tenant);
+  }
+
+  @Get("brand-discounts")
+  brandDiscounts(@CurrentTenant() tenant: TenantContext) {
+    assertTenantType(tenant, ["DISTRIBUTOR"]);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS);
+    return this.tenants.listBrandDiscounts(tenant);
+  }
+
+  @Put("brand-discounts")
+  upsertBrandDiscount(@CurrentTenant() tenant: TenantContext, @Body() dto: UpsertBrandDiscountDto) {
+    assertTenantType(tenant, ["DISTRIBUTOR"]);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS);
+    return this.tenants.upsertBrandDiscount(tenant, dto);
   }
 
   @Post("redeem-code")

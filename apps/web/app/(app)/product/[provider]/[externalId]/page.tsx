@@ -6,11 +6,12 @@ import Link from "next/link";
 import Image from "next/image";
 import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
-import AddToCartButton from "@/components/AddToCartButton";
 import { useResults } from "@/lib/results";
 import { useCart } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint } from "@/lib/api";
+import { getTenant } from "@/lib/auth";
+import { canMutateCart } from "@/lib/commerce";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
 import { linePricing, taxLabel } from "@/lib/tax";
@@ -38,6 +39,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const [zoom, setZoom] = useState(false);
   const [qty, setQty] = useState(1);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
+  const [ownCatalog, setOwnCatalog] = useState(false);
+  const [canBuy, setCanBuy] = useState(false);
+
+  useEffect(() => {
+    setOwnCatalog(getTenant()?.type === "DISTRIBUTOR");
+    setCanBuy(canMutateCart());
+  }, []);
 
   useEffect(() => {
     const found = find(providerName, extId);
@@ -311,6 +319,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         )}
                       </div>
 
+                      {canBuy && (
+                      <>
                       {/* Qty selector */}
                       <div className="flex items-center justify-between mb-3">
                         <span className="text-xs text-surface-400">Cantidad</span>
@@ -334,9 +344,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           Ya tenés {cartItem.qty} unidad{cartItem.qty !== 1 ? "es" : ""} en el carrito
                         </p>
                       )}
+                      </>
+                      )}
                     </div>
 
-                    {/* Action buttons */}
+                    {!ownCatalog && (
                     <div className="flex gap-2">
                       <button
                         onClick={searchSameName}
@@ -346,6 +358,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         Buscar similares en otros proveedores
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
               </div>

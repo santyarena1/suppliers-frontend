@@ -523,7 +523,7 @@ export class ProvidersController {
     @Query("name") name = ""
   ) {
     if (!tenant) return [];
-    return this.providersService.search(tenant.tenantId, assertProvider(provider), name);
+    return this.providersService.search(tenant, assertProvider(provider), name);
   }
 
   @Get("providers/:provider/products/:externalId")
@@ -532,11 +532,7 @@ export class ProvidersController {
     @Param("provider") provider: string,
     @Param("externalId") externalId: string
   ) {
-    const product = await this.providersService.getProduct(
-      tenant.tenantId,
-      assertProvider(provider),
-      externalId
-    );
+    const product = await this.providersService.getProduct(tenant, assertProvider(provider), externalId);
     if (!product) throw new NotFoundException("Producto no encontrado");
     return product;
   }
@@ -548,19 +544,19 @@ export class ProvidersController {
     @Param("externalId") externalId: string
   ) {
     if (!tenant) return [];
-    return this.providersService.getPriceHistory(tenant.tenantId, assertProvider(provider), externalId);
+    return this.providersService.getPriceHistory(tenant, assertProvider(provider), externalId);
   }
 
   @Get("catalog/categories")
   getCategories(@CurrentTenantOrNone() tenant: TenantContext | null) {
     if (!tenant) return [];
-    return this.providersService.getCategories(tenant.tenantId);
+    return this.providersService.getCategories(tenant);
   }
 
   @Get("catalog/featured")
   getFeatured(@CurrentTenantOrNone() tenant: TenantContext | null, @Query("take") take?: string) {
     if (!tenant) return [];
-    return this.providersService.getFeatured(tenant.tenantId, take ? Number(take) : 24);
+    return this.providersService.getFeatured(tenant, take ? Number(take) : 24);
   }
 
   @Get("catalog/by-category")
@@ -571,6 +567,6 @@ export class ProvidersController {
   ) {
     if (!category) throw new BadRequestException("Falta el parámetro category");
     if (!tenant) return [];
-    return this.providersService.getByCategory(tenant.tenantId, category, take ? Number(take) : 60);
+    return this.providersService.getByCategory(tenant, category, take ? Number(take) : 60);
   }
 }

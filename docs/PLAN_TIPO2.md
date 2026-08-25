@@ -4,14 +4,13 @@ Fuente de verdad de este tipo. El modelo general está en
 `docs/ARQUITECTURA_TENANTS.md`. El comercio (Tipo 1) ya está cerrado en
 `docs/PLAN_TIPO1.md` y no se reabre acá.
 
-NODO para el mayorista es **cartera**, no para comprar. No busca precios, no
-arma carrito, no confirma pedidos propios. Administra los comercios que le
-compran, el código con el que entran, el descuento de cada cuenta, el vendedor
-asignado y el chat con el local.
+NODO para el mayorista es **cartera** y **su catálogo**. No le compra a otras
+integraciones, no arma carrito, no confirma pedidos propios. Administra los
+comercios que le compran, el código con el que entran, el descuento de cada
+cuenta, el descuento por marca, el vendedor asignado y el chat con el local.
 
 No hay alta pública de distribuidor. Lo crea el superadmin porque lleva
-`providerKey`. El Product Manager queda para más adelante: si alguien tiene ese
-rol, ve Configuración y un aviso, no un panel.
+`providerKey`.
 
 ---
 
@@ -21,27 +20,27 @@ Nunca slugs. Nunca “Dueño”. Nunca la clave del proveedor.
 
 | Rol interno | En pantalla | Qué hace |
 |---|---|---|
-| `OWNER` | Gerente | Equipo, códigos + QR, descuento por comercio, publicidad, asignar vendedor a cada cliente. No se puede dejar la organización sin un gerente activo. |
+| `OWNER` | Gerente | Equipo (incluido Product Manager y sus marcas), códigos + QR, descuento por comercio, descuento por marca, publicidad, asignar vendedor a cada cliente. No se puede dejar la organización sin un gerente activo. |
 | `ADMIN` | Administrador | Lo mismo en el día a día. No reemplaza al gerente para el “último al mando”. |
-| `SELLER` | Vendedor | **Solo sus clientes** (`TenantLink.accountManagerId`). Resumen de pedidos, contacto, descuento puntual, chat. No ve el comercio de un compañero. |
-| `PRODUCT_MANAGER` | Product Manager | Más adelante. |
-| `VIEWER` | Solo lectura | Mira cartera, pedidos y chat. No edita, no genera códigos, no escribe. |
+| `SELLER` | Vendedor | **Solo sus clientes** (`TenantLink.accountManagerId`). Resumen de pedidos, contacto, descuento puntual, chat. No ve el comercio de un compañero. Ve el catálogo propio, sin carrito. |
+| `PRODUCT_MANAGER` | Product Manager | Solo las marcas de su `ProductManagerScope`, dentro de este distribuidor. Busca ese recorte, carga el descuento de esas marcas. No entra a cartera, códigos, publicidad ni chat. Si no tiene marcas, el catálogo queda vacío. |
+| `VIEWER` | Solo lectura | Mira cartera, pedidos, chat y catálogo. No edita, no genera códigos, no escribe. |
 
 ---
 
 ## 2. Qué ve y qué no
 
-Navegación del distribuidor: Inicio (resumen), Cartera, Códigos (gerente y
-administrador), Pedidos de clientes, Chat, Configuración.
+Navegación del distribuidor: Inicio, **Búsqueda** (solo su catálogo), Cartera,
+Códigos (gerente y administrador), Pedidos de clientes, Chat, Configuración.
 
-No aparecen búsqueda, carrito, pedidos propios ni el listado de proveedores
-para comprar. Eso es del comercio.
+No aparecen carrito, pedidos propios ni el listado de proveedores para comprar.
+Eso es del comercio. En búsqueda no hay “agregar al carrito” ni otras
+integraciones.
 
-En Configuración: Empresa, Equipo, Publicidad, Preferencias. El tilde del
-comprador y el canje de códigos no aplican.
+En Configuración: Empresa, Equipo, Publicidad, Marcas (descuentos), Preferencias.
+El tilde del comprador y el canje de códigos no aplican.
 
-El comercio **sí** gana el chat en esta tanda: el hilo es el vínculo, y se ve
-de los dos lados.
+El comercio **sí** gana el chat: el hilo es el vínculo, y se ve de los dos lados.
 
 ---
 
@@ -53,15 +52,15 @@ Lista de comercios con `TenantLink` hacia este distribuidor.
 - Vendedor ve solo los que tiene asignados. Si no tiene ninguno, la lista
   queda vacía: no existe “el resto de la empresa”.
 - Solo lectura ve lo mismo que el gerente, sin botones.
+- Product Manager no entra.
 
 Por cliente:
 
 - Nombre y contacto del local (`Tenant.name`, email, teléfono).
 - Vendedor asignado. Lo cambia el gerente o el administrador.
 - Descuento del vínculo, en porcentaje. Lo carga el mayorista. El comercio
-  **no lo ve ni lo edita** (Tipo 1). **No se aplica al precio de catálogo**
-  en esta tanda: se guarda y se muestra en la cartera. Aplicarlo al pedido
-  es otra decisión, después.
+  **no lo ve ni lo edita** (Tipo 1). **Sí se aplica** al precio de catálogo
+  cuando el comercio lo lee.
 - Resumen de pedidos de ese comercio **hacia este proveedor**
   (`ProviderOrder.provider = Tenant.providerKey`).
 
@@ -98,7 +97,7 @@ aparece como publicidad paga, sin abrirle el catálogo.
 Un hilo por `TenantLink`. No es un CRM.
 
 Quién lee: cualquiera de las dos organizaciones que pueda ver ese vínculo
-(el vendedor del mayorista, solo si es *su* cliente).
+(el vendedor del mayorista, solo si es *su* cliente). El Product Manager no.
 
 Quién escribe: del local, quien no es solo lectura. Del mayorista, gerente,
 administrador y el vendedor asignado. Solo lectura mira.
@@ -111,15 +110,42 @@ compañero.
 ## 7. Equipo
 
 Igual que el comercio: invitar genera una contraseña de una sola vez. Roles
-que se pueden invitar acá: Gerente, Administrador, Vendedor, Solo lectura.
-Product Manager no se invita desde este panel.
+que se pueden invitar acá: Gerente, Administrador, Vendedor, Product Manager,
+Solo lectura.
+
+Al Product Manager el gerente le asigna marcas del catálogo propio
+(`ProductManagerScope`). Superadmin también puede desde el árbol.
 
 ---
 
-## 8. Lo que no entra
+## 8. Búsqueda del mayorista
 
-- Aplicar el descuento al listado de precios ni al checkout.
-- Panel del Product Manager.
+Lee la ficha global (`ProviderSyncCache`) de **su** `providerKey`. Si piden
+otro proveedor, la respuesta es vacía. El Product Manager filtra por las
+marcas de su alcance. El precio que ve el mayorista es de lista (sin el
+descuento de cuenta, que es del comercio).
+
+---
+
+## 9. Descuentos
+
+Al leer el precio del comercio:
+
+`precio * (1 - cuenta/100) * (1 - marca/100) * (1 + markup/100)`
+
+- **Cuenta**: `TenantLink.discountPercent`. Lo carga el mayorista. El comercio
+  no ve el porcentaje.
+- **Marca**: `TenantBrandDiscount`. Lo carga el gerente (todas) o el Product
+  Manager (solo las suyas).
+- **Markup**: lo carga el comercio sobre *su* oferta.
+
+Se aplican al leer, no al guardar. La oferta conserva el valor crudo del
+proveedor.
+
+---
+
+## 10. Lo que no entra
+
 - Alta pública de distribuidor.
 - Cupos de descuento, metas, alertas de inactivos, visibilidad de la
   competencia.

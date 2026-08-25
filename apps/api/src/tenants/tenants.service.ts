@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
 import { Prisma, UserRole } from "@prisma/client";
@@ -19,6 +19,7 @@ import {
   UpdateCommerceDto,
   UpdateMembershipDto,
   UpdateTenantDto,
+  UpsertBrandDiscountDto,
   UpsertLinkDto,
 } from "./dto/tenant.dto";
 import type { TenantContext } from "./tenant-context.service";
@@ -49,6 +50,10 @@ function generateAccessCode(): string {
 function normalizeAccessCode(raw: string): string {
   const limpio = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
   return [limpio.slice(0, 4), limpio.slice(4, 8), limpio.slice(8, 12)].filter(Boolean).join("-");
+}
+
+function normalizeBrandName(name: string | null | undefined): string {
+  return (name ?? "").trim().replace(/\s+/g, " ").toLocaleUpperCase("es");
 }
 
 @Injectable()
@@ -319,6 +324,12 @@ export class TenantsService {
       await this.assertNotLastManager(membership.tenantId, membership.tenant.type, membershipId);
     }
 
+    if (dto.role && dto.role !== "PRODUCT_MANAGER" && membership.role === "PRODUCT_MANAGER") {
+      await this.prisma.productManagerScope.deleteMany({
+        where: { tenantId: membership.tenantId, userId: membership.userId },
+      });
+    }
+
     return this.prisma.tenantMembership.update({
       where: { id: membershipId },
       data: {
@@ -512,7 +523,9 @@ export class TenantsService {
       throw new BadRequestException("Solo un Product Manager tiene marcas asignadas");
     }
 
-    const brandNames = Array.from(new Set(dto.brandNames.map((name) => name.trim()).filter(Boolean)));
+    const brandNames = Array.from(
+      new Set(dto.brandNames.map((name) => normalizeBrandName(name)).filter(Boolean))
+    );
     await this.prisma.$transaction([
       this.prisma.productManagerScope.deleteMany({
         where: { tenantId: membership.tenantId, userId: membership.userId },
@@ -706,12 +719,28 @@ export class TenantsService {
   }
 
   async listTeam(tenant: TenantContext) {
-    const members = await this.prisma.tenantMembership.findMany({
-      where: { tenantId: tenant.tenantId },
-      include: MEMBERSHIP_INCLUDE,
-      orderBy: { createdAt: "asc" },
-    });
-    return members.map((membership) => this.serializeMember(membership));
+    const [members, scopes] = await Promise.all([
+      this.prisma.tenantMembership.findMany({
+        where: { tenantId: tenant.tenantId },
+        include: MEMBERSHIP_INCLUDE,
+        orderBy: { createdAt: "asc" },
+      }),
+      this.prisma.productManagerScope.findMany({
+        where: { tenantId: tenant.tenantId },
+        select: { userId: true, brandName: true },
+        orderBy: { brandName: "asc" },
+      }),
+    ]);
+    const brandsByUser = new Map<string, string[]>();
+    for (const scope of scopes) {
+      const list = brandsByUser.get(scope.userId) ?? [];
+      list.push(scope.brandName);
+      brandsByUser.set(scope.userId, list);
+    }
+    return members.map((membership) => ({
+      ...this.serializeMember(membership),
+      managedBrands: brandsByUser.get(membership.userId) ?? [],
+    }));
   }
 
   async inviteTeamMember(tenant: TenantContext, dto: InviteTeamMemberDto) {
@@ -740,5 +769,86 @@ export class TenantsService {
 
   async deactivateOwnMember(tenant: TenantContext, membershipId: string) {
     return this.updateOwnMember(tenant, membershipId, { active: false });
+  }
+
+  async setOwnMemberBrands(tenant: TenantContext, membershipId: string, dto: SetProductManagerScopeDto) {
+    const membership = await this.prisma.tenantMembership.findUnique({ where: { id: membershipId } });
+    if (!membership || membership.tenantId !== tenant.tenantId) {
+      throw new NotFoundException("Persona no encontrada en esta organización");
+    }
+    return this.setProductManagerScope(membershipId, dto);
+  }
+
+  async catalogBrands(tenant: TenantContext): Promise<string[]> {
+    const row = await this.prisma.tenant.findUnique({
+      where: { id: tenant.tenantId },
+      select: { providerKey: true, type: true },
+    });
+    if (row?.type !== "DISTRIBUTOR" || !row.providerKey) return [];
+    const products = await this.prisma.providerSyncCache.findMany({
+      where: { provider: row.providerKey, brand: { not: null } },
+      select: { brand: true },
+    });
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const product of products) {
+      const key = normalizeBrandName(product.brand);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      names.push(key);
+    }
+    names.sort((a, b) => a.localeCompare(b, "es"));
+    return names;
+  }
+
+  async managedBrands(tenant: TenantContext): Promise<string[]> {
+    if (tenant.tenantType !== "DISTRIBUTOR" || tenant.tenantRole !== "PRODUCT_MANAGER") return [];
+    const scopes = await this.prisma.productManagerScope.findMany({
+      where: { tenantId: tenant.tenantId, userId: tenant.userId },
+      select: { brandName: true },
+      orderBy: { brandName: "asc" },
+    });
+    return scopes.map((scope) => scope.brandName);
+  }
+
+  async listBrandDiscounts(tenant: TenantContext) {
+    const rows = await this.prisma.tenantBrandDiscount.findMany({
+      where: { tenantId: tenant.tenantId },
+      orderBy: { brandName: "asc" },
+    });
+    const items = rows.map((row) => ({
+      brandName: row.brandName,
+      discountPercent: Number(row.discountPercent),
+    }));
+    if (tenant.tenantRole !== "PRODUCT_MANAGER") return items;
+
+    const mine = await this.managedBrands(tenant);
+    const byName = new Map(items.map((item) => [normalizeBrandName(item.brandName), item]));
+    return mine
+      .map((brandName) => byName.get(normalizeBrandName(brandName)) ?? { brandName, discountPercent: 0 })
+      .sort((a, b) => a.brandName.localeCompare(b.brandName, "es"));
+  }
+
+  async upsertBrandDiscount(tenant: TenantContext, dto: UpsertBrandDiscountDto) {
+    const brandName = normalizeBrandName(dto.brandName);
+    if (!brandName) throw new BadRequestException("Falta el nombre de la marca");
+    if (tenant.tenantRole === "PRODUCT_MANAGER") {
+      const mine = new Set((await this.managedBrands(tenant)).map((name) => normalizeBrandName(name)));
+      if (!mine.has(brandName)) {
+        throw new ForbiddenException("Esa marca no está en tu alcance");
+      }
+    }
+    if (!dto.discountPercent) {
+      await this.prisma.tenantBrandDiscount.deleteMany({
+        where: { tenantId: tenant.tenantId, brandName },
+      });
+      return { brandName, discountPercent: 0 };
+    }
+    const row = await this.prisma.tenantBrandDiscount.upsert({
+      where: { tenantId_brandName: { tenantId: tenant.tenantId, brandName } },
+      create: { tenantId: tenant.tenantId, brandName, discountPercent: dto.discountPercent },
+      update: { discountPercent: dto.discountPercent },
+    });
+    return { brandName: row.brandName, discountPercent: Number(row.discountPercent) };
   }
 }
