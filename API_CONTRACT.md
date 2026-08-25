@@ -60,12 +60,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
-- **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/:id/approve`, `/orders/:id/reject`
+- **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/insights`, `/orders/:id/approve`, `/orders/:id/reject`
 - **Auth**: Bearer usuario con organización · aprobar y rechazar, solo OWNER o ADMIN
-- **Body / Params**: rechazo `{ reason? }`
-- **Respuesta esperada**: pedido con `{ id, provider, providerName, status, approvalStatus, createdBy, approvedBy, total, items }` · `/orders/pending-approval` devuelve `{ canApprove, needsApproval, orders }`
+- **Body / Params**: rechazo `{ reason? }` · insights `days` (`30` | `90` | `365` | `0` = todo el historial; default `90`)
+- **Respuesta esperada**: pedido con `{ id, provider, providerName, status, approvalStatus, createdBy, approvedBy, total, items }` · `/orders/pending-approval` devuelve `{ canApprove, needsApproval, orders }` · `/orders/insights` es el tablero del comercio de la sesión
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`.
+- **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`. **Insights nunca cruza locales**: filtra siempre por `tenantId`. Solo cuenta pedidos `CREATED` u `OFFLINE`.
 
 ### [FEATURE] Referencias de precio de venta (locales)
 - **Método**: GET · POST (admin)
@@ -75,6 +75,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: `{ query, tokens, results: [{ id, name, price, description, productUrl, imageUrl, categoryName, syncedAt, store: { name, logoUrl }, priceHistory: [...] }] }`
 - **Estado**: IMPLEMENTADO
 - **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo. Cron (timezone `America/Argentina/Buenos_Aires`): **cada 5 min de 06:00 a 20:55** un batch de tiendas más viejas (`RETAIL_INGEST_DAY_BATCH`, default 8); **cada hora de 21:00 a 05:00** un batch mayor (`RETAIL_INGEST_NIGHT_BATCH`, default 20). Admin “Sincronizar todo” hace **full en background hasta terminar**; si hay un batch del cron, lo cancela al cerrar la tienda actual y encola el full. Progreso en `RetailIngestRun` (`storesDone/storesTotal`, `currentStoreName`, `heartbeatAt`). Ingesta más rápida: páginas de 100, upserts en paralelo, sin persistir `raw` del producto, historial limitado. `priceDivisor` por local corrige centavos (Multiplo). `RETAIL_INGEST_DISABLED=true` apaga el cron.
+
+### [FEATURE] Dashboard de compras del local (proveedores)
+- **Método**: GET
+- **Ruta**: `/orders/insights?days=`
+- **Auth**: Bearer, organización de la sesión (el superadmin sin “entrar como” no ve data de nadie)
+- **Body / Params**: `days` opcional, default 90. `0` = todo el historial del comercio
+- **Respuesta esperada**: `{ tenantName, periodDays, kpis, concentration, channelMix, byMonth, byWeekday, byProvider, byBrand, byCategory, bySubcategory, brandProviders, topProducts, recentOrders }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: La data es **solo de ese local**. No hay ranking ni spend entre comercios. Los SKUs se cruzan con `TenantProductOffer` del mismo `tenantId` para marca, categoría y precio actual.
 
 ### [FEATURE] Pedido offline y compras en esquema (comercio tipo 1)
 - **Método**: GET | PUT · POST | PATCH (pedidos)

@@ -6,6 +6,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
 import RedeemAccessCode from "@/components/RedeemAccessCode";
+import LocalPurchaseDashboard from "@/components/insights/LocalPurchaseDashboard";
 import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
   canSyncProvider, type VisibleProvider
@@ -68,14 +69,15 @@ export default function ProveedoresPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Dashboard de Proveedores</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Las cuentas son de tu organización — entrá a un proveedor para conectar credenciales, sincronizar y ver el catálogo
+            Compras, marcas y catálogo de este comercio — las cuentas no se mezclan con otros locales
           </p>
         </div>
         <PrefsPanel />
       </header>
 
       <div className="flex-1 overflow-y-auto">
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
+              <LocalPurchaseDashboard />
               {retailer && (
                 <div className="border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100">
                   <span className="font-semibold">Pedido offline y esquema</span>

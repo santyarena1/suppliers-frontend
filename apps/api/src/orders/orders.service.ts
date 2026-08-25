@@ -20,6 +20,15 @@ import {
   snapshotOfflineOrder,
 } from "./offline-order";
 import { OrderApprovalService } from "./order-approval.service";
+import {
+  catalogKey,
+  computePurchaseInsights,
+  COUNTED_ORDER_STATUSES,
+  extractOrderLines,
+  MAX_INSIGHT_ORDERS,
+  type CatalogEntry,
+  type CatalogStats,
+} from "./purchase-analytics";
 
 /**
  * Aprobar un pedido online es mandarlo al proveedor con los mismos datos con los
@@ -148,6 +157,197 @@ export class OrdersService {
       },
     });
     return this.approval.serialize(row);
+  }
+
+  /**
+   * Tablero de compras del comercio de la sesión. El filtro `tenantId` es
+   * obligatorio: no hay vista que mezcle locales.
+   */
+  async insights(tenant: TenantContext, daysRaw?: string) {
+    const periodDays = this.parseInsightDays(daysRaw);
+    const now = new Date();
+    const periodStart = periodDays > 0 ? new Date(now.getTime() - periodDays * 86_400_000) : null;
+    const compareStart =
+      periodStart && periodDays > 0 ? new Date(periodStart.getTime() - periodDays * 86_400_000) : null;
+
+    const counted = {
+      tenantId: tenant.tenantId,
+      status: { in: [...COUNTED_ORDER_STATUSES] },
+    };
+
+    const [currentRows, previousRows, catalogStats] = await Promise.all([
+      this.prisma.providerOrder.findMany({
+        where: { ...counted, ...(periodStart ? { createdAt: { gte: periodStart } } : {}) },
+        orderBy: { createdAt: "desc" },
+        take: MAX_INSIGHT_ORDERS + 1,
+        select: {
+          id: true,
+          provider: true,
+          status: true,
+          channel: true,
+          items: true,
+          createdAt: true,
+          total: true,
+        },
+      }),
+      compareStart && periodStart
+        ? this.prisma.providerOrder.findMany({
+            where: {
+              ...counted,
+              createdAt: { gte: compareStart, lt: periodStart },
+            },
+            orderBy: { createdAt: "desc" },
+            take: MAX_INSIGHT_ORDERS,
+            select: {
+              id: true,
+              provider: true,
+              status: true,
+              channel: true,
+              items: true,
+              createdAt: true,
+              total: true,
+            },
+          })
+        : Promise.resolve([]),
+      this.catalogStatsFor(tenant.tenantId),
+    ]);
+
+    const truncated = currentRows.length > MAX_INSIGHT_ORDERS;
+    const current = (truncated ? currentRows.slice(0, MAX_INSIGHT_ORDERS) : currentRows).map((row) =>
+      this.toAnalyticsOrder(row)
+    );
+    const catalog = await this.catalogLookupFor(tenant.tenantId, current);
+    const previousSpendUsd =
+      periodDays > 0
+        ? computePurchaseInsights(
+            previousRows.map((row) => this.toAnalyticsOrder(row)),
+            {},
+            { tenantName: tenant.tenantName, periodDays }
+          ).kpis.spendUsd
+        : null;
+
+    return computePurchaseInsights(current, catalog, {
+      tenantName: tenant.tenantName,
+      periodDays,
+      truncated,
+      previousSpendUsd,
+      catalogStats,
+    });
+  }
+
+  private parseInsightDays(raw?: string) {
+    if (raw == null || raw === "") return 90;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) {
+      throw new BadRequestException("El período tiene que ser 0 (todo) o un número de días");
+    }
+    return Math.min(3650, Math.round(n));
+  }
+
+  private toAnalyticsOrder(row: {
+    id: string;
+    provider: string;
+    status: string;
+    channel: string;
+    items: Prisma.JsonValue;
+    createdAt: Date;
+    total: Prisma.Decimal | null;
+  }) {
+    return {
+      id: row.id,
+      provider: row.provider,
+      status: row.status,
+      channel: row.channel,
+      items: row.items,
+      createdAt: row.createdAt,
+      total: row.total == null ? null : Number(row.total),
+    };
+  }
+
+  private async catalogLookupFor(
+    tenantId: string,
+    orders: {
+      provider: string;
+      status: string;
+      channel?: string | null;
+      items: unknown;
+      id: string;
+      createdAt: Date | string;
+    }[]
+  ): Promise<Record<string, CatalogEntry>> {
+    const byProvider = new Map<string, Set<string>>();
+    for (const order of orders) {
+      for (const line of extractOrderLines(order)) {
+        const set = byProvider.get(line.provider) ?? new Set<string>();
+        set.add(line.sku);
+        byProvider.set(line.provider, set);
+      }
+    }
+
+    const out: Record<string, CatalogEntry> = {};
+    for (const [provider, skus] of byProvider) {
+      const ids = [...skus].slice(0, 1000);
+      if (ids.length === 0) continue;
+      const offers = await this.prisma.tenantProductOffer.findMany({
+        where: { tenantId, provider, externalId: { in: ids } },
+        select: {
+          provider: true,
+          externalId: true,
+          price: true,
+          finalPrice: true,
+          stock: true,
+          product: {
+            select: { brand: true, category: true, subcategory: true, name: true, imageUrl: true },
+          },
+        },
+      });
+      for (const offer of offers) {
+        const price = offer.finalPrice ?? offer.price;
+        out[catalogKey(offer.provider, offer.externalId)] = {
+          brand: offer.product.brand,
+          category: offer.product.category,
+          subcategory: offer.product.subcategory,
+          name: offer.product.name,
+          imageUrl: offer.product.imageUrl,
+          currentPrice: price == null ? null : Number(price),
+          stock: offer.stock,
+        };
+      }
+    }
+    return out;
+  }
+
+  private async catalogStatsFor(tenantId: string): Promise<CatalogStats> {
+    const [all, inStock] = await Promise.all([
+      this.prisma.tenantProductOffer.groupBy({
+        by: ["provider"],
+        where: { tenantId, active: true },
+        _count: { _all: true },
+        _max: { syncedAt: true },
+      }),
+      this.prisma.tenantProductOffer.groupBy({
+        by: ["provider"],
+        where: { tenantId, active: true, stock: { gt: 0 } },
+        _count: { _all: true },
+      }),
+    ]);
+    const inStockMap = new Map(inStock.map((row) => [row.provider, row._count._all]));
+    const byProvider = all.map((row) => ({
+      provider: row.provider,
+      skus: row._count._all,
+      inStock: inStockMap.get(row.provider) ?? 0,
+      lastSyncAt: row._max.syncedAt?.toISOString() ?? null,
+    }));
+    return {
+      skus: byProvider.reduce((sum, row) => sum + row.skus, 0),
+      inStock: byProvider.reduce((sum, row) => sum + row.inStock, 0),
+      lastSyncAt: byProvider.reduce<string | null>((latest, row) => {
+        if (!row.lastSyncAt) return latest;
+        if (!latest || row.lastSyncAt > latest) return row.lastSyncAt;
+        return latest;
+      }, null),
+      byProvider,
+    };
   }
 
   private async assertOfflineAllowed(tenantId: string, provider: Provider) {
