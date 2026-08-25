@@ -102,12 +102,12 @@ export default function ElitAccountPanel() {
   const section = history.section as SectionId;
   const rowsForSection =
     section === "cta"
-      ? account?.movements ?? null
+      ? (account ? account.movements ?? [] : null)
       : section === "payments"
-        ? account?.payments ?? null
+        ? (account ? account.payments ?? [] : null)
         : section === "nodo"
           ? drafts
-          : account?.orders ?? null;
+          : (account ? account.orders ?? [] : null);
 
   const getDate =
     section === "cta"
