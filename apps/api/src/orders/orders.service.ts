@@ -16,6 +16,7 @@ import type { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offlin
 import type { RenameOpsAliasDto, SplitOpsAliasDto, UnifyOpsAliasDto } from "./dto/ops-alias.dto";
 import {
   isOfflineChannel,
+  isOrderItemEditable,
   normalizeOfflineItems,
   OFFLINE_ORDER_STATUS,
   ORDER_CHANNEL_OFFLINE,
@@ -129,8 +130,10 @@ export class OrdersService {
   async updateOffline(tenant: TenantContext, id: string, dto: UpdateOfflineOrderDto) {
     this.approval.assertCanOrder(tenant);
     const order = await this.approval.getOwn(tenant, id);
-    if (!isOfflineChannel(order.channel)) {
-      throw new BadRequestException("Solo se pueden editar los pedidos offline");
+    if (!isOrderItemEditable(order)) {
+      throw new BadRequestException(
+        "Solo se pueden editar pedidos offline o pedidos ya creados/aprobados"
+      );
     }
     if (order.approvalStatus === "REJECTED") {
       throw new BadRequestException("Ese pedido está rechazado");
@@ -141,8 +144,16 @@ export class OrdersService {
     if (items.length === 0) {
       throw new BadRequestException("El pedido tiene que tener al menos un producto");
     }
-    const prev = snapshotOfflineOrder(currentItems, order.notes, (order.draftInput as { quoteRate?: number } | null)?.quoteRate);
-    const snap = snapshotOfflineOrder(items, dto.notes !== undefined ? dto.notes : prev.notes, prev.quoteRate);
+    const prev = snapshotOfflineOrder(
+      currentItems,
+      order.notes,
+      (order.draftInput as { quoteRate?: number } | null)?.quoteRate
+    );
+    const snap = snapshotOfflineOrder(
+      items,
+      dto.notes !== undefined ? dto.notes : prev.notes,
+      prev.quoteRate
+    );
 
     const row = await this.prisma.providerOrder.update({
       where: { id: order.id },
@@ -152,7 +163,11 @@ export class OrdersService {
         impuestos: new Prisma.Decimal(snap.internosUsd),
         total: new Prisma.Decimal(snap.totalUsd),
         items: snap.items as unknown as Prisma.InputJsonValue,
-        draftInput: snap as unknown as Prisma.InputJsonValue,
+        draftInput: {
+          ...((order.draftInput as object) ?? {}),
+          ...snap,
+          adjustedAt: new Date().toISOString(),
+        } as unknown as Prisma.InputJsonValue,
       },
       include: {
         createdBy: { select: { id: true, username: true } },

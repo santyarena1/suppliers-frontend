@@ -10,6 +10,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
+import { isOrderItemEditable } from "./offline-order";
 
 /** Lo que devuelve el checkout cuando el pedido queda esperando una firma. */
 export interface HeldOrder {
@@ -201,7 +202,7 @@ export class OrderApprovalService {
       rejectionReason: row.rejectionReason,
       items: Array.isArray(row.items) ? row.items : [],
       channel: row.channel === "OFFLINE" ? "OFFLINE" : "ONLINE",
-      editable: row.channel === "OFFLINE" && row.approvalStatus !== "REJECTED",
+      editable: isOrderItemEditable(row),
       createdBy: row.createdBy?.username ?? null,
       approvedBy: row.approvedBy?.username ?? null,
       approvalDecidedAt: row.approvalDecidedAt?.toISOString() ?? null,
