@@ -77,6 +77,16 @@ export type ExtractedLine = {
   spendUsd: number;
 };
 
+export type RankSliceMonth = {
+  month: string;
+  label: string;
+  spendUsd: number;
+  orders: number;
+  units: number;
+  online: number;
+  offline: number;
+};
+
 export type RankRow = {
   key: string;
   label: string;
@@ -85,6 +95,20 @@ export type RankRow = {
   orders: number;
   share: number;
   lastBoughtAt: string | null;
+  avgTicketUsd: number;
+  previousSpendUsd: number | null;
+  spendDeltaPercent: number | null;
+  onlineSpendUsd: number;
+  offlineSpendUsd: number;
+  byMonth: RankSliceMonth[];
+};
+
+export type MonthDayRow = {
+  day: number;
+  label: string;
+  spendUsd: number;
+  orders: number;
+  units: number;
 };
 
 export type ProductRow = {
@@ -158,6 +182,7 @@ export type PurchaseInsights = {
   };
   channelMix: { channel: PurchaseChannel; spendUsd: number; orders: number; share: number }[];
   byMonth: MonthRow[];
+  byMonthDay: MonthDayRow[];
   byWeekday: { weekday: number; label: string; spendUsd: number; orders: number }[];
   byProvider: (RankRow & { provider: string; catalogSkus: number; catalogInStock: number })[];
   byBrand: RankRow[];
@@ -268,26 +293,64 @@ export function extractOrderLines(order: OrderForAnalytics): ExtractedLine[] {
   return lines;
 }
 
+function dayOfMonth(iso: string) {
+  const n = Number(arParts(iso, { year: "numeric", month: "2-digit", day: "2-digit" }).slice(8, 10));
+  return Number.isFinite(n) && n >= 1 && n <= 31 ? n : 0;
+}
+
+function spendDelta(current: number, previous: number | null | undefined): number | null {
+  if (previous == null) return null;
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return round1(((current - previous) / previous) * 100);
+}
+
+type RankAcc = {
+  spend: number;
+  units: number;
+  orders: Set<string>;
+  last: string | null;
+  label: string;
+  online: number;
+  offline: number;
+  months: Map<string, { spend: number; units: number; orders: Set<string>; online: number; offline: number }>;
+};
+
 function topShare(sortedSpend: number[], total: number, n: number) {
   const part = sortedSpend.slice(0, n).reduce((s, v) => s + v, 0);
   return shareOf(part, total);
 }
 
-function toRank(
-  map: Map<string, { spend: number; units: number; orders: Set<string>; last: string | null; label: string }>,
-  totalSpend: number,
-  limit: number
-): RankRow[] {
+function toRank(map: Map<string, RankAcc>, totalSpend: number, limit: number, previous?: Record<string, number>): RankRow[] {
   return [...map.entries()]
-    .map(([key, v]) => ({
-      key,
-      label: v.label,
-      spendUsd: round2(v.spend),
-      units: v.units,
-      orders: v.orders.size,
-      share: shareOf(v.spend, totalSpend),
-      lastBoughtAt: v.last,
-    }))
+    .map(([key, v]) => {
+      const prev = previous?.[key];
+      const previousSpendUsd = prev == null ? null : round2(prev);
+      return {
+        key,
+        label: v.label,
+        spendUsd: round2(v.spend),
+        units: v.units,
+        orders: v.orders.size,
+        share: shareOf(v.spend, totalSpend),
+        lastBoughtAt: v.last,
+        avgTicketUsd: v.orders.size ? round2(v.spend / v.orders.size) : 0,
+        previousSpendUsd,
+        spendDeltaPercent: spendDelta(v.spend, previousSpendUsd),
+        onlineSpendUsd: round2(v.online),
+        offlineSpendUsd: round2(v.offline),
+        byMonth: [...v.months.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([month, row]) => ({
+            month,
+            label: monthLabel(month),
+            spendUsd: round2(row.spend),
+            orders: row.orders.size,
+            units: row.units,
+            online: round2(row.online),
+            offline: round2(row.offline),
+          })),
+      };
+    })
     .sort((a, b) => b.spendUsd - a.spendUsd || b.units - a.units)
     .slice(0, limit);
 }
@@ -297,21 +360,38 @@ function bumpLast(current: string | null, next: string) {
   return next > current ? next : current;
 }
 
-function accRank(
-  map: Map<string, { spend: number; units: number; orders: Set<string>; last: string | null; label: string }>,
-  key: string,
-  label: string,
-  line: ExtractedLine
-) {
+function accRank(map: Map<string, RankAcc>, key: string, label: string, line: ExtractedLine) {
   let row = map.get(key);
   if (!row) {
-    row = { spend: 0, units: 0, orders: new Set(), last: null, label };
+    row = {
+      spend: 0,
+      units: 0,
+      orders: new Set(),
+      last: null,
+      label,
+      online: 0,
+      offline: 0,
+      months: new Map(),
+    };
     map.set(key, row);
   }
   row.spend += line.spendUsd;
   row.units += line.qty;
   row.orders.add(line.orderId);
   row.last = bumpLast(row.last, line.createdAt);
+  if (line.channel === "OFFLINE") row.offline += line.spendUsd;
+  else row.online += line.spendUsd;
+  const mk = monthKey(line.createdAt);
+  let month = row.months.get(mk);
+  if (!month) {
+    month = { spend: 0, units: 0, orders: new Set(), online: 0, offline: 0 };
+    row.months.set(mk, month);
+  }
+  month.spend += line.spendUsd;
+  month.units += line.qty;
+  month.orders.add(line.orderId);
+  if (line.channel === "OFFLINE") month.offline += line.spendUsd;
+  else month.online += line.spendUsd;
 }
 
 export function computePurchaseInsights(
@@ -322,6 +402,11 @@ export function computePurchaseInsights(
     periodDays: number;
     truncated?: boolean;
     previousSpendUsd?: number | null;
+    previousSpendBy?: {
+      providers?: Record<string, number>;
+      brands?: Record<string, number>;
+      categories?: Record<string, number>;
+    };
     catalogStats?: CatalogStats;
     generatedAt?: Date;
     opsAliases?: import("./purchase-ops-aliases").OpsAliasIndex;
@@ -375,10 +460,10 @@ export function computePurchaseInsights(
   const units = lines.reduce((s, l) => s + l.qty, 0);
   const orderCount = orders.length;
 
-  const byProviderMap = new Map<string, { spend: number; units: number; orders: Set<string>; last: string | null; label: string }>();
-  const byBrandMap = new Map<string, { spend: number; units: number; orders: Set<string>; last: string | null; label: string }>();
-  const byCategoryMap = new Map<string, { spend: number; units: number; orders: Set<string>; last: string | null; label: string }>();
-  const bySubMap = new Map<string, { spend: number; units: number; orders: Set<string>; last: string | null; label: string }>();
+  const byProviderMap = new Map<string, RankAcc>();
+  const byBrandMap = new Map<string, RankAcc>();
+  const byCategoryMap = new Map<string, RankAcc>();
+  const bySubMap = new Map<string, RankAcc>();
   const brandProviderMap = new Map<string, { brand: string; provider: string; spend: number; units: number }>();
   const productMap = new Map<
     string,
@@ -400,6 +485,7 @@ export function computePurchaseInsights(
     }
   >();
   const monthMap = new Map<string, MonthRow>();
+  const monthDayMap = new Map<number, { spend: number; units: number; orders: Set<string> }>();
   const weekdayMap = new Map<number, { spend: number; orders: Set<string> }>();
   const channelMap = new Map<PurchaseChannel, { spend: number; orders: Set<string> }>();
   const skuOrders = new Map<string, Set<string>>();
@@ -467,6 +553,14 @@ export function computePurchaseInsights(
     w.orders.add(line.orderId);
     weekdayMap.set(wd, w);
 
+    const day = dayOfMonth(line.createdAt);
+    if (day) {
+      const md = monthDayMap.get(day) ?? { spend: 0, units: 0, orders: new Set() };
+      md.spend += line.spendUsd;
+      md.units += line.qty;
+      monthDayMap.set(day, md);
+    }
+
     const ch = channelMap.get(line.channel) ?? { spend: 0, orders: new Set() };
     ch.spend += line.spendUsd;
     ch.orders.add(line.orderId);
@@ -477,7 +571,7 @@ export function computePurchaseInsights(
     skuOrders.set(pKey, seen);
   }
 
-  for (const bucket of orderSpend.values()) {
+  for (const [orderId, bucket] of orderSpend.entries()) {
     const mk = monthKey(bucket.createdAt);
     const month = monthMap.get(mk);
     if (month) month.orders += 1;
@@ -492,14 +586,20 @@ export function computePurchaseInsights(
         offline: bucket.channel === "OFFLINE" ? round2(bucket.spend) : 0,
       });
     }
+    const day = dayOfMonth(bucket.createdAt);
+    if (day) {
+      const md = monthDayMap.get(day) ?? { spend: 0, units: 0, orders: new Set() };
+      md.orders.add(orderId);
+      monthDayMap.set(day, md);
+    }
   }
 
   const ops = computeOpsInsights(orders, opts.opsAliases);
   const uniqueSkus = productMap.size;
   const repeatSkus = [...skuOrders.values()].filter((s) => s.size > 1).length;
 
-  const byBrand = toRank(byBrandMap, spendUsd, MAX_RANK_ROWS);
-  const byProviderRank = toRank(byProviderMap, spendUsd, MAX_RANK_ROWS);
+  const byBrand = toRank(byBrandMap, spendUsd, MAX_RANK_ROWS, opts.previousSpendBy?.brands);
+  const byProviderRank = toRank(byProviderMap, spendUsd, MAX_RANK_ROWS, opts.previousSpendBy?.providers);
   const brandSpendSorted = byBrand.map((r) => r.spendUsd);
   const providerSpendSorted = byProviderRank.map((r) => r.spendUsd);
 
@@ -612,6 +712,17 @@ export function computePurchaseInsights(
       })
       .filter((r) => r.orders > 0 || r.spendUsd > 0),
     byMonth: [...monthMap.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    byMonthDay: Array.from({ length: 31 }, (_, i) => {
+      const day = i + 1;
+      const row = monthDayMap.get(day) ?? { spend: 0, units: 0, orders: new Set<string>() };
+      return {
+        day,
+        label: String(day),
+        spendUsd: round2(row.spend),
+        orders: row.orders.size,
+        units: row.units,
+      };
+    }),
     byWeekday: WEEKDAYS.map((label, weekday) => {
       const row = weekdayMap.get(weekday) ?? { spend: 0, orders: new Set<string>() };
       return { weekday, label, spendUsd: round2(row.spend), orders: row.orders.size };
@@ -626,7 +737,7 @@ export function computePurchaseInsights(
       };
     }),
     byBrand,
-    byCategory: toRank(byCategoryMap, spendUsd, MAX_RANK_ROWS),
+    byCategory: toRank(byCategoryMap, spendUsd, MAX_RANK_ROWS, opts.previousSpendBy?.categories),
     bySubcategory: toRank(bySubMap, spendUsd, 40),
     brandProviders: [...brandProviderMap.values()]
       .map((r) => ({ brand: r.brand, provider: r.provider, spendUsd: round2(r.spend), units: r.units }))
