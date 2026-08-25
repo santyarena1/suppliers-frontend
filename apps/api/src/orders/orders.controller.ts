@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -30,6 +30,12 @@ export class OrdersController {
       needsApproval: this.approval.needsApproval(tenant),
       orders: await this.orders.pending(tenant),
     };
+  }
+
+  /** Compras del comercio de la sesión. Nunca cruza con otro local. */
+  @Get("insights")
+  insights(@CurrentTenant() tenant: TenantContext, @Query("days") days?: string) {
+    return this.orders.insights(tenant, days);
   }
 
   @Post("offline")

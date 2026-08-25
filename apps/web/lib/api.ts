@@ -315,6 +315,93 @@ export interface TenantOrder {
   createdAt: string;
 }
 
+export type PurchaseChannel = "ONLINE" | "OFFLINE";
+
+export interface PurchaseRankRow {
+  key: string;
+  label: string;
+  spendUsd: number;
+  units: number;
+  orders: number;
+  share: number;
+  lastBoughtAt: string | null;
+}
+
+export interface PurchaseProductRow {
+  sku: string;
+  name: string;
+  brand: string;
+  category: string;
+  subcategory: string;
+  provider: string;
+  providerName: string;
+  qty: number;
+  spendUsd: number;
+  orders: number;
+  lastPaidUsd: number;
+  currentUsd: number | null;
+  deltaPercent: number | null;
+  stock: number | null;
+  imageUrl: string | null;
+  lastBoughtAt: string;
+}
+
+export interface PurchaseInsights {
+  tenantName: string;
+  periodDays: number;
+  generatedAt: string;
+  truncated: boolean;
+  kpis: {
+    spendUsd: number;
+    orderTotalUsd: number;
+    orders: number;
+    units: number;
+    avgTicketUsd: number;
+    uniqueSkus: number;
+    uniqueBrands: number;
+    uniqueCategories: number;
+    providersUsed: number;
+    repeatSkuShare: number;
+    avgUnitsPerOrder: number;
+    catalogSkus: number;
+    catalogInStock: number;
+    lastSyncAt: string | null;
+    previousSpendUsd: number | null;
+    spendDeltaPercent: number | null;
+  };
+  concentration: {
+    providers: { top1: number; top5: number; top10: number };
+    brands: { top1: number; top5: number; top10: number };
+  };
+  channelMix: { channel: PurchaseChannel; spendUsd: number; orders: number; share: number }[];
+  byMonth: {
+    month: string;
+    label: string;
+    spendUsd: number;
+    orders: number;
+    units: number;
+    online: number;
+    offline: number;
+  }[];
+  byWeekday: { weekday: number; label: string; spendUsd: number; orders: number }[];
+  byProvider: (PurchaseRankRow & { provider: string; catalogSkus: number; catalogInStock: number })[];
+  byBrand: PurchaseRankRow[];
+  byCategory: PurchaseRankRow[];
+  bySubcategory: PurchaseRankRow[];
+  brandProviders: { brand: string; provider: string; spendUsd: number; units: number }[];
+  topProducts: PurchaseProductRow[];
+  recentOrders: {
+    id: string;
+    provider: string;
+    providerName: string;
+    channel: PurchaseChannel;
+    createdAt: string;
+    spendUsd: number;
+    units: number;
+    skus: number;
+  }[];
+}
+
 export interface PendingApprovals {
   /** Quien mira puede firmar los pedidos que armaron otros. */
   canApprove: boolean;
@@ -326,6 +413,7 @@ export interface PendingApprovals {
 export const ordersApi = {
   list: () => api.get<TenantOrder[]>("/orders"),
   pending: () => api.get<PendingApprovals>("/orders/pending-approval"),
+  insights: (days = 90) => api.get<PurchaseInsights>("/orders/insights", { params: { days } }),
   createOffline: (orders: {
     provider: Provider | string;
     notes?: string;
