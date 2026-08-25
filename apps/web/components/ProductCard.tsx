@@ -58,6 +58,12 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
             />
           </span>
 
+          {product.priceDropPercent != null && product.priceDropPercent > 0 && (
+            <span className="absolute bottom-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md bg-emerald-600 text-white border border-emerald-400/40">
+              −{product.priceDropPercent % 1 === 0 ? product.priceDropPercent : product.priceDropPercent.toFixed(1)}%
+            </span>
+          )}
+
           <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md ${
             withIva
               ? "bg-brand-600 text-white border border-brand-400/40"
@@ -84,8 +90,15 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
 
         <div className="flex items-end justify-between gap-2 mt-auto pt-2.5 border-t product-card-divider">
           <div className="flex flex-col min-w-0">
-            <div className="flex items-baseline gap-1.5">
+            <div className="flex items-baseline gap-1.5 flex-wrap">
               <span className="product-card-price text-lg font-bold tabular-nums leading-none">{primary}</span>
+              {product.priceDropPercent != null && product.priceDropPercent > 0 && (product.previousFinalPrice ?? product.previousPrice) != null && (
+                <span className="text-[11px] text-surface-500 line-through tabular-nums">
+                  {currency === "USD"
+                    ? formatUSD(Number(product.previousFinalPrice ?? product.previousPrice) || 0)
+                    : formatARS(convert(Number(product.previousFinalPrice ?? product.previousPrice) || 0).amount)}
+                </span>
+              )}
             </div>
             {secondary && (
               <span className="product-card-meta text-[11px] tabular-nums mt-1">{secondary}</span>

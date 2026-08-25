@@ -535,20 +535,185 @@ export class ProvidersService {
     return rows.map((r) => ({ category: r.category, count: Number(r.count) }));
   }
 
-  /** Muestra de productos con stock entre proveedores visibles, para destacados de la landing. */
+  /** Muestra mixta para la landing: productos con stock de todos los proveedores + bajadas de precio. */
   async getFeatured(tenantId: string, take: number) {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
-    const [offers, rules] = await Promise.all([
-      this.prisma.tenantProductOffer.findMany({
-        where: { tenantId, active: true, stock: { gt: 0 }, provider: { in: providers } },
-        include: { product: true },
-        orderBy: { syncedAt: "desc" },
-        take: Math.min(Math.max(take, 1), 60),
-      }),
-      this.rulesByProvider(tenantId),
-    ]);
-    return offers.map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES));
+    const limit = Math.min(Math.max(take, 1), 60);
+    const rules = await this.rulesByProvider(tenantId);
+
+    const priceDropSlots = Math.max(4, Math.ceil(limit * 0.4));
+    const drops = await this.findRecentPriceDrops(tenantId, providers, priceDropSlots);
+
+    const dropKeys = new Set(drops.map((d) => `${d.provider}::${d.externalId}`));
+    const remaining = Math.max(limit - drops.length, 0);
+
+    const stockOffers = remaining > 0
+      ? await this.sampleOffersAcrossProviders(tenantId, providers, remaining, dropKeys)
+      : [];
+
+    const dropViews = drops.map((d) => {
+      const view = toProductView(d.offer.product, d.offer, rules.get(d.offer.provider) ?? NO_RULES);
+      const markup = rules.get(d.offer.provider)?.markupPercent ?? 0;
+      const prevPrice = withMarkup(d.previousPrice, markup);
+      const prevFinal = withMarkup(d.previousFinalPrice, markup);
+      const current = view.finalPrice ?? view.price;
+      const previous = prevFinal ?? prevPrice;
+      const priceDropPercent =
+        current != null && previous != null && previous > 0 && current < previous
+          ? Math.round(((previous - current) / previous) * 1000) / 10
+          : null;
+      return {
+        ...view,
+        previousPrice: prevPrice,
+        previousFinalPrice: prevFinal,
+        priceDropPercent,
+      };
+    });
+
+    const stockViews = stockOffers.map((offer) =>
+      toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES),
+    );
+
+    // Bajadas primero; después el resto mezclado por proveedor.
+    return [...dropViews, ...stockViews].slice(0, limit);
+  }
+
+  /**
+   * Última baja real por producto (historial de sync): precio actual < punto anterior.
+   * Solo ofertas activas con stock.
+   */
+  private async findRecentPriceDrops(tenantId: string, providers: string[], take: number) {
+    if (take <= 0 || providers.length === 0) return [];
+
+    type DropRow = {
+      provider: string;
+      externalId: string;
+      previousPrice: unknown;
+      previousFinalPrice: unknown;
+    };
+
+    const rows = await this.prisma.$queryRaw<DropRow[]>`
+      WITH ranked AS (
+        SELECT
+          h.provider,
+          h."externalId",
+          h.price,
+          h."finalPrice",
+          h."capturedAt",
+          LAG(h.price) OVER (
+            PARTITION BY h.provider, h."externalId"
+            ORDER BY h."capturedAt" ASC
+          ) AS prev_price,
+          LAG(h."finalPrice") OVER (
+            PARTITION BY h.provider, h."externalId"
+            ORDER BY h."capturedAt" ASC
+          ) AS prev_final,
+          ROW_NUMBER() OVER (
+            PARTITION BY h.provider, h."externalId"
+            ORDER BY h."capturedAt" DESC
+          ) AS rn
+        FROM "ProductPriceHistory" h
+        WHERE h."tenantId" = ${tenantId}
+          AND h.provider = ANY(${providers}::text[])
+      )
+      SELECT
+        r.provider,
+        r."externalId",
+        r.prev_price AS "previousPrice",
+        r.prev_final AS "previousFinalPrice"
+      FROM ranked r
+      INNER JOIN "TenantProductOffer" o
+        ON o."tenantId" = ${tenantId}
+        AND o.provider = r.provider
+        AND o."externalId" = r."externalId"
+        AND o.active
+        AND o.stock > 0
+      WHERE r.rn = 1
+        AND (
+          (r.prev_final IS NOT NULL AND r."finalPrice" IS NOT NULL AND r."finalPrice" < r.prev_final)
+          OR (
+            r.prev_final IS NULL AND r.prev_price IS NOT NULL AND r.price IS NOT NULL
+            AND r.price < r.prev_price
+          )
+        )
+      ORDER BY r."capturedAt" DESC
+      LIMIT ${take}
+    `;
+
+    if (rows.length === 0) return [];
+
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: {
+        tenantId,
+        active: true,
+        OR: rows.map((r) => ({ provider: r.provider, externalId: r.externalId })),
+      },
+      include: { product: true },
+    });
+
+    const byKey = new Map(offers.map((o) => [`${o.provider}::${o.externalId}`, o] as const));
+
+    return rows.flatMap((r) => {
+      const offer = byKey.get(`${r.provider}::${r.externalId}`);
+      if (!offer) return [];
+      return [{
+        provider: r.provider,
+        externalId: r.externalId,
+        previousPrice: numberOrNull(r.previousPrice),
+        previousFinalPrice: numberOrNull(r.previousFinalPrice),
+        offer,
+      }];
+    });
+  }
+
+  /** Reparto equitativo entre proveedores (evita que un sync reciente tape al resto). */
+  private async sampleOffersAcrossProviders(
+    tenantId: string,
+    providers: string[],
+    take: number,
+    excludeKeys: Set<string>,
+  ) {
+    if (take <= 0 || providers.length === 0) return [];
+    const perProvider = Math.max(2, Math.ceil(take / providers.length) + 1);
+
+    const batches = await Promise.all(
+      providers.map((provider) =>
+        this.prisma.tenantProductOffer.findMany({
+          where: { tenantId, provider, active: true, stock: { gt: 0 } },
+          include: { product: true },
+          orderBy: [{ syncedAt: "desc" }, { product: { name: "asc" } }],
+          take: perProvider * 2,
+        }),
+      ),
+    );
+
+    type Offer = (typeof batches)[number][number];
+    const queues = batches.map((batch) => {
+      const withImage = batch.filter((o) => !!o.product.imageUrl?.trim());
+      const without = batch.filter((o) => !o.product.imageUrl?.trim());
+      return [...withImage, ...without];
+    });
+
+    const picked: Offer[] = [];
+    const seen = new Set(excludeKeys);
+    let progressed = true;
+    while (picked.length < take && progressed) {
+      progressed = false;
+      for (const queue of queues) {
+        if (picked.length >= take) break;
+        while (queue.length > 0) {
+          const offer = queue.shift()!;
+          const key = `${offer.provider}::${offer.externalId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          picked.push(offer);
+          progressed = true;
+          break;
+        }
+      }
+    }
+    return picked;
   }
 
   /** Productos de una categoría, cruzando todos los proveedores visibles — clic en la grilla de categorías de la landing. */
