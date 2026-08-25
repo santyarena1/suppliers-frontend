@@ -18,8 +18,10 @@ import {
 import type { ProductDTO, RetailSearchHit } from "@/lib/api";
 import { formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
+import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { usePurchasePolicies } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
+import { displayAmountFromPricing } from "@/lib/display-price";
 import {
   entryKey,
   loadCompareEntries,
@@ -36,7 +38,8 @@ export default function ComparadorPage() {
   const [hydrated, setHydrated] = useState(false);
   const [retailFor, setRetailFor] = useState<CompareProviderEntry | null>(null);
   const [flash, setFlash] = useState("");
-  const { withIva, currency, convert } = usePrefs();
+  const { withIva, withIibb, currency, convert } = usePrefs();
+  const iibbEpoch = useIibbRatesEpoch();
   const policies = usePurchasePolicies();
 
   useEffect(() => {
@@ -131,14 +134,19 @@ export default function ComparadorPage() {
   );
 
   const providerCosts = useMemo(() => {
+    void iibbEpoch;
     return entries
       .filter((e): e is CompareProviderEntry => e.kind === "provider")
       .map((e) => {
         const pricing = purchaseLinePricing(e.product, policies[e.product.provider], e.mode);
-        const usd = withIva ? pricing.unitGross : pricing.unitNet;
+        const usd = displayAmountFromPricing(pricing, {
+          withIva,
+          withIibb: withIibb && pricing.mode !== "offline",
+          provider: e.product.provider,
+        }).unitDisplayUsd;
         return { id: e.id, usd };
       });
-  }, [entries, policies, withIva]);
+  }, [entries, policies, withIva, withIibb, iibbEpoch]);
 
   const cheapestProviderId = useMemo(() => {
     if (providerCosts.length < 2) return null;

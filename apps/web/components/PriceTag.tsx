@@ -3,7 +3,7 @@
 import { ProductDTO } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
 import { formatARS, formatUSD } from "@/lib/format";
-import { linePricing, TaxableProduct } from "@/lib/tax";
+import { linePricing, TaxableProduct, formatAlicuota } from "@/lib/tax";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import { displayAmountFromPricing } from "@/lib/display-price";
@@ -67,7 +67,7 @@ export default function PriceTag({
         )}
         {withIva && includeIibb && shown.iibbIncluded && (
           <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">
-            +IIBB
+            +IIBB{shown.iibbPercent != null ? ` ${formatAlicuota(shown.iibbPercent)}` : ""}
           </span>
         )}
       </div>

@@ -348,7 +348,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) &&
                         knownIibbPct == null && (
                           <p className="text-[10px] text-surface-600 leading-snug">
-                            IIBB no disponible para este distribuidor hasta cotizar en el carrito.
+                            No hay alícuota de percepción para este distribuidor. Cargala en Configuración, o cotizá en el carrito si el portal la informa.
                           </p>
                         )}
                       {visibleTaxLines.every((l) => l.unitAmount <= 0.0001) &&

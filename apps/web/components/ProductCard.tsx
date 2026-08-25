@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
-import { linePricing } from "@/lib/tax";
+import { linePricing, formatAlicuota } from "@/lib/tax";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
@@ -182,7 +182,9 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
               <p className="product-card-meta text-[10px] tabular-nums leading-none pt-0.5">
                 Base {formatUSD(listed.net)}
                 {withIva ? " · s/imp" : ""}
-                {shown.iibbIncluded && shown.estimatedIibb ? " · IIBB est." : ""}
+                {shown.iibbIncluded
+                  ? ` · IIBB${shown.estimatedIibb ? " est." : ""}${shown.iibbPercent != null ? ` ${formatAlicuota(shown.iibbPercent)}` : ""}`
+                  : ""}
               </p>
             )}
           </div>

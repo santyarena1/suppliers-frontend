@@ -180,7 +180,13 @@ export default function AirCheckoutPanel({
       <p className="text-[11px] text-surface-500">
         Air no cobra desde Nodo: el canasto queda para que el vendedor lo cargue.
         {warm.status === "ready" && warm.data?.preview.total != null && (
-          <> · Total {formatUSD(warm.data.preview.total)}</>
+          <>
+            {" "}
+            · Total {formatUSD(warm.data.preview.total)}
+            {(warm.data.preview.perceptions ?? 0) > 0.0005 && (
+              <> · Percep. {formatUSD(warm.data.preview.perceptions ?? 0)}</>
+            )}
+          </>
         )}
       </p>
       {(error || jobError) && !confirmOpen && <CheckoutError>{error || jobError}</CheckoutError>}

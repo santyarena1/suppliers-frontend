@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { AirPortalClient } from "./air-portal-client";
-import { AirOrderService } from "./air-order.service";
+import { AirOrderService, airPerceptionsFromCart } from "./air-order.service";
 
 function cart(over: Record<string, unknown> = {}) {
   return {
@@ -92,6 +92,19 @@ describe("AirOrderService", () => {
     expect(api.addItem).toHaveBeenCalledWith("ABC", 2, expect.any(String));
     expect(preview.items[0].code).toBe("ABC");
     expect(preview.note).toMatch(/vendedor/);
+    expect(preview.perceptions).toBe(0);
+  });
+
+  it("saca la percepción 7% de una NV real (0047-00572620)", () => {
+    expect(
+      airPerceptionsFromCart({
+        subtotal: 1360.57,
+        iva21: 142.86,
+        iva105: 0,
+        ii: 0,
+        total: 1598.67,
+      })
+    ).toBe(95.24);
   });
 
   it("send_pedido exige vendedor y rechaza dropshipping sin dirección del portal", async () => {

@@ -15,9 +15,12 @@ import {
 } from "lucide-react";
 import { formatARS, formatUSD, proxyImg } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
+import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
+import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
+import { formatAlicuota } from "@/lib/tax";
 import ProviderBadge from "@/components/ProviderBadge";
 import {
   MODE_HINT,
@@ -63,12 +66,19 @@ export function ProviderCompareColumn({
   onAddRetail: () => void;
 }) {
   const { product, mode } = entry;
-  const { currency, withIva, convert } = usePrefs();
+  const { currency, withIva, withIibb, convert } = usePrefs();
+  useIibbRatesEpoch();
   const policy = usePurchasePolicy(product.provider);
   const retailer = useIsRetailer();
   const hasIva = providerHasIvaRate(product.provider);
   const pricing = purchaseLinePricing(product, policy, mode);
-  const display = withIva ? pricing.unitGross : pricing.unitNet;
+  const includeIibb = withIibb && pricing.mode !== "offline";
+  const shown = displayAmountFromPricing(pricing, {
+    withIva,
+    withIibb: includeIibb,
+    provider: product.provider,
+  });
+  const display = shown.unitDisplayUsd;
   const [imgErr, setImgErr] = useState(false);
 
   const canOffline = retailer && hasIva && policy.acceptsOffline;
@@ -145,13 +155,20 @@ export function ProviderCompareColumn({
 
         <div>
           <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-0.5">
-            {withIva ? "Con impuestos" : "Sin impuestos"} · {MODE_LABEL[mode]}
+            {displayTaxTitle({ withIva, withIibb: includeIibb, provider: product.provider })} · {MODE_LABEL[mode]}
           </p>
           <p className="text-2xl font-bold text-white tabular-nums tracking-tight">
             {money(display, currency, convert)}
           </p>
           <p className="text-[11px] text-surface-500 tabular-nums mt-0.5">
             Neto {formatUSD(pricing.unitNet)}
+            {shown.iibbIncluded && (
+              <span className="text-amber-300/90">
+                {" · "}
+                {shown.estimatedIibb ? "IIBB est." : "IIBB"}
+                {shown.iibbPercent != null ? ` ${formatAlicuota(shown.iibbPercent)}` : ""}
+              </span>
+            )}
             {pricing.adjusted && pricing.missingIva && (
               <span className="text-amber-400"> · sin alícuota IVA</span>
             )}

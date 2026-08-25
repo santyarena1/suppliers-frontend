@@ -1092,6 +1092,7 @@ export interface AirCheckoutPreview {
   iva21: number;
   iva105: number;
   ii: number;
+  perceptions?: number;
   paymentLabel: string;
   deliveryLabel: string;
   stockOk: boolean;

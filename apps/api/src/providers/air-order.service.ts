@@ -23,7 +23,24 @@ export interface AirDraftInput extends AirCartItems {
   background?: boolean;
 }
 
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+/** Lo que queda en el total del canasto después de IVA e internos: percepción de la NV. */
+export function airPerceptionsFromCart(cart: {
+  subtotal: number;
+  total: number;
+  iva21: number;
+  iva105: number;
+  ii: number;
+}): number {
+  const leftover = cart.total - cart.subtotal - cart.iva21 - cart.iva105 - cart.ii;
+  return leftover > 0.005 ? round2(leftover) : 0;
+}
+
 function publicCart(cart: AirCart) {
+  const perceptions = airPerceptionsFromCart(cart);
   return {
     nrocompro: cart.nrocompro,
     sucursal: cart.sucursal,
@@ -43,6 +60,7 @@ function publicCart(cart: AirCart) {
     iva21: cart.iva21,
     iva105: cart.iva105,
     ii: cart.ii,
+    perceptions,
     total: cart.total,
   };
 }
