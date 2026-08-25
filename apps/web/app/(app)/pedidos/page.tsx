@@ -127,7 +127,7 @@ export default function PedidosPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-5">
           {aviso && (
             <div
               role="status"
@@ -381,8 +381,9 @@ function OrderCard({
   const rechazado = order.approvalStatus === "REJECTED";
   const offline = isOffline(order);
   const lineas = order.items.length;
+  const needsCollapse = lineas > 5;
   const [editing, setEditing] = useState(false);
-  const [expanded, setExpanded] = useState(esperando);
+  const [showAllItems, setShowAllItems] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [notes, setNotes] = useState(order.notes ?? "");
@@ -442,9 +443,11 @@ function OrderCard({
     }
   }
 
-  const totalLabel = order.total != null
-    ? order.total.toLocaleString("es-AR", { style: "currency", currency: "USD" })
-    : null;
+  const visibleItems = !needsCollapse || showAllItems
+    ? order.items
+    : order.items.slice(0, 5);
+
+  const totals = useMemo(() => sumOrderLines(order.items), [order.items]);
 
   return (
     <article
@@ -456,7 +459,8 @@ function OrderCard({
             : "border-surface-800"
       }`}
     >
-      <div className="p-4 flex flex-col gap-3">
+      <div className="p-4 sm:p-5 flex flex-col gap-4">
+        {/* Cabecera */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -471,13 +475,20 @@ function OrderCard({
                   Offline
                 </span>
               )}
+              {(order.webOrderNumber || order.orderNumber) && (
+                <span className="text-[11px] font-mono text-surface-400">
+                  {order.webOrderNumber ? `Web #${order.webOrderNumber}` : `#${order.orderNumber}`}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1.5 text-[11px] text-surface-500">
               <span>{lineas} línea{lineas === 1 ? "" : "s"}</span>
-              {totalLabel && (
+              {totals.final > 0 && (
                 <>
                   <span className="text-surface-700">·</span>
-                  <span className="tabular-nums text-surface-300 font-medium">{totalLabel}</span>
+                  <span className="tabular-nums text-surface-200 font-semibold">
+                    {formatUSD(totals.final)}
+                  </span>
                 </>
               )}
               {order.createdBy && (
@@ -493,10 +504,22 @@ function OrderCard({
           <Estado esperando={esperando} creado={creado} rechazado={rechazado} offline={offline} />
         </div>
 
-        {(order.webOrderNumber || order.orderNumber) && (
-          <p className="text-[11px] font-mono text-surface-500 bg-surface-950/60 rounded-lg px-2.5 py-1.5 inline-flex w-fit">
-            {order.webOrderNumber ? `Web #${order.webOrderNumber}` : `Orden #${order.orderNumber}`}
-          </p>
+        {/* Meta del pedido (como en carrito / checkout) */}
+        {(order.paymentLabel || order.deliveryLabel || order.notes || order.quoteRate) && !editing && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {order.paymentLabel && (
+              <MetaChip label="Pago" value={order.paymentLabel} />
+            )}
+            {order.deliveryLabel && (
+              <MetaChip label="Entrega" value={order.deliveryLabel} />
+            )}
+            {order.quoteRate != null && order.quoteRate > 0 && (
+              <MetaChip label="Cotización" value={`$${order.quoteRate.toLocaleString("es-AR")}`} />
+            )}
+            {order.notes && (
+              <MetaChip label="Notas" value={order.notes} className="sm:col-span-2 lg:col-span-1" />
+            )}
+          </div>
         )}
 
         {order.approvedBy && !esperando && (
@@ -519,7 +542,7 @@ function OrderCard({
               <div key={`${it.externalId || it.code || idx}`} className="flex items-start gap-2 rounded-lg bg-surface-950/50 p-2.5">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-surface-200 leading-snug font-medium">{it.name}</p>
-                  <div className="flex gap-3 mt-2">
+                  <div className="flex gap-3 mt-2 flex-wrap">
                     <label className="text-[10px] text-surface-500 flex items-center gap-1.5">
                       Cant.
                       <input
@@ -534,7 +557,7 @@ function OrderCard({
                       />
                     </label>
                     <label className="text-[10px] text-surface-500 flex items-center gap-1.5">
-                      USD
+                      Neto USD
                       <input
                         type="number"
                         min={0}
@@ -545,6 +568,20 @@ function OrderCard({
                           setDraft((prev) => prev.map((row, i) => i === idx ? { ...row, unitPrice } : row));
                         }}
                         className="w-24 bg-surface-800 border border-surface-700 rounded-md px-1.5 py-1 text-xs text-white tabular-nums"
+                      />
+                    </label>
+                    <label className="text-[10px] text-surface-500 flex items-center gap-1.5">
+                      IVA %
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.1"
+                        value={it.ivaPercent ?? 0}
+                        onChange={(e) => {
+                          const ivaPercent = Math.max(0, Number(e.target.value) || 0);
+                          setDraft((prev) => prev.map((row, i) => i === idx ? { ...row, ivaPercent } : row));
+                        }}
+                        className="w-16 bg-surface-800 border border-surface-700 rounded-md px-1.5 py-1 text-xs text-white tabular-nums"
                       />
                     </label>
                   </div>
@@ -568,41 +605,144 @@ function OrderCard({
             />
           </div>
         ) : order.items.length > 0 ? (
-          <div className="border-t border-surface-800 pt-2">
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="w-full flex items-center justify-between gap-2 py-1 text-[11px] text-surface-400 hover:text-surface-200"
-            >
-              <span>{expanded ? "Ocultar productos" : `Ver ${lineas} producto${lineas === 1 ? "" : "s"}`}</span>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expanded ? "" : "-rotate-90"}`} />
-            </button>
-            {expanded && (
-              <ul className="mt-1.5 space-y-1">
-                {(order.items.length > 8 && !esperando ? order.items.slice(0, 8) : order.items).map((it, i) => (
-                  <li
-                    key={`${it.externalId || it.code || i}`}
-                    className="flex items-baseline justify-between gap-3 text-[11px] rounded-md px-2 py-1.5 bg-surface-950/40"
-                  >
-                    <span className="text-surface-300 min-w-0 truncate">
-                      <span className="text-surface-500 tabular-nums mr-1.5">{it.qty ?? 1}×</span>
-                      {it.name}
-                    </span>
-                    {it.unitPrice != null && (
-                      <span className="tabular-nums text-surface-500 flex-shrink-0">{formatUSD(it.unitPrice)}</span>
-                    )}
+          <div className="border border-surface-800 rounded-xl overflow-hidden bg-surface-950/40">
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[720px]">
+                <thead>
+                  <tr className="border-b border-surface-800 text-[10px] uppercase tracking-wider text-surface-500">
+                    <th className="px-3 py-2 font-semibold">Código</th>
+                    <th className="px-3 py-2 font-semibold">Producto</th>
+                    <th className="px-3 py-2 font-semibold text-right">Cant.</th>
+                    <th className="px-3 py-2 font-semibold text-right">Neto</th>
+                    <th className="px-3 py-2 font-semibold text-right">IVA</th>
+                    <th className="px-3 py-2 font-semibold text-right">Internos</th>
+                    <th className="px-3 py-2 font-semibold text-right">Final</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleItems.map((it, i) => {
+                    const row = lineAmounts(it);
+                    const code = it.externalId || it.code || it.sku || "—";
+                    return (
+                      <tr
+                        key={`${code}-${i}`}
+                        className="border-b border-surface-800/70 last:border-0 hover:bg-surface-900/50"
+                      >
+                        <td className="px-3 py-2.5 font-mono text-[11px] text-surface-500 whitespace-nowrap">
+                          {code}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-surface-200 leading-snug max-w-[280px]">
+                          {it.name || "Producto"}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-surface-300 tabular-nums text-right">
+                          {row.qty}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <p className="text-xs text-surface-200 tabular-nums">{formatUSD(row.net)}</p>
+                          {row.qty > 1 && (
+                            <p className="text-[10px] text-surface-600 tabular-nums">{formatUSD(row.unitNet)} c/u</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <TaxPair percent={row.ivaPercent} amount={row.iva} />
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <TaxPair percent={row.internosPercent} amount={row.internos} />
+                        </td>
+                        <td className="px-3 py-2.5 text-xs font-semibold text-white tabular-nums text-right">
+                          {formatUSD(row.final)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-surface-900/80 border-t border-surface-700">
+                    <td colSpan={3} className="px-3 py-2.5 text-[11px] text-surface-500 font-medium">
+                      Totales · {lineas} línea{lineas === 1 ? "" : "s"}
+                      {needsCollapse && !showAllItems ? ` (mostrando 5)` : ""}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-surface-300 tabular-nums text-right">
+                      {formatUSD(totals.net)}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-surface-300 tabular-nums text-right">
+                      {totals.iva > 0.0005 ? formatUSD(totals.iva) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs text-surface-300 tabular-nums text-right">
+                      {totals.internos > 0.0005 ? formatUSD(totals.internos) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-sm font-bold text-white tabular-nums text-right">
+                      {formatUSD(totals.final)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {/* Mobile stacked rows */}
+            <ul className="md:hidden divide-y divide-surface-800">
+              {visibleItems.map((it, i) => {
+                const row = lineAmounts(it);
+                const code = it.externalId || it.code || it.sku || "—";
+                return (
+                  <li key={`${code}-m-${i}`} className="px-3 py-3 flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-white leading-snug">{it.name || "Producto"}</p>
+                        <p className="text-[10px] font-mono text-surface-500 mt-0.5">
+                          {code} · {row.qty}×
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-white tabular-nums flex-shrink-0">
+                        {formatUSD(row.final)}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[10px]">
+                      <div>
+                        <p className="text-surface-500 uppercase tracking-wider mb-0.5">Neto</p>
+                        <p className="text-surface-200 tabular-nums">{formatUSD(row.net)}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-500 uppercase tracking-wider mb-0.5">IVA</p>
+                        <TaxPair percent={row.ivaPercent} amount={row.iva} />
+                      </div>
+                      <div>
+                        <p className="text-surface-500 uppercase tracking-wider mb-0.5">Internos</p>
+                        <TaxPair percent={row.internosPercent} amount={row.internos} />
+                      </div>
+                    </div>
                   </li>
-                ))}
-                {order.items.length > 8 && !esperando && (
-                  <li className="text-[11px] text-surface-600 px-2 py-1">+{order.items.length - 8} más</li>
+                );
+              })}
+              <li className="px-3 py-2.5 flex items-center justify-between bg-surface-900/80 text-xs">
+                <span className="text-surface-500">Total pedido</span>
+                <span className="font-bold text-white tabular-nums">{formatUSD(totals.final)}</span>
+              </li>
+            </ul>
+
+            {needsCollapse && (
+              <button
+                type="button"
+                onClick={() => setShowAllItems((v) => !v)}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium text-surface-400 hover:text-white border-t border-surface-800 bg-surface-900/40"
+              >
+                {showAllItems ? (
+                  <>Mostrar menos <ChevronDown className="w-3.5 h-3.5 rotate-180" /></>
+                ) : (
+                  <>Ver los {lineas - 5} restantes <ChevronDown className="w-3.5 h-3.5" /></>
                 )}
-              </ul>
+              </button>
             )}
           </div>
-        ) : null}
+        ) : (
+          <p className="text-xs text-surface-500 border-t border-surface-800 pt-3">
+            Este pedido no tiene ítems cargados.
+          </p>
+        )}
 
         {/* Acciones */}
-        <div className="flex items-center gap-2 pt-1 border-t border-surface-800 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {esperando && canApprove ? (
             <>
               <button
@@ -652,7 +792,7 @@ function OrderCard({
                 order.editable && (
                   <button
                     type="button"
-                    onClick={() => { setEditing(true); setExpanded(true); }}
+                    onClick={() => setEditing(true)}
                     className="h-9 px-3 border border-surface-700 text-surface-200 hover:text-white rounded-lg text-xs inline-flex items-center gap-1.5"
                   >
                     <Pencil className="w-3.5 h-3.5" /> Editar
@@ -680,6 +820,75 @@ function OrderCard({
         </div>
       </div>
     </article>
+  );
+}
+
+type OrderLine = TenantOrder["items"][number];
+
+function lineAmounts(it: OrderLine) {
+  const qty = it.qty && it.qty > 0 ? it.qty : 1;
+  const unitNet = it.unitPrice ?? 0;
+  const net = unitNet * qty;
+  const ivaPercent = it.ivaPercent ?? 0;
+  const iva = net * (ivaPercent / 100);
+  const internosUnit = it.internosAmount ?? 0;
+  const internosFromAmt = internosUnit * qty;
+  const internosPercent = it.internosPercent ?? (unitNet > 0 && internosUnit > 0
+    ? (internosUnit / unitNet) * 100
+    : 0);
+  const internos = internosFromAmt > 0.00005
+    ? internosFromAmt
+    : net * (internosPercent / 100);
+  const final = it.lineTotal != null && it.lineTotal > 0
+    ? it.lineTotal
+    : net + iva + internos;
+  return { qty, unitNet, net, ivaPercent, iva, internosPercent, internos, final };
+}
+
+function sumOrderLines(items: OrderLine[]) {
+  return items.reduce(
+    (acc, it) => {
+      const row = lineAmounts(it);
+      acc.net += row.net;
+      acc.iva += row.iva;
+      acc.internos += row.internos;
+      acc.final += row.final;
+      return acc;
+    },
+    { net: 0, iva: 0, internos: 0, final: 0 },
+  );
+}
+
+function TaxPair({ percent, amount }: { percent: number; amount: number }) {
+  if (!(amount > 0.0005) && !(percent > 0)) {
+    return <p className="text-xs text-surface-600 tabular-nums">—</p>;
+  }
+  return (
+    <>
+      {percent > 0 && (
+        <p className="text-[10px] text-surface-500 tabular-nums leading-none mb-0.5">
+          {Number.isInteger(percent) ? percent : percent.toFixed(1)}%
+        </p>
+      )}
+      <p className="text-xs text-surface-200 tabular-nums leading-tight">
+        {amount > 0.0005 ? formatUSD(amount) : "—"}
+      </p>
+    </>
+  );
+}
+
+function MetaChip({
+  label, value, className = "",
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-lg border border-surface-800 bg-surface-950/50 px-2.5 py-2 min-w-0 ${className}`}>
+      <p className="text-[9px] uppercase tracking-wider text-surface-500 font-semibold">{label}</p>
+      <p className="text-[11px] text-surface-200 mt-0.5 leading-snug line-clamp-2">{value}</p>
+    </div>
   );
 }
 
