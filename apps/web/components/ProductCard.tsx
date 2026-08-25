@@ -1,6 +1,6 @@
 "use client";
 
-import { ProductDTO } from "@/lib/api";
+import { ProductDTO, PROVIDER_LABELS, type Provider } from "@/lib/api";
 import { Package, ImageOff, MapPin, DollarSign } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,9 +8,37 @@ import { useState } from "react";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { linePricing, taxLabel } from "@/lib/tax";
+import { useProviderDisplay } from "@/lib/providerDisplay";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
-import ProviderBadge from "./ProviderBadge";
+
+function CardProviderPill({ provider }: { provider: string }) {
+  const display = useProviderDisplay();
+  const logoUrl = display.logoUrl(provider);
+  const customColor = display.textColor(provider);
+  const name = PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  const initials = name.slice(0, 2).toUpperCase();
+
+  return (
+    <span className="absolute top-2 left-2 z-[1] inline-flex h-7 max-w-[75%] items-center gap-1.5 rounded-full bg-black/75 pl-1 pr-2.5 shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
+      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white">
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt="" className="h-full w-full object-contain p-[2px]" />
+        ) : (
+          <span className="text-[8px] font-bold leading-none text-slate-700">{initials}</span>
+        )}
+      </span>
+      <span
+        className="min-w-0 truncate text-[11px] font-semibold leading-none tracking-tight"
+        style={customColor ? { color: customColor } : { color: "rgba(255,255,255,0.95)" }}
+        title={name}
+      >
+        {name}
+      </span>
+    </span>
+  );
+}
 
 export default function ProductCard({ product }: { product: ProductDTO }) {
   const [imgErr, setImgErr] = useState(false);
@@ -39,7 +67,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
         : formatARS(convert(Number(prevRaw) || 0).amount)
       : null;
 
-  const taxText = withIva ? taxLabel(product) : "Sin imp.";
+  const taxText = withIva ? `+ ${taxLabel(product)}` : "Sin imp.";
 
   return (
     <div className="group relative rounded-2xl overflow-hidden flex flex-col product-card transition-shadow duration-300">
@@ -62,16 +90,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
             </div>
           )}
 
-          {/* Proveedor: píldora fija, logo + nombre centrados */}
-          <span className="absolute top-2 left-2 z-[1] inline-flex h-7 max-w-[72%] items-center rounded-full bg-black/72 pl-1 pr-2.5 shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
-            <ProviderBadge
-              provider={product.provider}
-              variant="inline"
-              size="sm"
-              className="!gap-1.5 min-w-0"
-              nameClassName="text-white/95 truncate"
-            />
-          </span>
+          <CardProviderPill provider={product.provider} />
 
           {dropLabel && (
             <span className="absolute top-2 right-2 z-[1] inline-flex h-7 items-center rounded-full bg-emerald-600 px-2.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-emerald-400/30">
@@ -96,14 +115,13 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
         </Link>
 
         <div className="mt-auto flex flex-col gap-2.5">
-          {/* Precio + IVA organizados en bloque */}
           <div className="flex flex-col gap-1">
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="product-card-price text-[1.2rem] font-bold tabular-nums leading-none tracking-tight">
                 {primary}
               </span>
               {prevFormatted && (
-                <span className="text-[11px] text-surface-500/90 line-through tabular-nums">
+                <span className="text-[11px] text-slate-400 line-through tabular-nums">
                   {prevFormatted}
                 </span>
               )}
@@ -113,15 +131,16 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               {secondary && (
                 <span className="product-card-meta text-[11px] tabular-nums">{secondary}</span>
               )}
+              {/* Chip neutro: visible pero sin competir con el precio (card siempre clara) */}
               <span
-                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${
                   withIva
-                    ? "bg-brand-600/12 text-brand-700 ring-1 ring-brand-600/20"
-                    : "bg-surface-800/60 text-surface-500 ring-1 ring-surface-700/80"
+                    ? "bg-slate-100 text-slate-600 ring-1 ring-slate-200/90"
+                    : "bg-slate-50 text-slate-500 ring-1 ring-slate-200/70"
                 }`}
                 title={withIva ? `Precio con ${taxLabel(product)}` : "Precio sin impuestos"}
               >
-                {withIva ? `+ ${taxText}` : taxText}
+                {taxText}
               </span>
             </div>
 
@@ -131,7 +150,6 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
             </p>
           </div>
 
-          {/* Footer: id + acciones */}
           <div className="flex items-center justify-between gap-2 pt-2 border-t product-card-divider">
             <span className="product-card-meta text-[10px] font-mono truncate min-w-0 opacity-80">
               {product.externalId ? `#${product.externalId}` : "—"}
@@ -146,7 +164,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
                   e.stopPropagation();
                   setSaleOpen(true);
                 }}
-                className="w-8 h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40 flex items-center justify-center transition-colors"
+                className="w-8 h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:border-emerald-500/40 flex items-center justify-center transition-colors"
               >
                 <DollarSign className="w-3.5 h-3.5" />
               </button>
