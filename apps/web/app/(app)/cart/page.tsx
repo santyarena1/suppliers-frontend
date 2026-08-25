@@ -15,6 +15,7 @@ import { usePrefs } from "@/lib/prefs";
 import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
 import { buildSellerMessage } from "@/lib/seller-message";
+import { offlineOrdersFromCart } from "@/lib/offline-order";
 import { proxyImg, formatUSD } from "@/lib/format";
 import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
@@ -31,10 +32,11 @@ import {
   ElitCheckoutPreview,
   InvidCheckoutPreview,
   NewBytesCartSnapshot,
+  ordersApi,
 } from "@/lib/api";
 import {
   Trash2, Minus, Plus, Download, AlertTriangle, ImageOff,
-  FileText, MessageCircle, Check, Copy, ChevronDown, History, StickyNote, ShoppingCart, Layers, ArrowRightLeft,
+  FileText, MessageCircle, Check, Copy, ChevronDown, History, StickyNote, ShoppingCart, Layers, ArrowRightLeft, Loader2,
 } from "lucide-react";
 import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
 import { SchemePicker } from "@/components/SchemePicker";
@@ -106,6 +108,7 @@ export default function CartPage() {
   const [exportOpen, setExportOpen] = useState(false);
   const [pedidosOpen, setPedidosOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmingOffline, setConfirmingOffline] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const pedidosRef = useRef<HTMLDivElement>(null);
 
@@ -347,6 +350,26 @@ export default function CartPage() {
     } catch { /* ignore */ }
   }
 
+  async function confirmOfflineOrder() {
+    const groups = offlineOrdersFromCart(viewItems, policies, currentRate?.venta);
+    if (groups.length === 0) return;
+    setConfirmingOffline(true);
+    setNotice(null);
+    try {
+      await ordersApi.createOffline(groups);
+      await copySellerMessage();
+      if (activeTab === "all") clear("offline");
+      else clearProvider(activeTab, "offline");
+      setActiveTab("all");
+      setNotice("Pedido guardado en Nodo como aprobado. El mensaje quedó copiado para el vendedor. Si cambia algo, lo editás en Pedidos.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setNotice(msg || "No se pudo guardar el pedido offline");
+    } finally {
+      setConfirmingOffline(false);
+    }
+  }
+
   async function copyForWhatsApp() {
     const txt = buildWhatsAppText(activeTab);
     try {
@@ -586,8 +609,18 @@ export default function CartPage() {
           </header>
 
           {notice && (
-            <div className="flex-shrink-0 px-5 lg:px-8 py-2.5 text-sm text-emerald-300 bg-emerald-500/10 border-b border-emerald-500/20">
+            <div className={`flex-shrink-0 px-5 lg:px-8 py-2.5 text-sm border-b ${
+              notice.startsWith("No se pudo")
+                ? "text-red-300 bg-red-500/10 border-red-500/20"
+                : "text-emerald-300 bg-emerald-500/10 border-emerald-500/20"
+            }`}>
               {notice}
+              {notice.includes("Pedidos") && (
+                <>
+                  {" "}
+                  <Link href="/pedidos" className="underline underline-offset-2 text-white">Ir a Pedidos</Link>
+                </>
+              )}
             </div>
           )}
 
@@ -795,16 +828,27 @@ export default function CartPage() {
                   {channelTab === "offline" && viewItems.length > 0 && (
                     <div className="flex flex-col gap-2">
                       <p className="text-xs text-amber-200/80">
-                        El pedido offline no se carga en el portal. Copiá el mensaje y mandáselo al vendedor.
+                        Se guarda en Nodo como pedido aprobado. No se carga en el portal: el mensaje es para el vendedor. Si después cambia, lo editás en Pedidos.
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => void copySellerMessage()}
-                        className="self-start flex items-center gap-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-100 text-sm font-medium rounded-lg px-3 py-2"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        Copiar mensaje para el vendedor
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void confirmOfflineOrder()}
+                          disabled={confirmingOffline}
+                          className="self-start flex items-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black text-sm font-semibold rounded-lg px-3 py-2"
+                        >
+                          {confirmingOffline ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          {confirmingOffline ? "Guardando…" : "Confirmar pedido"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copySellerMessage()}
+                          className="self-start flex items-center gap-2 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-100 text-sm font-medium rounded-lg px-3 py-2"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar mensaje
+                        </button>
+                      </div>
                     </div>
                   )}
                   {channelTab === "online" && viewItems.some((it) => it.schemeId) && (

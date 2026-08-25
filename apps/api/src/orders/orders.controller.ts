@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
+import { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offline-order.dto";
 import { RejectOrderDto } from "./dto/reject-order.dto";
 import { OrderApprovalService } from "./order-approval.service";
 import { OrdersService } from "./orders.service";
@@ -29,6 +30,24 @@ export class OrdersController {
       needsApproval: this.approval.needsApproval(tenant),
       orders: await this.orders.pending(tenant),
     };
+  }
+
+  @Post("offline")
+  createOffline(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: { userId: string },
+    @Body() dto: CreateOfflineOrdersDto
+  ) {
+    return this.orders.createOffline(tenant, user.userId, dto);
+  }
+
+  @Patch(":id")
+  updateOffline(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("id") id: string,
+    @Body() dto: UpdateOfflineOrderDto
+  ) {
+    return this.orders.updateOffline(tenant, id, dto);
   }
 
   @Post(":id/approve")
