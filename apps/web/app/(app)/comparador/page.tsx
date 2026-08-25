@@ -191,7 +191,7 @@ export default function ComparadorPage() {
 
   return (
     <>
-      <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950/95 backdrop-blur-sm px-4 sm:px-6 py-4">
+      <header className="relative z-30 flex-shrink-0 border-b border-surface-800 bg-surface-950/95 backdrop-blur-sm px-4 sm:px-6 py-4 overflow-visible">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-brand-600/15 border border-brand-500/25 flex items-center justify-center flex-shrink-0">
@@ -265,7 +265,7 @@ export default function ComparadorPage() {
         )}
       </header>
 
-      <div className="flex-1 overflow-x-auto overflow-y-auto">
+      <div className="relative z-0 flex-1 overflow-x-auto overflow-y-auto">
         {!hydrated ? (
           <div className="flex items-center justify-center py-24 text-surface-500 text-sm">
             Cargando…

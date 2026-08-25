@@ -100,7 +100,7 @@ export default function CompareSearch({
       </div>
 
       {hasQuery && (
-        <div className="absolute z-30 left-0 right-0 mt-2 max-h-[min(420px,55vh)] overflow-y-auto rounded-xl border border-surface-700 bg-surface-950 shadow-2xl">
+        <div className="absolute z-50 left-0 right-0 mt-2 max-h-[min(420px,55vh)] overflow-y-auto rounded-xl border border-surface-700 bg-surface-950 shadow-2xl ring-1 ring-black/40">
           {error && (
             <p className="px-4 py-3 text-sm text-amber-300">{error}</p>
           )}
@@ -121,7 +121,7 @@ export default function CompareSearch({
               const modesOpen = openModes === pid;
 
               return (
-                <li key={pid} className="hover:bg-surface-900/80 transition-colors">
+                <li key={pid} className="relative z-0 hover:bg-surface-900/80 transition-colors">
                   <div className="flex items-center gap-3 px-3 py-2.5">
                     <div className="relative w-12 h-12 rounded-lg bg-white overflow-hidden flex-shrink-0 border border-surface-800">
                       {p.imageUrl ? (
@@ -153,7 +153,7 @@ export default function CompareSearch({
                         #{p.externalId}
                       </p>
                     </div>
-                    <div className="relative flex-shrink-0">
+                    <div className="relative flex-shrink-0 z-10">
                       <button
                         type="button"
                         onClick={() => {
@@ -173,7 +173,7 @@ export default function CompareSearch({
                         {alreadyList ? "En tablero" : "Comparar"}
                       </button>
                       {modesOpen && (
-                        <div className="absolute right-0 top-full mt-1.5 w-44 rounded-lg border border-surface-700 bg-surface-900 shadow-xl z-40 overflow-hidden">
+                        <div className="absolute right-0 top-full mt-1.5 w-44 rounded-lg border border-surface-700 bg-surface-900 shadow-xl z-50 overflow-hidden">
                           {(["list", "offline", "scheme"] as PriceMode[]).map((mode) => {
                             const disabled =
                               (mode === "offline" && !canOffline) ||
