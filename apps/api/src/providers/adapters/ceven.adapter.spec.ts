@@ -30,6 +30,12 @@ describe("mapCevenItem", () => {
     expect(p.productUrl).toBe("https://www.ceven.com/94PHLJ05B");
     expect(p.imageUrl).toMatch(/foto\.jpg$/);
     expect(p.description).toBe("Lavavajilla 5 Cubiertos Philco Blanco PHLJ05B");
+    expect(p.ivaPercent).toBeUndefined();
+  });
+
+  it("copia taxrate de SuiteCommerce si vino, sin inventarlo", () => {
+    const p = mapCevenItem({ ...SAMPLE, taxrate: 21 } as typeof SAMPLE & { taxrate: number });
+    expect(p.ivaPercent).toBe(21);
   });
 
   it("deja precio undefined si no vino número", () => {

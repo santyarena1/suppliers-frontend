@@ -36,4 +36,14 @@ describe("mapDiapstoreProduct", () => {
     expect(p.price).toBe(12.5);
     expect(p.currency).toBe("ARS");
   });
+
+  it("copia tax_rate como alícuota de IVA si es número", () => {
+    const p = mapDiapstoreProduct({
+      id: "1",
+      name: "X",
+      unit_price: 100,
+      tax_rate: 21,
+    });
+    expect(p.ivaPercent).toBe(21);
+  });
 });

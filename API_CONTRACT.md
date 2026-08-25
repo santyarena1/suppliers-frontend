@@ -76,6 +76,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: La UI muestra “Precios de venta encontrados” / local (tienda). La app nunca consulta la fuente externa en vivo. Cron (timezone `America/Argentina/Buenos_Aires`): **cada 5 min de 06:00 a 20:55** un batch de tiendas más viejas (`RETAIL_INGEST_DAY_BATCH`, default 8); **cada hora de 21:00 a 05:00** un batch mayor (`RETAIL_INGEST_NIGHT_BATCH`, default 20). Admin “Sincronizar todo” hace **full en background hasta terminar**; si hay un batch del cron, lo cancela al cerrar la tienda actual y encola el full. Progreso en `RetailIngestRun` (`storesDone/storesTotal`, `currentStoreName`, `heartbeatAt`). Ingesta más rápida: páginas de 100, upserts en paralelo, sin persistir `raw` del producto, historial limitado. `priceDivisor` por local corrige centavos (Multiplo). `RETAIL_INGEST_DISABLED=true` apaga el cron.
 
+### [FEATURE] Pedido offline y compras en esquema (comercio tipo 1)
+- **Método**: GET | PUT
+- **Ruta**: `/providers/:provider/config` · los mismos campos viajan en `GET /my/providers` como `purchase`
+- **Auth**: Bearer, organización comercio (RETAILER) para usarlas en búsqueda/carrito; la config la guarda el tenant actual
+- **Body / Params**: `{ acceptsOffline?: boolean, acceptsScheme?: boolean, offlineIvaAdjustment?: "REMOVE" | "HALF" | "FLAT_10_5" | null, schemeIvaAdjustment?: "REMOVE" | "HALF" | "FLAT_10_5" | null, schemeDiscountPercent?: number | null }` además de los campos de sync ya existentes
+- **Respuesta esperada**: `ProviderConfig` con esos campos. `GET /my/providers` incluye `{ purchase: { acceptsOffline, acceptsScheme, offlineIvaAdjustment, schemeIvaAdjustment, schemeDiscountPercent } }` por proveedor
+- **Estado**: IMPLEMENTADO
+- **Notas**: Offline = compra sin facturar (antes “.com”); no se crea carrito en el portal, solo un mensaje para el vendedor. **Sin percepciones (IIBB); internos sí.** Esquema = facturado, con % extra que carga el comercio una vez por distribuidor (no aplica a ítems sueltos del carrito online); al portal los ítems van sueltos. El IVA de offline y el de esquema son independientes. Si offline está activo, `offlineIvaAdjustment` es obligatorio; si esquema está activo, `schemeIvaAdjustment` es obligatorio. Si el proveedor no informa alícuota de IVA (p. ej. Ceven), offline/esquema quedan deshabilitados: no se inventa 21%, 0% ni 10,5%. En el carrito se puede mover un ítem entre online y offline, y crear un esquema desde el carrito online.
+
 ## Pendiente (futuro)
 
 

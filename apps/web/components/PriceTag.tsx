@@ -4,6 +4,8 @@ import { ProductDTO } from "@/lib/api";
 import { usePrefs } from "@/lib/prefs";
 import { formatARS, formatUSD } from "@/lib/format";
 import { linePricing, TaxableProduct } from "@/lib/tax";
+import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
+import { usePurchasePolicy } from "@/lib/purchase";
 
 interface Props {
   product?: TaxableProduct | ProductDTO;
@@ -12,6 +14,7 @@ interface Props {
   size?: "sm" | "md" | "lg" | "xl";
   showSecondary?: boolean;
   qty?: number;
+  priceMode?: PriceMode;
 }
 
 const SIZES = {
@@ -28,9 +31,17 @@ export default function PriceTag({
   size = "md",
   showSecondary = false,
   qty = 1,
+  priceMode = "list",
 }: Props) {
   const { currency, convert, withIva } = usePrefs();
-  const pricing = linePricing(product ?? { price: usdPrice }, qty);
+  const policy = usePurchasePolicy(
+    product && typeof product === "object" && "provider" in product
+      ? String((product as { provider?: unknown }).provider ?? "")
+      : ""
+  );
+  const pricing = product
+    ? purchaseLinePricing(product, policy, priceMode, qty)
+    : { ...linePricing({ price: usdPrice }, qty), missingIva: false, adjusted: false, mode: "list" as const };
   const displayUsd = withIva ? pricing.gross : pricing.net;
   const { amount } = convert(displayUsd);
   const primary = currency === "USD" ? formatUSD(amount) : formatARS(amount);

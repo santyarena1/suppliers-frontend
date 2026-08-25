@@ -1,6 +1,14 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Provider } from "@nodo/shared";
+import { providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
+
+export type PurchasePolicyView = {
+  acceptsOffline: boolean;
+  acceptsScheme: boolean;
+  offlineIvaAdjustment: IvaAdjustment | null;
+  schemeIvaAdjustment: IvaAdjustment | null;
+  schemeDiscountPercent: number | null;
+};
 
 /** Un proveedor tal como lo ve un comercio, y por qué lo ve. */
 export interface VisibleProvider {
@@ -12,6 +20,8 @@ export interface VisibleProvider {
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
+  /** Cómo este comercio compra offline / en esquema a este distribuidor. */
+  purchase: PurchasePolicyView;
 }
 
 /**
@@ -37,6 +47,9 @@ export class TenantVisibilityService {
     // Un distribuidor no le compra a nadie: lo único que ve es su propio catálogo.
     if (propio.type !== "RETAILER") {
       if (!propio.providerKey) return [];
+      const ownConfig = await this.prisma.providerSyncConfig.findUnique({
+        where: { tenantId_provider: { tenantId, provider: propio.providerKey } },
+      });
       return [
         {
           provider: propio.providerKey as Provider,
@@ -45,11 +58,12 @@ export class TenantVisibilityService {
           advertised: false,
           accountManager: null,
           discountPercent: null,
+          purchase: purchaseFromConfig(propio.providerKey, ownConfig),
         },
       ];
     }
 
-    const [links, publicitados] = await Promise.all([
+    const [links, publicitados, configs] = await Promise.all([
       this.prisma.tenantLink.findMany({
         where: {
           clientTenantId: tenantId,
@@ -70,7 +84,19 @@ export class TenantVisibilityService {
         },
         select: { id: true, name: true, providerKey: true },
       }),
+      this.prisma.providerSyncConfig.findMany({
+        where: { tenantId },
+        select: {
+          provider: true,
+          acceptsOffline: true,
+          acceptsScheme: true,
+          offlineIvaAdjustment: true,
+          schemeIvaAdjustment: true,
+          schemeDiscountPercent: true,
+        },
+      }),
     ]);
+    const configByProvider = new Map(configs.map((c) => [c.provider, c]));
 
     const visibles = new Map<string, VisibleProvider>();
 
@@ -85,6 +111,7 @@ export class TenantVisibilityService {
           ? { name: link.accountManager.username, email: link.accountManager.email }
           : null,
         discountPercent: link.discountPercent == null ? null : Number(link.discountPercent),
+        purchase: purchaseFromConfig(key, configByProvider.get(key)),
       });
     }
 
@@ -100,6 +127,7 @@ export class TenantVisibilityService {
         advertised: true,
         accountManager: null,
         discountPercent: null,
+        purchase: purchaseFromConfig(key, null),
       });
     }
 
@@ -166,4 +194,39 @@ export class TenantVisibilityService {
     });
     return { ...visible, linked: true, advertised: false };
   }
+}
+
+const EMPTY_PURCHASE: PurchasePolicyView = {
+  acceptsOffline: false,
+  acceptsScheme: false,
+  offlineIvaAdjustment: null,
+  schemeIvaAdjustment: null,
+  schemeDiscountPercent: null,
+};
+
+function asAdj(value: unknown): IvaAdjustment | null {
+  return value === "REMOVE" || value === "HALF" || value === "FLAT_10_5" ? value : null;
+}
+
+function purchaseFromConfig(
+  provider: string,
+  config: {
+    acceptsOffline: boolean;
+    acceptsScheme: boolean;
+    offlineIvaAdjustment?: string | null;
+    schemeIvaAdjustment?: string | null;
+    ivaAdjustment?: string | null;
+    schemeDiscountPercent: unknown;
+  } | null | undefined
+): PurchasePolicyView {
+  if (!config || !providerHasIvaRate(provider)) return { ...EMPTY_PURCHASE };
+  const legacy = asAdj(config.ivaAdjustment);
+  return {
+    acceptsOffline: config.acceptsOffline,
+    acceptsScheme: config.acceptsScheme,
+    offlineIvaAdjustment: asAdj(config.offlineIvaAdjustment) ?? legacy,
+    schemeIvaAdjustment: asAdj(config.schemeIvaAdjustment) ?? legacy,
+    schemeDiscountPercent:
+      config.schemeDiscountPercent == null ? null : Number(config.schemeDiscountPercent),
+  };
 }

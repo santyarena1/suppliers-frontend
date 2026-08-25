@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import type { Provider } from "@nodo/shared";
+import { providerHasIvaRate, type Provider } from "@nodo/shared";
+import type { IvaAdjustment } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -34,12 +35,12 @@ export class ProvidersService {
     const config = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
     });
-    return config ?? this.defaultConfig(tenantId, provider);
+    return serializeSyncConfig((config ?? this.defaultConfig(tenantId, provider)));
   }
 
   private defaultConfig(tenantId: string, provider: Provider) {
     return {
-      id: null,
+      id: null as string | null,
       tenantId,
       provider,
       enabled: false,
@@ -48,8 +49,13 @@ export class ProvidersService {
       zeroStockAction: "KEEP" as const,
       priceMarkupPercent: 0,
       minStockThreshold: 0,
-      lastSyncedAt: null,
-      lastSyncError: null,
+      acceptsOffline: false,
+      acceptsScheme: false,
+      offlineIvaAdjustment: null as IvaAdjustment | null,
+      schemeIvaAdjustment: null as IvaAdjustment | null,
+      schemeDiscountPercent: null as number | null,
+      lastSyncedAt: null as Date | null,
+      lastSyncError: null as string | null,
       lastSyncCreated: 0,
       lastSyncUpdated: 0,
     };
@@ -57,11 +63,45 @@ export class ProvidersService {
 
   async updateConfig(tenantId: string, provider: Provider, dto: UpdateProviderConfigDto) {
     await this.visibility.assertLinked(tenantId, provider);
-    return this.prisma.providerSyncConfig.upsert({
+    const current = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
-      create: { tenantId, provider, ...dto },
-      update: { ...dto },
     });
+    const merged = {
+      acceptsOffline: dto.acceptsOffline ?? current?.acceptsOffline ?? false,
+      acceptsScheme: dto.acceptsScheme ?? current?.acceptsScheme ?? false,
+      offlineIvaAdjustment:
+        dto.offlineIvaAdjustment !== undefined
+          ? dto.offlineIvaAdjustment
+          : (current?.offlineIvaAdjustment ?? null),
+      schemeIvaAdjustment:
+        dto.schemeIvaAdjustment !== undefined
+          ? dto.schemeIvaAdjustment
+          : (current?.schemeIvaAdjustment ?? null),
+      schemeDiscountPercent:
+        dto.schemeDiscountPercent !== undefined
+          ? dto.schemeDiscountPercent
+          : current?.schemeDiscountPercent == null
+            ? null
+            : Number(current.schemeDiscountPercent),
+    };
+    if ((merged.acceptsOffline || merged.acceptsScheme) && !providerHasIvaRate(provider)) {
+      throw new BadRequestException(
+        "Este distribuidor no informa alícuota de IVA: no se puede configurar pedido offline ni esquema."
+      );
+    }
+    if (merged.acceptsOffline && !merged.offlineIvaAdjustment) {
+      throw new BadRequestException("Si acepta pedido offline, hay que elegir cómo tratar el IVA de offline.");
+    }
+    if (merged.acceptsScheme && !merged.schemeIvaAdjustment) {
+      throw new BadRequestException("Si acepta esquema, hay que elegir cómo tratar el IVA de esquema.");
+    }
+    const data = { ...dto, ...merged };
+    const saved = await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId, provider } },
+      create: { tenantId, provider, ...data },
+      update: data,
+    });
+    return serializeSyncConfig(saved);
   }
 
   async sync(tenantId: string, provider: Provider) {
@@ -791,4 +831,17 @@ function numberOrNull(value: unknown): number | null {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500);
+}
+
+function serializeSyncConfig<T extends object>(c: T) {
+  const row = c as T & Record<string, unknown>;
+  return {
+    ...row,
+    priceMarkupPercent: Number(row.priceMarkupPercent) || 0,
+    schemeDiscountPercent: row.schemeDiscountPercent == null ? null : Number(row.schemeDiscountPercent),
+    acceptsOffline: Boolean(row.acceptsOffline),
+    acceptsScheme: Boolean(row.acceptsScheme),
+    offlineIvaAdjustment: (row.offlineIvaAdjustment as IvaAdjustment | null | undefined) ?? null,
+    schemeIvaAdjustment: (row.schemeIvaAdjustment as IvaAdjustment | null | undefined) ?? null,
+  };
 }
