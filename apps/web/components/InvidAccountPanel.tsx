@@ -22,7 +22,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
-import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
+import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
 
 type Detail =
   | { kind: "order"; row: InvidOrder }
@@ -155,7 +155,7 @@ export default function InvidAccountPanel() {
       const filtered = rows as InvidAccountMovement[];
       const byCurrency = new Map<string, number>();
       for (const m of filtered) {
-        const n = sumAccountAmounts([m.total]);
+        const n = parseAccountAmount(m.total);
         if (n == null) continue;
         const cur = (m.currency || "ARS").toUpperCase().includes("USD") ? "USD" : "ARS";
         byCurrency.set(cur, (byCurrency.get(cur) ?? 0) + n);

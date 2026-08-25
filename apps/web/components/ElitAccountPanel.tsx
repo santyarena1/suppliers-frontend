@@ -23,7 +23,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
-import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
+import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
 
 type ElitAccount = Awaited<ReturnType<typeof elitAccountApi.account>>["data"];
 type Detail =
@@ -149,7 +149,7 @@ export default function ElitAccountPanel() {
     const orders = rows as ElitSaleNote[];
     const byCur = new Map<string, number>();
     for (const o of orders) {
-      const n = sumAccountAmounts([o.amount]);
+      const n = parseAccountAmount(o.amount);
       if (n == null) continue;
       const cur = o.currency === "ARS" ? "ARS" : "USD";
       byCur.set(cur, (byCur.get(cur) ?? 0) + n);
