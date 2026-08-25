@@ -8,8 +8,18 @@ import ProviderBadge from "@/components/ProviderBadge";
  * existe en NODO.
  */
 export default function PartnerCarousel() {
-  const { providers: mine } = useMyProviders();
+  const { providers: mine, loading } = useMyProviders();
   const partners = mine.filter((p) => p.linked);
+
+  if (loading) {
+    return (
+      <section className="mb-8 py-8 border-y border-surface-800 bg-surface-900/50 rounded-2xl">
+        <p className="text-center text-[11px] font-semibold uppercase tracking-widest text-surface-600">
+          Cargando proveedores…
+        </p>
+      </section>
+    );
+  }
 
   if (partners.length === 0) return null;
 

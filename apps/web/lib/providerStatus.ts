@@ -38,18 +38,22 @@ export function invalidateProviderStatuses() {
   inflight = null;
 }
 
-export function useProviderStatuses(): ProviderStatusMap {
+export function useProviderStatuses(): { statuses: ProviderStatusMap; loading: boolean } {
   const [statuses, setStatuses] = useState<ProviderStatusMap>(cache ?? {});
+  const [loading, setLoading] = useState(!cache);
 
   useEffect(() => {
     let alive = true;
+    if (!cache) setLoading(true);
     load().then((map) => {
-      if (alive) setStatuses(map);
+      if (!alive) return;
+      setStatuses(map);
+      setLoading(false);
     });
     return () => {
       alive = false;
     };
   }, []);
 
-  return statuses;
+  return { statuses, loading };
 }

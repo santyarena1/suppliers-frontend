@@ -10,7 +10,8 @@ import {
   invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile,
   TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders
 } from "@/lib/api";
-import { getTenant, getToken, sessionFromToken, isAdmin } from "@/lib/auth";
+import { getTenant, isAdmin } from "@/lib/auth";
+import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { SKU_PREFIX } from "@/lib/providerMeta";
@@ -140,13 +141,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
   // Vacía el catálogo de toda la organización, no solo el de quien lo pide.
   const [canPurge, setCanPurge] = useState(false);
-  const [isRetailer, setIsRetailer] = useState(false);
+  const [isRetailer, setIsRetailer] = useState(() => isRetailerSession());
 
   useEffect(() => {
     const tenant = getTenant();
     const role = tenant?.role;
     setCanPurge(isAdmin() || (!!role && TENANT_ROLES_CAN_PURGE_CATALOG.includes(role)));
-    setIsRetailer(tenant?.type === "RETAILER" || sessionFromToken(getToken() || "").tenantType === "RETAILER");
+    setIsRetailer(isRetailerSession());
   }, []);
 
   async function loadConfig() {
@@ -420,12 +421,17 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         Trae el catálogo completo de {provider.replace(/_/g, " ")} y lo guarda en nuestra base.
                         Las búsquedas de los usuarios consultan esta base, no la API del proveedor en vivo.
                       </p>
-                      {!canSyncProvider(status) && (
+                      {loadingStatus ? (
+                        <div className="flex items-center gap-2 text-xs text-surface-500 py-1">
+                          <NodoSpinner className="w-3.5 h-3.5" />
+                          Verificando cuenta…
+                        </div>
+                      ) : !canSyncProvider(status) ? (
                         <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs rounded-lg px-3.5 py-2.5">
                           <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                           Necesitás <button type="button" onClick={() => setTab("credentials")} className="underline font-medium">cargar tu cuenta</button> antes de sincronizar.
                         </div>
-                      )}
+                      ) : null}
                       {status?.publicCatalog && !status.hasCredentials && (
                         <p className="text-xs text-surface-500">
                           Este catálogo es público: se sincroniza sin login. Los precios son los que publica el sitio (lista, no necesariamente mayorista).
@@ -433,7 +439,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       )}
                       <button
                         onClick={handleSync}
-                        disabled={syncing || !canSyncProvider(status)}
+                        disabled={syncing || loadingStatus || !canSyncProvider(status)}
                         className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                       >
                         {syncing ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}

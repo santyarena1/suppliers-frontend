@@ -16,7 +16,7 @@ import {
   Search, TrendingUp, Clock, ArrowRight, ShoppingCart, Key,
   Sparkles, Zap, Cpu, Monitor, HardDrive, Smartphone, Gamepad2,
   Wifi, Mouse, Battery, Building2, DollarSign, ChevronRight,
-  Package, BarChart3
+  Package, BarChart3, Loader2
 } from "lucide-react";
 
 const CATEGORY_SHORTCUTS = [
@@ -71,7 +71,8 @@ export default function HomePage() {
   const [top, setTop] = useState<SearchEntry[]>([]);
   const [heroIdx, setHeroIdx] = useState(0);
   const [configuredProviders, setConfiguredProviders] = useState<Set<Provider>>(new Set());
-  const { providers: myProviders } = useMyProviders();
+  const [loadingCredentials, setLoadingCredentials] = useState(true);
+  const { providers: myProviders, loading: loadingProviders } = useMyProviders();
 
   useEffect(() => {
     setRecent(getRecentSearches(6));
@@ -79,9 +80,18 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    credentialsApi.mine().then((res) => {
-      setConfiguredProviders(new Set(res.data.map((c) => c.providerName)));
-    }).catch(() => {});
+    let alive = true;
+    setLoadingCredentials(true);
+    credentialsApi.mine()
+      .then((res) => {
+        if (!alive) return;
+        setConfiguredProviders(new Set(res.data.map((c) => c.providerName)));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setLoadingCredentials(false);
+      });
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -256,7 +266,12 @@ export default function HomePage() {
                     Administrar <ArrowRight className="w-3 h-3" />
                   </Link>
                 } />
-                {myProviders.length === 0 ? (
+                {loadingProviders ? (
+                  <div className="bg-surface-900 border border-surface-800 rounded-xl p-5 flex items-center gap-2 text-sm text-surface-500">
+                    <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
+                    Cargando proveedores…
+                  </div>
+                ) : myProviders.length === 0 ? (
                   <div className="bg-surface-900 border border-surface-800 rounded-xl p-5">
                     <p className="text-sm text-surface-400">
                       Todavía no estás conectado con ningún proveedor.{" "}
@@ -270,12 +285,19 @@ export default function HomePage() {
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
                     {myProviders.map(({ provider: p, name }) => {
                       const configured = configuredProviders.has(p);
+                      const credUnknown = loadingCredentials;
                       return (
                         <button
                           key={p}
-                          onClick={() => router.push(configured ? `/proveedores/${p}` : `/proveedores/${p}?tab=credentials`)}
+                          onClick={() => router.push(
+                            credUnknown || configured
+                              ? `/proveedores/${p}`
+                              : `/proveedores/${p}?tab=credentials`,
+                          )}
                           className={`relative bg-surface-900 border rounded-lg p-3 transition-all hover:scale-[1.02] text-left ${
-                            configured ? "border-surface-700 hover:border-brand-500" : "border-surface-800 hover:border-surface-600 opacity-70"
+                            configured || credUnknown
+                              ? "border-surface-700 hover:border-brand-500"
+                              : "border-surface-800 hover:border-surface-600 opacity-70"
                           }`}
                         >
                           <ProviderBadge
@@ -285,9 +307,21 @@ export default function HomePage() {
                             size="sm"
                             className="items-start text-left w-full"
                           />
-                          <span className={`text-[9px] mt-1.5 flex items-center gap-1 ${configured ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-emerald-500 dark:bg-emerald-400" : "bg-surface-700"}`} />
-                            {configured ? "Configurado" : "Sin credencial"}
+                          <span className={`text-[9px] mt-1.5 flex items-center gap-1 ${
+                            credUnknown
+                              ? "text-surface-500"
+                              : configured
+                                ? "text-emerald-700 dark:text-emerald-400"
+                                : "text-surface-600"
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              credUnknown
+                                ? "bg-surface-600 animate-pulse"
+                                : configured
+                                  ? "bg-emerald-500 dark:bg-emerald-400"
+                                  : "bg-surface-700"
+                            }`} />
+                            {credUnknown ? "…" : configured ? "Configurado" : "Sin credencial"}
                           </span>
                         </button>
                       );
