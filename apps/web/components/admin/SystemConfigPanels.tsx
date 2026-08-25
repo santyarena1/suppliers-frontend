@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import {
   BANNER_SLOTS,
-  BANNER_SLOT_COLLAGE,
+  BANNER_BENTO_CONTAINER,
+  BANNER_SLOT_BENTO,
   BANNER_SLOT_ORDER,
   BANNER_SLOT_RECOMMENDED,
   BRAND_PRESET_LABELS,
@@ -305,25 +306,24 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
         </div>
       </div>
 
-      {/* Maquetado collage — mismo layout que el buscador */}
+      {/* Maquetado bento — mismo layout que el buscador */}
       <div className="mb-6 border border-surface-800 rounded-2xl p-3 sm:p-4 bg-surface-900/40 overflow-hidden">
         <p className="text-[10px] uppercase tracking-wider text-surface-500 font-semibold mb-3">
           Maquetado · {form.position === "search" ? "Buscador" : "Home"} · tocá un espacio
         </p>
-        <div className="relative flex flex-col gap-0 md:block md:min-h-[380px] lg:min-h-[420px]">
+        <div className={BANNER_BENTO_CONTAINER}>
           {BANNER_SLOT_ORDER.map((slot) => {
             const meta = BANNER_SLOT_RECOMMENDED[slot];
             const occupied = occupiedBySlot.get(slot);
             const selected = showCreate && form.slot === slot;
-            const layout = BANNER_SLOT_COLLAGE[slot];
             return (
               <button
                 key={slot}
                 type="button"
                 onClick={() => openCreate(slot)}
-                className={`${layout.mobile} ${layout.desktop} overflow-hidden border text-left transition-all shadow-md shadow-black/20 ${
+                className={`${BANNER_SLOT_BENTO[slot]} relative overflow-hidden rounded-2xl border text-left transition-all ${
                   selected
-                    ? "border-brand-500 ring-1 ring-brand-500/40 bg-brand-600/10 z-50"
+                    ? "border-brand-500 ring-1 ring-brand-500/40 bg-brand-600/10"
                     : occupied
                       ? "border-surface-700 bg-surface-900 hover:border-brand-500/50"
                       : "border-dashed border-surface-700 bg-surface-950/80 hover:border-brand-500/60 hover:bg-brand-600/5"

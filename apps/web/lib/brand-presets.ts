@@ -101,89 +101,95 @@ export type BannerSlot = (typeof BANNER_SLOTS)[number]["value"];
 
 /**
  * Clases legacy de grid (admin fallback / listas).
- * El collage orgánico usa `BANNER_SLOT_COLLAGE`.
+ * El layout vivo usa `BANNER_SLOT_BENTO`.
  */
 export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
-  hero_main: "md:col-span-2 md:row-span-2 min-h-[200px] md:min-h-[280px]",
-  hero_side: "md:col-span-2 md:row-span-2 min-h-[200px] md:min-h-[280px]",
-  tile_1: "min-h-[120px]",
-  tile_2: "min-h-[120px]",
-  tile_3: "min-h-[120px]",
-  tile_4: "min-h-[120px]",
-  strip: "md:col-span-4 min-h-[100px]",
+  hero_main: "md:col-span-6 md:row-span-2 min-h-[200px] md:min-h-[280px]",
+  hero_side: "md:col-span-3 min-h-[140px]",
+  tile_1: "md:col-span-3 min-h-[120px]",
+  tile_2: "md:col-span-3 min-h-[120px]",
+  tile_3: "md:col-span-3 md:row-span-2 min-h-[120px]",
+  tile_4: "md:col-span-3 md:row-span-3 min-h-[140px]",
+  strip: "md:col-span-12 min-h-[96px]",
 };
 
 /**
- * Collage en desktop: posiciones absolutas que se cruzan.
- * En mobile se apilan con el mismo orden visual pero sin overlap extremo.
+ * Bento grid (estilo HardGamers): tamaños distintos, gaps uniformes, sin solapes.
+ *
+ * Desktop (12 columnas × 4 filas):
+ * ┌──────────────┬────────┬────┐
+ * │  hero_main   │ hero_s │ t4 │
+ * │              ├────────┤    │
+ * │              │ tile_3 │    │
+ * ├──────┬───────┤        │    │
+ * │ t1   │  t2   │        │    │
+ * ├──────┴───────┴────────┴────┤
+ * │           strip            │
+ * └────────────────────────────┘
  */
-export const BANNER_SLOT_COLLAGE: Record<
-  BannerSlot,
-  { desktop: string; mobile: string }
-> = {
-  hero_main: {
-    desktop:
-      "md:absolute md:left-0 md:top-0 md:w-[62%] md:h-[62%] md:z-[20] md:-rotate-2 md:rounded-[1.75rem]",
-    mobile: "relative w-full min-h-[180px] rounded-2xl -rotate-1 z-[20]",
-  },
-  hero_side: {
-    desktop:
-      "md:absolute md:right-[-1%] md:top-[6%] md:w-[46%] md:h-[54%] md:z-[28] md:rotate-[3deg] md:rounded-[1.5rem]",
-    mobile: "relative w-[92%] ml-auto min-h-[150px] rounded-2xl rotate-2 -mt-6 z-[28]",
-  },
-  tile_1: {
-    desktop:
-      "md:absolute md:left-[4%] md:top-[52%] md:w-[30%] md:h-[32%] md:z-[34] md:rotate-[4deg] md:rounded-2xl",
-    mobile: "relative w-[88%] min-h-[120px] rounded-2xl rotate-2 -mt-4 z-[34]",
-  },
-  tile_2: {
-    desktop:
-      "md:absolute md:left-[30%] md:top-[48%] md:w-[28%] md:h-[30%] md:z-[36] md:-rotate-[3deg] md:rounded-2xl",
-    mobile: "relative w-[90%] ml-auto min-h-[120px] rounded-2xl -rotate-2 -mt-5 z-[36]",
-  },
-  tile_3: {
-    desktop:
-      "md:absolute md:right-[18%] md:top-[50%] md:w-[26%] md:h-[28%] md:z-[32] md:rotate-[2deg] md:rounded-2xl",
-    mobile: "relative w-[86%] min-h-[110px] rounded-2xl rotate-1 -mt-4 z-[32]",
-  },
-  tile_4: {
-    desktop:
-      "md:absolute md:right-[2%] md:top-[56%] md:w-[24%] md:h-[26%] md:z-[38] md:-rotate-[4deg] md:rounded-2xl",
-    mobile: "relative w-[84%] ml-auto min-h-[110px] rounded-2xl -rotate-1 -mt-4 z-[38]",
-  },
-  strip: {
-    desktop:
-      "md:absolute md:left-[6%] md:bottom-0 md:w-[88%] md:h-[18%] md:z-[42] md:rotate-[-1deg] md:rounded-2xl",
-    mobile: "relative w-full min-h-[88px] rounded-2xl -rotate-1 -mt-3 z-[42]",
-  },
+export const BANNER_SLOT_BENTO: Record<BannerSlot, string> = {
+  hero_main:
+    "col-span-2 row-span-1 min-h-[180px] md:col-span-6 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
+  hero_side:
+    "col-span-1 min-h-[140px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-7 md:row-start-1",
+  tile_4:
+    "col-span-1 min-h-[140px] md:col-span-3 md:row-span-3 md:min-h-0 md:col-start-10 md:row-start-1",
+  tile_1:
+    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
+  tile_2:
+    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-4 md:row-start-3",
+  tile_3:
+    "col-span-2 min-h-[140px] md:col-span-3 md:row-span-2 md:min-h-0 md:col-start-7 md:row-start-2",
+  strip:
+    "col-span-2 min-h-[88px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-4",
 };
 
-/** Medidas recomendadas (px) para que el recorte se vea nítido en el collage. */
+/** Contenedor del bento (buscador + maquetado admin). */
+export const BANNER_BENTO_CONTAINER =
+  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(3,minmax(118px,1fr))_minmax(96px,auto)] md:gap-4";
+
+/** Medidas recomendadas (px) para que el recorte se vea nítido en el bento. */
 export const BANNER_SLOT_RECOMMENDED: Record<
   BannerSlot,
   { width: number; height: number; hint: string }
 > = {
   hero_main: {
-    width: 1400,
-    height: 900,
-    hint: "Pieza grande que se cruza con el hero lateral. Preferí horizontal amplio.",
+    width: 1200,
+    height: 640,
+    hint: "Bloque grande superior izquierdo (2 filas × 6 columnas).",
   },
   hero_side: {
-    width: 1000,
-    height: 900,
-    hint: "Se solapa arriba a la derecha del hero principal.",
+    width: 720,
+    height: 320,
+    hint: "Bloque chico arriba, a la derecha del hero.",
   },
-  tile_1: { width: 700, height: 520, hint: "Tile inferior izquierdo, levemente girado." },
-  tile_2: { width: 680, height: 500, hint: "Tile central, se cruza con tile 1 y 3." },
-  tile_3: { width: 640, height: 480, hint: "Tile medio-derecho." },
-  tile_4: { width: 600, height: 460, hint: "Tile derecho, el más alto en el stack." },
+  tile_1: {
+    width: 560,
+    height: 420,
+    hint: "Cuadrado inferior izquierdo.",
+  },
+  tile_2: {
+    width: 560,
+    height: 420,
+    hint: "Cuadrado al lado de tile 1.",
+  },
+  tile_3: {
+    width: 640,
+    height: 720,
+    hint: "Vertical medio: debajo del hero lateral (2 filas).",
+  },
+  tile_4: {
+    width: 480,
+    height: 960,
+    hint: "Columna alta a la derecha (toda la altura del bento).",
+  },
   strip: {
     width: 1920,
-    height: 320,
-    hint: "Banda inferior que cruza por encima de los tiles.",
+    height: 280,
+    hint: "Banda ancha debajo de todo el bento.",
   },
 };
 
 export const BANNER_SLOT_ORDER: BannerSlot[] = [
-  "hero_main", "hero_side", "tile_1", "tile_2", "tile_3", "tile_4", "strip",
+  "hero_main", "hero_side", "tile_4", "tile_1", "tile_2", "tile_3", "strip",
 ];

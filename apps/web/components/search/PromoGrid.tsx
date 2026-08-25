@@ -3,7 +3,8 @@
 import Link from "next/link";
 import type { Banner } from "@/lib/api";
 import {
-  BANNER_SLOT_COLLAGE,
+  BANNER_BENTO_CONTAINER,
+  BANNER_SLOT_BENTO,
   BANNER_SLOT_ORDER,
   type BannerSlot,
 } from "@/lib/brand-presets";
@@ -25,10 +26,9 @@ function SlotShell({
   slot: BannerSlot;
   children: React.ReactNode;
 }) {
-  const layout = BANNER_SLOT_COLLAGE[slot];
   return (
     <div
-      className={`${layout.mobile} ${layout.desktop} overflow-hidden border border-surface-700/80 bg-surface-900 shadow-lg shadow-black/30 transition-transform duration-500 hover:z-50 hover:scale-[1.02]`}
+      className={`${BANNER_SLOT_BENTO[slot]} relative overflow-hidden rounded-2xl border border-surface-700/80 bg-surface-900 transition-transform duration-300 hover:scale-[1.01]`}
     >
       {children}
     </div>
@@ -88,7 +88,7 @@ type PromoGridProps = {
 };
 
 /**
- * Collage de banners: piezas giradas que se cruzan.
+ * Bento de banners: tamaños distintos, gaps uniformes, sin solapes.
  * Cada slot mantiene su posición; si no hay banner real, se muestra uno de demo.
  */
 export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProps) {
@@ -104,7 +104,7 @@ export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProp
 
   return (
     <section className="mb-8">
-      <div className="relative flex flex-col gap-0 md:block md:min-h-[460px] lg:min-h-[520px] md:pb-2">
+      <div className={BANNER_BENTO_CONTAINER}>
         {bySlot.map(({ slot, banner, isDemo }) =>
           banner ? (
             <SlotShell key={slot} slot={slot}>

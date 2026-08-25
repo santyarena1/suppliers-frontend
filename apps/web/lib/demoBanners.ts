@@ -2,7 +2,7 @@ import type { Banner } from "@/lib/api";
 import type { BannerSlot } from "@/lib/brand-presets";
 
 /**
- * Banners de demostración para el collage del buscador.
+ * Banners de demostración para el bento del buscador.
  * Se usan solo en slots sin banner real cargado por el admin.
  * Imágenes de Unsplash (tech / retail) con tamaño acorde a cada slot.
  */
@@ -36,19 +36,19 @@ const DEMO: Record<
   },
   tile_3: {
     imageUrl:
-      "https://images.unsplash.com/photo-1547082299-de196ea013d0?auto=format&fit=crop&w=640&h=480&q=80",
+      "https://images.unsplash.com/photo-1547082299-de196ea013d0?auto=format&fit=crop&w=640&h=720&q=80",
     title: "Almacenamiento",
     subtitle: "Demo",
   },
   tile_4: {
     imageUrl:
-      "https://images.unsplash.com/photo-1555617981-dac3880eac6e?auto=format&fit=crop&w=600&h=460&q=80",
+      "https://images.unsplash.com/photo-1555617981-dac3880eac6e?auto=format&fit=crop&w=480&h=960&q=80",
     title: "Gaming",
     subtitle: "Demo",
   },
   strip: {
     imageUrl:
-      "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1920&h=320&q=80",
+      "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1920&h=280&q=80",
     title: "Promos de la semana",
     subtitle: "Demo · banda full width — cargá la tuya en admin",
   },
