@@ -9,6 +9,14 @@ import { providerOrdersHref } from "@/lib/providerOrders";
 import ProviderBadge from "@/components/ProviderBadge";
 import { buildSellerMessageFromOrder } from "@/lib/seller-message";
 import { formatUSD } from "@/lib/format";
+import { usePurchasePolicy } from "@/lib/purchase";
+import {
+  applySchemeToLine,
+  lineAmounts,
+  markLineEdited,
+  sumOrderLines,
+  type OrderLine,
+} from "@/lib/order-lines";
 import {
   CheckCircle2,
   ChevronDown,
@@ -17,6 +25,7 @@ import {
   Copy,
   ExternalLink,
   Inbox,
+  Layers,
   Loader2,
   Pencil,
   StickyNote,
@@ -380,6 +389,9 @@ function OrderCard({
   const creado = order.status === "CREATED";
   const rechazado = order.approvalStatus === "REJECTED";
   const offline = isOffline(order);
+  const canEditItems = Boolean(order.editable);
+  const policy = usePurchasePolicy(order.provider);
+  const canScheme = Boolean(policy.acceptsScheme && policy.schemeIvaAdjustment);
   const lineas = order.items.length;
   const needsCollapse = lineas > 5;
   const [editing, setEditing] = useState(false);
@@ -414,16 +426,27 @@ function OrderCard({
   async function save() {
     const items = draft
       .filter((it) => (it.qty ?? 0) > 0)
-      .map((it) => ({
-        externalId: it.externalId || it.code || "",
-        sku: it.sku,
-        name: it.name || "Producto",
-        qty: it.qty || 1,
-        unitPrice: it.unitPrice ?? 0,
-        internosAmount: it.internosAmount ?? 0,
-        ivaPercent: it.ivaPercent ?? 0,
-        internosPercent: it.internosPercent ?? 0,
-      }));
+      .map((it) => {
+        const row = lineAmounts(it);
+        return {
+          externalId: it.externalId || it.code || "",
+          sku: it.sku,
+          name: it.name || "Producto",
+          qty: it.qty || 1,
+          unitPrice: row.unitNet,
+          internosAmount: it.internosAmount ?? (row.qty > 0 ? row.internos / row.qty : 0),
+          ivaPercent: row.ivaPercent,
+          internosPercent: row.internosPercent,
+          finalLineUsd: row.final,
+          pricingMode: it.pricingMode ?? undefined,
+          listUnitPrice: it.listUnitPrice ?? row.listUnitPrice ?? undefined,
+          edited: it.edited || undefined,
+          editedAt: it.editedAt ?? undefined,
+          originalUnitPrice: it.originalUnitPrice ?? undefined,
+          originalFinalLineUsd: it.originalFinalLineUsd ?? undefined,
+          editNote: it.editNote ?? undefined,
+        };
+      });
     if (items.length === 0) {
       onAviso({ ok: false, text: "Dejá al menos un producto" });
       return;
@@ -536,14 +559,55 @@ function OrderCard({
         )}
 
         {/* Ítems */}
-        {offline && editing ? (
-          <div className="flex flex-col gap-2.5 border-t border-surface-800 pt-3">
-            {draft.map((it, idx) => (
-              <div key={`${it.externalId || it.code || idx}`} className="flex items-start gap-2 rounded-lg bg-surface-950/50 p-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-surface-200 leading-snug font-medium">{it.name}</p>
-                  <div className="flex gap-3 mt-2 flex-wrap">
-                    <label className="text-[10px] text-surface-500 flex items-center gap-1.5">
+        {canEditItems && editing ? (
+          <div className="flex flex-col gap-2.5 border border-surface-800 rounded-xl p-3 bg-surface-950/40">
+            <p className="text-[11px] text-surface-400 leading-relaxed">
+              Ajustá neto o final si el distribuidor cambió un número. Podés marcar líneas como{" "}
+              <span className="text-violet-300">esquema</span> para aplicar la config del proveedor
+              y seguir editando el precio final.
+            </p>
+            {draft.map((it, idx) => {
+              const row = lineAmounts(it);
+              const code = it.externalId || it.code || it.sku || "—";
+              return (
+                <div
+                  key={`${code}-${idx}`}
+                  className="rounded-lg bg-surface-900/80 border border-surface-800 p-3 flex flex-col gap-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs text-white font-medium leading-snug">{it.name}</p>
+                      <p className="text-[10px] font-mono text-surface-500 mt-0.5">{code}</p>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {it.pricingMode === "scheme" && (
+                          <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/25">
+                            Esquema
+                          </span>
+                        )}
+                        {it.edited && (
+                          <span
+                            className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-500/25"
+                            title={it.editNote || "Valor editado"}
+                          >
+                            Editado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {offline && (
+                      <button
+                        type="button"
+                        onClick={() => setDraft((prev) => prev.filter((_, i) => i !== idx))}
+                        className="text-surface-500 hover:text-red-400 p-1.5 rounded-md hover:bg-red-500/10"
+                        aria-label="Quitar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <label className="text-[10px] text-surface-500 flex flex-col gap-1">
                       Cant.
                       <input
                         type="number"
@@ -551,55 +615,116 @@ function OrderCard({
                         value={it.qty ?? 1}
                         onChange={(e) => {
                           const qty = Math.max(1, parseInt(e.target.value, 10) || 1);
-                          setDraft((prev) => prev.map((row, i) => i === idx ? { ...row, qty } : row));
+                          setDraft((prev) =>
+                            prev.map((rowIt, i) =>
+                              i === idx ? markLineEdited(rowIt, { qty }, "Cantidad ajustada") : rowIt
+                            )
+                          );
                         }}
-                        className="w-14 bg-surface-800 border border-surface-700 rounded-md px-1.5 py-1 text-xs text-white tabular-nums"
+                        className="w-full bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white tabular-nums"
                       />
                     </label>
-                    <label className="text-[10px] text-surface-500 flex items-center gap-1.5">
-                      Neto USD
+                    <label className="text-[10px] text-surface-500 flex flex-col gap-1">
+                      Neto USD (c/u)
                       <input
                         type="number"
                         min={0}
                         step="0.01"
-                        value={it.unitPrice ?? 0}
+                        value={Number(row.unitNet.toFixed(2))}
                         onChange={(e) => {
                           const unitPrice = Math.max(0, Number(e.target.value) || 0);
-                          setDraft((prev) => prev.map((row, i) => i === idx ? { ...row, unitPrice } : row));
+                          setDraft((prev) =>
+                            prev.map((rowIt, i) =>
+                              i === idx
+                                ? markLineEdited(
+                                    rowIt,
+                                    {
+                                      unitPrice,
+                                      price: unitPrice,
+                                      lineTotal: unitPrice * (rowIt.qty || 1),
+                                      subtotal: unitPrice * (rowIt.qty || 1),
+                                      finalLineUsd: undefined,
+                                    },
+                                    "Neto ajustado manualmente"
+                                  )
+                                : rowIt
+                            )
+                          );
                         }}
-                        className="w-24 bg-surface-800 border border-surface-700 rounded-md px-1.5 py-1 text-xs text-white tabular-nums"
+                        className="w-full bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white tabular-nums"
                       />
                     </label>
-                    <label className="text-[10px] text-surface-500 flex items-center gap-1.5">
+                    <label className="text-[10px] text-surface-500 flex flex-col gap-1">
                       IVA %
                       <input
                         type="number"
                         min={0}
                         step="0.1"
-                        value={it.ivaPercent ?? 0}
+                        value={row.ivaPercent}
                         onChange={(e) => {
                           const ivaPercent = Math.max(0, Number(e.target.value) || 0);
-                          setDraft((prev) => prev.map((row, i) => i === idx ? { ...row, ivaPercent } : row));
+                          setDraft((prev) =>
+                            prev.map((rowIt, i) =>
+                              i === idx
+                                ? markLineEdited(rowIt, { ivaPercent, finalLineUsd: undefined }, "IVA ajustado")
+                                : rowIt
+                            )
+                          );
                         }}
-                        className="w-16 bg-surface-800 border border-surface-700 rounded-md px-1.5 py-1 text-xs text-white tabular-nums"
+                        className="w-full bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white tabular-nums"
+                      />
+                    </label>
+                    <label className="text-[10px] text-surface-500 flex flex-col gap-1">
+                      Final línea USD
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={Number(row.final.toFixed(2))}
+                        onChange={(e) => {
+                          const finalLineUsd = Math.max(0, Number(e.target.value) || 0);
+                          setDraft((prev) =>
+                            prev.map((rowIt, i) =>
+                              i === idx
+                                ? markLineEdited(rowIt, { finalLineUsd }, "Final ajustado (p. ej. baja del distribuidor)")
+                                : rowIt
+                            )
+                          );
+                        }}
+                        className="w-full bg-surface-800 border border-amber-500/30 rounded-md px-2 py-1.5 text-xs text-white tabular-nums"
                       />
                     </label>
                   </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {canScheme && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDraft((prev) =>
+                            prev.map((rowIt, i) => (i === idx ? applySchemeToLine(rowIt, policy) : rowIt))
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-md border border-violet-500/35 bg-violet-500/10 text-violet-200 hover:bg-violet-500/15"
+                      >
+                        <Layers className="w-3 h-3" />
+                        {it.pricingMode === "scheme" ? "Reaplicar esquema" : "Aplicar esquema"}
+                      </button>
+                    )}
+                    {it.edited && it.originalFinalLineUsd != null && (
+                      <span className="text-[10px] text-amber-200/80 tabular-nums">
+                        Original {formatUSD(it.originalFinalLineUsd)}
+                        {it.editNote ? ` · ${it.editNote}` : ""}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDraft((prev) => prev.filter((_, i) => i !== idx))}
-                  className="text-surface-500 hover:text-red-400 p-1.5 rounded-md hover:bg-red-500/10"
-                  aria-label="Quitar"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+              );
+            })}
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Notas (opcional)"
+              placeholder="Notas del pedido (opcional)"
               rows={2}
               className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-xs text-white placeholder-surface-500 resize-none"
             />
@@ -633,7 +758,29 @@ function OrderCard({
                           {code}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-surface-200 leading-snug max-w-[280px]">
-                          {it.name || "Producto"}
+                          <span className="line-clamp-2">{it.name || "Producto"}</span>
+                          <span className="flex flex-wrap gap-1 mt-1">
+                            {row.pricingMode === "scheme" && (
+                              <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/25">
+                                Esquema
+                              </span>
+                            )}
+                            {row.edited && (
+                              <span
+                                className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-500/25"
+                                title={
+                                  [
+                                    row.editNote,
+                                    row.originalFinal != null ? `Antes ${formatUSD(row.originalFinal)}` : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ") || "Editado"
+                                }
+                              >
+                                Editado
+                              </span>
+                            )}
+                          </span>
                         </td>
                         <td className="px-3 py-2.5 text-xs text-surface-300 tabular-nums text-right">
                           {row.qty}
@@ -693,6 +840,18 @@ function OrderCard({
                         <p className="text-[10px] font-mono text-surface-500 mt-0.5">
                           {code} · {row.qty}×
                         </p>
+                        <span className="flex flex-wrap gap-1 mt-1">
+                          {row.pricingMode === "scheme" && (
+                            <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/25">
+                              Esquema
+                            </span>
+                          )}
+                          {row.edited && (
+                            <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 border border-amber-500/25">
+                              Editado
+                            </span>
+                          )}
+                        </span>
                       </div>
                       <p className="text-sm font-semibold text-white tabular-nums flex-shrink-0">
                         {formatUSD(row.final)}
@@ -767,13 +926,17 @@ function OrderCard({
             <p className="text-[11px] text-surface-500 py-2 leading-relaxed">
               Lo tiene que aprobar el dueño o un administrador de tu organización.
             </p>
-          ) : offline ? (
+          ) : (
             <>
               {editing ? (
                 <>
                   <button
                     type="button"
-                    onClick={() => setEditing(false)}
+                    onClick={() => {
+                      setEditing(false);
+                      setDraft(order.items);
+                      setNotes(order.notes ?? "");
+                    }}
                     className="h-9 px-3 border border-surface-700 text-surface-300 rounded-lg text-xs inline-flex items-center gap-1 hover:text-white"
                   >
                     <X className="w-3.5 h-3.5" /> Cancelar
@@ -785,77 +948,44 @@ function OrderCard({
                     className="h-9 px-3 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold inline-flex items-center gap-1.5"
                   >
                     {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                    Guardar
+                    Guardar cambios
                   </button>
                 </>
               ) : (
-                order.editable && (
+                canEditItems && (
                   <button
                     type="button"
                     onClick={() => setEditing(true)}
                     className="h-9 px-3 border border-surface-700 text-surface-200 hover:text-white rounded-lg text-xs inline-flex items-center gap-1.5"
                   >
-                    <Pencil className="w-3.5 h-3.5" /> Editar
+                    <Pencil className="w-3.5 h-3.5" /> Ajustar costos
                   </button>
                 )
               )}
-              <button
-                type="button"
-                onClick={() => void copyMessage()}
-                className="h-9 px-3 border border-amber-500/30 bg-amber-500/5 text-amber-100 hover:bg-amber-500/10 rounded-lg text-xs inline-flex items-center gap-1.5"
-              >
-                {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? "Copiado" : "Copiar mensaje"}
-              </button>
+              {offline && (
+                <button
+                  type="button"
+                  onClick={() => void copyMessage()}
+                  className="h-9 px-3 border border-amber-500/30 bg-amber-500/5 text-amber-100 hover:bg-amber-500/10 rounded-lg text-xs inline-flex items-center gap-1.5"
+                >
+                  {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? "Copiado" : "Copiar mensaje"}
+                </button>
+              )}
+              {!offline && !editing && (
+                <Link
+                  href={providerOrdersHref(order.provider)}
+                  className="h-9 px-3 inline-flex items-center gap-1.5 text-[11px] text-surface-400 hover:text-white border border-surface-800 hover:border-surface-600 rounded-lg transition-colors"
+                >
+                  Ver en {order.providerName}
+                  <ExternalLink className="w-3 h-3" />
+                </Link>
+              )}
             </>
-          ) : (
-            <Link
-              href={providerOrdersHref(order.provider)}
-              className="h-9 px-3 inline-flex items-center gap-1.5 text-[11px] text-surface-400 hover:text-white border border-surface-800 hover:border-surface-600 rounded-lg transition-colors"
-            >
-              Ver en {order.providerName}
-              <ExternalLink className="w-3 h-3" />
-            </Link>
           )}
         </div>
       </div>
     </article>
-  );
-}
-
-type OrderLine = TenantOrder["items"][number];
-
-function lineAmounts(it: OrderLine) {
-  const qty = it.qty && it.qty > 0 ? it.qty : 1;
-  const unitNet = it.unitPrice ?? 0;
-  const net = unitNet * qty;
-  const ivaPercent = it.ivaPercent ?? 0;
-  const iva = net * (ivaPercent / 100);
-  const internosUnit = it.internosAmount ?? 0;
-  const internosFromAmt = internosUnit * qty;
-  const internosPercent = it.internosPercent ?? (unitNet > 0 && internosUnit > 0
-    ? (internosUnit / unitNet) * 100
-    : 0);
-  const internos = internosFromAmt > 0.00005
-    ? internosFromAmt
-    : net * (internosPercent / 100);
-  const final = it.lineTotal != null && it.lineTotal > 0
-    ? it.lineTotal
-    : net + iva + internos;
-  return { qty, unitNet, net, ivaPercent, iva, internosPercent, internos, final };
-}
-
-function sumOrderLines(items: OrderLine[]) {
-  return items.reduce(
-    (acc, it) => {
-      const row = lineAmounts(it);
-      acc.net += row.net;
-      acc.iva += row.iva;
-      acc.internos += row.internos;
-      acc.final += row.final;
-      return acc;
-    },
-    { net: 0, iva: 0, internos: 0, final: 0 },
   );
 }
 

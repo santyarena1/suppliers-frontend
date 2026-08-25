@@ -303,11 +303,28 @@ export interface TenantOrder {
     code?: string;
     externalId?: string;
     sku?: string;
+    /** Neto unitario (offline). */
     unitPrice?: number;
+    /** Neto unitario (checkouts online). */
+    price?: number;
+    priceUsd?: number;
+    unitPriceUsd?: number;
     lineTotal?: number;
+    subtotal?: number;
+    total?: number;
     internosAmount?: number;
     ivaPercent?: number;
+    iva?: number;
     internosPercent?: number;
+    finalLineUsd?: number | null;
+    finalPrice?: number | null;
+    pricingMode?: "list" | "scheme" | "offline" | null;
+    listUnitPrice?: number | null;
+    edited?: boolean;
+    editedAt?: string | null;
+    originalUnitPrice?: number | null;
+    originalFinalLineUsd?: number | null;
+    editNote?: string | null;
   }[];
   createdBy: string | null;
   approvedBy: string | null;
@@ -519,6 +536,14 @@ export const ordersApi = {
       internosAmount?: number;
       ivaPercent?: number;
       internosPercent?: number;
+      finalLineUsd?: number;
+      pricingMode?: "list" | "scheme" | "offline";
+      listUnitPrice?: number;
+      edited?: boolean;
+      editedAt?: string;
+      originalUnitPrice?: number;
+      originalFinalLineUsd?: number;
+      editNote?: string;
     }[];
   }) => api.patch<TenantOrder>(`/orders/${id}`, body),
   approve: (id: string) => api.post<{ id: string; status: string; message: string }>(`/orders/${id}/approve`, {}),

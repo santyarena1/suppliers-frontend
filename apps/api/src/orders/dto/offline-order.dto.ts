@@ -2,6 +2,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -55,6 +56,48 @@ export class OfflineOrderItemDto {
   @IsNumber()
   @Min(0)
   internosPercent?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  finalLineUsd?: number;
+
+  @IsOptional()
+  @IsIn(["list", "scheme", "offline"])
+  pricingMode?: "list" | "scheme" | "offline";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  listUnitPrice?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  edited?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  editedAt?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  originalUnitPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  originalFinalLineUsd?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  editNote?: string;
 }
 
 export class OfflineOrderGroupDto {
