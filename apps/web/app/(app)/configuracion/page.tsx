@@ -241,7 +241,7 @@ export default function ConfiguracionPage() {
                           <div className="text-left min-w-0">
                             <span className="text-sm text-surface-200 block">Incluir percepciones / IIBB</span>
                             <span className="text-[11px] text-surface-500 leading-snug block mt-0.5">
-                              {iibbHint}. Air, Ceven y Diapstore no cargan percepción. Apagado por defecto; si cotizás en el carrito, se actualiza.
+                              {iibbHint}. Apagado por defecto; si cotizás en el carrito, se actualiza.
                             </span>
                           </div>
                         </div>

@@ -138,7 +138,7 @@ export default function PrefsPanel() {
                   <div className="text-left min-w-0">
                     <span className="text-xs text-surface-200 block">Incluir percepciones / IIBB</span>
                     <span className="text-[10px] text-surface-500 leading-tight block">
-                      {iibbHint}. Air, Ceven y Diapstore no cargan percepción. Apagado por defecto; el carrito puede actualizarlo.
+                      {iibbHint}. Apagado por defecto; el carrito puede actualizarlo.
                     </span>
                   </div>
                 </div>
