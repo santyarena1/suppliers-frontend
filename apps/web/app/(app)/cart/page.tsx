@@ -27,12 +27,13 @@ import {
   linePerceptionFromOrder,
 } from "@/lib/tax";
 import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
-import { rememberIibbRate } from "@/lib/iibb-rates";
+import { rememberIibbRate, getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import {
   ALL_PROVIDERS,
   ElitCheckoutPreview,
   InvidCheckoutPreview,
   NewBytesCartSnapshot,
+  AirCheckoutPreview,
   ordersApi,
 } from "@/lib/api";
 import {
@@ -95,6 +96,7 @@ export default function CartPage() {
     setQty, remove, clear, clearProvider, onlineCount, offlineCount,
   } = useCart();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
+  const iibbEpoch = useIibbRatesEpoch();
   const retailer = useIsRetailer();
   const policies = usePurchasePolicies();
   const { providers: myProviders } = useMyProviders();
@@ -176,6 +178,16 @@ export default function CartPage() {
     ivaUSD += shippingIva;
     iibbUSD += shippingIibb;
     if (extra?.perceptionsUSD) iibbUSD += extra.perceptionsUSD;
+    if (channelTab !== "offline" && iibbUSD <= 0.0005) {
+      void iibbEpoch;
+      for (const it of its) {
+        if (priceModeForCartItem(it) === "offline") continue;
+        const pct = getIibbRatePercent(it.provider);
+        if (pct == null || pct <= 0) continue;
+        const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
+        iibbUSD += pricing.net * (pct / 100);
+      }
+    }
     const taxUSD = ivaUSD + internosUSD + iibbUSD + otherUSD;
     let totalUSD = withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD;
     if (withIva && extra?.totalUSD != null) totalUSD = Math.max(totalUSD, extra.totalUSD);
@@ -198,13 +210,17 @@ export default function CartPage() {
   const invidLines = useMemo(() => cartLinesFromItems(onlineByProvider.INVID ?? []), [onlineByProvider.INVID]);
   const elitLines = useMemo(() => cartLinesFromItems(onlineByProvider.ELIT ?? []), [onlineByProvider.ELIT]);
   const nbLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_BYTES ?? []), [onlineByProvider.NEW_BYTES]);
+  const airLines = useMemo(() => cartLinesFromItems(onlineByProvider.AIR ?? []), [onlineByProvider.AIR]);
   const invidWarm = useCheckoutWarmup("INVID", invidLines);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines);
   const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines);
+  const airWarm = useCheckoutWarmup("AIR", airLines);
 
   const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
   const elitQuoted = elitPreview ?? (elitWarm.status === "ready" ? elitWarm.data?.preview ?? null : null);
   const nbQuoted = nbSnapshot ?? (nbWarm.status === "ready" ? nbWarm.data?.preview ?? null : null);
+  const airQuoted: AirCheckoutPreview | null =
+    airWarm.status === "ready" ? airWarm.data?.preview ?? null : null;
 
   const invidExtra: TaxExtra | undefined = invidQuoted?.stockOk
     ? { shippingUSD: invidQuoted.shippingCost ?? 0, percepcionPercent: invidQuoted.percepcionPercent ?? 0 }
@@ -222,6 +238,27 @@ export default function CartPage() {
         perceptionsUSD: nbQuoted.perceptions ?? 0,
         perceptionLines: nbQuoted.perceptionLines ?? [],
         totalUSD: nbQuoted.total,
+      }
+    : undefined;
+  const airPerc =
+    airQuoted == null
+      ? 0
+      : typeof airQuoted.perceptions === "number" && airQuoted.perceptions > 0.0005
+        ? airQuoted.perceptions
+        : Math.max(
+            0,
+            (airQuoted.total ?? 0) -
+              (airQuoted.subtotal ?? 0) -
+              (airQuoted.iva21 ?? 0) -
+              (airQuoted.iva105 ?? 0) -
+              (airQuoted.ii ?? 0)
+          );
+  const airExtra: TaxExtra | undefined = airQuoted
+    ? {
+        perceptionsUSD: airPerc > 0.0005 ? airPerc : 0,
+        perceptionLines:
+          airPerc > 0.0005 ? [{ label: "Percepciones", amount: airPerc }] : [],
+        totalUSD: airQuoted.total,
       }
     : undefined;
 
@@ -247,6 +284,14 @@ export default function CartPage() {
       rememberIibbRate("NEW_BYTES", (perc / net) * 100);
     }
   }, [nbQuoted]);
+  useEffect(() => {
+    if (!airQuoted) return;
+    const perc = airPerc;
+    const net = airQuoted.subtotal ?? 0;
+    if (perc > 0.0005 && net > 0) {
+      rememberIibbRate("AIR", (perc / net) * 100);
+    }
+  }, [airQuoted, airPerc]);
 
   function extraFor(provider: string): TaxExtra | undefined {
     if (channelTab === "offline") return undefined;
@@ -255,6 +300,7 @@ export default function CartPage() {
     if (provider === "INVID") return invidExtra;
     if (provider === "ELIT") return elitExtra;
     if (provider === "NEW_BYTES") return nbExtra;
+    if (provider === "AIR") return airExtra;
     return undefined;
   }
 
@@ -276,7 +322,7 @@ export default function CartPage() {
       productCount: acc.productCount + t.productCount,
       perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
     }), { ...EMPTY_TOTALS });
-  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, channelTab, policies]);
+  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, channelTab, policies, iibbEpoch]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
     for (const [p, its] of Object.entries(viewByProvider)) {

@@ -19,7 +19,7 @@ import {
   formatAlicuota,
 } from "@/lib/tax";
 import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
-import { getIibbRatePercent, providerOmitsIibb, useIibbRatesEpoch } from "@/lib/iibb-rates";
+import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import {
   ArrowLeft,
   Package,
@@ -348,11 +348,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) &&
                         knownIibbPct == null && (
                           <p className="text-[10px] text-surface-600 leading-snug">
-                            {providerName === "AIR"
-                              ? "Air no carga percepción/IIBB: el canasto suma IVA e impuestos internos."
-                              : providerOmitsIibb(providerName)
-                                ? "Este distribuidor no carga percepción/IIBB en el checkout."
-                                : "IIBB no disponible para este distribuidor hasta cotizar en el carrito."}
+                            No hay alícuota de percepción para este distribuidor. Cargala en Configuración, o cotizá en el carrito si el portal la informa.
                           </p>
                         )}
                       {visibleTaxLines.every((l) => l.unitAmount <= 0.0001) &&

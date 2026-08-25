@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
+import IibbRatesEditor from "@/components/IibbRatesEditor";
 import { useTheme, THEME_OPTIONS, type Theme } from "@/lib/theme";
 import { getUser, isAdmin } from "@/lib/auth";
 import {
@@ -241,7 +242,7 @@ export default function ConfiguracionPage() {
                           <div className="text-left min-w-0">
                             <span className="text-sm text-surface-200 block">Incluir percepciones / IIBB</span>
                             <span className="text-[11px] text-surface-500 leading-snug block mt-0.5">
-                              {iibbHint}. Apagado por defecto; si cotizás en el carrito, se actualiza.
+                              {iibbHint || "Cargá la alícuota de cada distribuidor abajo."} Apagado por defecto.
                             </span>
                           </div>
                         </div>
@@ -249,6 +250,7 @@ export default function ConfiguracionPage() {
                           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${withIibb ? "left-4" : "left-0.5"}`} />
                         </div>
                       </button>
+                      <IibbRatesEditor />
                     </div>
                   </div>
 

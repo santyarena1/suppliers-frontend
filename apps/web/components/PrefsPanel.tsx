@@ -4,6 +4,7 @@ import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { DollarSign, RefreshCw, Receipt, Check, Percent } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 
 export default function PrefsPanel() {
   const {
@@ -138,7 +139,7 @@ export default function PrefsPanel() {
                   <div className="text-left min-w-0">
                     <span className="text-xs text-surface-200 block">Incluir percepciones / IIBB</span>
                     <span className="text-[10px] text-surface-500 leading-tight block">
-                      {iibbHint}. Apagado por defecto; el carrito puede actualizarlo.
+                      {iibbHint || "Cargá las alícuotas en Configuración."}
                     </span>
                   </div>
                 </div>
@@ -146,6 +147,13 @@ export default function PrefsPanel() {
                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${withIibb ? "left-4" : "left-0.5"}`} />
                 </div>
               </button>
+              <Link
+                href="/configuracion"
+                className="text-[10px] text-brand-400 hover:text-brand-300 px-0.5"
+                onClick={() => setOpen(false)}
+              >
+                Editar alícuotas por distribuidor
+              </Link>
             </div>
 
             {currentRate && (
