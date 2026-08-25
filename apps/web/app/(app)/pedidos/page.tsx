@@ -15,7 +15,6 @@ import {
   lineAmounts,
   markLineEdited,
   sumOrderLines,
-  type OrderLine,
 } from "@/lib/order-lines";
 import {
   CheckCircle2,
