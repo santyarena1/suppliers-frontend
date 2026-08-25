@@ -8,11 +8,16 @@ import { clearSession, getUser, type UserRole } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules } from "@/lib/permissions";
 import { useResults } from "@/lib/results";
+import { canSyncProvider, type Provider } from "@/lib/api";
+import { useMyProviders } from "@/lib/myProviders";
+import { useProviderStatuses } from "@/lib/providerStatus";
+import ProviderBadge from "@/components/ProviderBadge";
 import {
   NAV_SECTIONS,
   type NavItemDef,
   type NavSectionId,
   findActiveNavId,
+  isNavItemActive,
   visibleNavItems,
 } from "@/lib/nav";
 import NodoLogo from "../NodoLogo";
@@ -20,6 +25,7 @@ import NodoWordmark from "../NodoWordmark";
 
 const COLLAPSED_KEY = "nodo.sidebar.collapsed";
 const OPEN_SECTION_KEY = "nodo.sidebar.openSection";
+const PROVIDERS_OPEN_KEY = "nodo.sidebar.providersOpen";
 const SECTION_IDS = new Set<NavSectionId>(["providers", "brands", "system"]);
 
 const ROLE_LABEL: Partial<Record<UserRole, { text: string; className: string }>> = {
@@ -39,6 +45,12 @@ function persistOpenSection(id: NavSectionId | null) {
   else localStorage.removeItem(OPEN_SECTION_KEY);
 }
 
+function statusDot(status: ReturnType<typeof useProviderStatuses>[string] | undefined) {
+  if (!canSyncProvider(status)) return "bg-surface-600";
+  if (status?.lastSyncedAt) return "bg-emerald-500";
+  return "bg-amber-500";
+}
+
 interface Props {
   mobileOpen: boolean;
   onCloseMobile: () => void;
@@ -52,14 +64,30 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const providerCount = Object.keys(byProvider).length;
   const myModules = useMyModules();
   const { clearResults } = useResults();
+  const { providers: myProviders } = useMyProviders();
+  const statuses = useProviderStatuses();
+  const linkedProviders = useMemo(
+    () => myProviders.filter((p) => p.linked),
+    [myProviders],
+  );
 
   const [collapsed, setCollapsed] = useState(false);
   const [openSection, setOpenSection] = useState<NavSectionId | null>(null);
+  const [providersOpen, setProvidersOpen] = useState(false);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
     setOpenSection(readOpenSection());
+    setProvidersOpen(localStorage.getItem(PROVIDERS_OPEN_KEY) === "1");
   }, []);
+
+  const onProvidersRoute = pathname === "/proveedores" || pathname.startsWith("/proveedores/");
+
+  useEffect(() => {
+    if (!onProvidersRoute) return;
+    setProvidersOpen(true);
+    localStorage.setItem(PROVIDERS_OPEN_KEY, "1");
+  }, [onProvidersRoute]);
 
   const items = useMemo(
     () => visibleNavItems({ role: user?.role ?? null, modules: myModules }),
@@ -95,6 +123,14 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
     });
   }
 
+  function toggleProvidersOpen() {
+    setProvidersOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem(PROVIDERS_OPEN_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
+
   function logout() {
     invalidateMyModules();
     clearSession();
@@ -102,8 +138,13 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   }
 
   const roleMeta = user?.role ? ROLE_LABEL[user.role] : undefined;
+  const providersExpanded = providersOpen || onProvidersRoute;
 
   function renderLink(item: NavItemDef, opts?: { collapsed?: boolean }) {
+    if (item.id === "providers" && !opts?.collapsed) {
+      return renderProvidersDropdown(item);
+    }
+
     const Icon = item.icon;
     const active = item.id === activeId;
     const badge = item.badge === "cart" && totalCount > 0 ? totalCount : undefined;
@@ -113,7 +154,6 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
 
     function onNavClick(e: React.MouseEvent<HTMLAnchorElement>) {
       onCloseMobile();
-      // Re-tocar Búsqueda estando ya en el módulo: limpiar y volver al landing.
       if (item.id === "search" && pathname.startsWith("/search")) {
         e.preventDefault();
         clearResults();
@@ -151,6 +191,86 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
           <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-brand-500" />
         )}
       </Link>
+    );
+  }
+
+  function renderProvidersDropdown(item: NavItemDef) {
+    const Icon = item.icon;
+    const moduleActive = onProvidersRoute;
+    const dashboardActive = pathname === "/proveedores";
+
+    return (
+      <div key={item.id} className="flex flex-col gap-0.5">
+        <div
+          className={`flex items-center rounded-md transition-all ${
+            moduleActive && dashboardActive
+              ? "bg-brand-600/15 text-brand-400 font-medium"
+              : moduleActive
+                ? "text-brand-400"
+                : "text-surface-400 hover:text-surface-100 hover:bg-surface-800"
+          }`}
+        >
+          <Link
+            href={item.href}
+            onClick={() => {
+              setProvidersOpen(true);
+              localStorage.setItem(PROVIDERS_OPEN_KEY, "1");
+              onCloseMobile();
+            }}
+            className="flex flex-1 items-center gap-2.5 px-3 py-2 text-sm min-w-0"
+          >
+            <Icon className={`w-4 h-4 flex-shrink-0 ${moduleActive ? "text-brand-400" : ""}`} />
+            <span className="flex-1 truncate">{item.label}</span>
+            {linkedProviders.length > 0 && (
+              <span className="text-[10px] text-surface-500 tabular-nums">{linkedProviders.length}</span>
+            )}
+          </Link>
+          <button
+            type="button"
+            aria-label={providersExpanded ? "Ocultar proveedores" : "Mostrar proveedores"}
+            aria-expanded={providersExpanded}
+            onClick={toggleProvidersOpen}
+            className="px-2 py-2 text-surface-500 hover:text-surface-200 transition-colors"
+          >
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform ${providersExpanded ? "" : "-rotate-90"}`} />
+          </button>
+        </div>
+
+        {providersExpanded && (
+          <div className="ml-3 pl-2.5 border-l border-surface-800 flex flex-col gap-0.5 py-0.5">
+            {linkedProviders.length === 0 ? (
+              <p className="px-2.5 py-1.5 text-[11px] text-surface-600">Sin proveedores vinculados</p>
+            ) : (
+              linkedProviders.map(({ provider, name }) => {
+                const href = `/proveedores/${provider}`;
+                const active = isNavItemActive({ href, exact: true }, pathname);
+                return (
+                  <Link
+                    key={provider}
+                    href={href}
+                    onClick={onCloseMobile}
+                    className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-all min-w-0 ${
+                      active
+                        ? "bg-brand-600/15 text-brand-400 font-medium"
+                        : "text-surface-400 hover:text-surface-100 hover:bg-surface-800"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot(statuses[provider as Provider])}`} />
+                    <ProviderBadge
+                      provider={provider}
+                      label={name}
+                      variant="inline"
+                      size="sm"
+                      className="!gap-1.5 min-w-0"
+                      nameClassName={active ? "!text-brand-400" : ""}
+                    />
+                  </Link>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
     );
   }
 
