@@ -245,6 +245,8 @@ export interface VisibleProvider {
   /** Aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
+  /** Presente cuando hay vínculo: abre el chat con ese mayorista. */
+  linkId: string | null;
   hasCredentials: boolean;
 }
 
@@ -262,6 +264,7 @@ export interface CommerceProfile {
   contactEmail: string | null;
   contactPhone: string | null;
   buyerCanConfirm: boolean;
+  advertisingEnabled?: boolean;
   role: TenantRole;
 }
 
@@ -278,6 +281,114 @@ export const myApi = {
     api.post<TenantMember & { generatedPassword?: string }>("/my/team", data),
   updateMember: (membershipId: string, data: Partial<{ role: TenantRole; title: string | null; active: boolean }>) =>
     api.put<TenantMember>(`/my/team/${membershipId}`, data),
+  setAdvertising: (advertisingEnabled: boolean) =>
+    api.put<{ advertisingEnabled: boolean }>("/my/advertising", { advertisingEnabled }),
+};
+
+export interface PortfolioSeller {
+  id: string;
+  username: string;
+  email: string;
+  role: TenantRole;
+}
+
+export interface PortfolioClient {
+  linkId: string;
+  status: string;
+  discountPercent: number | null;
+  notes: string | null;
+  commerce: {
+    id: string;
+    name: string;
+    contactEmail: string | null;
+    contactPhone: string | null;
+  };
+  accountManager: { id: string; username: string; email: string } | null;
+  orderSummary: { total: number; lastOrderAt: string | null; pendingApproval: number };
+  lastMessage: { body: string; createdAt: string; fromUs: boolean } | null;
+  canAssignSeller?: boolean;
+  canEditDiscount?: boolean;
+  sellers?: PortfolioSeller[];
+}
+
+export interface PortfolioSummary {
+  providerName: string;
+  canAssignSeller: boolean;
+  canEditDiscount: boolean;
+  sellers: PortfolioSeller[];
+  clients: PortfolioClient[];
+}
+
+export interface ClientOrder {
+  id: string;
+  linkId: string | null;
+  commerceName: string;
+  status: string;
+  approvalStatus: string;
+  total: number | null;
+  itemsCount: number;
+  createdBy: string | null;
+  createdAt: string;
+  providerName: string;
+}
+
+export interface ClientDetail extends PortfolioClient {
+  orders: Omit<ClientOrder, "linkId" | "commerceName" | "providerName">[];
+}
+
+export interface DistributorAccessCode {
+  id: string;
+  code: string;
+  label: string | null;
+  maxUses: number;
+  usedCount: number;
+  expiresAt: string | null;
+  revoked: boolean;
+  createdAt: string;
+  redemptions: { redeemedAt: string; commerceName: string }[];
+}
+
+export const portfolioApi = {
+  clients: () => api.get<PortfolioSummary>("/my/clients"),
+  client: (linkId: string) => api.get<ClientDetail>(`/my/clients/${linkId}`),
+  updateClient: (linkId: string, data: { accountManagerId?: string | null; discountPercent?: number | null; notes?: string | null }) =>
+    api.put<PortfolioClient>(`/my/clients/${linkId}`, data),
+  clientOrders: (linkId?: string) =>
+    api.get<ClientOrder[]>(linkId ? `/my/clients/${linkId}/orders` : "/my/client-orders"),
+  accessCodes: () => api.get<DistributorAccessCode[]>("/my/access-codes"),
+  createAccessCode: (data: { label?: string; maxUses?: number; expiresInDays?: number }) =>
+    api.post<DistributorAccessCode>("/my/access-codes", data),
+  revokeAccessCode: (codeId: string) => api.delete(`/my/access-codes/${codeId}`),
+};
+
+export interface ChatMessage {
+  id: string;
+  body: string;
+  createdAt: string;
+  mine: boolean;
+  sender: { userId: string; username: string; tenantName: string };
+}
+
+export interface ChatThreadSummary {
+  linkId: string;
+  otherName: string;
+  otherType: string;
+  otherTypeLabel: string;
+  accountManager: { id: string; username: string; email: string } | null;
+  lastMessage: { body: string; createdAt: string; fromUs: boolean } | null;
+}
+
+export interface ChatThreadView {
+  linkId: string;
+  otherName: string;
+  canWrite: boolean;
+  messages: ChatMessage[];
+}
+
+export const chatApi = {
+  list: () => api.get<ChatThreadSummary[]>("/my/chats"),
+  thread: (linkId: string) => api.get<ChatThreadView>(`/my/chats/${linkId}`),
+  post: (linkId: string, body: string) => api.post<ChatMessage>(`/my/chats/${linkId}`, { body }),
 };
 
 export interface CartApiItem {
@@ -1302,6 +1413,9 @@ export const TENANT_ROLES_BY_TYPE: Record<TenantType, TenantRole[]> = {
 export const TENANT_ROLES_CAN_ORDER: TenantRole[] = ["OWNER", "ADMIN", "BUYER", "SELLER"];
 export const TENANT_ROLES_CAN_APPROVE_ORDERS: TenantRole[] = ["OWNER", "ADMIN"];
 export const TENANT_ROLES_CAN_MANAGE_COMMERCE: TenantRole[] = ["OWNER", "ADMIN"];
+export const TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR: TenantRole[] = ["OWNER", "ADMIN"];
+export const TENANT_ROLES_INVITABLE_DISTRIBUTOR: TenantRole[] = ["OWNER", "ADMIN", "SELLER", "VIEWER"];
+export const TENANT_ROLES_CAN_SEE_PORTFOLIO: TenantRole[] = ["OWNER", "ADMIN", "SELLER", "VIEWER"];
 
 /** Roles que pueden vaciar el catálogo de la organización. */
 export const TENANT_ROLES_CAN_PURGE_CATALOG: TenantRole[] = ["OWNER", "ADMIN"];

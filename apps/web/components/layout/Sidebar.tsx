@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, X } from "lucide-react";
-import { clearSession, getUser, type UserRole } from "@/lib/auth";
+import { clearSession, getTenant, getUser, SESSION_EVENT, type UserRole } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules } from "@/lib/permissions";
 import {
@@ -19,7 +19,7 @@ import NodoWordmark from "../NodoWordmark";
 
 const COLLAPSED_KEY = "nodo.sidebar.collapsed";
 const OPEN_SECTION_KEY = "nodo.sidebar.openSection";
-const SECTION_IDS = new Set<NavSectionId>(["providers", "brands", "system"]);
+const SECTION_IDS = new Set<NavSectionId>(["providers", "portfolio", "brands", "system"]);
 
 const ROLE_LABEL: Partial<Record<UserRole, { text: string; className: string }>> = {
   ROLE_ADMIN: { text: "Administrador", className: "text-brand-400" },
@@ -46,22 +46,34 @@ interface Props {
 export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const router = useRouter();
   const pathname = usePathname();
-  const user = getUser();
-  const { totalCount, byProvider } = useCart();
-  const providerCount = Object.keys(byProvider).length;
-  const myModules = useMyModules();
-
   const [collapsed, setCollapsed] = useState(false);
   const [openSection, setOpenSection] = useState<NavSectionId | null>(null);
+  const [sessionTick, setSessionTick] = useState(0);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
     setOpenSection(readOpenSection());
+    const sync = () => setSessionTick((n) => n + 1);
+    window.addEventListener(SESSION_EVENT, sync);
+    return () => window.removeEventListener(SESSION_EVENT, sync);
   }, []);
 
+  const user = getUser();
+  const tenant = getTenant();
+  const { totalCount, byProvider } = useCart();
+  const providerCount = Object.keys(byProvider).length;
+  const myModules = useMyModules();
+
   const items = useMemo(
-    () => visibleNavItems({ role: user?.role ?? null, modules: myModules }),
-    [user?.role, myModules],
+    () =>
+      visibleNavItems({
+        role: user?.role ?? null,
+        modules: myModules,
+        tenantType: tenant?.type ?? null,
+        tenantRole: tenant?.role ?? null,
+        isSuperadmin: user?.role === "ROLE_ADMIN" && !tenant,
+      }),
+    [user?.role, myModules, tenant?.type, tenant?.role, tenant, sessionTick],
   );
 
   const pinned = items.filter((item) => !item.section);
@@ -157,7 +169,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
           {!iconMode && (
             <div>
               <NodoWordmark className="h-3.5" />
-              <p className="text-xs text-surface-400 mt-1">Proveedores</p>
+              <p className="text-xs text-surface-400 mt-1">{tenant?.name ?? "Proveedores"}</p>
             </div>
           )}
         </div>

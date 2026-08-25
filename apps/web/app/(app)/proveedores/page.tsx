@@ -11,12 +11,14 @@ import {
   canSyncProvider, type VisibleProvider
 } from "@/lib/api";
 import { canManageCommerce } from "@/lib/commerce";
+import { useRetailerOnly } from "@/lib/useRetailerOnly";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, Sparkles, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
 export default function ProveedoresPage() {
+  useRetailerOnly();
   const [visible, setVisible] = useState<VisibleProvider[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [loading, setLoading] = useState(true);
@@ -94,7 +96,7 @@ export default function ProveedoresPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {linked.map(({ provider, name, accountManager }) => {
+                    {linked.map(({ provider, name, accountManager, linkId }) => {
                       const s = statuses[provider];
                       const result = syncResult[provider];
                       const isSyncing = syncing === provider;
@@ -137,6 +139,11 @@ export default function ProveedoresPage() {
                             <p className="text-[11px] text-surface-500 -mt-1">
                               Tu vendedor: {accountManager.name} · {accountManager.email}
                             </p>
+                          )}
+                          {linkId && (
+                            <Link href={`/chat/${linkId}`} className="text-[11px] text-brand-400 hover:text-brand-300 -mt-1">
+                              Abrir chat
+                            </Link>
                           )}
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">

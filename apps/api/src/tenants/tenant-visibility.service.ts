@@ -11,6 +11,8 @@ export interface VisibleProvider {
   /** `true` cuando aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
+  /** Presente cuando hay vínculo: abre el chat con ese mayorista. */
+  linkId: string | null;
   /** `true` cuando el comercio ya cargó usuario y contraseña de ese mayorista. */
   hasCredentials: boolean;
 }
@@ -45,6 +47,7 @@ export class TenantVisibilityService {
           linked: true,
           advertised: false,
           accountManager: null,
+          linkId: null,
           hasCredentials: true,
         },
       ];
@@ -90,6 +93,7 @@ export class TenantVisibilityService {
         accountManager: link.accountManager
           ? { name: link.accountManager.username, email: link.accountManager.email }
           : null,
+        linkId: link.id,
         hasCredentials: conCuenta.has(key),
       });
     }
@@ -105,6 +109,7 @@ export class TenantVisibilityService {
         linked: false,
         advertised: true,
         accountManager: null,
+        linkId: null,
         hasCredentials: conCuenta.has(key),
       });
     }

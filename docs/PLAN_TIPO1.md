@@ -258,23 +258,9 @@ mezcla: cambia cómo se guarda el carrito.
 
 ---
 
-## 7. Borrador — Tipo 2 (Distribuidor)
+## 7. Tipo 2 (Distribuidor)
 
-No se implementa ahora.
-
-NODO para ellos es **cartera**, no para comprar:
-
-- Gerente: equipo, códigos (y QR para que el comercio escanee), descuento
-  por comercio, publicidad, asignar vendedor a cada cliente.
-- Vendedor: **solo sus clientes**, resumen de pedidos, contacto, descuento
-  puntual. No ve al comercio de un compañero.
-- Product Manager: más adelante, solo sus marcas, dentro de su empresa.
-
-El descuento del vínculo nace acá. El chat nace acá y se ve también en el
-comercio (el vendedor del mayorista ↔ el local).
-
-El distribuidor **no** carga la cuenta API del local. Le da el código o le
-abre la cuenta en *su* portal; el comercio la pega en NODO.
+Cerrado en `docs/PLAN_TIPO2.md`.
 
 ---
 
@@ -296,7 +282,7 @@ hasta ese momento, porque se usa para probar.
   reescribe).
 - Visual de búsqueda / ficha / home, salvo lo que el panel y los roles
   obliguen (botones, vacíos, canje).
-- Panel del distribuidor, chat, descuentos de cuenta, generación de QR.
+- Panel del distribuidor (Tipo 2), generación de QR del mayorista.
 
 Sí se toca: `apps/api` (roles de comercio, alta, `/my/*`, carrito por
 organización, sync automática), `apps/web` configuración / carrito /

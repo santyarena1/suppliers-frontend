@@ -11,6 +11,7 @@ import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
 import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
 import { useCart, CartItem } from "@/lib/cart";
+import { useRetailerOnly } from "@/lib/useRetailerOnly";
 import { usePrefs } from "@/lib/prefs";
 import { proxyImg, formatUSD } from "@/lib/format";
 import { PROVIDER_CHIP_COLOR as PROVIDER_COLOR, PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
@@ -78,6 +79,7 @@ const EMPTY_TOTALS: Totals = {
 };
 
 export default function CartPage() {
+  useRetailerOnly();
   const { items, byProvider, setQty, remove, clear, clearProvider, totalCount, canMutate } = useCart();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);

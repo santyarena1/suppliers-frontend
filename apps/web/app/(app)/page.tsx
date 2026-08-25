@@ -6,6 +6,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import DistributorHome from "@/components/DistributorHome";
+import { getTenant } from "@/lib/auth";
 import { credentialsApi, Provider } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
 import { usePrefs } from "@/lib/prefs";
@@ -62,6 +64,16 @@ const HERO_SLIDES = [
 ];
 
 export default function HomePage() {
+  const [kind, setKind] = useState<"unknown" | "distributor" | "retailer">("unknown");
+  useEffect(() => {
+    setKind(getTenant()?.type === "DISTRIBUTOR" ? "distributor" : "retailer");
+  }, []);
+  if (kind === "unknown") return <div className="flex-1 bg-surface-950" />;
+  if (kind === "distributor") return <DistributorHome />;
+  return <RetailerHome />;
+}
+
+function RetailerHome() {
   const router = useRouter();
   const { currency, currentRate, dollarLabel, dollarType } = usePrefs();
   const { totalCount, items: cartItems } = useCart();

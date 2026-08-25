@@ -77,6 +77,31 @@ export const TENANT_ROLES_CAN_APPROVE_ORDERS: readonly TenantRole[] = ["OWNER", 
 /** Credenciales, markup, equipo, canje y sync a mano: quien manda el local. */
 export const TENANT_ROLES_CAN_MANAGE_COMMERCE: readonly TenantRole[] = ["OWNER", "ADMIN"];
 
+/** Equipo, códigos, publicidad y asignación de vendedor en el distribuidor. */
+export const TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR: readonly TenantRole[] = ["OWNER", "ADMIN"];
+
+/**
+ * Roles que el gerente invita desde su panel. Product Manager se asigna más
+ * adelante, no desde acá.
+ */
+export const TENANT_ROLES_INVITABLE_DISTRIBUTOR: readonly TenantRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SELLER",
+  "VIEWER",
+];
+
+/** Cartera, pedidos de clientes y chat del mayorista. El PM todavía no. */
+export const TENANT_ROLES_CAN_SEE_PORTFOLIO: readonly TenantRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SELLER",
+  "VIEWER",
+];
+
+/** Quién escribe en el chat del vínculo. Solo lectura mira, no manda. */
+export const TENANT_ROLES_CAN_CHAT: readonly TenantRole[] = ["OWNER", "ADMIN", "BUYER", "SELLER"];
+
 /** Roles que pueden vaciar el catálogo de la organización. */
 export const TENANT_ROLES_CAN_PURGE_CATALOG: readonly TenantRole[] = ["OWNER", "ADMIN"];
 

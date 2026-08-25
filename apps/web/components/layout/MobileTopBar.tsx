@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, ShoppingCart } from "lucide-react";
+import { Menu, MessageSquare, ShoppingCart } from "lucide-react";
 import { useCart } from "@/lib/cart";
+import { getTenant } from "@/lib/auth";
 import NodoLogo from "../NodoLogo";
 import NodoWordmark from "../NodoWordmark";
 
@@ -12,6 +13,8 @@ interface Props {
 
 export default function MobileTopBar({ onOpen }: Props) {
   const { totalCount } = useCart();
+  const tenant = getTenant();
+  const showCart = tenant?.type !== "DISTRIBUTOR";
 
   return (
     <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-surface-900 border-b border-surface-800 flex items-center justify-between px-4 h-12">
@@ -22,14 +25,20 @@ export default function MobileTopBar({ onOpen }: Props) {
         <NodoLogo className="w-5 h-5" />
         <NodoWordmark className="h-3.5" />
       </div>
-      <Link href="/cart" className="relative text-surface-300 hover:text-white" aria-label="Carrito">
-        <ShoppingCart className="w-5 h-5" />
-        {totalCount > 0 && (
-          <span className="absolute -top-1 -right-1 bg-brand-600 text-white text-[9px] font-bold rounded-full min-w-[1rem] h-4 px-1 flex items-center justify-center">
-            {totalCount}
-          </span>
-        )}
-      </Link>
+      {showCart ? (
+        <Link href="/cart" className="relative text-surface-300 hover:text-white" aria-label="Carrito">
+          <ShoppingCart className="w-5 h-5" />
+          {totalCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-brand-600 text-white text-[9px] font-bold rounded-full min-w-[1rem] h-4 px-1 flex items-center justify-center">
+              {totalCount}
+            </span>
+          )}
+        </Link>
+      ) : (
+        <Link href="/chat" className="text-surface-300 hover:text-white" aria-label="Chat">
+          <MessageSquare className="w-5 h-5" />
+        </Link>
+      )}
     </div>
   );
 }

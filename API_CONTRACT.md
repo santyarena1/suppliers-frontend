@@ -94,6 +94,42 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. El comprador confirma solo si `buyerCanConfirm` está prendido en el local (se lee de la base, no del token). Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_TIPO1.md`.
 
+### [FEATURE] Cartera del distribuidor
+- **Método**: GET | PUT
+- **Ruta**: `/my/clients`, `/my/clients/:linkId`, `/my/client-orders`, `/my/clients/:linkId/orders`
+- **Auth**: Bearer con organización `DISTRIBUTOR` · vendedor, solo sus clientes
+- **Body / Params**: `{ accountManagerId?, discountPercent?, notes? }`
+- **Respuesta esperada**: lista con `{ linkId, commerce, accountManager, discountPercent, orderSummary }` · pedidos `{ commerceName, status, approvalStatus, itemsCount, createdAt }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: NODO para el mayorista es cartera, no para comprar. El descuento se guarda acá y el comercio no lo ve; no se aplica al catálogo en esta tanda. Product Manager recibe 403. Ver `docs/PLAN_TIPO2.md`.
+
+### [FEATURE] Códigos de vinculación del mayorista
+- **Método**: GET | POST | DELETE
+- **Ruta**: `/my/access-codes`, `/my/access-codes/:codeId`
+- **Auth**: Bearer · Gerente o Administrador del distribuidor (o marca)
+- **Body / Params**: alta `{ label?, maxUses?, expiresInDays? }`
+- **Respuesta esperada**: `{ id, code, label, maxUses, usedCount, expiresAt, revoked, redemptions: [{ commerceName, redeemedAt }] }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El QR en pantalla es el mismo código escrito. El canje sigue sin revelar el origen hasta completarse. DELETE revoca.
+
+### [FEATURE] Publicidad del distribuidor
+- **Método**: PUT
+- **Ruta**: `/my/advertising`
+- **Auth**: Bearer · Gerente o Administrador
+- **Body / Params**: `{ advertisingEnabled }`
+- **Respuesta esperada**: `{ advertisingEnabled }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Es el tilde que ya usaba el descubrimiento cerrado. Sin él, un comercio no vinculado no sabe que el mayorista existe.
+
+### [FEATURE] Chat del vínculo
+- **Método**: GET | POST
+- **Ruta**: `/my/chats`, `/my/chats/:linkId`
+- **Auth**: Bearer con organización (comercio o distribuidor)
+- **Body / Params**: `{ body }` (máx. 2000)
+- **Respuesta esperada**: hilos `{ linkId, otherName, lastMessage }` · mensajes `{ id, body, mine, sender, createdAt }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un hilo por `TenantLink`. El vendedor del mayorista solo entra a los de *sus* clientes. Solo lectura mira, no escribe.
+
 ## Pendiente (futuro)
 
 

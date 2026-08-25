@@ -72,12 +72,15 @@ Proveedores y marcas distribuidoras. Ejemplos reales: New Bytes, Elit. Se enlaza
 catálogo mediante `Tenant.providerKey` (`NEW_BYTES`, `ELIT`, …) cuando el proveedor tiene
 integración por API.
 
-| Rol interno | Alcance |
-|---|---|
-| `OWNER` | Gerente. Usuarios internos, publicidad contratada, códigos de vinculación, política de precios y descuentos, asignación de vendedores a clientes. |
-| `SELLER` | Ve solo sus clientes asignados: resumen de órdenes, descuentos puntuales, sus datos de contacto visibles para el cliente. |
-| `PRODUCT_MANAGER` | Controla una o varias marcas **dentro de su distribuidor** (`ProductManagerScope`): descuentos, combos y publicidad limitados a esas marcas. |
-| `VIEWER` | Solo lectura. |
+| Rol interno | En pantalla | Alcance |
+|---|---|---|
+| `OWNER` | Gerente | Equipo, códigos + QR, descuento por comercio, publicidad, asignar vendedor. No se puede dejar la organización sin un gerente activo. |
+| `ADMIN` | Administrador | Lo mismo en el día a día; no reemplaza al gerente para el “último al mando”. |
+| `SELLER` | Vendedor | Ve solo sus clientes asignados: resumen de órdenes, descuentos puntuales, chat. No ve el comercio de un compañero. |
+| `PRODUCT_MANAGER` | Product Manager | Más adelante: marcas dentro de su distribuidor (`ProductManagerScope`). |
+| `VIEWER` | Solo lectura | Mira cartera, pedidos y chat. |
+
+El cierre de este tipo está en `docs/PLAN_TIPO2.md`. NODO para ellos es cartera, no para comprar. El descuento del vínculo se carga acá y el comercio no lo ve; todavía no se aplica al catálogo. El chat nace acá y se ve también en el local.
 
 Capacidades:
 
@@ -160,9 +163,8 @@ En pantalla, siempre nombres normalizados. Nunca slugs ni claves internas.
 ## 6. Fases
 
 El aislamiento (3a–5) quedó cerrado en `docs/PLAN_AISLAMIENTO.md` y ya está
-en producción. Lo que falta del comercio está en `docs/PLAN_TIPO1.md` (visión
-a validar). Distribuidores, marcas, publicidad y chat no se arrancan hasta
-cerrar Tipo 1.
+en producción. El comercio está en `docs/PLAN_TIPO1.md`. El distribuidor,
+en `docs/PLAN_TIPO2.md`. Marcas (Tipo 3) no se arrancan hasta cerrar Tipo 2.
 
 | Fase | Contenido | Estado |
 |---|---|---|
@@ -174,8 +176,8 @@ cerrar Tipo 1.
 | 3d | Búsqueda filtrada por `TenantLink`. | Hecho |
 | 4 | Aprobación de órdenes en la interfaz del comercio. | Hecho en API y `/pedidos`; la UI aún no distingue roles |
 | 5 | Códigos de vinculación: generación, canje anónimo y auditoría. | Hecho el código escrito. QR queda para Tipo 2 |
-| T1 | Cerrar el comercio: panel del local, alta, equipo, carrito compartido, roles. | Acordado en `docs/PLAN_TIPO1.md` |
-| 6 | Panel del distribuidor: cartera por vendedor, descuentos, resumen de órdenes. | Después de Tipo 1 |
+| T1 | Cerrar el comercio: panel del local, alta, equipo, carrito compartido, roles. | Hecho. `docs/PLAN_TIPO1.md` |
+| 6 | Panel del distribuidor: cartera por vendedor, descuentos, resumen de órdenes. | Hecho en `docs/PLAN_TIPO2.md` |
 | 7 | Panel de la marca: acciones comerciales, objetivos y reportes. | Después de Tipo 2 |
-| 8 | Publicidad paga y descubrimiento controlado. | Después de Tipo 2 |
-| 9 | Chat entre comercio y vendedor del distribuidor. | Después de Tipo 2 |
+| 8 | Publicidad paga y descubrimiento controlado. | Tilde del gerente en Tipo 2. Descubrimiento ya existía |
+| 9 | Chat entre comercio y vendedor del distribuidor. | Hecho en Tipo 2 |

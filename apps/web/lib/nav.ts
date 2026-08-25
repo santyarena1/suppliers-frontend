@@ -1,26 +1,28 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
-  Settings, Activity, Users,
+  Settings, Activity, Users, Briefcase, QrCode, MessageSquare, ShoppingBag,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ModuleKey, TenantType } from "@/lib/api";
+import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
 import type { UserRole } from "@/lib/auth";
 
 /**
  * Navegación declarativa del sidebar.
  *
- * Inicio / Búsqueda / Carrito van sueltos (acceso diario).
- * El resto vive en 3 secciones colapsables alineadas a los tipos de
- * organización (`TenantType`): Proveedores, Marcas, Sistema.
+ * Inicio / Búsqueda / Carrito van sueltos (acceso diario) para el comercio.
+ * El distribuidor ve cartera, códigos, pedidos de clientes y chat: NODO para
+ * ellos no es para comprar.
  *
  * Visibilidad:
  *  - `module` — permiso de plataforma (`GET /me/permissions`).
- *  - `tenantTypes` — cuando la sesión tenga membresía (fase 3 de tenants).
- *  - `roles` — fallback de plataforma hasta que exista esa membresía.
- * Superadmin (`ROLE_ADMIN` sin tenant) ve todo lo que su módulo permita.
+ *  - `tenantTypes` — tipo de organización de la sesión.
+ *  - `tenantRoles` — rol interno (vendedor vs gerente, etc.).
+ *  - `roles` — fallback de plataforma.
+ * Superadmin (`ROLE_ADMIN` sin tenant) ve administración y no las pantallas
+ * de una organización: esas aparecen al entrar como alguien que sí tiene.
  */
 
-export type NavSectionId = "providers" | "brands" | "system";
+export type NavSectionId = "providers" | "portfolio" | "brands" | "system";
 
 export type NavItemId =
   | "home"
@@ -28,6 +30,10 @@ export type NavItemId =
   | "cart"
   | "orders"
   | "providers"
+  | "cartera"
+  | "codigos"
+  | "client-orders"
+  | "chat"
   | "brands-portal"
   | "brands-panel"
   | "brands-admin"
@@ -44,6 +50,8 @@ export interface NavItemDef {
   module?: ModuleKey;
   /** Tipos de organización que ven este ítem. Se ignora si no hay tenant en sesión. */
   tenantTypes?: TenantType[];
+  /** Rol interno. Se ignora si no hay membresía. */
+  tenantRoles?: TenantRole[];
   /** Fallback mientras /me no exponga la membresía. */
   roles?: UserRole[];
   badge?: "cart";
@@ -58,14 +66,31 @@ export interface NavSectionDef {
 
 export const NAV_SECTIONS: NavSectionDef[] = [
   { id: "providers", label: "Proveedores" },
+  { id: "portfolio", label: "Cartera" },
   { id: "brands", label: "Marcas" },
   { id: "system", label: "Sistema" },
 ];
 
 export const NAV_ITEMS: NavItemDef[] = [
   { id: "home", href: "/", label: "Inicio", icon: Home, exact: true },
-  { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search" },
-  { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers" },
+  {
+    id: "search",
+    href: "/search",
+    label: "Búsqueda",
+    icon: Search,
+    module: "search",
+    tenantTypes: ["RETAILER"],
+  },
+  {
+    id: "cart",
+    href: "/cart",
+    label: "Carrito",
+    icon: ShoppingCart,
+    module: "cart",
+    badge: "cart",
+    sublabel: "providers",
+    tenantTypes: ["RETAILER"],
+  },
 
   {
     id: "orders",
@@ -84,6 +109,42 @@ export const NAV_ITEMS: NavItemDef[] = [
     module: "providers",
     tenantTypes: ["RETAILER"],
     section: "providers",
+  },
+  {
+    id: "chat",
+    href: "/chat",
+    label: "Chat",
+    icon: MessageSquare,
+    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
+    tenantRoles: ["OWNER", "ADMIN", "BUYER", "SELLER", "VIEWER"],
+  },
+
+  {
+    id: "cartera",
+    href: "/cartera",
+    label: "Clientes",
+    icon: Briefcase,
+    tenantTypes: ["DISTRIBUTOR"],
+    tenantRoles: ["OWNER", "ADMIN", "SELLER", "VIEWER"],
+    section: "portfolio",
+  },
+  {
+    id: "codigos",
+    href: "/codigos",
+    label: "Códigos",
+    icon: QrCode,
+    tenantTypes: ["DISTRIBUTOR"],
+    tenantRoles: ["OWNER", "ADMIN"],
+    section: "portfolio",
+  },
+  {
+    id: "client-orders",
+    href: "/pedidos-clientes",
+    label: "Pedidos de clientes",
+    icon: ShoppingBag,
+    tenantTypes: ["DISTRIBUTOR"],
+    tenantRoles: ["OWNER", "ADMIN", "SELLER", "VIEWER"],
+    section: "portfolio",
   },
 
   {
@@ -140,8 +201,8 @@ export const NAV_ITEMS: NavItemDef[] = [
 export interface NavContext {
   role: UserRole | null;
   modules: ModuleKey[] | null;
-  /** Presente cuando la sesión conozca la organización activa. */
   tenantType?: TenantType | null;
+  tenantRole?: TenantRole | null;
   isSuperadmin?: boolean;
 }
 
@@ -162,10 +223,16 @@ export function canSeeNavItem(item: NavItemDef, ctx: NavContext): boolean {
     return false;
   }
 
-  const superadmin = ctx.isSuperadmin || ctx.role === "ROLE_ADMIN";
+  if (item.tenantTypes) {
+    if (!ctx.tenantType || !item.tenantTypes.includes(ctx.tenantType)) return false;
+  }
+  if (item.tenantRoles) {
+    if (!ctx.tenantRole || !item.tenantRoles.includes(ctx.tenantRole)) return false;
+  }
+
+  const superadmin = ctx.isSuperadmin || (ctx.role === "ROLE_ADMIN" && !ctx.tenantType);
 
   if (ctx.tenantType && !superadmin) {
-    if (item.tenantTypes && !item.tenantTypes.includes(ctx.tenantType)) return false;
     return true;
   }
 

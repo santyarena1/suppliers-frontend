@@ -8,6 +8,7 @@ import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
 import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
+import { useRetailerOnly } from "@/lib/useRetailerOnly";
 import { useMyProviders } from "@/lib/myProviders";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
@@ -33,6 +34,7 @@ export default function SearchPageWrapper() {
 }
 
 function SearchPage() {
+  useRetailerOnly();
   const { setResults: persistResults } = useResults();
   const searchParams = useSearchParams();
   const initialQ = searchParams?.get("q") || "";

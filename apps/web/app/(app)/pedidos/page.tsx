@@ -5,6 +5,7 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import { ordersApi, type TenantOrder } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
+import { useRetailerOnly } from "@/lib/useRetailerOnly";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
@@ -14,6 +15,7 @@ import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
  * el administrador lo aprueba y recién entonces sale al proveedor.
  */
 export default function PedidosPage() {
+  useRetailerOnly();
   const [orders, setOrders] = useState<TenantOrder[]>([]);
   const [canApprove, setCanApprove] = useState(false);
   const [loading, setLoading] = useState(true);

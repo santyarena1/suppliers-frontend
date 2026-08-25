@@ -41,6 +41,7 @@ model User {
   memberships          TenantMembership[]
   managedAccounts      TenantLink[]          @relation("AccountManager")
   productManagerScopes ProductManagerScope[]
+  linkMessages         TenantLinkMessage[]
 
   @@index([brandId])
 }
@@ -106,6 +107,7 @@ model Tenant {
   priceHistory  ProductPriceHistory[]
   cartItems     CartItem[]
   orders        ProviderOrder[]
+  linkMessages  TenantLinkMessage[]
 
   @@index([type, active])
 }
@@ -145,8 +147,27 @@ model TenantLink {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
+  messages TenantLinkMessage[]
+
   @@unique([clientTenantId, supplierTenantId])
   @@index([supplierTenantId, status])
+  @@index([accountManagerId])
+}
+
+/// Hilo simple entre un comercio y el mayorista (o marca) con el que está vinculado.
+/// Un mensaje no sale de este vínculo: el vendedor de un cliente no lee el de otro.
+model TenantLinkMessage {
+  id             String     @id @default(uuid())
+  linkId         String
+  link           TenantLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  senderUserId   String
+  senderUser     User       @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  senderTenantId String
+  senderTenant   Tenant     @relation(fields: [senderTenantId], references: [id], onDelete: Cascade)
+  body           String
+  createdAt      DateTime   @default(now())
+
+  @@index([linkId, createdAt])
 }
 
 /// Código escrito o QR que un distribuidor o marca entrega por fuera de Nodo.

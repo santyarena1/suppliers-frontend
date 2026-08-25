@@ -264,3 +264,36 @@ export class SetProductManagerScopeDto {
   @IsString({ each: true })
   brandNames!: string[];
 }
+
+export class UpdateClientLinkDto {
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  accountManagerId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @Type(() => Number)
+  discountPercent?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(500)
+  notes?: string | null;
+}
+
+export class UpdateAdvertisingDto {
+  @IsBoolean()
+  advertisingEnabled!: boolean;
+}
+
+export class PostLinkMessageDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(2000)
+  body!: string;
+}

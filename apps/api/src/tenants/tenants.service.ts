@@ -433,6 +433,14 @@ export class TenantsService {
     return this.prisma.tenantAccessCode.update({ where: { id: codeId }, data: { revoked: true } });
   }
 
+  async revokeOwnAccessCode(tenant: TenantContext, codeId: string) {
+    const code = await this.prisma.tenantAccessCode.findUnique({ where: { id: codeId } });
+    if (!code || code.tenantId !== tenant.tenantId) {
+      throw new NotFoundException("Código no encontrado");
+    }
+    return this.prisma.tenantAccessCode.update({ where: { id: codeId }, data: { revoked: true } });
+  }
+
   /**
    * Canjea un código y deja vinculado al comercio con quien lo emitió.
    *
@@ -656,6 +664,7 @@ export class TenantsService {
         contactEmail: true,
         contactPhone: true,
         buyerCanConfirm: true,
+        advertisingEnabled: true,
       },
     });
     if (!row) throw new NotFoundException("Organización no encontrada");
@@ -678,6 +687,7 @@ export class TenantsService {
         contactEmail: true,
         contactPhone: true,
         buyerCanConfirm: true,
+        advertisingEnabled: true,
       },
     });
     return { ...row, role: tenant.tenantRole };
@@ -722,7 +732,7 @@ export class TenantsService {
   async updateOwnMember(tenant: TenantContext, membershipId: string, dto: UpdateMembershipDto) {
     const membership = await this.prisma.tenantMembership.findUnique({ where: { id: membershipId } });
     if (!membership || membership.tenantId !== tenant.tenantId) {
-      throw new NotFoundException("Persona no encontrada en este local");
+      throw new NotFoundException("Persona no encontrada en esta organización");
     }
     const updated = await this.updateMember(membershipId, dto);
     return this.serializeMember(updated);

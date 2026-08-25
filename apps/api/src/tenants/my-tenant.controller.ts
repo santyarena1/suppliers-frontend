@@ -1,18 +1,24 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { JwtPayload } from "@nodo/shared";
-import { TENANT_ROLES_CAN_MANAGE_COMMERCE } from "@nodo/shared";
+import { TENANT_ROLES_CAN_MANAGE_COMMERCE, TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR } from "@nodo/shared";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { ChatService } from "./chat.service";
 import {
+  CreateAccessCodeDto,
   InviteTeamMemberDto,
+  PostLinkMessageDto,
   RedeemAccessCodeDto,
+  UpdateAdvertisingDto,
   UpdateBuyerCanConfirmDto,
+  UpdateClientLinkDto,
   UpdateCommerceDto,
   UpdateMembershipDto,
 } from "./dto/tenant.dto";
+import { PortfolioService } from "./portfolio.service";
 import type { TenantContext } from "./tenant-context.service";
-import { assertTenantRole } from "./tenant-roles";
+import { assertTenantRole, assertTenantType } from "./tenant-roles";
 import { TenantVisibilityService } from "./tenant-visibility.service";
 import { TenantGuard } from "./tenant.guard";
 import { TenantsService } from "./tenants.service";
@@ -23,7 +29,9 @@ import { TenantsService } from "./tenants.service";
 export class MyTenantController {
   constructor(
     private readonly tenants: TenantsService,
-    private readonly visibility: TenantVisibilityService
+    private readonly visibility: TenantVisibilityService,
+    private readonly portfolio: PortfolioService,
+    private readonly chat: ChatService
   ) {}
 
   /** Los proveedores que existen para esta organización. Para el resto, no existen. */
@@ -49,6 +57,11 @@ export class MyTenantController {
     return this.tenants.setBuyerCanConfirm(tenant, dto.buyerCanConfirm);
   }
 
+  @Put("advertising")
+  setAdvertising(@CurrentTenant() tenant: TenantContext, @Body() dto: UpdateAdvertisingDto) {
+    return this.portfolio.setAdvertising(tenant, dto.advertisingEnabled);
+  }
+
   @Get("team")
   team(@CurrentTenant() tenant: TenantContext) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
@@ -58,6 +71,7 @@ export class MyTenantController {
   @Post("team")
   invite(@CurrentTenant() tenant: TenantContext, @Body() dto: InviteTeamMemberDto) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
+    this.portfolio.assertInvitableRole(tenant, dto.role);
     return this.tenants.inviteTeamMember(tenant, dto);
   }
 
@@ -68,6 +82,7 @@ export class MyTenantController {
     @Body() dto: UpdateMembershipDto
   ) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
+    if (dto.role) this.portfolio.assertInvitableRole(tenant, dto.role);
     return this.tenants.updateOwnMember(tenant, membershipId, dto);
   }
 
@@ -79,5 +94,90 @@ export class MyTenantController {
   ) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
     return this.tenants.redeemAccessCode(tenant, user.userId, dto.code);
+  }
+
+  // ---------- Cartera del distribuidor ----------
+
+  @Get("clients")
+  clients(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: JwtPayload) {
+    return this.portfolio.listClients(tenant, user.userId);
+  }
+
+  @Get("client-orders")
+  clientOrders(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: JwtPayload) {
+    return this.portfolio.listClientOrders(tenant, user.userId);
+  }
+
+  @Get("clients/:linkId")
+  client(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: JwtPayload,
+    @Param("linkId") linkId: string
+  ) {
+    return this.portfolio.getClient(tenant, user.userId, linkId);
+  }
+
+  @Get("clients/:linkId/orders")
+  clientLinkOrders(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: JwtPayload,
+    @Param("linkId") linkId: string
+  ) {
+    return this.portfolio.listClientOrders(tenant, user.userId, linkId);
+  }
+
+  @Put("clients/:linkId")
+  updateClient(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: JwtPayload,
+    @Param("linkId") linkId: string,
+    @Body() dto: UpdateClientLinkDto
+  ) {
+    return this.portfolio.updateClient(tenant, user.userId, linkId, dto);
+  }
+
+  @Get("access-codes")
+  accessCodes(@CurrentTenant() tenant: TenantContext) {
+    return this.portfolio.listAccessCodes(tenant);
+  }
+
+  @Post("access-codes")
+  createAccessCode(@CurrentTenant() tenant: TenantContext, @Body() dto: CreateAccessCodeDto) {
+    assertTenantType(tenant, ["DISTRIBUTOR", "BRAND"]);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR);
+    return this.tenants.createAccessCode(tenant.tenantId, dto);
+  }
+
+  @Delete("access-codes/:codeId")
+  revokeAccessCode(@CurrentTenant() tenant: TenantContext, @Param("codeId") codeId: string) {
+    assertTenantType(tenant, ["DISTRIBUTOR", "BRAND"]);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_DISTRIBUTOR);
+    return this.tenants.revokeOwnAccessCode(tenant, codeId);
+  }
+
+  // ---------- Chat (comercio y mayorista) ----------
+
+  @Get("chats")
+  chats(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: JwtPayload) {
+    return this.chat.list(tenant, user.userId);
+  }
+
+  @Get("chats/:linkId")
+  chatThread(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: JwtPayload,
+    @Param("linkId") linkId: string
+  ) {
+    return this.chat.listMessages(tenant, user.userId, linkId);
+  }
+
+  @Post("chats/:linkId")
+  postChat(
+    @CurrentTenant() tenant: TenantContext,
+    @CurrentUser() user: JwtPayload,
+    @Param("linkId") linkId: string,
+    @Body() dto: PostLinkMessageDto
+  ) {
+    return this.chat.post(tenant, user.userId, linkId, dto.body);
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { useTheme, THEME_OPTIONS, type Theme } from "@/lib/theme";
 import { getTenant, getUser } from "@/lib/auth";
@@ -9,9 +10,9 @@ import {
   myApi,
   invalidateMyProviders,
   loadMyProviders,
-  TENANT_ROLE_LABELS,
   tenantRoleLabel,
   TENANT_ROLES_BY_TYPE,
+  TENANT_ROLES_INVITABLE_DISTRIBUTOR,
   type CommerceProfile,
   type TenantMember,
   type TenantRole,
@@ -21,7 +22,7 @@ import RedeemAccessCode from "@/components/RedeemAccessCode";
 import GeneratedPassword from "@/components/admin/GeneratedPassword";
 import {
   Settings, Palette, DollarSign, Receipt, Check, RefreshCw, Sun, Moon, Sparkles,
-  Building2, Users, ClipboardList, Link2, Loader2,
+  Building2, Users, ClipboardList, Link2, Loader2, Megaphone,
 } from "lucide-react";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
@@ -30,20 +31,22 @@ const THEME_ICONS: Record<Theme, React.ElementType> = {
   light: Sun,
 };
 
-type Tab = "local" | "equipo" | "pedidos" | "vinculados" | "preferencias";
+type Tab = "local" | "equipo" | "pedidos" | "vinculados" | "publicidad" | "preferencias";
 
 export default function ConfiguracionPage() {
   const user = getUser();
   const tenant = getTenant();
   const isRetailer = tenant?.type === "RETAILER";
+  const isDistributor = tenant?.type === "DISTRIBUTOR";
   const manage = canManageCommerce();
-  const [tab, setTab] = useState<Tab>(isRetailer ? "local" : "preferencias");
+  const [tab, setTab] = useState<Tab>(isRetailer || isDistributor ? "local" : "preferencias");
 
   const tabs: { key: Tab; label: string; show: boolean }[] = [
-    { key: "local", label: "Local", show: !!tenant },
-    { key: "equipo", label: "Equipo", show: isRetailer && manage },
+    { key: "local", label: isDistributor ? "Empresa" : "Local", show: !!tenant },
+    { key: "equipo", label: "Equipo", show: (isRetailer || isDistributor) && manage },
     { key: "pedidos", label: "Pedidos", show: isRetailer && manage },
     { key: "vinculados", label: "Proveedores vinculados", show: isRetailer },
+    { key: "publicidad", label: "Publicidad", show: isDistributor && manage },
     { key: "preferencias", label: "Preferencias", show: true },
   ];
 
@@ -85,6 +88,7 @@ export default function ConfiguracionPage() {
           {tab === "equipo" && <EquipoTab />}
           {tab === "pedidos" && <PedidosTab />}
           {tab === "vinculados" && <VinculadosTab manage={manage} />}
+          {tab === "publicidad" && <PublicidadTab />}
           {tab === "preferencias" && <PreferenciasTab />}
         </div>
       </div>
@@ -106,7 +110,7 @@ function LocalTab({ manage }: { manage: boolean }) {
       setName(res.data.name);
       setEmail(res.data.contactEmail ?? "");
       setPhone(res.data.contactPhone ?? "");
-    }).catch(() => setMsg({ ok: false, text: "No se pudo cargar el local" }));
+    }).catch(() => setMsg({ ok: false, text: "No se pudo cargar la organización" }));
   }, []);
 
   async function save(e: React.FormEvent) {
@@ -120,7 +124,7 @@ function LocalTab({ manage }: { manage: boolean }) {
         contactPhone: phone.trim() || null,
       });
       setProfile(res.data);
-      setMsg({ ok: true, text: "Datos del local guardados" });
+      setMsg({ ok: true, text: "Datos guardados" });
     } catch (err: unknown) {
       const text = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setMsg({ ok: false, text: text || "No se pudo guardar" });
@@ -137,7 +141,7 @@ function LocalTab({ manage }: { manage: boolean }) {
     <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-1">
         <Building2 className="w-4 h-4 text-brand-400" />
-        <h2 className="text-sm font-semibold text-white">Local</h2>
+        <h2 className="text-sm font-semibold text-white">{profile.type === "DISTRIBUTOR" ? "Empresa" : "Local"}</h2>
       </div>
       <p className="text-xs text-surface-500 mb-4">Nombre y contacto de {profile.name}.</p>
       <form onSubmit={save} className="flex flex-col gap-4">
@@ -190,13 +194,16 @@ function LocalTab({ manage }: { manage: boolean }) {
 }
 
 function EquipoTab() {
+  const tenant = getTenant();
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [invite, setInvite] = useState({ username: "", email: "", role: "SELLER" as TenantRole, title: "" });
   const [sending, setSending] = useState(false);
   const [generated, setGenerated] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const roles = TENANT_ROLES_BY_TYPE.RETAILER;
+  const roles = tenant?.type === "DISTRIBUTOR"
+    ? TENANT_ROLES_INVITABLE_DISTRIBUTOR
+    : TENANT_ROLES_BY_TYPE.RETAILER;
 
   const load = useCallback(async () => {
     try {
@@ -260,7 +267,7 @@ function EquipoTab() {
         <Users className="w-4 h-4 text-brand-400" />
         <h2 className="text-sm font-semibold text-white">Equipo</h2>
       </div>
-      <p className="text-xs text-surface-500 mb-4">Quién trabaja en el local. Al invitar se genera una contraseña de una sola vez.</p>
+        <p className="text-xs text-surface-500 mb-4">Quién trabaja en la organización. Al invitar se genera una contraseña de una sola vez.</p>
 
       {loading ? (
         <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
@@ -276,12 +283,12 @@ function EquipoTab() {
                 <p className="text-[11px] text-surface-500">{member.email}</p>
               </div>
               <select
-                value={member.tenantRole === "OWNER" ? "ADMIN" : member.tenantRole}
+                value={tenant?.type === "RETAILER" && member.tenantRole === "OWNER" ? "ADMIN" : member.tenantRole}
                 onChange={(e) => changeRole(member, e.target.value as TenantRole)}
                 className="bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white"
               >
                 {roles.map((role) => (
-                  <option key={role} value={role}>{tenantRoleLabel(role, "RETAILER")}</option>
+                  <option key={role} value={role}>{tenantRoleLabel(role, tenant?.type)}</option>
                 ))}
               </select>
               <button
@@ -327,7 +334,7 @@ function EquipoTab() {
             className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white"
           >
             {roles.map((role) => (
-              <option key={role} value={role}>{TENANT_ROLE_LABELS[role]}</option>
+              <option key={role} value={role}>{tenantRoleLabel(role, tenant?.type)}</option>
             ))}
           </select>
           <input
@@ -459,6 +466,11 @@ function VinculadosTab({ manage }: { manage: boolean }) {
                   Vendedor de contacto: {p.accountManager.name} · {p.accountManager.email}
                 </p>
               )}
+              {p.linkId && (
+                <Link href={`/chat/${p.linkId}`} className="text-[11px] text-brand-400 hover:text-brand-300 mt-1 inline-block">
+                  Abrir chat
+                </Link>
+              )}
             </div>
           ))}
         </div>
@@ -469,6 +481,64 @@ function VinculadosTab({ manage }: { manage: boolean }) {
       ) : (
         <p className="text-xs text-surface-500">Solo el administrador canjea códigos de vinculación.</p>
       )}
+    </section>
+  );
+}
+
+function PublicidadTab() {
+  const [value, setValue] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    void myApi.commerce().then((res) => {
+      setValue(Boolean(res.data.advertisingEnabled));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  async function toggle() {
+    const next = !value;
+    setValue(next);
+    setSaving(true);
+    setMsg(null);
+    try {
+      await myApi.setAdvertising(next);
+    } catch {
+      setValue(!next);
+      setMsg("No se pudo guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Megaphone className="w-4 h-4 text-brand-400" />
+        <h2 className="text-sm font-semibold text-white">Publicidad</h2>
+      </div>
+      <p className="text-xs text-surface-500 mb-4 leading-relaxed">
+        Si está prendido, un comercio que no te tiene vinculado puede verte en NODO
+        y pedir cuenta. El catálogo no se abre: solo se sabe que existís.
+      </p>
+      {loading ? (
+        <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+      ) : (
+        <button
+          type="button"
+          onClick={toggle}
+          disabled={saving}
+          className="w-full flex items-center justify-between bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-xl px-4 py-3 transition-all"
+        >
+          <span className="text-sm text-surface-200 text-left">Mostrarme a comercios no vinculados</span>
+          <div className={`w-9 h-5 rounded-full relative transition-colors ${value ? "bg-brand-600" : "bg-surface-600"}`}>
+            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${value ? "left-4" : "left-0.5"}`} />
+          </div>
+        </button>
+      )}
+      {msg && <p className="text-xs text-red-400 mt-2">{msg}</p>}
     </section>
   );
 }
