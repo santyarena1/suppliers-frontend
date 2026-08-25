@@ -213,6 +213,8 @@ function SearchPage() {
 
   // Apply in-results filters + sort
   const filtered = useMemo(() => {
+    // iibbEpoch fuerza reorden cuando se aprende una alícuota nueva
+    void iibbEpoch;
     const sortPrice = (p: ProductDTO) => {
       const pricing = purchaseLinePricing(p, purchasePolicies[p.provider], priceMode);
       return displayAmountFromPricing(

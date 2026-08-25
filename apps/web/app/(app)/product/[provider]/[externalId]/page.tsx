@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect, useMemo } from "react";
+import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -129,9 +129,9 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     : null;
   const displayUSD = shown?.displayUsd ?? 0;
   const unitDisplayUsd = shown?.unitDisplayUsd ?? 0;
-  const conv = useMemo(() => convert(displayUSD), [convert, displayUSD]);
-  const unitConv = useMemo(() => convert(unitDisplayUsd), [convert, unitDisplayUsd]);
-  const unitNetConv = useMemo(() => convert(pricing?.unitNet ?? 0), [convert, pricing?.unitNet]);
+  const conv = convert(displayUSD);
+  const unitConv = convert(unitDisplayUsd);
+  const unitNetConv = convert(pricing?.unitNet ?? 0);
   const estimatedIibbLine =
     shown?.estimatedIibb && shown.iibbUnitUsd > 0.0001
       ? {
