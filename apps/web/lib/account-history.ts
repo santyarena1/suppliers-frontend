@@ -78,3 +78,63 @@ export function paginateRows<T>(
     pages,
   };
 }
+
+/** Parsea importes de portales (número, "1.234,56", "USD 120", etc.). */
+export function parseAccountAmount(raw: string | number | null | undefined): number | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  let s = String(raw).trim().replace(/\s/g, "");
+  s = s.replace(/[^\d,.\-]/g, "");
+  if (!s || s === "-" || s === "." || s === ",") return null;
+
+  const hasDot = s.includes(".");
+  const hasComma = s.includes(",");
+  if (hasDot && hasComma) {
+    // El último separador suele ser el decimal.
+    if (s.lastIndexOf(",") > s.lastIndexOf(".")) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (hasComma && !hasDot) {
+    // "1234,56" o "1.234" mal tipado como coma → decimal si hay 1–2 dígitos finales
+    if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, "").replace(",", ".");
+    else s = s.replace(/,/g, "");
+  } else if (hasDot) {
+    // miles US "1,234.56" ya sin comas; o miles EU "1.234" sin decimales
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  }
+
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function sumAccountAmounts(
+  values: Array<string | number | null | undefined>
+): number | null {
+  let sum = 0;
+  let any = false;
+  for (const v of values) {
+    const n = parseAccountAmount(v);
+    if (n != null) {
+      sum += n;
+      any = true;
+    }
+  }
+  return any ? sum : null;
+}
+
+export function formatAccountSum(
+  n: number,
+  currency?: string | null
+): string {
+  const code = currency === "USD" || currency === "ARS" ? currency : null;
+  if (code) {
+    return n.toLocaleString("es-AR", {
+      style: "currency",
+      currency: code,
+      maximumFractionDigits: 2,
+    });
+  }
+  return n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+}

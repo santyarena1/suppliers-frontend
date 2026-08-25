@@ -23,6 +23,9 @@ type Props = {
   onRefresh: () => void;
   refreshing?: boolean;
   fromCache?: boolean;
+  /** Suma de importes del filtro actual (mes / todos), no solo la página. */
+  amountTotal?: string | null;
+  amountTotalLabel?: string;
   /** Contenido de la sección activa (tabla, etc.). */
   children: React.ReactNode;
   /** Bloque fijo arriba del listado (saldo, formularios…). */
@@ -43,6 +46,8 @@ export default function AccountHistoryChrome({
   onRefresh,
   refreshing,
   fromCache,
+  amountTotal,
+  amountTotalLabel = "Total período",
   children,
   header,
   hint,
@@ -121,6 +126,16 @@ export default function AccountHistoryChrome({
       </div>
 
       {header}
+
+      {amountTotal ? (
+        <div className="flex items-baseline justify-between gap-3 rounded-xl border border-surface-800 bg-surface-900/50 px-4 py-3">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">
+            {amountTotalLabel}
+            {month !== "all" ? ` · ${monthLabel}` : ""}
+          </span>
+          <span className="text-lg font-bold tabular-nums text-white">{amountTotal}</span>
+        </div>
+      ) : null}
 
       <div className="border border-surface-800 rounded-xl p-4 sm:p-5 flex flex-col gap-3">
         {children}

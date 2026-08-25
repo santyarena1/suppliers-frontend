@@ -18,6 +18,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
+import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
 
 type CachedPayload = { note: string | null; drafts: NodoProviderDraft[] };
 
@@ -74,6 +75,9 @@ export default function GrupoNucleoAccountPanel() {
   );
   useClampPage(history.page, paged.pages, history.setPage);
 
+  const amountSum = sumAccountAmounts(paged.filtered.map((d) => d.total));
+  const amountTotal = amountSum != null ? formatAccountSum(amountSum) : null;
+
   return (
     <>
       <AccountHistoryChrome
@@ -89,6 +93,7 @@ export default function GrupoNucleoAccountPanel() {
         onRefresh={() => void load(true)}
         refreshing={loading}
         fromCache={fromCache}
+        amountTotal={amountTotal}
         hint={note || "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá van solo los pedidos creados desde Nodo. Mes actual por defecto, de a 25."}
       >
         {loading && drafts == null ? (
