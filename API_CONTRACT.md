@@ -111,6 +111,6 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/assets/upload`
 - **Auth**: Bearer token requerido (cualquier usuario autenticado)
 - **Body / Params**: `multipart/form-data` con campo `file` (imagen JPEG, PNG, WebP, GIF o SVG, máx. 5 MB)
-- **Respuesta esperada**: `{ url: "/uploads/<uuid>.ext" }`
+- **Respuesta esperada**: `{ url: "/assets/<uuid>" }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Los archivos se sirven en `GET /uploads/<filename>` (público, sin auth). Banners y logos aceptan URL externa o path `/uploads/...`.
+- **Notas**: Los bytes se guardan en Postgres (`StoredAsset`) y se sirven en `GET /assets/<uuid>` (público, sin auth). Así viajan con la DB entre máquinas/deploys. Banners y logos aceptan URL externa, path `/assets/...` o legacy `/uploads/...` (disco local; se mantiene por compatibilidad).

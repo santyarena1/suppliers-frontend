@@ -339,6 +339,18 @@ model ProductPriceHistory {
   @@index([tenantId, provider, externalId, capturedAt])
 }
 
+// Imágenes subidas desde el panel (logos, banners). Se guardan en Postgres
+// para que viajen con la DB entre máquinas/deploys (no dependen del disco local).
+// La URL pública estable es `/assets/<id>`.
+model StoredAsset {
+  id        String   @id @default(uuid())
+  mimeType  String
+  filename  String
+  byteSize  Int
+  data      Bytes
+  createdAt DateTime @default(now())
+}
+
 // Configuración visual + de visibilidad por proveedor, editable desde el
 // panel de superadmin. Ausencia de fila para un proveedor = visible, sin
 // logo/color custom (se usan los defaults de providerColors.ts).
@@ -363,7 +375,7 @@ model UserModuleAccess {
 }
 
 // Banners de imagen para el home y la landing del buscador, editables desde
-// el panel de superadmin. Se usan URLs de imagen (no hay upload de archivos).
+// el panel de superadmin. `imageUrl` puede ser URL externa o path `/assets/...`.
 model HomeBanner {
   id        String   @id @default(uuid())
   position  String

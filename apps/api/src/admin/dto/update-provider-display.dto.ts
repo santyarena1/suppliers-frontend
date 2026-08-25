@@ -7,7 +7,7 @@ export class UpdateProviderDisplayDto {
   visible?: boolean;
 
   @IsOptional()
-  @IsImageUrlOrUploadPath({ message: "logoUrl debe ser una URL válida o un path /uploads/..." })
+  @IsImageUrlOrUploadPath({ message: "logoUrl debe ser una URL válida o un path /assets/..." })
   logoUrl?: string;
 
   @IsOptional()
