@@ -460,6 +460,8 @@ model ProviderOrder {
   errorMessage        String?
   items               Json
   addressSnapshot     Json
+  /// ONLINE = checkout al portal. OFFLINE = pedido de Nodo, sin portal, editable.
+  channel             String              @default("ONLINE")
   // Aprobación interna del comercio: un vendedor arma el pedido pero no lo
   // confirma; queda en PENDING_APPROVAL hasta que lo aprueba el dueño.
   approvalStatus      OrderApprovalStatus @default(NOT_REQUIRED)
@@ -479,6 +481,7 @@ model ProviderOrder {
   @@index([tenantId, provider, createdAt])
   @@index([tenantId, approvalStatus])
   @@index([approvalStatus])
+  @@index([tenantId, channel])
 }
 
 enum OrderApprovalStatus {

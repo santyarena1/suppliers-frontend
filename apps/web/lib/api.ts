@@ -277,6 +277,8 @@ export const myApi = {
 
 export type OrderApprovalStatus = "NOT_REQUIRED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 
+export type OrderChannel = "ONLINE" | "OFFLINE";
+
 /** Pedido de la organización, con la aprobación interna del comercio. */
 export interface TenantOrder {
   id: string;
@@ -284,15 +286,29 @@ export interface TenantOrder {
   providerName: string;
   status: string;
   approvalStatus: OrderApprovalStatus;
+  channel?: OrderChannel;
+  editable?: boolean;
   orderNumber: string | null;
   webOrderNumber: string | null;
   paymentLabel: string | null;
   deliveryLabel: string | null;
   notes: string | null;
   total: number | null;
+  quoteRate?: number | null;
   errorMessage: string | null;
   rejectionReason: string | null;
-  items: { name?: string; qty?: number; code?: string }[];
+  items: {
+    name?: string;
+    qty?: number;
+    code?: string;
+    externalId?: string;
+    sku?: string;
+    unitPrice?: number;
+    lineTotal?: number;
+    internosAmount?: number;
+    ivaPercent?: number;
+    internosPercent?: number;
+  }[];
   createdBy: string | null;
   approvedBy: string | null;
   approvalDecidedAt: string | null;
@@ -310,6 +326,34 @@ export interface PendingApprovals {
 export const ordersApi = {
   list: () => api.get<TenantOrder[]>("/orders"),
   pending: () => api.get<PendingApprovals>("/orders/pending-approval"),
+  createOffline: (orders: {
+    provider: Provider | string;
+    notes?: string;
+    quoteRate?: number;
+    items: {
+      externalId: string;
+      sku?: string;
+      name: string;
+      qty: number;
+      unitPrice: number;
+      internosAmount?: number;
+      ivaPercent?: number;
+      internosPercent?: number;
+    }[];
+  }[]) => api.post<TenantOrder[]>("/orders/offline", { orders }),
+  updateOffline: (id: string, body: {
+    notes?: string;
+    items?: {
+      externalId: string;
+      sku?: string;
+      name: string;
+      qty: number;
+      unitPrice: number;
+      internosAmount?: number;
+      ivaPercent?: number;
+      internosPercent?: number;
+    }[];
+  }) => api.patch<TenantOrder>(`/orders/${id}`, body),
   approve: (id: string) => api.post<{ id: string; status: string; message: string }>(`/orders/${id}/approve`, {}),
   reject: (id: string, reason?: string) => api.post<TenantOrder>(`/orders/${id}/reject`, { reason }),
 };

@@ -89,6 +89,7 @@ export class OrderApprovalService {
         items: items as Prisma.InputJsonValue,
         addressSnapshot: {},
         draftInput: draft as Prisma.InputJsonValue,
+        channel: "ONLINE",
       },
     });
 
@@ -192,9 +193,15 @@ export class OrderApprovalService {
       deliveryLabel: row.deliveryLabel,
       notes: row.notes,
       total: row.total == null ? null : Number(row.total),
+      quoteRate: (() => {
+        const draft = row.draftInput as { quoteRate?: unknown } | null;
+        return typeof draft?.quoteRate === "number" ? draft.quoteRate : null;
+      })(),
       errorMessage: row.errorMessage,
       rejectionReason: row.rejectionReason,
       items: Array.isArray(row.items) ? row.items : [],
+      channel: row.channel === "OFFLINE" ? "OFFLINE" : "ONLINE",
+      editable: row.channel === "OFFLINE" && row.approvalStatus !== "REJECTED",
       createdBy: row.createdBy?.username ?? null,
       approvedBy: row.approvedBy?.username ?? null,
       approvalDecidedAt: row.approvalDecidedAt?.toISOString() ?? null,

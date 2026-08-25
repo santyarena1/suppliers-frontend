@@ -111,6 +111,57 @@ function buildProviderOrder(
   };
 }
 
+export function buildSellerMessageFromOrder(opts: {
+  provider: string;
+  items: Array<{
+    name?: string;
+    qty?: number;
+    unitPrice?: number;
+    lineTotal?: number;
+    ivaPercent?: number;
+    internosPercent?: number;
+    internosAmount?: number;
+  }>;
+  clientName?: string | null;
+  sellerName?: string | null;
+  quoteRate?: number | null;
+  now?: Date;
+}): string {
+  const lines: SellerOrderLine[] = [];
+  let netUsd = 0;
+  let internosUsd = 0;
+  for (const it of opts.items) {
+    const qty = it.qty && it.qty > 0 ? it.qty : 1;
+    const unit = typeof it.unitPrice === "number" ? it.unitPrice : 0;
+    const lineTotal = typeof it.lineTotal === "number" ? it.lineTotal : round2(unit * qty);
+    lines.push({
+      qty,
+      description: it.name || "Producto",
+      ivaPercent: it.ivaPercent ?? 0,
+      internosPercent: it.internosPercent ?? 0,
+      unitPriceUsd: unit,
+      lineTotalUsd: lineTotal,
+    });
+    netUsd += lineTotal;
+    internosUsd += (it.internosAmount ?? 0) * qty;
+  }
+  const extraCharges: SellerOrderCharge[] = [];
+  if (internosUsd > 0.005) extraCharges.push({ label: "Imp. internos", usd: round2(internosUsd) });
+  return formatSellerOrderText([
+    {
+      reference: sellerOrderReference(opts.now ?? new Date()),
+      providerLabel: providerDisplayName(opts.provider),
+      clientName: opts.clientName ?? null,
+      sellerName: opts.sellerName ?? null,
+      quoteRate: opts.quoteRate ?? null,
+      lines,
+      netUsd: round2(netUsd),
+      extraCharges,
+      finalUsd: round2(netUsd + internosUsd),
+    },
+  ]);
+}
+
 function formatPct(n: number) {
   const r = Math.round(n * 10) / 10;
   return `${Number.isInteger(r) ? String(r) : r.toFixed(1)}%`;
