@@ -35,6 +35,7 @@ import { GrupoNucleoCheckoutDraftDto, GrupoNucleoCheckoutPreviewDto } from "./dt
 import { AirCheckoutDraftDto, AirCheckoutPreviewDto } from "./dto/air-checkout.dto";
 import { ElitCheckoutDraftDto, ElitCheckoutPreviewDto } from "./dto/elit-checkout.dto";
 import { ElitPaymentOperationDto } from "./dto/elit-payment.dto";
+import { AccountPortalCache, wantsRefresh } from "./account-portal-cache";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -61,7 +62,8 @@ export class ProvidersController {
     private readonly airOrderService: AirOrderService,
     private readonly elitAccountService: ElitAccountService,
     private readonly elitOrderService: ElitOrderService,
-    private readonly orderApproval: OrderApprovalService
+    private readonly orderApproval: OrderApprovalService,
+    private readonly accountCache: AccountPortalCache
   ) {}
 
   /**
@@ -90,14 +92,26 @@ export class ProvidersController {
 
   /** Historial real de pedidos de Invid (solo lectura) — usa la credencial del portal ya guardada. */
   @Get("providers/INVID/orders")
-  async invidOrders(@CurrentTenant() tenant: TenantContext) {
-    return this.invidAccountService.getOrders(await this.invidCredentials(tenant));
+  async invidOrders(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string
+  ) {
+    const key = `${tenant.tenantId}:INVID:orders`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.invidAccountService.getOrders(await this.invidCredentials(tenant))
+    );
   }
 
   /** Saldo y movimientos reales de cuenta corriente de Invid (solo lectura). */
   @Get("providers/INVID/account-statement")
-  async invidAccountStatement(@CurrentTenant() tenant: TenantContext) {
-    return this.invidAccountService.getAccountStatement(await this.invidCredentials(tenant));
+  async invidAccountStatement(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string
+  ) {
+    const key = `${tenant.tenantId}:INVID:cta`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.invidAccountService.getAccountStatement(await this.invidCredentials(tenant))
+    );
   }
 
   @Get("providers/INVID/documents")
@@ -170,20 +184,38 @@ export class ProvidersController {
 
   /** Historial real de pedidos web de NewBytes (solo lectura). */
   @Get("providers/NEW_BYTES/orders")
-  async newBytesOrders(@CurrentTenant() tenant: TenantContext) {
-    return this.newBytesAccountService.getOrders(await this.newBytesCredentials(tenant));
+  async newBytesOrders(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string
+  ) {
+    const key = `${tenant.tenantId}:NEW_BYTES:orders`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.newBytesAccountService.getOrders(await this.newBytesCredentials(tenant))
+    );
   }
 
   /** Órdenes de compra reales de NewBytes (las que genera el checkout). */
   @Get("providers/NEW_BYTES/purchase-orders")
-  async newBytesPurchaseOrders(@CurrentTenant() tenant: TenantContext) {
-    return this.newBytesAccountService.getPurchaseOrders(await this.newBytesCredentials(tenant));
+  async newBytesPurchaseOrders(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string
+  ) {
+    const key = `${tenant.tenantId}:NEW_BYTES:purchase-orders`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.newBytesAccountService.getPurchaseOrders(await this.newBytesCredentials(tenant))
+    );
   }
 
   /** Comprobantes / cuenta corriente de NewBytes (solo lectura). */
   @Get("providers/NEW_BYTES/account-statement")
-  async newBytesAccountStatement(@CurrentTenant() tenant: TenantContext) {
-    return this.newBytesAccountService.getAccountStatement(await this.newBytesCredentials(tenant));
+  async newBytesAccountStatement(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string
+  ) {
+    const key = `${tenant.tenantId}:NEW_BYTES:cta`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.newBytesAccountService.getAccountStatement(await this.newBytesCredentials(tenant))
+    );
   }
 
   @Get("providers/NEW_BYTES/profile")
@@ -322,8 +354,14 @@ export class ProvidersController {
   }
 
   @Get("providers/AIR/account")
-  async airAccount(@CurrentTenant() tenant: TenantContext) {
-    return this.airAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "AIR"));
+  async airAccount(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string
+  ) {
+    const key = `${tenant.tenantId}:AIR:account`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.airAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "AIR"))
+    );
   }
 
   @Get("providers/AIR/documents")
@@ -368,8 +406,14 @@ export class ProvidersController {
   }
 
   @Get("providers/ELIT/account")
-  async elitAccount(@CurrentTenant() tenant: TenantContext) {
-    return this.elitAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "ELIT"));
+  async elitAccount(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string
+  ) {
+    const key = `${tenant.tenantId}:ELIT:account`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.elitAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "ELIT"))
+    );
   }
 
   @Get("providers/ELIT/salenotes/:number")

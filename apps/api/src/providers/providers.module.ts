@@ -23,6 +23,7 @@ import { AirOrderService } from "./air-order.service";
 import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
 import { OrderApprovalService } from "../orders/order-approval.service";
+import { AccountPortalCache } from "./account-portal-cache";
 
 @Module({
   imports: [CredentialsModule, TenantsModule],
@@ -31,6 +32,7 @@ import { OrderApprovalService } from "../orders/order-approval.service";
     ProvidersService,
     ProviderRegistry,
     SyncSchedulerService,
+    AccountPortalCache,
     ElitAdapter,
     InvidAdapter,
     AirAdapter,

@@ -711,10 +711,16 @@ export interface InvidAccountMovement {
   hrefs?: string[];
 }
 export const invidAccountApi = {
-  orders: () =>
-    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>("/providers/INVID/orders"),
-  accountStatement: () =>
-    api.get<{ balance: number | null; movements: InvidAccountMovement[] }>("/providers/INVID/account-statement"),
+  orders: (opts?: { refresh?: boolean }) =>
+    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>(
+      "/providers/INVID/orders",
+      { params: opts?.refresh ? { refresh: 1 } : undefined }
+    ),
+  accountStatement: (opts?: { refresh?: boolean }) =>
+    api.get<{ balance: number | null; movements: InvidAccountMovement[] }>(
+      "/providers/INVID/account-statement",
+      { params: opts?.refresh ? { refresh: 1 } : undefined }
+    ),
 };
 
 export interface InvidAddress {
@@ -947,10 +953,19 @@ export interface NewBytesNodoDraft {
 }
 
 export const newBytesAccountApi = {
-  orders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/orders"),
-  purchaseOrders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/purchase-orders"),
-  accountStatement: () =>
-    api.get<{ balance: number | null; movements: NewBytesComprobante[] }>("/providers/NEW_BYTES/account-statement"),
+  orders: (opts?: { refresh?: boolean }) =>
+    api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/orders", {
+      params: opts?.refresh ? { refresh: 1 } : undefined,
+    }),
+  purchaseOrders: (opts?: { refresh?: boolean }) =>
+    api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/purchase-orders", {
+      params: opts?.refresh ? { refresh: 1 } : undefined,
+    }),
+  accountStatement: (opts?: { refresh?: boolean }) =>
+    api.get<{ balance: number | null; movements: NewBytesComprobante[] }>(
+      "/providers/NEW_BYTES/account-statement",
+      { params: opts?.refresh ? { refresh: 1 } : undefined }
+    ),
   orderDetail: (id: string) =>
     api.get<{ found: boolean; raw: unknown }>(`/providers/NEW_BYTES/orders/${encodeURIComponent(id)}`),
 };
