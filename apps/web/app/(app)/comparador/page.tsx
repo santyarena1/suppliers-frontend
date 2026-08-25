@@ -66,29 +66,34 @@ export default function ComparadorPage() {
   const addProvider = useCallback(
     (product: ProductDTO, mode: PriceMode) => {
       const key = `provider:${product.provider}:${product.externalId}:${mode}`;
+      let duplicate = false;
       setEntries((prev) => {
-        if (prev.some((e) => entryKey(e) === key)) return prev;
+        if (prev.some((e) => entryKey(e) === key)) {
+          duplicate = true;
+          return prev;
+        }
         return [...prev, newProviderEntry(product, mode)];
       });
-      setEntries((current) => {
-        // read via ref pattern: use entries snapshot from closure for flash only
-        return current;
-      });
+      showFlash(
+        duplicate
+          ? "Ya está en el comparador"
+          : `Agregado · ${mode === "list" ? "Normal" : mode === "offline" ? "Offline" : "Esquema"}`
+      );
     },
-    []
+    [showFlash]
   );
 
   const addRetail = useCallback(
     (hit: RetailSearchHit, from?: CompareProviderEntry) => {
+      let duplicate = false;
       setEntries((prev) => {
         if (prev.some((e) => e.kind === "retail" && e.hit.id === hit.id)) {
-          showFlash("Ese local ya está en el tablero");
+          duplicate = true;
           return prev;
         }
         const costUsd = from
           ? purchaseLinePricing(from.product, policies[from.product.provider], from.mode).unitNet
           : null;
-        showFlash(`Local agregado · ${hit.store.name}`);
         return [
           ...prev,
           newRetailEntry(hit, {
@@ -97,6 +102,7 @@ export default function ComparadorPage() {
           }),
         ];
       });
+      showFlash(duplicate ? "Ese local ya está en el tablero" : `Local agregado · ${hit.store.name}`);
       setRetailFor(null);
     },
     [policies, showFlash]
