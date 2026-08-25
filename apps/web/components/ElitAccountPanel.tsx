@@ -10,12 +10,19 @@ import {
   ElitPayment,
   uploadAuthedFile,
 } from "@/lib/api";
+import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
-import { Receipt, Wallet, XCircle } from "lucide-react";
+import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines } from "@/components/account/draftDetail";
 import { CheckoutField, CheckoutGhostButton, CheckoutInput, CheckoutSelect, CheckoutSubmit } from "@/components/checkout/CheckoutForm";
+import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
+import {
+  useAccountHistoryState,
+  useClampPage,
+  usePagedMonthRows,
+} from "@/components/account/useAccountHistory";
 
 type ElitAccount = Awaited<ReturnType<typeof elitAccountApi.account>>["data"];
 type Detail =
@@ -24,28 +31,53 @@ type Detail =
   | { kind: "draft"; row: NodoProviderDraft }
   | { kind: "payment"; row: ElitPayment };
 
+type SectionId = "cta" | "payments" | "nodo" | "orders";
+
+type CachedPayload = { account: ElitAccount; drafts: NodoProviderDraft[] };
+
+const SECTIONS = [
+  { id: "cta", label: "Cuenta corriente" },
+  { id: "payments", label: "Informes de pago" },
+  { id: "nodo", label: "Desde Nodo" },
+  { id: "orders", label: "Notas de venta" },
+] as const;
+
 export default function ElitAccountPanel() {
+  const history = useAccountHistoryState("cta");
   const [account, setAccount] = useState<ElitAccount | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailNote, setDetailNote] = useState<ElitSaleNote | null>(null);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, []);
 
-  async function load() {
+  async function load(refresh: boolean) {
     setLoading(true);
     setError(null);
     try {
-      const [accountRes, draftsRes] = await Promise.all([
-        elitAccountApi.account(),
-        elitCheckoutApi.drafts().catch(() => ({ data: [] as NodoProviderDraft[] })),
-      ]);
-      setAccount(accountRes.data);
-      setDrafts(draftsRes.data ?? accountRes.data.drafts ?? []);
+      if (refresh) clearAccountCache("ELIT:");
+      const { data, fromCache: hit } = await loadAccountCached<CachedPayload>(
+        "ELIT:account",
+        async () => {
+          const [accountRes, draftsRes] = await Promise.all([
+            elitAccountApi.account({ refresh }),
+            elitCheckoutApi.drafts().catch(() => ({ data: [] as NodoProviderDraft[] })),
+          ]);
+          return {
+            account: accountRes.data,
+            drafts: draftsRes.data ?? accountRes.data.drafts ?? [],
+          };
+        },
+        { refresh }
+      );
+      setAccount(data.account);
+      setDrafts(data.drafts);
+      setFromCache(hit);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "No se pudo traer Pedidos/Cta. Cte. de Elit. ¿Están el nº de cliente y la contraseña del portal?");
@@ -67,132 +99,111 @@ export default function ElitAccountPanel() {
     void elitAccountApi.saleNote(number).then((res) => setDetailNote(res.data)).catch(() => setDetailNote(detail.row));
   }, [detail]);
 
+  const section = history.section as SectionId;
+  const rowsForSection =
+    section === "cta"
+      ? (account ? account.movements ?? [] : null)
+      : section === "payments"
+        ? (account ? account.payments ?? [] : null)
+        : section === "nodo"
+          ? drafts
+          : (account ? account.orders ?? [] : null);
+
+  const getDate =
+    section === "cta"
+      ? (m: ElitMovement) => m.date
+      : section === "payments"
+        ? (p: ElitPayment) => p.date
+        : section === "nodo"
+          ? (d: NodoProviderDraft) => d.createdAt
+          : (o: ElitSaleNote) => o.date;
+
+  const paged = usePagedMonthRows(
+    rowsForSection as never[],
+    getDate as never,
+    history.month,
+    history.page
+  );
+  useClampPage(history.page, paged.pages, history.setPage);
+
   const openOrder = detail?.kind === "order" ? (detailNote ?? detail.row) : null;
+  const ready = account != null && drafts != null;
 
   return (
-    <div className="flex flex-col gap-5 max-w-3xl">
-      <p className="text-xs text-surface-500">
-        Pedidos, comprobantes e informes de pago de tu cuenta en elit.com.ar. Las facturas y recibos se bajan autenticados; las notas de venta/remito usan el PDF del CDN de Elit.
-      </p>
-      {loading ? (
-        <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
-      ) : error ? (
-        <div className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
-          <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span className="flex-1">
-            {error}{" "}
-            <Link href="/proveedores/ELIT?tab=credentials" className="underline text-red-300 hover:text-white">
-              Cargar cuenta
-            </Link>
-          </span>
-          <button onClick={load} className="underline flex-shrink-0">Reintentar</button>
-        </div>
-      ) : (
-        <>
-          {account?.profile?.name && (
-            <p className="text-xs text-surface-400">
-              {account.profile.name}
-              {account.profile.id ? ` · cliente ${account.profile.id}` : ""}
-              {account.profile.exchange != null ? ` · USD ${account.profile.exchange}` : ""}
-            </p>
-          )}
-          <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+    <>
+      {account?.profile?.name && (
+        <p className="text-xs text-surface-400 mb-3 max-w-3xl">
+          {account.profile.name}
+          {account.profile.id ? ` · cliente ${account.profile.id}` : ""}
+          {account.profile.exchange != null ? ` · USD ${account.profile.exchange}` : ""}
+        </p>
+      )}
+
+      <AccountHistoryChrome
+        sections={[...SECTIONS]}
+        section={section}
+        onSection={(id) => history.setSection(id)}
+        month={history.month}
+        onMonth={history.setMonth}
+        page={paged.page}
+        pages={paged.pages}
+        total={paged.total}
+        onPage={history.setPage}
+        onRefresh={() => void load(true)}
+        refreshing={loading}
+        fromCache={fromCache}
+        hint="Pedidos, comprobantes e informes de pago de tu cuenta en elit.com.ar. Mes actual por defecto, de a 25. Actualizar vuelve a consultar el portal."
+        header={
+          section === "cta" && account?.balance != null ? (
+            <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-sky-400" />
-              Cuenta corriente
-            </div>
-            {account?.balance != null && (
               <div>
                 <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
-                <p className={`text-2xl font-bold tabular-nums ${account.balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+                <p className={`text-xl font-bold tabular-nums ${account.balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
                   {account.balance.toLocaleString("es-AR", { style: "currency", currency: "USD" })}
                 </p>
               </div>
-            )}
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                    <th className="text-left font-semibold px-2 py-2">Fecha</th>
-                    <th className="text-left font-semibold px-2 py-2">Tipo</th>
-                    <th className="text-left font-semibold px-2 py-2">Número</th>
-                    <th className="text-right font-semibold px-2 py-2">Débito</th>
-                    <th className="text-right font-semibold px-2 py-2">Crédito</th>
-                    <th className="text-right font-semibold px-2 py-2">Saldo</th>
-                    <th className="text-right font-semibold px-2 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-surface-800">
-                  {(account?.movements ?? []).map((m, i) => (
-                    <tr key={`${m.number}-${i}`}>
-                      <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date || "—"}</td>
-                      <td className="px-2 py-2 text-surface-200">{m.form || "—"}</td>
-                      <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.number || "—"}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.debit, m.currency)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.credit, m.currency)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.balanceUsd ?? m.balance, m.currency)}</td>
-                      <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setDetail({ kind: "movement", row: m })} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {(account?.movements ?? []).length === 0 && (
-                <p className="text-center text-xs text-surface-500 py-6">Sin movimientos.</p>
-              )}
             </div>
+          ) : undefined
+        }
+      >
+        {loading && !ready ? (
+          <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
+        ) : error ? (
+          <div className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
+            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span className="flex-1">
+              {error}{" "}
+              <Link href="/proveedores/ELIT?tab=credentials" className="underline text-red-300 hover:text-white">
+                Cargar cuenta
+              </Link>
+            </span>
+            <button type="button" onClick={() => void load(true)} className="underline flex-shrink-0">Reintentar</button>
           </div>
-
-          <ElitPaymentSection payments={account?.payments ?? []} canCreate={account?.canCreateReport} onOpen={(p) => setDetail({ kind: "payment", row: p })} onDone={load} />
-
-          <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Receipt className="w-4 h-4 text-sky-400" />
-              Pedidos creados desde Nodo
-            </div>
-            <DraftsTable drafts={drafts ?? []} onOpen={(d) => setDetail({ kind: "draft", row: d })} />
-          </div>
-
-          <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Receipt className="w-4 h-4 text-brand-700 dark:text-brand-400" />
-              Notas de venta
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                    <th className="text-left font-semibold px-2 py-2">N°</th>
-                    <th className="text-left font-semibold px-2 py-2">Factura</th>
-                    <th className="text-left font-semibold px-2 py-2">Estado</th>
-                    <th className="text-left font-semibold px-2 py-2">Depósito</th>
-                    <th className="text-left font-semibold px-2 py-2">Fecha</th>
-                    <th className="text-right font-semibold px-2 py-2">Importe</th>
-                    <th className="text-right font-semibold px-2 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-surface-800">
-                  {(account?.orders ?? []).map((o, i) => (
-                    <tr key={`${o.orderNumber}-${i}`}>
-                      <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.orderNumber || "—"}</td>
-                      <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.invoiceNumber || "—"}</td>
-                      <td className="px-2 py-2">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass(o.status)}`}>{o.status || "—"}</span>
-                      </td>
-                      <td className="px-2 py-2 text-surface-400">{o.warehouseName || "—"}</td>
-                      <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(o.amount, o.currency)}</td>
-                      <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setDetail({ kind: "order", row: o })} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {(account?.orders ?? []).length === 0 && (
-                <p className="text-center text-xs text-surface-500 py-6">Sin notas de venta.</p>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+        ) : section === "cta" ? (
+          <MovementsTable
+            rows={paged.items as ElitMovement[]}
+            onOpen={(m) => setDetail({ kind: "movement", row: m })}
+          />
+        ) : section === "payments" ? (
+          <ElitPaymentSection
+            payments={paged.items as ElitPayment[]}
+            canCreate={account?.canCreateReport}
+            onOpen={(p) => setDetail({ kind: "payment", row: p })}
+            onDone={() => void load(true)}
+          />
+        ) : section === "nodo" ? (
+          <DraftsTable
+            drafts={paged.items as NodoProviderDraft[]}
+            onOpen={(d) => setDetail({ kind: "draft", row: d })}
+          />
+        ) : (
+          <OrdersTable
+            rows={paged.items as ElitSaleNote[]}
+            onOpen={(o) => setDetail({ kind: "order", row: o })}
+          />
+        )}
+      </AccountHistoryChrome>
 
       {detail?.kind === "order" && openOrder && (
         <AccountRowDetail
@@ -260,7 +271,7 @@ export default function ElitAccountPanel() {
           onClose={() => setDetail(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -311,6 +322,92 @@ function statusClass(status: string) {
   return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
 }
 
+function MovementsTable({
+  rows,
+  onOpen,
+}: {
+  rows: ElitMovement[];
+  onOpen: (m: ElitMovement) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+            <th className="text-left font-semibold px-2 py-2">Fecha</th>
+            <th className="text-left font-semibold px-2 py-2">Tipo</th>
+            <th className="text-left font-semibold px-2 py-2">Número</th>
+            <th className="text-right font-semibold px-2 py-2">Débito</th>
+            <th className="text-right font-semibold px-2 py-2">Crédito</th>
+            <th className="text-right font-semibold px-2 py-2">Saldo</th>
+            <th className="text-right font-semibold px-2 py-2"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-surface-800">
+          {rows.map((m, i) => (
+            <tr key={`${m.number}-${i}`}>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date || "—"}</td>
+              <td className="px-2 py-2 text-surface-200">{m.form || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.number || "—"}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.debit, m.currency)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.credit, m.currency)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.balanceUsd ?? m.balance, m.currency)}</td>
+              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(m)} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length === 0 && (
+        <p className="text-center text-xs text-surface-500 py-6">Sin movimientos en este período.</p>
+      )}
+    </div>
+  );
+}
+
+function OrdersTable({
+  rows,
+  onOpen,
+}: {
+  rows: ElitSaleNote[];
+  onOpen: (o: ElitSaleNote) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+            <th className="text-left font-semibold px-2 py-2">N°</th>
+            <th className="text-left font-semibold px-2 py-2">Factura</th>
+            <th className="text-left font-semibold px-2 py-2">Estado</th>
+            <th className="text-left font-semibold px-2 py-2">Depósito</th>
+            <th className="text-left font-semibold px-2 py-2">Fecha</th>
+            <th className="text-right font-semibold px-2 py-2">Importe</th>
+            <th className="text-right font-semibold px-2 py-2"></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-surface-800">
+          {rows.map((o, i) => (
+            <tr key={`${o.orderNumber}-${i}`}>
+              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.orderNumber || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.invoiceNumber || "—"}</td>
+              <td className="px-2 py-2">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass(o.status)}`}>{o.status || "—"}</span>
+              </td>
+              <td className="px-2 py-2 text-surface-400">{o.warehouseName || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(o.amount, o.currency)}</td>
+              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(o)} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length === 0 && (
+        <p className="text-center text-xs text-surface-500 py-6">Sin notas de venta en este período.</p>
+      )}
+    </div>
+  );
+}
+
 function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: (d: NodoProviderDraft) => void }) {
   return (
     <div className="overflow-x-auto">
@@ -341,7 +438,7 @@ function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: 
         </tbody>
       </table>
       {drafts.length === 0 && (
-        <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste pedidos desde Nodo.</p>
+        <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste pedidos desde Nodo en este período.</p>
       )}
     </div>
   );
@@ -458,11 +555,7 @@ function ElitPaymentSection({
   }
 
   return (
-    <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2 text-sm font-semibold text-white">
-        <Wallet className="w-4 h-4 text-emerald-400" />
-        Informes de pago
-      </div>
+    <div className="flex flex-col gap-4">
       <p className="text-xs text-surface-500">
         Subí el comprobante acá para no entrar a Elit. No se abre un informe vacío: primero elegís banco, tipo, fecha e importe.
       </p>
@@ -489,7 +582,7 @@ function ElitPaymentSection({
             ))}
           </tbody>
         </table>
-        {payments.length === 0 && <p className="text-center text-xs text-surface-500 py-4">Sin informes.</p>}
+        {payments.length === 0 && <p className="text-center text-xs text-surface-500 py-4">Sin informes en este período.</p>}
       </div>
       {canCreate !== false && (
         <CheckoutGhostButton type="button" onClick={loadOptions}>Nuevo informe</CheckoutGhostButton>

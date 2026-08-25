@@ -6,37 +6,78 @@ import {
   airCheckoutApi,
   NodoProviderDraft,
 } from "@/lib/api";
+import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
-import { Receipt, Wallet, XCircle } from "lucide-react";
+import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc, type AccountDetailLine } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines } from "@/components/account/draftDetail";
+import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
+import {
+  useAccountHistoryState,
+  useClampPage,
+  usePagedMonthRows,
+} from "@/components/account/useAccountHistory";
 
 type AirAccount = Awaited<ReturnType<typeof airAccountApi.account>>["data"];
 type AirRow = Record<string, string> & { _links?: { href: string; label: string }[]; _href?: string };
 type Detail = { kind: "row"; title: string; row: AirRow } | { kind: "draft"; row: NodoProviderDraft };
 
+type SectionId = "cta" | "invoices" | "pending" | "nodo";
+
+type CachedPayload = { account: AirAccount; drafts: NodoProviderDraft[] };
+
+const SECTIONS = [
+  { id: "cta", label: "Debe/Haber" },
+  { id: "invoices", label: "Comprobantes" },
+  { id: "pending", label: "Pendientes" },
+  { id: "nodo", label: "Desde Nodo" },
+] as const;
+
+function airRowDate(row: AirRow): string | null {
+  const keys = ["Fecha", "fecha", "Date", "date"] as const;
+  for (const k of keys) {
+    const v = row[k];
+    if (v != null && String(v).trim()) return String(v);
+  }
+  return null;
+}
+
 export default function AirAccountPanel() {
+  const history = useAccountHistoryState("cta");
   const [account, setAccount] = useState<AirAccount | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, []);
 
-  async function load() {
+  async function load(refresh: boolean) {
     setLoading(true);
     setError(null);
     try {
-      const [accountRes, draftsRes] = await Promise.all([
-        airAccountApi.account(),
-        airCheckoutApi.drafts().catch(() => ({ data: [] as NodoProviderDraft[] })),
-      ]);
-      setAccount(accountRes.data);
-      setDrafts(draftsRes.data ?? accountRes.data.drafts ?? []);
+      if (refresh) clearAccountCache("AIR:");
+      const { data, fromCache: hit } = await loadAccountCached<CachedPayload>(
+        "AIR:account",
+        async () => {
+          const [accountRes, draftsRes] = await Promise.all([
+            airAccountApi.account({ refresh }),
+            airCheckoutApi.drafts().catch(() => ({ data: [] as NodoProviderDraft[] })),
+          ]);
+          return {
+            account: accountRes.data,
+            drafts: draftsRes.data ?? accountRes.data.drafts ?? [],
+          };
+        },
+        { refresh }
+      );
+      setAccount(data.account);
+      setDrafts(data.drafts);
+      setFromCache(hit);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "No se pudo traer la cuenta de Air. ¿Están usuario y contraseña del portal?");
@@ -45,97 +86,99 @@ export default function AirAccountPanel() {
     }
   }
 
+  const section = history.section as SectionId;
+  const rowsForSection =
+    section === "cta"
+      ? ((account?.movements ?? null) as AirRow[] | null)
+      : section === "invoices"
+        ? ((account?.invoices ?? null) as AirRow[] | null)
+        : section === "pending"
+          ? ((account?.pending ?? null) as AirRow[] | null)
+          : drafts;
+
+  const getDate =
+    section === "nodo"
+      ? (d: NodoProviderDraft) => d.createdAt
+      : (row: AirRow) => airRowDate(row);
+
+  const paged = usePagedMonthRows(
+    rowsForSection as never[],
+    getDate as never,
+    history.month,
+    history.page
+  );
+  useClampPage(history.page, paged.pages, history.setPage);
+
+  const ready = account != null && drafts != null;
+
   return (
-    <div className="flex flex-col gap-5 max-w-3xl">
-      <p className="text-xs text-surface-500">
-        {account?.note || "Datos del portal www.air-intra.com (debe/haber y comprobantes)."}
-      </p>
-      {loading ? (
-        <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
-      ) : error ? (
-        <div className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
-          <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span className="flex-1">
-            {error}{" "}
-            <Link href="/proveedores/AIR?tab=credentials" className="underline text-red-300 hover:text-white">
-              Cargar cuenta
-            </Link>
-          </span>
-          <button onClick={load} className="underline flex-shrink-0">Reintentar</button>
-        </div>
-      ) : (
-        <>
-          <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+    <>
+      <AccountHistoryChrome
+        sections={[...SECTIONS]}
+        section={section}
+        onSection={(id) => history.setSection(id)}
+        month={history.month}
+        onMonth={history.setMonth}
+        page={paged.page}
+        pages={paged.pages}
+        total={paged.total}
+        onPage={history.setPage}
+        onRefresh={() => void load(true)}
+        refreshing={loading}
+        fromCache={fromCache}
+        hint={account?.note || "Datos del portal www.air-intra.com (debe/haber y comprobantes). Mes actual por defecto, de a 25."}
+        header={
+          section === "cta" && account?.balance != null ? (
+            <div className="flex items-center gap-2">
               <Wallet className="w-4 h-4 text-sky-400" />
-              Debe / Haber
-            </div>
-            {account?.balance != null && (
               <div>
                 <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
-                <p className={`text-2xl font-bold tabular-nums ${account.balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+                <p className={`text-xl font-bold tabular-nums ${account.balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
                   {account.balance.toLocaleString("es-AR", { style: "currency", currency: "ARS" })}
                 </p>
               </div>
-            )}
-            <HtmlRowsTable rows={(account?.movements ?? []) as AirRow[]} empty="Sin movimientos." onOpen={(row) => setDetail({ kind: "row", title: "Movimiento", row })} />
-          </div>
-
-          <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Receipt className="w-4 h-4 text-sky-400" />
-              Comprobantes
             </div>
-            <HtmlRowsTable rows={(account?.invoices ?? []) as AirRow[]} empty="Sin comprobantes." onOpen={(row) => setDetail({ kind: "row", title: "Comprobante", row })} />
+          ) : undefined
+        }
+      >
+        {loading && !ready ? (
+          <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
+        ) : error ? (
+          <div className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
+            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span className="flex-1">
+              {error}{" "}
+              <Link href="/proveedores/AIR?tab=credentials" className="underline text-red-300 hover:text-white">
+                Cargar cuenta
+              </Link>
+            </span>
+            <button type="button" onClick={() => void load(true)} className="underline flex-shrink-0">Reintentar</button>
           </div>
-
-          <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Receipt className="w-4 h-4 text-amber-400" />
-              Comprobantes pendientes
-            </div>
-            <HtmlRowsTable rows={(account?.pending ?? []) as AirRow[]} empty="Sin pendientes." onOpen={(row) => setDetail({ kind: "row", title: "Pendiente", row })} />
-          </div>
-
-          <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Receipt className="w-4 h-4 text-brand-700 dark:text-brand-400" />
-              Pedidos enviados desde Nodo
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                    <th className="text-left font-semibold px-2 py-2">Estado</th>
-                    <th className="text-left font-semibold px-2 py-2">Pedido</th>
-                    <th className="text-left font-semibold px-2 py-2">Fecha</th>
-                    <th className="text-right font-semibold px-2 py-2">Total</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-surface-800">
-                  {(drafts ?? []).map((d) => (
-                    <tr key={d.id}>
-                      <td className="px-2 py-2">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : "bg-red-500/10 text-red-400"
-                        }`}>{d.status === "CREATED" ? "Enviado" : d.status}</span>
-                      </td>
-                      <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
-                      <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
-                      <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setDetail({ kind: "draft", row: d })} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {(drafts ?? []).length === 0 && (
-                <p className="text-center text-xs text-surface-500 py-6">Todavía no enviaste canastos desde Nodo.</p>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+        ) : section === "nodo" ? (
+          <DraftsTable
+            drafts={paged.items as NodoProviderDraft[]}
+            onOpen={(d) => setDetail({ kind: "draft", row: d })}
+          />
+        ) : (
+          <HtmlRowsTable
+            rows={paged.items as AirRow[]}
+            empty={
+              section === "cta"
+                ? "Sin movimientos en este período."
+                : section === "invoices"
+                  ? "Sin comprobantes en este período."
+                  : "Sin pendientes en este período."
+            }
+            onOpen={(row) =>
+              setDetail({
+                kind: "row",
+                title: section === "cta" ? "Movimiento" : section === "invoices" ? "Comprobante" : "Pendiente",
+                row,
+              })
+            }
+          />
+        )}
+      </AccountHistoryChrome>
 
       {detail?.kind === "row" && (
         <AccountRowDetail
@@ -157,7 +200,7 @@ export default function AirAccountPanel() {
           onClose={() => setDetail(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -202,6 +245,42 @@ function HtmlRowsTable({ rows, empty, onOpen }: { rows: AirRow[]; empty: string;
       </table>
       {rows.length === 0 && (
         <p className="text-center text-xs text-surface-500 py-6">{empty}</p>
+      )}
+    </div>
+  );
+}
+
+function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: (d: NodoProviderDraft) => void }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+            <th className="text-left font-semibold px-2 py-2">Estado</th>
+            <th className="text-left font-semibold px-2 py-2">Pedido</th>
+            <th className="text-left font-semibold px-2 py-2">Fecha</th>
+            <th className="text-right font-semibold px-2 py-2">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-surface-800">
+          {drafts.map((d) => (
+            <tr key={d.id}>
+              <td className="px-2 py-2">
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  d.status === "CREATED" ? "bg-sky-500/10 text-sky-400" : "bg-red-500/10 text-red-400"
+                }`}>{d.status === "CREATED" ? "Enviado" : d.status}</span>
+              </td>
+              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? d.invidWebOrderNumber ?? "—"}</td>
+              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
+              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(d)} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {drafts.length === 0 && (
+        <p className="text-center text-xs text-surface-500 py-6">Todavía no enviaste canastos desde Nodo en este período.</p>
       )}
     </div>
   );

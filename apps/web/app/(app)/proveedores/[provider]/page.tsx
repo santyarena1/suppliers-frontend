@@ -7,7 +7,6 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
-  invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile,
   TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
@@ -19,15 +18,14 @@ import ProviderBadge from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
 import NewBytesAccountPanel from "@/components/NewBytesAccountPanel";
+import InvidAccountPanel from "@/components/InvidAccountPanel";
 import ElitAccountPanel from "@/components/ElitAccountPanel";
 import GrupoNucleoAccountPanel from "@/components/GrupoNucleoAccountPanel";
 import AirAccountPanel from "@/components/AirAccountPanel";
-import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
-import { draftItems, draftLines } from "@/components/account/draftDetail";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import {
   AlertTriangle, ArrowLeft, Boxes, CheckCircle2, FileSpreadsheet, ImageOff, KeyRound,
-  Loader2, PackageCheck, Receipt, RefreshCw, Save, Search, Settings, Trash2, Wallet, XCircle
+  Loader2, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
 } from "lucide-react";
 
 const MISSING_ACTION_LABELS: Record<MissingProductAction, string> = {
@@ -81,49 +79,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     if (VALID_PROVIDER_TABS.includes(initialTab as ProviderTab)) {
       setTab(initialTab as ProviderTab);
       tabFromQuery.current = true;
-      if (initialTab === "invid-account") loadInvidAccount();
     }
   }, [provider]);
-
-  const [invidOrders, setInvidOrders] = useState<InvidOrder[] | null>(null);
-  const [invidBalance, setInvidBalance] = useState<number | null>(null);
-  const [invidMovements, setInvidMovements] = useState<InvidAccountMovement[] | null>(null);
-  const [loadingInvidAccount, setLoadingInvidAccount] = useState(false);
-  const [invidAccountError, setInvidAccountError] = useState<string | null>(null);
-  const [invidNodoDrafts, setInvidNodoDrafts] = useState<InvidNodoDraft[] | null>(null);
-  const [invidPaymentUploads, setInvidPaymentUploads] = useState<InvidFileForm[]>([]);
-  const [invidUploadNote, setInvidUploadNote] = useState<string | null>(null);
-  const [invidDetail, setInvidDetail] = useState<
-    | { kind: "order"; row: InvidOrder }
-    | { kind: "movement"; row: InvidAccountMovement }
-    | { kind: "draft"; row: InvidNodoDraft }
-    | null
-  >(null);
-  const [invidUploadError, setInvidUploadError] = useState<string | null>(null);
-  const [invidUploading, setInvidUploading] = useState(false);
-
-  async function loadInvidAccount() {
-    setLoadingInvidAccount(true);
-    setInvidAccountError(null);
-    try {
-      const [ordersRes, statementRes, draftsRes] = await Promise.all([
-        invidAccountApi.orders(),
-        invidAccountApi.accountStatement(),
-        invidCheckoutApi.drafts().catch(() => ({ data: [] as InvidNodoDraft[] })),
-      ]);
-      setInvidOrders(ordersRes.data.orders);
-      setInvidPaymentUploads(ordersRes.data.paymentUploads ?? []);
-      setInvidUploadNote(ordersRes.data.note ?? null);
-      setInvidBalance(statementRes.data.balance);
-      setInvidMovements(statementRes.data.movements);
-      setInvidNodoDrafts(draftsRes.data ?? []);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setInvidAccountError(msg || "No se pudo traer Pedidos/Cuenta Corriente de Invid");
-    } finally {
-      setLoadingInvidAccount(false);
-    }
-  }
 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ProductDTO[]>([]);
@@ -387,10 +344,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   ].map(({ key, label }) => (
                     <button
                       key={key}
-                      onClick={() => {
-                        setTab(key);
-                        if (key === "invid-account" && invidOrders === null && !loadingInvidAccount) loadInvidAccount();
-                      }}
+                      onClick={() => setTab(key)}
                       className={`text-sm font-medium px-4 py-2.5 border-b-2 -mb-px transition-all ${
                         tab === key ? "border-brand-500 text-brand-700 dark:text-brand-400" : "border-transparent text-surface-500 hover:text-surface-300"
                       }`}
@@ -757,239 +711,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   </div>
                 )}
 
-                {tab === "invid-account" && (
-                  <div className="flex flex-col gap-5 max-w-3xl">
-                    <p className="text-xs text-surface-500">
-                      Datos reales de tu cuenta en invidcomputers.com. Ver más muestra ítems, entrega/pago y PDFs si el portal los linkea. Si hay un formulario de comprobante de pago en la sesión, también se puede subir desde Nodo.
-                    </p>
-                    {loadingInvidAccount ? (
-                      <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
-                    ) : invidAccountError ? (
-                      <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
-                        <XCircle className="w-4 h-4 flex-shrink-0" /> {invidAccountError}
-                        <button onClick={loadInvidAccount} className="ml-auto underline">Reintentar</button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                            <Wallet className="w-4 h-4 text-brand-700 dark:text-brand-400" />
-                            Cuenta Corriente
-                          </div>
-                          {invidBalance != null && (
-                            <div>
-                              <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
-                              <p className={`text-2xl font-bold tabular-nums ${invidBalance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
-                                {invidBalance.toLocaleString("es-AR", { style: "currency", currency: "ARS" })}
-                              </p>
-                            </div>
-                          )}
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                                  <th className="text-left font-semibold px-2 py-2">Fecha</th>
-                                  <th className="text-left font-semibold px-2 py-2">Tipo</th>
-                                  <th className="text-left font-semibold px-2 py-2">Número</th>
-                                  <th className="text-right font-semibold px-2 py-2">Total</th>
-                                  <th></th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-surface-800">
-                                {(invidMovements ?? []).map((m, i) => (
-                                  <tr key={i}>
-                                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date}</td>
-                                    <td className="px-2 py-2 text-surface-200">{m.docType}</td>
-                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.docNumber}</td>
-                                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{m.currency} {m.total}</td>
-                                    <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setInvidDetail({ kind: "movement", row: m })} /></td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            {(invidMovements ?? []).length === 0 && (
-                              <p className="text-center text-xs text-surface-500 py-6">Sin movimientos.</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                            <Receipt className="w-4 h-4 text-orange-400" />
-                            Borradores creados desde Nodo
-                          </div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                                  <th className="text-left font-semibold px-2 py-2">Estado</th>
-                                  <th className="text-left font-semibold px-2 py-2">Pedido web</th>
-                                  <th className="text-left font-semibold px-2 py-2">Orden</th>
-                                  <th className="text-left font-semibold px-2 py-2">Fecha</th>
-                                  <th className="text-right font-semibold px-2 py-2">Total</th>
-                                  <th></th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-surface-800">
-                                {(invidNodoDrafts ?? []).map((d) => (
-                                  <tr key={d.id}>
-                                    <td className="px-2 py-2">
-                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                        d.status === "CREATED" ? "bg-amber-500/10 text-amber-400"
-                                          : d.status === "PENDING" ? "bg-sky-500/10 text-sky-400"
-                                          : "bg-red-500/10 text-red-400"
-                                      }`}>{d.status === "CREATED" ? "Pendiente" : d.status === "PENDING" ? "Procesando" : d.status}</span>
-                                    </td>
-                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidWebOrderNumber ?? "—"}</td>
-                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{d.invidOrderNumber ?? "—"}</td>
-                                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{new Date(d.createdAt).toLocaleString("es-AR")}</td>
-                                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{d.total ?? "—"}</td>
-                                    <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setInvidDetail({ kind: "draft", row: d })} /></td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            {(invidNodoDrafts ?? []).length === 0 && (
-                              <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste borradores desde Nodo.</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                            <Receipt className="w-4 h-4 text-brand-700 dark:text-brand-400" />
-                            Mis Pedidos
-                          </div>
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                                  <th className="text-left font-semibold px-2 py-2">N° Orden</th>
-                                  <th className="text-left font-semibold px-2 py-2">N° Pedido Web</th>
-                                  <th className="text-left font-semibold px-2 py-2">Estado</th>
-                                  <th className="text-left font-semibold px-2 py-2">Fecha</th>
-                                  <th className="text-right font-semibold px-2 py-2">Importe</th>
-                                  <th></th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-surface-800">
-                                {(invidOrders ?? []).map((o, i) => (
-                                  <tr key={i}>
-                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.orderNumber}</td>
-                                    <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.webOrderNumber}</td>
-                                    <td className="px-2 py-2">
-                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                        o.status === "Cerrado" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                                        : o.status === "Vencido" || o.status === "Cancelado" ? "bg-red-500/10 text-red-400"
-                                        : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                                      }`}>{o.status}</span>
-                                    </td>
-                                    <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
-                                    <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount}</td>
-                                    <td className="px-2 py-2 text-right"><VerMasButton onClick={() => setInvidDetail({ kind: "order", row: o })} /></td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            {(invidOrders ?? []).length === 0 && (
-                              <p className="text-center text-xs text-surface-500 py-6">Sin pedidos.</p>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    )}
-                    {invidDetail?.kind === "order" && (
-                      <AccountRowDetail
-                        open
-                        title={`Pedido ${invidDetail.row.orderNumber}`}
-                        lines={[
-                          { label: "Orden", value: invidDetail.row.orderNumber },
-                          { label: "Pedido web", value: invidDetail.row.webOrderNumber },
-                          { label: "Estado", value: invidDetail.row.status },
-                          { label: "Fecha", value: invidDetail.row.date },
-                          { label: "Importe", value: invidDetail.row.amount },
-                          { label: "Factura", value: invidDetail.row.invoice },
-                          { label: "Entrega", value: invidDetail.row.delivery || "" },
-                          { label: "Pago", value: invidDetail.row.payment || "" },
-                        ]}
-                        items={(invidDetail.row.items ?? []).map((it) => ({
-                          code: it.code,
-                          name: it.name,
-                          qty: it.qty,
-                          price: it.price,
-                          total: it.total,
-                        }))}
-                        documents={[
-                          ...(invidDetail.row.invoiceHrefs ?? []).map((href, i) => ({
-                            label: "Descargar factura",
-                            href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
-                            filename: `invid-factura-${invidDetail.row.orderNumber || i}.pdf`,
-                          })),
-                          ...(invidDetail.row.links ?? [])
-                            .filter((l) => !/ultima\.php/i.test(l.href))
-                            .map((l) => ({
-                              label: l.label || "Descargar",
-                              href: `/providers/INVID/documents?href=${encodeURIComponent(l.href)}`,
-                              filename: l.label || "invid-doc",
-                            })),
-                        ]}
-                        note={
-                          invidPaymentUploads.length === 0
-                            ? (invidUploadNote || "Si Invid no muestra un formulario de comprobante en esta sesión, el alta se hace desde su portal.")
-                            : undefined
-                        }
-                        upload={
-                          invidPaymentUploads.length > 0
-                            ? {
-                                label: "Subir comprobante de pago",
-                                loading: invidUploading,
-                                error: invidUploadError,
-                                onFile: (file) => {
-                                  setInvidUploading(true);
-                                  setInvidUploadError(null);
-                                  void uploadAuthedFile("/providers/INVID/payments/attach", file)
-                                    .then(() => { setInvidUploadError(null); })
-                                    .catch((e: unknown) => setInvidUploadError(e instanceof Error ? e.message : "No se pudo subir"))
-                                    .finally(() => setInvidUploading(false));
-                                },
-                              }
-                            : undefined
-                        }
-                        onClose={() => setInvidDetail(null)}
-                      />
-                    )}
-                    {invidDetail?.kind === "movement" && (
-                      <AccountRowDetail
-                        open
-                        title={`${invidDetail.row.docType} ${invidDetail.row.docNumber}`.trim()}
-                        lines={[
-                          { label: "Fecha", value: invidDetail.row.date },
-                          { label: "Tipo", value: invidDetail.row.docType },
-                          { label: "Número", value: invidDetail.row.docNumber },
-                          { label: "Interno", value: invidDetail.row.internalNumber },
-                          { label: "Moneda", value: invidDetail.row.currency },
-                          { label: "Total", value: invidDetail.row.total },
-                        ]}
-                        documents={(invidDetail.row.hrefs ?? []).map((href, i) => ({
-                          label: "Descargar",
-                          href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
-                          filename: `invid-${invidDetail.row.docNumber || i}.pdf`,
-                        }))}
-                        note={(invidDetail.row.hrefs ?? []).length === 0 ? "Este movimiento no trae un link de PDF en el HTML de Invid." : undefined}
-                        onClose={() => setInvidDetail(null)}
-                      />
-                    )}
-                    {invidDetail?.kind === "draft" && (
-                      <AccountRowDetail
-                        open
-                        title="Borrador desde Nodo"
-                        lines={draftLines(invidDetail.row)}
-                        items={draftItems(invidDetail.row)}
-                        onClose={() => setInvidDetail(null)}
-                      />
-                    )}
-                  </div>
-                )}
+                {tab === "invid-account" && <InvidAccountPanel />}
 
                 {tab === "nb-account" && <NewBytesAccountPanel />}
                 {tab === "elit-account" && <ElitAccountPanel />}

@@ -54,14 +54,14 @@ export class NewBytesAccountService {
   /** Historial real de pedidos web — GET miCuenta/pedidos. */
   async getOrders(credentials: Record<string, string>): Promise<{ orders: NbOrderRow[] }> {
     const api = await this.client(credentials);
-    const rows = await api.paginate("miCuenta/pedidos", 20, 200);
+    const rows = await api.paginate("miCuenta/pedidos", 20, 60);
     return { orders: rows.map(normalizeOrderRow) };
   }
 
   /** Órdenes de compra (las que crea el checkout) — GET miCuenta/ordenesDeCompra. */
   async getPurchaseOrders(credentials: Record<string, string>): Promise<{ orders: NbOrderRow[] }> {
     const api = await this.client(credentials);
-    const rows = await api.paginate("miCuenta/ordenesDeCompra", 20, 200);
+    const rows = await api.paginate("miCuenta/ordenesDeCompra", 20, 60);
     return { orders: rows.map(normalizeOrderRow) };
   }
 
@@ -73,7 +73,7 @@ export class NewBytesAccountService {
   }> {
     const api = await this.client(credentials);
     const [rows, user, clientBody, misDatos] = await Promise.all([
-      api.paginate("miCuenta/comprobantes", 20, 200),
+      api.paginate("miCuenta/comprobantes", 20, 60),
       api.get("auth/user").catch(() => null),
       api.get("client").catch(() => null),
       api.get("miCuenta/misDatos").catch(() => null),
@@ -92,7 +92,7 @@ export class NewBytesAccountService {
   async getDocument(credentials: Record<string, string>, voucherId: string) {
     if (!voucherId?.trim()) throw new BadRequestException("Falta voucherId");
     const api = await this.client(credentials);
-    const rows = await api.paginate("miCuenta/comprobantes", 20, 200);
+    const rows = await api.paginate("miCuenta/comprobantes", 20, 60);
     const found = rows.map(normalizeComprobante).find((r) => String(r.voucherId) === String(voucherId));
     const url = found?.voucherUrl;
     if (!url) throw new NotFoundException("Ese comprobante no tiene voucherUrl");

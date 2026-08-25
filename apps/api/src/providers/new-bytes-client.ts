@@ -183,10 +183,10 @@ export class NewBytesApiClient {
 
   /**
    * Recorre páginas limit/offset como el sitio (Mis pedidos / comprobantes /
-   * órdenes). Corta cuando la página viene corta o se llega al tope de offset
-   * que usa el front de NB (200).
+   * órdenes). Corta cuando la página viene corta o se llega al tope de offset.
+   * Default maxOffset 60 (~80 filas) cubre el mes reciente sin 10+ roundtrips.
    */
-  async paginate<T = unknown>(path: string, limit = 50, maxOffset = 200): Promise<T[]> {
+  async paginate<T = unknown>(path: string, limit = 20, maxOffset = 60): Promise<T[]> {
     const all: T[] = [];
     for (let offset = 0; offset <= maxOffset; offset += limit) {
       const page = unwrapNbList<T>(await this.get(path, { limit, offset }));

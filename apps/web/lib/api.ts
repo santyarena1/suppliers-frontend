@@ -711,10 +711,16 @@ export interface InvidAccountMovement {
   hrefs?: string[];
 }
 export const invidAccountApi = {
-  orders: () =>
-    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>("/providers/INVID/orders"),
-  accountStatement: () =>
-    api.get<{ balance: number | null; movements: InvidAccountMovement[] }>("/providers/INVID/account-statement"),
+  orders: (opts?: { refresh?: boolean }) =>
+    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>(
+      "/providers/INVID/orders",
+      { params: opts?.refresh ? { refresh: 1 } : undefined }
+    ),
+  accountStatement: (opts?: { refresh?: boolean }) =>
+    api.get<{ balance: number | null; movements: InvidAccountMovement[] }>(
+      "/providers/INVID/account-statement",
+      { params: opts?.refresh ? { refresh: 1 } : undefined }
+    ),
 };
 
 export interface InvidAddress {
@@ -947,10 +953,19 @@ export interface NewBytesNodoDraft {
 }
 
 export const newBytesAccountApi = {
-  orders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/orders"),
-  purchaseOrders: () => api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/purchase-orders"),
-  accountStatement: () =>
-    api.get<{ balance: number | null; movements: NewBytesComprobante[] }>("/providers/NEW_BYTES/account-statement"),
+  orders: (opts?: { refresh?: boolean }) =>
+    api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/orders", {
+      params: opts?.refresh ? { refresh: 1 } : undefined,
+    }),
+  purchaseOrders: (opts?: { refresh?: boolean }) =>
+    api.get<{ orders: NewBytesOrder[] }>("/providers/NEW_BYTES/purchase-orders", {
+      params: opts?.refresh ? { refresh: 1 } : undefined,
+    }),
+  accountStatement: (opts?: { refresh?: boolean }) =>
+    api.get<{ balance: number | null; movements: NewBytesComprobante[] }>(
+      "/providers/NEW_BYTES/account-statement",
+      { params: opts?.refresh ? { refresh: 1 } : undefined }
+    ),
   orderDetail: (id: string) =>
     api.get<{ found: boolean; raw: unknown }>(`/providers/NEW_BYTES/orders/${encodeURIComponent(id)}`),
 };
@@ -1102,7 +1117,7 @@ export interface AirDraftResult {
 }
 
 export const airAccountApi = {
-  account: () =>
+  account: (opts?: { refresh?: boolean }) =>
     api.get<{
       balance: number | null;
       movements: Record<string, string>[];
@@ -1110,7 +1125,7 @@ export const airAccountApi = {
       pending: Record<string, string>[];
       drafts: NodoProviderDraft[];
       note: string;
-    }>("/providers/AIR/account"),
+    }>("/providers/AIR/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
 };
 
 export const airCheckoutApi = {
@@ -1189,7 +1204,7 @@ export interface ElitDraftResult {
 }
 
 export const elitAccountApi = {
-  account: () =>
+  account: (opts?: { refresh?: boolean }) =>
     api.get<{
       profile: { id?: string; name?: string; exchange?: number | null };
       balance: number | null;
@@ -1199,7 +1214,7 @@ export const elitAccountApi = {
       canCreateReport?: boolean;
       drafts: NodoProviderDraft[];
       note: string;
-    }>("/providers/ELIT/account"),
+    }>("/providers/ELIT/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
   saleNote: (number: string) => api.get<ElitSaleNote>(`/providers/ELIT/salenotes/${encodeURIComponent(number)}`),
   payments: () =>
     api.get<{ canCreateReport: boolean; active: unknown; payments: ElitPayment[] }>("/providers/ELIT/payments"),
