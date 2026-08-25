@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offline-order.dto";
+import { RenameOpsAliasDto, SplitOpsAliasDto, UnifyOpsAliasDto } from "./dto/ops-alias.dto";
 import { RejectOrderDto } from "./dto/reject-order.dto";
 import { OrderApprovalService } from "./order-approval.service";
 import { OrdersService } from "./orders.service";
@@ -36,6 +37,34 @@ export class OrdersController {
   @Get("insights")
   insights(@CurrentTenant() tenant: TenantContext, @Query("days") days?: string) {
     return this.orders.insights(tenant, days);
+  }
+
+  @Put("insights/aliases")
+  unifyAlias(@CurrentTenant() tenant: TenantContext, @Body() dto: UnifyOpsAliasDto) {
+    return this.orders.unifyOpsAlias(tenant, dto);
+  }
+
+  @Patch("insights/aliases/:groupId")
+  renameAlias(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("groupId") groupId: string,
+    @Body() dto: RenameOpsAliasDto
+  ) {
+    return this.orders.renameOpsAlias(tenant, groupId, dto);
+  }
+
+  @Post("insights/aliases/:groupId/split")
+  splitAlias(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("groupId") groupId: string,
+    @Body() dto: SplitOpsAliasDto
+  ) {
+    return this.orders.splitOpsAlias(tenant, groupId, dto);
+  }
+
+  @Delete("insights/aliases/:groupId")
+  deleteAlias(@CurrentTenant() tenant: TenantContext, @Param("groupId") groupId: string) {
+    return this.orders.deleteOpsAlias(tenant, groupId);
   }
 
   @Post("offline")

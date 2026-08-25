@@ -1,5 +1,6 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { providerHasIvaRate, PROVIDER_LABELS, type Provider } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { CredentialsService } from "../credentials/credentials.service";
@@ -12,6 +13,7 @@ import type { OrderAuthor } from "../providers/provider-draft";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import type { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offline-order.dto";
+import type { RenameOpsAliasDto, SplitOpsAliasDto, UnifyOpsAliasDto } from "./dto/ops-alias.dto";
 import {
   isOfflineChannel,
   normalizeOfflineItems,
@@ -29,6 +31,7 @@ import {
   type CatalogEntry,
   type CatalogStats,
 } from "./purchase-analytics";
+import { indexOpsAliases, isAliasable, parseOpsGroupKey, type OpsAliasKind } from "./purchase-ops-aliases";
 
 /**
  * Aprobar un pedido online es mandarlo al proveedor con los mismos datos con los
@@ -175,7 +178,7 @@ export class OrdersService {
       status: { in: [...COUNTED_ORDER_STATUSES] },
     };
 
-    const [currentRows, previousRows, catalogStats] = await Promise.all([
+    const [currentRows, previousRows, catalogStats, aliasRows] = await Promise.all([
       this.prisma.providerOrder.findMany({
         where: { ...counted, ...(periodStart ? { createdAt: { gte: periodStart } } : {}) },
         orderBy: { createdAt: "desc" },
@@ -232,6 +235,10 @@ export class OrdersService {
           })
         : Promise.resolve([]),
       this.catalogStatsFor(tenant.tenantId),
+      this.prisma.tenantOpsAlias.findMany({
+        where: { tenantId: tenant.tenantId },
+        select: { kind: true, rawKey: true, groupId: true, label: true },
+      }),
     ]);
 
     const truncated = currentRows.length > MAX_INSIGHT_ORDERS;
@@ -254,7 +261,95 @@ export class OrdersService {
       truncated,
       previousSpendUsd,
       catalogStats,
+      opsAliases: indexOpsAliases(aliasRows),
     });
+  }
+
+  async unifyOpsAlias(tenant: TenantContext, dto: UnifyOpsAliasDto) {
+    const label = dto.label.trim();
+    if (!label) throw new BadRequestException("Poné un nombre para el grupo");
+    const kind = dto.kind as OpsAliasKind;
+    const rawKeys = await this.expandAliasKeys(tenant.tenantId, kind, dto.keys);
+    if (rawKeys.length < 2) {
+      throw new BadRequestException("Elegí al menos dos etiquetas para unificarlas");
+    }
+    for (const key of rawKeys) {
+      if (!isAliasable(key)) throw new BadRequestException(`"${key}" no se puede unificar`);
+    }
+    const existing = await this.prisma.tenantOpsAlias.findMany({
+      where: { tenantId: tenant.tenantId, kind, rawKey: { in: rawKeys } },
+    });
+    const groupId = existing[0]?.groupId ?? randomUUID();
+    await this.prisma.$transaction(
+      rawKeys.map((rawKey) =>
+        this.prisma.tenantOpsAlias.upsert({
+          where: { tenantId_kind_rawKey: { tenantId: tenant.tenantId, kind, rawKey } },
+          create: { tenantId: tenant.tenantId, kind, rawKey, groupId, label },
+          update: { groupId, label },
+        })
+      )
+    );
+    await this.prisma.tenantOpsAlias.updateMany({
+      where: { tenantId: tenant.tenantId, kind, groupId },
+      data: { label },
+    });
+    return { groupId, kind, label, keys: rawKeys };
+  }
+
+  async renameOpsAlias(tenant: TenantContext, groupId: string, dto: RenameOpsAliasDto) {
+    const label = dto.label.trim();
+    if (!label) throw new BadRequestException("Poné un nombre para el grupo");
+    const found = await this.prisma.tenantOpsAlias.updateMany({
+      where: { tenantId: tenant.tenantId, groupId },
+      data: { label },
+    });
+    if (found.count === 0) throw new NotFoundException("Ese grupo no existe en este comercio");
+    return { groupId, label };
+  }
+
+  async deleteOpsAlias(tenant: TenantContext, groupId: string) {
+    const found = await this.prisma.tenantOpsAlias.deleteMany({
+      where: { tenantId: tenant.tenantId, groupId },
+    });
+    if (found.count === 0) throw new NotFoundException("Ese grupo no existe en este comercio");
+    return { groupId, deleted: found.count };
+  }
+
+  async splitOpsAlias(tenant: TenantContext, groupId: string, dto: SplitOpsAliasDto) {
+    const toDrop = dto.keys.map((k) => k.trim()).filter(Boolean);
+    if (toDrop.length === 0) throw new BadRequestException("No hay etiquetas para sacar");
+    const members = await this.prisma.tenantOpsAlias.findMany({
+      where: { tenantId: tenant.tenantId, groupId },
+    });
+    if (members.length === 0) throw new NotFoundException("Ese grupo no existe en este comercio");
+    const dropSet = new Set(toDrop);
+    await this.prisma.tenantOpsAlias.deleteMany({
+      where: { tenantId: tenant.tenantId, groupId, rawKey: { in: [...dropSet] } },
+    });
+    const remaining = members.filter((m) => !dropSet.has(m.rawKey)).length;
+    if (remaining < 2) {
+      await this.prisma.tenantOpsAlias.deleteMany({ where: { tenantId: tenant.tenantId, groupId } });
+    }
+    return { groupId };
+  }
+
+  private async expandAliasKeys(tenantId: string, kind: OpsAliasKind, keys: string[]) {
+    const raw = new Set<string>();
+    const groupIds: string[] = [];
+    for (const key of keys) {
+      const trimmed = key.trim();
+      if (!trimmed) continue;
+      const groupId = parseOpsGroupKey(trimmed);
+      if (groupId) groupIds.push(groupId);
+      else raw.add(trimmed);
+    }
+    if (groupIds.length) {
+      const members = await this.prisma.tenantOpsAlias.findMany({
+        where: { tenantId, kind, groupId: { in: groupIds } },
+      });
+      for (const member of members) raw.add(member.rawKey);
+    }
+    return [...raw];
   }
 
   private parseInsightDays(raw?: string) {

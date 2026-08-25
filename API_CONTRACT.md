@@ -83,7 +83,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `days` opcional, default 90. `0` = todo el historial del comercio
 - **Respuesta esperada**: `{ tenantName, periodDays, kpis, concentration, channelMix, byMonth, byWeekday, byProvider, byBrand, byCategory, bySubcategory, brandProviders, topProducts, recentOrders, ops }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: La data es **solo de ese local**. `ops` agrega envíos (retiro vs domicilio, flete por mes/proveedor), formas de pago, direcciones más usadas, sucursales, IVA/percepciones y quién armó el pedido. El flete **no se inventa ni se convierte**. New Bytes guarda la cotización en **ARS** (`shippingArs`); Elit/Invid/Air solo cuentan en **USD** si el pedido trajo `shippingCost` creíble. No se usa `total − subtotal − impuestos`: en Invid `impuestos` son internos y ese resto es IVA, no envío.
+- **Notas**: La data es **solo de ese local**. `ops` agrega envíos (retiro vs domicilio, flete por mes/proveedor), formas de pago, direcciones más usadas, sucursales, IVA/percepciones y quién armó el pedido. El flete **no se inventa ni se convierte**. New Bytes guarda la cotización en **ARS** (`shippingArs`); Elit/Invid/Air solo cuentan en **USD** si el pedido trajo `shippingCost` creíble. No se usa `total − subtotal − impuestos`: en Invid `impuestos` son internos y ese resto es IVA, no envío. El comercio puede **unificar** etiquetas de dirección/pago/entrega/sucursal (`PUT /orders/insights/aliases`, `PATCH/DELETE /orders/insights/aliases/:groupId`, `POST .../split`) para que distintas escrituras cuenten como una sola real; `ops.suggestions` propone pares que se parecen (sin unificar solo).
 
 ### [FEATURE] Pedido offline y compras en esquema (comercio tipo 1)
 - **Método**: GET | PUT · POST | PATCH (pedidos)
@@ -93,6 +93,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: `ProviderConfig` / `purchase` por proveedor. `POST /orders/offline` y `PATCH /orders/:id` devuelven `TenantOrder` con `channel: "OFFLINE"`, `status: "OFFLINE"`, `approvalStatus: "APPROVED"`, `editable: true`.
 - **Estado**: IMPLEMENTADO
 - **Notas**: Offline = compra sin facturar (antes “.com”); **no se llama al portal del proveedor**. Sí se registra en Nodo como pedido **aprobado** y se puede editar (cantidades, precio, notas) si el vendedor cambia algo. El mensaje al vendedor se copia aparte. **Sin percepciones (IIBB); internos sí.** Esquema = facturado, con % extra que carga el comercio una vez por distribuidor (no aplica a ítems sueltos del carrito online); al portal los ítems van sueltos. El IVA de offline y el de esquema son independientes. Si offline está activo, `offlineIvaAdjustment` es obligatorio; si esquema está activo, `schemeIvaAdjustment` es obligatorio. Si el proveedor no informa alícuota de IVA (p. ej. Ceven), offline/esquema quedan deshabilitados: no se inventa 21%, 0% ni 10,5%. Aprobar un pedido offline está bloqueado: no hay envío al portal.
+
+### [FEATURE] Unificar direcciones, pagos y envíos del local
+- **Método**: PUT · PATCH · DELETE · POST
+- **Ruta**: `PUT /orders/insights/aliases` · `PATCH /orders/insights/aliases/:groupId` · `DELETE /orders/insights/aliases/:groupId` · `POST /orders/insights/aliases/:groupId/split`
+- **Auth**: Bearer, organización de la sesión (solo ese comercio)
+- **Body / Params**: unificar `{ kind: "ADDRESS"|"PAYMENT"|"DELIVERY"|"WAREHOUSE", keys: string[], label }` · renombrar `{ label }` · split `{ keys }` (saca esas escrituras del grupo)
+- **Respuesta esperada**: `{ groupId, kind?, label?, keys? }`. El GET `/orders/insights` aplica los alias: filas unificadas traen `groupId`, `unified`, `variants`; `ops.suggestions` lista parecidos sin unificarlos.
+- **Estado**: IMPLEMENTADO
+- **Notas**: No cruza locales. No se unifica en automático: el comercio elige. Las claves crudas son el texto que ya guardó cada pedido.
 
 ## Pendiente (futuro)
 

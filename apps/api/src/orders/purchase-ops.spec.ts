@@ -98,4 +98,73 @@ describe("computeOpsInsights", () => {
     expect(report.byAddress[0].label).toContain("Mitre 12");
     expect(report.byBuyer[0]).toMatchObject({ key: "ana", orders: 2 });
   });
+
+  it("junta direcciones unificadas en una sola real", () => {
+    const report = computeOpsInsights(
+      [
+        {
+          id: "1",
+          provider: "INVID",
+          status: "CREATED",
+          createdAt: "2026-08-10T15:00:00.000Z",
+          total: 100,
+          paymentLabel: "Transferencia",
+          addressSnapshot: { Direccion: "Mitre 12", Localidad: "Rosario" },
+        },
+        {
+          id: "2",
+          provider: "NEW_BYTES",
+          status: "CREATED",
+          createdAt: "2026-08-11T15:00:00.000Z",
+          total: 80,
+          paymentLabel: "TRANSFERENCIA",
+          addressSnapshot: { Direccion: "mitre 12", Localidad: "Rosario" },
+        },
+      ],
+      {
+        ADDRESS: {
+          "Mitre 12, Rosario": { groupId: "g1", label: "Mitre 12, Rosario" },
+          "mitre 12, Rosario": { groupId: "g1", label: "Mitre 12, Rosario" },
+        },
+        PAYMENT: {
+          Transferencia: { groupId: "p1", label: "Transferencia" },
+          TRANSFERENCIA: { groupId: "p1", label: "Transferencia" },
+        },
+      }
+    );
+    expect(report.kpis.uniqueAddresses).toBe(1);
+    expect(report.byAddress).toHaveLength(1);
+    expect(report.byAddress[0]).toMatchObject({
+      label: "Mitre 12, Rosario",
+      orders: 2,
+      unified: true,
+      groupId: "g1",
+    });
+    expect(report.byAddress[0].variants).toHaveLength(2);
+    expect(report.kpis.uniquePayments).toBe(1);
+    expect(report.suggestions.some((s) => s.kind === "ADDRESS")).toBe(false);
+  });
+
+  it("sugiere unificar direcciones parecidas sin juntarlas solo", () => {
+    const report = computeOpsInsights([
+      {
+        id: "1",
+        provider: "INVID",
+        status: "CREATED",
+        createdAt: "2026-08-10T15:00:00.000Z",
+        total: 10,
+        addressSnapshot: { Direccion: "Av. Mitre 12", Localidad: "Rosario" },
+      },
+      {
+        id: "2",
+        provider: "ELIT",
+        status: "CREATED",
+        createdAt: "2026-08-11T15:00:00.000Z",
+        total: 20,
+        addressSnapshot: { shippingAddress: "Avenida Mitre 12, Rosario" },
+      },
+    ]);
+    expect(report.kpis.uniqueAddresses).toBe(2);
+    expect(report.suggestions.some((s) => s.kind === "ADDRESS" && s.keys.length === 2)).toBe(true);
+  });
 });

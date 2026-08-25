@@ -324,6 +324,7 @@ export function computePurchaseInsights(
     previousSpendUsd?: number | null;
     catalogStats?: CatalogStats;
     generatedAt?: Date;
+    opsAliases?: import("./purchase-ops-aliases").OpsAliasIndex;
   }
 ): PurchaseInsights {
   const generatedAt = (opts.generatedAt ?? new Date()).toISOString();
@@ -493,7 +494,7 @@ export function computePurchaseInsights(
     }
   }
 
-  const ops = computeOpsInsights(orders);
+  const ops = computeOpsInsights(orders, opts.opsAliases);
   const uniqueSkus = productMap.size;
   const repeatSkus = [...skuOrders.values()].filter((s) => s.size > 1).length;
 
