@@ -8,7 +8,6 @@ import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import SalePricePanel from "@/components/SalePricePanel";
 import { useResults } from "@/lib/results";
-import { useCart } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint } from "@/lib/api";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
@@ -35,13 +34,13 @@ import {
   ChevronDown,
   Store,
 } from "lucide-react";
+import ProductBuyActions from "@/components/ProductBuyActions";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
 
 export default function ProductPage({ params }: { params: Promise<{ provider: string; externalId: string }> }) {
   const { provider, externalId } = use(params);
   const router = useRouter();
   const { find, query } = useResults();
-  const { items: cartItems, add } = useCart();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
 
   const dec = (s: string) => decodeURIComponent(s);
@@ -56,7 +55,6 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const [qty, setQty] = useState(1);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [copied, setCopied] = useState(false);
-  const [addedFlash, setAddedFlash] = useState(false);
 
   useEffect(() => {
     setImgErr(false);
@@ -125,19 +123,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const unitConv = useMemo(() => convert(unitDisplayUsd), [convert, unitDisplayUsd]);
   const unitNetConv = useMemo(() => convert(pricing?.unitNet ?? 0), [convert, pricing?.unitNet]);
 
-  const cartItem = cartItems.find((i) => i.provider === providerName && i.externalId === extId);
 
   function copyId() {
     void navigator.clipboard.writeText(extId);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
-  }
-
-  function addToCart() {
-    if (!product) return;
-    add(product, qty);
-    setAddedFlash(true);
-    setTimeout(() => setAddedFlash(false), 1600);
   }
 
   function money(usd: number) {
@@ -376,18 +366,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={addToCart}
-                        className="w-full bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-xl py-3 transition-all"
-                      >
-                        {addedFlash ? "Agregado al carrito" : `Agregar al carrito · ${qty}`}
-                      </button>
-                      {cartItem && (
-                        <p className="text-[11px] text-emerald-400 text-center">
-                          Ya tenés {cartItem.qty} en el carrito
-                        </p>
-                      )}
+                      <ProductBuyActions product={product} qty={qty} />
                     </div>
                   </div>
 

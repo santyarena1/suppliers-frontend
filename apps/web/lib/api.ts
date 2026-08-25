@@ -241,6 +241,8 @@ export const searchApi = {
 };
 
 // --- Mi organización ---
+export type IvaAdjustment = "REMOVE" | "HALF" | "FLAT_10_5";
+
 /** Un proveedor tal como lo ve un comercio, y por qué lo ve. */
 export interface VisibleProvider {
   provider: Provider;
@@ -251,6 +253,14 @@ export interface VisibleProvider {
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
+  /** Pedido offline / esquema que configuró este comercio para el distribuidor. */
+  purchase?: {
+    acceptsOffline: boolean;
+    acceptsScheme: boolean;
+    offlineIvaAdjustment: IvaAdjustment | null;
+    schemeIvaAdjustment: IvaAdjustment | null;
+    schemeDiscountPercent: number | null;
+  };
 }
 
 export interface RedeemedCode {
@@ -312,6 +322,8 @@ let visibleProviders: { list: VisibleProvider[]; at: number } | null = null;
 let visibleProvidersInflight: Promise<VisibleProvider[]> | null = null;
 const VISIBLE_PROVIDERS_TTL_MS = 60_000;
 
+export const MY_PROVIDERS_UPDATED = "nodo:my-providers-updated";
+
 export async function loadMyProviders(force = false): Promise<VisibleProvider[]> {
   if (!force && visibleProviders && Date.now() - visibleProviders.at < VISIBLE_PROVIDERS_TTL_MS) {
     return visibleProviders.list;
@@ -335,6 +347,9 @@ export async function loadMyProviders(force = false): Promise<VisibleProvider[]>
 export function invalidateMyProviders() {
   visibleProviders = null;
   visibleProvidersInflight = null;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(MY_PROVIDERS_UPDATED));
+  }
 }
 
 /** Solo los vinculados: de los publicitados todavía no hay catálogo que traer. */
@@ -388,6 +403,11 @@ export interface ProviderConfig {
   zeroStockAction: ZeroStockAction;
   priceMarkupPercent: number | string;
   minStockThreshold: number;
+  acceptsOffline: boolean;
+  acceptsScheme: boolean;
+  offlineIvaAdjustment: IvaAdjustment | null;
+  schemeIvaAdjustment: IvaAdjustment | null;
+  schemeDiscountPercent: number | string | null;
   lastSyncedAt: string | null;
   lastSyncError: string | null;
   lastSyncCreated: number;

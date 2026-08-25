@@ -8,9 +8,10 @@ import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
   invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile,
-  TENANT_ROLES_CAN_PURGE_CATALOG
+  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders
 } from "@/lib/api";
-import { getTenant, isAdmin } from "@/lib/auth";
+import { getTenant, getToken, sessionFromToken, isAdmin } from "@/lib/auth";
+import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { SKU_PREFIX } from "@/lib/providerMeta";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -132,16 +133,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const [clearingZeroStock, setClearingZeroStock] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
   // Vacía el catálogo de toda la organización, no solo el de quien lo pide.
   const [canPurge, setCanPurge] = useState(false);
+  const [isRetailer, setIsRetailer] = useState(false);
 
   useEffect(() => {
-    const role = getTenant()?.role;
+    const tenant = getTenant();
+    const role = tenant?.role;
     setCanPurge(isAdmin() || (!!role && TENANT_ROLES_CAN_PURGE_CATALOG.includes(role)));
+    setIsRetailer(tenant?.type === "RETAILER" || sessionFromToken(getToken() || "").tenantType === "RETAILER");
   }, []);
 
   async function loadConfig() {
@@ -149,7 +154,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     setLoadingConfig(true);
     try {
       const res = await providersApi.getConfig(provider);
-      setConfig(res.data);
+      setConfig({
+        ...res.data,
+        acceptsOffline: Boolean(res.data.acceptsOffline),
+        acceptsScheme: Boolean(res.data.acceptsScheme),
+        offlineIvaAdjustment: res.data.offlineIvaAdjustment ?? null,
+        schemeIvaAdjustment: res.data.schemeIvaAdjustment ?? null,
+        schemeDiscountPercent: res.data.schemeDiscountPercent ?? null,
+      });
     } catch {
       setConfig(null);
     } finally {
@@ -162,6 +174,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     if (!config) return;
     setSavingConfig(true);
     setConfigSaved(false);
+    setConfigError(null);
     try {
       const res = await providersApi.updateConfig(provider, {
         enabled: config.enabled,
@@ -170,10 +183,22 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         zeroStockAction: config.zeroStockAction,
         priceMarkupPercent: Number(config.priceMarkupPercent) || 0,
         minStockThreshold: Number(config.minStockThreshold) || 0,
+        acceptsOffline: Boolean(config.acceptsOffline),
+        acceptsScheme: Boolean(config.acceptsScheme),
+        offlineIvaAdjustment: config.offlineIvaAdjustment,
+        schemeIvaAdjustment: config.schemeIvaAdjustment,
+        schemeDiscountPercent:
+          config.schemeDiscountPercent == null || config.schemeDiscountPercent === ""
+            ? null
+            : Number(config.schemeDiscountPercent),
       });
       setConfig(res.data);
+      invalidateMyProviders();
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 3000);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setConfigError(msg || "No se pudo guardar la configuración");
     } finally {
       setSavingConfig(false);
     }
@@ -351,7 +376,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   {[
                     { key: "credentials" as const, label: "Mi cuenta" },
                     { key: "sync" as const, label: "Sincronización" },
-                    { key: "config" as const, label: "Configuración" },
+                    { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración" },
                     { key: "catalog" as const, label: "Catálogo" },
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte." }] : []),
                     ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte." }] : []),
@@ -380,6 +405,16 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                 {tab === "sync" && (
                   <div className="max-w-xl flex flex-col gap-4">
+                    {isRetailer && (
+                      <button
+                        type="button"
+                        onClick={() => setTab("config")}
+                        className="text-left border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100 hover:bg-amber-500/15"
+                      >
+                        <span className="font-semibold">Pedido offline y esquema</span>
+                        <span className="block text-xs text-amber-200/80 mt-0.5">Se configura en la pestaña Configuración, no acá.</span>
+                      </button>
+                    )}
                     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                       <p className="text-sm text-surface-400">
                         Trae el catálogo completo de {provider.replace(/_/g, " ")} y lo guarda en nuestra base.
@@ -439,12 +474,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                 {tab === "config" && (
                   <div className="max-w-xl">
-                    {loadingConfig || !config ? (
+                    {loadingConfig ? (
                       <div className="flex items-center justify-center py-16">
                         <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
                       </div>
+                    ) : !config ? (
+                      <p className="text-sm text-surface-400 py-8">
+                        No se pudo cargar la configuración. Recargá la página o avisá si sigue fallando.
+                      </p>
                     ) : (
                       <form onSubmit={handleSaveConfig} className="flex flex-col gap-5">
+                        {isRetailer && (
+                          <ProviderPurchaseConfig provider={provider} config={config} onChange={setConfig} />
+                        )}
+
                         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="flex items-center gap-2 text-sm font-semibold text-white">
                             <Settings className="w-4 h-4 text-brand-700 dark:text-brand-400" />
@@ -565,6 +608,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         {configSaved && (
                           <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-emerald-500/8 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
                             <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Configuración guardada
+                          </div>
+                        )}
+                        {configError && (
+                          <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
+                            <XCircle className="w-4 h-4 flex-shrink-0" /> {configError}
                           </div>
                         )}
                       </form>

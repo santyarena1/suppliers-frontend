@@ -9,6 +9,8 @@ import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { linePricing, taxLabel } from "@/lib/tax";
 import { useProviderDisplay } from "@/lib/providerDisplay";
+import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
+import { usePurchasePolicy } from "@/lib/purchase";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
 
@@ -40,15 +42,20 @@ function CardProviderPill({ provider }: { provider: string }) {
   );
 }
 
-export default function ProductCard({ product }: { product: ProductDTO }) {
+export default function ProductCard({ product, priceMode = "list" }: { product: ProductDTO; priceMode?: PriceMode }) {
   const [imgErr, setImgErr] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
   const { currency, withIva, convert } = usePrefs();
+  const policy = usePurchasePolicy(product.provider);
   const href = `/product/${encodeURIComponent(product.provider)}/${encodeURIComponent(product.externalId)}`;
 
-  const pricing = linePricing(product);
+  const pricing = purchaseLinePricing(product, policy, priceMode);
   const displayUsd = withIva ? pricing.gross : pricing.net;
   const ars = convert(displayUsd).amount;
+  const listed = linePricing(product);
+  const showingOffline = pricing.adjusted && pricing.mode === "offline";
+  const wantsOffline = priceMode === "offline";
+  const offlineUnavailable = wantsOffline && !showingOffline;
 
   const primary = currency === "USD" ? formatUSD(displayUsd) : formatARS(ars);
   const secondary = currency === "USD"
@@ -92,11 +99,24 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
 
           <CardProviderPill provider={product.provider} />
 
-          {dropLabel && (
-            <span className="absolute top-2 right-2 z-[1] inline-flex h-7 items-center rounded-full bg-emerald-600 px-2.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-emerald-400/30">
-              {dropLabel}
-            </span>
-          )}
+          <div className="absolute top-2 right-2 z-[1] flex flex-col items-end gap-1">
+            {dropLabel && (
+              <span className="inline-flex h-7 items-center rounded-full bg-emerald-600 px-2.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-emerald-400/30">
+                {dropLabel}
+              </span>
+            )}
+            {(showingOffline || offlineUnavailable) && (
+              <span
+                className={`inline-flex h-7 items-center rounded-full px-2.5 text-[11px] font-bold shadow-sm ${
+                  showingOffline
+                    ? "bg-amber-500 text-black ring-1 ring-amber-300/50"
+                    : "bg-black/70 text-amber-200 ring-1 ring-amber-500/30"
+                }`}
+              >
+                {showingOffline ? "Offline" : "Sin offline"}
+              </span>
+            )}
+          </div>
 
           {product.locationAir && (
             <span className="absolute bottom-2 left-2 z-[1] inline-flex max-w-[85%] items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[10px] font-medium text-white/95 ring-1 ring-white/10 backdrop-blur-sm">
@@ -131,7 +151,6 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               {secondary && (
                 <span className="product-card-meta text-[11px] tabular-nums">{secondary}</span>
               )}
-              {/* Chip neutro: visible pero sin competir con el precio (card siempre clara) */}
               <span
                 className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium tabular-nums ${
                   withIva
@@ -144,10 +163,16 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               </span>
             </div>
 
-            <p className="product-card-meta text-[10px] tabular-nums leading-none pt-0.5">
-              Base {formatUSD(pricing.net)}
-              {withIva ? " · s/imp" : ""}
-            </p>
+            {pricing.missingIva && showingOffline && (
+              <p className="text-[10px] text-amber-600 leading-none">Sin alícuota de IVA</p>
+            )}
+
+            {!showingOffline && (
+              <p className="product-card-meta text-[10px] tabular-nums leading-none pt-0.5">
+                Base {formatUSD(listed.net)}
+                {withIva ? " · s/imp" : ""}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between gap-2 pt-2 border-t product-card-divider">
@@ -168,7 +193,11 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               >
                 <DollarSign className="w-3.5 h-3.5" />
               </button>
-              <AddToCartButton product={product} variant="icon" />
+              <AddToCartButton
+                product={product}
+                variant="icon"
+                channel={showingOffline ? "offline" : "online"}
+              />
             </div>
           </div>
         </div>
@@ -178,7 +207,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
         open={saleOpen}
         onClose={() => setSaleOpen(false)}
         seedQuery={product.name}
-        costUsd={pricing.net}
+        costUsd={listed.net}
       />
     </div>
   );

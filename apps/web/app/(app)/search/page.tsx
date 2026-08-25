@@ -7,8 +7,11 @@ import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
+import { OfflinePricesHelpButton } from "@/components/OfflinePricesHelp";
 import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
+import { useIsRetailer, usePurchasePolicies } from "@/lib/purchase";
+import { purchaseLinePricing } from "@/lib/purchase-price";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
 import { parsePrice, proxyImg } from "@/lib/format";
@@ -50,7 +53,12 @@ function SearchPage() {
   // Solo se puede buscar en los proveedores con los que el comercio está vinculado:
   // del resto no hay catálogo, y ni siquiera tiene por qué saber que existen.
   const { providers: myProviders } = useMyProviders();
+  const retailer = useIsRetailer();
+  const purchasePolicies = usePurchasePolicies();
   const searchable = myProviders.filter((p) => p.linked);
+  const anyOffline = searchable.some((p) => purchasePolicies[p.provider]?.acceptsOffline);
+  const [showOfflinePrices, setShowOfflinePrices] = useState(false);
+  const priceMode = retailer && showOfflinePrices ? "offline" as const : "list" as const;
   const [selectedProviders, setSelectedProviders] = useState<Set<Provider>>(new Set());
   const [touchedFilters, setTouchedFilters] = useState(false);
   const [results, setResults] = useState<ProductDTO[]>([]);
@@ -200,6 +208,8 @@ function SearchPage() {
 
   // Apply in-results filters + sort
   const filtered = useMemo(() => {
+    const sortPrice = (p: ProductDTO) =>
+      purchaseLinePricing(p, purchasePolicies[p.provider], priceMode).unitNet;
     let arr = results;
     if (refineText.trim()) {
       const q = refineText.toLowerCase();
@@ -214,11 +224,11 @@ function SearchPage() {
       const m = parseFloat(maxPrice);
       if (!isNaN(m)) arr = arr.filter((p) => parsePrice(p.price) <= m);
     }
-    if (sortBy === "price_asc") arr = [...arr].sort((a, b) => parsePrice(a.price) - parsePrice(b.price));
-    if (sortBy === "price_desc") arr = [...arr].sort((a, b) => parsePrice(b.price) - parsePrice(a.price));
+    if (sortBy === "price_asc") arr = [...arr].sort((a, b) => sortPrice(a) - sortPrice(b));
+    if (sortBy === "price_desc") arr = [...arr].sort((a, b) => sortPrice(b) - sortPrice(a));
     if (sortBy === "name_asc") arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     return arr;
-  }, [results, refineText, hideNoImage, minPrice, maxPrice, sortBy]);
+  }, [results, refineText, hideNoImage, minPrice, maxPrice, sortBy, priceMode, purchasePolicies]);
 
   const providerCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -393,6 +403,32 @@ function SearchPage() {
             </form>
 
             <div className="flex items-center gap-2 ml-auto">
+              {retailer && (
+                <span className="flex items-center gap-1">
+                  {anyOffline ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowOfflinePrices((v) => !v)}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
+                        showOfflinePrices
+                          ? "border-amber-500 text-amber-300 bg-amber-500/10"
+                          : "border-surface-700 text-surface-400 hover:text-surface-200"
+                      }`}
+                    >
+                      Precios offline
+                    </button>
+                  ) : (
+                    <Link
+                      href="/proveedores"
+                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-amber-500/30 text-amber-200/90 hover:text-white hover:border-amber-400/50"
+                      title="Se activa en Proveedores → el distribuidor → Configuración"
+                    >
+                      Pedido offline
+                    </Link>
+                  )}
+                  <OfflinePricesHelpButton />
+                </span>
+              )}
               <PrefsPanel />
 
               <button
@@ -514,6 +550,32 @@ function SearchPage() {
                     Con imagen
                   </button>
 
+                  {retailer && (
+                    <span className="flex items-center gap-1">
+                      {anyOffline ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowOfflinePrices((v) => !v)}
+                          className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                            showOfflinePrices
+                              ? "border-amber-500 bg-amber-500/15 text-amber-300"
+                              : "border-surface-700 text-surface-500 hover:text-surface-300"
+                          }`}
+                        >
+                          Precios offline
+                        </button>
+                      ) : (
+                        <Link
+                          href="/proveedores"
+                          className="text-[11px] font-medium px-2 py-1.5 rounded-md border border-amber-500/30 text-amber-200/90"
+                        >
+                          Pedido offline
+                        </Link>
+                      )}
+                      <OfflinePricesHelpButton />
+                    </span>
+                  )}
+
                   {hasInResultsFilter && (
                     <button
                       onClick={() => { setRefineText(""); setMinPrice(""); setMaxPrice(""); setHideNoImage(false); }}
@@ -582,14 +644,14 @@ function SearchPage() {
               {hydrated && !loading && filtered.length > 0 && viewMode === "grid" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                   {filtered.map((product, i) => (
-                    <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} />
+                    <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} priceMode={priceMode} />
                   ))}
                 </div>
               )}
 
               {/* List */}
               {hydrated && !loading && filtered.length > 0 && viewMode === "list" && (
-                <ListView items={filtered} />
+                <ListView items={filtered} priceMode={priceMode} />
               )}
 
               {/* Grouped */}
@@ -611,7 +673,7 @@ function SearchPage() {
                         {!collapsed && (
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                             {items.map((p, i) => (
-                              <ProductCard key={`${p.provider}-${p.externalId}-${i}`} product={p} />
+                              <ProductCard key={`${p.provider}-${p.externalId}-${i}`} product={p} priceMode={priceMode} />
                             ))}
                           </div>
                         )}
@@ -626,7 +688,7 @@ function SearchPage() {
   );
 }
 
-function ListView({ items }: { items: ProductDTO[] }) {
+function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: "list" | "offline" }) {
   return (
     <div className="flex flex-col divide-y divide-surface-800 border border-surface-800 rounded-xl overflow-hidden">
       <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 bg-surface-900 text-[10px] font-semibold text-surface-500 uppercase tracking-wider items-center">
@@ -656,7 +718,7 @@ function ListView({ items }: { items: ProductDTO[] }) {
             <ProviderBadge provider={p.provider} variant="inline" size="sm" />
           </div>
           <div className="w-28 text-right">
-            <PriceTag product={p} size="sm" showSecondary />
+            <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
           </div>
           <div onClick={(e) => e.stopPropagation()}>
             <AddToCartButton product={p} variant="icon" />

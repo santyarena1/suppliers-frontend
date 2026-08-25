@@ -11,11 +11,14 @@ import {
   canSyncProvider, type VisibleProvider
 } from "@/lib/api";
 import ProviderBadge from "@/components/ProviderBadge";
-import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, Sparkles, XCircle } from "lucide-react";
+import { useIsRetailer } from "@/lib/purchase";
+import { providerHasIvaRate } from "@/lib/purchase-pricing";
+import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
 export default function ProveedoresPage() {
+  const retailer = useIsRetailer();
   const [visible, setVisible] = useState<VisibleProvider[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [loading, setLoading] = useState(true);
@@ -73,6 +76,14 @@ export default function ProveedoresPage() {
 
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
+              {retailer && (
+                <div className="border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100">
+                  <span className="font-semibold">Pedido offline y esquema</span>
+                  <span className="block text-xs text-amber-200/80 mt-0.5">
+                    Entrá a un distribuidor que informe IVA (New Bytes, Elit, Grupo Núcleo, Air, Invid o Diapstore) → pestaña Configuración. Activá los checks y elegí el IVA. Ceven y el resto no habilitan esto.
+                  </span>
+                </div>
+              )}
               <section>
                 <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-3">
                   Tus proveedores — {linked.length}
@@ -141,6 +152,15 @@ export default function ProveedoresPage() {
                               {s?.hasCredentials ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
                               {s?.hasCredentials ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
                             </Link>
+                            {retailer && providerHasIvaRate(provider) && (
+                              <Link
+                                href={`/proveedores/${provider}?tab=config`}
+                                className="flex items-center justify-center gap-1 text-xs font-medium border border-amber-500/40 hover:border-amber-400 text-amber-200 hover:text-white rounded-lg px-2.5 py-1.5 transition-all"
+                                title="Pedido offline y esquema"
+                              >
+                                <StickyNote className="w-3.5 h-3.5" />
+                              </Link>
+                            )}
                             <button
                               onClick={(e) => handleSync(provider, e)}
                               disabled={isSyncing || !canSyncProvider(s)}
