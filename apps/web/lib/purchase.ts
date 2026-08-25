@@ -1,6 +1,6 @@
 "use client";
 
-import { getTenant } from "@/lib/auth";
+import { getTenant, getToken, sessionFromToken } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
 import {
   EMPTY_PURCHASE_POLICY,
@@ -10,7 +10,10 @@ import {
 } from "@/lib/purchase-pricing";
 
 export function isRetailerSession(): boolean {
-  return getTenant()?.type === "RETAILER";
+  if (getTenant()?.type === "RETAILER") return true;
+  const token = getToken();
+  if (!token) return false;
+  return sessionFromToken(token).tenantType === "RETAILER";
 }
 
 export function useIsRetailer(): boolean {

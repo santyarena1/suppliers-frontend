@@ -10,7 +10,7 @@ import {
   invidAccountApi, invidCheckoutApi, InvidOrder, InvidAccountMovement, InvidNodoDraft, InvidFileForm, uploadAuthedFile,
   TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders
 } from "@/lib/api";
-import { getTenant, isAdmin } from "@/lib/auth";
+import { getTenant, getToken, sessionFromToken, isAdmin } from "@/lib/auth";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { SKU_PREFIX } from "@/lib/providerMeta";
@@ -146,7 +146,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     const tenant = getTenant();
     const role = tenant?.role;
     setCanPurge(isAdmin() || (!!role && TENANT_ROLES_CAN_PURGE_CATALOG.includes(role)));
-    setIsRetailer(tenant?.type === "RETAILER");
+    setIsRetailer(tenant?.type === "RETAILER" || sessionFromToken(getToken() || "").tenantType === "RETAILER");
   }, []);
 
   async function loadConfig() {
@@ -376,7 +376,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   {[
                     { key: "credentials" as const, label: "Mi cuenta" },
                     { key: "sync" as const, label: "Sincronización" },
-                    { key: "config" as const, label: "Configuración" },
+                    { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración" },
                     { key: "catalog" as const, label: "Catálogo" },
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte." }] : []),
                     ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte." }] : []),
@@ -405,6 +405,16 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                 {tab === "sync" && (
                   <div className="max-w-xl flex flex-col gap-4">
+                    {isRetailer && (
+                      <button
+                        type="button"
+                        onClick={() => setTab("config")}
+                        className="text-left border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100 hover:bg-amber-500/15"
+                      >
+                        <span className="font-semibold">Pedido offline y esquema</span>
+                        <span className="block text-xs text-amber-200/80 mt-0.5">Se configura en la pestaña Configuración, no acá.</span>
+                      </button>
+                    )}
                     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                       <p className="text-sm text-surface-400">
                         Trae el catálogo completo de {provider.replace(/_/g, " ")} y lo guarda en nuestra base.
