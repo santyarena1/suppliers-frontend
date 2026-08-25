@@ -331,6 +331,13 @@ export interface PurchaseRankRow {
   unified?: boolean;
   variants?: { key: string; label: string; orders: number }[];
   avgTicketUsd?: number;
+  avgUnitsPerOrder?: number;
+  uniqueSkus?: number;
+  uniqueBrands?: number;
+  uniqueCategories?: number;
+  uniqueProviders?: number;
+  repeatSkuShare?: number;
+  firstBoughtAt?: string | null;
   previousSpendUsd?: number | null;
   spendDeltaPercent?: number | null;
   onlineSpendUsd?: number;
@@ -344,6 +351,7 @@ export interface PurchaseRankRow {
     online?: number;
     offline?: number;
   }[];
+  byWeekday?: { weekday: number; label: string; spendUsd: number; orders: number }[];
 }
 
 export type OpsAliasKind = "ADDRESS" | "PAYMENT" | "DELIVERY" | "WAREHOUSE";

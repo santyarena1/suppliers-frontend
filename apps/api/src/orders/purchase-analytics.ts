@@ -95,12 +95,20 @@ export type RankRow = {
   orders: number;
   share: number;
   lastBoughtAt: string | null;
+  firstBoughtAt: string | null;
   avgTicketUsd: number;
+  avgUnitsPerOrder: number;
+  uniqueSkus: number;
+  uniqueBrands: number;
+  uniqueCategories: number;
+  uniqueProviders: number;
+  repeatSkuShare: number;
   previousSpendUsd: number | null;
   spendDeltaPercent: number | null;
   onlineSpendUsd: number;
   offlineSpendUsd: number;
   byMonth: RankSliceMonth[];
+  byWeekday: { weekday: number; label: string; spendUsd: number; orders: number }[];
 };
 
 export type MonthDayRow = {
@@ -309,10 +317,17 @@ type RankAcc = {
   units: number;
   orders: Set<string>;
   last: string | null;
+  first: string | null;
   label: string;
   online: number;
   offline: number;
   months: Map<string, { spend: number; units: number; orders: Set<string>; online: number; offline: number }>;
+  skus: Set<string>;
+  brands: Set<string>;
+  categories: Set<string>;
+  providers: Set<string>;
+  skuOrders: Map<string, Set<string>>;
+  weekdays: Map<number, { spend: number; orders: Set<string> }>;
 };
 
 function topShare(sortedSpend: number[], total: number, n: number) {
@@ -325,6 +340,7 @@ function toRank(map: Map<string, RankAcc>, totalSpend: number, limit: number, pr
     .map(([key, v]) => {
       const prev = previous?.[key];
       const previousSpendUsd = prev == null ? null : round2(prev);
+      const repeatSkus = [...v.skuOrders.values()].filter((s) => s.size > 1).length;
       return {
         key,
         label: v.label,
@@ -333,7 +349,14 @@ function toRank(map: Map<string, RankAcc>, totalSpend: number, limit: number, pr
         orders: v.orders.size,
         share: shareOf(v.spend, totalSpend),
         lastBoughtAt: v.last,
+        firstBoughtAt: v.first,
         avgTicketUsd: v.orders.size ? round2(v.spend / v.orders.size) : 0,
+        avgUnitsPerOrder: v.orders.size ? round1(v.units / v.orders.size) : 0,
+        uniqueSkus: v.skus.size,
+        uniqueBrands: v.brands.size,
+        uniqueCategories: v.categories.size,
+        uniqueProviders: v.providers.size,
+        repeatSkuShare: v.skus.size ? shareOf(repeatSkus, v.skus.size) : 0,
         previousSpendUsd,
         spendDeltaPercent: spendDelta(v.spend, previousSpendUsd),
         onlineSpendUsd: round2(v.online),
@@ -349,6 +372,10 @@ function toRank(map: Map<string, RankAcc>, totalSpend: number, limit: number, pr
             online: round2(row.online),
             offline: round2(row.offline),
           })),
+        byWeekday: WEEKDAYS.map((label, weekday) => {
+          const row = v.weekdays.get(weekday) ?? { spend: 0, orders: new Set<string>() };
+          return { weekday, label, spendUsd: round2(row.spend), orders: row.orders.size };
+        }),
       };
     })
     .sort((a, b) => b.spendUsd - a.spendUsd || b.units - a.units)
@@ -360,7 +387,18 @@ function bumpLast(current: string | null, next: string) {
   return next > current ? next : current;
 }
 
-function accRank(map: Map<string, RankAcc>, key: string, label: string, line: ExtractedLine) {
+function bumpFirst(current: string | null, next: string) {
+  if (!current) return next;
+  return next < current ? next : current;
+}
+
+function accRank(
+  map: Map<string, RankAcc>,
+  key: string,
+  label: string,
+  line: ExtractedLine,
+  meta: { skuKey: string; brand: string; category: string }
+) {
   let row = map.get(key);
   if (!row) {
     row = {
@@ -368,10 +406,17 @@ function accRank(map: Map<string, RankAcc>, key: string, label: string, line: Ex
       units: 0,
       orders: new Set(),
       last: null,
+      first: null,
       label,
       online: 0,
       offline: 0,
       months: new Map(),
+      skus: new Set(),
+      brands: new Set(),
+      categories: new Set(),
+      providers: new Set(),
+      skuOrders: new Map(),
+      weekdays: new Map(),
     };
     map.set(key, row);
   }
@@ -379,8 +424,21 @@ function accRank(map: Map<string, RankAcc>, key: string, label: string, line: Ex
   row.units += line.qty;
   row.orders.add(line.orderId);
   row.last = bumpLast(row.last, line.createdAt);
+  row.first = bumpFirst(row.first, line.createdAt);
   if (line.channel === "OFFLINE") row.offline += line.spendUsd;
   else row.online += line.spendUsd;
+  row.skus.add(meta.skuKey);
+  row.brands.add(meta.brand);
+  row.categories.add(meta.category);
+  row.providers.add(line.provider);
+  const skuSeen = row.skuOrders.get(meta.skuKey) ?? new Set();
+  skuSeen.add(line.orderId);
+  row.skuOrders.set(meta.skuKey, skuSeen);
+  const wd = weekdayIndex(line.createdAt);
+  const w = row.weekdays.get(wd) ?? { spend: 0, orders: new Set() };
+  w.spend += line.spendUsd;
+  w.orders.add(line.orderId);
+  row.weekdays.set(wd, w);
   const mk = monthKey(line.createdAt);
   let month = row.months.get(mk);
   if (!month) {
@@ -497,10 +555,12 @@ export function computePurchaseInsights(
     const subcategory = named(meta?.subcategory, named(meta?.category, UNKNOWN_CATEGORY));
     const name = named(meta?.name, line.name);
 
-    accRank(byProviderMap, line.provider, providerLabel(line.provider), line);
-    accRank(byBrandMap, brand, brand, line);
-    accRank(byCategoryMap, category, category, line);
-    accRank(bySubMap, subcategory, subcategory, line);
+    const skuKey = catalogKey(line.provider, line.sku);
+    const lineMeta = { skuKey, brand, category };
+    accRank(byProviderMap, line.provider, providerLabel(line.provider), line, lineMeta);
+    accRank(byBrandMap, brand, brand, line, lineMeta);
+    accRank(byCategoryMap, category, category, line, lineMeta);
+    accRank(bySubMap, subcategory, subcategory, line, lineMeta);
 
     const bpKey = `${brand}::${line.provider}`;
     const bp = brandProviderMap.get(bpKey) ?? { brand, provider: line.provider, spend: 0, units: 0 };
