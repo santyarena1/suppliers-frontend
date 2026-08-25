@@ -474,12 +474,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                 {tab === "config" && (
                   <div className="max-w-xl">
-                    {loadingConfig || !config ? (
+                    {loadingConfig ? (
                       <div className="flex items-center justify-center py-16">
                         <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
                       </div>
+                    ) : !config ? (
+                      <p className="text-sm text-surface-400 py-8">
+                        No se pudo cargar la configuración. Recargá la página o avisá si sigue fallando.
+                      </p>
                     ) : (
                       <form onSubmit={handleSaveConfig} className="flex flex-col gap-5">
+                        {isRetailer && (
+                          <ProviderPurchaseConfig provider={provider} config={config} onChange={setConfig} />
+                        )}
+
                         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="flex items-center gap-2 text-sm font-semibold text-white">
                             <Settings className="w-4 h-4 text-brand-700 dark:text-brand-400" />
@@ -581,10 +589,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                             </select>
                           </div>
                         </div>
-
-                        {isRetailer && (
-                          <ProviderPurchaseConfig provider={provider} config={config} onChange={setConfig} />
-                        )}
 
                         {config.lastSyncError && (
                           <div className="flex items-start gap-2.5 bg-red-500/8 border border-red-500/20 text-red-400 text-xs rounded-lg px-3.5 py-2.5">

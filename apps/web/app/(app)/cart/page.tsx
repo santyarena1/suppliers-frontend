@@ -111,7 +111,8 @@ export default function CartPage() {
     () => (channelTab === "offline" ? items.filter((it) => it.channel === "offline") : items.filter((it) => it.channel !== "offline")),
     [items, channelTab]
   );
-  const showOfflineTab = retailer && (offlineCount > 0 || Object.values(policies).some((p) => p.acceptsOffline));
+  const anyOfflinePolicy = Object.values(policies).some((p) => p.acceptsOffline);
+  const showOfflineTab = retailer;
 
   useEffect(() => {
     if (activeTab !== "all" && !viewByProvider[activeTab]?.length) setActiveTab("all");
@@ -586,7 +587,7 @@ export default function CartPage() {
             <PendingOrdersBanner onCreated={onBackgroundOrderCreated} />
           </div>
 
-          {items.length === 0 ? (
+          {items.length === 0 && channelTab === "online" ? (
             <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
               <p className="text-base text-surface-200">No hay productos en esta cotización</p>
               <p className="text-sm text-surface-500 mt-2 max-w-md">
@@ -603,9 +604,16 @@ export default function CartPage() {
               </p>
               <p className="text-sm text-surface-500 mt-2 max-w-md">
                 {channelTab === "offline"
-                  ? "El pedido offline no se carga en el portal: se copia un mensaje para el vendedor."
+                  ? anyOfflinePolicy
+                    ? "El pedido offline no se carga en el portal: se copia un mensaje para el vendedor."
+                    : "Todavía no activaste el pedido offline. Entrá a un distribuidor → Configuración, marcá “Acepta pedidos offline” y elegí el IVA."
                   : "Los ítems offline están en la otra pestaña."}
               </p>
+              {channelTab === "offline" && !anyOfflinePolicy && (
+                <Link href="/proveedores" className="mt-5 text-sm font-medium text-amber-300 hover:text-amber-200 border-b border-amber-400/40 pb-0.5">
+                  Ir a Proveedores
+                </Link>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden min-w-0">
