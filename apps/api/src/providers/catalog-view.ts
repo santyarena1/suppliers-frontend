@@ -17,6 +17,11 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   stockStatus: string | null;
   active: boolean;
   needsResync: boolean;
+  /** Solo en destacados: precio crudo anterior (con markup) cuando bajó. */
+  previousPrice?: number | null;
+  previousFinalPrice?: number | null;
+  /** Porcentaje de baja (0–100), si aplica. */
+  priceDropPercent?: number | null;
 };
 
 /**

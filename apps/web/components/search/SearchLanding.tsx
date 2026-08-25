@@ -58,7 +58,7 @@ export default function SearchLanding({ onCategoryClick }: SearchLandingProps) {
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="w-4 h-4 text-brand-600" />
             <h2 className="text-base font-bold text-white">Destacados del catálogo</h2>
-            <span className="text-xs text-surface-500">Precios de proveedores sincronizados</span>
+            <span className="text-xs text-surface-500">Varios proveedores · incluye bajadas de precio</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
             {featured.map((product, i) => (
