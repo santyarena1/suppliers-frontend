@@ -27,8 +27,22 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
     ? (ars > 0 ? formatARS(ars) : null)
     : formatUSD(displayUsd);
 
+  const hasDrop = product.priceDropPercent != null && product.priceDropPercent > 0;
+  const dropLabel = hasDrop
+    ? `−${product.priceDropPercent! % 1 === 0 ? product.priceDropPercent : product.priceDropPercent!.toFixed(1)}%`
+    : null;
+  const prevRaw = product.previousFinalPrice ?? product.previousPrice;
+  const prevFormatted =
+    hasDrop && prevRaw != null
+      ? currency === "USD"
+        ? formatUSD(Number(prevRaw) || 0)
+        : formatARS(convert(Number(prevRaw) || 0).amount)
+      : null;
+
+  const taxText = withIva ? taxLabel(product) : "Sin imp.";
+
   return (
-    <div className="group relative rounded-xl overflow-hidden flex flex-col product-card">
+    <div className="group relative rounded-2xl overflow-hidden flex flex-col product-card transition-shadow duration-300">
       <Link href={href} className="block">
         <div className="bg-white aspect-square flex items-center justify-center relative overflow-hidden">
           {product.imageUrl && !imgErr ? (
@@ -36,7 +50,7 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
               src={proxyImg(product.imageUrl)}
               alt={product.name}
               fill
-              className="object-contain p-2 group-hover:scale-[1.05] transition-transform duration-300"
+              className="object-contain p-3 group-hover:scale-[1.04] transition-transform duration-500 ease-out"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
               unoptimized
               onError={() => setImgErr(true)}
@@ -48,86 +62,98 @@ export default function ProductCard({ product }: { product: ProductDTO }) {
             </div>
           )}
 
-          <span className="absolute top-2 left-2 shadow-md backdrop-blur-md rounded-md bg-black/75 border border-white/10 px-1.5 py-1 max-w-[70%]">
+          {/* Proveedor: píldora fija, logo + nombre centrados */}
+          <span className="absolute top-2 left-2 z-[1] inline-flex h-7 max-w-[72%] items-center rounded-full bg-black/72 pl-1 pr-2.5 shadow-sm ring-1 ring-white/10 backdrop-blur-sm">
             <ProviderBadge
               provider={product.provider}
               variant="inline"
               size="sm"
-              className="!gap-1.5"
-              nameClassName="text-white truncate"
+              className="!gap-1.5 min-w-0"
+              nameClassName="text-white/95 truncate"
             />
           </span>
 
-          {product.priceDropPercent != null && product.priceDropPercent > 0 && (
-            <span className="absolute bottom-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md bg-emerald-600 text-white border border-emerald-400/40">
-              −{product.priceDropPercent % 1 === 0 ? product.priceDropPercent : product.priceDropPercent.toFixed(1)}%
+          {dropLabel && (
+            <span className="absolute top-2 right-2 z-[1] inline-flex h-7 items-center rounded-full bg-emerald-600 px-2.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-emerald-400/30">
+              {dropLabel}
             </span>
           )}
 
-          <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md ${
-            withIva
-              ? "bg-brand-600 text-white border border-brand-400/40"
-              : "bg-black/70 text-white border border-white/10"
-          }`}>
-            {withIva ? `+ ${taxLabel(product)}` : "Sin imp."}
-          </span>
-
           {product.locationAir && (
-            <span className="absolute bottom-2 left-2 flex items-center gap-1 text-[10px] font-medium bg-black/70 backdrop-blur-md border border-white/10 text-white rounded-md px-2 py-1 shadow-md">
-              <MapPin className="w-2.5 h-2.5" />
-              {product.locationAir}
+            <span className="absolute bottom-2 left-2 z-[1] inline-flex max-w-[85%] items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[10px] font-medium text-white/95 ring-1 ring-white/10 backdrop-blur-sm">
+              <MapPin className="w-2.5 h-2.5 flex-shrink-0" />
+              <span className="truncate">{product.locationAir}</span>
             </span>
           )}
         </div>
       </Link>
 
-      <div className="p-3 flex flex-col gap-2.5 flex-1">
-        <Link href={href} className="block">
-          <p className="product-card-title text-sm leading-snug line-clamp-2 font-medium transition-colors min-h-[2.3rem]">
+      <div className="p-3.5 flex flex-col gap-3 flex-1">
+        <Link href={href} className="block min-h-[2.5rem]">
+          <p className="product-card-title text-[13px] leading-snug line-clamp-2 font-semibold tracking-tight transition-colors">
             {product.name}
           </p>
         </Link>
 
-        <div className="flex items-end justify-between gap-2 mt-auto pt-2.5 border-t product-card-divider">
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-baseline gap-1.5 flex-wrap">
-              <span className="product-card-price text-lg font-bold tabular-nums leading-none">{primary}</span>
-              {product.priceDropPercent != null && product.priceDropPercent > 0 && (product.previousFinalPrice ?? product.previousPrice) != null && (
-                <span className="text-[11px] text-surface-500 line-through tabular-nums">
-                  {currency === "USD"
-                    ? formatUSD(Number(product.previousFinalPrice ?? product.previousPrice) || 0)
-                    : formatARS(convert(Number(product.previousFinalPrice ?? product.previousPrice) || 0).amount)}
+        <div className="mt-auto flex flex-col gap-2.5">
+          {/* Precio + IVA organizados en bloque */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="product-card-price text-[1.2rem] font-bold tabular-nums leading-none tracking-tight">
+                {primary}
+              </span>
+              {prevFormatted && (
+                <span className="text-[11px] text-surface-500/90 line-through tabular-nums">
+                  {prevFormatted}
                 </span>
               )}
             </div>
-            {secondary && (
-              <span className="product-card-meta text-[11px] tabular-nums mt-1">{secondary}</span>
-            )}
-            <span className="product-card-meta text-[10px] tabular-nums mt-0.5">
-              Base: {formatUSD(pricing.net)} {withIva ? "(s/imp)" : ""}
-            </span>
+
+            <div className="flex items-center gap-1.5 flex-wrap min-h-[1.25rem]">
+              {secondary && (
+                <span className="product-card-meta text-[11px] tabular-nums">{secondary}</span>
+              )}
+              <span
+                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${
+                  withIva
+                    ? "bg-brand-600/12 text-brand-700 ring-1 ring-brand-600/20"
+                    : "bg-surface-800/60 text-surface-500 ring-1 ring-surface-700/80"
+                }`}
+                title={withIva ? `Precio con ${taxLabel(product)}` : "Precio sin impuestos"}
+              >
+                {withIva ? `+ ${taxText}` : taxText}
+              </span>
+            </div>
+
+            <p className="product-card-meta text-[10px] tabular-nums leading-none pt-0.5">
+              Base {formatUSD(pricing.net)}
+              {withIva ? " · s/imp" : ""}
+            </p>
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <button
-              type="button"
-              title="Ver precios de venta en locales (referencia de mercado)"
-              aria-label="Ver precios de venta"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setSaleOpen(true);
-              }}
-              className="w-8 h-8 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 flex items-center justify-center transition-colors"
-            >
-              <DollarSign className="w-3.5 h-3.5" />
-            </button>
-            <AddToCartButton product={product} variant="icon" />
+
+          {/* Footer: id + acciones */}
+          <div className="flex items-center justify-between gap-2 pt-2 border-t product-card-divider">
+            <span className="product-card-meta text-[10px] font-mono truncate min-w-0 opacity-80">
+              {product.externalId ? `#${product.externalId}` : "—"}
+            </span>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                title="Ver precios de venta en locales (referencia de mercado)"
+                aria-label="Ver precios de venta"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSaleOpen(true);
+                }}
+                className="w-8 h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 hover:border-emerald-500/40 flex items-center justify-center transition-colors"
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+              </button>
+              <AddToCartButton product={product} variant="icon" />
+            </div>
           </div>
         </div>
-
-        {product.externalId && (
-          <span className="product-card-meta text-[9px] font-mono truncate">#{product.externalId}</span>
-        )}
       </div>
 
       <SalePricePanel
