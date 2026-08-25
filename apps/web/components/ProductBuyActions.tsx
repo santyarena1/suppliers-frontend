@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Check, Layers, ShoppingCart, StickyNote } from "lucide-react";
 import type { ProductDTO } from "@/lib/api";
 import { useCart } from "@/lib/cart";
@@ -133,6 +134,16 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             <p className="text-[11px] text-amber-400 text-center">Ya tenés {offlineItem.qty} en el pedido offline</p>
           )}
         </>
+      )}
+
+      {retailer && hasIva && !showScheme && !showOffline && (
+        <p className="text-[11px] text-surface-400 text-center leading-relaxed">
+          Pedido offline y esquema se activan en{" "}
+          <Link href={`/proveedores/${product.provider}?tab=config`} className="text-amber-300 hover:text-amber-200 underline">
+            Configuración de {product.provider.replace(/_/g, " ")}
+          </Link>
+          .
+        </p>
       )}
 
       {pickOpen && (

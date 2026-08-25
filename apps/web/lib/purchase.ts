@@ -1,6 +1,7 @@
 "use client";
 
-import { getTenant } from "@/lib/auth";
+import { useEffect, useState } from "react";
+import { getTenant, getToken, sessionFromToken } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
 import {
   EMPTY_PURCHASE_POLICY,
@@ -10,14 +11,19 @@ import {
 } from "@/lib/purchase-pricing";
 
 export function isRetailerSession(): boolean {
-  return getTenant()?.type === "RETAILER";
+  if (getTenant()?.type === "RETAILER") return true;
+  const token = getToken();
+  if (!token) return false;
+  return sessionFromToken(token).tenantType === "RETAILER";
 }
 
 export function useIsRetailer(): boolean {
   const { providers } = useMyProviders();
-  // Forzar re-render cuando llega la org; la sesión se lee al momento.
-  void providers;
-  return isRetailerSession();
+  const [retailer, setRetailer] = useState(false);
+  useEffect(() => {
+    setRetailer(isRetailerSession());
+  }, [providers]);
+  return retailer;
 }
 
 export function usePurchasePolicy(provider: string): PurchasePolicy {

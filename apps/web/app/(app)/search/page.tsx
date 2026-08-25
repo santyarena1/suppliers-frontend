@@ -403,19 +403,29 @@ function SearchPage() {
             </form>
 
             <div className="flex items-center gap-2 ml-auto">
-              {retailer && anyOffline && (
+              {retailer && (
                 <span className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowOfflinePrices((v) => !v)}
-                    className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
-                      showOfflinePrices
-                        ? "border-amber-500 text-amber-300 bg-amber-500/10"
-                        : "border-surface-700 text-surface-400 hover:text-surface-200"
-                    }`}
-                  >
-                    Precios offline
-                  </button>
+                  {anyOffline ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowOfflinePrices((v) => !v)}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
+                        showOfflinePrices
+                          ? "border-amber-500 text-amber-300 bg-amber-500/10"
+                          : "border-surface-700 text-surface-400 hover:text-surface-200"
+                      }`}
+                    >
+                      Precios offline
+                    </button>
+                  ) : (
+                    <Link
+                      href="/proveedores"
+                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-amber-500/30 text-amber-200/90 hover:text-white hover:border-amber-400/50"
+                      title="Se activa en Proveedores → el distribuidor → Configuración"
+                    >
+                      Pedido offline
+                    </Link>
+                  )}
                   <OfflinePricesHelpButton />
                 </span>
               )}
@@ -540,19 +550,28 @@ function SearchPage() {
                     Con imagen
                   </button>
 
-                  {retailer && anyOffline && (
+                  {retailer && (
                     <span className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowOfflinePrices((v) => !v)}
-                        className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
-                          showOfflinePrices
-                            ? "border-amber-500 bg-amber-500/15 text-amber-300"
-                            : "border-surface-700 text-surface-500 hover:text-surface-300"
-                        }`}
-                      >
-                        Precios offline
-                      </button>
+                      {anyOffline ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowOfflinePrices((v) => !v)}
+                          className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                            showOfflinePrices
+                              ? "border-amber-500 bg-amber-500/15 text-amber-300"
+                              : "border-surface-700 text-surface-500 hover:text-surface-300"
+                          }`}
+                        >
+                          Precios offline
+                        </button>
+                      ) : (
+                        <Link
+                          href="/proveedores"
+                          className="text-[11px] font-medium px-2 py-1.5 rounded-md border border-amber-500/30 text-amber-200/90"
+                        >
+                          Pedido offline
+                        </Link>
+                      )}
                       <OfflinePricesHelpButton />
                     </span>
                   )}
