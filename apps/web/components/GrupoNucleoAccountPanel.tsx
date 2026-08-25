@@ -6,33 +6,58 @@ import {
   grupoNucleoCheckoutApi,
   NodoProviderDraft,
 } from "@/lib/api";
+import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
-import { Receipt, XCircle } from "lucide-react";
+import { XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines } from "@/components/account/draftDetail";
+import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
+import {
+  useAccountHistoryState,
+  useClampPage,
+  usePagedMonthRows,
+} from "@/components/account/useAccountHistory";
+
+type CachedPayload = { note: string | null; drafts: NodoProviderDraft[] };
+
+const SECTIONS = [{ id: "nodo", label: "Desde Nodo" }] as const;
 
 export default function GrupoNucleoAccountPanel() {
+  const history = useAccountHistoryState("nodo");
   const [note, setNote] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fromCache, setFromCache] = useState(false);
   const [open, setOpen] = useState<NodoProviderDraft | null>(null);
 
   useEffect(() => {
-    void load();
+    void load(false);
   }, []);
 
-  async function load() {
+  async function load(refresh: boolean) {
     setLoading(true);
     setError(null);
     try {
-      const [accountRes, draftsRes] = await Promise.all([
-        grupoNucleoAccountApi.account(),
-        grupoNucleoCheckoutApi.drafts().catch(() => ({ data: [] as NodoProviderDraft[] })),
-      ]);
-      setNote(accountRes.data.note);
-      setDrafts(draftsRes.data ?? accountRes.data.drafts ?? []);
+      if (refresh) clearAccountCache("GN:");
+      const { data, fromCache: hit } = await loadAccountCached<CachedPayload>(
+        "GN:account",
+        async () => {
+          const [accountRes, draftsRes] = await Promise.all([
+            grupoNucleoAccountApi.account(),
+            grupoNucleoCheckoutApi.drafts().catch(() => ({ data: [] as NodoProviderDraft[] })),
+          ]);
+          return {
+            note: accountRes.data.note ?? null,
+            drafts: draftsRes.data ?? accountRes.data.drafts ?? [],
+          };
+        },
+        { refresh }
+      );
+      setNote(data.note);
+      setDrafts(data.drafts);
+      setFromCache(hit);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "No se pudieron traer los pedidos de Grupo Núcleo. ¿Están las credenciales?");
@@ -41,30 +66,45 @@ export default function GrupoNucleoAccountPanel() {
     }
   }
 
+  const paged = usePagedMonthRows(
+    drafts,
+    (d) => d.createdAt,
+    history.month,
+    history.page
+  );
+  useClampPage(history.page, paged.pages, history.setPage);
+
   return (
-    <div className="flex flex-col gap-5 max-w-3xl">
-      <p className="text-xs text-surface-500">
-        {note || "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá están solo los pedidos creados desde Nodo."}
-      </p>
-      {loading ? (
-        <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
-      ) : error ? (
-        <div className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
-          <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span className="flex-1">
-            {error}{" "}
-            <Link href="/proveedores/GRUPO_NUCLEO?tab=credentials" className="underline text-red-300 hover:text-white">
-              Cargar cuenta
-            </Link>
-          </span>
-          <button onClick={load} className="underline flex-shrink-0">Reintentar</button>
-        </div>
-      ) : (
-        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-white">
-            <Receipt className="w-4 h-4 text-sky-400" />
-            Pedidos creados desde Nodo
+    <>
+      <AccountHistoryChrome
+        sections={[...SECTIONS]}
+        section={history.section}
+        onSection={(id) => history.setSection(id)}
+        month={history.month}
+        onMonth={history.setMonth}
+        page={paged.page}
+        pages={paged.pages}
+        total={paged.total}
+        onPage={history.setPage}
+        onRefresh={() => void load(true)}
+        refreshing={loading}
+        fromCache={fromCache}
+        hint={note || "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá van solo los pedidos creados desde Nodo. Mes actual por defecto, de a 25."}
+      >
+        {loading && drafts == null ? (
+          <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
+        ) : error ? (
+          <div className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-red-500/8 border border-red-500/20 text-red-400">
+            <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span className="flex-1">
+              {error}{" "}
+              <Link href="/proveedores/GRUPO_NUCLEO?tab=credentials" className="underline text-red-300 hover:text-white">
+                Cargar cuenta
+              </Link>
+            </span>
+            <button type="button" onClick={() => void load(true)} className="underline flex-shrink-0">Reintentar</button>
           </div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -77,7 +117,7 @@ export default function GrupoNucleoAccountPanel() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-800">
-                {(drafts ?? []).map((d) => (
+                {paged.items.map((d) => (
                   <tr key={d.id}>
                     <td className="px-2 py-2">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
@@ -92,12 +132,12 @@ export default function GrupoNucleoAccountPanel() {
                 ))}
               </tbody>
             </table>
-            {(drafts ?? []).length === 0 && (
-              <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste pedidos desde Nodo.</p>
+            {paged.items.length === 0 && (
+              <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste pedidos desde Nodo en este período.</p>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </AccountHistoryChrome>
       {open && (
         <AccountRowDetail
           open
@@ -108,6 +148,6 @@ export default function GrupoNucleoAccountPanel() {
           onClose={() => setOpen(null)}
         />
       )}
-    </div>
+    </>
   );
 }
