@@ -659,12 +659,12 @@ export default function CartPage() {
           ) : (
             <div className="flex-1 flex flex-col overflow-hidden min-w-0">
               <div className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 bg-surface-950">
-                <div className="flex gap-0 overflow-x-auto">
+                <div className="flex gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:thin]">
                   {tabsToShow.map((tab) => (
                     <button
                       key={tab.key}
                       onClick={() => setActiveTab(tab.key)}
-                      className={`relative whitespace-nowrap text-sm px-3.5 py-3 transition-colors ${
+                      className={`relative flex-shrink-0 whitespace-nowrap text-sm px-3.5 py-3 transition-colors ${
                         activeTab === tab.key
                           ? "text-white"
                           : "text-surface-500 hover:text-surface-200"
@@ -673,7 +673,7 @@ export default function CartPage() {
                       {tab.label}
                       <span className="ml-1.5 text-xs tabular-nums text-surface-500">{tab.count}</span>
                       {activeTab === tab.key && (
-                        <span className="absolute inset-x-3 -bottom-px h-px bg-brand-500" />
+                        <span className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 bg-brand-500" />
                       )}
                     </button>
                   ))}
