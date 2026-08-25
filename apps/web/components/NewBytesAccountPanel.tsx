@@ -20,6 +20,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
+import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
 
 type Detail =
   | { kind: "movement"; row: NewBytesComprobante }
@@ -154,6 +155,21 @@ export default function NewBytesAccountPanel() {
   );
   useClampPage(history.page, paged.pages, history.setPage);
 
+  const amountTotal = (() => {
+    const rows = paged.filtered as unknown[];
+    if (!rows.length) return null;
+    if (section === "cta") {
+      const s = sumAccountAmounts((rows as NewBytesComprobante[]).map((m) => m.totalUsd));
+      return s != null ? formatAccountSum(s, "USD") : null;
+    }
+    if (section === "nodo") {
+      const s = sumAccountAmounts((rows as NewBytesNodoDraft[]).map((d) => d.total));
+      return s != null ? formatAccountSum(s) : null;
+    }
+    const s = sumAccountAmounts((rows as NewBytesOrder[]).map((o) => o.amount));
+    return s != null ? formatAccountSum(s, "USD") : null;
+  })();
+
   const ready = rowsForSection != null;
 
   return (
@@ -171,6 +187,7 @@ export default function NewBytesAccountPanel() {
         onRefresh={() => void loadSection(section, true)}
         refreshing={loading}
         fromCache={fromCache}
+        amountTotal={amountTotal}
         hint="Pedidos, comprobantes y órdenes de compra de tu cuenta en nb.com.ar. Mes actual por defecto, de a 25. Actualizar vuelve a consultar el portal."
         header={
           section === "cta" && balance != null ? (

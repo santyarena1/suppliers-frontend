@@ -18,6 +18,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
+import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
 
 type AirAccount = Awaited<ReturnType<typeof airAccountApi.account>>["data"];
 type AirRow = Record<string, string> & { _links?: { href: string; label: string }[]; _href?: string };
@@ -41,6 +42,41 @@ function airRowDate(row: AirRow): string | null {
     if (v != null && String(v).trim()) return String(v);
   }
   return null;
+}
+
+function airCellText(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === "string" || typeof v === "number") return String(v);
+  return null;
+}
+
+function airRowAmount(row: AirRow): number | null {
+  const prefer = ["Importe", "Total", "Monto", "Debe", "Haber", "importe", "total", "monto", "debe", "haber"];
+  for (const k of prefer) {
+    const n = parseAccountAmount(airCellText(row[k]));
+    if (n != null) return n;
+  }
+  for (const [k, v] of Object.entries(row)) {
+    if (k.startsWith("_")) continue;
+    if (!/importe|total|monto|debe|haber|precio/i.test(k)) continue;
+    const n = parseAccountAmount(airCellText(v));
+    if (n != null) return n;
+  }
+  return null;
+}
+
+function airRowsSum(rows: AirRow[]): string | null {
+  const hasDebe = rows.some((r) => airCellText(r.Debe ?? r.debe) != null);
+  const hasHaber = rows.some((r) => airCellText(r.Haber ?? r.haber) != null);
+  if (hasDebe && hasHaber) {
+    const debe = sumAccountAmounts(rows.map((r) => airCellText(r.Debe ?? r.debe)));
+    const haber = sumAccountAmounts(rows.map((r) => airCellText(r.Haber ?? r.haber)));
+    if (debe == null && haber == null) return null;
+    const net = (debe ?? 0) - (haber ?? 0);
+    return `Debe ${formatAccountSum(debe ?? 0)} · Haber ${formatAccountSum(haber ?? 0)} · Neto ${formatAccountSum(net)}`;
+  }
+  const s = sumAccountAmounts(rows.map((r) => airRowAmount(r)));
+  return s != null ? formatAccountSum(s) : null;
 }
 
 export default function AirAccountPanel() {
@@ -109,6 +145,15 @@ export default function AirAccountPanel() {
   );
   useClampPage(history.page, paged.pages, history.setPage);
 
+  const amountTotal = (() => {
+    if (!paged.filtered.length) return null;
+    if (section === "nodo") {
+      const s = sumAccountAmounts((paged.filtered as NodoProviderDraft[]).map((d) => d.total));
+      return s != null ? formatAccountSum(s) : null;
+    }
+    return airRowsSum(paged.filtered as AirRow[]);
+  })();
+
   const ready = account != null && drafts != null;
 
   return (
@@ -126,6 +171,7 @@ export default function AirAccountPanel() {
         onRefresh={() => void load(true)}
         refreshing={loading}
         fromCache={fromCache}
+        amountTotal={amountTotal}
         hint={account?.note || "Datos del portal www.air-intra.com (debe/haber y comprobantes). Mes actual por defecto, de a 25."}
         header={
           section === "cta" && account?.balance != null ? (

@@ -23,6 +23,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
+import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
 
 type ElitAccount = Awaited<ReturnType<typeof elitAccountApi.account>>["data"];
 type Detail =
@@ -126,6 +127,37 @@ export default function ElitAccountPanel() {
   );
   useClampPage(history.page, paged.pages, history.setPage);
 
+  const amountTotal = (() => {
+    const rows = paged.filtered as unknown[];
+    if (!rows.length) return null;
+    if (section === "cta") {
+      const moves = rows as ElitMovement[];
+      const debit = sumAccountAmounts(moves.map((m) => m.debit));
+      const credit = sumAccountAmounts(moves.map((m) => m.credit));
+      if (debit == null && credit == null) return null;
+      const net = (debit ?? 0) - (credit ?? 0);
+      return `Débito ${formatAccountSum(debit ?? 0, "USD")} · Crédito ${formatAccountSum(credit ?? 0, "USD")} · Neto ${formatAccountSum(net, "USD")}`;
+    }
+    if (section === "payments") {
+      const s = sumAccountAmounts((rows as ElitPayment[]).map((p) => p.total));
+      return s != null ? formatAccountSum(s, "USD") : null;
+    }
+    if (section === "nodo") {
+      const s = sumAccountAmounts((rows as NodoProviderDraft[]).map((d) => d.total));
+      return s != null ? formatAccountSum(s) : null;
+    }
+    const orders = rows as ElitSaleNote[];
+    const byCur = new Map<string, number>();
+    for (const o of orders) {
+      const n = parseAccountAmount(o.amount);
+      if (n == null) continue;
+      const cur = o.currency === "ARS" ? "ARS" : "USD";
+      byCur.set(cur, (byCur.get(cur) ?? 0) + n);
+    }
+    if (byCur.size === 0) return null;
+    return [...byCur.entries()].map(([cur, n]) => formatAccountSum(n, cur)).join(" · ");
+  })();
+
   const openOrder = detail?.kind === "order" ? (detailNote ?? detail.row) : null;
   const ready = account != null && drafts != null;
 
@@ -152,6 +184,7 @@ export default function ElitAccountPanel() {
         onRefresh={() => void load(true)}
         refreshing={loading}
         fromCache={fromCache}
+        amountTotal={amountTotal}
         hint="Pedidos, comprobantes e informes de pago de tu cuenta en elit.com.ar. Mes actual por defecto, de a 25. Actualizar vuelve a consultar el portal."
         header={
           section === "cta" && account?.balance != null ? (

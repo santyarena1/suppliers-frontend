@@ -22,6 +22,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
+import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
 
 type Detail =
   | { kind: "order"; row: InvidOrder }
@@ -147,6 +148,31 @@ export default function InvidAccountPanel() {
   );
   useClampPage(history.page, paged.pages, history.setPage);
 
+  const amountTotal = (() => {
+    const rows = paged.filtered as unknown[];
+    if (!rows.length) return null;
+    if (section === "cta") {
+      const filtered = rows as InvidAccountMovement[];
+      const byCurrency = new Map<string, number>();
+      for (const m of filtered) {
+        const n = parseAccountAmount(m.total);
+        if (n == null) continue;
+        const cur = (m.currency || "ARS").toUpperCase().includes("USD") ? "USD" : "ARS";
+        byCurrency.set(cur, (byCurrency.get(cur) ?? 0) + n);
+      }
+      if (byCurrency.size === 0) return null;
+      return [...byCurrency.entries()]
+        .map(([cur, n]) => formatAccountSum(n, cur))
+        .join(" · ");
+    }
+    if (section === "nodo") {
+      const s = sumAccountAmounts((rows as InvidNodoDraft[]).map((d) => d.total));
+      return s != null ? formatAccountSum(s) : null;
+    }
+    const s = sumAccountAmounts((rows as InvidOrder[]).map((o) => o.amount));
+    return s != null ? formatAccountSum(s) : null;
+  })();
+
   const ready = rowsForSection != null;
 
   return (
@@ -164,6 +190,7 @@ export default function InvidAccountPanel() {
         onRefresh={() => void loadSection(section, true)}
         refreshing={loading}
         fromCache={fromCache}
+        amountTotal={amountTotal}
         hint="Datos reales de tu cuenta en invidcomputers.com. Ver más muestra ítems, entrega/pago y PDFs si el portal los linkea. Mes actual por defecto, de a 25. Actualizar vuelve a consultar el portal."
         header={
           section === "cta" && balance != null ? (

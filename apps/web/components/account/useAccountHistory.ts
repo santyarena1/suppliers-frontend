@@ -43,7 +43,7 @@ export function usePagedMonthRows<T>(
   page: number
 ) {
   const filtered = filterByMonth(rows ?? [], getDate, month);
-  return paginateRows(filtered, page);
+  return { ...paginateRows(filtered, page), filtered };
 }
 
 /** Resetea página si el total de páginas baja (p. ej. al filtrar). */
