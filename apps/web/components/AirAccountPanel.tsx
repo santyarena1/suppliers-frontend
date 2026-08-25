@@ -44,29 +44,33 @@ function airRowDate(row: AirRow): string | null {
   return null;
 }
 
+function airCellText(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === "string" || typeof v === "number") return String(v);
+  return null;
+}
+
 function airRowAmount(row: AirRow): number | null {
   const prefer = ["Importe", "Total", "Monto", "Debe", "Haber", "importe", "total", "monto", "debe", "haber"];
   for (const k of prefer) {
-    const v = row[k];
-    if (v == null) continue;
-    const n = parseAccountAmount(v);
+    const n = parseAccountAmount(airCellText(row[k]));
     if (n != null) return n;
   }
   for (const [k, v] of Object.entries(row)) {
-    if (k.startsWith("_") || v == null) continue;
+    if (k.startsWith("_")) continue;
     if (!/importe|total|monto|debe|haber|precio/i.test(k)) continue;
-    const n = parseAccountAmount(v);
+    const n = parseAccountAmount(airCellText(v));
     if (n != null) return n;
   }
   return null;
 }
 
 function airRowsSum(rows: AirRow[]): string | null {
-  const hasDebe = rows.some((r) => r.Debe != null || r.debe != null);
-  const hasHaber = rows.some((r) => r.Haber != null || r.haber != null);
+  const hasDebe = rows.some((r) => airCellText(r.Debe ?? r.debe) != null);
+  const hasHaber = rows.some((r) => airCellText(r.Haber ?? r.haber) != null);
   if (hasDebe && hasHaber) {
-    const debe = sumAccountAmounts(rows.map((r) => r.Debe ?? r.debe));
-    const haber = sumAccountAmounts(rows.map((r) => r.Haber ?? r.haber));
+    const debe = sumAccountAmounts(rows.map((r) => airCellText(r.Debe ?? r.debe)));
+    const haber = sumAccountAmounts(rows.map((r) => airCellText(r.Haber ?? r.haber)));
     if (debe == null && haber == null) return null;
     const net = (debe ?? 0) - (haber ?? 0);
     return `Debe ${formatAccountSum(debe ?? 0)} · Haber ${formatAccountSum(haber ?? 0)} · Neto ${formatAccountSum(net)}`;
