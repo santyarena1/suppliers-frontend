@@ -7,10 +7,12 @@ import Link from "next/link";
 import { useState } from "react";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
-import { linePricing, taxLabel } from "@/lib/tax";
+import { linePricing } from "@/lib/tax";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
+import { displayAmountFromPricing, displayTaxBadge, displayTaxTitle } from "@/lib/display-price";
+import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
 
@@ -45,12 +47,19 @@ function CardProviderPill({ provider }: { provider: string }) {
 export default function ProductCard({ product, priceMode = "list" }: { product: ProductDTO; priceMode?: PriceMode }) {
   const [imgErr, setImgErr] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
-  const { currency, withIva, convert } = usePrefs();
+  const { currency, withIva, withIibb, convert } = usePrefs();
+  useIibbRatesEpoch();
   const policy = usePurchasePolicy(product.provider);
   const href = `/product/${encodeURIComponent(product.provider)}/${encodeURIComponent(product.externalId)}`;
 
   const pricing = purchaseLinePricing(product, policy, priceMode);
-  const displayUsd = withIva ? pricing.gross : pricing.net;
+  const includeIibb = withIibb && pricing.mode !== "offline";
+  const shown = displayAmountFromPricing(pricing, {
+    withIva,
+    withIibb: includeIibb,
+    provider: product.provider,
+  });
+  const displayUsd = shown.displayUsd;
   const ars = convert(displayUsd).amount;
   const listed = linePricing(product);
   const showingOffline = pricing.adjusted && pricing.mode === "offline";
@@ -74,7 +83,9 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
         : formatARS(convert(Number(prevRaw) || 0).amount)
       : null;
 
-  const taxText = withIva ? `+ ${taxLabel(product)}` : "Sin imp.";
+  const taxOpts = { withIva, withIibb: includeIibb, provider: product.provider };
+  const taxText = withIva ? `+ ${displayTaxBadge(product, taxOpts)}` : "Sin imp.";
+  const taxTitle = displayTaxTitle(taxOpts);
 
   return (
     <div className="group relative rounded-2xl overflow-hidden flex flex-col product-card transition-shadow duration-300">
@@ -157,7 +168,7 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
                     ? "bg-slate-100 text-slate-600 ring-1 ring-slate-200/90"
                     : "bg-slate-50 text-slate-500 ring-1 ring-slate-200/70"
                 }`}
-                title={withIva ? `Precio con ${taxLabel(product)}` : "Precio sin impuestos"}
+                title={taxTitle}
               >
                 {taxText}
               </span>
@@ -171,6 +182,7 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
               <p className="product-card-meta text-[10px] tabular-nums leading-none pt-0.5">
                 Base {formatUSD(listed.net)}
                 {withIva ? " · s/imp" : ""}
+                {shown.iibbIncluded && shown.estimatedIibb ? " · IIBB est." : ""}
               </p>
             )}
           </div>

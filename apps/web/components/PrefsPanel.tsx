@@ -1,11 +1,14 @@
 "use client";
 
 import { usePrefs, DollarType } from "@/lib/prefs";
-import { DollarSign, RefreshCw, Receipt, Check } from "lucide-react";
+import { DollarSign, RefreshCw, Receipt, Check, Percent } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 export default function PrefsPanel() {
-  const { currency, setCurrency, withIva, setWithIva, dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel } = usePrefs();
+  const {
+    currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
+    dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
+  } = usePrefs();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -33,7 +36,9 @@ export default function PrefsPanel() {
           </span>
         )}
         {withIva ? (
-          <span className="bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">IVA</span>
+          <span className="bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+            IVA{withIibb ? "+IIBB" : ""}
+          </span>
         ) : (
           <span className="bg-surface-700 text-surface-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">s/IVA</span>
         )}
@@ -99,10 +104,11 @@ export default function PrefsPanel() {
               </div>
             </div>
 
-            {/* IVA */}
-            <div>
-              <label className="block text-[10px] font-semibold text-surface-500 uppercase tracking-wider mb-1.5">Impuestos</label>
+            {/* IVA / IIBB */}
+            <div className="flex flex-col gap-1.5">
+              <label className="block text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Impuestos</label>
               <button
+                type="button"
                 onClick={() => setWithIva(!withIva)}
                 className="w-full flex items-center justify-between bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg px-3 py-2 transition-all"
               >
@@ -112,6 +118,29 @@ export default function PrefsPanel() {
                 </div>
                 <div className={`w-8 h-4 rounded-full relative transition-colors ${withIva ? "bg-brand-600" : "bg-surface-600"}`}>
                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${withIva ? "left-4" : "left-0.5"}`} />
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWithIibb(!withIibb)}
+                className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 transition-all ${
+                  withIva
+                    ? "bg-surface-800 hover:bg-surface-700 border-surface-700"
+                    : "bg-surface-800 hover:bg-surface-700 border-surface-700"
+                }`}
+                title="Suma IIBB/percepciones al costo cuando el distribuidor las carga (p. ej. en el carrito)"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Percent className="w-3.5 h-3.5 text-surface-400 flex-shrink-0" />
+                  <div className="text-left min-w-0">
+                    <span className="text-xs text-surface-200 block">Incluir IIBB en precios</span>
+                    <span className="text-[10px] text-surface-500 leading-tight block">
+                      Por defecto oculto · se suma al costo
+                    </span>
+                  </div>
+                </div>
+                <div className={`w-8 h-4 rounded-full relative transition-colors flex-shrink-0 ${withIibb ? "bg-brand-600" : "bg-surface-600"}`}>
+                  <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${withIibb ? "left-4" : "left-0.5"}`} />
                 </div>
               </button>
             </div>

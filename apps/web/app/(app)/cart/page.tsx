@@ -27,6 +27,7 @@ import {
   linePerceptionFromOrder,
 } from "@/lib/tax";
 import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
+import { rememberIibbRate } from "@/lib/iibb-rates";
 import {
   ALL_PROVIDERS,
   ElitCheckoutPreview,
@@ -223,6 +224,29 @@ export default function CartPage() {
         totalUSD: nbQuoted.total,
       }
     : undefined;
+
+  // Aprender alícuotas IIBB de cotizaciones reales para usarlas en búsqueda.
+  useEffect(() => {
+    if (invidQuoted?.stockOk && (invidQuoted.percepcionPercent ?? 0) > 0) {
+      rememberIibbRate("INVID", invidQuoted.percepcionPercent!);
+    }
+  }, [invidQuoted]);
+  useEffect(() => {
+    if (!elitQuoted) return;
+    const perc = elitQuoted.perceptions ?? 0;
+    const net = elitQuoted.subtotal ?? 0;
+    if (perc > 0.0005 && net > 0) {
+      rememberIibbRate("ELIT", (perc / net) * 100);
+    }
+  }, [elitQuoted]);
+  useEffect(() => {
+    if (!nbQuoted) return;
+    const perc = nbQuoted.perceptions ?? 0;
+    const net = nbQuoted.subtotal ?? 0;
+    if (perc > 0.0005 && net > 0) {
+      rememberIibbRate("NEW_BYTES", (perc / net) * 100);
+    }
+  }, [nbQuoted]);
 
   function extraFor(provider: string): TaxExtra | undefined {
     if (channelTab === "offline") return undefined;

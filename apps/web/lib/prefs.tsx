@@ -26,6 +26,9 @@ interface PrefsContextValue {
   setCurrency: (c: Currency) => void;
   withIva: boolean;
   setWithIva: (v: boolean) => void;
+  /** Incluir IIBB/percepciones en precios de búsqueda. Default: false. */
+  withIibb: boolean;
+  setWithIibb: (v: boolean) => void;
   dollarType: DollarType;
   setDollarType: (t: DollarType) => void;
   rates: DollarRate[];
@@ -41,6 +44,7 @@ const PrefsContext = createContext<PrefsContextValue | null>(null);
 export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>("ARS");
   const [withIva, setWithIvaState] = useState<boolean>(true);
+  const [withIibb, setWithIibbState] = useState<boolean>(false);
   const [dollarType, setDollarTypeState] = useState<DollarType>("oficial");
   const [rates, setRates] = useState<DollarRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
@@ -48,11 +52,14 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const c = localStorage.getItem("pref_currency") as Currency | null;
     const i = localStorage.getItem("pref_iva");
+    const iibb = localStorage.getItem("pref_iibb");
     const d = localStorage.getItem("pref_dollar") as DollarType | null;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (c) setCurrencyState(c);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (i != null) setWithIvaState(i === "1");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (iibb != null) setWithIibbState(iibb === "1");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (d) setDollarTypeState(d);
   }, []);
@@ -64,6 +71,18 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const setWithIva = useCallback((v: boolean) => {
     setWithIvaState(v);
     localStorage.setItem("pref_iva", v ? "1" : "0");
+    if (!v) {
+      setWithIibbState(false);
+      localStorage.setItem("pref_iibb", "0");
+    }
+  }, []);
+  const setWithIibb = useCallback((v: boolean) => {
+    setWithIibbState(v);
+    localStorage.setItem("pref_iibb", v ? "1" : "0");
+    if (v) {
+      setWithIvaState(true);
+      localStorage.setItem("pref_iva", "1");
+    }
   }, []);
   const setDollarType = useCallback((t: DollarType) => {
     setDollarTypeState(t);
@@ -104,7 +123,8 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <PrefsContext.Provider value={{
-      currency, setCurrency, withIva, setWithIva, dollarType, setDollarType,
+      currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
+      dollarType, setDollarType,
       rates, currentRate, refreshRates, loadingRates,
       dollarLabel: (t) => DOLLAR_LABELS[t] || t,
       convert,
