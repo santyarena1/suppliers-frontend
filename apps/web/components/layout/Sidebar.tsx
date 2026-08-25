@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, X } from "lucide-react";
 import { clearSession, getUser, type UserRole } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
@@ -75,6 +75,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [openSection, setOpenSection] = useState<NavSectionId | null>(null);
   const [providersOpen, setProvidersOpen] = useState(false);
+  const wasOnProviders = useRef(false);
 
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSED_KEY) === "1");
@@ -84,10 +85,13 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
 
   const onProvidersRoute = pathname === "/proveedores" || pathname.startsWith("/proveedores/");
 
+  // Abrir solo al *entrar* al módulo; el chevron puede colapsarlo aunque sigas adentro.
   useEffect(() => {
-    if (!onProvidersRoute) return;
-    setProvidersOpen(true);
-    localStorage.setItem(PROVIDERS_OPEN_KEY, "1");
+    if (onProvidersRoute && !wasOnProviders.current) {
+      setProvidersOpen(true);
+      localStorage.setItem(PROVIDERS_OPEN_KEY, "1");
+    }
+    wasOnProviders.current = onProvidersRoute;
   }, [onProvidersRoute]);
 
   const items = useMemo(
@@ -139,7 +143,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   }
 
   const roleMeta = user?.role ? ROLE_LABEL[user.role] : undefined;
-  const providersExpanded = providersOpen || onProvidersRoute;
+  const providersExpanded = providersOpen;
 
   function renderLink(item: NavItemDef, opts?: { collapsed?: boolean }) {
     if (item.id === "providers" && !opts?.collapsed) {
