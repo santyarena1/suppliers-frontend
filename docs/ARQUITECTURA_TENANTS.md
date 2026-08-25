@@ -77,10 +77,10 @@ integración por API.
 | `OWNER` | Gerente | Equipo, códigos + QR, descuento por comercio, publicidad, asignar vendedor. No se puede dejar la organización sin un gerente activo. |
 | `ADMIN` | Administrador | Lo mismo en el día a día; no reemplaza al gerente para el “último al mando”. |
 | `SELLER` | Vendedor | Ve solo sus clientes asignados: resumen de órdenes, descuentos puntuales, chat. No ve el comercio de un compañero. |
-| `PRODUCT_MANAGER` | Product Manager | Marcas de su `ProductManagerScope`, solo dentro de su distribuidor. Busca ese recorte y carga el descuento de esas marcas. No entra a cartera, códigos, publicidad ni chat. |
+| `PRODUCT_MANAGER` | Product Manager | Marcas de su `ProductManagerScope`, solo dentro de su distribuidor. Busca ese recorte y carga el descuento de esas marcas (lista general o locales concretos; ve el nombre del comercio para asignar). No entra a cartera, códigos, publicidad ni chat. |
 | `VIEWER` | Solo lectura | Mira cartera, pedidos y chat. |
 
-El cierre de este tipo está en `docs/PLAN_TIPO2.md`. NODO para ellos es cartera y su propio catálogo, no para comprarle a otras integraciones. El descuento del vínculo y el de marca se aplican al precio que lee el comercio; el local no ve los porcentajes. El chat nace acá y se ve también en el local. No hay alta pública: lo crea el superadmin.
+El cierre de este tipo está en `docs/PLAN_TIPO2.md`. NODO para ellos es cartera y su propio catálogo, no para comprarle a otras integraciones. El descuento del vínculo y el de marca se aplican al precio que lee el comercio (lista general o locales concretos); el local no ve los porcentajes. El chat nace acá y se ve también en el local. No hay alta pública: lo crea el superadmin.
 
 Capacidades:
 

@@ -141,12 +141,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Product Manager y descuentos por marca
 - **Método**: GET | PUT | POST
-- **Ruta**: `/my/team`, `/my/team/:membershipId/brands`, `/my/catalog-brands`, `/my/managed-brands`, `/my/brand-discounts`
+- **Ruta**: `/my/team`, `/my/team/:membershipId/brands`, `/my/catalog-brands`, `/my/managed-brands`, `/my/brand-discounts`, `/my/discount-clients`
 - **Auth**: Bearer · invitar y asignar marcas, Gerente o Administrador · descuentos, también Product Manager (solo las suyas)
-- **Body / Params**: invitar `{ username, email, role, title? }` · marcas `{ brandNames }` · descuento `{ brandName, discountPercent }`
-- **Respuesta esperada**: equipo con `managedBrands` · descuentos `{ brandName, discountPercent }`
+- **Body / Params**: invitar `{ username, email, role, title? }` · marcas `{ brandNames }` · descuento `{ brandName, discountPercent, appliesToAll?, clientTenantIds? }`
+- **Respuesta esperada**: equipo con `managedBrands` · descuentos `{ brandName, discountPercent, appliesToAll, clients: [{ id, name }] }` · locales `{ id, name }[]`
 - **Estado**: IMPLEMENTADO
-- **Notas**: No hay alta pública de distribuidor: lo crea el superadmin. Fórmula del precio del comercio: `crudo * (1 - cuenta/100) * (1 - marca/100) * (1 + markup/100)`.
+- **Notas**: `appliesToAll: true` es la lista general. `false` exige al menos un comercio vinculado. El Product Manager ve los nombres para asignar; no entra a la cartera. El comercio no ve el porcentaje. Fórmula: `crudo * (1 - cuenta/100) * (1 - marca/100) * (1 + markup/100)`.
 
 ## Pendiente (futuro)
 

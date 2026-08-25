@@ -7,6 +7,7 @@ import type { TenantContext } from "../tenants/tenant-context.service";
 import {
   NO_RULES,
   applyPrice,
+  brandDiscountAppliesToClient,
   normalizeBrandName,
   toProductView,
   toSheetView,
@@ -500,7 +501,7 @@ export class ProvidersService {
         select: { discountPercent: true, supplierTenantId: true },
       }),
     ]);
-    const brandDiscounts = await this.brandDiscountsOf(link?.supplierTenantId);
+    const brandDiscounts = await this.brandDiscountsOf(link?.supplierTenantId, tenant.tenantId);
     return {
       markupPercent: Number(config?.priceMarkupPercent) || 0,
       minStockThreshold: config?.minStockThreshold || 0,
@@ -533,10 +534,22 @@ export class ProvidersService {
     const configBy = new Map(configs.map((c) => [c.provider, c]));
     const supplierIds = [...new Set(links.map((link) => link.supplierTenantId))];
     const brandRows = supplierIds.length
-      ? await this.prisma.tenantBrandDiscount.findMany({ where: { tenantId: { in: supplierIds } } })
+      ? await this.prisma.tenantBrandDiscount.findMany({
+          where: { tenantId: { in: supplierIds } },
+          include: { clients: { select: { clientTenantId: true } } },
+        })
       : [];
     const brandsBySupplier = new Map<string, Map<string, number>>();
     for (const row of brandRows) {
+      if (
+        !brandDiscountAppliesToClient(
+          row.appliesToAll,
+          row.clients.map((client) => client.clientTenantId),
+          tenant.tenantId
+        )
+      ) {
+        continue;
+      }
       const map = brandsBySupplier.get(row.tenantId) ?? new Map<string, number>();
       map.set(normalizeBrandName(row.brandName), Number(row.discountPercent) || 0);
       brandsBySupplier.set(row.tenantId, map);
@@ -556,10 +569,26 @@ export class ProvidersService {
     return result;
   }
 
-  private async brandDiscountsOf(supplierTenantId: string | undefined) {
+  private async brandDiscountsOf(supplierTenantId: string | undefined, clientTenantId: string) {
     if (!supplierTenantId) return new Map<string, number>();
-    const rows = await this.prisma.tenantBrandDiscount.findMany({ where: { tenantId: supplierTenantId } });
-    return new Map(rows.map((row) => [normalizeBrandName(row.brandName), Number(row.discountPercent) || 0]));
+    const rows = await this.prisma.tenantBrandDiscount.findMany({
+      where: { tenantId: supplierTenantId },
+      include: { clients: { select: { clientTenantId: true } } },
+    });
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      if (
+        !brandDiscountAppliesToClient(
+          row.appliesToAll,
+          row.clients.map((client) => client.clientTenantId),
+          clientTenantId
+        )
+      ) {
+        continue;
+      }
+      map.set(normalizeBrandName(row.brandName), Number(row.discountPercent) || 0);
+    }
+    return map;
   }
 
   private async hiddenProviders(): Promise<Set<string>> {

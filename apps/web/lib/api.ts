@@ -287,14 +287,26 @@ export const myApi = {
   managedBrands: () => api.get<string[]>("/my/managed-brands"),
   setMemberBrands: (membershipId: string, brandNames: string[]) =>
     api.put<{ membershipId: string; brandNames: string[] }>(`/my/team/${membershipId}/brands`, { brandNames }),
+  discountClients: () => api.get<DiscountClient[]>("/my/discount-clients"),
   brandDiscounts: () => api.get<BrandDiscount[]>("/my/brand-discounts"),
-  upsertBrandDiscount: (data: { brandName: string; discountPercent: number }) =>
-    api.put<BrandDiscount>("/my/brand-discounts", data),
+  upsertBrandDiscount: (data: {
+    brandName: string;
+    discountPercent: number;
+    appliesToAll?: boolean;
+    clientTenantIds?: string[];
+  }) => api.put<BrandDiscount>("/my/brand-discounts", data),
 };
+
+export interface DiscountClient {
+  id: string;
+  name: string;
+}
 
 export interface BrandDiscount {
   brandName: string;
   discountPercent: number;
+  appliesToAll: boolean;
+  clients: DiscountClient[];
 }
 
 export interface PortfolioSeller {

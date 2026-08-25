@@ -112,6 +112,13 @@ export class MyTenantController {
     return this.tenants.managedBrands(tenant);
   }
 
+  @Get("discount-clients")
+  discountClients(@CurrentTenant() tenant: TenantContext) {
+    assertTenantType(tenant, ["DISTRIBUTOR"]);
+    assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS);
+    return this.tenants.listDiscountClients(tenant);
+  }
+
   @Get("brand-discounts")
   brandDiscounts(@CurrentTenant() tenant: TenantContext) {
     assertTenantType(tenant, ["DISTRIBUTOR"]);

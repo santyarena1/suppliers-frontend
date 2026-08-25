@@ -13,6 +13,7 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  IsArray,
 } from "class-validator";
 import {
   ALL_PROVIDERS,
@@ -276,6 +277,16 @@ export class UpsertBrandDiscountDto {
   @Max(100)
   @Type(() => Number)
   discountPercent!: number;
+
+  /** `true` (default): todos los locales vinculados. `false`: solo `clientTenantIds`. */
+  @IsOptional()
+  @IsBoolean()
+  appliesToAll?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID("4", { each: true })
+  clientTenantIds?: string[];
 }
 
 export class UpdateClientLinkDto {

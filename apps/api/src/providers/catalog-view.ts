@@ -32,6 +32,15 @@ export function normalizeBrandName(name: string | null | undefined): string {
   return (name ?? "").trim().replace(/\s+/g, " ").toLocaleUpperCase("es");
 }
 
+/** Lista general, o este local está entre los asignados. */
+export function brandDiscountAppliesToClient(
+  appliesToAll: boolean,
+  clientTenantIds: readonly string[],
+  clientTenantId: string
+): boolean {
+  return appliesToAll || clientTenantIds.includes(clientTenantId);
+}
+
 /**
  * Junta la ficha del producto con la oferta de una organización y aplica lo que
  * esa organización configuró.

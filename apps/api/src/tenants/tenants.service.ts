@@ -811,21 +811,38 @@ export class TenantsService {
     return scopes.map((scope) => scope.brandName);
   }
 
+  async listDiscountClients(tenant: TenantContext) {
+    const links = await this.prisma.tenantLink.findMany({
+      where: { supplierTenantId: tenant.tenantId, status: "ACTIVE" },
+      select: { clientTenant: { select: { id: true, name: true } } },
+      orderBy: { clientTenant: { name: "asc" } },
+    });
+    return links.map((link) => ({ id: link.clientTenant.id, name: link.clientTenant.name }));
+  }
+
   async listBrandDiscounts(tenant: TenantContext) {
     const rows = await this.prisma.tenantBrandDiscount.findMany({
       where: { tenantId: tenant.tenantId },
+      include: {
+        clients: { include: { clientTenant: { select: { id: true, name: true } } } },
+      },
       orderBy: { brandName: "asc" },
     });
-    const items = rows.map((row) => ({
-      brandName: row.brandName,
-      discountPercent: Number(row.discountPercent),
-    }));
+    const items = rows.map((row) => this.serializeBrandDiscount(row));
     if (tenant.tenantRole !== "PRODUCT_MANAGER") return items;
 
     const mine = await this.managedBrands(tenant);
     const byName = new Map(items.map((item) => [normalizeBrandName(item.brandName), item]));
     return mine
-      .map((brandName) => byName.get(normalizeBrandName(brandName)) ?? { brandName, discountPercent: 0 })
+      .map(
+        (brandName) =>
+          byName.get(normalizeBrandName(brandName)) ?? {
+            brandName,
+            discountPercent: 0,
+            appliesToAll: true,
+            clients: [],
+          }
+      )
       .sort((a, b) => a.brandName.localeCompare(b.brandName, "es"));
   }
 
@@ -842,13 +859,67 @@ export class TenantsService {
       await this.prisma.tenantBrandDiscount.deleteMany({
         where: { tenantId: tenant.tenantId, brandName },
       });
-      return { brandName, discountPercent: 0 };
+      return { brandName, discountPercent: 0, appliesToAll: true, clients: [] };
     }
-    const row = await this.prisma.tenantBrandDiscount.upsert({
-      where: { tenantId_brandName: { tenantId: tenant.tenantId, brandName } },
-      create: { tenantId: tenant.tenantId, brandName, discountPercent: dto.discountPercent },
-      update: { discountPercent: dto.discountPercent },
+
+    const appliesToAll = dto.appliesToAll !== false;
+    const requestedIds = appliesToAll ? [] : [...new Set(dto.clientTenantIds ?? [])];
+    if (!appliesToAll && requestedIds.length === 0) {
+      throw new BadRequestException("Elegí al menos un local, o usá la lista general");
+    }
+    const clientIds = await this.assertOwnClients(tenant.tenantId, requestedIds);
+
+    const row = await this.prisma.$transaction(async (tx) => {
+      const discount = await tx.tenantBrandDiscount.upsert({
+        where: { tenantId_brandName: { tenantId: tenant.tenantId, brandName } },
+        create: { tenantId: tenant.tenantId, brandName, discountPercent: dto.discountPercent, appliesToAll },
+        update: { discountPercent: dto.discountPercent, appliesToAll },
+      });
+      await tx.tenantBrandDiscountClient.deleteMany({ where: { discountId: discount.id } });
+      if (clientIds.length > 0) {
+        await tx.tenantBrandDiscountClient.createMany({
+          data: clientIds.map((clientTenantId) => ({ discountId: discount.id, clientTenantId })),
+        });
+      }
+      return tx.tenantBrandDiscount.findUniqueOrThrow({
+        where: { id: discount.id },
+        include: {
+          clients: { include: { clientTenant: { select: { id: true, name: true } } } },
+        },
+      });
     });
-    return { brandName: row.brandName, discountPercent: Number(row.discountPercent) };
+    return this.serializeBrandDiscount(row);
+  }
+
+  private async assertOwnClients(supplierTenantId: string, clientTenantIds: string[]) {
+    if (clientTenantIds.length === 0) return [] as string[];
+    const links = await this.prisma.tenantLink.findMany({
+      where: {
+        supplierTenantId,
+        status: "ACTIVE",
+        clientTenantId: { in: clientTenantIds },
+      },
+      select: { clientTenantId: true },
+    });
+    if (links.length !== clientTenantIds.length) {
+      throw new BadRequestException("Ese comercio no está vinculado");
+    }
+    return links.map((link) => link.clientTenantId);
+  }
+
+  private serializeBrandDiscount(row: {
+    brandName: string;
+    discountPercent: Prisma.Decimal | number;
+    appliesToAll: boolean;
+    clients: { clientTenant: { id: string; name: string } }[];
+  }) {
+    return {
+      brandName: row.brandName,
+      discountPercent: Number(row.discountPercent),
+      appliesToAll: row.appliesToAll,
+      clients: row.clients
+        .map((client) => ({ id: client.clientTenant.id, name: client.clientTenant.name }))
+        .sort((a, b) => a.name.localeCompare(b.name, "es")),
+    };
   }
 }

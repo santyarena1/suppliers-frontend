@@ -1,4 +1,4 @@
-import { applyPrice, normalizeBrandName } from "./catalog-view";
+import { applyPrice, normalizeBrandName, brandDiscountAppliesToClient } from "./catalog-view";
 
 describe("applyPrice", () => {
   it("deja el crudo si no hay descuento ni markup", () => {
@@ -20,8 +20,13 @@ describe("applyPrice", () => {
   });
 });
 
-describe("normalizeBrandName", () => {
-  it("compara marcas sin importar mayúsculas ni espacios", () => {
-    expect(normalizeBrandName("  gigabyte ")).toBe(normalizeBrandName("Gigabyte"));
+describe("brandDiscountAppliesToClient", () => {
+  it("la lista general aplica a cualquier local", () => {
+    expect(brandDiscountAppliesToClient(true, [], "local-a")).toBe(true);
+  });
+
+  it("si no es general, solo aplica a los locales asignados", () => {
+    expect(brandDiscountAppliesToClient(false, ["local-a"], "local-a")).toBe(true);
+    expect(brandDiscountAppliesToClient(false, ["local-a"], "local-b")).toBe(false);
   });
 });

@@ -23,7 +23,7 @@ Nunca slugs. Nunca “Dueño”. Nunca la clave del proveedor.
 | `OWNER` | Gerente | Equipo (incluido Product Manager y sus marcas), códigos + QR, descuento por comercio, descuento por marca, publicidad, asignar vendedor a cada cliente. No se puede dejar la organización sin un gerente activo. |
 | `ADMIN` | Administrador | Lo mismo en el día a día. No reemplaza al gerente para el “último al mando”. |
 | `SELLER` | Vendedor | **Solo sus clientes** (`TenantLink.accountManagerId`). Resumen de pedidos, contacto, descuento puntual, chat. No ve el comercio de un compañero. Ve el catálogo propio, sin carrito. |
-| `PRODUCT_MANAGER` | Product Manager | Solo las marcas de su `ProductManagerScope`, dentro de este distribuidor. Busca ese recorte, carga el descuento de esas marcas. No entra a cartera, códigos, publicidad ni chat. Si no tiene marcas, el catálogo queda vacío. |
+| `PRODUCT_MANAGER` | Product Manager | Solo las marcas de su `ProductManagerScope`, dentro de este distribuidor. Busca ese recorte y carga el descuento de esas marcas, a la lista general o a locales concretos (ve el nombre del comercio para asignar; no entra a cartera, códigos, publicidad ni chat). Si no tiene marcas, el catálogo queda vacío. |
 | `VIEWER` | Solo lectura | Mira cartera, pedidos, chat y catálogo. No edita, no genera códigos, no escribe. |
 
 ---
@@ -136,7 +136,9 @@ Al leer el precio del comercio:
 - **Cuenta**: `TenantLink.discountPercent`. Lo carga el mayorista. El comercio
   no ve el porcentaje.
 - **Marca**: `TenantBrandDiscount`. Lo carga el gerente (todas) o el Product
-  Manager (solo las suyas).
+  Manager (solo las suyas). **Lista general** (todos los vinculados) o
+  **locales concretos**. El PM ve el nombre de los comercios para asignar;
+  no entra a la cartera. El comercio no ve el porcentaje.
 - **Markup**: lo carga el comercio sobre *su* oferta.
 
 Se aplican al leer, no al guardar. La oferta conserva el valor crudo del

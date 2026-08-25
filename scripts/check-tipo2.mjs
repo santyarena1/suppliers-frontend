@@ -243,8 +243,42 @@ async function main() {
   });
   check("El Product Manager carga el descuento de su marca",
     (descuentoMarca.status === 200 || descuentoMarca.status === 201)
-      && Number(dataOf(descuentoMarca)?.discountPercent) === 7,
+      && Number(dataOf(descuentoMarca)?.discountPercent) === 7
+      && dataOf(descuentoMarca)?.appliesToAll === true,
     `HTTP ${descuentoMarca.status}`);
+
+  const localesPm = dataOf(await call("GET", "/my/discount-clients", tokenPm));
+  check("El Product Manager ve los locales para asignar descuentos",
+    Array.isArray(localesPm) && localesPm.length === 2,
+    `${Array.isArray(localesPm) ? localesPm.length : "?"} locales`);
+
+  const carteraSigueCerrada = await call("GET", "/my/clients", tokenPm);
+  check("Ver locales para descuentos no abre la cartera",
+    carteraSigueCerrada.status === 403,
+    `HTTP ${carteraSigueCerrada.status}`);
+
+  const descuentoVacio = await call("PUT", "/my/brand-discounts", tokenPm, {
+    brandName: "GIGABYTE",
+    discountPercent: 7,
+    appliesToAll: false,
+    clientTenantIds: [],
+  });
+  check("Sin locales no se guarda un descuento puntual",
+    descuentoVacio.status === 400,
+    `HTTP ${descuentoVacio.status}`);
+
+  const descuentoLocal = await call("PUT", "/my/brand-discounts", tokenPm, {
+    brandName: "GIGABYTE",
+    discountPercent: 7,
+    appliesToAll: false,
+    clientTenantIds: [retailerA.id],
+  });
+  const descuentoLocalData = dataOf(descuentoLocal);
+  check("El Product Manager asigna el descuento a un local",
+    (descuentoLocal.status === 200 || descuentoLocal.status === 201)
+      && descuentoLocalData?.appliesToAll === false
+      && descuentoLocalData?.clients?.some((c) => c.id === retailerA.id),
+    `HTTP ${descuentoLocal.status}`);
 
   const descuentoOtra = await call("PUT", "/my/brand-discounts", tokenPm, {
     brandName: "ASUS",
