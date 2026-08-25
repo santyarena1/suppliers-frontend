@@ -263,7 +263,7 @@ export default function LocalPurchaseDashboard() {
           {tab === "distribuidores" && (
             <RankDetail
               title="Distribuidores más comprados"
-              hint="Share de spend de este local. El catálogo de la derecha es el de tu cuenta en ese proveedor."
+              hint="Cuánto de lo comprado en este local sale de cada distribuidor. Clic para ver el detalle de ese proveedor."
               rows={data.byProvider}
               extra={(row) => {
                 const p = data.byProvider.find((x) => x.key === row.key);
@@ -277,7 +277,7 @@ export default function LocalPurchaseDashboard() {
             <div className="flex flex-col gap-4">
               <RankDetail
                 title="Marcas más compradas"
-                hint="Marca resuelta contra el catálogo de este comercio. Si el SKU no está sincronizado, figura como Sin marca."
+                hint="Cuánto de lo comprado sale de cada marca. Clic para ver gasto, período y productos."
                 rows={data.byBrand}
                 onRow={(row) => openRank("brand", row)}
                 color="#a78bfa"
@@ -390,7 +390,7 @@ function Resumen({
         />
         <Kpi label="SKUs comprados" value={qty(k.uniqueSkus)} hint={`${pct(k.repeatSkuShare)} se recompraron`} />
         <Kpi label="Marcas" value={qty(k.uniqueBrands)} hint={`${qty(k.uniqueCategories)} categorías`} />
-        <Kpi label="Distribuidores" value={qty(k.providersUsed)} hint={`Top 1 = ${pct(data.concentration.providers.top1)}`} />
+        <Kpi label="Distribuidores" value={qty(k.providersUsed)} hint={data.byProvider[0] ? `${data.byProvider[0].label} se lleva ${pct(data.concentration.providers.top1)}` : undefined} />
         <Kpi label="Importe de pedidos" value={formatUSD(k.orderTotalUsd)} hint="Totales guardados (puede incluir IVA/envío)" />
         <Kpi
           label="Gastado en envíos"
@@ -441,7 +441,7 @@ function Resumen({
       {data.concentration.providers.top1 >= 60 && (
         <div className="flex items-start gap-2 border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-xs text-amber-100">
           <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          El {pct(data.concentration.providers.top1)} de lo comprado en este local sale de un solo distribuidor. El top 5 cubre {pct(data.concentration.providers.top5)}.
+          El {pct(data.concentration.providers.top1)} de lo comprado sale de {data.byProvider[0]?.label ?? "un solo distribuidor"}. Los cinco más grandes cubren el {pct(data.concentration.providers.top5)}.
         </div>
       )}
 
@@ -468,10 +468,25 @@ function Resumen({
         <Card title="Por día de la semana">
           <WeekdayBars data={data.byWeekday} />
         </Card>
-        <Card title="Concentración">
+        <Card
+          title="De quién dependés"
+          hint="Qué parte de la plata se va a uno solo o a unos pocos. Si el más comprado se lleva más de la mitad, el local queda muy atado."
+        >
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <ConcBlock title="Distribuidores" values={data.concentration.providers} />
-            <ConcBlock title="Marcas" values={data.concentration.brands} />
+            <ConcBlock
+              title="Distribuidores"
+              plural="distribuidores"
+              values={data.concentration.providers}
+              top={data.byProvider[0]}
+              onTop={() => data.byProvider[0] && onOpen("provider", data.byProvider[0])}
+            />
+            <ConcBlock
+              title="Marcas"
+              plural="marcas"
+              values={data.concentration.brands}
+              top={data.byBrand[0]}
+              onTop={() => data.byBrand[0] && onOpen("brand", data.byBrand[0])}
+            />
           </div>
         </Card>
       </div>
@@ -596,61 +611,117 @@ function FocusHero({
   const delta = rank.spendDeltaPercent;
   const up = delta != null && delta > 0;
   const down = delta != null && delta < 0;
-  const uniqueSkus = new Set(products.map((p) => `${p.provider}:${p.sku}`)).size;
+  const uniqueSkus = rank.uniqueSkus ?? new Set(products.map((p) => `${p.provider}:${p.sku}`)).size;
   const providerRow = focus.kind === "provider" ? data.byProvider.find((p) => p.key === focus.key) : null;
   const brandDist = focus.kind === "brand" ? data.brandProviders.filter((r) => r.brand === focus.key) : [];
+  const providerBrands = focus.kind === "provider" ? data.brandProviders.filter((r) => r.provider === focus.key) : [];
+  const ship = focus.kind === "provider" ? data.ops?.shippingByProvider.find((p) => p.provider === focus.key) : null;
+  const drops = products.filter((p) => p.deltaPercent != null && p.deltaPercent < 0);
   const monthRows = (rank.byMonth ?? []).map((m) => ({
     label: m.label,
     spendUsd: m.spendUsd,
     online: m.online ?? m.spendUsd,
     offline: m.offline ?? 0,
   }));
+  const weekday = rank.byWeekday ?? [];
+  const cats = [...new Map(products.map((p) => [p.category, { label: p.category, spendUsd: 0, qty: 0 }])).values()];
+  for (const p of products) {
+    const row = cats.find((c) => c.label === p.category);
+    if (row) {
+      row.spendUsd += p.spendUsd;
+      row.qty += p.qty;
+    }
+  }
+  cats.sort((a, b) => b.spendUsd - a.spendUsd);
 
   return (
     <div className="flex flex-col gap-3">
       <Card
         title={`${kindLabel}: ${rank.label}`}
-        hint={`Cuánto se compró ${periodPhrase(days)} en este local. No se mezclan otros comercios.`}
+        hint={`Estadísticas ${periodPhrase(days)} de este local. No se mezclan otros comercios.`}
       >
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Kpi
             label="Gastado"
             value={formatUSD(rank.spendUsd)}
-            hint={delta == null ? `${pct(rank.share)} del período` : `${up ? "+" : ""}${pct(delta)} vs período anterior`}
+            hint={`${pct(rank.share)} de todo lo comprado en el período`}
+            trend={up ? "up" : down ? "down" : undefined}
+          />
+          <Kpi
+            label="Vs período anterior"
+            value={delta == null ? "—" : `${up ? "+" : ""}${pct(delta)}`}
+            hint={rank.previousSpendUsd != null ? `Antes ${formatUSD(rank.previousSpendUsd)}` : "Sin recorte anterior comparable"}
             trend={up ? "up" : down ? "down" : undefined}
           />
           <Kpi label="Pedidos" value={qty(rank.orders)} hint={`Ticket ${formatUSD(rank.avgTicketUsd ?? 0)}`} />
-          <Kpi label="Unidades" value={qty(rank.units)} hint={`${qty(uniqueSkus)} SKUs distintos`} />
           <Kpi
-            label="Última compra"
-            value={when(rank.lastBoughtAt)}
-            hint={
-              rank.previousSpendUsd != null
-                ? `Antes ${formatUSD(rank.previousSpendUsd)}`
-                : `${pct(rank.share)} del total comprado`
-            }
+            label="Unidades"
+            value={qty(rank.units)}
+            hint={`${rank.avgUnitsPerOrder ?? 0} por pedido · ${qty(uniqueSkus)} SKUs`}
           />
-          {(rank.onlineSpendUsd || rank.offlineSpendUsd) ? (
+          <Kpi label="Primera compra" value={when(rank.firstBoughtAt ?? rank.lastBoughtAt)} hint="En este recorte" />
+          <Kpi label="Última compra" value={when(rank.lastBoughtAt)} hint={`${pct(rank.repeatSkuShare ?? 0)} de SKUs se recompraron`} />
+          <Kpi
+            label="Portal"
+            value={formatUSD(rank.onlineSpendUsd ?? 0)}
+            hint={`Offline ${formatUSD(rank.offlineSpendUsd ?? 0)}`}
+          />
+          {focus.kind === "provider" && (
             <Kpi
-              label="Portal / offline"
-              value={`${formatUSD(rank.onlineSpendUsd ?? 0)}`}
-              hint={`Offline ${formatUSD(rank.offlineSpendUsd ?? 0)}`}
+              label="Marcas distintas"
+              value={qty(rank.uniqueBrands ?? providerBrands.length)}
+              hint={`${qty(rank.uniqueCategories ?? 0)} categorías`}
             />
-          ) : null}
-          {providerRow ? (
+          )}
+          {focus.kind === "brand" && (
+            <Kpi
+              label="Distribuidores"
+              value={qty(rank.uniqueProviders ?? brandDist.length)}
+              hint={`${qty(rank.uniqueCategories ?? 0)} categorías`}
+            />
+          )}
+          {focus.kind === "category" && (
+            <Kpi
+              label="Marcas en esta categoría"
+              value={qty(rank.uniqueBrands ?? 0)}
+              hint={`${qty(rank.uniqueProviders ?? 0)} distribuidores`}
+            />
+          )}
+          {providerRow && (
             <Kpi
               label="Catálogo de tu cuenta"
               value={qty(providerRow.catalogSkus)}
               hint={`${qty(providerRow.catalogInStock)} con stock`}
             />
-          ) : null}
+          )}
+          {ship && (ship.shippingUsd > 0 || ship.shippingArs > 0) && (
+            <Kpi
+              label="Flete de este distribuidor"
+              value={formatFreight(ship.shippingUsd, ship.shippingArs)}
+              hint={`${qty(ship.orders)} pedidos de este proveedor`}
+            />
+          )}
+          {drops.length > 0 && (
+            <Kpi
+              label="Bajaron de precio"
+              value={qty(drops.length)}
+              hint="SKUs más baratos ahora que la última compra"
+            />
+          )}
         </div>
       </Card>
-      {monthRows.length > 0 && (
-        <Card title="Evolución en el período" hint="Mes a mes de este recorte, no del local entero.">
-          <SpendAreaChart data={monthRows} />
-        </Card>
-      )}
+      <div className="grid lg:grid-cols-2 gap-3">
+        {monthRows.length > 0 && (
+          <Card title="Mes a mes" hint="Solo este recorte, no el local entero.">
+            <SpendAreaChart data={monthRows} />
+          </Card>
+        )}
+        {weekday.some((d) => d.spendUsd > 0) && (
+          <Card title="Por día de la semana" hint="En qué días le comprás a este recorte.">
+            <WeekdayBars data={weekday} />
+          </Card>
+        )}
+      </div>
       {brandDist.length > 0 && (
         <Card title="Dónde compraste esta marca">
           <div className="overflow-x-auto">
@@ -660,6 +731,7 @@ function FocusHero({
                   <th className="text-left font-medium py-2">Distribuidor</th>
                   <th className="text-right font-medium py-2">Unidades</th>
                   <th className="text-right font-medium py-2">Comprado</th>
+                  <th className="text-right font-medium py-2">Share</th>
                 </tr>
               </thead>
               <tbody>
@@ -670,11 +742,47 @@ function FocusHero({
                     </td>
                     <td className="py-1.5 text-right tabular-nums">{qty(row.units)}</td>
                     <td className="py-1.5 text-right tabular-nums text-white">{formatUSD(row.spendUsd)}</td>
+                    <td className="py-1.5 text-right tabular-nums text-surface-400">
+                      {pct(rank.spendUsd ? (row.spendUsd / rank.spendUsd) * 100 : 0)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        </Card>
+      )}
+      {providerBrands.length > 0 && (
+        <Card title="Marcas que le compraste a este distribuidor">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-surface-500">
+                <tr className="border-b border-surface-800">
+                  <th className="text-left font-medium py-2">Marca</th>
+                  <th className="text-right font-medium py-2">Unidades</th>
+                  <th className="text-right font-medium py-2">Comprado</th>
+                  <th className="text-right font-medium py-2">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {providerBrands.slice(0, 20).map((row) => (
+                  <tr key={row.brand} className="border-b border-surface-800/60">
+                    <td className="py-1.5 text-surface-200">{row.brand}</td>
+                    <td className="py-1.5 text-right tabular-nums">{qty(row.units)}</td>
+                    <td className="py-1.5 text-right tabular-nums text-white">{formatUSD(row.spendUsd)}</td>
+                    <td className="py-1.5 text-right tabular-nums text-surface-400">
+                      {pct(rank.spendUsd ? (row.spendUsd / rank.spendUsd) * 100 : 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+      {cats.length > 1 && (
+        <Card title="Categorías de este recorte">
+          <RankBarChart data={cats.slice(0, 12)} color="#34d399" />
         </Card>
       )}
     </div>
@@ -921,23 +1029,56 @@ function Kpi({
   );
 }
 
-function ConcBlock({ title, values }: { title: string; values: { top1: number; top5: number; top10: number } }) {
+function ConcBlock({
+  title,
+  plural,
+  values,
+  top,
+  onTop,
+}: {
+  title: string;
+  plural: string;
+  values: { top1: number; top5: number; top10: number };
+  top?: PurchaseRankRow;
+  onTop?: () => void;
+}) {
+  const rows: { label: string; value: number; sub?: string; onClick?: () => void }[] = [
+    {
+      label: top ? `Más comprado: ${top.label}` : "El más comprado",
+      value: values.top1,
+      sub: `${pct(values.top1)} de todo lo gastado`,
+      onClick: onTop,
+    },
+    {
+      label: `Los 5 ${plural} más grandes`,
+      value: values.top5,
+      sub: "juntos, del total comprado",
+    },
+    {
+      label: `Los 10 ${plural} más grandes`,
+      value: values.top10,
+      sub: "juntos, del total comprado",
+    },
+  ];
   return (
     <div>
       <p className="text-surface-400 mb-2">{title}</p>
-      {[
-        ["Top 1", values.top1],
-        ["Top 5", values.top5],
-        ["Top 10", values.top10],
-      ].map(([label, n]) => (
-        <div key={String(label)} className="mb-2">
-          <div className="flex justify-between text-surface-300 mb-0.5">
-            <span>{label}</span>
-            <span className="tabular-nums">{pct(Number(n))}</span>
+      {rows.map((row) => (
+        <div key={row.label} className="mb-2.5">
+          <div className="flex justify-between gap-2 text-surface-300 mb-0.5">
+            {row.onClick ? (
+              <button type="button" onClick={row.onClick} className="text-left hover:text-white truncate">
+                {row.label}
+              </button>
+            ) : (
+              <span className="truncate">{row.label}</span>
+            )}
+            <span className="tabular-nums flex-shrink-0">{pct(row.value)}</span>
           </div>
           <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-            <div className="h-full bg-brand-500 rounded-full" style={{ width: `${Math.min(100, Number(n))}%` }} />
+            <div className="h-full bg-brand-500 rounded-full" style={{ width: `${Math.min(100, row.value)}%` }} />
           </div>
+          {row.sub && <p className="text-[10px] text-surface-600 mt-0.5">{row.sub}</p>}
         </div>
       ))}
     </div>

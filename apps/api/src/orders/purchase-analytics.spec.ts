@@ -153,6 +153,9 @@ describe("computePurchaseInsights", () => {
     expect(report.byMonthDay[11]).toMatchObject({ day: 12, spendUsd: 50, orders: 1 });
     expect(elit?.avgTicketUsd).toBe(200);
     expect(elit?.onlineSpendUsd).toBe(200);
+    expect(elit?.uniqueSkus).toBe(1);
+    expect(elit?.uniqueBrands).toBe(1);
+    expect(elit?.firstBoughtAt).toBe("2026-07-10T15:00:00.000Z");
     expect(elit?.byMonth.some((m) => m.spendUsd === 200)).toBe(true);
   });
 
@@ -166,6 +169,8 @@ describe("computePurchaseInsights", () => {
     expect(asus?.previousSpendUsd).toBe(100);
     expect(asus?.spendDeltaPercent).toBe(100);
     expect(asus?.avgTicketUsd).toBe(200);
+    expect(asus?.uniqueProviders).toBe(1);
+    expect(asus?.byWeekday.some((d) => d.spendUsd > 0)).toBe(true);
   });
 
   it("un lote vacío no inventa compras de otro comercio", () => {
