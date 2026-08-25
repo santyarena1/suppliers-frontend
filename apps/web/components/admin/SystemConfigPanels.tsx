@@ -20,10 +20,10 @@ import {
   BANNER_SLOT_RECOMMENDED,
   BRAND_PRESET_LABELS,
   BRAND_PRESETS,
-  applyBrandPreset,
   type BrandPreset,
   type BannerSlot,
 } from "@/lib/brand-presets";
+import { useBranding } from "@/lib/branding";
 import ImageUploadField from "@/components/ImageUploadField";
 import { assetUrl } from "@/lib/assets";
 import { invalidateProviderDisplayCache } from "@/lib/providerDisplay";
@@ -452,25 +452,32 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
 // ---------- Apariencia (identidad visual) ----------
 
 export function AppearanceTab({ showToast }: { showToast: ConfigToast }) {
-  const [preset, setPreset] = useState<BrandPreset>("violet");
+  const { preset: livePreset, setPreset: applyLive } = useBranding();
+  const [preset, setPreset] = useState<BrandPreset>(livePreset);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setPreset(livePreset);
+  }, [livePreset]);
 
   useEffect(() => {
     adminApi.getPlatformSettings()
       .then((r) => {
         const p = r.data.brandPreset as BrandPreset;
-        setPreset(p in BRAND_PRESET_LABELS ? p : "violet");
+        const next = p in BRAND_PRESET_LABELS ? p : "violet";
+        setPreset(next);
+        applyLive(next);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [applyLive]);
 
   async function save() {
     setSaving(true);
     try {
       await adminApi.updatePlatformSettings(preset);
-      applyBrandPreset(preset);
+      applyLive(preset);
       showToast("Identidad visual actualizada");
     } catch (err) {
       showToast(errMsg(err, "Error al guardar"), false);
@@ -501,7 +508,7 @@ export function AppearanceTab({ showToast }: { showToast: ConfigToast }) {
             type="button"
             onClick={() => {
               setPreset(key);
-              applyBrandPreset(key);
+              applyLive(key);
             }}
             className={`rounded-xl border p-4 text-left transition-all ${
               preset === key

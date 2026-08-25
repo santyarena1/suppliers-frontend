@@ -2,7 +2,14 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { platformApi } from "./api";
-import { applyBrandPreset, BrandPreset, BRAND_PRESETS } from "./brand-presets";
+import {
+  applyBrandPreset,
+  BrandPreset,
+  BRAND_PRESETS,
+  isBrandPreset,
+  readCachedBrandPreset,
+  writeCachedBrandPreset,
+} from "./brand-presets";
 
 interface BrandingContextValue {
   preset: BrandPreset;
@@ -12,30 +19,40 @@ interface BrandingContextValue {
 
 const BrandingContext = createContext<BrandingContextValue | null>(null);
 
+function initialPreset(): BrandPreset {
+  return readCachedBrandPreset() ?? "violet";
+}
+
 export function BrandingProvider({ children }: { children: React.ReactNode }) {
-  const [preset, setPresetState] = useState<BrandPreset>("violet");
-  const [loading, setLoading] = useState(true);
+  const [preset, setPresetState] = useState<BrandPreset>(initialPreset);
+  const [loading, setLoading] = useState(() => readCachedBrandPreset() == null);
 
   useEffect(() => {
-    applyBrandPreset("violet");
+    const cached = readCachedBrandPreset();
+    if (cached) applyBrandPreset(cached);
+
     let alive = true;
     platformApi.settings()
       .then((res) => {
         if (!alive) return;
-        const p = res.data.brandPreset as BrandPreset;
-        if (BRAND_PRESETS[p]) {
+        const p = res.data.brandPreset;
+        if (isBrandPreset(p) && BRAND_PRESETS[p]) {
           setPresetState(p);
           applyBrandPreset(p);
+          writeCachedBrandPreset(p);
         }
       })
       .catch(() => {})
-      .finally(() => alive && setLoading(false));
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
     return () => { alive = false; };
   }, []);
 
   const setPreset = useCallback((p: BrandPreset) => {
     setPresetState(p);
     applyBrandPreset(p);
+    writeCachedBrandPreset(p);
   }, []);
 
   return (

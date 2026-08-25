@@ -8,7 +8,7 @@ import { clearSession, getUser, type UserRole } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules } from "@/lib/permissions";
 import { useResults } from "@/lib/results";
-import { canSyncProvider, type Provider } from "@/lib/api";
+import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
 import { useProviderStatuses } from "@/lib/providerStatus";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -45,7 +45,8 @@ function persistOpenSection(id: NavSectionId | null) {
   else localStorage.removeItem(OPEN_SECTION_KEY);
 }
 
-function statusDot(status: ReturnType<typeof useProviderStatuses>[string] | undefined) {
+function statusDot(status: ProviderStatus | undefined, loading: boolean) {
+  if (loading && !status) return "bg-surface-700 animate-pulse";
   if (!canSyncProvider(status)) return "bg-surface-600";
   if (status?.lastSyncedAt) return "bg-emerald-500";
   return "bg-amber-500";
@@ -65,7 +66,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const myModules = useMyModules();
   const { clearResults } = useResults();
   const { providers: myProviders } = useMyProviders();
-  const statuses = useProviderStatuses();
+  const { statuses, loading: statusesLoading } = useProviderStatuses();
   const linkedProviders = useMemo(
     () => myProviders.filter((p) => p.linked),
     [myProviders],
@@ -255,7 +256,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
                         : "text-surface-400 hover:text-surface-100 hover:bg-surface-800"
                     }`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot(statuses[provider as Provider])}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot(statuses[provider as Provider], statusesLoading)}`} />
                     <ProviderBadge
                       provider={provider}
                       label={name}

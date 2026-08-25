@@ -79,12 +79,59 @@ export const BRAND_PRESET_LABELS: Record<BrandPreset, string> = {
 };
 
 export function applyBrandPreset(preset: BrandPreset) {
+  if (typeof document === "undefined") return;
   const palette = BRAND_PRESETS[preset] ?? BRAND_PRESETS.violet;
   const root = document.documentElement;
   for (const [step, rgb] of Object.entries(palette)) {
     root.style.setProperty(`--brand-${step}`, rgb);
   }
   root.dataset.brandPreset = preset;
+}
+
+export const BRAND_PRESET_STORAGE_KEY = "nodo_brand_preset";
+
+export function isBrandPreset(value: unknown): value is BrandPreset {
+  return typeof value === "string" && value in BRAND_PRESETS;
+}
+
+export function readCachedBrandPreset(): BrandPreset | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(BRAND_PRESET_STORAGE_KEY);
+    return isBrandPreset(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedBrandPreset(preset: BrandPreset) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(BRAND_PRESET_STORAGE_KEY, preset);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+/**
+ * Script bloqueante (antes del paint) para aplicar marca + tema desde localStorage
+ * y evitar el flash de violet/soft por defecto.
+ */
+export function brandThemeBootScript(): string {
+  const palettes = JSON.stringify(BRAND_PRESETS);
+  return `(function(){try{
+    var palettes=${palettes};
+    var preset=localStorage.getItem(${JSON.stringify(BRAND_PRESET_STORAGE_KEY)});
+    if(preset&&palettes[preset]){
+      var p=palettes[preset],r=document.documentElement;
+      for(var k in p){if(Object.prototype.hasOwnProperty.call(p,k))r.style.setProperty('--brand-'+k,p[k]);}
+      r.dataset.brandPreset=preset;
+    }
+    var theme=localStorage.getItem('pref_theme');
+    if(theme==='light'||theme==='dark'||theme==='soft'){
+      document.documentElement.setAttribute('data-theme',theme);
+    }
+  }catch(e){}})();`;
 }
 
 export const BANNER_SLOTS = [

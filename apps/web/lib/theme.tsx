@@ -36,12 +36,20 @@ function normalizeTheme(raw: string | null): Theme {
   return "soft";
 }
 
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "soft";
+  try {
+    return normalizeTheme(localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return "soft";
+  }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("soft");
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const initial = normalizeTheme(stored);
+    const initial = readStoredTheme();
     setThemeState(initial);
     document.documentElement.setAttribute("data-theme", initial);
   }, []);

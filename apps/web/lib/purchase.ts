@@ -19,7 +19,7 @@ export function isRetailerSession(): boolean {
 
 export function useIsRetailer(): boolean {
   const { providers } = useMyProviders();
-  const [retailer, setRetailer] = useState(false);
+  const [retailer, setRetailer] = useState(() => isRetailerSession());
   useEffect(() => {
     setRetailer(isRetailerSession());
   }, [providers]);
