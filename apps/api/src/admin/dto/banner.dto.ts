@@ -5,7 +5,7 @@ export class CreateBannerDto {
   @IsIn(["home", "search"])
   position!: "home" | "search";
 
-  @IsImageUrlOrUploadPath({ message: "imageUrl debe ser una URL válida o un path /uploads/..." })
+  @IsImageUrlOrUploadPath({ message: "imageUrl debe ser una URL válida o un path /assets/..." })
   imageUrl!: string;
 
   @IsOptional()
@@ -39,7 +39,7 @@ export class UpdateBannerDto {
   position?: "home" | "search";
 
   @IsOptional()
-  @IsImageUrlOrUploadPath({ message: "imageUrl debe ser una URL válida o un path /uploads/..." })
+  @IsImageUrlOrUploadPath({ message: "imageUrl debe ser una URL válida o un path /assets/..." })
   imageUrl?: string;
 
   @IsOptional()

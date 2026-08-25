@@ -28,11 +28,12 @@ async function bootstrap() {
   const config = app.get(ConfigService);
 
   await app.register(helmet as any, {
-    // Permite <img> desde el frontend (otro origen) hacia /uploads/*
+    // Permite <img> desde el frontend (otro origen) hacia /assets/* y /uploads/*
     crossOriginResourcePolicy: { policy: "cross-origin" },
   });
   await app.register(multipart as any, { limits: { fileSize: 20 * 1024 * 1024 } });
 
+  // Legacy: assets viejos en disco. Los uploads nuevos van a Postgres (`/assets/:id`).
   const uploadsRoot = join(process.cwd(), "uploads");
   if (!existsSync(uploadsRoot)) mkdirSync(uploadsRoot, { recursive: true });
   await app.register(fastifyStatic as any, {
