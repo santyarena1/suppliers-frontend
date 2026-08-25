@@ -1,6 +1,6 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
-  Settings, Users,
+  Settings, Users, GitCompare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantType } from "@/lib/api";
@@ -9,7 +9,7 @@ import type { UserRole } from "@/lib/auth";
 /**
  * Navegación declarativa del sidebar.
  *
- * Inicio / Búsqueda / Carrito van sueltos (acceso diario).
+ * Inicio / Búsqueda / Comparador / Carrito van sueltos (acceso diario).
  * El resto vive en 3 secciones colapsables alineadas a los tipos de
  * organización (`TenantType`): Proveedores, Marcas, Sistema.
  *
@@ -23,6 +23,7 @@ export type NavSectionId = "providers" | "brands" | "system";
 export type NavItemId =
   | "home"
   | "search"
+  | "compare"
   | "cart"
   | "orders"
   | "providers"
@@ -62,6 +63,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
 export const NAV_ITEMS: NavItemDef[] = [
   { id: "home", href: "/", label: "Inicio", icon: Home, exact: true },
   { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search" },
+  { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search" },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers" },
 
   {
