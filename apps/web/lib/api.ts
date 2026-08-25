@@ -325,7 +325,14 @@ export interface PurchaseRankRow {
   orders: number;
   share: number;
   lastBoughtAt: string | null;
+  extraUsd?: number;
+  extraArs?: number;
+  groupId?: string | null;
+  unified?: boolean;
+  variants?: { key: string; label: string; orders: number }[];
 }
+
+export type OpsAliasKind = "ADDRESS" | "PAYMENT" | "DELIVERY" | "WAREHOUSE";
 
 export interface PurchaseProductRow {
   sku: string;
@@ -401,13 +408,14 @@ export interface PurchaseInsights {
     };
     fulfillmentMix: { key: string; label: string; orders: number; spendUsd: number; share: number }[];
     byPayment: PurchaseRankRow[];
-    byDelivery: (PurchaseRankRow & { extraUsd?: number; extraArs?: number })[];
-    byAddress: (PurchaseRankRow & { extraUsd?: number; extraArs?: number })[];
+    byDelivery: PurchaseRankRow[];
+    byAddress: PurchaseRankRow[];
     byWarehouse: PurchaseRankRow[];
     byBuyer: PurchaseRankRow[];
     byHour: { hour: number; label: string; orders: number; spendUsd: number }[];
     shippingByMonth: { month: string; label: string; shippingUsd: number; shippingArs: number; shippedOrders: number; pickupOrders: number }[];
     shippingByProvider: { provider: string; label: string; shippingUsd: number; shippingArs: number; orders: number; spendUsd: number }[];
+    suggestions?: { kind: OpsAliasKind; keys: string[]; labels: string[]; reason: string }[];
   };
   concentration: {
     providers: { top1: number; top5: number; top10: number };
@@ -454,6 +462,14 @@ export const ordersApi = {
   list: () => api.get<TenantOrder[]>("/orders"),
   pending: () => api.get<PendingApprovals>("/orders/pending-approval"),
   insights: (days = 90) => api.get<PurchaseInsights>("/orders/insights", { params: { days } }),
+  unifyAlias: (body: { kind: OpsAliasKind; keys: string[]; label: string }) =>
+    api.put<{ groupId: string; kind: OpsAliasKind; label: string; keys: string[] }>("/orders/insights/aliases", body),
+  renameAlias: (groupId: string, label: string) =>
+    api.patch<{ groupId: string; label: string }>(`/orders/insights/aliases/${groupId}`, { label }),
+  splitAlias: (groupId: string, keys: string[]) =>
+    api.post<{ groupId: string }>(`/orders/insights/aliases/${groupId}/split`, { keys }),
+  deleteAlias: (groupId: string) =>
+    api.delete<{ groupId: string; deleted: number }>(`/orders/insights/aliases/${groupId}`),
   createOffline: (orders: {
     provider: Provider | string;
     notes?: string;

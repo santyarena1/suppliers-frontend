@@ -5,6 +5,13 @@
  */
 
 import { PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import {
+  suggestOpsMerges,
+  resolveOpsAlias,
+  type OpsAliasIndex,
+  type OpsAliasKind,
+  type OpsSuggestion,
+} from "./purchase-ops-aliases";
 
 export type Fulfillment = "SHIPPING" | "PICKUP" | "UNKNOWN";
 
@@ -18,6 +25,9 @@ export type NamedCount = {
   orders: number;
   share: number;
   lastBoughtAt: string | null;
+  groupId: string | null;
+  unified: boolean;
+  variants: { key: string; label: string; orders: number }[];
 };
 
 export type OrderOpsInput = {
@@ -99,6 +109,7 @@ export type OpsInsights = {
   byHour: { hour: number; label: string; orders: number; spendUsd: number }[];
   shippingByMonth: { month: string; label: string; shippingUsd: number; shippingArs: number; shippedOrders: number; pickupOrders: number }[];
   shippingByProvider: { provider: string; label: string; shippingUsd: number; shippingArs: number; orders: number; spendUsd: number }[];
+  suggestions: OpsSuggestion[];
 };
 
 const PICKUP_RE = /\b(retiro|pickup|sucursal|dep[oó]sito|warehouse|jujuy|centro de distribuci[oó]n|\bcd\b)\b/i;
@@ -308,36 +319,74 @@ type NamedBucket = {
   extraArs: number;
   orders: Set<string>;
   last: string | null;
+  groupId: string | null;
+  label: string;
+  variants: Map<string, Set<string>>;
 };
 
 function toNamed(map: Map<string, NamedBucket>, totalOrders: number, limit = 40): NamedCount[] {
   return [...map.entries()]
-    .map(([key, v]) => ({
-      key,
-      label: key,
-      spendUsd: round2(v.spend),
-      extraUsd: round2(v.extraUsd),
-      extraArs: round2(v.extraArs),
-      units: v.orders.size,
-      orders: v.orders.size,
-      share: shareOf(v.orders.size, totalOrders),
-      lastBoughtAt: v.last,
-    }))
+    .map(([key, v]) => {
+      const variants = [...v.variants.entries()]
+        .map(([raw, ids]) => ({ key: raw, label: raw, orders: ids.size }))
+        .sort((a, b) => b.orders - a.orders || a.label.localeCompare(b.label, "es"));
+      return {
+        key,
+        label: v.label,
+        spendUsd: round2(v.spend),
+        extraUsd: round2(v.extraUsd),
+        extraArs: round2(v.extraArs),
+        units: v.orders.size,
+        orders: v.orders.size,
+        share: shareOf(v.orders.size, totalOrders),
+        lastBoughtAt: v.last,
+        groupId: v.groupId,
+        unified: Boolean(v.groupId) && variants.length > 1,
+        variants,
+      };
+    })
     .sort((a, b) => b.orders - a.orders || b.spendUsd - a.spendUsd)
     .slice(0, limit);
 }
 
-function bump(map: Map<string, NamedBucket>, key: string, ops: OrderOps, extraUsd = 0, extraArs = 0) {
-  const k = key || "—";
+function bump(
+  map: Map<string, NamedBucket>,
+  rawKey: string,
+  ops: OrderOps,
+  extraUsd = 0,
+  extraArs = 0,
+  alias?: { kind: OpsAliasKind; index?: OpsAliasIndex }
+) {
+  const resolved = alias ? resolveOpsAlias(alias.kind, rawKey, alias.index) : {
+    mapKey: rawKey,
+    label: rawKey,
+    groupId: null as string | null,
+    raw: rawKey,
+  };
+  const k = resolved.mapKey || "—";
   let row = map.get(k);
   if (!row) {
-    row = { spend: 0, extraUsd: 0, extraArs: 0, orders: new Set(), last: null };
+    row = {
+      spend: 0,
+      extraUsd: 0,
+      extraArs: 0,
+      orders: new Set(),
+      last: null,
+      groupId: resolved.groupId,
+      label: resolved.label,
+      variants: new Map(),
+    };
     map.set(k, row);
   }
   row.spend += ops.totalUsd || ops.subtotalUsd;
   row.extraUsd += extraUsd;
   row.extraArs += extraArs;
   row.orders.add(ops.orderId);
+  row.label = resolved.label;
+  row.groupId = resolved.groupId;
+  const variant = row.variants.get(resolved.raw) ?? new Set();
+  variant.add(ops.orderId);
+  row.variants.set(resolved.raw, variant);
   if (!row.last || ops.createdAt > row.last) row.last = ops.createdAt;
 }
 
@@ -347,7 +396,7 @@ const FULFILLMENT_LABEL: Record<Fulfillment, string> = {
   UNKNOWN: "Sin dato de entrega",
 };
 
-export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
+export function computeOpsInsights(orders: OrderOpsInput[], aliases?: OpsAliasIndex): OpsInsights {
   const opsList = orders.map(extractOrderOps);
   const n = opsList.length;
   const payments = new Map<string, NamedBucket>();
@@ -373,10 +422,12 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
   let withNotes = 0;
 
   for (const ops of opsList) {
-    bump(payments, ops.payment, ops);
-    bump(deliveries, ops.delivery, ops, ops.shippingUsd, ops.shippingArs);
-    if (ops.address && ops.address !== "Sin dirección") bump(addresses, ops.address, ops, ops.shippingUsd, ops.shippingArs);
-    if (ops.warehouse) bump(warehouses, ops.warehouse, ops);
+    bump(payments, ops.payment, ops, 0, 0, { kind: "PAYMENT", index: aliases });
+    bump(deliveries, ops.delivery, ops, ops.shippingUsd, ops.shippingArs, { kind: "DELIVERY", index: aliases });
+    if (ops.address && ops.address !== "Sin dirección") {
+      bump(addresses, ops.address, ops, ops.shippingUsd, ops.shippingArs, { kind: "ADDRESS", index: aliases });
+    }
+    if (ops.warehouse) bump(warehouses, ops.warehouse, ops, 0, 0, { kind: "WAREHOUSE", index: aliases });
     bump(buyers, ops.buyer, ops);
     const h = hours.get(ops.hour) ?? { orders: 0, spend: 0 };
     h.orders += 1;
@@ -418,6 +469,15 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
 
   const shippingOrders = mix.get("SHIPPING")?.orders ?? 0;
   const pickupOrders = mix.get("PICKUP")?.orders ?? 0;
+  const suggestions = suggestOpsMerges(
+    opsList.flatMap((ops) => [
+      { kind: "PAYMENT" as const, raw: ops.payment },
+      { kind: "DELIVERY" as const, raw: ops.delivery },
+      { kind: "ADDRESS" as const, raw: ops.address },
+      { kind: "WAREHOUSE" as const, raw: ops.warehouse },
+    ]),
+    aliases
+  );
 
   return {
     kpis: {
@@ -432,11 +492,11 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
       perceptionsUsd: round2(perceptionsUsd),
       subtotalUsd: round2(subtotalUsd),
       uniqueAddresses: addresses.size,
-      uniquePayments: [...payments.keys()].filter((k) => k !== "Sin medio de pago").length,
+      uniquePayments: [...payments.values()].filter((v) => v.label !== "Sin medio de pago").length,
       dropShippingOrders,
       customerSaleOrders,
       withNotes,
-      uniqueBuyers: [...buyers.keys()].filter((k) => k !== "Sin asignar").length,
+      uniqueBuyers: [...buyers.values()].filter((v) => v.label !== "Sin asignar").length,
       shippingKnownOrders,
     },
     fulfillmentMix: (["SHIPPING", "PICKUP", "UNKNOWN"] as Fulfillment[])
@@ -485,5 +545,6 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
         spendUsd: row.spend,
       }))
       .sort((a, b) => b.shippingUsd + b.shippingArs - (a.shippingUsd + a.shippingArs)),
+    suggestions,
   };
 }

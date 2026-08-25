@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -23,6 +23,7 @@ import {
 import { formatUSD, proxyImg } from "@/lib/format";
 import ProviderBadge from "@/components/ProviderBadge";
 import { ChannelPie, MixPie, RankBarChart, ShippingMonthChart, SpendAreaChart, WeekdayBars } from "./InsightCharts";
+import { UnifyNamedTable } from "./UnifyNamedTable";
 
 const PERIODS: { days: number; label: string }[] = [
   { days: 30, label: "30 días" },
@@ -94,30 +95,25 @@ export default function LocalPurchaseDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
-    ordersApi
-      .insights(days)
-      .then((res) => {
-        if (!alive) return;
-        setData(res.data);
-        setSelected(null);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-        setError(msg || "No se pudo cargar el tablero de este comercio");
-        setData(null);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
+    try {
+      const res = await ordersApi.insights(days);
+      setData(res.data);
+      if (!silent) setSelected(null);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setError(msg || "No se pudo cargar el tablero de este comercio");
+      if (!silent) setData(null);
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [days]);
+
+  useEffect(() => {
+    void refresh(false);
+  }, [refresh]);
 
   const products = useMemo(() => {
     if (!data) return [];
@@ -319,9 +315,9 @@ export default function LocalPurchaseDashboard() {
               onExport={exportProducts}
             />
           )}
-          {tab === "envios" && <EnviosPanel data={data} />}
-          {tab === "pagos" && <PagosPanel data={data} />}
-          {tab === "direcciones" && <DireccionesPanel data={data} />}
+          {tab === "envios" && <EnviosPanel data={data} onReload={() => refresh(true)} />}
+          {tab === "pagos" && <PagosPanel data={data} onReload={() => refresh(true)} />}
+          {tab === "direcciones" && <DireccionesPanel data={data} onReload={() => refresh(true)} />}
         </>
       )}
     </section>
@@ -382,7 +378,7 @@ function Resumen({
         <Kpi
           label="Medios de pago"
           value={qty(k.uniquePayments ?? data.ops?.kpis.uniquePayments ?? 0)}
-          hint={`${qty(k.uniqueAddresses ?? data.ops?.kpis.uniqueAddresses ?? 0)} direcciones distintas`}
+          hint={`${qty(k.uniquePayments ?? data.ops?.kpis.uniquePayments ?? 0)} medios · ${qty(k.uniqueAddresses ?? data.ops?.kpis.uniqueAddresses ?? 0)} domicilios (después de unificar)`}
         />
       </div>
 
@@ -823,7 +819,7 @@ function EmptyOps({ text }: { text: string }) {
   return <p className="text-xs text-surface-500 py-6 text-center">{text}</p>;
 }
 
-function EnviosPanel({ data }: { data: PurchaseInsights }) {
+function EnviosPanel({ data, onReload }: { data: PurchaseInsights; onReload: () => void }) {
   const ops = data.ops;
   if (!ops) return <EmptyOps text="El tablero todavía no trajo el detalle de envíos." />;
   const k = ops.kpis;
@@ -870,10 +866,13 @@ function EnviosPanel({ data }: { data: PurchaseInsights }) {
       <div className="grid lg:grid-cols-2 gap-3">
         <Card title="Modos de entrega">
           {ops.byDelivery.length === 0 ? <EmptyOps text="Ningún pedido guardó etiqueta de entrega." /> : (
-            <NamedTable
+            <UnifyNamedTable
+              kind="DELIVERY"
               rows={ops.byDelivery}
+              suggestions={ops.suggestions}
               extraHeader="Flete"
               extra={(r) => formatFreight(r.extraUsd ?? 0, r.extraArs ?? 0)}
+              onReload={onReload}
             />
           )}
         </Card>
@@ -910,13 +909,13 @@ function EnviosPanel({ data }: { data: PurchaseInsights }) {
   );
 }
 
-function PagosPanel({ data }: { data: PurchaseInsights }) {
+function PagosPanel({ data, onReload }: { data: PurchaseInsights; onReload: () => void }) {
   const ops = data.ops;
   if (!ops) return <EmptyOps text="El tablero todavía no trajo el detalle de pagos." />;
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi label="Medios distintos" value={qty(ops.kpis.uniquePayments)} hint="Según la etiqueta que guardó cada checkout" />
+        <Kpi label="Medios distintos" value={qty(ops.kpis.uniquePayments)} hint="Después de unificar las que son la misma forma de pago" />
         <Kpi label="IVA / internos" value={formatUSD(ops.kpis.taxesUsd)} hint="Campo impuestos del pedido" />
         <Kpi label="Percepciones" value={formatUSD(ops.kpis.perceptionsUsd)} hint="IIBB y percepciones informadas" />
         <Kpi label="Neto de ítems" value={formatUSD(ops.kpis.subtotalUsd)} hint="Subtotal guardado, sin flete" />
@@ -926,7 +925,7 @@ function PagosPanel({ data }: { data: PurchaseInsights }) {
           {ops.byPayment.length === 0 ? <EmptyOps text="Ningún pedido guardó medio de pago." /> : (
             <>
               <RankBarChart data={ops.byPayment.map((r) => ({ label: r.label, spendUsd: r.spendUsd }))} color="#34d399" />
-              <NamedTable rows={ops.byPayment} />
+              <UnifyNamedTable kind="PAYMENT" rows={ops.byPayment} suggestions={ops.suggestions} onReload={onReload} />
             </>
           )}
         </Card>
@@ -947,26 +946,33 @@ function PagosPanel({ data }: { data: PurchaseInsights }) {
   );
 }
 
-function DireccionesPanel({ data }: { data: PurchaseInsights }) {
+function DireccionesPanel({ data, onReload }: { data: PurchaseInsights; onReload: () => void }) {
   const ops = data.ops;
   if (!ops) return <EmptyOps text="El tablero todavía no trajo direcciones." />;
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <Kpi label="Direcciones usadas" value={qty(ops.kpis.uniqueAddresses)} hint="Calle + localidad que vino en el snapshot del pedido" />
+        <Kpi label="Direcciones usadas" value={qty(ops.kpis.uniqueAddresses)} hint="Domicilios reales de este local, después de unificar los que se escriben distinto" />
         <Kpi label="Sucursales / depósitos" value={qty(ops.byWarehouse.length)} hint="Air sucursal, Elit warehouse, retiro NB" />
         <Kpi label="Pedidos sin dirección" value={qty(Math.max(0, data.kpis.orders - ops.byAddress.reduce((s, r) => s + r.orders, 0)))} hint="Offline u órdenes que no guardaron domicilio" />
       </div>
-      <Card title="Domicilios más usados" hint="Se arma con el snapshot de cada checkout (Invid, New Bytes, Elit, Air). No cruza otros locales.">
+      <Card title="Domicilios más usados" hint="Se arma con el snapshot de cada checkout. Unificá las que son la misma aunque Invid, New Bytes o Elit las hayan escrito distinto.">
         {ops.byAddress.length === 0 ? (
           <EmptyOps text="Todavía no hay domicilios guardados en los pedidos de este período." />
         ) : (
-          <NamedTable rows={ops.byAddress} extraHeader="Flete" extra={(r) => formatFreight(r.extraUsd ?? 0, r.extraArs ?? 0)} />
+          <UnifyNamedTable
+            kind="ADDRESS"
+            rows={ops.byAddress}
+            suggestions={ops.suggestions}
+            extraHeader="Flete"
+            extra={(r) => formatFreight(r.extraUsd ?? 0, r.extraArs ?? 0)}
+            onReload={onReload}
+          />
         )}
       </Card>
       {ops.byWarehouse.length > 0 && (
         <Card title="Sucursales y depósitos">
-          <NamedTable rows={ops.byWarehouse} />
+          <UnifyNamedTable kind="WAREHOUSE" rows={ops.byWarehouse} suggestions={ops.suggestions} onReload={onReload} />
         </Card>
       )}
     </div>
