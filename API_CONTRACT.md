@@ -65,7 +65,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: rechazo `{ reason? }` · insights `days` (`30` | `90` | `365` | `0` = todo el historial; default `90`)
 - **Respuesta esperada**: pedido con `{ id, provider, providerName, status, approvalStatus, createdBy, approvedBy, total, items }` · `/orders/pending-approval` devuelve `{ canApprove, needsApproval, orders }` · `/orders/insights` es el tablero del comercio de la sesión
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`. **Insights nunca cruza locales**: filtra siempre por `tenantId`. Solo cuenta pedidos `CREATED` u `OFFLINE`.
+- **Notas**: Un vendedor que confirma un checkout recibe `status: "PENDING_APPROVAL"` y el pedido no se manda al proveedor. Al aprobarlo se reenvía el borrador guardado tal cual. Ver `docs/PLAN_AISLAMIENTO.md`. **Insights nunca cruza locales**: filtra siempre por `tenantId`. Solo cuenta pedidos `CREATED` u `OFFLINE`. El payload incluye `ops` (envíos, pagos, direcciones, sucursales, impuestos, autores) armado con lo que cada pedido ya guardó: no se inventan fletes.
 
 ### [FEATURE] Referencias de precio de venta (locales)
 - **Método**: GET · POST (admin)
@@ -81,9 +81,9 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/orders/insights?days=`
 - **Auth**: Bearer, organización de la sesión (el superadmin sin “entrar como” no ve data de nadie)
 - **Body / Params**: `days` opcional, default 90. `0` = todo el historial del comercio
-- **Respuesta esperada**: `{ tenantName, periodDays, kpis, concentration, channelMix, byMonth, byWeekday, byProvider, byBrand, byCategory, bySubcategory, brandProviders, topProducts, recentOrders }`
+- **Respuesta esperada**: `{ tenantName, periodDays, kpis, concentration, channelMix, byMonth, byWeekday, byProvider, byBrand, byCategory, bySubcategory, brandProviders, topProducts, recentOrders, ops }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: La data es **solo de ese local**. No hay ranking ni spend entre comercios. Los SKUs se cruzan con `TenantProductOffer` del mismo `tenantId` para marca, categoría y precio actual.
+- **Notas**: La data es **solo de ese local**. `ops` agrega envíos (retiro vs domicilio, flete por mes/proveedor), formas de pago, direcciones más usadas, sucursales, IVA/percepciones y quién armó el pedido. El flete se lee de la cotización guardada o, si no está, del resto `total - subtotal - impuestos - percepciones` cuando ese resto es creíble.
 
 ### [FEATURE] Pedido offline y compras en esquema (comercio tipo 1)
 - **Método**: GET | PUT · POST | PATCH (pedidos)

@@ -368,6 +368,42 @@ export interface PurchaseInsights {
     lastSyncAt: string | null;
     previousSpendUsd: number | null;
     spendDeltaPercent: number | null;
+    shippingUsd?: number;
+    shippingOrders?: number;
+    pickupOrders?: number;
+    avgShippingUsd?: number;
+    taxesUsd?: number;
+    perceptionsUsd?: number;
+    uniqueAddresses?: number;
+    uniquePayments?: number;
+  };
+  ops?: {
+    kpis: {
+      shippingUsd: number;
+      shippingOrders: number;
+      pickupOrders: number;
+      unknownFulfillment: number;
+      avgShippingUsd: number;
+      taxesUsd: number;
+      perceptionsUsd: number;
+      subtotalUsd: number;
+      uniqueAddresses: number;
+      uniquePayments: number;
+      dropShippingOrders: number;
+      customerSaleOrders: number;
+      withNotes: number;
+      uniqueBuyers: number;
+      shippingKnownOrders: number;
+    };
+    fulfillmentMix: { key: string; label: string; orders: number; spendUsd: number; share: number }[];
+    byPayment: PurchaseRankRow[];
+    byDelivery: (PurchaseRankRow & { extraUsd?: number })[];
+    byAddress: (PurchaseRankRow & { extraUsd?: number })[];
+    byWarehouse: PurchaseRankRow[];
+    byBuyer: PurchaseRankRow[];
+    byHour: { hour: number; label: string; orders: number; spendUsd: number }[];
+    shippingByMonth: { month: string; label: string; shippingUsd: number; shippedOrders: number; pickupOrders: number }[];
+    shippingByProvider: { provider: string; label: string; shippingUsd: number; orders: number; spendUsd: number }[];
   };
   concentration: {
     providers: { top1: number; top5: number; top10: number };

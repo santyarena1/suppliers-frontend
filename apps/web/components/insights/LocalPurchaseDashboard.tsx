@@ -22,7 +22,7 @@ import {
 } from "@/lib/api";
 import { formatUSD, proxyImg } from "@/lib/format";
 import ProviderBadge from "@/components/ProviderBadge";
-import { ChannelPie, RankBarChart, SpendAreaChart, WeekdayBars } from "./InsightCharts";
+import { ChannelPie, MixPie, RankBarChart, ShippingMonthChart, SpendAreaChart, WeekdayBars } from "./InsightCharts";
 
 const PERIODS: { days: number; label: string }[] = [
   { days: 30, label: "30 días" },
@@ -31,7 +31,7 @@ const PERIODS: { days: number; label: string }[] = [
   { days: 0, label: "Todo" },
 ];
 
-type Tab = "resumen" | "distribuidores" | "marcas" | "categorias" | "productos";
+type Tab = "resumen" | "distribuidores" | "marcas" | "categorias" | "productos" | "envios" | "pagos" | "direcciones";
 
 type Focus = { kind: "brand" | "category" | "provider"; key: string; label: string } | null;
 
@@ -43,6 +43,9 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "marcas", label: "Marcas" },
   { id: "categorias", label: "Categorías" },
   { id: "productos", label: "Productos" },
+  { id: "envios", label: "Envíos" },
+  { id: "pagos", label: "Pagos" },
+  { id: "direcciones", label: "Direcciones" },
 ];
 
 function pct(n: number) {
@@ -305,6 +308,9 @@ export default function LocalPurchaseDashboard() {
               onExport={exportProducts}
             />
           )}
+          {tab === "envios" && <EnviosPanel data={data} />}
+          {tab === "pagos" && <PagosPanel data={data} />}
+          {tab === "direcciones" && <DireccionesPanel data={data} />}
         </>
       )}
     </section>
@@ -347,6 +353,26 @@ function Resumen({
         <Kpi label="Marcas" value={qty(k.uniqueBrands)} hint={`${qty(k.uniqueCategories)} categorías`} />
         <Kpi label="Distribuidores" value={qty(k.providersUsed)} hint={`Top 1 = ${pct(data.concentration.providers.top1)}`} />
         <Kpi label="Importe de pedidos" value={formatUSD(k.orderTotalUsd)} hint="Totales guardados (puede incluir IVA/envío)" />
+        <Kpi
+          label="Gastado en envíos"
+          value={formatUSD(k.shippingUsd ?? data.ops?.kpis.shippingUsd ?? 0)}
+          hint={`${qty(k.shippingOrders ?? data.ops?.kpis.shippingOrders ?? 0)} pedidos con envío · ticket ${formatUSD(k.avgShippingUsd ?? data.ops?.kpis.avgShippingUsd ?? 0)}`}
+        />
+        <Kpi
+          label="Retiro vs envío"
+          value={`${qty(k.pickupOrders ?? data.ops?.kpis.pickupOrders ?? 0)} / ${qty(k.shippingOrders ?? data.ops?.kpis.shippingOrders ?? 0)}`}
+          hint="Retiros · envíos. Lo que no informa el proveedor queda sin dato."
+        />
+        <Kpi
+          label="IVA / internos"
+          value={formatUSD(k.taxesUsd ?? data.ops?.kpis.taxesUsd ?? 0)}
+          hint={`Percepciones ${formatUSD(k.perceptionsUsd ?? data.ops?.kpis.perceptionsUsd ?? 0)}`}
+        />
+        <Kpi
+          label="Medios de pago"
+          value={qty(k.uniquePayments ?? data.ops?.kpis.uniquePayments ?? 0)}
+          hint={`${qty(k.uniqueAddresses ?? data.ops?.kpis.uniqueAddresses ?? 0)} direcciones distintas`}
+        />
       </div>
 
       {data.concentration.providers.top1 >= 60 && (
@@ -780,4 +806,183 @@ function Dt({ children }: { children: ReactNode }) {
 
 function Dd({ children }: { children: ReactNode }) {
   return <dd className="text-surface-200 text-right">{children}</dd>;
+}
+
+function EmptyOps({ text }: { text: string }) {
+  return <p className="text-xs text-surface-500 py-6 text-center">{text}</p>;
+}
+
+function EnviosPanel({ data }: { data: PurchaseInsights }) {
+  const ops = data.ops;
+  if (!ops) return <EmptyOps text="El tablero todavía no trajo el detalle de envíos." />;
+  const k = ops.kpis;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi label="Pedidos con envío" value={qty(k.shippingOrders)} hint={`${pct(k.shippingOrders && data.kpis.orders ? (k.shippingOrders / data.kpis.orders) * 100 : 0)} del período`} />
+        <Kpi label="Gastado en flete" value={formatUSD(k.shippingUsd)} hint={k.shippingKnownOrders ? `En ${qty(k.shippingKnownOrders)} pedidos con costo conocido` : "El proveedor no siempre informa el costo"} />
+        <Kpi label="Costo medio de envío" value={formatUSD(k.avgShippingUsd)} hint="Solo pedidos donde se pudo leer o estimar el flete" />
+        <Kpi label="Retiros" value={qty(k.pickupOrders)} hint={`${qty(k.unknownFulfillment)} sin dato de entrega`} />
+        {k.dropShippingOrders > 0 && <Kpi label="Dropshipping" value={qty(k.dropShippingOrders)} hint="Marca blanca / envío al cliente final" />}
+      </div>
+      <div className="grid lg:grid-cols-3 gap-3">
+        <Card title="Cómo salen los pedidos" className="lg:col-span-1">
+          <MixPie
+            data={ops.fulfillmentMix.map((r) => ({ name: r.label, value: r.orders, share: r.share }))}
+            colors={["#f59e0b", "#22d3ee", "#71717a"]}
+          />
+          <ul className="text-[11px] text-surface-400 space-y-1 mt-1">
+            {ops.fulfillmentMix.map((r) => (
+              <li key={r.key} className="flex justify-between">
+                <span>{r.label}</span>
+                <span className="tabular-nums text-surface-200">{r.orders} · {pct(r.share)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+        <Card title="Flete por mes" className="lg:col-span-2" hint="Suma de costos de envío que el pedido trajo guardados (cotización o resto del total).">
+          <ShippingMonthChart data={ops.shippingByMonth} />
+        </Card>
+      </div>
+      <div className="grid lg:grid-cols-2 gap-3">
+        <Card title="Modos de entrega">
+          {ops.byDelivery.length === 0 ? <EmptyOps text="Ningún pedido guardó etiqueta de entrega." /> : (
+            <NamedTable
+              rows={ops.byDelivery}
+              extraHeader="Flete"
+              extra={(r) => formatUSD(r.extraUsd ?? 0)}
+            />
+          )}
+        </Card>
+        <Card title="Flete por distribuidor">
+          {ops.shippingByProvider.every((p) => p.shippingUsd === 0) ? (
+            <EmptyOps text="Ningún distribuidor informó costo de envío en este período." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-surface-500">
+                  <tr className="border-b border-surface-800">
+                    <th className="text-left font-medium py-2">Distribuidor</th>
+                    <th className="text-right font-medium py-2">Pedidos</th>
+                    <th className="text-right font-medium py-2">Flete</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ops.shippingByProvider.map((row) => (
+                    <tr key={row.provider} className="border-b border-surface-800/60">
+                      <td className="py-1.5"><ProviderBadge provider={row.provider} label={row.label} size="sm" /></td>
+                      <td className="py-1.5 text-right tabular-nums">{row.orders}</td>
+                      <td className="py-1.5 text-right tabular-nums text-white">{formatUSD(row.shippingUsd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function PagosPanel({ data }: { data: PurchaseInsights }) {
+  const ops = data.ops;
+  if (!ops) return <EmptyOps text="El tablero todavía no trajo el detalle de pagos." />;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Kpi label="Medios distintos" value={qty(ops.kpis.uniquePayments)} hint="Según la etiqueta que guardó cada checkout" />
+        <Kpi label="IVA / internos" value={formatUSD(ops.kpis.taxesUsd)} hint="Campo impuestos del pedido" />
+        <Kpi label="Percepciones" value={formatUSD(ops.kpis.perceptionsUsd)} hint="IIBB y percepciones informadas" />
+        <Kpi label="Neto de ítems" value={formatUSD(ops.kpis.subtotalUsd)} hint="Subtotal guardado, sin flete" />
+      </div>
+      <div className="grid lg:grid-cols-2 gap-3">
+        <Card title="Formas de pago" hint="Transferencia, cuenta corriente, efectivo, factura al cliente, etc.">
+          {ops.byPayment.length === 0 ? <EmptyOps text="Ningún pedido guardó medio de pago." /> : (
+            <>
+              <RankBarChart data={ops.byPayment.map((r) => ({ label: r.label, spendUsd: r.spendUsd }))} color="#34d399" />
+              <NamedTable rows={ops.byPayment} />
+            </>
+          )}
+        </Card>
+        <Card title="Quién arma los pedidos" hint="Usuario de Nodo que confirmó el checkout en este local.">
+          {ops.byBuyer.length === 0 ? <EmptyOps text="Los pedidos no trajeron autor." /> : <NamedTable rows={ops.byBuyer} />}
+        </Card>
+      </div>
+      <Card title="A qué hora se confirman" hint="Hora de Argentina.">
+        <WeekdayBars data={ops.byHour.filter((h) => h.orders > 0).map((h) => ({ label: h.label, spendUsd: h.spendUsd, orders: h.orders }))} />
+      </Card>
+      {(ops.kpis.customerSaleOrders > 0 || ops.kpis.withNotes > 0) && (
+        <div className="grid grid-cols-2 gap-3">
+          {ops.kpis.customerSaleOrders > 0 && <Kpi label="Factura al cliente" value={qty(ops.kpis.customerSaleOrders)} hint="Grupo Núcleo: venta a nombre del cliente final" />}
+          {ops.kpis.withNotes > 0 && <Kpi label="Con notas" value={qty(ops.kpis.withNotes)} hint="Pedidos que llevaron comentario al vendedor" />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DireccionesPanel({ data }: { data: PurchaseInsights }) {
+  const ops = data.ops;
+  if (!ops) return <EmptyOps text="El tablero todavía no trajo direcciones." />;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <Kpi label="Direcciones usadas" value={qty(ops.kpis.uniqueAddresses)} hint="Calle + localidad que vino en el snapshot del pedido" />
+        <Kpi label="Sucursales / depósitos" value={qty(ops.byWarehouse.length)} hint="Air sucursal, Elit warehouse, retiro NB" />
+        <Kpi label="Pedidos sin dirección" value={qty(Math.max(0, data.kpis.orders - ops.byAddress.reduce((s, r) => s + r.orders, 0)))} hint="Offline u órdenes que no guardaron domicilio" />
+      </div>
+      <Card title="Domicilios más usados" hint="Se arma con el snapshot de cada checkout (Invid, New Bytes, Elit, Air). No cruza otros locales.">
+        {ops.byAddress.length === 0 ? (
+          <EmptyOps text="Todavía no hay domicilios guardados en los pedidos de este período." />
+        ) : (
+          <NamedTable rows={ops.byAddress} extraHeader="Flete" extra={(r) => formatUSD(r.extraUsd ?? 0)} />
+        )}
+      </Card>
+      {ops.byWarehouse.length > 0 && (
+        <Card title="Sucursales y depósitos">
+          <NamedTable rows={ops.byWarehouse} />
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function NamedTable({
+  rows,
+  extraHeader,
+  extra,
+}: {
+  rows: (PurchaseRankRow & { extraUsd?: number })[];
+  extraHeader?: string;
+  extra?: (row: PurchaseRankRow & { extraUsd?: number }) => string;
+}) {
+  return (
+    <div className="overflow-x-auto mt-2">
+      <table className="w-full text-xs">
+        <thead className="text-surface-500">
+          <tr className="border-b border-surface-800">
+            <th className="text-left font-medium py-2">Detalle</th>
+            <th className="text-right font-medium py-2">Share</th>
+            <th className="text-right font-medium py-2">Pedidos</th>
+            <th className="text-right font-medium py-2">Importe</th>
+            {extraHeader && <th className="text-right font-medium py-2">{extraHeader}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key} className="border-b border-surface-800/60">
+              <td className="py-1.5 text-surface-200 pr-3">{row.label}</td>
+              <td className="py-1.5 text-right tabular-nums text-surface-400">{pct(row.share)}</td>
+              <td className="py-1.5 text-right tabular-nums">{row.orders}</td>
+              <td className="py-1.5 text-right tabular-nums text-white">{formatUSD(row.spendUsd)}</td>
+              {extraHeader && extra && (
+                <td className="py-1.5 text-right tabular-nums text-amber-200">{extra(row)}</td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
