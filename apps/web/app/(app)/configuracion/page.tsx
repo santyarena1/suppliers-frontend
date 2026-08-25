@@ -12,7 +12,7 @@ import {
 } from "@/components/admin/SystemConfigPanels";
 import {
   Settings, Palette, DollarSign, Receipt, Check, RefreshCw, Sun, Moon, Sparkles,
-  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle,
+  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle, Percent,
 } from "lucide-react";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
@@ -37,7 +37,7 @@ export default function ConfiguracionPage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const { theme, setTheme } = useTheme();
   const {
-    currency, setCurrency, withIva, setWithIva,
+    currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
     dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
   } = usePrefs();
 
@@ -209,19 +209,44 @@ export default function ConfiguracionPage() {
                     <label className="block text-[10px] font-semibold text-surface-500 uppercase tracking-wider mb-2">
                       Impuestos en precios
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setWithIva(!withIva)}
-                      className="w-full flex items-center justify-between bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-xl px-4 py-3 transition-all"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Receipt className="w-4 h-4 text-surface-400" />
-                        <span className="text-sm text-surface-200">Mostrar precios con impuestos</span>
-                      </div>
-                      <div className={`w-9 h-5 rounded-full relative transition-colors ${withIva ? "bg-brand-600" : "bg-surface-600"}`}>
-                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${withIva ? "left-4" : "left-0.5"}`} />
-                      </div>
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWithIva(!withIva)}
+                        className="w-full flex items-center justify-between bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-xl px-4 py-3 transition-all"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <Receipt className="w-4 h-4 text-surface-400" />
+                          <span className="text-sm text-surface-200">Mostrar precios con impuestos</span>
+                        </div>
+                        <div className={`w-9 h-5 rounded-full relative transition-colors ${withIva ? "bg-brand-600" : "bg-surface-600"}`}>
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${withIva ? "left-4" : "left-0.5"}`} />
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWithIibb(!withIibb)}
+                        className={`w-full flex items-center justify-between border rounded-xl px-4 py-3 transition-all ${
+                          withIva || withIibb
+                            ? "bg-surface-800 hover:bg-surface-700 border-surface-700"
+                            : "bg-surface-900/50 border-surface-800 opacity-70"
+                        }`}
+                        title="Suma IIBB/percepciones al costo de búsqueda cuando el distribuidor las aplica"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Percent className="w-4 h-4 text-surface-400 flex-shrink-0" />
+                          <div className="text-left min-w-0">
+                            <span className="text-sm text-surface-200 block">Incluir IIBB en precios</span>
+                            <span className="text-[11px] text-surface-500 leading-snug block mt-0.5">
+                              Apagado por defecto. Se suma al costo si el proveedor carga percepciones (p. ej. en el carrito).
+                            </span>
+                          </div>
+                        </div>
+                        <div className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ${withIibb ? "bg-brand-600" : "bg-surface-600"}`}>
+                          <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${withIibb ? "left-4" : "left-0.5"}`} />
+                        </div>
+                      </button>
+                    </div>
                   </div>
 
                   {currentRate && (

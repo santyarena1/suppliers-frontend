@@ -6,6 +6,8 @@ import { formatARS, formatUSD } from "@/lib/format";
 import { linePricing, TaxableProduct } from "@/lib/tax";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
+import { displayAmountFromPricing } from "@/lib/display-price";
+import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 
 interface Props {
   product?: TaxableProduct | ProductDTO;
@@ -33,16 +35,23 @@ export default function PriceTag({
   qty = 1,
   priceMode = "list",
 }: Props) {
-  const { currency, convert, withIva } = usePrefs();
-  const policy = usePurchasePolicy(
+  const { currency, convert, withIva, withIibb } = usePrefs();
+  useIibbRatesEpoch();
+  const provider =
     product && typeof product === "object" && "provider" in product
       ? String((product as { provider?: unknown }).provider ?? "")
-      : ""
-  );
+      : "";
+  const policy = usePurchasePolicy(provider);
   const pricing = product
     ? purchaseLinePricing(product, policy, priceMode, qty)
     : { ...linePricing({ price: usdPrice }, qty), missingIva: false, adjusted: false, mode: "list" as const };
-  const displayUsd = withIva ? pricing.gross : pricing.net;
+  const includeIibb = withIibb && pricing.mode !== "offline";
+  const shown = displayAmountFromPricing(
+    pricing,
+    { withIva, withIibb: includeIibb, provider: provider || undefined },
+    qty
+  );
+  const displayUsd = shown.displayUsd;
   const { amount } = convert(displayUsd);
   const primary = currency === "USD" ? formatUSD(amount) : formatARS(amount);
   const secondary = currency === "USD"
@@ -55,6 +64,11 @@ export default function PriceTag({
         <span className={`font-bold text-white tabular-nums ${SIZES[size]}`}>{primary}</span>
         {!withIva && (
           <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">s/imp</span>
+        )}
+        {withIva && includeIibb && shown.iibbIncluded && (
+          <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">
+            +IIBB
+          </span>
         )}
       </div>
       {showSecondary && currency === "ARS" && (

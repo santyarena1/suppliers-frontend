@@ -12,6 +12,9 @@ import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
 import { useIsRetailer, usePurchasePolicies } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
+import { displayAmountFromPricing } from "@/lib/display-price";
+import { usePrefs } from "@/lib/prefs";
+import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
 import { parsePrice, proxyImg } from "@/lib/format";
@@ -55,6 +58,8 @@ function SearchPage() {
   const { providers: myProviders } = useMyProviders();
   const retailer = useIsRetailer();
   const purchasePolicies = usePurchasePolicies();
+  const { withIva, withIibb } = usePrefs();
+  const iibbEpoch = useIibbRatesEpoch();
   const searchable = myProviders.filter((p) => p.linked);
   const anyOffline = searchable.some((p) => purchasePolicies[p.provider]?.acceptsOffline);
   const [showOfflinePrices, setShowOfflinePrices] = useState(false);
@@ -208,8 +213,17 @@ function SearchPage() {
 
   // Apply in-results filters + sort
   const filtered = useMemo(() => {
-    const sortPrice = (p: ProductDTO) =>
-      purchaseLinePricing(p, purchasePolicies[p.provider], priceMode).unitNet;
+    const sortPrice = (p: ProductDTO) => {
+      const pricing = purchaseLinePricing(p, purchasePolicies[p.provider], priceMode);
+      return displayAmountFromPricing(
+        pricing,
+        {
+          withIva,
+          withIibb: withIibb && pricing.mode !== "offline",
+          provider: p.provider,
+        }
+      ).unitDisplayUsd;
+    };
     let arr = results;
     if (refineText.trim()) {
       const q = refineText.toLowerCase();
@@ -228,7 +242,10 @@ function SearchPage() {
     if (sortBy === "price_desc") arr = [...arr].sort((a, b) => sortPrice(b) - sortPrice(a));
     if (sortBy === "name_asc") arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     return arr;
-  }, [results, refineText, hideNoImage, minPrice, maxPrice, sortBy, priceMode, purchasePolicies]);
+  }, [
+    results, refineText, hideNoImage, minPrice, maxPrice, sortBy, priceMode,
+    purchasePolicies, withIva, withIibb, iibbEpoch,
+  ]);
 
   const providerCounts = useMemo(() => {
     const c: Record<string, number> = {};

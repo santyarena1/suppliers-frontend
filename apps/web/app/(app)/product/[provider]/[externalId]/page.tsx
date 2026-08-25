@@ -18,6 +18,8 @@ import {
   extractTaxLines,
   formatAlicuota,
 } from "@/lib/tax";
+import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
+import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import {
   ArrowLeft,
   Package,
@@ -41,7 +43,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const { provider, externalId } = use(params);
   const router = useRouter();
   const { find, query } = useResults();
-  const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
+  const { currency, withIva, withIibb, convert, currentRate, dollarLabel, dollarType } = usePrefs();
+  useIibbRatesEpoch();
 
   const dec = (s: string) => decodeURIComponent(s);
   const providerName = dec(provider);
@@ -117,11 +120,30 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
 
   const pricing = product ? linePricing(product, qty) : null;
   const taxLines = product ? extractTaxLines(product) : [];
-  const displayUSD = pricing ? (withIva ? pricing.gross : pricing.net) : 0;
-  const unitDisplayUsd = pricing ? (withIva ? pricing.unitGross : pricing.unitNet) : 0;
+  const shown = pricing
+    ? displayAmountFromPricing(
+        pricing,
+        { withIva, withIibb, provider: providerName },
+        qty
+      )
+    : null;
+  const displayUSD = shown?.displayUsd ?? 0;
+  const unitDisplayUsd = shown?.unitDisplayUsd ?? 0;
   const conv = useMemo(() => convert(displayUSD), [convert, displayUSD]);
   const unitConv = useMemo(() => convert(unitDisplayUsd), [convert, unitDisplayUsd]);
   const unitNetConv = useMemo(() => convert(pricing?.unitNet ?? 0), [convert, pricing?.unitNet]);
+  const estimatedIibbLine =
+    shown?.estimatedIibb && shown.iibbUnitUsd > 0.0001
+      ? {
+          label: "IIBB (est.)",
+          percent: shown.iibbPercent,
+          unitAmount: shown.iibbUnitUsd,
+        }
+      : null;
+  const visibleTaxLines = withIibb
+    ? taxLines
+    : taxLines.filter((l) => l.kind !== "iibb");
+  const knownIibbPct = getIibbRatePercent(providerName);
 
 
   function copyId() {
@@ -256,7 +278,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   <div className="rounded-2xl border border-surface-800 bg-surface-900/80 overflow-hidden">
                     <div className="px-5 pt-5 pb-4 border-b border-surface-800">
                       <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">
-                        {withIva ? "Precio con impuestos" : "Precio sin impuestos"}
+                        {displayTaxTitle({ withIva, withIibb, provider: providerName })}
                         {qty > 1 ? ` · ${qty} u.` : ""}
                       </p>
                       <div className="flex items-baseline gap-2 flex-wrap">
@@ -306,7 +328,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         value={formatARS(unitNetConv.amount)}
                       />
 
-                      {taxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
+                      {visibleTaxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
                         <BreakdownRow
                           key={`${line.kind}-${line.label}`}
                           label={`${line.label}${line.percent != null ? ` ${formatAlicuota(line.percent)}` : ""}`}
@@ -314,27 +336,46 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           muted
                         />
                       ))}
-                      {taxLines.every((l) => l.unitAmount <= 0.0001) && pricing.tax > 0 && (
+                      {estimatedIibbLine && (
+                        <BreakdownRow
+                          label={`${estimatedIibbLine.label}${estimatedIibbLine.percent != null ? ` ${formatAlicuota(estimatedIibbLine.percent)}` : ""}`}
+                          value={`+ ${money(estimatedIibbLine.unitAmount)}`}
+                          muted
+                        />
+                      )}
+                      {withIibb &&
+                        !estimatedIibbLine &&
+                        !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) &&
+                        knownIibbPct == null && (
+                          <p className="text-[10px] text-surface-600 leading-snug">
+                            IIBB no disponible para este distribuidor hasta cotizar en el carrito.
+                          </p>
+                        )}
+                      {visibleTaxLines.every((l) => l.unitAmount <= 0.0001) &&
+                        !estimatedIibbLine &&
+                        pricing.tax > 0 &&
+                        withIva && (
                         <BreakdownRow label={taxLabel(product)} value={`+ ${money(pricing.tax / qty)}`} muted />
                       )}
 
                       <div className="border-t border-surface-800 pt-2.5 mt-1">
                         <BreakdownRow
                           label="Costo unitario final"
-                          value={money(pricing.unitGross)}
+                          value={money(unitDisplayUsd)}
                           strong
                         />
                         {qty > 1 && (
                           <BreakdownRow
                             label={`Total × ${qty}`}
-                            value={money(pricing.gross)}
+                            value={money(displayUSD)}
                             strong
                           />
                         )}
                       </div>
                       <p className="text-[10px] text-surface-600 leading-relaxed pt-1">
-                        El desglose usa tu cotización y preferencias de impuestos. El margen vs locales
-                        se calcula sobre el costo sin impuestos.
+                        El desglose usa tu cotización y preferencias de impuestos
+                        {withIibb ? " (incluye IIBB si se conoce)" : " (sin IIBB)"}
+                        . El margen vs locales se calcula sobre el costo sin impuestos.
                       </p>
                     </div>
 
