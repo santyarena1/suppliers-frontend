@@ -58,7 +58,7 @@ export default function SearchLanding({ onCategoryClick }: SearchLandingProps) {
           <div className="flex items-center gap-2 mb-4">
             <Sparkles className="w-4 h-4 text-brand-600" />
             <h2 className="text-base font-bold text-white">Destacados del catálogo</h2>
-            <span className="text-xs text-surface-500">Precios de proveedores sincronizados</span>
+            <span className="text-xs text-surface-500">Varios proveedores · incluye bajadas de precio</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
             {featured.map((product, i) => (
@@ -71,11 +71,11 @@ export default function SearchLanding({ onCategoryClick }: SearchLandingProps) {
         </section>
       )}
 
-      {categories.length === 0 && featured.length === 0 && banners.filter((b) => b.active !== false && b.imageUrl).length === 0 && (
+      {categories.length === 0 && featured.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 gap-2 text-center rounded-2xl border border-dashed border-surface-700 bg-surface-900/30 px-6">
           <p className="text-sm font-medium text-surface-300">Buscador mayorista NODO</p>
           <p className="text-xs text-surface-500 max-w-md">
-            Los espacios de arriba se van llenando a medida que el admin carga banners. Cada uno queda en su posición.
+            Los banners de arriba son de demo hasta que cargues los tuyos en Configuración. Consultá precios desde la barra de búsqueda.
           </p>
         </div>
       )}

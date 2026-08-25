@@ -6,7 +6,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import { ordersApi, type TenantOrder } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
 import { providerOrdersHref } from "@/lib/providerOrders";
-import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
+import ProviderBadge from "@/components/ProviderBadge";
 import { CheckCircle2, Clock, Loader2, XCircle } from "lucide-react";
 
 /**
@@ -155,9 +155,12 @@ function OrderCard({
     <div className="bg-surface-900 border border-surface-800 rounded-xl p-4 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <span className={`text-sm font-bold ${PROVIDER_TEXT_COLOR[order.provider] || "text-surface-200"}`}>
-            {order.providerName}
-          </span>
+          <ProviderBadge
+            provider={order.provider}
+            label={order.providerName}
+            variant="inline"
+            size="md"
+          />
           <p className="text-xs text-surface-500 mt-0.5">
             {lineas} línea{lineas === 1 ? "" : "s"}
             {order.total != null && ` · ${order.total.toLocaleString("es-AR", { style: "currency", currency: "USD" })}`}

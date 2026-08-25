@@ -11,7 +11,7 @@ import { useMyProviders } from "@/lib/myProviders";
 import { usePrefs } from "@/lib/prefs";
 import { useCart } from "@/lib/cart";
 import { getRecentSearches, getTopSearches, SearchEntry, trackSearch } from "@/lib/history";
-import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
+import ProviderBadge from "@/components/ProviderBadge";
 import {
   Search, TrendingUp, Clock, ArrowRight, ShoppingCart, Key,
   Sparkles, Zap, Cpu, Monitor, HardDrive, Smartphone, Gamepad2,
@@ -278,10 +278,14 @@ export default function HomePage() {
                             configured ? "border-surface-700 hover:border-brand-500" : "border-surface-800 hover:border-surface-600 opacity-70"
                           }`}
                         >
-                          <span className={`text-[11px] font-bold leading-tight block ${PROVIDER_TEXT_COLOR[p] || "text-surface-400"}`}>
-                            {name}
-                          </span>
-                          <span className={`text-[9px] mt-1 flex items-center gap-1 ${configured ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}`}>
+                          <ProviderBadge
+                            provider={p}
+                            label={name}
+                            variant="stacked"
+                            size="sm"
+                            className="items-start text-left w-full"
+                          />
+                          <span className={`text-[9px] mt-1.5 flex items-center gap-1 ${configured ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${configured ? "bg-emerald-500 dark:bg-emerald-400" : "bg-surface-700"}`} />
                             {configured ? "Configurado" : "Sin credencial"}
                           </span>

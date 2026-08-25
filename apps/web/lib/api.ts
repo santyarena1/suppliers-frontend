@@ -176,6 +176,10 @@ export interface ProductDTO {
   volume?: string | number | null;
   tags?: string | null;
   syncedAt?: string;
+  /** Presente en destacados cuando el precio del distribuidor bajó vs la sync anterior. */
+  previousPrice?: number | null;
+  previousFinalPrice?: number | null;
+  priceDropPercent?: number | null;
 }
 
 export interface CredentialResponse {

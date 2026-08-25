@@ -7,39 +7,18 @@ import Link from "next/link";
 import { useState } from "react";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
-import { useProviderDisplay } from "@/lib/providerDisplay";
 import { linePricing, taxLabel } from "@/lib/tax";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
-
-const PROVIDER_HUE: Record<string, string> = {
-  NEW_BYTES:    "text-sky-400   bg-sky-400/10",
-  ELIT:         "text-purple-400 bg-purple-400/10",
-  GRUPO_NUCLEO: "text-emerald-400 bg-emerald-400/10",
-  AIR:          "text-cyan-400  bg-cyan-400/10",
-  NEW_TREE:     "text-teal-400  bg-teal-400/10",
-  INVID:        "text-orange-400 bg-orange-400/10",
-  GC:           "text-red-400   bg-red-400/10",
-  POLYTECH:     "text-pink-400  bg-pink-400/10",
-  ASHIR:        "text-indigo-400 bg-indigo-400/10",
-  HDC:          "text-yellow-400 bg-yellow-400/10",
-  SOLUTION_BOX: "text-lime-400  bg-lime-400/10",
-  DISTECNA:     "text-violet-400 bg-violet-400/10",
-  CEVEN:        "text-rose-400  bg-rose-400/10",
-  DIAPSTORE:    "text-blue-400  bg-blue-400/10",
-};
+import ProviderBadge from "./ProviderBadge";
 
 export default function ProductCard({ product, priceMode = "list" }: { product: ProductDTO; priceMode?: PriceMode }) {
   const [imgErr, setImgErr] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
   const { currency, withIva, convert } = usePrefs();
-  const display = useProviderDisplay();
   const policy = usePurchasePolicy(product.provider);
-  const color = PROVIDER_HUE[product.provider] || "text-surface-400 bg-surface-400/10";
-  const logoUrl = display.logoUrl(product.provider);
-  const customColor = display.textColor(product.provider);
   const href = `/product/${encodeURIComponent(product.provider)}/${encodeURIComponent(product.externalId)}`;
 
   const pricing = purchaseLinePricing(product, policy, priceMode);
@@ -76,15 +55,21 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
             </div>
           )}
 
-          <span className="absolute top-2 left-2 flex items-center gap-1.5 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md tracking-wide bg-black/70 text-white border border-white/10">
-            {logoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="" className="w-3.5 h-3.5 object-contain rounded-sm" />
-            )}
-            <span className={customColor ? undefined : color.split(" ")[0]} style={customColor ? { color: customColor } : undefined}>
-              {product.provider.replace(/_/g, " ")}
-            </span>
+          <span className="absolute top-2 left-2 shadow-md backdrop-blur-md rounded-md bg-black/75 border border-white/10 px-1.5 py-1 max-w-[70%]">
+            <ProviderBadge
+              provider={product.provider}
+              variant="inline"
+              size="sm"
+              className="!gap-1.5"
+              nameClassName="text-white truncate"
+            />
           </span>
+
+          {product.priceDropPercent != null && product.priceDropPercent > 0 && (
+            <span className="absolute bottom-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md bg-emerald-600 text-white border border-emerald-400/40">
+              −{product.priceDropPercent % 1 === 0 ? product.priceDropPercent : product.priceDropPercent.toFixed(1)}%
+            </span>
+          )}
 
           <span className={`absolute top-2 right-2 text-[10px] font-bold px-2 py-1 rounded-md shadow-md backdrop-blur-md ${
             showingOffline
@@ -116,8 +101,15 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
 
         <div className="flex items-end justify-between gap-2 mt-auto pt-2.5 border-t product-card-divider">
           <div className="flex flex-col min-w-0">
-            <div className="flex items-baseline gap-1.5">
+            <div className="flex items-baseline gap-1.5 flex-wrap">
               <span className="product-card-price text-lg font-bold tabular-nums leading-none">{primary}</span>
+              {product.priceDropPercent != null && product.priceDropPercent > 0 && (product.previousFinalPrice ?? product.previousPrice) != null && (
+                <span className="text-[11px] text-surface-500 line-through tabular-nums">
+                  {currency === "USD"
+                    ? formatUSD(Number(product.previousFinalPrice ?? product.previousPrice) || 0)
+                    : formatARS(convert(Number(product.previousFinalPrice ?? product.previousPrice) || 0).amount)}
+                </span>
+              )}
             </div>
             {secondary && (
               <span className="product-card-meta text-[11px] tabular-nums mt-1">{secondary}</span>

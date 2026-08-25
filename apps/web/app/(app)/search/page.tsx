@@ -15,7 +15,7 @@ import { purchaseLinePricing } from "@/lib/purchase-price";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
 import { parsePrice, proxyImg } from "@/lib/format";
-import { PROVIDER_TEXT_COLOR as PROVIDER_COLOR } from "@/lib/providerColors";
+import ProviderBadge from "@/components/ProviderBadge";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -469,14 +469,18 @@ function SearchPage() {
                     <button
                       key={provider}
                       onClick={() => toggleProvider(provider)}
-                      className={`text-[11px] font-medium px-2 py-1 rounded border transition-all ${
+                      className={`rounded border transition-all px-1.5 py-1 ${
                         selectedProviders.has(provider)
-                          ? `${PROVIDER_COLOR[provider]} bg-current/10 border-current/30`
-                          : "text-surface-600 bg-transparent border-surface-800 hover:border-surface-600 hover:text-surface-400"
+                          ? "border-brand-500/50 bg-brand-600/10"
+                          : "border-surface-800 bg-transparent hover:border-surface-600 opacity-70 hover:opacity-100"
                       }`}
-                      style={selectedProviders.has(provider) ? { borderColor: "currentColor" } : {}}
                     >
-                      {name}
+                      <ProviderBadge
+                        provider={provider}
+                        label={name}
+                        variant="inline"
+                        size="sm"
+                      />
                     </button>
                   ))}
                 </div>
@@ -643,9 +647,7 @@ function SearchPage() {
                           className="w-full flex items-center gap-2 mb-3 group"
                         >
                           {collapsed ? <ChevronRight className="w-4 h-4 text-surface-500" /> : <ChevronDown className="w-4 h-4 text-surface-500" />}
-                          <h3 className={`text-sm font-bold ${PROVIDER_COLOR[prov] || "text-surface-300"}`}>
-                            {prov.replace(/_/g, " ")}
-                          </h3>
+                          <ProviderBadge provider={prov} variant="inline" size="md" />
                           <span className="text-xs text-surface-500">{items.length}</span>
                           <div className="flex-1 border-b border-surface-800 ml-2" />
                         </button>
@@ -693,9 +695,9 @@ function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: "list"
             <p className="text-sm text-surface-100 font-medium truncate">{p.name}</p>
             {p.externalId && <p className="text-[11px] text-surface-500 font-mono">#{p.externalId}</p>}
           </div>
-          <span className={`text-xs font-semibold w-28 text-right ${PROVIDER_COLOR[p.provider] || "text-surface-400"}`}>
-            {p.provider.replace(/_/g, " ")}
-          </span>
+          <div className="w-28 text-right flex justify-end">
+            <ProviderBadge provider={p.provider} variant="inline" size="sm" />
+          </div>
           <div className="w-28 text-right">
             <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
           </div>

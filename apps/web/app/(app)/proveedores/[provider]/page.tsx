@@ -13,8 +13,8 @@ import {
 import { getTenant, isAdmin } from "@/lib/auth";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { parsePrice, proxyImg } from "@/lib/format";
-import { PROVIDER_TEXT_COLOR } from "@/lib/providerColors";
 import { SKU_PREFIX } from "@/lib/providerMeta";
+import ProviderBadge from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
 import NewBytesAccountPanel from "@/components/NewBytesAccountPanel";
@@ -321,9 +321,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 <ArrowLeft className="w-4 h-4" />
               </Link>
               <div className="min-w-0">
-                <h1 className={`text-base font-bold truncate ${PROVIDER_TEXT_COLOR[provider] || "text-white"}`}>
-                  {provider.replace(/_/g, " ")}
-                </h1>
+                <ProviderBadge provider={provider} variant="inline" size="lg" className="mb-0.5" />
                 <p className="text-xs text-surface-500 hidden sm:block">
                   {implemented ? "Cargá tu cuenta, sincronizá el catálogo y mirá pedidos" : "Sin integración real todavía"}
                 </p>
