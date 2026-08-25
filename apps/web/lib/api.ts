@@ -1446,7 +1446,13 @@ export const TENANT_ROLES_INVITABLE_DISTRIBUTOR: TenantRole[] = [
   "VIEWER",
 ];
 export const TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS: TenantRole[] = ["OWNER", "ADMIN", "PRODUCT_MANAGER"];
-export const TENANT_ROLES_CAN_SEE_PORTFOLIO: TenantRole[] = ["OWNER", "ADMIN", "SELLER", "VIEWER"];
+export const TENANT_ROLES_CAN_SEE_PORTFOLIO: TenantRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SELLER",
+  "PRODUCT_MANAGER",
+  "VIEWER",
+];
 
 /** Roles que pueden vaciar el catálogo de la organización. */
 export const TENANT_ROLES_CAN_PURGE_CATALOG: TenantRole[] = ["OWNER", "ADMIN"];

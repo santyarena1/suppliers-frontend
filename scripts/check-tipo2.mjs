@@ -188,10 +188,22 @@ async function main() {
     : null;
   check("El Product Manager entra", Boolean(tokenPm));
 
-  const pmCartera = await call("GET", "/my/clients", tokenPm);
-  check("El Product Manager no entra a la cartera",
-    pmCartera.status === 403,
-    `HTTP ${pmCartera.status}`);
+  const pmCartera = dataOf(await call("GET", "/my/clients", tokenPm));
+  const pmClientes = pmCartera?.clients ?? [];
+  check("El Product Manager ve todos los clientes",
+    pmClientes.length === 2,
+    `vio ${pmClientes.length}`);
+  check("El Product Manager ve qué vendedor tiene cada local",
+    pmClientes.some((c) => c.accountManager?.id === (vendedor.userId ?? vendedor.user?.id))
+      && pmClientes.some((c) => !c.accountManager),
+    pmClientes.map((c) => c.accountManager?.username ?? "sin vendedor").join(", "));
+
+  const pmEdita = await call("PUT", `/my/clients/${pmClientes[0]?.linkId}`, tokenPm, {
+    discountPercent: 3,
+  });
+  check("El Product Manager no edita la cuenta del local",
+    pmEdita.status === 403,
+    `HTTP ${pmEdita.status}`);
 
   const pmChat = await call("GET", "/my/chats", tokenPm);
   check("El Product Manager no entra al chat",
@@ -251,11 +263,6 @@ async function main() {
   check("El Product Manager ve los locales para asignar descuentos",
     Array.isArray(localesPm) && localesPm.length === 2,
     `${Array.isArray(localesPm) ? localesPm.length : "?"} locales`);
-
-  const carteraSigueCerrada = await call("GET", "/my/clients", tokenPm);
-  check("Ver locales para descuentos no abre la cartera",
-    carteraSigueCerrada.status === 403,
-    `HTTP ${carteraSigueCerrada.status}`);
 
   const descuentoVacio = await call("PUT", "/my/brand-discounts", tokenPm, {
     brandName: "GIGABYTE",

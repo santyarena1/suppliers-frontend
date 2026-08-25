@@ -49,7 +49,7 @@ export class PortfolioService {
     return {
       providerName: tenant.tenantName,
       canAssignSeller: this.isManager(tenant),
-      canEditDiscount: tenant.tenantRole !== "VIEWER",
+      canEditDiscount: this.canEditLink(tenant),
       sellers,
       clients: links.map((link) =>
         this.serializeClient(link, summaries.get(link.clientTenantId), lastMessages.get(link.id), tenant)
@@ -70,7 +70,7 @@ export class PortfolioService {
     return {
       ...this.serializeClient(link, summary.get(link.clientTenantId), lastMessage.get(link.id), tenant),
       canAssignSeller: this.isManager(tenant),
-      canEditDiscount: tenant.tenantRole !== "VIEWER",
+      canEditDiscount: this.canEditLink(tenant),
       sellers,
       orders,
     };
@@ -78,7 +78,7 @@ export class PortfolioService {
 
   async updateClient(tenant: TenantContext, userId: string, linkId: string, dto: UpdateClientLinkDto) {
     this.assertCanSeePortfolio(tenant);
-    if (tenant.tenantRole === "VIEWER") {
+    if (!this.canEditLink(tenant)) {
       throw new ForbiddenException(`Tu rol en ${tenant.tenantName} es de solo lectura`);
     }
     const link = await this.requireLink(tenant, userId, linkId);
@@ -199,10 +199,11 @@ export class PortfolioService {
 
   private assertCanSeePortfolio(tenant: TenantContext) {
     assertTenantType(tenant, ["DISTRIBUTOR"]);
-    if (tenant.tenantRole === "PRODUCT_MANAGER") {
-      throw new ForbiddenException("El Product Manager no entra a la cartera");
-    }
     assertTenantRole(tenant, TENANT_ROLES_CAN_SEE_PORTFOLIO);
+  }
+
+  private canEditLink(tenant: TenantContext) {
+    return tenant.tenantRole !== "VIEWER" && tenant.tenantRole !== "PRODUCT_MANAGER";
   }
 
   private isManager(tenant: TenantContext) {

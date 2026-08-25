@@ -11,7 +11,8 @@ import type { UserRole } from "@/lib/auth";
  *
  * Inicio / Búsqueda / Carrito van sueltos (acceso diario) para el comercio.
  * El distribuidor busca **su** catálogo (sin carrito ni otras integraciones)
- * y administra cartera, códigos, pedidos de clientes y chat.
+ * y administra cartera, códigos, pedidos de clientes y chat. El Product
+ * Manager también ve la cartera completa (quién vende a cada local).
  *
  * Visibilidad:
  *  - `module` — permiso de plataforma (`GET /me/permissions`).
@@ -125,7 +126,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     label: "Clientes",
     icon: Briefcase,
     tenantTypes: ["DISTRIBUTOR"],
-    tenantRoles: ["OWNER", "ADMIN", "SELLER", "VIEWER"],
+    tenantRoles: ["OWNER", "ADMIN", "SELLER", "PRODUCT_MANAGER", "VIEWER"],
     section: "portfolio",
   },
   {

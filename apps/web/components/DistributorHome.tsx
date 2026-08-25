@@ -14,12 +14,22 @@ export default function DistributorHome() {
 }
 
 function ProductManagerHome() {
+  const [clients, setClients] = useState<PortfolioClient[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void portfolioApi.clients()
+      .then((res) => setClients(res.data.clients ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div>
           <h1 className="text-base font-semibold text-white">Inicio</h1>
-          <p className="text-xs text-surface-500">Tus marcas dentro de este catálogo</p>
+          <p className="text-xs text-surface-500">Marcas, descuentos y cartera de todos los vendedores</p>
         </div>
         <PrefsPanel />
       </header>
@@ -35,6 +45,21 @@ function ProductManagerHome() {
               <p className="text-xs text-surface-500">Solo el catálogo de este distribuidor, sin carrito ni otras integraciones.</p>
             </div>
           </Link>
+          <Link
+            href="/cartera"
+            className="flex items-center gap-3 bg-surface-900 border border-surface-800 hover:border-brand-500/40 rounded-2xl px-4 py-3 transition-colors"
+          >
+            <Briefcase className="w-5 h-5 text-brand-400" />
+            <div>
+              <p className="text-sm font-medium text-white">Clientes</p>
+              <p className="text-xs text-surface-500">Todos los comercios y qué vendedor tiene cada uno. Solo lectura.</p>
+            </div>
+          </Link>
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>
+          ) : (
+            <RecentClients clients={clients} />
+          )}
           <BrandDiscountsPanel />
         </div>
       </div>
@@ -121,24 +146,40 @@ function HomeCard({ href, icon: Icon, label, value }: { href: string; icon: type
 function RecentClients({ clients }: { clients: PortfolioClient[] }) {
   if (clients.length === 0) {
     return (
-      <p className="text-sm text-surface-400">Todavía no hay comercios vinculados. Generá un código y pasáselo al local.</p>
+      <p className="text-sm text-surface-400">Todavía no hay comercios vinculados.</p>
     );
   }
+  const groups = new Map<string, { label: string; clients: PortfolioClient[] }>();
+  for (const client of clients) {
+    const key = client.accountManager?.id ?? "sin-vendedor";
+    const label = client.accountManager
+      ? `Vendedor: ${client.accountManager.username}`
+      : "Sin vendedor asignado";
+    const group = groups.get(key) ?? { label, clients: [] };
+    group.clients.push(client);
+    groups.set(key, group);
+  }
+  const ordered = [...groups.entries()].sort((a, b) => {
+    if (a[0] === "sin-vendedor") return 1;
+    if (b[0] === "sin-vendedor") return -1;
+    return a[1].label.localeCompare(b[1].label, "es");
+  });
   return (
     <section>
       <h2 className="text-sm font-semibold text-white mb-3">Clientes</h2>
-      <div className="border border-surface-800 rounded-2xl divide-y divide-surface-800 overflow-hidden">
-        {clients.map((client) => (
-          <Link key={client.linkId} href={`/cartera/${client.linkId}`} className="flex items-center justify-between px-4 py-3 hover:bg-surface-800/60">
-            <div>
-              <p className="text-sm text-white">{client.commerce.name}</p>
-              <p className="text-[11px] text-surface-500">
-                {client.accountManager ? `Vendedor: ${client.accountManager.username}` : "Sin vendedor asignado"}
-                {client.discountPercent != null ? ` · ${client.discountPercent}%` : ""}
-              </p>
+      <div className="flex flex-col gap-4">
+        {ordered.map(([key, group]) => (
+          <div key={key}>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-500 mb-1.5">{group.label}</p>
+            <div className="border border-surface-800 rounded-2xl divide-y divide-surface-800 overflow-hidden">
+              {group.clients.map((client) => (
+                <Link key={client.linkId} href={`/cartera/${client.linkId}`} className="flex items-center justify-between px-4 py-3 hover:bg-surface-800/60">
+                  <p className="text-sm text-white">{client.commerce.name}</p>
+                  <span className="text-xs text-surface-500">{client.orderSummary.total} pedidos</span>
+                </Link>
+              ))}
             </div>
-            <span className="text-xs text-surface-500">{client.orderSummary.total} pedidos</span>
-          </Link>
+          </div>
         ))}
       </div>
     </section>

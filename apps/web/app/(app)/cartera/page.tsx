@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
-import { portfolioApi, type PortfolioSummary } from "@/lib/api";
+import { portfolioApi, type PortfolioClient, type PortfolioSummary } from "@/lib/api";
 import { Briefcase, Loader2 } from "lucide-react";
 
 export default function CarteraPage() {
@@ -22,6 +22,7 @@ export default function CarteraPage() {
   }, []);
 
   const clients = data?.clients ?? [];
+  const groups = useMemo(() => groupBySeller(clients), [clients]);
 
   return (
     <>
@@ -47,27 +48,34 @@ export default function CarteraPage() {
               <p className="text-xs text-surface-500 mt-1">Cuando un comercio canjee tu código, aparece acá.</p>
             </div>
           ) : (
-            <div className="border border-surface-800 rounded-2xl divide-y divide-surface-800 overflow-hidden">
-              {clients.map((client) => (
-                <Link
-                  key={client.linkId}
-                  href={`/cartera/${client.linkId}`}
-                  className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-surface-800/60"
-                >
-                  <div className="flex-1 min-w-[160px]">
-                    <p className="text-sm font-medium text-white">{client.commerce.name}</p>
-                    <p className="text-[11px] text-surface-500">
-                      {client.commerce.contactEmail || client.commerce.contactPhone || "Sin contacto cargado"}
-                    </p>
+            <div className="flex flex-col gap-5">
+              {groups.map((group) => (
+                <section key={group.key}>
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-surface-500 mb-2">
+                    {group.label}
+                    <span className="font-normal normal-case tracking-normal ml-2">{group.clients.length}</span>
+                  </h2>
+                  <div className="border border-surface-800 rounded-2xl divide-y divide-surface-800 overflow-hidden">
+                    {group.clients.map((client) => (
+                      <Link
+                        key={client.linkId}
+                        href={`/cartera/${client.linkId}`}
+                        className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-surface-800/60"
+                      >
+                        <div className="flex-1 min-w-[160px]">
+                          <p className="text-sm font-medium text-white">{client.commerce.name}</p>
+                          <p className="text-[11px] text-surface-500">
+                            {client.commerce.contactEmail || client.commerce.contactPhone || "Sin contacto cargado"}
+                          </p>
+                        </div>
+                        <p className="text-xs text-surface-400">
+                          {client.discountPercent != null ? `${client.discountPercent}%` : "Sin descuento de cuenta"}
+                        </p>
+                        <p className="text-xs text-surface-500">{client.orderSummary.total} pedidos</p>
+                      </Link>
+                    ))}
                   </div>
-                  <p className="text-xs text-surface-400">
-                    {client.accountManager ? client.accountManager.username : "Sin vendedor"}
-                  </p>
-                  <p className="text-xs text-surface-400">
-                    {client.discountPercent != null ? `${client.discountPercent}%` : "Sin descuento"}
-                  </p>
-                  <p className="text-xs text-surface-500">{client.orderSummary.total} pedidos</p>
-                </Link>
+                </section>
               ))}
             </div>
           )}
@@ -75,4 +83,22 @@ export default function CarteraPage() {
       </div>
     </>
   );
+}
+
+function groupBySeller(clients: PortfolioClient[]) {
+  const map = new Map<string, { key: string; label: string; clients: PortfolioClient[] }>();
+  for (const client of clients) {
+    const key = client.accountManager?.id ?? "sin-vendedor";
+    const label = client.accountManager
+      ? `Vendedor: ${client.accountManager.username}`
+      : "Sin vendedor asignado";
+    const group = map.get(key) ?? { key, label, clients: [] };
+    group.clients.push(client);
+    map.set(key, group);
+  }
+  return [...map.values()].sort((a, b) => {
+    if (a.key === "sin-vendedor") return 1;
+    if (b.key === "sin-vendedor") return -1;
+    return a.label.localeCompare(b.label, "es");
+  });
 }

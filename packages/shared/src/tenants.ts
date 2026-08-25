@@ -96,11 +96,12 @@ export const TENANT_ROLES_CAN_MANAGE_BRAND_DISCOUNTS: readonly TenantRole[] = [
   "PRODUCT_MANAGER",
 ];
 
-/** Cartera, pedidos de clientes y chat del mayorista. El PM no entra. */
+/** Cartera y pedidos de clientes del mayorista. El vendedor solo ve los suyos. */
 export const TENANT_ROLES_CAN_SEE_PORTFOLIO: readonly TenantRole[] = [
   "OWNER",
   "ADMIN",
   "SELLER",
+  "PRODUCT_MANAGER",
   "VIEWER",
 ];
 

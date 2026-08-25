@@ -97,11 +97,11 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 ### [FEATURE] Cartera del distribuidor
 - **Método**: GET | PUT
 - **Ruta**: `/my/clients`, `/my/clients/:linkId`, `/my/client-orders`, `/my/clients/:linkId/orders`
-- **Auth**: Bearer con organización `DISTRIBUTOR` · vendedor, solo sus clientes
+- **Auth**: Bearer con organización `DISTRIBUTOR` · vendedor, solo sus clientes · Product Manager, todos en solo lectura
 - **Body / Params**: `{ accountManagerId?, discountPercent?, notes? }`
 - **Respuesta esperada**: lista con `{ linkId, commerce, accountManager, discountPercent, orderSummary }` · pedidos `{ commerceName, status, approvalStatus, itemsCount, createdAt }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: NODO para el mayorista es cartera y su catálogo, no para comprarle a otras integraciones. El descuento de cuenta se aplica al precio que lee el comercio; el local no ve el porcentaje. Product Manager recibe 403. Ver `docs/PLAN_TIPO2.md`.
+- **Notas**: NODO para el mayorista es cartera y su catálogo, no para comprarle a otras integraciones. El descuento de cuenta se aplica al precio que lee el comercio; el local no ve el porcentaje. El Product Manager ve todos los clientes y el vendedor de cada uno; no edita ni entra al chat. Ver `docs/PLAN_TIPO2.md`.
 
 ### [FEATURE] Códigos de vinculación del mayorista
 - **Método**: GET | POST | DELETE
@@ -146,7 +146,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: invitar `{ username, email, role, title? }` · marcas `{ brandNames }` · descuento `{ brandName, discountPercent, appliesToAll?, clientTenantIds? }`
 - **Respuesta esperada**: equipo con `managedBrands` · descuentos `{ brandName, discountPercent, appliesToAll, clients: [{ id, name }] }` · locales `{ id, name }[]`
 - **Estado**: IMPLEMENTADO
-- **Notas**: `appliesToAll: true` es la lista general. `false` exige al menos un comercio vinculado. El Product Manager ve los nombres para asignar; no entra a la cartera. El comercio no ve el porcentaje. Fórmula: `crudo * (1 - cuenta/100) * (1 - marca/100) * (1 + markup/100)`.
+- **Notas**: `appliesToAll: true` es la lista general. `false` exige al menos un comercio vinculado. El Product Manager ve la cartera completa (quién vende a cada local) para asignar descuentos; no edita vendedor ni descuento de cuenta. El comercio no ve el porcentaje. Fórmula: `crudo * (1 - cuenta/100) * (1 - marca/100) * (1 + markup/100)`.
 
 ## Pendiente (futuro)
 

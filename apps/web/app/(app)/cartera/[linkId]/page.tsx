@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import PrefsPanel from "@/components/PrefsPanel";
 import ChatThread from "@/components/ChatThread";
 import { portfolioApi, type ClientDetail, type PortfolioSeller } from "@/lib/api";
+import { isProductManager } from "@/lib/distributor";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
 export default function ClientePage() {
@@ -137,7 +138,9 @@ export default function ClientePage() {
                 )}
               </section>
 
-              <ChatThread linkId={linkId} otherName={data.commerce.name} />
+              {!isProductManager() && (
+                <ChatThread linkId={linkId} otherName={data.commerce.name} />
+              )}
             </>
           )}
         </div>

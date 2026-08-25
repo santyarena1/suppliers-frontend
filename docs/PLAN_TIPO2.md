@@ -23,14 +23,15 @@ Nunca slugs. Nunca “Dueño”. Nunca la clave del proveedor.
 | `OWNER` | Gerente | Equipo (incluido Product Manager y sus marcas), códigos + QR, descuento por comercio, descuento por marca, publicidad, asignar vendedor a cada cliente. No se puede dejar la organización sin un gerente activo. |
 | `ADMIN` | Administrador | Lo mismo en el día a día. No reemplaza al gerente para el “último al mando”. |
 | `SELLER` | Vendedor | **Solo sus clientes** (`TenantLink.accountManagerId`). Resumen de pedidos, contacto, descuento puntual, chat. No ve el comercio de un compañero. Ve el catálogo propio, sin carrito. |
-| `PRODUCT_MANAGER` | Product Manager | Solo las marcas de su `ProductManagerScope`, dentro de este distribuidor. Busca ese recorte y carga el descuento de esas marcas, a la lista general o a locales concretos (ve el nombre del comercio para asignar; no entra a cartera, códigos, publicidad ni chat). Si no tiene marcas, el catálogo queda vacío. |
+| `PRODUCT_MANAGER` | Product Manager | Solo las marcas de su `ProductManagerScope`, dentro de este distribuidor. Busca ese recorte y carga el descuento de esas marcas (lista general o locales). Ve **toda** la cartera: todos los comercios de todos los vendedores y quién está asignado a cada uno. No edita vendedor ni descuento de cuenta, no entra a códigos, publicidad ni chat. Si no tiene marcas, el catálogo queda vacío. |
 | `VIEWER` | Solo lectura | Mira cartera, pedidos, chat y catálogo. No edita, no genera códigos, no escribe. |
 
 ---
 
 ## 2. Qué ve y qué no
 
-Navegación del distribuidor: Inicio, **Búsqueda** (solo su catálogo), Cartera,
+Navegación del distribuidor: Inicio, **Búsqueda** (solo su catálogo), Cartera
+(el Product Manager ve todos los clientes y el vendedor de cada uno),
 Códigos (gerente y administrador), Pedidos de clientes, Chat, Configuración.
 
 No aparecen carrito, pedidos propios ni el listado de proveedores para comprar.
@@ -52,7 +53,7 @@ Lista de comercios con `TenantLink` hacia este distribuidor.
 - Vendedor ve solo los que tiene asignados. Si no tiene ninguno, la lista
   queda vacía: no existe “el resto de la empresa”.
 - Solo lectura ve lo mismo que el gerente, sin botones.
-- Product Manager no entra.
+- Product Manager ve todos, con el vendedor de cada uno. No edita.
 
 Por cliente:
 
