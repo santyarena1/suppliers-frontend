@@ -1,76 +1,114 @@
-import type { CartItem, CartScheme } from "@/lib/cart";
+import type { CartItem } from "@/lib/cart";
 import type { PurchasePolicy } from "@/lib/purchase-pricing";
 import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
-import { IVA_ADJUSTMENT_LABELS } from "@/lib/purchase-pricing";
+import { taxByKind } from "@/lib/tax";
+import {
+  formatSellerOrderText,
+  providerDisplayName,
+  sellerOrderReference,
+  type SellerOrderCharge,
+  type SellerOrderInput,
+  type SellerOrderLine,
+} from "@/lib/seller-order-text";
 
-function providerLabel(provider: string) {
-  return provider.replace(/_/g, " ");
-}
-
-export function buildSellerMessage(opts: {
+export type SellerMessageOpts = {
   scopeProvider?: string;
   items: CartItem[];
-  schemes: CartScheme[];
   policies: Record<string, PurchasePolicy>;
-  fmt: (usd: number, digits?: number) => string;
-}): string {
-  const { scopeProvider, schemes, policies, fmt } = opts;
-  const items = scopeProvider ? opts.items.filter((it) => it.provider === scopeProvider) : opts.items;
+  clientName?: string | null;
+  /** Vendedor (account manager) por proveedor. */
+  sellers?: Record<string, string | null | undefined>;
+  quoteRate?: number | null;
+  now?: Date;
+};
+
+/**
+ * Armado del texto que se copia al vendedor.
+ * Offline: el IVA de la condición ya va en el precio y en la columna se ve 0%.
+ * Online: se muestra la alícuota real. Sin mencionar portal, “sin facturar” ni el modo de IVA.
+ */
+export function buildSellerMessage(opts: SellerMessageOpts): string {
+  const items = opts.scopeProvider
+    ? opts.items.filter((it) => it.provider === opts.scopeProvider)
+    : opts.items;
   if (items.length === 0) return "";
 
+  const now = opts.now ?? new Date();
   const providers = [...new Set(items.map((it) => it.provider))];
-  const lines: string[] = [];
-  const allOffline = items.every((it) => it.channel === "offline");
-  const allOnline = items.every((it) => it.channel !== "offline");
+  const orders: SellerOrderInput[] = providers.map((provider) =>
+    buildProviderOrder(provider, items.filter((it) => it.provider === provider), opts, now)
+  );
+  return formatSellerOrderText(orders);
+}
 
-  if (allOffline) {
-    lines.push("Pedido offline NODO");
-    lines.push("Compra sin facturar. Este pedido no se carga en el portal: copiá y mandáselo al vendedor.");
-  } else if (allOnline) {
-    lines.push("Pedido online NODO");
-    lines.push("Al portal van todos los ítems sueltos. Este texto es para el vendedor (con/sin esquema).");
-  } else {
-    lines.push("Pedido NODO");
-  }
-  lines.push(new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }));
-  lines.push("");
+function buildProviderOrder(
+  provider: string,
+  items: CartItem[],
+  opts: SellerMessageOpts,
+  now: Date
+): SellerOrderInput {
+  const policy = opts.policies[provider];
+  const lines: SellerOrderLine[] = [];
+  const iibbByLabel = new Map<string, { usd: number; percent: number | null }>();
+  let netUsd = 0;
+  let ivaUsd = 0;
+  let internosUsd = 0;
 
-  for (const provider of providers) {
-    const policy = policies[provider];
-    const group = items.filter((it) => it.provider === provider);
-    lines.push(`*${providerLabel(provider)}*`);
-    if (group.some((it) => it.channel === "offline") && policy?.offlineIvaAdjustment) {
-      lines.push(`IVA offline: ${IVA_ADJUSTMENT_LABELS[policy.offlineIvaAdjustment]}`);
+  for (const it of items) {
+    const offline = it.channel === "offline";
+    const pricing = purchaseLinePricing(it, policy, priceModeForCartItem(it), it.qty);
+    const iva = taxByKind(pricing.lines, "iva");
+    const internos = taxByKind(pricing.lines, "internos");
+    const iibb = taxByKind(pricing.lines, "iibb");
+    const unitIva = iva?.unitAmount ?? 0;
+    const unitPriceUsd = offline ? pricing.unitNet + unitIva : pricing.unitNet;
+    const lineTotalUsd = round2(unitPriceUsd * it.qty);
+    lines.push({
+      qty: it.qty,
+      description: it.name,
+      ivaPercent: offline ? 0 : (iva?.percent ?? 0),
+      internosPercent: internos?.percent ?? 0,
+      unitPriceUsd,
+      lineTotalUsd,
+    });
+    netUsd += lineTotalUsd;
+    if (!offline) ivaUsd += unitIva * it.qty;
+    internosUsd += (internos?.unitAmount ?? 0) * it.qty;
+    if (!offline && iibb && iibb.unitAmount > 0.00005) {
+      const label = iibb.label?.trim() || "Percepciones";
+      const prev = iibbByLabel.get(label) ?? { usd: 0, percent: iibb.percent };
+      prev.usd += iibb.unitAmount * it.qty;
+      if (prev.percent == null) prev.percent = iibb.percent;
+      iibbByLabel.set(label, prev);
     }
-    const offline = group.filter((it) => it.channel === "offline");
-    const online = group.filter((it) => it.channel !== "offline");
-
-    if (offline.length) {
-      if (online.length) lines.push("Pedido offline:");
-      pushItems(lines, offline, policy, fmt);
-    }
-
-    if (online.length) {
-      const loose = online.filter((it) => !it.schemeId);
-      const schemeIds = [...new Set(online.map((it) => it.schemeId).filter(Boolean))] as string[];
-      if (loose.length) {
-        lines.push("Sin esquema:");
-        pushItems(lines, loose, policy, fmt);
-      }
-      for (const id of schemeIds) {
-        const scheme = schemes.find((s) => s.id === id);
-        const name = scheme?.name || "Esquema";
-        const disc = policy?.schemeDiscountPercent;
-        const discBit = disc ? ` (desc. ${formatPct(disc)})` : "";
-        const ivaBit = policy?.schemeIvaAdjustment ? ` · IVA ${IVA_ADJUSTMENT_LABELS[policy.schemeIvaAdjustment]}` : "";
-        lines.push(`${name}${discBit}${ivaBit}:`);
-        pushItems(lines, online.filter((it) => it.schemeId === id), policy, fmt);
-      }
-    }
-    lines.push("");
   }
 
-  return lines.join("\n").trim();
+  const extraCharges: SellerOrderCharge[] = [];
+  if (internosUsd > 0.005) {
+    extraCharges.push({ label: "Imp. internos", usd: round2(internosUsd) });
+  }
+  for (const [label, row] of iibbByLabel) {
+    const pctBit =
+      row.percent != null && Number.isFinite(row.percent)
+        ? ` ${formatPct(row.percent)}`
+        : "";
+    extraCharges.push({ label: `${label}${pctBit}`.trim(), usd: round2(row.usd) });
+  }
+
+  const iibbUsd = [...iibbByLabel.values()].reduce((s, r) => s + r.usd, 0);
+  const finalUsd = round2(netUsd + ivaUsd + internosUsd + iibbUsd);
+
+  return {
+    reference: sellerOrderReference(now),
+    providerLabel: providerDisplayName(provider),
+    clientName: opts.clientName ?? null,
+    sellerName: opts.sellers?.[provider] ?? null,
+    quoteRate: opts.quoteRate ?? null,
+    lines,
+    netUsd: round2(netUsd),
+    extraCharges,
+    finalUsd,
+  };
 }
 
 function formatPct(n: number) {
@@ -78,17 +116,6 @@ function formatPct(n: number) {
   return `${Number.isInteger(r) ? String(r) : r.toFixed(1)}%`;
 }
 
-function pushItems(
-  lines: string[],
-  items: CartItem[],
-  policy: PurchasePolicy | undefined,
-  fmt: (usd: number, digits?: number) => string
-) {
-  for (const it of items) {
-    const pricing = purchaseLinePricing(it, policy, priceModeForCartItem(it), it.qty);
-    const name = it.name.length > 80 ? `${it.name.slice(0, 77)}...` : it.name;
-    const qtyBit = it.qty > 1 ? ` x${it.qty}` : "";
-    const warn = pricing.missingIva ? " ⚠ sin alícuota de IVA" : "";
-    lines.push(`• ${name}${qtyBit}  →  ${fmt(pricing.gross, 2)}${warn}`);
-  }
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
 }

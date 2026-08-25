@@ -16,6 +16,8 @@ import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/pur
 import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
 import { buildSellerMessage } from "@/lib/seller-message";
 import { proxyImg, formatUSD } from "@/lib/format";
+import { getTenant } from "@/lib/auth";
+import { useMyProviders } from "@/lib/myProviders";
 import ProviderBadge from "@/components/ProviderBadge";
 import {
   taxByKind,
@@ -92,6 +94,7 @@ export default function CartPage() {
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
   const retailer = useIsRetailer();
   const policies = usePurchasePolicies();
+  const { providers: myProviders } = useMyProviders();
   const [channelTab, setChannelTab] = useState<"online" | "offline">("online");
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
   const [elitPreview, setElitPreview] = useState<ElitCheckoutPreview | null>(null);
@@ -323,12 +326,17 @@ export default function CartPage() {
   }
 
   async function copySellerMessage() {
+    const sellers: Record<string, string | null> = {};
+    for (const p of myProviders) {
+      sellers[p.provider] = p.accountManager?.name ?? null;
+    }
     const txt = buildSellerMessage({
       scopeProvider: activeTab === "all" ? undefined : activeTab,
       items: viewItems,
-      schemes,
       policies,
-      fmt,
+      clientName: getTenant()?.name ?? null,
+      sellers,
+      quoteRate: currentRate?.venta ?? null,
     });
     if (!txt) return;
     try {
