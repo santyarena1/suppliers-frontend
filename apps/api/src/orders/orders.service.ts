@@ -188,6 +188,17 @@ export class OrdersService {
           items: true,
           createdAt: true,
           total: true,
+          subtotal: true,
+          impuestos: true,
+          percepciones: true,
+          paymentOption: true,
+          paymentLabel: true,
+          deliveryOption: true,
+          deliveryLabel: true,
+          notes: true,
+          addressSnapshot: true,
+          draftInput: true,
+          createdBy: { select: { username: true } },
         },
       }),
       compareStart && periodStart
@@ -206,6 +217,17 @@ export class OrdersService {
               items: true,
               createdAt: true,
               total: true,
+              subtotal: true,
+              impuestos: true,
+              percepciones: true,
+              paymentOption: true,
+              paymentLabel: true,
+              deliveryOption: true,
+              deliveryLabel: true,
+              notes: true,
+              addressSnapshot: true,
+              draftInput: true,
+              createdBy: { select: { username: true } },
             },
           })
         : Promise.resolve([]),
@@ -252,6 +274,17 @@ export class OrdersService {
     items: Prisma.JsonValue;
     createdAt: Date;
     total: Prisma.Decimal | null;
+    subtotal: Prisma.Decimal | null;
+    impuestos: Prisma.Decimal | null;
+    percepciones: Prisma.Decimal | null;
+    paymentOption: string;
+    paymentLabel: string | null;
+    deliveryOption: string | null;
+    deliveryLabel: string | null;
+    notes: string | null;
+    addressSnapshot: Prisma.JsonValue;
+    draftInput: Prisma.JsonValue | null;
+    createdBy?: { username: string } | null;
   }) {
     return {
       id: row.id,
@@ -261,6 +294,17 @@ export class OrdersService {
       items: row.items,
       createdAt: row.createdAt,
       total: row.total == null ? null : Number(row.total),
+      subtotal: row.subtotal == null ? null : Number(row.subtotal),
+      impuestos: row.impuestos == null ? null : Number(row.impuestos),
+      percepciones: row.percepciones == null ? null : Number(row.percepciones),
+      paymentOption: row.paymentOption,
+      paymentLabel: row.paymentLabel,
+      deliveryOption: row.deliveryOption,
+      deliveryLabel: row.deliveryLabel,
+      notes: row.notes,
+      addressSnapshot: row.addressSnapshot,
+      draftInput: row.draftInput,
+      createdBy: row.createdBy?.username ?? null,
     };
   }
 
@@ -347,6 +391,8 @@ export class OrdersService {
         return latest;
       }, null),
       byProvider,
+      byBrand: [],
+      byCategory: [],
     };
   }
 

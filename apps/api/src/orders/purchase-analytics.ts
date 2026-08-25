@@ -6,6 +6,7 @@
  */
 
 import { PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import { computeOpsInsights, type OpsInsights } from "./purchase-ops";
 
 export const COUNTED_ORDER_STATUSES = ["CREATED", "OFFLINE"] as const;
 export const UNKNOWN_BRAND = "Sin marca";
@@ -26,11 +27,21 @@ export type CatalogEntry = {
   stock: number | null;
 };
 
+export type CatalogRank = {
+  key: string;
+  label: string;
+  skus: number;
+  inStock: number;
+  share: number;
+};
+
 export type CatalogStats = {
   skus: number;
   inStock: number;
   lastSyncAt: string | null;
   byProvider: { provider: string; skus: number; inStock: number; lastSyncAt: string | null }[];
+  byBrand: CatalogRank[];
+  byCategory: CatalogRank[];
 };
 
 export type OrderForAnalytics = {
@@ -41,6 +52,17 @@ export type OrderForAnalytics = {
   items: unknown;
   createdAt: Date | string;
   total?: unknown;
+  subtotal?: unknown;
+  impuestos?: unknown;
+  percepciones?: unknown;
+  paymentOption?: string | null;
+  paymentLabel?: string | null;
+  deliveryOption?: string | null;
+  deliveryLabel?: string | null;
+  notes?: string | null;
+  addressSnapshot?: unknown;
+  draftInput?: unknown;
+  createdBy?: string | null;
 };
 
 export type ExtractedLine = {
@@ -116,7 +138,18 @@ export type PurchaseInsights = {
     lastSyncAt: string | null;
     previousSpendUsd: number | null;
     spendDeltaPercent: number | null;
+    shippingUsd: number;
+    shippingOrders: number;
+    pickupOrders: number;
+    avgShippingUsd: number;
+    taxesUsd: number;
+    perceptionsUsd: number;
+    uniqueAddresses: number;
+    uniquePayments: number;
   };
+  catalogBrands: CatalogRank[];
+  catalogCategories: CatalogRank[];
+  ops: OpsInsights;
   concentration: {
     providers: { top1: number; top5: number; top10: number };
     brands: { top1: number; top5: number; top10: number };
@@ -292,7 +325,14 @@ export function computePurchaseInsights(
   }
 ): PurchaseInsights {
   const generatedAt = (opts.generatedAt ?? new Date()).toISOString();
-  const catalogStats = opts.catalogStats ?? { skus: 0, inStock: 0, lastSyncAt: null, byProvider: [] };
+  const catalogStats = opts.catalogStats ?? {
+    skus: 0,
+    inStock: 0,
+    lastSyncAt: null,
+    byProvider: [],
+    byBrand: [],
+    byCategory: [],
+  };
   const catalogByProvider = new Map(catalogStats.byProvider.map((p) => [p.provider, p]));
 
   const lines: ExtractedLine[] = [];
@@ -451,6 +491,7 @@ export function computePurchaseInsights(
     }
   }
 
+  const ops = computeOpsInsights(orders);
   const uniqueSkus = productMap.size;
   const repeatSkus = [...skuOrders.values()].filter((s) => s.size > 1).length;
 
@@ -533,6 +574,14 @@ export function computePurchaseInsights(
       lastSyncAt: catalogStats.lastSyncAt,
       previousSpendUsd: previous,
       spendDeltaPercent,
+      shippingUsd: ops.kpis.shippingUsd,
+      shippingOrders: ops.kpis.shippingOrders,
+      pickupOrders: ops.kpis.pickupOrders,
+      avgShippingUsd: ops.kpis.avgShippingUsd,
+      taxesUsd: ops.kpis.taxesUsd,
+      perceptionsUsd: ops.kpis.perceptionsUsd,
+      uniqueAddresses: ops.kpis.uniqueAddresses,
+      uniquePayments: ops.kpis.uniquePayments,
     },
     concentration: {
       providers: {
@@ -580,5 +629,8 @@ export function computePurchaseInsights(
       .slice(0, 100),
     topProducts,
     recentOrders,
+    catalogBrands: catalogStats.byBrand,
+    catalogCategories: catalogStats.byCategory,
+    ops,
   };
 }

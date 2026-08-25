@@ -146,6 +146,66 @@ export function WeekdayBars({
   );
 }
 
+export function ShippingMonthChart({
+  data,
+}: {
+  data: { label: string; shippingUsd: number; shippedOrders: number; pickupOrders: number }[];
+}) {
+  if (data.every((d) => d.shippingUsd === 0 && d.shippedOrders === 0)) {
+    return <EmptyChart text="Sin costos de envío en el período" />;
+  }
+  return (
+    <div className="h-52">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+          <XAxis dataKey="label" tick={TICK} axisLine={{ stroke: "#3f3f46" }} tickLine={false} />
+          <YAxis tick={TICK} axisLine={false} tickLine={false} width={48} tickFormatter={(v) => usd(Number(v))} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value, name) => [
+              name === "shippingUsd" ? usd(Number(value)) : Number(value).toLocaleString("es-AR"),
+              name === "shippingUsd" ? "Envíos USD" : name === "shippedOrders" ? "Con envío" : "Retiro",
+            ]}
+          />
+          <Bar dataKey="shippingUsd" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={22} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export function MixPie({
+  data,
+  colors,
+}: {
+  data: { name: string; value: number; share: number }[];
+  colors: string[];
+}) {
+  const rows = data.filter((d) => d.value > 0);
+  if (rows.length === 0) return <EmptyChart text="Sin mix para graficar" />;
+  return (
+    <div className="h-52">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie data={rows} dataKey="value" nameKey="name" innerRadius={48} outerRadius={72} paddingAngle={3}>
+            {rows.map((row, i) => (
+              <Cell key={row.name} fill={colors[i % colors.length]} />
+            ))}
+          </Pie>
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value, _name, item) => {
+              const share = (item?.payload as { share?: number })?.share;
+              return [`${Number(value).toLocaleString("es-AR")}${share != null ? ` · ${share}%` : ""}`, ""];
+            }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 function EmptyChart({ text }: { text: string }) {
   return (
     <div className="h-40 flex items-center justify-center text-xs text-surface-500 border border-dashed border-surface-800 rounded-lg">

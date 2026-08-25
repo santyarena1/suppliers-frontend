@@ -111,6 +111,8 @@ describe("computePurchaseInsights", () => {
         inStock: 310,
         lastSyncAt: "2026-08-20T00:00:00.000Z",
         byProvider: [{ provider: "ELIT", skus: 200, inStock: 150, lastSyncAt: "2026-08-20T00:00:00.000Z" }],
+        byBrand: [],
+        byCategory: [],
       },
     });
 
