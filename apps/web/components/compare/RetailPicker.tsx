@@ -86,8 +86,12 @@ export default function RetailPicker({
       .sort((a, b) => b.ratio - a.ratio || a.sale - b.sale);
   }, [hits, seedName, costArs]);
 
-  const best = ranked.filter((r) => r.ratio >= BEST_MATCH_THRESHOLD);
-  const rest = ranked.filter((r) => r.ratio < BEST_MATCH_THRESHOLD);
+  const best = ranked
+    .filter((r) => r.ratio >= BEST_MATCH_THRESHOLD)
+    .sort((a, b) => a.sale - b.sale);
+  const rest = ranked
+    .filter((r) => r.ratio < BEST_MATCH_THRESHOLD)
+    .sort((a, b) => a.sale - b.sale);
 
   function row(item: { hit: RetailSearchHit; ratio: number; sale: number }) {
     const { hit, ratio, sale } = item;
@@ -134,7 +138,7 @@ export default function RetailPicker({
             </span>
           ) : (
             <span className="inline-flex items-center gap-0.5 text-[10px] text-brand-400 mt-0.5">
-              <Plus className="w-3 h-3" /> Agregar
+              <Plus className="w-3 h-3" /> Usar
             </span>
           )}
         </div>
@@ -153,7 +157,7 @@ export default function RetailPicker({
       <div className="relative w-full sm:max-w-lg max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800">
           <div>
-            <h3 className="text-sm font-semibold text-white">Agregar local importado</h3>
+            <h3 className="text-sm font-semibold text-white">Elegir local de referencia</h3>
             <p className="text-[11px] text-surface-500 mt-0.5 line-clamp-1">{seedName}</p>
           </div>
           <button

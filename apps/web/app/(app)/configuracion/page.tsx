@@ -217,7 +217,7 @@ export default function ConfiguracionPage() {
                       >
                         <div className="flex items-center gap-2.5">
                           <Receipt className="w-4 h-4 text-surface-400" />
-                          <span className="text-sm text-surface-200">Mostrar precios con impuestos</span>
+                          <span className="text-sm text-surface-200">Mostrar precios con IVA</span>
                         </div>
                         <div className={`w-9 h-5 rounded-full relative transition-colors ${withIva ? "bg-brand-600" : "bg-surface-600"}`}>
                           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${withIva ? "left-4" : "left-0.5"}`} />
@@ -226,19 +226,15 @@ export default function ConfiguracionPage() {
                       <button
                         type="button"
                         onClick={() => setWithIibb(!withIibb)}
-                        className={`w-full flex items-center justify-between border rounded-xl px-4 py-3 transition-all ${
-                          withIva || withIibb
-                            ? "bg-surface-800 hover:bg-surface-700 border-surface-700"
-                            : "bg-surface-900/50 border-surface-800 opacity-70"
-                        }`}
-                        title="Suma IIBB/percepciones al costo de búsqueda cuando el distribuidor las aplica"
+                        className="w-full flex items-center justify-between bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-xl px-4 py-3 transition-all"
+                        title="Suma solo la percepción/IIBB del distribuidor. Independiente del IVA."
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Percent className="w-4 h-4 text-surface-400 flex-shrink-0" />
                           <div className="text-left min-w-0">
-                            <span className="text-sm text-surface-200 block">Incluir IIBB en precios</span>
+                            <span className="text-sm text-surface-200 block">Incluir percepciones / IIBB</span>
                             <span className="text-[11px] text-surface-500 leading-snug block mt-0.5">
-                              Apagado por defecto. Se suma al costo si el proveedor carga percepciones (p. ej. en el carrito).
+                              Independiente del IVA. Apagado por defecto; se recuerda. No es IVA: es la percepción que cobra el mayorista (Elit, Invid, New Bytes…).
                             </span>
                           </div>
                         </div>

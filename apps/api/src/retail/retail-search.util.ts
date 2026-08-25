@@ -28,6 +28,26 @@ const WEAK_TOKENS = new Set([
 
 export type ScoredToken = { t: string; strong: boolean };
 
+function escapeRe(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Modelo tipo SKU: 7600, 7600x, rtx4060. No “am5” ni un dígito suelto.
+ * Sirve para no tratar 7600 y 7600X como el mismo producto.
+ */
+export function isModelSkuToken(t: string): boolean {
+  if (!t) return false;
+  return /^\d{3,}[a-z]*$/i.test(t) || /[a-z]+\d{3,}[a-z]*/i.test(t);
+}
+
+/** Token con borde de palabra: “7600” no pega dentro de “7600x”. */
+export function textHasToken(haystack: string, token: string): boolean {
+  if (!token || !haystack) return false;
+  const re = new RegExp(`(?:^|[^a-z0-9])${escapeRe(token)}(?:[^a-z0-9]|$)`);
+  return re.test(haystack);
+}
+
 /** Tokens útiles; marca fuertes (marca/modelo) vs débiles (categoría/genéricos). */
 export function extractSearchTokens(value: string, max = 10): ScoredToken[] {
   const normalized = normalizeSearchText(value);
@@ -61,21 +81,25 @@ export interface MatchScore {
   strongHits: number;
   strongTotal: number;
   coverage: number;
+  skuHits: number;
+  skuTotal: number;
 }
 
 /** Score de un producto vs tokens de la query. */
 export function scoreRetailMatch(searchText: string, tokens: ScoredToken[]): MatchScore {
   const text = searchText || "";
   const strong = tokens.filter((x) => x.strong);
-  const weak = tokens.filter((x) => !x.strong);
+  const skuTokens = tokens.filter((x) => isModelSkuToken(x.t));
 
   let score = 0;
   let hits = 0;
   let strongHits = 0;
+  let skuHits = 0;
 
   for (const { t, strong: isStrong } of tokens) {
-    if (!text.includes(t)) continue;
+    if (!textHasToken(text, t)) continue;
     hits += 1;
+    if (isModelSkuToken(t)) skuHits += 1;
     if (isStrong) {
       strongHits += 1;
       score += t.length >= 6 || /^\d/.test(t) ? 8 : 5;
@@ -84,17 +108,26 @@ export function scoreRetailMatch(searchText: string, tokens: ScoredToken[]): Mat
     }
   }
 
-  // Bigramas consecutivos de la query (marca + modelo)
+  // Bigramas consecutivos de la query (marca + modelo), con borde.
   const rawTokens = tokens.map((x) => x.t);
   for (let i = 0; i < rawTokens.length - 1; i++) {
     const bigram = `${rawTokens[i]} ${rawTokens[i + 1]}`;
-    if (text.includes(bigram)) score += 10;
+    if (textHasToken(text, bigram) || text.includes(bigram)) score += 10;
   }
 
   if (hits >= 2) score += hits * 2;
   if (hits >= 3) score += 4;
   if (strongHits >= 2) score += strongHits * 4;
   if (strong.length > 0 && strongHits === strong.length) score += 12;
+
+  const productTokens = extractSearchTokens(text, 14);
+  const querySet = new Set(tokens.map((x) => x.t));
+  for (const p of productTokens) {
+    if (!isModelSkuToken(p.t) || querySet.has(p.t)) continue;
+    // Extra SKU (B650 en un combo, 7600X cuando buscás 7600)
+    score -= 18;
+  }
+  if (/\b(combo|kit|pack)\b/.test(text)) score -= 22;
 
   const coverage = tokens.length ? hits / tokens.length : 0;
   return {
@@ -103,19 +136,21 @@ export function scoreRetailMatch(searchText: string, tokens: ScoredToken[]): Mat
     strongHits,
     strongTotal: strong.length,
     coverage,
+    skuHits,
+    skuTotal: skuTokens.length,
   };
 }
 
 /**
  * ¿Pasa el umbral de relevancia?
- * Exigimos señal de marca/modelo sin matar coincidencias parciales.
+ * El número de modelo (7600 vs 7600X) tiene que coincidir entero.
  */
 export function passesRelevanceGate(m: MatchScore, tokens: ScoredToken[]): boolean {
   if (tokens.length === 0 || m.hits === 0) return false;
+  if (m.skuTotal > 0 && m.skuHits < m.skuTotal) return false;
 
   const strong = tokens.filter((t) => t.strong);
   if (strong.length >= 2) {
-    // Al menos 1 fuerte + algo más, o 2 fuertes
     if (m.strongHits >= 2) return true;
     if (m.strongHits >= 1 && m.hits >= 3) return true;
     if (m.strongHits >= 1 && m.coverage >= 0.45) return true;

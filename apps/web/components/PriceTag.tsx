@@ -63,9 +63,9 @@ export default function PriceTag({
       <div className="flex items-baseline gap-1.5">
         <span className={`font-bold text-white tabular-nums ${SIZES[size]}`}>{primary}</span>
         {!withIva && (
-          <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">s/imp</span>
+          <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">s/IVA</span>
         )}
-        {withIva && includeIibb && shown.iibbIncluded && (
+        {includeIibb && shown.iibbIncluded && (
           <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">
             +IIBB
           </span>

@@ -140,9 +140,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
           unitAmount: shown.iibbUnitUsd,
         }
       : null;
-  const visibleTaxLines = withIibb
-    ? taxLines
-    : taxLines.filter((l) => l.kind !== "iibb");
+  const visibleTaxLines = taxLines.filter((l) => {
+    if (l.kind === "iibb") return withIibb;
+    if (l.kind === "iva" || l.kind === "internos" || l.kind === "other") return withIva;
+    return true;
+  });
   const knownIibbPct = getIibbRatePercent(providerName);
 
 
@@ -373,9 +375,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         )}
                       </div>
                       <p className="text-[10px] text-surface-600 leading-relaxed pt-1">
-                        El desglose usa tu cotización y preferencias de impuestos
-                        {withIibb ? " (incluye IIBB si se conoce)" : " (sin IIBB)"}
-                        . El margen vs locales se calcula sobre el costo sin impuestos.
+                        El desglose usa tu cotización. IVA y percepciones se eligen por separado
+                        {withIva ? "" : " · sin IVA"}
+                        {withIibb ? " · con percepciones si se conocen" : " · sin percepciones"}
+                        . El margen vs locales se calcula sobre el costo neto.
                       </p>
                     </div>
 

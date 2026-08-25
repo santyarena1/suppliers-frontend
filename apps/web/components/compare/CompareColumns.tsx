@@ -4,20 +4,20 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Copy,
   ExternalLink,
+  GripVertical,
   ImageOff,
   Package,
   Store,
   Trash2,
-  Layers,
-  StickyNote,
 } from "lucide-react";
 import { formatARS, formatUSD, proxyImg } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
+import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
+import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
 import ProviderBadge from "@/components/ProviderBadge";
 import {
   MODE_HINT,
@@ -30,16 +30,18 @@ import {
   repairImplausibleSalePrice,
 } from "@/lib/retailMatch";
 
-const MODE_ACCENT: Record<PriceMode, string> = {
+const MODE_ACCENT: Record<PriceMode | "local", string> = {
   list: "border-brand-500/40 ring-brand-500/10",
   offline: "border-amber-500/40 ring-amber-500/10",
   scheme: "border-violet-500/40 ring-violet-500/10",
+  local: "border-emerald-500/35 ring-emerald-500/10",
 };
 
-const MODE_CHIP: Record<PriceMode, string> = {
+const MODE_CHIP: Record<PriceMode | "local", string> = {
   list: "bg-brand-600/20 text-brand-300 border-brand-500/30",
   offline: "bg-amber-500/15 text-amber-200 border-amber-500/30",
   scheme: "bg-violet-500/15 text-violet-200 border-violet-500/30",
+  local: "bg-emerald-500/15 text-emerald-200 border-emerald-500/30",
 };
 
 function money(usd: number, currency: "USD" | "ARS", convert: (n: number) => { amount: number }) {
@@ -47,28 +49,79 @@ function money(usd: number, currency: "USD" | "ARS", convert: (n: number) => { a
   return formatARS(convert(usd).amount);
 }
 
+function ModeChips({
+  modes,
+  active,
+  onChangeMode,
+  onLocal,
+}: {
+  modes: PriceMode[];
+  active: PriceMode | "local";
+  onChangeMode: (mode: PriceMode) => void;
+  onLocal: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {modes.map((m) => (
+        <button
+          key={m}
+          type="button"
+          onClick={() => onChangeMode(m)}
+          title={MODE_HINT[m]}
+          className={`text-[10px] font-semibold px-2 py-1 rounded-md border transition-colors ${
+            active === m ? MODE_CHIP[m] : "border-surface-700 text-surface-400 hover:text-surface-200"
+          }`}
+        >
+          {MODE_LABEL[m]}
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={onLocal}
+        title={MODE_HINT.local}
+        className={`text-[10px] font-semibold px-2 py-1 rounded-md border transition-colors ${
+          active === "local"
+            ? MODE_CHIP.local
+            : "border-surface-700 text-surface-400 hover:text-surface-200"
+        }`}
+      >
+        {MODE_LABEL.local}
+      </button>
+    </div>
+  );
+}
+
 export function ProviderCompareColumn({
   entry,
   isCheapest,
   onRemove,
   onChangeMode,
-  onDuplicateMode,
-  onAddRetail,
+  onPickLocal,
+  onDragStart,
+  onDropOn,
 }: {
   entry: CompareProviderEntry;
   isCheapest: boolean;
   onRemove: () => void;
   onChangeMode: (mode: PriceMode) => void;
-  onDuplicateMode: (mode: PriceMode) => void;
-  onAddRetail: () => void;
+  onPickLocal: () => void;
+  onDragStart: () => void;
+  onDropOn: () => void;
 }) {
   const { product, mode } = entry;
-  const { currency, withIva, convert } = usePrefs();
+  const { currency, withIva, withIibb, convert } = usePrefs();
+  useIibbRatesEpoch();
   const policy = usePurchasePolicy(product.provider);
   const retailer = useIsRetailer();
   const hasIva = providerHasIvaRate(product.provider);
   const pricing = purchaseLinePricing(product, policy, mode);
-  const display = withIva ? pricing.unitGross : pricing.unitNet;
+  const includeIibb = withIibb && pricing.mode !== "offline";
+  const shown = displayAmountFromPricing(pricing, {
+    withIva,
+    withIibb: includeIibb,
+    provider: product.provider,
+  });
+  const display = shown.unitDisplayUsd;
   const [imgErr, setImgErr] = useState(false);
 
   const canOffline = retailer && hasIva && policy.acceptsOffline;
@@ -81,7 +134,21 @@ export function ProviderCompareColumn({
 
   return (
     <article
-      className={`flex flex-col w-[280px] flex-shrink-0 rounded-2xl border bg-surface-900/90 ring-1 overflow-hidden ${MODE_ACCENT[mode]} ${
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", entry.id);
+        onDragStart();
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOn();
+      }}
+      className={`flex flex-col w-[280px] flex-shrink-0 rounded-2xl border bg-surface-900/90 ring-1 overflow-hidden cursor-grab active:cursor-grabbing ${MODE_ACCENT[mode]} ${
         isCheapest ? "shadow-[0_0_0_1px_rgba(16,185,129,0.35)]" : ""
       }`}
     >
@@ -103,14 +170,19 @@ export function ProviderCompareColumn({
         )}
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-2">
           <ProviderBadge provider={product.provider} size="sm" chip />
-          <button
-            type="button"
-            onClick={onRemove}
-            className="p-1.5 rounded-lg bg-black/70 text-white/80 hover:text-white hover:bg-black/90"
-            title="Quitar"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <span className="p-1.5 rounded-lg bg-black/50 text-white/70" title="Arrastrá para reordenar">
+              <GripVertical className="w-3.5 h-3.5" />
+            </span>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="p-1.5 rounded-lg bg-black/70 text-white/80 hover:text-white hover:bg-black/90"
+              title="Quitar"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         {isCheapest && (
           <span className="absolute bottom-2 left-2 text-[10px] font-bold uppercase tracking-wide bg-emerald-500 text-black px-2 py-0.5 rounded-full">
@@ -125,52 +197,29 @@ export function ProviderCompareColumn({
         </Link>
         <p className="text-[10px] font-mono text-surface-500 -mt-1">#{product.externalId}</p>
 
-        <div className="flex flex-wrap gap-1">
-          {modes.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onChangeMode(m)}
-              title={MODE_HINT[m]}
-              className={`text-[10px] font-semibold px-2 py-1 rounded-md border transition-colors ${
-                mode === m
-                  ? MODE_CHIP[m]
-                  : "border-surface-700 text-surface-400 hover:text-surface-200"
-              }`}
-            >
-              {MODE_LABEL[m]}
-            </button>
-          ))}
-        </div>
+        <ModeChips modes={modes} active={mode} onChangeMode={onChangeMode} onLocal={onPickLocal} />
 
         <div>
           <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-0.5">
-            {withIva ? "Con impuestos" : "Sin impuestos"} · {MODE_LABEL[mode]}
+            {displayTaxTitle({ withIva, withIibb: includeIibb, provider: product.provider })} · {MODE_LABEL[mode]}
           </p>
           <p className="text-2xl font-bold text-white tabular-nums tracking-tight">
             {money(display, currency, convert)}
           </p>
           <p className="text-[11px] text-surface-500 tabular-nums mt-0.5">
             Neto {formatUSD(pricing.unitNet)}
+            {shown.iibbIncluded && (
+              <span className="text-amber-300/90">
+                {shown.estimatedIibb ? " · IIBB est." : " · +IIBB"}
+              </span>
+            )}
             {pricing.adjusted && pricing.missingIva && (
               <span className="text-amber-400"> · sin alícuota IVA</span>
             )}
           </p>
         </div>
 
-        <div className="mt-auto flex flex-col gap-1.5 pt-1 border-t border-surface-800">
-          <div className="flex flex-wrap gap-1">
-            {canOffline && mode !== "offline" && (
-              <DupBtn icon={<StickyNote className="w-3 h-3" />} label="Offline" onClick={() => onDuplicateMode("offline")} />
-            )}
-            {canScheme && mode !== "scheme" && (
-              <DupBtn icon={<Layers className="w-3 h-3" />} label="Esquema" onClick={() => onDuplicateMode("scheme")} />
-            )}
-            {mode !== "list" && (
-              <DupBtn icon={<Copy className="w-3 h-3" />} label="Normal" onClick={() => onDuplicateMode("list")} />
-            )}
-            <DupBtn icon={<Store className="w-3 h-3" />} label="Local" onClick={onAddRetail} />
-          </div>
+        <div className="mt-auto pt-1 border-t border-surface-800">
           <Link
             href={href}
             className="inline-flex items-center gap-1 text-[11px] text-surface-400 hover:text-white transition-colors"
@@ -183,35 +232,22 @@ export function ProviderCompareColumn({
   );
 }
 
-function DupBtn({
-  icon,
-  label,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border border-surface-700 text-surface-300 hover:border-surface-500 hover:text-white transition-colors"
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
-
 export function RetailCompareColumn({
   entry,
   isBestSale,
   onRemove,
+  onChangeMode,
+  onPickLocal,
+  onDragStart,
+  onDropOn,
 }: {
   entry: CompareRetailEntry;
   isBestSale: boolean;
   onRemove: () => void;
+  onChangeMode?: (mode: PriceMode) => void;
+  onPickLocal: () => void;
+  onDragStart: () => void;
+  onDropOn: () => void;
 }) {
   const { convert } = usePrefs();
   const costArs =
@@ -219,10 +255,33 @@ export function RetailCompareColumn({
   const sale = repairImplausibleSalePrice(entry.hit.price, costArs);
   const margin = marginVsCostPercent(sale, costArs);
   const [imgErr, setImgErr] = useState(false);
+  const src = entry.sourceProduct;
+  const policy = usePurchasePolicy(src?.provider ?? "");
+  const retailer = useIsRetailer();
+  const hasIva = src ? providerHasIvaRate(src.provider) : false;
+  const canOffline = Boolean(src && retailer && hasIva && policy.acceptsOffline);
+  const canScheme = Boolean(src && retailer && hasIva && policy.acceptsScheme);
+  const modes: PriceMode[] = src ? ["list"] : [];
+  if (canOffline) modes.push("offline");
+  if (canScheme) modes.push("scheme");
 
   return (
     <article
-      className={`flex flex-col w-[280px] flex-shrink-0 rounded-2xl border border-emerald-500/35 bg-surface-900/90 ring-1 ring-emerald-500/10 overflow-hidden ${
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", entry.id);
+        onDragStart();
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOn();
+      }}
+      className={`flex flex-col w-[280px] flex-shrink-0 rounded-2xl border bg-surface-900/90 ring-1 overflow-hidden cursor-grab active:cursor-grabbing ${MODE_ACCENT.local} ${
         isBestSale ? "shadow-[0_0_0_1px_rgba(16,185,129,0.45)]" : ""
       }`}
     >
@@ -243,7 +302,7 @@ export function RetailCompareColumn({
           </div>
         )}
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 max-w-[75%] rounded-full bg-emerald-600/90 text-white text-[11px] font-semibold pl-1 pr-2.5 py-0.5">
+          <span className="inline-flex items-center gap-1.5 max-w-[70%] rounded-full bg-emerald-600/90 text-white text-[11px] font-semibold pl-1 pr-2.5 py-0.5">
             <span className="w-5 h-5 rounded-full bg-white overflow-hidden flex items-center justify-center">
               {entry.hit.store.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -254,14 +313,19 @@ export function RetailCompareColumn({
             </span>
             <span className="truncate">{entry.hit.store.name}</span>
           </span>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="p-1.5 rounded-lg bg-black/70 text-white/80 hover:text-white hover:bg-black/90"
-            title="Quitar"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <span className="p-1.5 rounded-lg bg-black/50 text-white/70" title="Arrastrá para reordenar">
+              <GripVertical className="w-3.5 h-3.5" />
+            </span>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="p-1.5 rounded-lg bg-black/70 text-white/80 hover:text-white hover:bg-black/90"
+              title="Quitar"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
         {isBestSale && (
           <span className="absolute bottom-2 left-2 text-[10px] font-bold uppercase tracking-wide bg-emerald-500 text-black px-2 py-0.5 rounded-full">
@@ -276,13 +340,15 @@ export function RetailCompareColumn({
           <p className="text-[10px] text-surface-500 -mt-1">{entry.hit.categoryName}</p>
         )}
 
-        <span className="self-start text-[10px] font-semibold px-2 py-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
-          Local importado
-        </span>
+        {src && onChangeMode ? (
+          <ModeChips modes={modes} active="local" onChangeMode={onChangeMode} onLocal={onPickLocal} />
+        ) : (
+          <ModeChips modes={[]} active="local" onChangeMode={() => {}} onLocal={onPickLocal} />
+        )}
 
         <div>
           <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-0.5">
-            Precio de venta
+            Precio de venta · todo incluido
           </p>
           <p className="text-2xl font-bold text-white tabular-nums tracking-tight">
             {formatARS(sale)}
