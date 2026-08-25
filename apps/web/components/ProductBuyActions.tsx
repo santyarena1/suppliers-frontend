@@ -7,9 +7,27 @@ import type { ProductDTO } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
-import { formatUSD } from "@/lib/format";
+import { formatARS, formatUSD } from "@/lib/format";
+import { usePrefs } from "@/lib/prefs";
 import { SchemePicker } from "@/components/SchemePicker";
-import { IVA_ADJUSTMENT_LABELS, providerHasIvaRate } from "@/lib/purchase-pricing";
+import { providerHasIvaRate } from "@/lib/purchase-pricing";
+
+function FinalPriceLine({ usd, className }: { usd: number; className?: string }) {
+  const { currentRate } = usePrefs();
+  const rate = currentRate?.venta ?? 0;
+  const ars = rate > 0 ? usd * rate : null;
+  return (
+    <p className={`text-[11px] text-center tabular-nums leading-relaxed ${className ?? ""}`}>
+      {formatUSD(usd)}
+      {ars != null && (
+        <>
+          <span className="opacity-50"> · </span>
+          {formatARS(ars)}
+        </>
+      )}
+    </p>
+  );
+}
 
 export default function ProductBuyActions({ product, qty }: { product: ProductDTO; qty: number }) {
   const { add, items, createScheme, schemesFor } = useCart();
@@ -99,12 +117,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             {flash === "scheme" ? "Agregado al esquema" : "Agregar como esquema"}
           </button>
           {schemePricing.adjusted && (
-            <p className="text-[11px] text-violet-300/80 text-center tabular-nums">
-              Con esquema: {formatUSD(schemePricing.gross)}
-              {policy.schemeDiscountPercent ? ` · desc. ${policy.schemeDiscountPercent}%` : ""}
-              {policy.schemeIvaAdjustment ? ` · ${IVA_ADJUSTMENT_LABELS[policy.schemeIvaAdjustment]}` : ""}
-              {schemePricing.missingIva ? " · falta alícuota de IVA" : ""}
-            </p>
+            <FinalPriceLine usd={schemePricing.gross} className="text-violet-200/90" />
           )}
         </>
       )}
@@ -124,11 +137,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             {flash === "offline" ? "Agregado al pedido offline" : "Agregar a carrito offline"}
           </button>
           {offlinePricing.adjusted && (
-            <p className="text-[11px] text-amber-200/80 text-center tabular-nums">
-              Precio offline: {formatUSD(offlinePricing.gross)}
-              {policy.offlineIvaAdjustment ? ` · ${IVA_ADJUSTMENT_LABELS[policy.offlineIvaAdjustment]}` : ""}
-              {offlinePricing.missingIva ? " · falta alícuota de IVA" : ""}
-            </p>
+            <FinalPriceLine usd={offlinePricing.gross} className="text-amber-100/90" />
           )}
           {offlineItem && (
             <p className="text-[11px] text-amber-400 text-center">Ya tenés {offlineItem.qty} en el pedido offline</p>
