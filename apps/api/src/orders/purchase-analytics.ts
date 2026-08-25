@@ -139,9 +139,11 @@ export type PurchaseInsights = {
     previousSpendUsd: number | null;
     spendDeltaPercent: number | null;
     shippingUsd: number;
+    shippingArs: number;
     shippingOrders: number;
     pickupOrders: number;
     avgShippingUsd: number;
+    avgShippingArs: number;
     taxesUsd: number;
     perceptionsUsd: number;
     uniqueAddresses: number;
@@ -575,9 +577,11 @@ export function computePurchaseInsights(
       previousSpendUsd: previous,
       spendDeltaPercent,
       shippingUsd: ops.kpis.shippingUsd,
+      shippingArs: ops.kpis.shippingArs,
       shippingOrders: ops.kpis.shippingOrders,
       pickupOrders: ops.kpis.pickupOrders,
       avgShippingUsd: ops.kpis.avgShippingUsd,
+      avgShippingArs: ops.kpis.avgShippingArs,
       taxesUsd: ops.kpis.taxesUsd,
       perceptionsUsd: ops.kpis.perceptionsUsd,
       uniqueAddresses: ops.kpis.uniqueAddresses,

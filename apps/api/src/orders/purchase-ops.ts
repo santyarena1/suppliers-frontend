@@ -13,6 +13,7 @@ export type NamedCount = {
   label: string;
   spendUsd: number;
   extraUsd?: number;
+  extraArs?: number;
   units: number;
   orders: number;
   share: number;
@@ -51,6 +52,7 @@ export type OrderOps = {
   createdAt: string;
   fulfillment: Fulfillment;
   shippingUsd: number;
+  shippingArs: number;
   shippingKnown: boolean;
   taxesUsd: number;
   perceptionsUsd: number;
@@ -71,10 +73,12 @@ export type OrderOps = {
 export type OpsInsights = {
   kpis: {
     shippingUsd: number;
+    shippingArs: number;
     shippingOrders: number;
     pickupOrders: number;
     unknownFulfillment: number;
     avgShippingUsd: number;
+    avgShippingArs: number;
     taxesUsd: number;
     perceptionsUsd: number;
     subtotalUsd: number;
@@ -93,8 +97,8 @@ export type OpsInsights = {
   byWarehouse: NamedCount[];
   byBuyer: NamedCount[];
   byHour: { hour: number; label: string; orders: number; spendUsd: number }[];
-  shippingByMonth: { month: string; label: string; shippingUsd: number; shippedOrders: number; pickupOrders: number }[];
-  shippingByProvider: { provider: string; label: string; shippingUsd: number; orders: number; spendUsd: number }[];
+  shippingByMonth: { month: string; label: string; shippingUsd: number; shippingArs: number; shippedOrders: number; pickupOrders: number }[];
+  shippingByProvider: { provider: string; label: string; shippingUsd: number; shippingArs: number; orders: number; spendUsd: number }[];
 };
 
 const PICKUP_RE = /\b(retiro|pickup|sucursal|dep[oó]sito|warehouse|jujuy|centro de distribuci[oó]n|\bcd\b)\b/i;
@@ -182,7 +186,42 @@ export function classifyFulfillment(order: {
   return "UNKNOWN";
 }
 
+export function extractShipping(order: {
+  provider?: string;
+  total?: unknown;
+  subtotal?: unknown;
+  impuestos?: unknown;
+  percepciones?: unknown;
+  addressSnapshot?: unknown;
+  draftInput?: unknown;
+}): { usd: number; ars: number; known: boolean } {
+  const snap = rec(order.addressSnapshot);
+  const draft = rec(order.draftInput);
+  const quote = rec(snap.quote);
+  const provider = String(order.provider ?? "");
+
+  const quoteTotal = asNum(quote.total) || asNum(quote.cost) || asNum(quote.precio);
+  const shippingTotal = asNum(snap.shippingTotal);
+  const nbArs = provider === "NEW_BYTES" ? quoteTotal || shippingTotal : 0;
+  if (nbArs > 0) return { usd: 0, ars: round2(nbArs), known: true };
+
+  const explicitUsd =
+    asNum(snap.shippingCost) ||
+    nestedNum(draft, ["shippingCost"]) ||
+    nestedNum(draft, ["shipping"]);
+  // Un flete en USD de mayorista rara vez pasa unos cientos. Si el número es enorme,
+  // es pesos colados (no lo mezclamos).
+  if (explicitUsd > 0 && explicitUsd <= 400) return { usd: round2(explicitUsd), ars: 0, known: true };
+  if (explicitUsd > 400) return { usd: 0, ars: round2(explicitUsd), known: true };
+
+  // No usar total−subtotal−impuestos: en Invid `impuestos` son internos, no el IVA,
+  // y ese resto parece envío cuando en realidad es el IVA.
+  return { usd: 0, ars: 0, known: false };
+}
+
+/** @deprecated usar extractShipping — se deja para no romper imports de tests viejos. */
 export function extractShippingUsd(order: {
+  provider?: string;
   total?: unknown;
   subtotal?: unknown;
   impuestos?: unknown;
@@ -190,27 +229,8 @@ export function extractShippingUsd(order: {
   addressSnapshot?: unknown;
   draftInput?: unknown;
 }): { amount: number; known: boolean } {
-  const snap = rec(order.addressSnapshot);
-  const draft = rec(order.draftInput);
-  const quote = rec(snap.quote);
-  const explicit =
-    asNum(snap.shippingCost) ||
-    asNum(snap.shippingTotal) ||
-    asNum(snap.costo_envio) ||
-    asNum(snap.shipping) ||
-    asNum(quote.total) ||
-    asNum(quote.cost) ||
-    asNum(quote.precio) ||
-    nestedNum(draft, ["shippingCost"]) ||
-    nestedNum(draft, ["shipping"]);
-  if (explicit > 0) return { amount: round2(explicit), known: true };
-
-  const total = asNum(order.total);
-  const subtotal = asNum(order.subtotal);
-  if (total <= 0 || subtotal <= 0) return { amount: 0, known: false };
-  const remainder = round2(total - subtotal - asNum(order.impuestos) - asNum(order.percepciones));
-  if (remainder >= 0.05 && remainder < total * 0.6) return { amount: remainder, known: true };
-  return { amount: 0, known: false };
+  const got = extractShipping(order);
+  return { amount: got.usd, known: got.known && got.usd > 0 };
 }
 
 export function extractAddressLabel(order: {
@@ -252,7 +272,7 @@ export function extractOrderOps(order: OrderOpsInput): OrderOps {
   const createdAt = typeof order.createdAt === "string" ? order.createdAt : order.createdAt.toISOString();
   const snap = rec(order.addressSnapshot);
   const draft = rec(order.draftInput);
-  const shipping = extractShippingUsd(order);
+  const shipping = extractShipping(order);
   const payment = text(order.paymentLabel) || text(order.paymentOption) || "Sin medio de pago";
   const delivery = text(order.deliveryLabel) || text(order.deliveryOption) || "Sin entrega cargada";
   const quoteRate = asNum(draft.quoteRate) || null;
@@ -262,7 +282,8 @@ export function extractOrderOps(order: OrderOpsInput): OrderOps {
     channel: channelOf(order),
     createdAt,
     fulfillment: classifyFulfillment(order),
-    shippingUsd: shipping.amount,
+    shippingUsd: shipping.usd,
+    shippingArs: shipping.ars,
     shippingKnown: shipping.known,
     taxesUsd: round2(asNum(order.impuestos)),
     perceptionsUsd: round2(asNum(order.percepciones)),
@@ -281,17 +302,22 @@ export function extractOrderOps(order: OrderOpsInput): OrderOps {
   };
 }
 
-function toNamed(
-  map: Map<string, { spend: number; extra: number; orders: Set<string>; last: string | null }>,
-  totalOrders: number,
-  limit = 40
-): NamedCount[] {
+type NamedBucket = {
+  spend: number;
+  extraUsd: number;
+  extraArs: number;
+  orders: Set<string>;
+  last: string | null;
+};
+
+function toNamed(map: Map<string, NamedBucket>, totalOrders: number, limit = 40): NamedCount[] {
   return [...map.entries()]
     .map(([key, v]) => ({
       key,
       label: key,
       spendUsd: round2(v.spend),
-      extraUsd: round2(v.extra),
+      extraUsd: round2(v.extraUsd),
+      extraArs: round2(v.extraArs),
       units: v.orders.size,
       orders: v.orders.size,
       share: shareOf(v.orders.size, totalOrders),
@@ -301,20 +327,16 @@ function toNamed(
     .slice(0, limit);
 }
 
-function bump(
-  map: Map<string, { spend: number; extra: number; orders: Set<string>; last: string | null }>,
-  key: string,
-  ops: OrderOps,
-  extra = 0
-) {
+function bump(map: Map<string, NamedBucket>, key: string, ops: OrderOps, extraUsd = 0, extraArs = 0) {
   const k = key || "—";
   let row = map.get(k);
   if (!row) {
-    row = { spend: 0, extra: 0, orders: new Set(), last: null };
+    row = { spend: 0, extraUsd: 0, extraArs: 0, orders: new Set(), last: null };
     map.set(k, row);
   }
   row.spend += ops.totalUsd || ops.subtotalUsd;
-  row.extra += extra;
+  row.extraUsd += extraUsd;
+  row.extraArs += extraArs;
   row.orders.add(ops.orderId);
   if (!row.last || ops.createdAt > row.last) row.last = ops.createdAt;
 }
@@ -328,17 +350,20 @@ const FULFILLMENT_LABEL: Record<Fulfillment, string> = {
 export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
   const opsList = orders.map(extractOrderOps);
   const n = opsList.length;
-  const payments = new Map<string, { spend: number; extra: number; orders: Set<string>; last: string | null }>();
-  const deliveries = new Map<string, { spend: number; extra: number; orders: Set<string>; last: string | null }>();
-  const addresses = new Map<string, { spend: number; extra: number; orders: Set<string>; last: string | null }>();
-  const warehouses = new Map<string, { spend: number; extra: number; orders: Set<string>; last: string | null }>();
-  const buyers = new Map<string, { spend: number; extra: number; orders: Set<string>; last: string | null }>();
+  const payments = new Map<string, NamedBucket>();
+  const deliveries = new Map<string, NamedBucket>();
+  const addresses = new Map<string, NamedBucket>();
+  const warehouses = new Map<string, NamedBucket>();
+  const buyers = new Map<string, NamedBucket>();
   const hours = new Map<number, { orders: number; spend: number }>();
-  const months = new Map<string, { shippingUsd: number; shipped: number; pickup: number }>();
-  const providers = new Map<string, { shippingUsd: number; orders: number; spend: number }>();
+  const months = new Map<string, { shippingUsd: number; shippingArs: number; shipped: number; pickup: number }>();
+  const providers = new Map<string, { shippingUsd: number; shippingArs: number; orders: number; spend: number }>();
   const mix = new Map<Fulfillment, { orders: number; spend: number }>();
 
   let shippingUsd = 0;
+  let shippingArs = 0;
+  let shippingKnownUsd = 0;
+  let shippingKnownArs = 0;
   let shippingKnownOrders = 0;
   let taxesUsd = 0;
   let perceptionsUsd = 0;
@@ -349,8 +374,8 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
 
   for (const ops of opsList) {
     bump(payments, ops.payment, ops);
-    bump(deliveries, ops.delivery, ops, ops.shippingUsd);
-    if (ops.address && ops.address !== "Sin dirección") bump(addresses, ops.address, ops, ops.shippingUsd);
+    bump(deliveries, ops.delivery, ops, ops.shippingUsd, ops.shippingArs);
+    if (ops.address && ops.address !== "Sin dirección") bump(addresses, ops.address, ops, ops.shippingUsd, ops.shippingArs);
     if (ops.warehouse) bump(warehouses, ops.warehouse, ops);
     bump(buyers, ops.buyer, ops);
     const h = hours.get(ops.hour) ?? { orders: 0, spend: 0 };
@@ -359,14 +384,16 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
     hours.set(ops.hour, h);
 
     const mk = monthKey(ops.createdAt);
-    const month = months.get(mk) ?? { shippingUsd: 0, shipped: 0, pickup: 0 };
+    const month = months.get(mk) ?? { shippingUsd: 0, shippingArs: 0, shipped: 0, pickup: 0 };
     month.shippingUsd = round2(month.shippingUsd + ops.shippingUsd);
+    month.shippingArs = round2(month.shippingArs + ops.shippingArs);
     if (ops.fulfillment === "SHIPPING") month.shipped += 1;
     if (ops.fulfillment === "PICKUP") month.pickup += 1;
     months.set(mk, month);
 
-    const p = providers.get(ops.provider) ?? { shippingUsd: 0, orders: 0, spend: 0 };
+    const p = providers.get(ops.provider) ?? { shippingUsd: 0, shippingArs: 0, orders: 0, spend: 0 };
     p.shippingUsd = round2(p.shippingUsd + ops.shippingUsd);
+    p.shippingArs = round2(p.shippingArs + ops.shippingArs);
     p.orders += 1;
     p.spend = round2(p.spend + (ops.totalUsd || ops.subtotalUsd));
     providers.set(ops.provider, p);
@@ -377,6 +404,9 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
     mix.set(ops.fulfillment, f);
 
     shippingUsd += ops.shippingUsd;
+    shippingArs += ops.shippingArs;
+    if (ops.shippingUsd > 0) shippingKnownUsd += 1;
+    if (ops.shippingArs > 0) shippingKnownArs += 1;
     if (ops.shippingKnown) shippingKnownOrders += 1;
     taxesUsd += ops.taxesUsd;
     perceptionsUsd += ops.perceptionsUsd;
@@ -392,10 +422,12 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
   return {
     kpis: {
       shippingUsd: round2(shippingUsd),
+      shippingArs: round2(shippingArs),
       shippingOrders,
       pickupOrders,
       unknownFulfillment: mix.get("UNKNOWN")?.orders ?? 0,
-      avgShippingUsd: shippingKnownOrders ? round2(shippingUsd / shippingKnownOrders) : 0,
+      avgShippingUsd: shippingKnownUsd ? round2(shippingUsd / shippingKnownUsd) : 0,
+      avgShippingArs: shippingKnownArs ? round2(shippingArs / shippingKnownArs) : 0,
       taxesUsd: round2(taxesUsd),
       perceptionsUsd: round2(perceptionsUsd),
       subtotalUsd: round2(subtotalUsd),
@@ -439,6 +471,7 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
         month,
         label: monthLabel(month),
         shippingUsd: row.shippingUsd,
+        shippingArs: row.shippingArs,
         shippedOrders: row.shipped,
         pickupOrders: row.pickup,
       })),
@@ -447,9 +480,10 @@ export function computeOpsInsights(orders: OrderOpsInput[]): OpsInsights {
         provider,
         label: PROVIDER_LABELS[provider as Provider] ?? provider,
         shippingUsd: row.shippingUsd,
+        shippingArs: row.shippingArs,
         orders: row.orders,
         spendUsd: row.spend,
       }))
-      .sort((a, b) => b.shippingUsd - a.shippingUsd),
+      .sort((a, b) => b.shippingUsd + b.shippingArs - (a.shippingUsd + a.shippingArs)),
   };
 }

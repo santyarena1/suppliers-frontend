@@ -369,9 +369,11 @@ export interface PurchaseInsights {
     previousSpendUsd: number | null;
     spendDeltaPercent: number | null;
     shippingUsd?: number;
+    shippingArs?: number;
     shippingOrders?: number;
     pickupOrders?: number;
     avgShippingUsd?: number;
+    avgShippingArs?: number;
     taxesUsd?: number;
     perceptionsUsd?: number;
     uniqueAddresses?: number;
@@ -380,10 +382,12 @@ export interface PurchaseInsights {
   ops?: {
     kpis: {
       shippingUsd: number;
+      shippingArs: number;
       shippingOrders: number;
       pickupOrders: number;
       unknownFulfillment: number;
       avgShippingUsd: number;
+      avgShippingArs: number;
       taxesUsd: number;
       perceptionsUsd: number;
       subtotalUsd: number;
@@ -397,13 +401,13 @@ export interface PurchaseInsights {
     };
     fulfillmentMix: { key: string; label: string; orders: number; spendUsd: number; share: number }[];
     byPayment: PurchaseRankRow[];
-    byDelivery: (PurchaseRankRow & { extraUsd?: number })[];
-    byAddress: (PurchaseRankRow & { extraUsd?: number })[];
+    byDelivery: (PurchaseRankRow & { extraUsd?: number; extraArs?: number })[];
+    byAddress: (PurchaseRankRow & { extraUsd?: number; extraArs?: number })[];
     byWarehouse: PurchaseRankRow[];
     byBuyer: PurchaseRankRow[];
     byHour: { hour: number; label: string; orders: number; spendUsd: number }[];
-    shippingByMonth: { month: string; label: string; shippingUsd: number; shippedOrders: number; pickupOrders: number }[];
-    shippingByProvider: { provider: string; label: string; shippingUsd: number; orders: number; spendUsd: number }[];
+    shippingByMonth: { month: string; label: string; shippingUsd: number; shippingArs: number; shippedOrders: number; pickupOrders: number }[];
+    shippingByProvider: { provider: string; label: string; shippingUsd: number; shippingArs: number; orders: number; spendUsd: number }[];
   };
   concentration: {
     providers: { top1: number; top5: number; top10: number };

@@ -28,6 +28,10 @@ function usd(value: number) {
   return `US$ ${Number(value).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
 }
 
+function ars(value: number) {
+  return `$ ${Number(value).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
+}
+
 export function SpendAreaChart({
   data,
 }: {
@@ -149,26 +153,53 @@ export function WeekdayBars({
 export function ShippingMonthChart({
   data,
 }: {
-  data: { label: string; shippingUsd: number; shippedOrders: number; pickupOrders: number }[];
+  data: { label: string; shippingUsd: number; shippingArs?: number; shippedOrders: number; pickupOrders: number }[];
 }) {
-  if (data.every((d) => d.shippingUsd === 0 && d.shippedOrders === 0)) {
-    return <EmptyChart text="Sin costos de envío en el período" />;
+  const hasUsd = data.some((d) => d.shippingUsd > 0);
+  const hasArs = data.some((d) => (d.shippingArs ?? 0) > 0);
+  if (!hasUsd && !hasArs) {
+    return <EmptyChart text="Los pedidos no trajeron costo de envío (no se estima ni se convierte)" />;
   }
+
+  const moneyKey = hasArs && !hasUsd ? "shippingArs" : hasUsd && !hasArs ? "shippingUsd" : null;
+  if (moneyKey) {
+    const fmt = moneyKey === "shippingArs" ? ars : usd;
+    const seriesLabel = moneyKey === "shippingArs" ? "Flete ARS" : "Flete USD";
+    return (
+      <div className="h-52">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+            <XAxis dataKey="label" tick={TICK} axisLine={{ stroke: "#3f3f46" }} tickLine={false} />
+            <YAxis tick={TICK} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => fmt(Number(v))} />
+            <Tooltip
+              contentStyle={TOOLTIP_STYLE}
+              formatter={(value) => [fmt(Number(value)), seriesLabel]}
+            />
+            <Bar dataKey={moneyKey} fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={22} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
   return (
     <div className="h-52">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
           <XAxis dataKey="label" tick={TICK} axisLine={{ stroke: "#3f3f46" }} tickLine={false} />
-          <YAxis tick={TICK} axisLine={false} tickLine={false} width={48} tickFormatter={(v) => usd(Number(v))} />
+          <YAxis yAxisId="ars" tick={TICK} axisLine={false} tickLine={false} width={56} tickFormatter={(v) => ars(Number(v))} />
+          <YAxis yAxisId="usd" orientation="right" tick={TICK} axisLine={false} tickLine={false} width={48} tickFormatter={(v) => usd(Number(v))} />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
             formatter={(value, name) => [
-              name === "shippingUsd" ? usd(Number(value)) : Number(value).toLocaleString("es-AR"),
-              name === "shippingUsd" ? "Envíos USD" : name === "shippedOrders" ? "Con envío" : "Retiro",
+              name === "shippingArs" ? ars(Number(value)) : usd(Number(value)),
+              name === "shippingArs" ? "Flete ARS" : "Flete USD",
             ]}
           />
-          <Bar dataKey="shippingUsd" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={22} />
+          <Bar yAxisId="ars" dataKey="shippingArs" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={18} />
+          <Bar yAxisId="usd" dataKey="shippingUsd" fill="#22d3ee" radius={[4, 4, 0, 0]} maxBarSize={18} />
         </BarChart>
       </ResponsiveContainer>
     </div>
