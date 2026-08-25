@@ -1,19 +1,39 @@
-import { classifyFulfillment, computeOpsInsights, extractAddressLabel, extractShippingUsd } from "./purchase-ops";
+import { classifyFulfillment, computeOpsInsights, extractAddressLabel, extractShipping } from "./purchase-ops";
 
-describe("extractShippingUsd", () => {
-  it("usa el costo explícito del snapshot", () => {
-    expect(extractShippingUsd({ addressSnapshot: { shippingCost: 12.5 } })).toEqual({ amount: 12.5, known: true });
-    expect(extractShippingUsd({ addressSnapshot: { quote: { total: 8 } } })).toEqual({ amount: 8, known: true });
+describe("extractShipping", () => {
+  it("toma el flete de New Bytes como pesos, no como dólares", () => {
+    expect(extractShipping({ provider: "NEW_BYTES", addressSnapshot: { quote: { total: 1749.86 } } })).toEqual({
+      usd: 0,
+      ars: 1749.86,
+      known: true,
+    });
   });
 
-  it("estima el envío como resto del total cuando está guardado", () => {
-    const got = extractShippingUsd({ total: 130, subtotal: 100, impuestos: 21, percepciones: 2 });
-    expect(got).toEqual({ amount: 7, known: true });
+  it("toma un shippingCost chico de Elit/Invid como USD", () => {
+    expect(extractShipping({ provider: "ELIT", addressSnapshot: { shippingCost: 12.5 } })).toEqual({
+      usd: 12.5,
+      ars: 0,
+      known: true,
+    });
   });
 
-  it("no inventa envío si el resto es absurdo o no hay totales", () => {
-    expect(extractShippingUsd({ total: 100, subtotal: 10 }).known).toBe(false);
-    expect(extractShippingUsd({ total: 100 }).known).toBe(false);
+  it("no trata un shippingCost enorme como dólares", () => {
+    expect(extractShipping({ provider: "INVID", addressSnapshot: { shippingCost: 1749.86 } })).toEqual({
+      usd: 0,
+      ars: 1749.86,
+      known: true,
+    });
+  });
+
+  it("no trata el IVA de Invid como envío", () => {
+    const got = extractShipping({
+      provider: "INVID",
+      total: 130,
+      subtotal: 100,
+      impuestos: 10,
+      percepciones: 2,
+    });
+    expect(got).toEqual({ usd: 0, ars: 0, known: false });
   });
 });
 
@@ -38,7 +58,7 @@ describe("extractAddressLabel", () => {
 });
 
 describe("computeOpsInsights", () => {
-  it("cuenta envíos, pagos y direcciones del mismo lote", () => {
+  it("cuenta envíos, pagos y direcciones sin mezclar pesos en USD", () => {
     const report = computeOpsInsights([
       {
         id: "1",
@@ -64,17 +84,18 @@ describe("computeOpsInsights", () => {
         total: 50,
         subtotal: 50,
         paymentLabel: "Efectivo",
-        deliveryLabel: "Retiro Av. Jujuy 1039",
-        addressSnapshot: { pickup: true, label: "Av. Jujuy 1039" },
+        deliveryLabel: "Envío Andreani",
+        addressSnapshot: { quote: { total: 1749.86 }, dropShipping: false },
         createdBy: "ana",
       },
     ]);
-    expect(report.kpis.shippingOrders).toBe(1);
-    expect(report.kpis.pickupOrders).toBe(1);
-    expect(report.kpis.shippingUsd).toBe(8);
+    expect(report.kpis.shippingOrders).toBe(2);
+    expect(report.kpis.shippingUsd).toBe(0);
+    expect(report.kpis.shippingArs).toBe(1749.86);
+    expect(report.kpis.avgShippingArs).toBe(1749.86);
+    expect(report.byDelivery.find((r) => r.label.includes("Andreani"))?.extraArs).toBe(1749.86);
     expect(report.kpis.uniquePayments).toBe(2);
     expect(report.byAddress[0].label).toContain("Mitre 12");
     expect(report.byBuyer[0]).toMatchObject({ key: "ana", orders: 2 });
-    expect(report.shippingByMonth.some((m) => m.shippedOrders === 1 && m.pickupOrders === 1)).toBe(true);
   });
 });

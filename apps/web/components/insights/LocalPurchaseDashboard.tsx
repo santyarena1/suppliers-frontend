@@ -56,6 +56,17 @@ function qty(n: number) {
   return n.toLocaleString("es-AR");
 }
 
+function pesos(n: number) {
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(n);
+}
+
+function formatFreight(usd: number, ars: number) {
+  const parts: string[] = [];
+  if (usd > 0) parts.push(formatUSD(usd));
+  if (ars > 0) parts.push(pesos(ars));
+  return parts.join(" · ") || "—";
+}
+
 function when(iso: string | null | undefined) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "2-digit" });
@@ -355,8 +366,8 @@ function Resumen({
         <Kpi label="Importe de pedidos" value={formatUSD(k.orderTotalUsd)} hint="Totales guardados (puede incluir IVA/envío)" />
         <Kpi
           label="Gastado en envíos"
-          value={formatUSD(k.shippingUsd ?? data.ops?.kpis.shippingUsd ?? 0)}
-          hint={`${qty(k.shippingOrders ?? data.ops?.kpis.shippingOrders ?? 0)} pedidos con envío · ticket ${formatUSD(k.avgShippingUsd ?? data.ops?.kpis.avgShippingUsd ?? 0)}`}
+          value={formatFreight(k.shippingUsd ?? data.ops?.kpis.shippingUsd ?? 0, k.shippingArs ?? data.ops?.kpis.shippingArs ?? 0)}
+          hint="New Bytes cotiza en pesos. Elit/Invid en USD solo si el pedido guardó el flete. No se convierte."
         />
         <Kpi
           label="Retiro vs envío"
@@ -818,10 +829,22 @@ function EnviosPanel({ data }: { data: PurchaseInsights }) {
   const k = ops.kpis;
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-[11px] text-surface-500 leading-relaxed">
+        New Bytes cotiza el envío en pesos y acá se muestra en pesos: no se convierte a dólares.
+        Elit/Invid/Air solo suman flete en USD si el pedido guardó el costo. No se estima restando IVA.
+      </p>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi label="Pedidos con envío" value={qty(k.shippingOrders)} hint={`${pct(k.shippingOrders && data.kpis.orders ? (k.shippingOrders / data.kpis.orders) * 100 : 0)} del período`} />
-        <Kpi label="Gastado en flete" value={formatUSD(k.shippingUsd)} hint={k.shippingKnownOrders ? `En ${qty(k.shippingKnownOrders)} pedidos con costo conocido` : "El proveedor no siempre informa el costo"} />
-        <Kpi label="Costo medio de envío" value={formatUSD(k.avgShippingUsd)} hint="Solo pedidos donde se pudo leer o estimar el flete" />
+        <Kpi
+          label="Flete en pesos"
+          value={pesos(k.shippingArs ?? 0)}
+          hint={k.avgShippingArs ? `Promedio ${pesos(k.avgShippingArs)} · cotización New Bytes` : "Ningún pedido guardó cotización en pesos"}
+        />
+        <Kpi
+          label="Flete en dólares"
+          value={formatUSD(k.shippingUsd ?? 0)}
+          hint={k.avgShippingUsd ? `Promedio ${formatUSD(k.avgShippingUsd)} · shippingCost del pedido` : "Elit/Invid casi no guardan el flete"}
+        />
         <Kpi label="Retiros" value={qty(k.pickupOrders)} hint={`${qty(k.unknownFulfillment)} sin dato de entrega`} />
         {k.dropShippingOrders > 0 && <Kpi label="Dropshipping" value={qty(k.dropShippingOrders)} hint="Marca blanca / envío al cliente final" />}
       </div>
@@ -840,7 +863,7 @@ function EnviosPanel({ data }: { data: PurchaseInsights }) {
             ))}
           </ul>
         </Card>
-        <Card title="Flete por mes" className="lg:col-span-2" hint="Suma de costos de envío que el pedido trajo guardados (cotización o resto del total).">
+        <Card title="Flete por mes" className="lg:col-span-2" hint="Suma de costos que el pedido trajo guardados, en la moneda original. No se convierte ni se estima con el IVA.">
           <ShippingMonthChart data={ops.shippingByMonth} />
         </Card>
       </div>
@@ -850,12 +873,12 @@ function EnviosPanel({ data }: { data: PurchaseInsights }) {
             <NamedTable
               rows={ops.byDelivery}
               extraHeader="Flete"
-              extra={(r) => formatUSD(r.extraUsd ?? 0)}
+              extra={(r) => formatFreight(r.extraUsd ?? 0, r.extraArs ?? 0)}
             />
           )}
         </Card>
         <Card title="Flete por distribuidor">
-          {ops.shippingByProvider.every((p) => p.shippingUsd === 0) ? (
+          {ops.shippingByProvider.every((p) => (p.shippingUsd ?? 0) === 0 && (p.shippingArs ?? 0) === 0) ? (
             <EmptyOps text="Ningún distribuidor informó costo de envío en este período." />
           ) : (
             <div className="overflow-x-auto">
@@ -864,7 +887,8 @@ function EnviosPanel({ data }: { data: PurchaseInsights }) {
                   <tr className="border-b border-surface-800">
                     <th className="text-left font-medium py-2">Distribuidor</th>
                     <th className="text-right font-medium py-2">Pedidos</th>
-                    <th className="text-right font-medium py-2">Flete</th>
+                    <th className="text-right font-medium py-2">Flete USD</th>
+                    <th className="text-right font-medium py-2">Flete ARS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -872,7 +896,8 @@ function EnviosPanel({ data }: { data: PurchaseInsights }) {
                     <tr key={row.provider} className="border-b border-surface-800/60">
                       <td className="py-1.5"><ProviderBadge provider={row.provider} label={row.label} size="sm" /></td>
                       <td className="py-1.5 text-right tabular-nums">{row.orders}</td>
-                      <td className="py-1.5 text-right tabular-nums text-white">{formatUSD(row.shippingUsd)}</td>
+                      <td className="py-1.5 text-right tabular-nums text-white">{row.shippingUsd > 0 ? formatUSD(row.shippingUsd) : "—"}</td>
+                      <td className="py-1.5 text-right tabular-nums text-white">{row.shippingArs > 0 ? pesos(row.shippingArs) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -936,7 +961,7 @@ function DireccionesPanel({ data }: { data: PurchaseInsights }) {
         {ops.byAddress.length === 0 ? (
           <EmptyOps text="Todavía no hay domicilios guardados en los pedidos de este período." />
         ) : (
-          <NamedTable rows={ops.byAddress} extraHeader="Flete" extra={(r) => formatUSD(r.extraUsd ?? 0)} />
+          <NamedTable rows={ops.byAddress} extraHeader="Flete" extra={(r) => formatFreight(r.extraUsd ?? 0, r.extraArs ?? 0)} />
         )}
       </Card>
       {ops.byWarehouse.length > 0 && (
@@ -953,9 +978,9 @@ function NamedTable({
   extraHeader,
   extra,
 }: {
-  rows: (PurchaseRankRow & { extraUsd?: number })[];
+  rows: (PurchaseRankRow & { extraUsd?: number; extraArs?: number })[];
   extraHeader?: string;
-  extra?: (row: PurchaseRankRow & { extraUsd?: number }) => string;
+  extra?: (row: PurchaseRankRow & { extraUsd?: number; extraArs?: number }) => string;
 }) {
   return (
     <div className="overflow-x-auto mt-2">

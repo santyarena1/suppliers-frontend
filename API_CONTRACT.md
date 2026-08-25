@@ -83,7 +83,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `days` opcional, default 90. `0` = todo el historial del comercio
 - **Respuesta esperada**: `{ tenantName, periodDays, kpis, concentration, channelMix, byMonth, byWeekday, byProvider, byBrand, byCategory, bySubcategory, brandProviders, topProducts, recentOrders, ops }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: La data es **solo de ese local**. `ops` agrega envíos (retiro vs domicilio, flete por mes/proveedor), formas de pago, direcciones más usadas, sucursales, IVA/percepciones y quién armó el pedido. El flete se lee de la cotización guardada o, si no está, del resto `total - subtotal - impuestos - percepciones` cuando ese resto es creíble.
+- **Notas**: La data es **solo de ese local**. `ops` agrega envíos (retiro vs domicilio, flete por mes/proveedor), formas de pago, direcciones más usadas, sucursales, IVA/percepciones y quién armó el pedido. El flete **no se inventa ni se convierte**. New Bytes guarda la cotización en **ARS** (`shippingArs`); Elit/Invid/Air solo cuentan en **USD** si el pedido trajo `shippingCost` creíble. No se usa `total − subtotal − impuestos`: en Invid `impuestos` son internos y ese resto es IVA, no envío.
 
 ### [FEATURE] Pedido offline y compras en esquema (comercio tipo 1)
 - **Método**: GET | PUT · POST | PATCH (pedidos)
