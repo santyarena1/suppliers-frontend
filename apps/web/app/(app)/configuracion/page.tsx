@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePrefs, DollarType } from "@/lib/prefs";
+import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useTheme, THEME_OPTIONS, type Theme } from "@/lib/theme";
 import { getUser, isAdmin } from "@/lib/auth";
 import {
@@ -40,6 +41,8 @@ export default function ConfiguracionPage() {
     currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
     dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
   } = usePrefs();
+  useIibbRatesEpoch();
+  const iibbHint = knownIibbRatesHint();
 
   useEffect(() => {
     if (!admin && tab !== "prefs") setTab("prefs");
@@ -231,14 +234,14 @@ export default function ConfiguracionPage() {
                             ? "bg-surface-800 hover:bg-surface-700 border-surface-700"
                             : "bg-surface-900/50 border-surface-800 opacity-70"
                         }`}
-                        title="Suma IIBB/percepciones al costo de búsqueda cuando el distribuidor las aplica"
+                        title={iibbHint}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Percent className="w-4 h-4 text-surface-400 flex-shrink-0" />
                           <div className="text-left min-w-0">
-                            <span className="text-sm text-surface-200 block">Incluir IIBB en precios</span>
+                            <span className="text-sm text-surface-200 block">Incluir percepciones / IIBB</span>
                             <span className="text-[11px] text-surface-500 leading-snug block mt-0.5">
-                              Apagado por defecto. Se suma al costo si el proveedor carga percepciones (p. ej. en el carrito).
+                              {iibbHint}. Air, Ceven y Diapstore no cargan percepción. Apagado por defecto; si cotizás en el carrito, se actualiza.
                             </span>
                           </div>
                         </div>

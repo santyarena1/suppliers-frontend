@@ -6,13 +6,36 @@ const STORAGE_KEY = "pref_iibb_rates";
 const EVENT = "nodo:iibb-rates";
 
 /**
- * Alícuotas documentadas (puntos: 3 = 3% sobre neto).
- * Invid la informa al validar stock; el parser de checkout la trata como típica ~3%.
- * El resto se aprende de cotizaciones reales del carrito.
+ * Alícuotas IIBB/percepciones sobre neto (puntos: 7 = 7%).
+ *
+ * New Bytes: el carrito suma `perceptionsIIBB` ≈ 7% del subtotal.
+ * Invid: al validar stock manda `percepcion` = 3.
+ * Elit: Percep. II.BB. C.A.B.A típica 3% (p. ej. 1.5 / 50.01).
+ * Grupo Núcleo: línea `Percepción IIBB` 3% en `impuestos[]` (fallback si el producto no la trae).
+ *
+ * Air, Ceven y Diapstore no cargan percepción en checkout: no se inventa.
+ * Una cotización real del carrito pisa estos valores.
  */
 const BUILTIN_RATES: Record<string, number> = {
+  NEW_BYTES: 7,
   INVID: 3,
+  ELIT: 3,
+  GRUPO_NUCLEO: 3,
 };
+
+const RATE_LABELS: Record<string, string> = {
+  NEW_BYTES: "New Bytes",
+  INVID: "Invid",
+  ELIT: "Elit",
+  GRUPO_NUCLEO: "Grupo Núcleo",
+};
+
+const RATE_ORDER = ["NEW_BYTES", "INVID", "ELIT", "GRUPO_NUCLEO"];
+
+function formatPct(percent: number): string {
+  const n = Math.round(percent * 10) / 10;
+  return `${Number.isInteger(n) ? String(n) : n.toFixed(1)}%`;
+}
 
 function readStored(): Record<string, number> {
   if (typeof window === "undefined") return {};
@@ -37,6 +60,31 @@ export function getIibbRatePercent(provider: string | null | undefined): number 
   const stored = readStored()[provider];
   if (stored != null) return stored;
   return BUILTIN_RATES[provider] ?? null;
+}
+
+export function listKnownIibbRates(): { provider: string; label: string; percent: number }[] {
+  const stored = readStored();
+  const providers = new Set([...Object.keys(BUILTIN_RATES), ...Object.keys(stored)]);
+  const rest = [...providers].filter((p) => !RATE_ORDER.includes(p)).sort();
+  const ordered = [...RATE_ORDER.filter((p) => providers.has(p)), ...rest];
+  return ordered
+    .map((provider) => {
+      const percent = stored[provider] ?? BUILTIN_RATES[provider];
+      if (percent == null || percent <= 0) return null;
+      return {
+        provider,
+        label: RATE_LABELS[provider] ?? provider.replace(/_/g, " "),
+        percent,
+      };
+    })
+    .filter((r): r is { provider: string; label: string; percent: number } => r != null);
+}
+
+/** Texto corto para el toggle: "New Bytes 7% · Invid 3% · …" */
+export function knownIibbRatesHint(): string {
+  return listKnownIibbRates()
+    .map((r) => `${r.label} ${formatPct(r.percent)}`)
+    .join(" · ");
 }
 
 /** Guarda la alícuota observada en una cotización del carrito. */

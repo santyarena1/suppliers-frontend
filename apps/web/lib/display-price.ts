@@ -35,7 +35,8 @@ export type DisplayAmount = {
  * Precio a mostrar en búsqueda / cards / ficha.
  * - sin impuestos: neto
  * - con impuestos, sin IIBB: IVA + internos (excluye percepciones aunque el producto las traiga)
- * - con impuestos + IIBB: suma IIBB del producto o alícuota conocida del distribuidor
+ * - con impuestos + IIBB: suma IIBB del producto o la alícuota del distribuidor
+ *   (New Bytes 7%, Invid/Elit/Grupo Núcleo 3%; el carrito puede pisar)
  */
 export function displayAmountFromPricing(
   pricing: {

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePrefs, DollarType } from "@/lib/prefs";
+import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { DollarSign, RefreshCw, Receipt, Check, Percent } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
@@ -9,6 +10,8 @@ export default function PrefsPanel() {
     currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
     dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
   } = usePrefs();
+  useIibbRatesEpoch();
+  const iibbHint = knownIibbRatesHint();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -128,14 +131,14 @@ export default function PrefsPanel() {
                     ? "bg-surface-800 hover:bg-surface-700 border-surface-700"
                     : "bg-surface-800 hover:bg-surface-700 border-surface-700"
                 }`}
-                title="Suma IIBB/percepciones al costo cuando el distribuidor las carga (p. ej. en el carrito)"
+                title={iibbHint}
               >
                 <div className="flex items-center gap-2 min-w-0">
                   <Percent className="w-3.5 h-3.5 text-surface-400 flex-shrink-0" />
                   <div className="text-left min-w-0">
-                    <span className="text-xs text-surface-200 block">Incluir IIBB en precios</span>
+                    <span className="text-xs text-surface-200 block">Incluir percepciones / IIBB</span>
                     <span className="text-[10px] text-surface-500 leading-tight block">
-                      Por defecto oculto · se suma al costo
+                      {iibbHint}. Air, Ceven y Diapstore no cargan percepción. Apagado por defecto; el carrito puede actualizarlo.
                     </span>
                   </div>
                 </div>
