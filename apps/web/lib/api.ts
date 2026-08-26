@@ -1661,6 +1661,9 @@ export const catalogEnrichmentApi = {
       {},
       { params: provider ? { provider } : {} }
     ),
+  saveOpenAi: (apiKey: string) =>
+    api.put<{ hasOpenAiKey: boolean }>("/admin/catalog-enrichment/openai", { apiKey }),
+  clearOpenAi: () => api.delete<{ hasOpenAiKey: boolean }>("/admin/catalog-enrichment/openai"),
 };
 
 /** Marca/categoría visible con fallback al valor crudo del proveedor. */

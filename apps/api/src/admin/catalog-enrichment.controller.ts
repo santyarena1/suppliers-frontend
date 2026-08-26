@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -16,6 +17,7 @@ import {
   ApplyCatalogSuggestionDto,
   PreviewRawQueryDto,
   RawValuesQueryDto,
+  SaveOpenAiKeyDto,
   UpsertCatalogAliasDto,
   UpsertCatalogIdentityDto,
 } from "./dto/catalog-enrichment.dto";
@@ -29,6 +31,16 @@ export class CatalogEnrichmentController {
   @Get("overview")
   overview() {
     return this.catalog.overview();
+  }
+
+  @Put("openai")
+  saveOpenAi(@Body() dto: SaveOpenAiKeyDto) {
+    return this.catalog.saveOpenAiKey(dto.apiKey);
+  }
+
+  @Delete("openai")
+  clearOpenAi() {
+    return this.catalog.clearOpenAiKey();
   }
 
   @Get("raw-values")

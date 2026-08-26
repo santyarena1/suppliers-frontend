@@ -15,6 +15,7 @@ import { displayAmountFromPricing, displayTaxBadge, displayTaxTitle } from "@/li
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
+import ProductSyncedAt from "./ProductSyncedAt";
 
 function CardProviderPill({ provider }: { provider: string }) {
   const display = useProviderDisplay();
@@ -215,6 +216,11 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
             </div>
           </div>
         </div>
+
+        <ProductSyncedAt
+          syncedAt={product.syncedAt}
+          className="text-[9px] text-surface-500 text-center leading-tight px-1 pb-0.5"
+        />
       </div>
 
       <SalePricePanel
