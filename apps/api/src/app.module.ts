@@ -19,6 +19,7 @@ import { AdminModule } from "./admin/admin.module";
 import { TenantsModule } from "./tenants/tenants.module";
 import { RetailModule } from "./retail/retail.module";
 import { AssetsModule } from "./assets/assets.module";
+import { ImagesModule } from "./images/images.module";
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { AssetsModule } from "./assets/assets.module";
     TenantsModule,
     RetailModule,
     AssetsModule,
+    ImagesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

@@ -6,6 +6,7 @@ import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service"
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
+import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct } from "./types";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
@@ -346,6 +347,11 @@ export class ProvidersService {
     const CHUNK_SIZE = 25;
     for (let i = 0; i < items.length; i += CHUNK_SIZE) {
       const chunk = items.slice(i, i + CHUNK_SIZE);
+      const previousFichas = await this.prisma.providerSyncCache.findMany({
+        where: { provider, externalId: { in: chunk.map((it) => it.externalId) } },
+        select: { externalId: true, imageUrl: true },
+      });
+      const previousImageById = new Map(previousFichas.map((f) => [f.externalId, f.imageUrl]));
       await Promise.all(
         chunk.map(async (item) => {
           const ficha = {
@@ -358,7 +364,7 @@ export class ProvidersService {
             subcategory: item.subcategory,
             description: item.description,
             longDescription: item.longDescription,
-            imageUrl: item.imageUrl,
+            imageUrl: mergeProductImage(item.imageUrl, previousImageById.get(item.externalId)),
             productUrl: item.productUrl,
             locationAir: item.locationAir,
             warranty: item.warranty,

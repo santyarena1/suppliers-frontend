@@ -11,14 +11,15 @@ import UsersManagement from "@/components/admin/UsersManagement";
 import OrganizationsTree from "@/components/admin/OrganizationsTree";
 import CatalogEnrichmentPanel from "@/components/admin/CatalogEnrichmentPanel";
 import DiagnosticsPanel from "@/components/DiagnosticsPanel";
+import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
 import {
   Users, ShieldCheck,
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
-  ChevronLeft, ChevronRight, RefreshCw, Store, Search,
+  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon,
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "organizations" | "users" | "permissions" | "retail" | "catalog" | "diagnostics";
+type Tab = "organizations" | "users" | "permissions" | "retail" | "catalog" | "images" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "organizations", label: "Organizaciones", icon: <Network className="w-3.5 h-3.5" /> },
@@ -26,6 +27,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "permissions", label: "Permisos", icon: <ShieldCheck className="w-3.5 h-3.5" /> },
   { key: "retail", label: "Locales / precios", icon: <DollarSign className="w-3.5 h-3.5" /> },
   { key: "catalog", label: "Catálogo", icon: <Tags className="w-3.5 h-3.5" /> },
+  { key: "images", label: "Imágenes", icon: <ImageIcon className="w-3.5 h-3.5" /> },
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
@@ -39,7 +41,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   admin: "Administración",
 };
 
-const TAB_KEYS: Tab[] = ["organizations", "users", "permissions", "retail", "catalog", "diagnostics"];
+const TAB_KEYS: Tab[] = ["organizations", "users", "permissions", "retail", "catalog", "images", "diagnostics"];
 
 export default function AdminPage() {
   return (
@@ -114,6 +116,7 @@ function AdminPageInner() {
             {tab === "permissions" && <PermissionsTab showToast={showToast} />}
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
+            {tab === "images" && <ImageSyncPanel showToast={showToast} />}
             {tab === "diagnostics" && <DiagnosticsPanel />}
           </div>
 
