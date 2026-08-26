@@ -1,19 +1,62 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   ALL_PROVIDERS,
   PROVIDER_LABELS,
+  assetsApi,
   imageSyncApi,
+  type ImageSyncFill,
   type ImageSyncMissingItem,
   type ImageSyncStatus,
   type Provider,
+  type SerperImageHit,
 } from "@/lib/api";
-import { Image as ImageIcon, KeyRound, Loader2, Play, Square } from "lucide-react";
+import { assetUrl } from "@/lib/assets";
+import { proxyImg } from "@/lib/format";
+import ImageUploadPreviewModal from "@/components/ImageUploadPreviewModal";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Image as ImageIcon,
+  KeyRound,
+  Loader2,
+  Play,
+  Search,
+  Square,
+  Upload,
+} from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
 }
+
+function thumb(url: string | null | undefined) {
+  if (!url) return "";
+  if (url.startsWith("/assets/") || url.startsWith("/uploads/")) return assetUrl(url);
+  return proxyImg(url, { trim: false });
+}
+
+function fmtWhen(iso: string) {
+  return new Date(iso).toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const SOURCE_LABEL: Record<string, string> = {
+  serper: "Primera foto",
+  serper_pick: "Elegida",
+  upload: "Subida",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  filled: "Con foto",
+  skipped: "Sin resultado",
+  failed: "Error",
+};
 
 export default function ImageSyncPanel({
   showToast,
@@ -22,28 +65,48 @@ export default function ImageSyncPanel({
 }) {
   const [status, setStatus] = useState<ImageSyncStatus | null>(null);
   const [missing, setMissing] = useState<ImageSyncMissingItem[]>([]);
+  const [history, setHistory] = useState<ImageSyncFill[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [histStatus, setHistStatus] = useState("");
+  const [histQ, setHistQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [apiKey, setApiKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [provider, setProvider] = useState<string>("");
+  const [picker, setPicker] = useState<ImageSyncFill | ImageSyncMissingItem | null>(null);
+  const [uploadFor, setUploadFor] = useState<string | null>(null);
+  const [draftFile, setDraftFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const take = 20;
 
   const load = useCallback(async () => {
     try {
-      const [st, miss] = await Promise.all([
+      const [st, miss, hist] = await Promise.all([
         imageSyncApi.status(),
-        imageSyncApi.missing({ take: 12, provider: provider || undefined }),
+        imageSyncApi.missing({ take: 8, provider: provider || undefined }),
+        imageSyncApi.history({
+          page,
+          take,
+          provider: provider || undefined,
+          status: histStatus || undefined,
+          q: histQ.trim() || undefined,
+        }),
       ]);
       setStatus(st.data);
       setMissing(miss.data.items);
+      setHistory(hist.data.items);
+      setHistoryTotal(hist.data.total);
     } catch {
       setStatus(null);
-      setMissing([]);
     } finally {
       setLoading(false);
     }
-  }, [provider]);
+  }, [provider, page, histStatus, histQ]);
 
   useEffect(() => {
     void load();
@@ -84,6 +147,18 @@ export default function ImageSyncPanel({
     }
   }
 
+  async function toggleCron() {
+    if (!status) return;
+    try {
+      const next = !status.cronEnabled;
+      await imageSyncApi.setCron(next);
+      showToast(next ? "Cron activado: 8:00 y 20:00" : "Cron desactivado");
+      await load();
+    } catch (err) {
+      showToast(errMsg(err, "No se pudo cambiar el cron"), false);
+    }
+  }
+
   async function run(once: boolean) {
     setStarting(true);
     try {
@@ -118,6 +193,28 @@ export default function ImageSyncPanel({
     }
   }
 
+  async function applyImage(productId: string, imageUrl: string, source: "serper_pick" | "upload") {
+    await imageSyncApi.setImage(productId, imageUrl, source);
+    showToast("Foto actualizada");
+    setPicker(null);
+    await load();
+  }
+
+  async function confirmUpload(file: File) {
+    if (!uploadFor) return;
+    setUploading(true);
+    try {
+      const { url } = await assetsApi.upload(file);
+      await applyImage(uploadFor, url, "upload");
+      setDraftFile(null);
+      setUploadFor(null);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "No se pudo subir", false);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   if (loading && !status) {
     return (
       <div className="flex justify-center py-16">
@@ -128,20 +225,21 @@ export default function ImageSyncPanel({
 
   const runRow = status?.lastRun;
   const running = Boolean(status?.running);
+  const pages = Math.max(1, Math.ceil(historyTotal / take));
   const pct =
     runRow && runRow.missingTotal > 0
-      ? Math.min(100, Math.round((runRow.processed / runRow.missingTotal) * 100))
+      ? Math.min(100, Math.round((runRow.processed / Math.max(runRow.maxItems ?? runRow.missingTotal, 1)) * 100))
       : running
         ? 5
         : 0;
 
   return (
-    <div className="max-w-3xl flex flex-col gap-6">
+    <div className="max-w-4xl flex flex-col gap-6">
       <div>
         <h2 className="text-sm font-semibold text-white">Sincronización de imágenes</h2>
         <p className="text-xs text-surface-500 mt-1">
-          Solo para productos <span className="text-surface-300">sin foto</span>. Primera foto busca en Google
-          vía Serper y guarda la primera imagen. De a tandas de 50, en segundo plano.
+          Solo productos sin foto. Primera foto busca en Serper y guarda la primera imagen, de a 50.
+          El automático corre dos veces al día y va completando el catálogo (~{status?.cronLimit ?? 200} por corrida).
         </p>
       </div>
 
@@ -160,7 +258,7 @@ export default function ImageSyncPanel({
           )}
         </div>
         <p className="text-xs text-surface-500">
-          Se guarda cifrada. No se vuelve a mostrar. La sacás de{" "}
+          Se guarda cifrada. La sacás de{" "}
           <a href="https://serper.dev/api-key" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">
             serper.dev/api-key
           </a>
@@ -197,15 +295,32 @@ export default function ImageSyncPanel({
 
       <div className="border border-surface-800 rounded-xl p-4 flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-2xl font-semibold text-white tabular-nums">{status?.missing ?? "—"}</p>
-            <p className="text-xs text-surface-500">productos sin imagen</p>
+          <div className="flex gap-6">
+            <div>
+              <p className="text-2xl font-semibold text-white tabular-nums">{status?.missing ?? "—"}</p>
+              <p className="text-xs text-surface-500">sin imagen</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-white tabular-nums">{status?.pendingVisible ?? "—"}</p>
+              <p className="text-xs text-surface-500">en catálogo con stock</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-white tabular-nums">{status?.pendingDeferred ?? "—"}</p>
+              <p className="text-xs text-surface-500">sin stock / ocultos</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-white tabular-nums">{status?.filled ?? "—"}</p>
+              <p className="text-xs text-surface-500">completadas</p>
+            </div>
           </div>
           <label className="text-xs text-surface-500">
             Distribuidor
             <select
               value={provider}
-              onChange={(e) => setProvider(e.target.value)}
+              onChange={(e) => {
+                setProvider(e.target.value);
+                setPage(1);
+              }}
               className="mt-1 block bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-1.5 text-sm text-white"
             >
               <option value="">Todos</option>
@@ -218,6 +333,22 @@ export default function ImageSyncPanel({
           </label>
         </div>
 
+        <label className="flex items-start gap-2.5 text-sm text-surface-200 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={Boolean(status?.cronEnabled)}
+            onChange={() => void toggleCron()}
+            className="mt-0.5"
+          />
+          <span>
+            Correr solo, 2 veces por día
+            <span className="block text-xs text-surface-500">
+              {status?.cronHourHint ?? "8:00 y 20:00 (Argentina)"} · hasta {status?.cronLimit ?? 200} productos por
+              corrida (tandas de 50). Primero los que se ven con stock; sin stock u ocultos quedan para después, solos.
+            </span>
+          </span>
+        </label>
+
         {runRow && (
           <div className="flex flex-col gap-1.5">
             <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden">
@@ -228,10 +359,10 @@ export default function ImageSyncPanel({
             </div>
             <p className="text-xs text-surface-500">
               {running ? "En curso" : runRow.status === "OK" ? "Última corrida lista" : runRow.status === "CANCELLED" ? "Cortada" : "Error"}
+              {runRow.source === "cron" ? " · automático" : " · manual"}
               {" · "}
               {runRow.updated} fotos · {runRow.skipped} sin resultado · {runRow.failed} error
               {runRow.processed > 0 ? ` · ${runRow.processed} procesados` : ""}
-              {runRow.lastQuery ? ` · última: ${runRow.lastQuery}` : ""}
             </p>
             {runRow.errorMessage && <p className="text-xs text-red-400">{runRow.errorMessage}</p>}
           </div>
@@ -241,7 +372,7 @@ export default function ImageSyncPanel({
           <button
             type="button"
             onClick={() => void run(false)}
-            disabled={starting || running || !status?.hasSerperKey || (status?.missing ?? 0) === 0}
+            disabled={starting || running || !status?.hasSerperKey || (status?.pending ?? 0) === 0}
             className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-3 py-2"
           >
             {starting || running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
@@ -250,7 +381,7 @@ export default function ImageSyncPanel({
           <button
             type="button"
             onClick={() => void run(true)}
-            disabled={starting || running || !status?.hasSerperKey || (status?.missing ?? 0) === 0}
+            disabled={starting || running || !status?.hasSerperKey || (status?.pending ?? 0) === 0}
             className="inline-flex items-center gap-2 border border-surface-700 text-surface-200 hover:text-white disabled:opacity-40 text-sm rounded-lg px-3 py-2"
           >
             Solo 50
@@ -269,51 +400,293 @@ export default function ImageSyncPanel({
         </div>
       </div>
 
-      {status && status.byProvider.length > 0 && (
-        <div className="border border-surface-800 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="text-[11px] uppercase tracking-wider text-surface-500 bg-surface-900">
-              <tr>
-                <th className="text-left font-medium px-4 py-2">Proveedor</th>
-                <th className="text-right font-medium px-4 py-2">Sin foto</th>
-                <th className="text-right font-medium px-4 py-2">Catálogo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {status.byProvider.map((row) => (
-                <tr key={row.provider} className="border-t border-surface-800">
-                  <td className="px-4 py-2 text-surface-200">{PROVIDER_LABELS[row.provider as Provider] ?? row.provider}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-white">{row.missing}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-surface-500">{row.total}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-white">Historial</h3>
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={histQ}
+              onChange={(e) => {
+                setHistQ(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Buscar producto…"
+              className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-surface-500 w-44"
+            />
+            <select
+              value={histStatus}
+              onChange={(e) => {
+                setHistStatus(e.target.value);
+                setPage(1);
+              }}
+              className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-1.5 text-sm text-white"
+            >
+              <option value="">Todos</option>
+              <option value="filled">Con foto</option>
+              <option value="skipped">Sin resultado</option>
+              <option value="failed">Error</option>
+            </select>
+          </div>
         </div>
-      )}
+
+        {history.length === 0 ? (
+          <p className="text-sm text-surface-500">Todavía no hay movimientos. Corré Primera foto o esperá el cron.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {history.map((row) => (
+              <li key={row.id} className="border border-surface-800 rounded-xl p-3 flex gap-3 items-start">
+                <div className="w-16 h-16 rounded-md bg-white overflow-hidden flex-shrink-0 relative border border-surface-800">
+                  {row.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={thumb(row.imageUrl)} alt="" className="w-full h-full object-contain p-0.5" />
+                  ) : (
+                    <ImageIcon className="w-5 h-5 text-surface-400 absolute inset-0 m-auto" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-surface-100 line-clamp-2">{row.name}</p>
+                  <p className="text-[11px] text-surface-500 mt-0.5">
+                    {PROVIDER_LABELS[row.provider as Provider] ?? row.provider} · {STATUS_LABEL[row.status] ?? row.status}
+                    {row.source ? ` · ${SOURCE_LABEL[row.source] ?? row.source}` : ""} · {fmtWhen(row.updatedAt)}
+                  </p>
+                  {row.error && row.status !== "filled" && (
+                    <p className="text-[11px] text-amber-400/90 mt-0.5">{row.error}</p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setPicker(row)}
+                      className="inline-flex items-center gap-1 text-[11px] text-brand-300 hover:text-white border border-brand-500/30 rounded px-1.5 py-0.5"
+                    >
+                      <Search className="w-3 h-3" />
+                      Otra en Serper
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadFor(row.productId);
+                        fileRef.current?.click();
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+                    >
+                      <Upload className="w-3 h-3" />
+                      Subir de la PC
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {pages > 1 && (
+          <div className="flex items-center justify-between mt-3 text-sm text-surface-400">
+            <span>
+              {historyTotal} ítems · pág. {page}/{pages}
+            </span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="p-1.5 border border-surface-700 rounded disabled:opacity-30"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                disabled={page >= pages}
+                onClick={() => setPage((p) => p + 1)}
+                className="p-1.5 border border-surface-700 rounded disabled:opacity-30"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
 
       {missing.length > 0 && (
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-surface-500 mb-2">Muestra sin foto</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-surface-500 mb-2">
+            Pendientes (muestra · primero con stock)
+          </h3>
           <ul className="flex flex-col gap-1.5">
             {missing.map((it) => (
-              <li key={it.id} className="border border-surface-800 rounded-lg px-3 py-2">
-                <p className="text-sm text-surface-200 line-clamp-1">{it.name}</p>
-                <p className="text-[11px] text-surface-500 font-mono truncate">
-                  {PROVIDER_LABELS[it.provider as Provider] ?? it.provider} · {it.query}
-                </p>
+              <li key={it.id} className="border border-surface-800 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-surface-200 line-clamp-1">{it.name}</p>
+                  <p className="text-[11px] text-surface-500 font-mono truncate">
+                    {PROVIDER_LABELS[it.provider as Provider] ?? it.provider} · {it.query}
+                    {it.inCatalog === false ? " · después" : ""}
+                  </p>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPicker(it)}
+                    className="text-[11px] text-brand-300 border border-brand-500/30 rounded px-1.5 py-0.5"
+                  >
+                    Serper
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadFor(it.id);
+                      fileRef.current?.click();
+                    }}
+                    className="text-[11px] text-surface-400 border border-surface-700 rounded px-1.5 py-0.5"
+                  >
+                    Subir
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {status?.missing === 0 && (
-        <p className="text-sm text-surface-500 flex items-center gap-2">
-          <ImageIcon className="w-4 h-4" />
-          No hay fichas sin imagen en el catálogo.
-        </p>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) setDraftFile(f);
+          e.target.value = "";
+        }}
+      />
+      {draftFile && (
+        <ImageUploadPreviewModal
+          file={draftFile}
+          uploading={uploading}
+          onCancel={() => {
+            if (!uploading) {
+              setDraftFile(null);
+              setUploadFor(null);
+            }
+          }}
+          onConfirm={confirmUpload}
+        />
       )}
+      {picker && (
+        <SerperPicker
+          productId={"productId" in picker ? picker.productId : picker.id}
+          name={picker.name}
+          initialQuery={picker.query}
+          onClose={() => setPicker(null)}
+          onPick={(url) => void applyImage("productId" in picker ? picker.productId : picker.id, url, "serper_pick")}
+          showToast={showToast}
+        />
+      )}
+    </div>
+  );
+}
+
+function SerperPicker({
+  productId,
+  name,
+  initialQuery,
+  onClose,
+  onPick,
+  showToast,
+}: {
+  productId: string;
+  name: string;
+  initialQuery: string;
+  onClose: () => void;
+  onPick: (url: string) => void;
+  showToast: (m: string, ok?: boolean) => void;
+}) {
+  const [query, setQuery] = useState(initialQuery);
+  const [hits, setHits] = useState<SerperImageHit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [picking, setPicking] = useState<string | null>(null);
+
+  const search = useCallback(
+    async (q: string) => {
+      setLoading(true);
+      try {
+        const r = await imageSyncApi.serperSearch(productId, q.trim() || undefined);
+        setQuery(r.data.query);
+        setHits(r.data.images);
+      } catch (err) {
+        showToast(errMsg(err, "No se pudo buscar en Serper"), false);
+        setHits([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [productId, showToast]
+  );
+
+  useEffect(() => {
+    void search(initialQuery);
+  }, [search, initialQuery]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
+      <div
+        className="bg-surface-900 border border-surface-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-sm font-semibold text-white line-clamp-2">{name}</h3>
+        <form
+          className="flex gap-2 mt-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void search(query);
+          }}
+        >
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white"
+          />
+          <button type="submit" className="bg-brand-600 hover:bg-brand-500 text-white text-sm rounded-lg px-3 py-2">
+            Buscar
+          </button>
+        </form>
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+          </div>
+        ) : hits.length === 0 ? (
+          <p className="text-sm text-surface-500 mt-6">No hubo resultados. Probá otro texto.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4">
+            {hits.map((hit) => (
+              <button
+                key={hit.imageUrl}
+                type="button"
+                disabled={Boolean(picking)}
+                onClick={() => {
+                  setPicking(hit.imageUrl);
+                  onPick(hit.imageUrl);
+                }}
+                className="border border-surface-700 hover:border-brand-500 rounded-lg overflow-hidden bg-white aspect-square relative"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={thumb(hit.thumbnailUrl || hit.imageUrl)} alt="" className="w-full h-full object-contain p-1" />
+                {picking === hit.imageUrl && (
+                  <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-white" />
+                  </span>
+                )}
+                {hit.source && (
+                  <span className="absolute bottom-0 inset-x-0 text-[10px] bg-black/60 text-white px-1 py-0.5 truncate">
+                    {hit.source}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+        <button type="button" onClick={onClose} className="mt-4 text-sm text-surface-400 hover:text-white">
+          Cerrar
+        </button>
+      </div>
     </div>
   );
 }

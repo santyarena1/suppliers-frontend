@@ -1,18 +1,18 @@
 import { BadGatewayException, BadRequestException, Injectable } from "@nestjs/common";
 import axios from "axios";
-import { pickFirstImageUrl } from "./product-image";
+import { pickFirstImageUrl, pickSerperImages, type SerperImageHit } from "./product-image";
 
 const SERPER_IMAGES = "https://google.serper.dev/images";
 
 @Injectable()
 export class SerperImagesClient {
-  async firstPhoto(apiKey: string, query: string): Promise<string | null> {
+  async searchImages(apiKey: string, query: string, num = 10): Promise<SerperImageHit[]> {
     const q = query.trim();
-    if (!q) return null;
+    if (!q) return [];
     try {
       const res = await axios.post(
         SERPER_IMAGES,
-        { q, gl: "ar", hl: "es", num: 10 },
+        { q, gl: "ar", hl: "es", num },
         {
           headers: {
             "X-API-KEY": apiKey,
@@ -21,7 +21,7 @@ export class SerperImagesClient {
           timeout: 20_000,
         }
       );
-      return pickFirstImageUrl(res.data);
+      return pickSerperImages(res.data, num);
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const status = err.response?.status;
@@ -40,5 +40,10 @@ export class SerperImagesClient {
       }
       throw err;
     }
+  }
+
+  async firstPhoto(apiKey: string, query: string): Promise<string | null> {
+    const hits = await this.searchImages(apiKey, query, 10);
+    return hits[0]?.imageUrl ?? pickFirstImageUrl({ images: hits });
   }
 }

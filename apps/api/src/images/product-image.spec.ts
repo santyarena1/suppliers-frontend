@@ -1,4 +1,4 @@
-import { buildImageSearchQuery, hasProductImage, mergeProductImage, pickFirstImageUrl } from "./product-image";
+import { buildImageSearchQuery, hasProductImage, mergeProductImage, pickFirstImageUrl, pickSerperImages } from "./product-image";
 
 describe("product-image", () => {
   it("detecta fichas sin foto", () => {
@@ -32,6 +32,19 @@ describe("product-image", () => {
         sku: "910-005647",
       })
     ).toBe("Mouse 910-005647");
+  });
+
+  it("lista varias fotos de Serper sin repetir URL", () => {
+    const hits = pickSerperImages({
+      images: [
+        { title: "a", imageUrl: "https://cdn.example/1.jpg", thumbnailUrl: "https://t.example/1.jpg", source: "foo" },
+        { title: "b", imageUrl: "https://cdn.example/1.jpg" },
+        { title: "c", imageUrl: "https://cdn.example/2.jpg" },
+      ],
+    });
+    expect(hits).toHaveLength(2);
+    expect(hits[0]).toMatchObject({ imageUrl: "https://cdn.example/1.jpg", source: "foo" });
+    expect(hits[1].imageUrl).toBe("https://cdn.example/2.jpg");
   });
 
   it("toma la primera imageUrl http de Serper", () => {
