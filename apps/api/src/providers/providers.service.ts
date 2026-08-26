@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from "@nes
 import { providerHasIvaRate, type Provider } from "@nodo/shared";
 import type { IvaAdjustment } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
@@ -28,7 +29,8 @@ export class ProvidersService {
     private readonly prisma: PrismaService,
     private readonly credentials: CredentialsService,
     private readonly registry: ProviderRegistry,
-    private readonly visibility: TenantVisibilityService
+    private readonly visibility: TenantVisibilityService,
+    private readonly catalogEnrichment: CatalogEnrichmentService
   ) {}
 
   async getConfig(tenantId: string, provider: Provider) {
@@ -455,7 +457,7 @@ export class ProvidersService {
   async search(tenantId: string, provider: Provider, name: string) {
     if (!(await this.isProviderVisible(provider))) return [];
     if (!(await this.visibility.isLinked(tenantId, provider))) return [];
-    const [offers, rules] = await Promise.all([
+    const [offers, rules, enrichment] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
           tenantId,
@@ -468,8 +470,9 @@ export class ProvidersService {
         take: 200,
       }),
       this.rulesFor(tenantId, provider),
+      this.catalogEnrichment.getContext(),
     ]);
-    return offers.map((offer) => toProductView(offer.product, offer, rules));
+    return offers.map((offer) => toProductView(offer.product, offer, rules, enrichment));
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
@@ -481,7 +484,11 @@ export class ProvidersService {
       include: { product: true },
     });
     if (!offer) return null;
-    return toProductView(offer.product, offer, await this.rulesFor(tenantId, provider));
+    const [rules, enrichment] = await Promise.all([
+      this.rulesFor(tenantId, provider),
+      this.catalogEnrichment.getContext(),
+    ]);
+    return toProductView(offer.product, offer, rules, enrichment);
   }
 
   /**
@@ -559,7 +566,8 @@ export class ProvidersService {
   async getCategories(tenantId: string) {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
-    const rows = await this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
+    const [rows, enrichment] = await Promise.all([
+      this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
       SELECT ficha.category AS category, COUNT(*) AS count
       FROM "TenantProductOffer" oferta
       JOIN "ProviderSyncCache" ficha
@@ -570,9 +578,16 @@ export class ProvidersService {
         AND oferta.provider = ANY(${providers}::text[])
       GROUP BY ficha.category
       ORDER BY count DESC
-      LIMIT 60
-    `;
-    return rows.map((r) => ({ category: r.category, count: Number(r.count) }));
+      LIMIT 120
+    `,
+      this.catalogEnrichment.getContext(),
+    ]);
+    return this.catalogEnrichment
+      .groupCategories(
+        rows.map((r) => ({ rawCategory: r.category, count: Number(r.count) })),
+        enrichment
+      )
+      .slice(0, 60);
   }
 
   /** Muestra mixta para la landing: productos con stock de todos los proveedores + bajadas de precio. */
@@ -580,7 +595,10 @@ export class ProvidersService {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
     const limit = Math.min(Math.max(take, 1), 60);
-    const rules = await this.rulesByProvider(tenantId);
+    const [rules, enrichment] = await Promise.all([
+      this.rulesByProvider(tenantId),
+      this.catalogEnrichment.getContext(),
+    ]);
 
     const priceDropSlots = Math.max(4, Math.ceil(limit * 0.4));
     const drops = await this.findRecentPriceDrops(tenantId, providers, priceDropSlots);
@@ -593,7 +611,7 @@ export class ProvidersService {
       : [];
 
     const dropViews = drops.map((d) => {
-      const view = toProductView(d.offer.product, d.offer, rules.get(d.offer.provider) ?? NO_RULES);
+      const view = toProductView(d.offer.product, d.offer, rules.get(d.offer.provider) ?? NO_RULES, enrichment);
       const markup = rules.get(d.offer.provider)?.markupPercent ?? 0;
       const prevPrice = withMarkup(d.previousPrice, markup);
       const prevFinal = withMarkup(d.previousFinalPrice, markup);
@@ -612,7 +630,7 @@ export class ProvidersService {
     });
 
     const stockViews = stockOffers.map((offer) =>
-      toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES),
+      toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment),
     );
 
     // Bajadas primero; después el resto mezclado por proveedor.
@@ -760,16 +778,33 @@ export class ProvidersService {
   async getByCategory(tenantId: string, category: string, take: number) {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
-    const [offers, rules] = await Promise.all([
-      this.prisma.tenantProductOffer.findMany({
-        where: { tenantId, active: true, provider: { in: providers }, product: { category } },
-        include: { product: true },
-        orderBy: { product: { name: "asc" } },
-        take: Math.min(Math.max(take, 1), 200),
-      }),
+    const limit = Math.min(Math.max(take, 1), 200);
+    const [rules, enrichment, match] = await Promise.all([
       this.rulesByProvider(tenantId),
+      this.catalogEnrichment.getContext(),
+      this.catalogEnrichment.categoryMatchFilters(category),
     ]);
-    return offers.map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES));
+
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: {
+        tenantId,
+        active: true,
+        provider: { in: providers },
+        OR: [
+          { product: { category: { in: match.rawCategories } } },
+          ...(match.eans.length ? [{ product: { ean: { in: match.eans } } }] : []),
+          ...(match.partNumbers.length ? [{ product: { partNumber: { in: match.partNumbers } } }] : []),
+        ],
+      },
+      include: { product: true },
+      orderBy: { product: { name: "asc" } },
+      take: limit * 3,
+    });
+
+    return offers
+      .filter((offer) => this.catalogEnrichment.productMatchesCategory(offer.product, category, enrichment))
+      .slice(0, limit)
+      .map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment));
   }
 
   /**
