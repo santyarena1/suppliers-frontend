@@ -180,6 +180,10 @@ export interface ProductDTO {
   previousPrice?: number | null;
   previousFinalPrice?: number | null;
   priceDropPercent?: number | null;
+  /** Marca/categoría unificada (superadmin). Si falta, usar brand/category crudos. */
+  displayBrand?: string | null;
+  displayCategory?: string | null;
+  displaySubcategory?: string | null;
 }
 
 export interface CredentialResponse {
@@ -1585,6 +1589,92 @@ export const adminApi = {
   updatePlatformSettings: (brandPreset: BrandPreset) =>
     api.put<PlatformSettings>("/admin/platform/settings", { brandPreset }),
 };
+
+export type CatalogAliasKind = "BRAND" | "CATEGORY" | "SUBCATEGORY";
+export type CatalogMatchKind = "EAN" | "PART_NUMBER";
+
+export interface CatalogEnrichmentOverview {
+  aliasCount: number;
+  identityCount: number;
+  productCount: number;
+  airCodedProducts: number;
+  aiConfigured: boolean;
+}
+
+export interface CatalogRawValueStat {
+  kind: CatalogAliasKind;
+  provider: string | null;
+  rawKey: string;
+  count: number;
+  sampleNames: string[];
+  looksLikeCode: boolean;
+}
+
+export interface CatalogSuggestions {
+  aliasSuggestions: {
+    kind: CatalogAliasKind;
+    provider: string | null;
+    rawKeys: string[];
+    labels: string[];
+    reason: string;
+    suggestedLabel: string;
+  }[];
+  codeSuggestions: {
+    kind: CatalogAliasKind;
+    provider: string | null;
+    rawKeys: string[];
+    labels: string[];
+    reason: string;
+    suggestedLabel: string;
+  }[];
+  identitySuggestions: {
+    matchKind: CatalogMatchKind;
+    matchKey: string;
+    productCount: number;
+    brands: string[];
+    categories: string[];
+    suggestedBrand: string | null;
+    suggestedCategory: string | null;
+    reason: string;
+  }[];
+}
+
+export const catalogEnrichmentApi = {
+  overview: () => api.get<CatalogEnrichmentOverview>("/admin/catalog-enrichment/overview"),
+  rawValues: (params: { kind: CatalogAliasKind; provider?: string; codesOnly?: boolean; limit?: number }) =>
+    api.get<CatalogRawValueStat[]>("/admin/catalog-enrichment/raw-values", { params }),
+  suggestions: (provider?: string) =>
+    api.get<CatalogSuggestions>("/admin/catalog-enrichment/suggestions", { params: provider ? { provider } : {} }),
+  upsertAlias: (data: {
+    kind: CatalogAliasKind;
+    provider?: string | null;
+    rawKeys: string[];
+    label: string;
+    groupId?: string;
+    source?: "MANUAL" | "AUTO" | "AI";
+  }) => api.post("/admin/catalog-enrichment/aliases", data),
+  applySuggestion: (data: Record<string, unknown>) =>
+    api.post("/admin/catalog-enrichment/suggestions/apply", data),
+  aiCategoryClusters: (provider?: string) =>
+    api.post<{ clusters: { label: string; members: string[] }[]; usedAi: boolean }>(
+      "/admin/catalog-enrichment/ai/category-clusters",
+      {},
+      { params: provider ? { provider } : {} }
+    ),
+};
+
+/** Marca/categoría visible con fallback al valor crudo del proveedor. */
+export function productDisplayBrand(p: Pick<ProductDTO, "displayBrand" | "brand">) {
+  return p.displayBrand ?? p.brand ?? null;
+}
+
+export function productDisplayCategory(p: Pick<ProductDTO, "displayCategory" | "category">) {
+  return p.displayCategory ?? p.category ?? null;
+}
+
+export function productDisplaySubcategory(p: Pick<ProductDTO, "displaySubcategory" | "subcategory">) {
+  return p.displaySubcategory ?? p.subcategory ?? null;
+}
 
 export interface ImageSyncRun {
   id: string;

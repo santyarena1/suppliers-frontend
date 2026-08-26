@@ -9,7 +9,7 @@ import PriceTag from "@/components/PriceTag";
 import SalePricePanel from "@/components/SalePricePanel";
 import { useResults } from "@/lib/results";
 import { usePrefs } from "@/lib/prefs";
-import { ProductDTO, Provider, searchApi, catalogApi, PricePoint } from "@/lib/api";
+import { ProductDTO, Provider, searchApi, catalogApi, PricePoint, productDisplayBrand, productDisplayCategory, productDisplaySubcategory } from "@/lib/api";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import {
@@ -205,14 +205,14 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <ProviderBadge provider={providerName} variant="inline" size="md" chip />
-                  {product.brand && (
+                  {productDisplayBrand(product) && (
                     <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200">
-                      {product.brand}
+                      {productDisplayBrand(product)}
                     </span>
                   )}
-                  {(product.category || product.subcategory) && (
+                  {(productDisplayCategory(product) || productDisplaySubcategory(product)) && (
                     <span className="text-xs text-surface-500">
-                      {[product.category, product.subcategory].filter(Boolean).join(" · ")}
+                      {[productDisplayCategory(product), productDisplaySubcategory(product)].filter(Boolean).join(" · ")}
                     </span>
                   )}
                   <span className="font-mono text-xs text-surface-500">#{extId}</span>
@@ -647,9 +647,18 @@ function productFacts(
   };
 
   push("Proveedor", providerLabel(providerName));
-  push("Marca", product.brand);
-  push("Categoría", product.category);
-  push("Subcategoría", product.subcategory);
+  push("Marca", productDisplayBrand(product));
+  if (product.brand && product.brand !== productDisplayBrand(product)) {
+    push("Marca (proveedor)", product.brand);
+  }
+  push("Categoría", productDisplayCategory(product));
+  if (product.category && product.category !== productDisplayCategory(product)) {
+    push("Categoría (proveedor)", product.category);
+  }
+  push("Subcategoría", productDisplaySubcategory(product));
+  if (product.subcategory && product.subcategory !== productDisplaySubcategory(product)) {
+    push("Subcategoría (proveedor)", product.subcategory);
+  }
   push("ID externo", extId, { mono: true });
   if (product.sku && product.sku !== extId) push("SKU", product.sku, { mono: true });
   push("Part number", product.partNumber, { mono: true });

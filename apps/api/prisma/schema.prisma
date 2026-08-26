@@ -142,6 +142,57 @@ model TenantOpsAlias {
   @@index([tenantId, kind, groupId])
 }
 
+enum CatalogAliasKind {
+  BRAND
+  CATEGORY
+  SUBCATEGORY
+}
+
+enum CatalogMatchKind {
+  EAN
+  PART_NUMBER
+}
+
+enum CatalogEnrichmentSource {
+  MANUAL
+  AUTO
+  AI
+}
+
+/// Superadmin: unifica marcas/categorías crudas (incl. códigos numéricos de Air).
+model PlatformCatalogAlias {
+  id        String           @id @default(uuid())
+  kind      CatalogAliasKind
+  /// Vacío = cross-proveedor; set para códigos propios del distribuidor (ej. Rubro Air).
+  provider  String           @default("")
+  rawKey    String
+  groupId   String
+  label     String
+  source    CatalogEnrichmentSource @default(MANUAL)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([kind, provider, rawKey])
+  @@index([kind, groupId])
+  @@index([kind, provider])
+}
+
+/// Superadmin: marca/categoría canónica para todos los productos con el mismo EAN o part number.
+model PlatformProductIdentity {
+  id                 String                  @id @default(uuid())
+  matchKind          CatalogMatchKind
+  matchKey           String
+  displayBrand       String?
+  displayCategory    String?
+  displaySubcategory String?
+  source             CatalogEnrichmentSource @default(MANUAL)
+  confirmedAt        DateTime?
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@unique([matchKind, matchKey])
+}
+
 model TenantMembership {
   id        String     @id @default(uuid())
   tenantId  String

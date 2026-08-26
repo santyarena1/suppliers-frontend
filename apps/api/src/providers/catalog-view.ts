@@ -1,4 +1,5 @@
 import type { ProviderSyncCache, TenantProductOffer } from "@prisma/client";
+import { resolveCatalogDisplay, type CatalogEnrichmentContext } from "../catalog/catalog-enrichment";
 
 /** Lo que la organización decidió para un proveedor y hay que aplicar al leer. */
 export interface OfferRules {
@@ -17,6 +18,9 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   stockStatus: string | null;
   active: boolean;
   needsResync: boolean;
+  displayBrand?: string | null;
+  displayCategory?: string | null;
+  displaySubcategory?: string | null;
   /** Solo en destacados: precio crudo anterior (con markup) cuando bajó. */
   previousPrice?: number | null;
   previousFinalPrice?: number | null;
@@ -36,13 +40,16 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
 export function toProductView(
   product: ProviderSyncCache,
   offer: TenantProductOffer,
-  rules: OfferRules = NO_RULES
+  rules: OfferRules = NO_RULES,
+  enrichment?: CatalogEnrichmentContext
 ): ProductView {
   const { id: _id, updatedAt: _updatedAt, ...ficha } = product;
   const rawStock = offer.stock;
+  const display = resolveCatalogDisplay(product, enrichment);
 
   return {
     ...ficha,
+    ...display,
     price: withMarkup(offer.price, rules.markupPercent),
     finalPrice: withMarkup(offer.finalPrice, rules.markupPercent),
     currency: offer.currency,
