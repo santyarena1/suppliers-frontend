@@ -1,5 +1,5 @@
-import { Transform } from "class-transformer";
-import { IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from "class-validator";
 import { CATALOG_ALIAS_KINDS, CATALOG_MATCH_KINDS } from "../../catalog/catalog-enrichment";
 
 export class RawValuesQueryDto {
@@ -24,6 +24,34 @@ export class SaveOpenAiKeyDto {
   @MinLength(8)
   @MaxLength(300)
   apiKey!: string;
+}
+
+export class ConfirmCategoryItemDto {
+  @IsString()
+  provider!: string;
+
+  @IsString()
+  @MinLength(1)
+  rawKey!: string;
+}
+
+export class ConfirmCategoriesDto {
+  @IsString()
+  @MinLength(1)
+  label!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmCategoryItemDto)
+  items!: ConfirmCategoryItemDto[];
+
+  @IsOptional()
+  @IsIn(CATALOG_ALIAS_KINDS)
+  kind?: (typeof CATALOG_ALIAS_KINDS)[number];
+
+  @IsOptional()
+  @IsEnum(["MANUAL", "AUTO", "AI"] as const)
+  source?: "MANUAL" | "AUTO" | "AI";
 }
 
 export class UpsertCatalogAliasDto {

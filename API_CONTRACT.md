@@ -103,6 +103,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: No cruza locales. No se unifica en automático: el comercio elige. Las claves crudas son el texto que ya guardó cada pedido.
 
+### [FEATURE] Unificador de categorías (admin catálogo)
+- **Método**: GET | POST | PUT | DELETE
+- **Ruta**: `/admin/catalog-enrichment/categories/workspace` · `/admin/catalog-enrichment/categories/confirm` · `/admin/catalog-enrichment/openai` · `/admin/catalog-enrichment/ai/category-clusters` · (legacy) `/admin/catalog-enrichment/aliases`, `/raw-values`, `/identities`, `/suggestions`
+- **Auth**: Bearer ROLE_ADMIN
+- **Body / Params**: confirm `{ label, items: [{ provider, rawKey }], kind?: "CATEGORY"|"SUBCATEGORY", source?: "MANUAL"|"AI"|"AUTO" }`
+- **Respuesta esperada**: workspace `{ stats, canonicalCategories, canonicalSubcategories, pendingText, allText, providerCodes, suggestions }` · confirm `{ groupId, label, items }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Flujo en dos pasos: (1) unificar categorías de texto de todos los distribuidores en canónicas globales con sugerencias heurísticas y confirmación manual; (2) mapear códigos numéricos de proveedor (p. ej. rubro/grupo Air) a una canónica existente o nueva. Los alias se guardan en `PlatformCatalogAlias` con `groupId` compartido entre proveedores.
+
 ### [FEATURE] Sincronización de imágenes (Primera foto / Serper)
 - **Método**: GET | PUT | DELETE | POST
 - **Ruta**: `/admin/images/status` · `/admin/images/missing` · `/admin/images/history` · `/admin/images/serper` · `/admin/images/cron` · `/admin/images/first-photo` · `/admin/images/first-photo/stop` · `/admin/images/products/:productId/serper-search` · `/admin/images/products/:productId/image`

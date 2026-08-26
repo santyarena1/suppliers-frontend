@@ -1601,15 +1601,6 @@ export interface CatalogEnrichmentOverview {
   aiConfigured: boolean;
 }
 
-export interface CatalogRawValueStat {
-  kind: CatalogAliasKind;
-  provider: string | null;
-  rawKey: string;
-  count: number;
-  sampleNames: string[];
-  looksLikeCode: boolean;
-}
-
 export interface CatalogSuggestions {
   aliasSuggestions: {
     kind: CatalogAliasKind;
@@ -1639,8 +1630,71 @@ export interface CatalogSuggestions {
   }[];
 }
 
+export interface CategoryCanonical {
+  label: string;
+  groupId: string;
+  members: number;
+  productCount: number;
+}
+
+export interface CategoryRawRow {
+  id: string;
+  provider: string;
+  rawKey: string;
+  kind: CatalogAliasKind;
+  count: number;
+  sampleNames: string[];
+  looksLikeCode: boolean;
+  mappedLabel: string | null;
+  groupId: string | null;
+}
+
+export interface CatalogRawValueStat {
+  kind: CatalogAliasKind;
+  provider: string | null;
+  rawKey: string;
+  count: number;
+  sampleNames: string[];
+  looksLikeCode: boolean;
+}
+
+export interface CategoryMergeSuggestion {
+  id: string;
+  members: {
+    provider: string;
+    rawKey: string;
+    count: number;
+    sampleNames: string[];
+  }[];
+  suggestedLabel: string;
+  reason: string;
+}
+
+export interface CategoryWorkspace {
+  stats: {
+    pendingText: number;
+    pendingCodes: number;
+    canonicalCount: number;
+    mappedText: number;
+    mappedCodes: number;
+  };
+  canonicalCategories: CategoryCanonical[];
+  canonicalSubcategories: CategoryCanonical[];
+  pendingText: CategoryRawRow[];
+  allText: CategoryRawRow[];
+  providerCodes: CategoryRawRow[];
+  suggestions: CategoryMergeSuggestion[];
+}
+
 export const catalogEnrichmentApi = {
   overview: () => api.get<CatalogEnrichmentOverview>("/admin/catalog-enrichment/overview"),
+  categoryWorkspace: () => api.get<CategoryWorkspace>("/admin/catalog-enrichment/categories/workspace"),
+  confirmCategories: (data: {
+    label: string;
+    items: { provider: string; rawKey: string }[];
+    kind?: CatalogAliasKind;
+    source?: "MANUAL" | "AUTO" | "AI";
+  }) => api.post("/admin/catalog-enrichment/categories/confirm", data),
   rawValues: (params: { kind: CatalogAliasKind; provider?: string; codesOnly?: boolean; limit?: number }) =>
     api.get<CatalogRawValueStat[]>("/admin/catalog-enrichment/raw-values", { params }),
   suggestions: (provider?: string) =>

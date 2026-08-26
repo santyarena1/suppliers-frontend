@@ -14,8 +14,11 @@ import {
   normalizeEan,
   normalizePartNumber,
   suggestAliasMerges,
+  suggestGlobalCategoryMerges,
   suggestIdentityMerges,
   suggestProviderCodeLabels,
+  resolveCategoryAlias,
+  resolveSubcategoryAlias,
   type CatalogEnrichmentContext,
   type RawValueStat,
 } from "./catalog-enrichment";
@@ -186,6 +189,150 @@ export class CatalogEnrichmentService implements OnModuleInit {
 
     await this.refreshCache(true);
     return { groupId, label, rawKeys, kind: input.kind, provider };
+  }
+
+  async upsertAliasItems(input: {
+    kind: CatalogAliasKind;
+    label: string;
+    items: { provider: string; rawKey: string }[];
+    groupId?: string;
+    source?: CatalogEnrichmentSource;
+  }) {
+    const label = input.label.trim();
+    if (!label) throw new BadRequestException("Falta label");
+    const groupId = input.groupId?.trim() || randomUUID();
+    const items = input.items
+      .map((i) => ({ provider: i.provider.trim(), rawKey: i.rawKey.trim() }))
+      .filter((i) => i.rawKey);
+    if (items.length === 0) throw new BadRequestException("Faltan items");
+
+    const source = input.source ?? "MANUAL";
+    await this.prisma.$transaction(
+      items.map(({ provider, rawKey }) =>
+        this.prisma.platformCatalogAlias.upsert({
+          where: {
+            kind_provider_rawKey: { kind: input.kind, provider: provider || "", rawKey },
+          },
+          create: { kind: input.kind, provider: provider || "", rawKey, groupId, label, source },
+          update: { groupId, label, source },
+        })
+      )
+    );
+
+    await this.refreshCache(true);
+    return { groupId, label, items };
+  }
+
+  async getCategoryWorkspace() {
+    const ctx = await this.getContext();
+    const [categoryStats, subcategoryStats, aliasRows] = await Promise.all([
+      this.listRawValues({ kind: "CATEGORY", limit: 400 }),
+      this.listRawValues({ kind: "SUBCATEGORY", limit: 200 }),
+      this.prisma.platformCatalogAlias.findMany({ where: { kind: { in: ["CATEGORY", "SUBCATEGORY"] } } }),
+    ]);
+
+    type RawRow = {
+      id: string;
+      provider: string;
+      rawKey: string;
+      kind: CatalogAliasKind;
+      count: number;
+      sampleNames: string[];
+      looksLikeCode: boolean;
+      mappedLabel: string | null;
+      groupId: string | null;
+    };
+
+    const toRawRow = (s: RawValueStat): RawRow => {
+      const mapped =
+        s.kind === "CATEGORY"
+          ? resolveCategoryAlias(s.provider ?? "", s.rawKey, ctx.aliases)
+          : resolveSubcategoryAlias(s.provider ?? "", s.rawKey, ctx.aliases);
+      return {
+        id: `${s.kind}:${s.provider}:${s.rawKey}`,
+        provider: s.provider ?? "",
+        rawKey: s.rawKey,
+        kind: s.kind,
+        count: s.count,
+        sampleNames: s.sampleNames,
+        looksLikeCode: s.looksLikeCode,
+        mappedLabel: mapped?.label ?? null,
+        groupId: mapped?.groupId ?? null,
+      };
+    };
+
+    const textCategories = categoryStats.filter((s) => !s.looksLikeCode).map(toRawRow);
+    const providerCodes = [...categoryStats, ...subcategoryStats]
+      .filter((s) => s.looksLikeCode)
+      .map(toRawRow);
+
+    const canonicalMap = new Map<
+      string,
+      { label: string; groupId: string; members: number; productCount: number }
+    >();
+    const subCanonicalMap = new Map<
+      string,
+      { label: string; groupId: string; members: number; productCount: number }
+    >();
+    for (const row of aliasRows) {
+      const target = row.kind === "CATEGORY" ? canonicalMap : subCanonicalMap;
+      const cur = target.get(row.groupId) ?? {
+        label: row.label,
+        groupId: row.groupId,
+        members: 0,
+        productCount: 0,
+      };
+      cur.members++;
+      target.set(row.groupId, cur);
+    }
+    for (const raw of [...textCategories, ...providerCodes]) {
+      if (!raw.groupId) continue;
+      const target = raw.kind === "CATEGORY" ? canonicalMap : subCanonicalMap;
+      const cur = target.get(raw.groupId);
+      if (cur) cur.productCount += raw.count;
+    }
+
+    const canonicalCategories = [...canonicalMap.values()].sort(
+      (a, b) => b.productCount - a.productCount || a.label.localeCompare(b.label, "es")
+    );
+    const canonicalSubcategories = [...subCanonicalMap.values()].sort(
+      (a, b) => b.productCount - a.productCount || a.label.localeCompare(b.label, "es")
+    );
+
+    const suggestions = suggestGlobalCategoryMerges(categoryStats, ctx.aliases);
+
+    const pendingText = textCategories.filter((r) => !r.mappedLabel);
+    const pendingCodes = providerCodes.filter((r) => !r.mappedLabel);
+
+    return {
+      stats: {
+        pendingText: pendingText.length,
+        pendingCodes: pendingCodes.length,
+        canonicalCount: canonicalCategories.length,
+        mappedText: textCategories.length - pendingText.length,
+        mappedCodes: providerCodes.length - pendingCodes.length,
+      },
+      canonicalCategories,
+      canonicalSubcategories,
+      pendingText,
+      allText: textCategories,
+      providerCodes,
+      suggestions,
+    };
+  }
+
+  async confirmCategories(input: {
+    label: string;
+    items: { provider: string; rawKey: string }[];
+    kind?: CatalogAliasKind;
+    source?: CatalogEnrichmentSource;
+  }) {
+    return this.upsertAliasItems({
+      kind: input.kind ?? "CATEGORY",
+      label: input.label,
+      items: input.items,
+      source: input.source ?? "MANUAL",
+    });
   }
 
   async deleteAlias(id: string) {

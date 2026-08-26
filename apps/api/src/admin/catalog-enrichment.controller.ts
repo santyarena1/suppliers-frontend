@@ -20,6 +20,7 @@ import {
   SaveOpenAiKeyDto,
   UpsertCatalogAliasDto,
   UpsertCatalogIdentityDto,
+  ConfirmCategoriesDto,
 } from "./dto/catalog-enrichment.dto";
 
 @UseGuards(RolesGuard)
@@ -41,6 +42,16 @@ export class CatalogEnrichmentController {
   @Delete("openai")
   clearOpenAi() {
     return this.catalog.clearOpenAiKey();
+  }
+
+  @Get("categories/workspace")
+  categoryWorkspace() {
+    return this.catalog.getCategoryWorkspace();
+  }
+
+  @Post("categories/confirm")
+  confirmCategories(@Body() dto: ConfirmCategoriesDto) {
+    return this.catalog.confirmCategories(dto);
   }
 
   @Get("raw-values")

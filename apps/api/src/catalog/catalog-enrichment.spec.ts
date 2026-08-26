@@ -8,6 +8,7 @@ import {
   normalizePartNumber,
   resolveCatalogDisplay,
   suggestAliasMerges,
+  suggestGlobalCategoryMerges,
   suggestIdentityMerges,
   suggestProviderCodeLabels,
   type RawValueStat,
@@ -70,6 +71,19 @@ describe("catalog-enrichment", () => {
     const suggestions = suggestAliasMerges(stats);
     expect(suggestions.length).toBe(1);
     expect(suggestions[0].rawKeys).toEqual(expect.arrayContaining(["Memorias RAM", "Memorias Ram"]));
+  });
+
+  it("sugiere unificación global cross-proveedor", () => {
+    const stats: RawValueStat[] = [
+      { kind: "CATEGORY", provider: "AIR", rawKey: "Periféricos", count: 40, sampleNames: [], looksLikeCode: false },
+      { kind: "CATEGORY", provider: "ELIT", rawKey: "Perifericos", count: 22, sampleNames: [], looksLikeCode: false },
+      { kind: "CATEGORY", provider: "AIR", rawKey: "12", count: 5, sampleNames: [], looksLikeCode: true },
+    ];
+    const suggestions = suggestGlobalCategoryMerges(stats);
+    expect(suggestions.length).toBe(1);
+    expect(suggestions[0].members).toHaveLength(2);
+    expect(suggestions[0].reason).toContain("distintos proveedores");
+    expect(suggestions[0].suggestedLabel).toBe("Periféricos");
   });
 
   it("normaliza EAN y part number", () => {

@@ -202,6 +202,97 @@ function majority(values: string[]): string | null {
   return best;
 }
 
+export type CategoryMergeMember = {
+  provider: string;
+  rawKey: string;
+  count: number;
+  sampleNames: string[];
+};
+
+export type GlobalCategorySuggestion = {
+  id: string;
+  members: CategoryMergeMember[];
+  suggestedLabel: string;
+  reason: string;
+};
+
+export function resolveCategoryAlias(
+  provider: string,
+  rawKey: string,
+  aliases?: CatalogAliasIndex
+): { label: string; groupId: string } | null {
+  return resolveKindAlias("CATEGORY", provider, rawKey, aliases);
+}
+
+export function resolveSubcategoryAlias(
+  provider: string,
+  rawKey: string,
+  aliases?: CatalogAliasIndex
+): { label: string; groupId: string } | null {
+  return resolveKindAlias("SUBCATEGORY", provider, rawKey, aliases);
+}
+
+function resolveKindAlias(
+  kind: CatalogAliasKind,
+  provider: string,
+  rawKey: string,
+  aliases?: CatalogAliasIndex
+): { label: string; groupId: string } | null {
+  const hit =
+    aliases?.[kind]?.[provider]?.[rawKey] ?? aliases?.[kind]?.["*"]?.[rawKey] ?? null;
+  return hit ?? null;
+}
+
+/** Agrupa categorías de texto de todos los proveedores (no códigos numéricos). */
+export function suggestGlobalCategoryMerges(
+  stats: RawValueStat[],
+  aliases?: CatalogAliasIndex
+): GlobalCategorySuggestion[] {
+  const rows = stats.filter((s) => s.kind === "CATEGORY" && !looksLikeProviderCode(s.rawKey));
+  const byNorm = new Map<string, RawValueStat[]>();
+  for (const row of rows) {
+    const n = normalizeCatalogLabel(row.rawKey);
+    if (n.length < 3) continue;
+    const arr = byNorm.get(n) ?? [];
+    arr.push(row);
+    byNorm.set(n, arr);
+  }
+
+  const out: GlobalCategorySuggestion[] = [];
+  for (const [, members] of byNorm) {
+    if (members.length < 2) continue;
+
+    const mapped = members.map((m) =>
+      resolveCategoryAlias(m.provider ?? "", m.rawKey, aliases)
+    );
+    const mappedGroups = new Set(mapped.filter(Boolean).map((m) => m!.groupId));
+    if (mappedGroups.size === 1 && mapped.every(Boolean)) continue;
+
+    const providers = new Set(members.map((m) => m.provider).filter(Boolean));
+    const labels = [...new Set(members.map((m) => m.rawKey))];
+    out.push({
+      id: members.map((m) => `${m.provider}:${m.rawKey}`).join("|"),
+      members: members.map((m) => ({
+        provider: m.provider ?? "",
+        rawKey: m.rawKey,
+        count: m.count,
+        sampleNames: m.sampleNames,
+      })),
+      suggestedLabel: labels.sort((a, b) => b.length - a.length)[0] ?? members[0].rawKey,
+      reason:
+        providers.size > 1
+          ? "Misma categoría en distintos proveedores"
+          : "Misma categoría escrita distinto",
+    });
+  }
+
+  return out.sort((a, b) => {
+    const ca = a.members.reduce((s, m) => s + m.count, 0);
+    const cb = b.members.reduce((s, m) => s + m.count, 0);
+    return cb - ca;
+  }).slice(0, 60);
+}
+
 export function suggestAliasMerges(
   stats: RawValueStat[],
   aliases?: CatalogAliasIndex
