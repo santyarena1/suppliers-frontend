@@ -1680,9 +1680,11 @@ export interface ImageSyncRun {
   id: string;
   status: "RUNNING" | "OK" | "ERROR" | "CANCELLED" | string;
   kind: string;
+  source: "manual" | "cron" | string;
   provider: string | null;
   batchSize: number;
   once: boolean;
+  maxItems: number | null;
   missingTotal: number;
   processed: number;
   updated: number;
@@ -1697,7 +1699,12 @@ export interface ImageSyncRun {
 
 export interface ImageSyncStatus {
   hasSerperKey: boolean;
+  cronEnabled: boolean;
+  cronHourHint: string;
+  cronLimit: number;
   missing: number;
+  pending: number;
+  filled: number;
   running: boolean;
   byProvider: { provider: string; missing: number; total: number }[];
   lastRun: ImageSyncRun | null;
@@ -1715,15 +1722,49 @@ export interface ImageSyncMissingItem {
   query: string;
 }
 
+export interface ImageSyncFill {
+  id: string;
+  runId: string | null;
+  productId: string;
+  provider: string;
+  externalId: string;
+  name: string;
+  brand: string | null;
+  query: string;
+  imageUrl: string | null;
+  source: string;
+  status: "filled" | "skipped" | "failed" | string;
+  error: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SerperImageHit {
+  imageUrl: string;
+  thumbnailUrl: string | null;
+  title: string | null;
+  source: string | null;
+}
+
 export const imageSyncApi = {
   status: () => api.get<ImageSyncStatus>("/admin/images/status"),
   missing: (params?: { take?: number; provider?: string }) =>
     api.get<{ items: ImageSyncMissingItem[] }>("/admin/images/missing", { params }),
+  history: (params?: { page?: number; take?: number; status?: string; provider?: string; q?: string }) =>
+    api.get<{ total: number; page: number; take: number; items: ImageSyncFill[] }>("/admin/images/history", { params }),
   saveSerper: (apiKey: string) => api.put<{ hasSerperKey: boolean }>("/admin/images/serper", { apiKey }),
   clearSerper: () => api.delete<{ hasSerperKey: boolean }>("/admin/images/serper"),
+  setCron: (enabled: boolean) => api.put<{ cronEnabled: boolean }>("/admin/images/cron", { enabled }),
   firstPhoto: (data?: { provider?: string; batchSize?: number; once?: boolean }) =>
     api.post<{ started: boolean; reason?: string }>("/admin/images/first-photo", data ?? {}),
   stop: () => api.post<{ stopped: boolean }>("/admin/images/first-photo/stop", {}),
+  serperSearch: (productId: string, query?: string) =>
+    api.post<{ query: string; images: SerperImageHit[] }>(
+      `/admin/images/products/${productId}/serper-search`,
+      query ? { query } : {}
+    ),
+  setImage: (productId: string, imageUrl: string, source: "serper_pick" | "upload" | "serper" = "serper_pick") =>
+    api.put<ImageSyncFill>(`/admin/images/products/${productId}/image`, { imageUrl, source }),
 };
 
 // --- Organizaciones (multi-tenant) ---

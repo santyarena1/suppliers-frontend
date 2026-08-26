@@ -328,7 +328,8 @@ model ProviderSyncCache {
   syncedAt        DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  offers TenantProductOffer[]
+  offers     TenantProductOffer[]
+  imageFills ImageSyncFill[]
 
   @@unique([provider, externalId])
   @@index([provider, name])
@@ -1072,6 +1073,8 @@ model RetailIngestRun {
 model ImageSyncSettings {
   id                    String   @id @default("default")
   serperApiKeyEncrypted String?
+  /// Cron 8:00 y 20:00 America/Argentina/Buenos_Aires.
+  cronEnabled           Boolean  @default(true)
   updatedAt             DateTime @updatedAt
 }
 
@@ -1082,10 +1085,14 @@ model ImageSyncRun {
   status       String    @default("RUNNING")
   /// first_photo
   kind         String    @default("first_photo")
+  /// manual | cron
+  source       String    @default("manual")
   provider     String?
   batchSize    Int       @default(50)
   /// true = una sola tanda; false = todas las faltantes de a `batchSize`
   once         Boolean   @default(false)
+  /// Tope de productos de esta corrida (cron). Null = hasta agotar faltantes nuevas.
+  maxItems     Int?
   missingTotal Int       @default(0)
   processed    Int       @default(0)
   updated      Int       @default(0)
@@ -1098,5 +1105,34 @@ model ImageSyncRun {
   heartbeatAt  DateTime  @default(now())
   startedById  String?
 
+  fills ImageSyncFill[]
+
   @@index([startedAt])
+}
+
+/// Una ficha tocada por Primera foto. Unique por producto: si se edita, se actualiza.
+model ImageSyncFill {
+  id         String          @id @default(uuid())
+  runId      String?
+  run        ImageSyncRun?   @relation(fields: [runId], references: [id], onDelete: SetNull)
+  productId  String
+  product    ProviderSyncCache @relation(fields: [productId], references: [id], onDelete: Cascade)
+  provider   String
+  externalId String
+  name       String
+  brand      String?
+  query      String
+  imageUrl   String?
+  /// serper | serper_pick | upload
+  source     String          @default("serper")
+  /// filled | skipped | failed
+  status     String
+  error      String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([productId])
+  @@index([createdAt])
+  @@index([status])
+  @@index([provider])
 }

@@ -105,12 +105,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Sincronización de imágenes (Primera foto / Serper)
 - **Método**: GET | PUT | DELETE | POST
-- **Ruta**: `/admin/images/status` · `/admin/images/missing` · `/admin/images/serper` · `/admin/images/first-photo` · `/admin/images/first-photo/stop`
+- **Ruta**: `/admin/images/status` · `/admin/images/missing` · `/admin/images/history` · `/admin/images/serper` · `/admin/images/cron` · `/admin/images/first-photo` · `/admin/images/first-photo/stop` · `/admin/images/products/:productId/serper-search` · `/admin/images/products/:productId/image`
 - **Auth**: Bearer ROLE_ADMIN (solo superadmin)
 - **Body / Params**: guardar clave `{ apiKey }` · primera foto `{ provider?, batchSize?: 1–50, once?: boolean }` · missing `take`, `provider`
 - **Respuesta esperada**: status `{ hasSerperKey, missing, running, byProvider, lastRun }` · first-photo `{ started, reason? }` · missing `{ items: [{ id, provider, name, query, ... }] }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Rellena `ProviderSyncCache.imageUrl` **solo si está vacío**. Busca en `POST https://google.serper.dev/images` (`X-API-KEY`, `gl=ar`, `hl=es`) y toma la primera `imageUrl`. Corre en segundo plano de a tandas de 50. La API key se cifra (`ENCRYPTION_KEY`) y nunca se devuelve. Si después el proveedor sigue sin foto, el sync de catálogo **no borra** la de Serper; si el proveedor trae una, esa gana.
+- **Notas**: Rellena `ProviderSyncCache.imageUrl` **solo si está vacío** (salvo edición manual). Busca en `POST https://google.serper.dev/images` (`X-API-KEY`, `gl=ar`, `hl=es`) y toma la primera `imageUrl`. Corre en segundo plano de a tandas de 50. La API key se cifra y nunca se devuelve. Cada producto tocado queda en `ImageSyncFill` (historial editable). **Editar**: `POST /admin/images/products/:productId/serper-search` `{ query? }` → `{ query, images[] }`; `PUT /admin/images/products/:productId/image` `{ imageUrl, source: serper_pick|upload }`. **Historial**: `GET /admin/images/history?page=&take=&status=&provider=&q=`. **Cron** 8:00 y 20:00 `America/Argentina/Buenos_Aires`, tope 200 por corrida (`IMAGE_SYNC_CRON_LIMIT`), se apaga con `IMAGE_SYNC_CRON_DISABLED=true` o `PUT /admin/images/cron { enabled }`. Los “sin resultado” no se reintentan solos: se editan desde el historial. El sync de catálogo no borra una foto de Serper si el proveedor sigue vacío.
 
 ## Pendiente (futuro)
 
