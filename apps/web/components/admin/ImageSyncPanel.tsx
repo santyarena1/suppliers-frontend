@@ -18,6 +18,7 @@ import ImageUploadPreviewModal from "@/components/ImageUploadPreviewModal";
 import {
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Image as ImageIcon,
   KeyRound,
   Loader2,
@@ -35,6 +36,10 @@ function thumb(url: string | null | undefined) {
   if (!url) return "";
   if (url.startsWith("/assets/") || url.startsWith("/uploads/")) return assetUrl(url);
   return proxyImg(url, { trim: false });
+}
+
+function productHref(provider: string, externalId: string) {
+  return `/product/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}`;
 }
 
 function fmtWhen(iso: string) {
@@ -471,6 +476,15 @@ export default function ImageSyncPanel({
                       <Upload className="w-3 h-3" />
                       Subir de la PC
                     </button>
+                    <a
+                      href={productHref(row.provider, row.externalId)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Ver ficha
+                    </a>
                   </div>
                 </div>
               </li>
@@ -538,6 +552,15 @@ export default function ImageSyncPanel({
                   >
                     Subir
                   </button>
+                  <a
+                    href={productHref(it.provider, it.externalId)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-surface-400 border border-surface-700 rounded px-1.5 py-0.5"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Ver ficha
+                  </a>
                 </div>
               </li>
             ))}
@@ -573,6 +596,8 @@ export default function ImageSyncPanel({
         <SerperPicker
           productId={"productId" in picker ? picker.productId : picker.id}
           name={picker.name}
+          provider={picker.provider}
+          externalId={picker.externalId}
           initialQuery={picker.query}
           onClose={() => setPicker(null)}
           onPick={(url) => void applyImage("productId" in picker ? picker.productId : picker.id, url, "serper_pick")}
@@ -586,6 +611,8 @@ export default function ImageSyncPanel({
 function SerperPicker({
   productId,
   name,
+  provider,
+  externalId,
   initialQuery,
   onClose,
   onPick,
@@ -593,6 +620,8 @@ function SerperPicker({
 }: {
   productId: string;
   name: string;
+  provider: string;
+  externalId: string;
   initialQuery: string;
   onClose: () => void;
   onPick: (url: string) => void;
@@ -630,7 +659,18 @@ function SerperPicker({
         className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold text-white line-clamp-2">{name}</h3>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-semibold text-white line-clamp-2">{name}</h3>
+          <a
+            href={productHref(provider, externalId)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 flex-shrink-0 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Ver ficha
+          </a>
+        </div>
         <form
           className="flex gap-2 mt-3"
           onSubmit={(e) => {
