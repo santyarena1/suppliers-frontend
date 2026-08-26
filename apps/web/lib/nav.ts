@@ -15,7 +15,7 @@ import type { UserRole } from "@/lib/auth";
  *
  * Sistema:
  *  - Configuración — apariencia, preferencias y ajustes generales del sistema
- *  - Administración — usuarios, orgs, locales/precios, diagnóstico
+ *  - Administración — usuarios, orgs, locales/precios, imágenes, diagnóstico
  */
 
 export type NavSectionId = "providers" | "brands" | "system";
