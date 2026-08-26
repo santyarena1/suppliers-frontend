@@ -1586,6 +1586,56 @@ export const adminApi = {
     api.put<PlatformSettings>("/admin/platform/settings", { brandPreset }),
 };
 
+export interface ImageSyncRun {
+  id: string;
+  status: "RUNNING" | "OK" | "ERROR" | "CANCELLED" | string;
+  kind: string;
+  provider: string | null;
+  batchSize: number;
+  once: boolean;
+  missingTotal: number;
+  processed: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+  lastQuery: string | null;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  heartbeatAt: string;
+}
+
+export interface ImageSyncStatus {
+  hasSerperKey: boolean;
+  missing: number;
+  running: boolean;
+  byProvider: { provider: string; missing: number; total: number }[];
+  lastRun: ImageSyncRun | null;
+}
+
+export interface ImageSyncMissingItem {
+  id: string;
+  provider: string;
+  externalId: string;
+  name: string;
+  brand: string | null;
+  sku: string | null;
+  ean: string | null;
+  partNumber: string | null;
+  query: string;
+}
+
+export const imageSyncApi = {
+  status: () => api.get<ImageSyncStatus>("/admin/images/status"),
+  missing: (params?: { take?: number; provider?: string }) =>
+    api.get<{ items: ImageSyncMissingItem[] }>("/admin/images/missing", { params }),
+  saveSerper: (apiKey: string) => api.put<{ hasSerperKey: boolean }>("/admin/images/serper", { apiKey }),
+  clearSerper: () => api.delete<{ hasSerperKey: boolean }>("/admin/images/serper"),
+  firstPhoto: (data?: { provider?: string; batchSize?: number; once?: boolean }) =>
+    api.post<{ started: boolean; reason?: string }>("/admin/images/first-photo", data ?? {}),
+  stop: () => api.post<{ stopped: boolean }>("/admin/images/first-photo/stop", {}),
+};
+
 // --- Organizaciones (multi-tenant) ---
 // Ver docs/ARQUITECTURA_TENANTS.md. `tenantRole` es el alcance dentro de la
 // organización; `platformRole` es el nivel de acceso a Nodo.

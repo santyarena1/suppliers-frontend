@@ -103,6 +103,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: No cruza locales. No se unifica en automático: el comercio elige. Las claves crudas son el texto que ya guardó cada pedido.
 
+### [FEATURE] Sincronización de imágenes (Primera foto / Serper)
+- **Método**: GET | PUT | DELETE | POST
+- **Ruta**: `/admin/images/status` · `/admin/images/missing` · `/admin/images/serper` · `/admin/images/first-photo` · `/admin/images/first-photo/stop`
+- **Auth**: Bearer ROLE_ADMIN (solo superadmin)
+- **Body / Params**: guardar clave `{ apiKey }` · primera foto `{ provider?, batchSize?: 1–50, once?: boolean }` · missing `take`, `provider`
+- **Respuesta esperada**: status `{ hasSerperKey, missing, running, byProvider, lastRun }` · first-photo `{ started, reason? }` · missing `{ items: [{ id, provider, name, query, ... }] }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Rellena `ProviderSyncCache.imageUrl` **solo si está vacío**. Busca en `POST https://google.serper.dev/images` (`X-API-KEY`, `gl=ar`, `hl=es`) y toma la primera `imageUrl`. Corre en segundo plano de a tandas de 50. La API key se cifra (`ENCRYPTION_KEY`) y nunca se devuelve. Si después el proveedor sigue sin foto, el sync de catálogo **no borra** la de Serper; si el proveedor trae una, esa gana.
+
 ## Pendiente (futuro)
 
 
