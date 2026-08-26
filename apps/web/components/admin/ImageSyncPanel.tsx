@@ -301,8 +301,12 @@ export default function ImageSyncPanel({
               <p className="text-xs text-surface-500">sin imagen</p>
             </div>
             <div>
-              <p className="text-2xl font-semibold text-white tabular-nums">{status?.pending ?? "—"}</p>
-              <p className="text-xs text-surface-500">pendientes de intentar</p>
+              <p className="text-2xl font-semibold text-white tabular-nums">{status?.pendingVisible ?? "—"}</p>
+              <p className="text-xs text-surface-500">en catálogo con stock</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold text-white tabular-nums">{status?.pendingDeferred ?? "—"}</p>
+              <p className="text-xs text-surface-500">sin stock / ocultos</p>
             </div>
             <div>
               <p className="text-2xl font-semibold text-white tabular-nums">{status?.filled ?? "—"}</p>
@@ -340,7 +344,7 @@ export default function ImageSyncPanel({
             Correr solo, 2 veces por día
             <span className="block text-xs text-surface-500">
               {status?.cronHourHint ?? "8:00 y 20:00 (Argentina)"} · hasta {status?.cronLimit ?? 200} productos por
-              corrida (tandas de 50). Con 3000 faltantes se cubren en ~una semana.
+              corrida (tandas de 50). Primero los que se ven con stock; sin stock u ocultos quedan para después, solos.
             </span>
           </span>
         </label>
@@ -504,7 +508,9 @@ export default function ImageSyncPanel({
 
       {missing.length > 0 && (
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-surface-500 mb-2">Pendientes (muestra)</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wider text-surface-500 mb-2">
+            Pendientes (muestra · primero con stock)
+          </h3>
           <ul className="flex flex-col gap-1.5">
             {missing.map((it) => (
               <li key={it.id} className="border border-surface-800 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
@@ -512,6 +518,7 @@ export default function ImageSyncPanel({
                   <p className="text-sm text-surface-200 line-clamp-1">{it.name}</p>
                   <p className="text-[11px] text-surface-500 font-mono truncate">
                     {PROVIDER_LABELS[it.provider as Provider] ?? it.provider} · {it.query}
+                    {it.inCatalog === false ? " · después" : ""}
                   </p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">

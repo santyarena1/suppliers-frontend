@@ -1704,6 +1704,8 @@ export interface ImageSyncStatus {
   cronLimit: number;
   missing: number;
   pending: number;
+  pendingVisible: number;
+  pendingDeferred: number;
   filled: number;
   running: boolean;
   byProvider: { provider: string; missing: number; total: number }[];
@@ -1720,6 +1722,7 @@ export interface ImageSyncMissingItem {
   ean: string | null;
   partNumber: string | null;
   query: string;
+  inCatalog: boolean;
 }
 
 export interface ImageSyncFill {

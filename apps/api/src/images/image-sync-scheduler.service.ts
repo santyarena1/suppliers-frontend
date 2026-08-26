@@ -14,7 +14,7 @@ export class ImageSyncSchedulerService {
     private readonly config: ConfigService
   ) {}
 
-  /** 8:00 y 20:00 Argentina: una tanda de hasta 200 faltantes (de a 50). */
+  /** 8:00 y 20:00 Argentina: hasta 200 faltantes (primero catálogo con stock). */
   @Cron("0 8,20 * * *", { timeZone: TZ })
   async tick() {
     if (this.config.get("IMAGE_SYNC_CRON_DISABLED") === "true") return;

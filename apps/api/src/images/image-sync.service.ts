@@ -9,6 +9,7 @@ import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
 import { Prisma } from "@prisma/client";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { candidateWhere, missingWhere, resolveRunPriority } from "./image-sync-candidates";
 import { buildImageSearchQuery, hasProductImage } from "./product-image";
 import { SerperImagesClient } from "./serper-images.client";
 
@@ -22,10 +23,6 @@ const STALE_MS = 15 * 60_000;
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
-
-const missingImage: Prisma.ProviderSyncCacheWhereInput = {
-  OR: [{ imageUrl: null }, { imageUrl: "" }],
-};
 
 function assertProvider(value: string | undefined): Provider | undefined {
   if (!value?.trim()) return undefined;
@@ -125,32 +122,24 @@ export class ImageSyncService implements OnModuleInit {
     }
   }
 
-  private missingWhere(provider?: Provider): Prisma.ProviderSyncCacheWhereInput {
-    return provider ? { provider, AND: [missingImage] } : missingImage;
-  }
-
-  /** Faltantes que todavía no se intentaron (así el cron no se clava en los mismos 50). */
-  private candidateWhere(provider?: Provider): Prisma.ProviderSyncCacheWhereInput {
-    return {
-      AND: [this.missingWhere(provider), { imageFills: { none: {} } }],
-    };
-  }
-
   async status() {
     await this.markStaleRuns();
-    const [hasSerperKey, cronEnabled, missing, pending, filled, lastRun, byProvider] = await Promise.all([
-      this.hasSerperKey(),
-      this.isCronEnabled(),
-      this.prisma.providerSyncCache.count({ where: missingImage }),
-      this.prisma.providerSyncCache.count({ where: this.candidateWhere() }),
-      this.prisma.imageSyncFill.count({ where: { status: "filled" } }),
-      this.prisma.imageSyncRun.findFirst({ orderBy: { startedAt: "desc" } }),
-      this.prisma.providerSyncCache.groupBy({
-        by: ["provider"],
-        where: missingImage,
-        _count: { _all: true },
-      }),
-    ]);
+    const [hasSerperKey, cronEnabled, missing, pendingVisible, pendingDeferred, filled, lastRun, byProvider] =
+      await Promise.all([
+        this.hasSerperKey(),
+        this.isCronEnabled(),
+        this.prisma.providerSyncCache.count({ where: missingWhere() }),
+        this.prisma.providerSyncCache.count({ where: candidateWhere(undefined, "visible") }),
+        this.prisma.providerSyncCache.count({ where: candidateWhere(undefined, "deferred") }),
+        this.prisma.imageSyncFill.count({ where: { status: "filled" } }),
+        this.prisma.imageSyncRun.findFirst({ orderBy: { startedAt: "desc" } }),
+        this.prisma.providerSyncCache.groupBy({
+          by: ["provider"],
+          where: missingWhere(),
+          _count: { _all: true },
+        }),
+      ]);
+    const pending = pendingVisible + pendingDeferred;
     const totals = await this.prisma.providerSyncCache.groupBy({
       by: ["provider"],
       _count: { _all: true },
@@ -163,6 +152,8 @@ export class ImageSyncService implements OnModuleInit {
       cronLimit: DEFAULT_CRON_LIMIT,
       missing,
       pending,
+      pendingVisible,
+      pendingDeferred,
       filled,
       running: this.running,
       byProvider: byProvider
@@ -178,26 +169,37 @@ export class ImageSyncService implements OnModuleInit {
 
   async listMissing(take = 20, provider?: string) {
     const p = assertProvider(provider);
-    const rows = await this.prisma.providerSyncCache.findMany({
-      where: this.candidateWhere(p),
+    const limit = Math.min(Math.max(take, 1), 50);
+    const select = {
+      id: true,
+      provider: true,
+      externalId: true,
+      name: true,
+      brand: true,
+      sku: true,
+      ean: true,
+      partNumber: true,
+    } as const;
+    const visible = await this.prisma.providerSyncCache.findMany({
+      where: candidateWhere(p, "visible"),
       orderBy: { updatedAt: "desc" },
-      take: Math.min(Math.max(take, 1), 50),
-      select: {
-        id: true,
-        provider: true,
-        externalId: true,
-        name: true,
-        brand: true,
-        sku: true,
-        ean: true,
-        partNumber: true,
-      },
+      take: limit,
+      select,
     });
+    const rest =
+      visible.length < limit
+        ? await this.prisma.providerSyncCache.findMany({
+            where: candidateWhere(p, "deferred"),
+            orderBy: { updatedAt: "desc" },
+            take: limit - visible.length,
+            select,
+          })
+        : [];
     return {
-      items: rows.map((r) => ({
-        ...r,
-        query: buildImageSearchQuery(r),
-      })),
+      items: [
+        ...visible.map((r) => ({ ...r, query: buildImageSearchQuery(r), inCatalog: true })),
+        ...rest.map((r) => ({ ...r, query: buildImageSearchQuery(r), inCatalog: false })),
+      ],
     };
   }
 
@@ -311,9 +313,16 @@ export class ImageSyncService implements OnModuleInit {
   }) {
     if (this.running) throw new Error("Ya hay una sincronización de imágenes en curso");
     const apiKey = await this.readApiKey();
-    const where = this.candidateWhere(opts.provider);
+    const pendingVisible = await this.prisma.providerSyncCache.count({
+      where: candidateWhere(opts.provider, "visible"),
+    });
+    const priority = resolveRunPriority(pendingVisible);
+    const where = candidateWhere(opts.provider, priority);
     const missingTotal = await this.prisma.providerSyncCache.count({ where });
     const cap = opts.once ? opts.batchSize : opts.maxItems;
+    this.logger.log(
+      `Primera foto (${opts.source}): ${priority === "visible" ? "catálogo con stock" : "sin stock / ocultos"} · ${missingTotal} pendientes`
+    );
 
     this.running = true;
     this.cancelRequested = false;
