@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios from "axios";
 import { heuristicCategoryClusters } from "./catalog-enrichment";
+import { CatalogSettingsService } from "./catalog-settings.service";
 
 export type AiCategoryCluster = { label: string; members: string[]; confidence?: string };
 export type AiProductHint = {
@@ -16,10 +17,13 @@ export type AiProductHint = {
 export class CatalogAiService {
   private readonly logger = new Logger(CatalogAiService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly settings: CatalogSettingsService
+  ) {}
 
-  get isConfigured() {
-    return Boolean(this.config.get<string>("OPENAI_API_KEY")?.trim());
+  async isConfigured() {
+    return this.settings.hasOpenAiKey();
   }
 
   async suggestCategoryClusters(
@@ -29,7 +33,7 @@ export class CatalogAiService {
     const unique = [...new Set(categories.filter(Boolean))].slice(0, 120);
     if (unique.length === 0) return { clusters: [], usedAi: false };
 
-    if (!this.isConfigured) {
+    if (!(await this.isConfigured())) {
       return { clusters: heuristicCategoryClusters(unique), usedAi: false };
     }
 
@@ -63,7 +67,7 @@ Categorías a analizar: ${JSON.stringify(unique)}`
   }): Promise<AiProductHint> {
     const fallback = this.heuristicProductHint(input);
 
-    if (!this.isConfigured) return fallback;
+    if (!(await this.isConfigured())) return fallback;
 
     try {
       const result = await this.chatJson<{
@@ -120,13 +124,14 @@ Producto: ${JSON.stringify({
       displayBrand: brand,
       displayCategory: category,
       displaySubcategory: null,
-      reasoning: "Heurística por nombre (sin OPENAI_API_KEY)",
+      reasoning: "Heurística por nombre (sin API key de OpenAI)",
       source: "heuristic",
     };
   }
 
   private async chatJson<T>(userPrompt: string): Promise<T> {
-    const apiKey = this.config.get<string>("OPENAI_API_KEY")!.trim();
+    const apiKey = await this.settings.readOpenAiKey();
+    if (!apiKey) throw new Error("OpenAI API key not configured");
     const model = this.config.get<string>("OPENAI_MODEL") ?? "gpt-4o-mini";
     const baseUrl = (this.config.get<string>("OPENAI_BASE_URL") ?? "https://api.openai.com/v1").replace(/\/$/, "");
 
@@ -140,7 +145,7 @@ Producto: ${JSON.stringify({
           {
             role: "system",
             content:
-              "Sos un asistente de taxonomía de catálogo IT. Respondé solo JSON válido. Para arrays envolvé en { \"items\": [...] } si hace falta.",
+              'Sos un asistente de taxonomía de catálogo IT. Respondé solo JSON válido. Para arrays envolvé en { "items": [...] } si hace falta.',
           },
           { role: "user", content: userPrompt },
         ],

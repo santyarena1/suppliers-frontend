@@ -193,6 +193,13 @@ model PlatformProductIdentity {
   @@unique([matchKind, matchKey])
 }
 
+/// Clave de OpenAI para sugerencias de catálogo. Solo superadmin. Cifrada.
+model CatalogEnrichmentSettings {
+  id                    String   @id @default("default")
+  openAiApiKeyEncrypted String?
+  updatedAt             DateTime @updatedAt
+}
+
 model TenantMembership {
   id        String     @id @default(uuid())
   tenantId  String

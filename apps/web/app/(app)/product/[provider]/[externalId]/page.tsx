@@ -12,6 +12,7 @@ import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint, productDisplayBrand, productDisplayCategory, productDisplaySubcategory } from "@/lib/api";
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
+import ProductSyncedAt from "@/components/ProductSyncedAt";
 import {
   linePricing,
   taxLabel,
@@ -476,6 +477,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   </div>
                 </section>
               )}
+
+              <ProductSyncedAt
+                syncedAt={product.syncedAt}
+                className="text-[11px] text-surface-500 text-center pt-2 border-t border-surface-800/60"
+              />
             </div>
 
             {/* Locales: footer separado, siempre debajo de TODO el producto (mobile incluido) */}
@@ -775,6 +781,10 @@ function RelatedCard({ product }: { product: ProductDTO }) {
           {product.name}
         </p>
         <PriceTag product={product} size="sm" />
+        <ProductSyncedAt
+          syncedAt={product.syncedAt}
+          className="text-[9px] text-surface-500 mt-1.5 leading-tight"
+        />
       </div>
     </Link>
   );

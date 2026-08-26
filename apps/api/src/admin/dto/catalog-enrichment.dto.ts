@@ -1,5 +1,5 @@
 import { Transform } from "class-transformer";
-import { IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsString, MinLength } from "class-validator";
+import { IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { CATALOG_ALIAS_KINDS, CATALOG_MATCH_KINDS } from "../../catalog/catalog-enrichment";
 
 export class RawValuesQueryDto {
@@ -17,6 +17,13 @@ export class RawValuesQueryDto {
 
   @IsOptional()
   limit?: number;
+}
+
+export class SaveOpenAiKeyDto {
+  @IsString()
+  @MinLength(8)
+  @MaxLength(300)
+  apiKey!: string;
 }
 
 export class UpsertCatalogAliasDto {

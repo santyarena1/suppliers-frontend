@@ -3,6 +3,7 @@ import type { CatalogAliasKind, CatalogEnrichmentSource, CatalogMatchKind } from
 import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogAiService } from "./catalog-ai.service";
+import { CatalogSettingsService } from "./catalog-settings.service";
 import {
   groupCategoriesByDisplay,
   indexCatalogAliases,
@@ -27,7 +28,8 @@ export class CatalogEnrichmentService implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly ai: CatalogAiService
+    private readonly ai: CatalogAiService,
+    private readonly settings: CatalogSettingsService
   ) {}
 
   async onModuleInit() {
@@ -69,8 +71,16 @@ export class CatalogEnrichmentService implements OnModuleInit {
       identityCount,
       productCount,
       airCodedProducts: codedCategories,
-      aiConfigured: this.ai.isConfigured,
+      aiConfigured: await this.settings.hasOpenAiKey(),
     };
+  }
+
+  saveOpenAiKey(apiKey: string) {
+    return this.settings.saveOpenAiKey(apiKey);
+  }
+
+  clearOpenAiKey() {
+    return this.settings.clearOpenAiKey();
   }
 
   async listRawValues(params: {

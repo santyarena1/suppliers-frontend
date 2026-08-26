@@ -10,7 +10,7 @@ import {
 } from "@/lib/api";
 import { PROVIDER_LABELS, type Provider } from "@/lib/api";
 import {
-  Brain, Check, ChevronDown, Hash, Layers, Loader2, RefreshCw, Sparkles, Tags, Wand2,
+  Brain, Check, ChevronDown, Hash, KeyRound, Layers, Loader2, RefreshCw, Sparkles, Tags, Wand2,
 } from "lucide-react";
 
 type SubTab = "codes" | "unify" | "identities" | "ai";
@@ -36,6 +36,8 @@ export default function CatalogEnrichmentPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [aiClusters, setAiClusters] = useState<{ label: string; members: string[] }[]>([]);
   const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({});
+  const [openAiKey, setOpenAiKey] = useState("");
+  const [savingOpenAi, setSavingOpenAi] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,7 +144,7 @@ export default function CatalogEnrichmentPanel({
     try {
       const res = await catalogEnrichmentApi.aiCategoryClusters(provider);
       setAiClusters(res.data.clusters);
-      showToast(res.data.usedAi ? "Clusters sugeridos con IA" : "Clusters sugeridos (heurística — sin OPENAI_API_KEY)");
+      showToast(res.data.usedAi ? "Clusters sugeridos con IA" : "Clusters sugeridos (heurística — cargá API key de OpenAI)");
     } catch {
       showToast("Error en sugerencia IA", false);
     } finally {
@@ -166,6 +168,35 @@ export default function CatalogEnrichmentPanel({
       showToast("Error al aplicar cluster", false);
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function saveOpenAiKey(e: React.FormEvent) {
+    e.preventDefault();
+    if (!openAiKey.trim()) return;
+    setSavingOpenAi(true);
+    try {
+      await catalogEnrichmentApi.saveOpenAi(openAiKey.trim());
+      setOpenAiKey("");
+      showToast("API key de OpenAI guardada");
+      await load();
+    } catch {
+      showToast("No se pudo guardar la clave de OpenAI", false);
+    } finally {
+      setSavingOpenAi(false);
+    }
+  }
+
+  async function clearOpenAiKey() {
+    setSavingOpenAi(true);
+    try {
+      await catalogEnrichmentApi.clearOpenAi();
+      showToast("Se quitó la API key de OpenAI");
+      await load();
+    } catch {
+      showToast("No se pudo quitar la clave", false);
+    } finally {
+      setSavingOpenAi(false);
     }
   }
 
@@ -204,7 +235,7 @@ export default function CatalogEnrichmentPanel({
             { label: "Alias activos", value: overview.aliasCount, icon: Layers },
             { label: "Identidades", value: overview.identityCount, icon: Hash },
             { label: "Productos en cache", value: overview.productCount, icon: Tags },
-            { label: "IA", value: overview.aiConfigured ? "Configurada" : "Heurística", icon: Brain },
+            { label: "IA", value: overview.aiConfigured ? "Configurada" : "Sin clave", icon: Brain },
           ].map(({ label, value, icon: Icon }) => (
             <div key={label} className="rounded-xl border border-surface-800 bg-surface-900/50 px-4 py-3">
               <div className="flex items-center gap-2 text-surface-500 text-xs mb-1">
@@ -215,6 +246,53 @@ export default function CatalogEnrichmentPanel({
           ))}
         </div>
       )}
+
+      <section className="rounded-xl border border-surface-800 p-4 bg-surface-900/30 space-y-3">
+        <div className="flex items-start gap-3">
+          <KeyRound className="w-4 h-4 text-brand-400 mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-medium text-white">API key de OpenAI</h3>
+            <p className="text-xs text-surface-500 mt-1">
+              Se guarda cifrada en la base (igual que Serper). Nunca se muestra de nuevo.
+              {overview?.aiConfigured ? (
+                <span className="text-emerald-400"> Clave activa.</span>
+              ) : (
+                <span> Sin clave, las sugerencias usan heurística local.</span>
+              )}
+            </p>
+          </div>
+        </div>
+        <form onSubmit={saveOpenAiKey} className="flex flex-wrap gap-2 items-end">
+          <label className="flex-1 min-w-[220px] text-xs text-surface-500">
+            sk-…
+            <input
+              type="password"
+              value={openAiKey}
+              onChange={(e) => setOpenAiKey(e.target.value)}
+              placeholder="Pegá la API key"
+              className="mt-1 block w-full rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1.5 text-sm text-white font-mono"
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="submit"
+            disabled={savingOpenAi || !openAiKey.trim()}
+            className="text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-50"
+          >
+            {savingOpenAi ? "Guardando…" : "Guardar"}
+          </button>
+          {overview?.aiConfigured && (
+            <button
+              type="button"
+              disabled={savingOpenAi}
+              onClick={() => void clearOpenAiKey()}
+              className="text-xs font-medium px-3 py-2 rounded-lg border border-surface-700 text-surface-400 hover:text-surface-200"
+            >
+              Quitar
+            </button>
+          )}
+        </form>
+      </section>
 
       <div className="flex flex-wrap gap-2 border-b border-surface-800 pb-2">
         {([
@@ -370,7 +448,7 @@ export default function CatalogEnrichmentPanel({
             <p className="text-sm text-surface-300 mb-3 flex items-center gap-2">
               <Wand2 className="w-4 h-4 text-brand-400" />
               Agrupá categorías semánticamente iguales y elegí el nombre visible del grupo.
-              {overview?.aiConfigured ? " Usando OpenAI." : " Sin API key: usa heurística local."}
+              {overview?.aiConfigured ? " Usando OpenAI." : " Cargá la API key arriba para usar OpenAI."}
             </p>
             <button
               onClick={runAiClusters}
