@@ -1,7 +1,8 @@
 /**
  * Crea el juego de organizaciones y usuarios de ejemplo del modelo multi-tenant
- * (ver docs/ARQUITECTURA_TENANTS.md): dos comercios, dos distribuidores y dos
- * marcas, cada uno con sus sub-usuarios y sus vínculos comerciales cruzados.
+ * El superadmin de prueba queda en la organización «Administración»: carrito y
+ * pedidos propios. Credenciales de proveedor, distribuidores y marcas se leen
+ * del Comercio de Pruebas (los de testuser1), sin impersonar.
  *
  * Es idempotente: si una organización o un usuario ya existe, lo reutiliza.
  *
@@ -209,7 +210,46 @@ async function main() {
     console.log(`↔ ${link.client} ← ${link.supplier}${seller ? ` (vendedor: ${seller.username})` : ""}`);
   }
 
+  // Superadmin: organización propia (carrito aparte) espejando el comercio de pruebas.
+  tree = await call("GET", "/admin/tenants");
+  const latest = new Map(tree.tenants.map((tenant) => [tenant.name, tenant]));
+  const source = latest.get("Comercio de Pruebas");
+  let adminTenant = latest.get("Administración");
+  if (!adminTenant) {
+    adminTenant = await call("POST", "/admin/tenants", {
+      name: "Administración",
+      type: "RETAILER",
+      notes: "Organización del superadmin: carrito y pedidos propios. Credenciales y vínculos se leen del comercio de pruebas.",
+    });
+    console.log("+ Administración (RETAILER)");
+  }
+  if (source) {
+    await call("PUT", `/admin/tenants/${adminTenant.id}`, { mirrorsCommercialFromId: source.id });
+    console.log(`· Administración espeja ${source.name}`);
+  }
+  const adminAccountForOrg = (await call("GET", "/admin/users")).find((user) => user.username === ADMIN_USER);
+  if (adminAccountForOrg) {
+    for (const tenant of latest.values()) {
+      const extra = (tenant.members ?? []).find((m) => m.userId === adminAccountForOrg.id && tenant.id !== adminTenant.id);
+      if (extra) {
+        await call("DELETE", `/admin/tenants/members/${extra.membershipId}`);
+        console.log(`  - ${ADMIN_USER} salió de ${tenant.name}`);
+      }
+    }
+    const already = (adminTenant.members ?? []).some((m) => m.userId === adminAccountForOrg.id);
+    if (!already) {
+      await call("POST", `/admin/tenants/${adminTenant.id}/members`, {
+        userId: adminAccountForOrg.id,
+        role: "OWNER",
+        title: "Superadmin de prueba",
+      });
+      console.log(`  + ${ADMIN_USER} en Administración`);
+    }
+  }
+
   console.log("\nListo. Todos los usuarios de ejemplo usan la contraseña:", DEMO_PASSWORD);
+  console.log(`${ADMIN_USER} está en Administración: carrito propio, mismas credenciales y vínculos que testuser1.`);
+  console.log("Volvé a entrar con esa cuenta para que el token traiga la organización.");
 }
 
 main().catch((err) => {

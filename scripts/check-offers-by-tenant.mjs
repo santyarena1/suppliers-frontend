@@ -49,7 +49,9 @@ async function main() {
   if (!adminToken) throw new Error("No se pudo entrar como administrador");
 
   const tree = (await call("GET", "/admin/tenants", adminToken)).payload.data;
-  const tenants = (tree.tenants ?? tree).filter((t) => (t.members ?? []).length > 0);
+  const tenants = (tree.tenants ?? tree).filter((t) =>
+    (t.members ?? []).length > 0 && t.name !== "Administración" && !t.mirrorsCommercialFromId
+  );
 
   const dueño = (t) => t.members.find((m) => m.tenantRole === "OWNER") ?? t.members[0];
   const conDueño = tenants.find((t) => dueño(t));
@@ -121,12 +123,25 @@ async function main() {
   check("Volver el markup a cero recupera el precio original", Math.abs(vuelve - crudo) < 0.02,
     `${vuelve} vs ${crudo}`);
 
-  // El superadmin no pertenece a ninguna organización: no tiene catálogo, pero
-  // tampoco tiene que romperse.
+  // El superadmin de prueba espeja el Comercio de Pruebas: ve el mismo catálogo
+  // que testuser1 (credenciales y vínculos compartidos), con carrito propio.
+  const demo = (tree.tenants ?? tree).find((t) => t.name === "Comercio de Pruebas");
+  const testuser = demo?.members.find((m) => m.username === "testuser1" || m.username === "testuser");
   const busquedaAdmin = await call("GET", `/search/provider/${PROVIDER}?name=${termino}`, adminToken);
-  const vacio = Array.isArray(busquedaAdmin.payload.data) ? busquedaAdmin.payload.data : busquedaAdmin.payload;
-  check("El superadmin ve el catálogo vacío en vez de un error",
-    busquedaAdmin.status === 200 && vacio.length === 0, `HTTP ${busquedaAdmin.status}, ${vacio.length} resultados`);
+  const resultadosAdmin = Array.isArray(busquedaAdmin.payload.data) ? busquedaAdmin.payload.data : busquedaAdmin.payload;
+  check("La búsqueda del superadmin no falla", busquedaAdmin.status === 200,
+    `HTTP ${busquedaAdmin.status}, ${Array.isArray(resultadosAdmin) ? resultadosAdmin.length : "?"} resultados`);
+  if (testuser) {
+    const tokenTestuser = await sesion(testuser.userId);
+    const busquedaTestuser = await call("GET", `/search/provider/${PROVIDER}?name=${termino}`, tokenTestuser);
+    const resultadosTestuser = Array.isArray(busquedaTestuser.payload.data)
+      ? busquedaTestuser.payload.data
+      : busquedaTestuser.payload;
+    const idsAdmin = (Array.isArray(resultadosAdmin) ? resultadosAdmin : []).map((p) => p.externalId).sort().join(",");
+    const idsTestuser = (Array.isArray(resultadosTestuser) ? resultadosTestuser : []).map((p) => p.externalId).sort().join(",");
+    check("El superadmin ve el mismo catálogo que testuser1", idsAdmin === idsTestuser,
+      `admin=${(resultadosAdmin ?? []).length} · testuser=${(resultadosTestuser ?? []).length}`);
+  }
 
   const destacados = await call("GET", "/catalog/featured", adminToken);
   check("Los destacados tampoco fallan para el superadmin", destacados.status === 200, `HTTP ${destacados.status}`);

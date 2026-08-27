@@ -3,7 +3,7 @@ import { AuthGuard } from "@nestjs/passport";
 import { ALL_PROVIDERS, type JwtPayload, type Provider } from "@nodo/shared";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import type { TenantContext } from "../tenants/tenant-context.service";
+import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { CredentialsService } from "./credentials.service";
 import { SaveCredentialDto } from "./dto/save-credential.dto";
@@ -22,21 +22,21 @@ export class CredentialsController {
 
   @Get("me")
   mine(@CurrentTenant() tenant: TenantContext) {
-    return this.credentialsService.ofTenant(tenant.tenantId);
+    return this.credentialsService.ofTenant(commercialId(tenant));
   }
 
   @Get(":providerName")
   getByProvider(@CurrentTenant() tenant: TenantContext, @Param("providerName") providerName: string) {
-    return this.credentialsService.getByProvider(tenant.tenantId, assertProvider(providerName));
+    return this.credentialsService.getByProvider(commercialId(tenant), assertProvider(providerName));
   }
 
   @Post()
   save(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: JwtPayload, @Body() dto: SaveCredentialDto) {
-    return this.credentialsService.save(tenant.tenantId, user.userId, dto);
+    return this.credentialsService.save(commercialId(tenant), user.userId, dto);
   }
 
   @Delete(":providerName")
   delete(@CurrentTenant() tenant: TenantContext, @Param("providerName") providerName: string) {
-    return this.credentialsService.delete(tenant.tenantId, assertProvider(providerName));
+    return this.credentialsService.delete(commercialId(tenant), assertProvider(providerName));
   }
 }

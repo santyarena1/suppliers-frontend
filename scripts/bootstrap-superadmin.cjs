@@ -35,6 +35,49 @@ async function main() {
     create: { username: USERNAME, email: EMAIL, passwordHash, role: "ROLE_ADMIN", active: true },
   });
 
+  // Organización propia (carrito aparte) espejando el comercio de testuser1.
+  const demoUser = (await prisma.user.findUnique({ where: { username: "testuser1" } }))
+    ?? (await prisma.user.findUnique({ where: { username: "testuser" } }));
+  const demoMembership = demoUser
+    ? await prisma.tenantMembership.findFirst({
+        where: { userId: demoUser.id, active: true, tenant: { type: "RETAILER", active: true } },
+        orderBy: { createdAt: "asc" },
+      })
+    : null;
+  const source = demoMembership
+    ? await prisma.tenant.findUnique({ where: { id: demoMembership.tenantId } })
+    : await prisma.tenant.findFirst({ where: { name: "Comercio de Pruebas", type: "RETAILER", active: true } });
+
+  let own = await prisma.tenant.findFirst({ where: { name: "Administración" } });
+  if (!own) {
+    own = await prisma.tenant.create({
+      data: {
+        name: "Administración",
+        type: "RETAILER",
+        notes: "Organización del superadmin: carrito y pedidos propios. Credenciales y vínculos se leen del comercio de pruebas.",
+        mirrorsCommercialFromId: source?.id ?? null,
+      },
+    });
+  } else if (source && own.mirrorsCommercialFromId !== source.id) {
+    own = await prisma.tenant.update({
+      where: { id: own.id },
+      data: { mirrorsCommercialFromId: source.id },
+    });
+  }
+
+  await prisma.tenantMembership.deleteMany({ where: { userId: user.id, tenantId: { not: own.id } } });
+  await prisma.tenantMembership.upsert({
+    where: { tenantId_userId: { tenantId: own.id, userId: user.id } },
+    update: { role: "OWNER", title: "Superadmin de prueba", active: true },
+    create: {
+      tenantId: own.id,
+      userId: user.id,
+      role: "OWNER",
+      title: "Superadmin de prueba",
+    },
+  });
+  console.log(`OK ${user.username} en ${own.name} (credenciales de ${source?.name ?? "nadie todavía"})`);
+
   console.log(`OK superadmin: ${user.username} (${user.id}) en ${process.env.RAILWAY_ENVIRONMENT_NAME ?? "entorno desconocido"}`);
   await prisma.$disconnect();
 }

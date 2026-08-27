@@ -10,7 +10,7 @@ import { GrupoNucleoOrderService, type GnDraftInput } from "../providers/grupo-n
 import { InvidOrderService, type InvidDraftInput } from "../providers/invid-order.service";
 import { NewBytesOrderService, type NewBytesDraftInput } from "../providers/new-bytes-order.service";
 import type { OrderAuthor } from "../providers/provider-draft";
-import type { TenantContext } from "../tenants/tenant-context.service";
+import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import type { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offline-order.dto";
 import type { RenameOpsAliasDto, SplitOpsAliasDto, UnifyOpsAliasDto } from "./dto/ops-alias.dto";
@@ -89,7 +89,7 @@ export class OrdersService {
     const created = [];
     for (const group of dto.orders) {
       const provider = group.provider as Provider;
-      await this.assertOfflineAllowed(tenant.tenantId, provider);
+      await this.assertOfflineAllowed(commercialId(tenant), provider);
       const items = normalizeOfflineItems(group.items);
       if (items.length === 0) {
         throw new BadRequestException(`No hay productos de ${PROVIDER_LABELS[provider]} en el pedido`);
@@ -563,7 +563,7 @@ export class OrdersService {
   }
 
   private async credentialsOf(tenant: TenantContext, provider: Provider) {
-    const stored = await this.credentials.getByProvider(tenant.tenantId, provider);
+    const stored = await this.credentials.getByProvider(commercialId(tenant), provider);
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 }

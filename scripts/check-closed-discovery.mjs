@@ -42,7 +42,9 @@ async function main() {
 
   const tree = (await call("GET", "/admin/tenants", adminToken)).payload.data;
   const tenants = tree.tenants ?? tree;
-  const comercios = tenants.filter((t) => t.type === "RETAILER" && (t.members ?? []).length > 0);
+  const comercios = tenants.filter((t) =>
+    t.type === "RETAILER" && (t.members ?? []).length > 0 && t.name !== "Administración" && !t.mirrorsCommercialFromId
+  );
   const distribuidores = tenants.filter((t) => t.type === "DISTRIBUTOR" && t.providerKey);
 
   if (comercios.length < 2) throw new Error("Hacen falta dos comercios con personas para probar");

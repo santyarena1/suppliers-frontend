@@ -4,7 +4,7 @@ import type { JwtPayload } from "@nodo/shared";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { RedeemAccessCodeDto } from "./dto/tenant.dto";
-import type { TenantContext } from "./tenant-context.service";
+import { commercialId, type TenantContext } from "./tenant-context.service";
 import { TenantVisibilityService } from "./tenant-visibility.service";
 import { TenantGuard } from "./tenant.guard";
 import { TenantsService } from "./tenants.service";
@@ -21,7 +21,7 @@ export class MyTenantController {
   /** Los proveedores que existen para esta organización. Para el resto, no existen. */
   @Get("providers")
   providers(@CurrentTenant() tenant: TenantContext) {
-    return this.visibility.listFor(tenant.tenantId);
+    return this.visibility.listFor(commercialId(tenant));
   }
 
   @Post("redeem-code")

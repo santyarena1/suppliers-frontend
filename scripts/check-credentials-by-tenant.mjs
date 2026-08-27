@@ -45,7 +45,9 @@ async function main() {
   if (!adminToken) throw new Error("No se pudo entrar como administrador");
 
   const tree = (await call("GET", "/admin/tenants", adminToken)).payload.data;
-  const tenants = (tree.tenants ?? tree).filter((t) => (t.members ?? []).length > 0);
+  const tenants = (tree.tenants ?? tree).filter((t) =>
+    (t.members ?? []).length > 0 && t.name !== "Administración" && !t.mirrorsCommercialFromId
+  );
 
   // Hace falta una organización con dos personas y otra distinta para contrastar.
   const conEquipo = tenants.find((t) => t.members.length >= 2);
@@ -107,10 +109,11 @@ async function main() {
       estadoCompanero.payload.data?.hasCredentials === true,
       `hasCredentials=${estadoCompanero.payload.data?.hasCredentials}`);
 
-    // El superadmin no pertenece a ninguna organización: no puede tener credenciales.
+    // El superadmin de prueba espeja el Comercio de Pruebas: ve esas credenciales,
+    // no las de otra organización (salvo que sea la misma).
     const superadmin = await call("GET", "/credentials/me", adminToken);
-    check("El superadmin no puede tener credenciales propias", superadmin.status === 403,
-      `HTTP ${superadmin.status}`);
+    check("El superadmin puede leer las credenciales de su comercio",
+      superadmin.status === 200, `HTTP ${superadmin.status}`);
   } finally {
     await call("DELETE", `/credentials/${PROVIDER}`, unoToken);
     await call("PUT", `/providers/${PROVIDER}/config`, unoToken, { priceMarkupPercent: 0 });

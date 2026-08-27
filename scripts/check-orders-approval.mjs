@@ -62,7 +62,9 @@ async function main() {
 
   const arbol = (await call("GET", "/admin/tenants", adminToken)).payload.data;
   const tenants = arbol.tenants ?? arbol;
-  const comercios = tenants.filter((t) => t.type === "RETAILER" && (t.members ?? []).length > 0);
+  const comercios = tenants.filter((t) =>
+    t.type === "RETAILER" && (t.members ?? []).length > 0 && t.name !== "Administración" && !t.mirrorsCommercialFromId
+  );
 
   const conVendedor = comercios.find(
     (t) => t.members.some((m) => m.tenantRole === "SELLER") &&
