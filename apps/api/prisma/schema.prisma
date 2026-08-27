@@ -185,6 +185,8 @@ model PlatformCatalogTerm {
   children  PlatformCatalogTerm[] @relation("CatalogTermTree")
   /// Si false, no se muestra en el catálogo público (grilla de categorías / marcas).
   visible   Boolean          @default(true)
+  /// Si true, aparece en el menú de Nodo (lo arma el admin desde Categorías).
+  inMenu    Boolean          @default(false)
   source    CatalogEnrichmentSource @default(MANUAL)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
@@ -192,6 +194,7 @@ model PlatformCatalogTerm {
 
   @@unique([kind, label])
   @@index([kind, visible])
+  @@index([kind, inMenu])
   @@index([parentId])
 }
 

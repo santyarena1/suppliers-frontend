@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   catalogEnrichmentApi,
   PROVIDER_LABELS,
@@ -8,8 +8,9 @@ import {
   type CatalogIncompleteProduct,
   type Provider,
 } from "@/lib/api";
-import { uniqueSorted } from "@/lib/catalog-menu";
-import { Check, Loader2, Plus, Search, Sparkles } from "lucide-react";
+import type { LabelChoice } from "@/lib/catalog-menu";
+import SearchablePick from "./SearchablePick";
+import { Check, Loader2, Search, Sparkles } from "lucide-react";
 
 function providerName(provider: string) {
   return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
@@ -18,13 +19,13 @@ function providerName(provider: string) {
 type MissingFilter = "all" | "brand" | "category";
 
 export default function IncompleteTab({
-  brandOptions,
-  categoryOptions,
+  brandChoices,
+  categoryChoices,
   showToast,
   onChanged,
 }: {
-  brandOptions: string[];
-  categoryOptions: string[];
+  brandChoices: LabelChoice[];
+  categoryChoices: LabelChoice[];
   showToast: (msg: string, ok?: boolean) => void;
   onChanged: () => Promise<void>;
 }) {
@@ -38,16 +39,14 @@ export default function IncompleteTab({
   const [drafts, setDrafts] = useState<
     Record<string, { brand: string; category: string; subcategory: string }>
   >({});
-  const [extraBrands, setExtraBrands] = useState<string[]>([]);
-  const [extraCats, setExtraCats] = useState<string[]>([]);
-  const [newBrand, setNewBrand] = useState("");
-  const [newCat, setNewCat] = useState("");
+  const [extraBrands, setExtraBrands] = useState<LabelChoice[]>([]);
+  const [extraCats, setExtraCats] = useState<LabelChoice[]>([]);
   const limit = 30;
 
-  const brands = useMemo(() => uniqueSorted([...brandOptions, ...extraBrands]), [brandOptions, extraBrands]);
+  const brands = useMemo(() => mergeChoices(brandChoices, extraBrands), [brandChoices, extraBrands]);
   const categories = useMemo(
-    () => uniqueSorted([...categoryOptions, ...extraCats]),
-    [categoryOptions, extraCats]
+    () => mergeChoices(categoryChoices, extraCats),
+    [categoryChoices, extraCats]
   );
 
   const load = useCallback(async () => {
@@ -89,9 +88,10 @@ export default function IncompleteTab({
     setBusy(`create-${kind}`);
     try {
       await catalogEnrichmentApi.createTerm({ kind, label: name });
-      if (kind === "BRAND") setExtraBrands((p) => uniqueSorted([...p, name]));
-      else setExtraCats((p) => uniqueSorted([...p, name]));
-      showToast(`${kind === "BRAND" ? "Marca" : "Categoría"} «${name}» creada`);
+      const choice = { label: name, count: 0 };
+      if (kind === "BRAND") setExtraBrands((p) => mergeChoices(p, [choice]));
+      else setExtraCats((p) => mergeChoices(p, [choice]));
+      showToast(`${kind === "BRAND" ? "Marca" : "Categoría"} «${name}» lista`);
       await onChanged();
       return name;
     } catch {
@@ -149,36 +149,9 @@ export default function IncompleteTab({
   return (
     <div className="w-full space-y-4">
       <p className="text-sm text-surface-400 leading-relaxed">
-        Productos sin marca o categoría (Air casi siempre entra acá: el CSV no trae marca).
-        Escribí <strong className="text-surface-200">cualquier nombre</strong> — no hace falta que
-        esté unificado. Si no existe, se crea al guardar o con «Crear».
+        Tocá marca o categoría y buscá <strong className="text-surface-200">cualquiera</strong> de
+        cualquier proveedor — no hace falta que esté unificada. Si no aparece, escribila y se crea.
       </p>
-
-      <div className="rounded-xl border border-surface-800 bg-surface-900/40 px-4 py-3 space-y-2">
-        <p className="text-xs font-medium text-white">Crear acá, sin ir a Marcas o Categorías</p>
-        <div className="flex flex-wrap gap-2">
-          <QuickCreate
-            placeholder="Nueva marca…"
-            value={newBrand}
-            onChange={setNewBrand}
-            busy={busy === "create-BRAND"}
-            onCreate={async () => {
-              const name = await createTerm("BRAND", newBrand);
-              if (name) setNewBrand("");
-            }}
-          />
-          <QuickCreate
-            placeholder="Nueva categoría…"
-            value={newCat}
-            onChange={setNewCat}
-            busy={busy === "create-CATEGORY"}
-            onCreate={async () => {
-              const name = await createTerm("CATEGORY", newCat);
-              if (name) setNewCat("");
-            }}
-          />
-        </div>
-      </div>
 
       <div className="flex flex-wrap gap-2 items-center justify-between">
         <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -257,7 +230,7 @@ export default function IncompleteTab({
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 items-end">
-                    <CreatableTermField
+                    <SearchablePick
                       label="Marca"
                       value={d.brand}
                       options={brands}
@@ -273,7 +246,7 @@ export default function IncompleteTab({
                       }}
                       creating={busy === "create-BRAND"}
                     />
-                    <CreatableTermField
+                    <SearchablePick
                       label="Categoría"
                       value={d.category}
                       options={categories}
@@ -289,14 +262,14 @@ export default function IncompleteTab({
                       }}
                       creating={busy === "create-CATEGORY"}
                     />
-                    <CreatableTermField
+                    <SearchablePick
                       label="Subcategoría"
                       value={d.subcategory}
                       options={categories}
+                      optional
                       onChange={(v) =>
                         setDrafts((prev) => ({ ...prev, [key]: { ...d, subcategory: v } }))
                       }
-                      optional
                       onCreate={async (name) => {
                         const created = await createTerm("SUBCATEGORY", name);
                         if (created) {
@@ -369,127 +342,12 @@ export default function IncompleteTab({
   );
 }
 
-function QuickCreate({
-  placeholder,
-  value,
-  onChange,
-  onCreate,
-  busy,
-}: {
-  placeholder: string;
-  value: string;
-  onChange: (v: string) => void;
-  onCreate: () => void;
-  busy: boolean;
-}) {
-  return (
-    <div className="flex gap-1.5">
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onCreate();
-          }
-        }}
-        placeholder={placeholder}
-        className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1.5 text-sm text-white min-w-[160px]"
-      />
-      <button
-        type="button"
-        disabled={busy || !value.trim()}
-        onClick={onCreate}
-        className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-brand-600 text-white disabled:opacity-50"
-      >
-        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-        Crear
-      </button>
-    </div>
-  );
-}
-
-function CreatableTermField({
-  label,
-  value,
-  options,
-  onChange,
-  onCreate,
-  optional,
-  creating,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
-  onCreate?: (name: string) => Promise<void>;
-  optional?: boolean;
-  creating?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLLabelElement>(null);
-  const q = value.trim().toLowerCase();
-  const filtered = q
-    ? options.filter((o) => o.toLowerCase().includes(q)).slice(0, 12)
-    : options.slice(0, 12);
-  const exact = options.some((o) => o.toLowerCase() === q);
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
-
-  return (
-    <label ref={wrapRef} className="flex flex-col gap-0.5 min-w-[180px] relative">
-      <span className="text-[10px] text-surface-500 uppercase tracking-wide">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        placeholder={optional ? "Opcional — escribí cualquiera" : "Escribí o elegí…"}
-        className="rounded-lg border border-surface-700 bg-surface-900 px-2 py-1.5 text-xs text-white"
-      />
-      {open && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-surface-700 bg-surface-950 shadow-xl">
-          {filtered.map((o) => (
-            <button
-              key={o}
-              type="button"
-              onClick={() => {
-                onChange(o);
-                setOpen(false);
-              }}
-              className="block w-full text-left px-2.5 py-1.5 text-xs text-surface-200 hover:bg-surface-800"
-            >
-              {o}
-            </button>
-          ))}
-          {q && !exact && onCreate && (
-            <button
-              type="button"
-              disabled={creating}
-              onClick={() => {
-                void onCreate(value.trim()).then(() => setOpen(false));
-              }}
-              className="flex w-full items-center gap-1 text-left px-2.5 py-1.5 text-xs font-medium text-brand-300 hover:bg-surface-800 border-t border-surface-800"
-            >
-              {creating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
-              Crear «{value.trim()}»
-            </button>
-          )}
-          {filtered.length === 0 && !(q && !exact && onCreate) && (
-            <p className="px-2.5 py-2 text-[11px] text-surface-500">
-              Escribí un nombre y guardá el producto — se crea solo.
-            </p>
-          )}
-        </div>
-      )}
-    </label>
-  );
+function mergeChoices(a: LabelChoice[], b: LabelChoice[]): LabelChoice[] {
+  const map = new Map<string, LabelChoice>();
+  for (const x of [...a, ...b]) {
+    const k = x.label.toLowerCase();
+    const cur = map.get(k);
+    if (!cur || x.count > cur.count) map.set(k, x);
+  }
+  return [...map.values()].sort((x, y) => y.count - x.count || x.label.localeCompare(y.label, "es"));
 }

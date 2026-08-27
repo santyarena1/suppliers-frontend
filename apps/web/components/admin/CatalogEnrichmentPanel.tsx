@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   catalogEnrichmentApi,
+  PROVIDER_LABELS,
   type CatalogAliasKind,
   type CatalogBoard,
   type CatalogTerm,
+  type Provider,
 } from "@/lib/api";
 import {
-  FolderTree,
   Layers,
   Loader2,
   Plus,
@@ -21,10 +22,9 @@ import {
 } from "lucide-react";
 import UnifyBoard from "./UnifyBoard";
 import IncompleteTab from "./IncompleteTab";
-import MenuNodoTab from "./MenuNodoTab";
-import { uniqueSorted } from "@/lib/catalog-menu";
+import { aggregateLabelChoices } from "@/lib/catalog-menu";
 
-type MainTab = "categories" | "brands" | "incomplete" | "menu" | "config";
+type MainTab = "categories" | "brands" | "incomplete" | "config";
 
 export default function CatalogEnrichmentPanel({
   showToast,
@@ -122,7 +122,6 @@ export default function CatalogEnrichmentPanel({
             ["categories", "Categorías", Layers],
             ["brands", "Marcas", Tags],
             ["incomplete", "Incompletos", AlertTriangle],
-            ["menu", "Menú Nodo", FolderTree],
             ["config", "Términos", Settings2],
           ] as const
         ).map(([key, label, Icon]) => (
@@ -151,6 +150,9 @@ export default function CatalogEnrichmentPanel({
         <UnifyBoard
           kind={tab === "categories" ? "CATEGORY" : "BRAND"}
           board={tab === "categories" ? catBoard : brandBoard}
+          terms={terms.filter((t) =>
+            tab === "categories" ? t.kind === "CATEGORY" || t.kind === "SUBCATEGORY" : t.kind === "BRAND"
+          )}
           busy={busy}
           setBusy={setBusy}
           onReload={load}
@@ -160,26 +162,22 @@ export default function CatalogEnrichmentPanel({
 
       {tab === "incomplete" && (
         <IncompleteTab
-          brandOptions={uniqueSorted([
-            ...terms.filter((t) => t.kind === "BRAND").map((t) => t.label),
-            ...(brandBoard?.rows ?? []).map((r) => r.rawKey),
-          ])}
-          categoryOptions={uniqueSorted([
-            ...terms.filter((t) => t.kind === "CATEGORY" || t.kind === "SUBCATEGORY").map((t) => t.label),
-            ...(catBoard?.rows ?? []).map((r) => r.rawKey),
-          ])}
+          brandChoices={aggregateLabelChoices(
+            (brandBoard?.rows ?? []).map((r) => ({
+              ...r,
+              provider: PROVIDER_LABELS[r.provider as Provider] ?? r.provider.replace(/_/g, " "),
+            })),
+            terms.filter((t) => t.kind === "BRAND").map((t) => t.label)
+          )}
+          categoryChoices={aggregateLabelChoices(
+            (catBoard?.rows ?? []).map((r) => ({
+              ...r,
+              provider: PROVIDER_LABELS[r.provider as Provider] ?? r.provider.replace(/_/g, " "),
+            })),
+            terms.filter((t) => t.kind === "CATEGORY" || t.kind === "SUBCATEGORY").map((t) => t.label)
+          )}
           showToast={showToast}
           onChanged={load}
-        />
-      )}
-
-      {tab === "menu" && (
-        <MenuNodoTab
-          terms={terms}
-          busy={busy}
-          setBusy={setBusy}
-          onChanged={load}
-          showToast={showToast}
         />
       )}
 

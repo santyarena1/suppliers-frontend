@@ -10,6 +10,7 @@ import {
   type CatalogBoardRow,
   type CatalogMergeCluster,
   type CatalogPreviewProduct,
+  type CatalogTerm,
   type CatalogTermCard,
   type Provider,
 } from "@/lib/api";
@@ -25,6 +26,9 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import CatalogMenuPreview from "./CatalogMenuPreview";
+import SendToMenuDialog, { type MenuTarget } from "./SendToMenuDialog";
+import { aggregateLabelChoices, productCountByTerm } from "@/lib/catalog-menu";
 
 type ListFilter = "unlinked" | "linked";
 
@@ -58,6 +62,7 @@ function defaultClusterName(c: CatalogMergeCluster) {
 export default function UnifyBoard({
   kind,
   board,
+  terms = [],
   busy,
   setBusy,
   onReload,
@@ -65,6 +70,7 @@ export default function UnifyBoard({
 }: {
   kind: CatalogAliasKind;
   board: CatalogBoard | null;
+  terms?: CatalogTerm[];
   busy: string | null;
   setBusy: (v: string | null) => void;
   onReload: () => Promise<void>;
@@ -89,6 +95,7 @@ export default function UnifyBoard({
   const [mergeLabel, setMergeLabel] = useState("");
   const [mergeExistingId, setMergeExistingId] = useState("");
   const [highlightTermId, setHighlightTermId] = useState<string | null>(null);
+  const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
 
   useEffect(() => {
     setSelected(new Set());
@@ -429,6 +436,57 @@ export default function UnifyBoard({
     }
   }
 
+  const countsByTerm = useMemo(() => productCountByTerm(board), [board]);
+  const menuParentChoices = useMemo(
+    () =>
+      aggregateLabelChoices(board?.rows ?? [], terms.filter((t) => t.kind === "CATEGORY").map((t) => t.label)),
+    [board, terms]
+  );
+
+  async function confirmSendToMenu(role: "parent" | "child", parentLabel: string | null) {
+    if (!menuTarget) return;
+    setBusy("send-menu");
+    try {
+      let termId = menuTarget.termId ?? null;
+      if (!termId) {
+        const res = await catalogEnrichmentApi.link({
+          kind: "CATEGORY",
+          items: menuTarget.items,
+          label: menuTarget.label,
+        });
+        termId = res.data.term.id;
+      }
+      if (role === "parent") {
+        await catalogEnrichmentApi.updateTerm(termId, { inMenu: true, parentId: null });
+      } else {
+        const parentName = (parentLabel ?? "").trim();
+        if (!parentName) throw new Error("Falta padre");
+        const parent = await catalogEnrichmentApi.createTerm({
+          kind: "CATEGORY",
+          label: parentName,
+          inMenu: true,
+          parentId: null,
+        });
+        if (parent.data.id === termId) {
+          showToast("No puede ser hija de sí misma", false);
+          return;
+        }
+        await catalogEnrichmentApi.updateTerm(termId, { inMenu: true, parentId: parent.data.id });
+      }
+      showToast(
+        role === "parent"
+          ? `«${menuTarget.label}» quedó como padre (${menuTarget.count} prod.)`
+          : `«${menuTarget.label}» quedó como hija de «${parentLabel}»`
+      );
+      setMenuTarget(null);
+      await onReload();
+    } catch {
+      showToast("No se pudo mandar al menú", false);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <p className="text-sm text-surface-300 bg-surface-900/50 border border-surface-800 rounded-lg px-3 py-2.5 leading-relaxed">
@@ -436,7 +494,24 @@ export default function UnifyBoard({
         puso cada proveedor. Marcás las que son lo mismo, elegís <em>cuál de esos nombres queda</em> y
         unificás. En <em>Ya unificadas</em> ves <strong>un grupo por nombre</strong> — no las filas sueltas
         — con todos los productos adentro.
+        {kind === "CATEGORY" && (
+          <>
+            {" "}
+            <strong className="text-white">Al menú</strong> manda esa categoría (unificada o no) como padre o
+            como hija.
+          </>
+        )}
       </p>
+
+      {kind === "CATEGORY" && (
+        <CatalogMenuPreview
+          terms={terms}
+          counts={countsByTerm}
+          busy={busy}
+          onChanged={onReload}
+          showToast={showToast}
+        />
+      )}
 
       <section className="rounded-xl border border-surface-800 overflow-hidden">
         <div className="px-4 py-3 border-b border-surface-800 bg-surface-900/60 flex flex-wrap items-center justify-between gap-2">
@@ -664,6 +739,17 @@ export default function UnifyBoard({
               });
             }}
             onExpand={(t) => void toggleExpandGroup(t)}
+            onSendToMenu={
+              kind === "CATEGORY"
+                ? (t) =>
+                    setMenuTarget({
+                      label: t.label,
+                      count: t.productCount,
+                      termId: t.id,
+                      items: t.members.map((m) => ({ provider: m.provider, rawKey: m.rawKey })),
+                    })
+                : undefined
+            }
           />
         ) : (
           <>
@@ -691,8 +777,8 @@ export default function UnifyBoard({
                     </th>
                     <th className="px-2 py-2 font-medium">Proveedor</th>
                     <th className="px-2 py-2 font-medium">Nombre del proveedor</th>
-                    <th className="px-2 py-2 font-medium text-right">Productos</th>
-                    <th className="w-20 px-2 py-2" />
+                <th className="px-2 py-2 font-medium text-right">Productos</th>
+                <th className="w-28 px-2 py-2" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800/70">
@@ -748,19 +834,37 @@ export default function UnifyBoard({
                             {r.count}
                           </td>
                           <td className="px-2 py-2 align-top text-right">
-                            <button
-                              type="button"
-                              onClick={() => void toggleVisible(r)}
-                              disabled={busy === `vis-${k}`}
-                              className="p-1.5 rounded-lg border border-surface-700 text-surface-400 hover:text-white"
-                              title={r.visible ? "Ocultar del catálogo" : "Mostrar"}
-                            >
-                              {r.visible ? (
-                                <Eye className="w-3.5 h-3.5" />
-                              ) : (
-                                <EyeOff className="w-3.5 h-3.5 text-amber-300" />
+                            <div className="flex justify-end gap-1">
+                              {kind === "CATEGORY" && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setMenuTarget({
+                                      label: r.rawKey,
+                                      count: r.count,
+                                      termId: r.termId,
+                                      items: [{ provider: r.provider, rawKey: r.rawKey }],
+                                    })
+                                  }
+                                  className="text-[10px] font-medium px-2 py-1 rounded-lg border border-surface-700 text-surface-300 hover:text-white"
+                                >
+                                  Al menú
+                                </button>
                               )}
-                            </button>
+                              <button
+                                type="button"
+                                onClick={() => void toggleVisible(r)}
+                                disabled={busy === `vis-${k}`}
+                                className="p-1.5 rounded-lg border border-surface-700 text-surface-400 hover:text-white"
+                                title={r.visible ? "Ocultar del catálogo" : "Mostrar"}
+                              >
+                                {r.visible ? (
+                                  <Eye className="w-3.5 h-3.5" />
+                                ) : (
+                                  <EyeOff className="w-3.5 h-3.5 text-amber-300" />
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -880,6 +984,16 @@ export default function UnifyBoard({
           </div>
         </div>
       )}
+      {menuTarget && (
+        <SendToMenuDialog
+          target={menuTarget}
+          parentChoices={menuParentChoices}
+          parentCounts={Object.fromEntries(menuParentChoices.map((c) => [c.label, c.count]))}
+          busy={busy === "send-menu"}
+          onClose={() => setMenuTarget(null)}
+          onConfirm={confirmSendToMenu}
+        />
+      )}
     </div>
   );
 }
@@ -918,6 +1032,7 @@ function UnifiedGroups({
   onToggleGroup,
   onToggleSelectAll,
   onExpand,
+  onSendToMenu,
 }: {
   groups: CatalogTermCard[];
   total: number;
@@ -930,6 +1045,7 @@ function UnifiedGroups({
   onToggleGroup: (t: CatalogTermCard) => void;
   onToggleSelectAll: (on: boolean) => void;
   onExpand: (t: CatalogTermCard) => void;
+  onSendToMenu?: (t: CatalogTermCard) => void;
 }) {
   const allSelected =
     groups.length > 0 &&
@@ -1030,6 +1146,15 @@ function UnifiedGroups({
                     </div>
                   )}
                 </div>
+                {onSendToMenu && (
+                  <button
+                    type="button"
+                    onClick={() => onSendToMenu(term)}
+                    className="text-[10px] font-medium px-2 py-1 rounded-lg border border-surface-700 text-surface-300 hover:text-white flex-shrink-0"
+                  >
+                    Al menú
+                  </button>
+                )}
               </div>
             </li>
           );

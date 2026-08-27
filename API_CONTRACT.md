@@ -147,12 +147,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
   - board `?kind=CATEGORY|BRAND|SUBCATEGORY`
   - link `{ kind, items:[{provider,rawKey}], label?|termId? }`
   - move `{ kind, from:{provider,rawKey}, toLabel?|toTermId?, deleteEmptySourceTerm? }`
-  - terms CRUD `{ kind, label, parentId?, visible? }` (parentId arma el árbol del Menú Nodo; no se permiten ciclos)
+  - terms CRUD `{ kind, label, parentId?, visible?, inMenu? }` (`inMenu` = está en el menú de Nodo; parentId arma padre/hija; no se permiten ciclos)
   - assign producto `{ provider, externalId, displayBrand?, displayCategory?, displaySubcategory? }` — el label puede ser **cualquiera**; si no existe el término, `ensureTerm` lo crea
   - preview `?kind&rawKey&provider?` **o** `?kind&termId` (productos de un grupo ya unificado)
 - **Respuesta esperada**: board `{ rows, terms, stats }` · `stats.groupCount` = grupos con al menos un alias · incomplete `{ items, total }` · preview productos
 - **Estado**: IMPLEMENTADO
-- **Notas**: Lista todas las categorías/marcas crudas de todos los distribuidores. Vincular o trasladar productos a un término canónico (con visibilidad y jerarquía padre/hijo). Overrides por producto en `PlatformProductCatalogOverride` (no pelean con el sync). Sin flujo especial de códigos Air. La API key de OpenAI se gestiona en **Configuración → Credenciales API** (`PUT/DELETE /admin/catalog-enrichment/openai`). La UI de Unificadas agrupa por `board.terms` (un renglón por nombre elegido, con `members` y productos). Al fusionar se elige uno de los nombres seleccionados; no hace falta inventar uno nuevo. Incompletos permite escribir cualquier marca/categoría (no solo las unificadas) y crearlas ahí. **Menú Nodo** usa `parentId` para anidar categorías (carpeta padre + hijas existentes o nuevas).
+- **Notas**: Lista todas las categorías/marcas crudas de todos los distribuidores. Vincular o trasladar productos a un término canónico (con visibilidad y jerarquía padre/hijo). Overrides por producto en `PlatformProductCatalogOverride` (no pelean con el sync). Sin flujo especial de códigos Air. La API key de OpenAI se gestiona en **Configuración → Credenciales API** (`PUT/DELETE /admin/catalog-enrichment/openai`). La UI de Unificadas agrupa por `board.terms` (un renglón por nombre elegido, con `members` y productos). Al fusionar se elige uno de los nombres seleccionados; no hace falta inventar uno nuevo. Incompletos permite escribir o buscar cualquier marca/categoría de cualquier proveedor (no hace falta unificar). El **menú** se arma desde Categorías con `inMenu` + `parentId` (padre o hija); no hace falta unificar para mandarla.
 
 ### [FEATURE] Credenciales API (UI Configuración)
 - **Método**: PUT | DELETE (mismos endpoints existentes)

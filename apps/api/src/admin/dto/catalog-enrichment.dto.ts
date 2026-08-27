@@ -107,6 +107,10 @@ export class CreateCatalogTermDto {
   @IsOptional()
   @IsBoolean()
   visible?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  inMenu?: boolean;
 }
 
 export class UpdateCatalogTermDto {
@@ -122,6 +126,10 @@ export class UpdateCatalogTermDto {
   @IsOptional()
   @IsBoolean()
   visible?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  inMenu?: boolean;
 }
 
 export class ToggleRawVisibilityDto {
