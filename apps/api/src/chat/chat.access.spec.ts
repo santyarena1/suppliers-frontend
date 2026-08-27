@@ -1,5 +1,5 @@
 import { isChatReactionEmoji } from "@nodo/shared";
-import { canWriteChat, chatLinkVisibleTo, chatPeerName, chatThreadVisibleTo } from "./chat.access";
+import { canWriteChat, chatLinkVisibleTo, chatPeerName, chatThreadVisibleTo, formatChatPeerLine } from "./chat.access";
 
 describe("chatLinkVisibleTo", () => {
   const link = {
@@ -112,6 +112,17 @@ describe("chatPeerName", () => {
   it("cada lado ve el nombre del otro", () => {
     expect(chatPeerName(named, "RETAILER")).toBe("New Bytes");
     expect(chatPeerName(named, "DISTRIBUTOR")).toBe("Local Centro");
+  });
+});
+
+describe("formatChatPeerLine", () => {
+  it("junta usuario, rol y organización", () => {
+    expect(
+      formatChatPeerLine({ username: "juan", roleLabel: "Vendedor", orgName: "Elit" })
+    ).toBe("juan · Vendedor · Elit");
+    expect(
+      formatChatPeerLine({ name: "maría", roleLabel: "Comprador", orgName: "TecnoStore" })
+    ).toBe("maría · Comprador · TecnoStore");
   });
 });
 

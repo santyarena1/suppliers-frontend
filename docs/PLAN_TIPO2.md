@@ -52,7 +52,7 @@ es el contacto por defecto al tocar “Hablar”, pero no es un buzón compartid
 el PM, el dueño y el comprador tienen conversaciones distintas. Nadie ve el
 chat de un compañero.
 
-- En la lista y el encabezado se ve **usuario + rol + organización** (los dos lados).
+- En la lista y el encabezado se ve **organización + usuario + rol** (los dos lados). El vendedor asignado aparece marcado.
 - El comercio escribe: dueño, administrador y comprador. El vendedor del local no.
 - El distro escribe: dueño, administrador, vendedor y PM.
 - `REVOKED` no se habla; `SUSPENDED` sí.

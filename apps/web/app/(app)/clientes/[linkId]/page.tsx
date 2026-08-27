@@ -194,7 +194,7 @@ export default function ClienteDetallePage() {
                     href={`/mensajes?linkId=${detail.linkId}`}
                     className="self-start inline-flex items-center gap-1.5 mt-1 text-xs font-medium bg-brand-600/15 hover:bg-brand-600/25 text-brand-200 rounded-lg px-3 py-2"
                   >
-                    <MessageSquare className="w-3.5 h-3.5" /> Hablar
+                    <MessageSquare className="w-3.5 h-3.5" /> Hablar con el comercio
                   </Link>
                 )}
               </section>

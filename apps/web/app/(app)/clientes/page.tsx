@@ -194,7 +194,7 @@ function ClientRow({ client }: { client: OwnClient }) {
           href={`/mensajes?linkId=${client.linkId}`}
           className="w-10 h-10 flex items-center justify-center rounded-full text-surface-500 hover:text-brand-300 hover:bg-surface-800"
           aria-label="Abrir chat"
-          title="Hablar"
+          title="Abrir chat con esa persona del comercio"
         >
           <MessageSquare className="w-4 h-4" />
         </Link>

@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { assetUrl } from "@/lib/assets";
-import { avatarTone, initials, isoNow, listWhen, newChatTempId, nowMs } from "@/lib/chat-ui";
+import { avatarTone, chatPeerLines, initials, isoNow, listWhen, newChatTempId, nowMs } from "@/lib/chat-ui";
 import {
   chatSoundEnabled,
   draftKey,
@@ -289,6 +289,7 @@ export default function ChatApp({
   }, [active, me, messages]);
 
   const peerSeenAt = active?.peerLastReadAt ? new Date(active.peerLastReadAt).getTime() : 0;
+  const activeWho = active ? chatPeerLines(active.peer) : null;
 
   async function sendText(body = draft.trim(), replyToId = reply?.id, replaceId?: string) {
     if (!active || !body || sending || !canWrite) return;
@@ -509,7 +510,7 @@ export default function ChatApp({
                   ? active?.threadId === item.threadId
                   : active?.linkId === item.linkId && active?.peer.userId === item.peer.userId;
                 const unread = item.unreadCount > 0;
-                const subtitle = [item.peer.roleLabel, item.peer.orgName].filter(Boolean).join(" · ");
+                const who = chatPeerLines(item.peer);
                 return (
                   <button
                     key={item.threadId ?? `${item.linkId}:${item.peer.userId}`}
@@ -530,13 +531,13 @@ export default function ChatApp({
                     <span className="min-w-0 flex-1 py-0.5">
                       <span className="flex items-baseline gap-2">
                         <span className={`text-sm truncate flex-1 ${unread ? "text-white font-semibold" : "text-surface-100"}`}>
-                          {item.peer.name}
+                          {who.org}
                         </span>
                         <span className={`text-[11px] tabular-nums flex-shrink-0 ${unread ? "text-brand-300" : "text-surface-500"}`}>
                           {listWhen(item.lastMessageAt)}
                         </span>
                       </span>
-                      <span className="text-[11px] text-surface-500 truncate block">{subtitle}</span>
+                      <span className="text-[11px] text-surface-400 truncate block">{who.person}</span>
                       <span className="flex items-center gap-2 mt-0.5">
                         <span className={`text-[12px] truncate flex-1 ${unread ? "text-surface-200" : "text-surface-500"}`}>
                           {item.lastMessage
@@ -578,7 +579,7 @@ export default function ChatApp({
                 </div>
               )}
               {filter && visibleThreads.length === 0 && !searchHits && (
-                <p className="text-xs text-surface-500 px-4 py-6 text-center">Ninguna cuenta coincide.</p>
+                <p className="text-xs text-surface-500 px-4 py-6 text-center">Ninguna conversación coincide.</p>
               )}
             </>
           )}
@@ -592,7 +593,7 @@ export default function ChatApp({
             </div>
             <p className="text-sm font-medium text-white">Elegí una conversación</p>
             <p className="text-xs text-surface-500 max-w-xs leading-relaxed">
-              Hablás con una persona, no con toda la cuenta. En el encabezado ves el nombre, el rol y la organización.
+              Hablás con una persona, no con toda la cuenta. Ves la organización, el nombre y si es vendedor, PM, comprador u otro rol.
             </p>
           </div>
         ) : (
@@ -607,11 +608,11 @@ export default function ChatApp({
                 </span>
                 <span className="min-w-0">
                   <span className="text-sm font-semibold text-white truncate flex items-center gap-1.5">
-                    {active.peer.name}
+                    {activeWho?.org}
                     {active.peerOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />}
                   </span>
-                  <span className="text-[11px] text-surface-500 truncate block">
-                    {[active.peer.roleLabel, active.peer.orgName, active.peerOnline ? "en línea" : null]
+                  <span className="text-[11px] text-surface-400 truncate block">
+                    {[activeWho?.person, active.peerOnline ? "en línea" : null]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
@@ -633,6 +634,10 @@ export default function ChatApp({
             </header>
             {headerOpen && (
               <div className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 py-3 text-[12px] text-surface-400 flex flex-col gap-2">
+                <p className="text-sm text-surface-200">
+                  {activeWho?.org}
+                  <span className="text-surface-500"> · {activeWho?.person}</span>
+                </p>
                 <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {active.peer.contactPhone && (
                   <a href={`tel:${active.peer.contactPhone}`} className="inline-flex items-center gap-1.5 text-brand-300">
@@ -666,7 +671,7 @@ export default function ChatApp({
                           >
                             {p.username}
                             <span className="text-surface-500"> · {p.roleLabel}</span>
-                            {p.isAccountManager ? " · asignado" : ""}
+                            {p.isAccountManager ? " · asignado" : p.isDefault ? " · por defecto" : ""}
                           </button>
                         ))}
                     </div>

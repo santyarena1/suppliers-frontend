@@ -16,7 +16,7 @@ import {
 } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
-import { canWriteChat, chatLinkVisibleTo, chatThreadVisibleTo, type ChatActor } from "./chat.access";
+import { canWriteChat, chatLinkVisibleTo, chatThreadVisibleTo, formatChatPeerLine, type ChatActor } from "./chat.access";
 import { ChatHub } from "./chat.hub";
 import type { SendChatMessageDto } from "./dto/chat.dto";
 
@@ -442,7 +442,7 @@ export class ChatService {
         return {
           ...this.serializeMessage(row),
           threadId: row.threadId,
-          peerName: peer ? `${peer.username} · ${peer.orgName}` : "",
+          peerName: peer ? formatChatPeerLine(peer) : "",
         };
       }),
     };

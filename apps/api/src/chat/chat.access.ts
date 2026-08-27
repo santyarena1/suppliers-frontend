@@ -62,3 +62,9 @@ export function chatPeerName(
 ): string {
   return chatPeerOrgName(link, actorType);
 }
+
+/** Una línea para búsqueda y avisos: usuario · rol · organización. */
+export function formatChatPeerLine(peer: { username?: string; name?: string; roleLabel: string; orgName: string }) {
+  const who = (peer.name ?? peer.username ?? "").trim();
+  return [who, peer.roleLabel, peer.orgName].filter(Boolean).join(" · ");
+}
