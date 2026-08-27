@@ -658,3 +658,21 @@ export function matchesDisplayCategory(
   const display = resolveCatalogDisplay(product, ctx).displayCategory;
   return display === targetCategory;
 }
+
+/** True si poner `id` debajo de `newParentId` formaría un ciclo. */
+export function parentWouldCycle(
+  id: string,
+  newParentId: string | null | undefined,
+  parentOf: Record<string, string | null | undefined>
+): boolean {
+  if (!newParentId) return false;
+  if (newParentId === id) return true;
+  const seen = new Set<string>([id]);
+  let cur: string | null | undefined = newParentId;
+  while (cur) {
+    if (seen.has(cur)) return true;
+    seen.add(cur);
+    cur = parentOf[cur];
+  }
+  return false;
+}

@@ -1,37 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import {
   catalogEnrichmentApi,
-  PROVIDER_LABELS,
   type CatalogAliasKind,
   type CatalogBoard,
-  type CatalogIncompleteProduct,
   type CatalogTerm,
-  type Provider,
 } from "@/lib/api";
 import {
-  Check,
-  Eye,
-  EyeOff,
+  FolderTree,
   Layers,
   Loader2,
   Plus,
   RefreshCw,
-  Search,
   Settings2,
-  Sparkles,
   Tags,
   AlertTriangle,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import UnifyBoard from "./UnifyBoard";
+import IncompleteTab from "./IncompleteTab";
+import MenuNodoTab from "./MenuNodoTab";
+import { uniqueSorted } from "@/lib/catalog-menu";
 
-type MainTab = "categories" | "brands" | "incomplete" | "config";
-
-function providerName(provider: string) {
-  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
-}
+type MainTab = "categories" | "brands" | "incomplete" | "menu" | "config";
 
 export default function CatalogEnrichmentPanel({
   showToast,
@@ -129,6 +122,7 @@ export default function CatalogEnrichmentPanel({
             ["categories", "Categorías", Layers],
             ["brands", "Marcas", Tags],
             ["incomplete", "Incompletos", AlertTriangle],
+            ["menu", "Menú Nodo", FolderTree],
             ["config", "Términos", Settings2],
           ] as const
         ).map(([key, label, Icon]) => (
@@ -166,11 +160,26 @@ export default function CatalogEnrichmentPanel({
 
       {tab === "incomplete" && (
         <IncompleteTab
-          brandOptions={terms.filter((t) => t.kind === "BRAND").map((t) => t.label)}
-          categoryOptions={terms.filter((t) => t.kind === "CATEGORY").map((t) => t.label)}
-          subcategoryOptions={terms.filter((t) => t.kind === "SUBCATEGORY").map((t) => t.label)}
+          brandOptions={uniqueSorted([
+            ...terms.filter((t) => t.kind === "BRAND").map((t) => t.label),
+            ...(brandBoard?.rows ?? []).map((r) => r.rawKey),
+          ])}
+          categoryOptions={uniqueSorted([
+            ...terms.filter((t) => t.kind === "CATEGORY" || t.kind === "SUBCATEGORY").map((t) => t.label),
+            ...(catBoard?.rows ?? []).map((r) => r.rawKey),
+          ])}
           showToast={showToast}
           onChanged={load}
+        />
+      )}
+
+      {tab === "menu" && (
+        <MenuNodoTab
+          terms={terms}
+          busy={busy}
+          setBusy={setBusy}
+          onChanged={load}
+          showToast={showToast}
         />
       )}
 
@@ -182,275 +191,6 @@ export default function CatalogEnrichmentPanel({
 }
 
 
-function IncompleteTab({
-  brandOptions,
-  categoryOptions,
-  subcategoryOptions,
-  showToast,
-  onChanged,
-}: {
-  brandOptions: string[];
-  categoryOptions: string[];
-  subcategoryOptions: string[];
-  showToast: (msg: string, ok?: boolean) => void;
-  onChanged: () => Promise<void>;
-}) {
-  const [items, setItems] = useState<CatalogIncompleteProduct[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [q, setQ] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<
-    Record<string, { brand: string; category: string; subcategory: string }>
-  >({});
-  const limit = 30;
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await catalogEnrichmentApi.incomplete({ limit, offset, q: q || undefined });
-      setItems(res.data.items);
-      setTotal(res.data.total);
-      const next: Record<string, { brand: string; category: string; subcategory: string }> = {};
-      for (const p of res.data.items) {
-        const key = `${p.provider}:${p.externalId}`;
-        next[key] = {
-          brand: p.displayBrand ?? "",
-          category: p.displayCategory ?? "",
-          subcategory: p.displaySubcategory ?? "",
-        };
-      }
-      setDrafts(next);
-    } catch {
-      showToast("No se pudieron cargar incompletos", false);
-    } finally {
-      setLoading(false);
-    }
-  }, [offset, q, showToast]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  async function save(p: CatalogIncompleteProduct) {
-    const key = `${p.provider}:${p.externalId}`;
-    const d = drafts[key];
-    if (!d) return;
-    setBusy(key);
-    try {
-      await catalogEnrichmentApi.assignProduct({
-        provider: p.provider,
-        externalId: p.externalId,
-        displayBrand: d.brand || null,
-        displayCategory: d.category || null,
-        displaySubcategory: d.subcategory || null,
-      });
-      showToast("Asignado");
-      await load();
-      await onChanged();
-    } catch {
-      showToast("No se pudo guardar", false);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function suggestAi(p: CatalogIncompleteProduct) {
-    const key = `${p.provider}:${p.externalId}`;
-    setBusy(`ai-${key}`);
-    try {
-      const res = await catalogEnrichmentApi.aiProductHint(p.provider, p.externalId);
-      setDrafts((prev) => ({
-        ...prev,
-        [key]: {
-          brand: res.data.displayBrand ?? prev[key]?.brand ?? "",
-          category: res.data.displayCategory ?? prev[key]?.category ?? "",
-          subcategory: res.data.displaySubcategory ?? prev[key]?.subcategory ?? "",
-        },
-      }));
-      showToast(res.data.reasoning || "Sugerencia lista");
-    } catch {
-      showToast("Sin sugerencia IA", false);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  return (
-    <div className="w-full space-y-4">
-      <div className="flex flex-wrap gap-2 items-center justify-between">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-surface-500" />
-          <input
-            value={q}
-            onChange={(e) => {
-              setOffset(0);
-              setQ(e.target.value);
-            }}
-            placeholder="Buscar productos incompletos…"
-            className="w-full rounded-lg border border-surface-700 bg-surface-900 pl-8 pr-3 py-2 text-sm text-white"
-          />
-        </div>
-        <p className="text-xs text-surface-500">
-          {total} sin marca o categoría ·{" "}
-          <Link href="/configuracion?tab=credentials" className="text-brand-400 hover:underline">
-            Credenciales API
-          </Link>
-        </p>
-      </div>
-
-      <section className="rounded-xl border border-surface-800 overflow-hidden">
-        {loading ? (
-          <p className="px-4 py-10 text-sm text-surface-500 text-center flex items-center justify-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" /> Cargando…
-          </p>
-        ) : items.length === 0 ? (
-          <p className="px-4 py-10 text-sm text-surface-500 text-center">
-            Todos los productos tienen marca y categoría.
-          </p>
-        ) : (
-          <div className="divide-y divide-surface-800/80">
-            {items.map((p) => {
-              const key = `${p.provider}:${p.externalId}`;
-              const d = drafts[key] ?? { brand: "", category: "", subcategory: "" };
-              return (
-                <div key={key} className="px-4 py-3 space-y-2">
-                  <div className="flex flex-wrap gap-2 items-start justify-between">
-                    <div className="min-w-0">
-                      <p className="text-sm text-white font-medium truncate">{p.name}</p>
-                      <p className="text-[11px] text-surface-500 mt-0.5">
-                        {providerName(p.provider)} · {p.sku || p.partNumber || p.externalId}
-                      </p>
-                    </div>
-                    <div className="flex gap-1.5">
-                      {p.missingBrand && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
-                          sin marca
-                        </span>
-                      )}
-                      {p.missingCategory && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
-                          sin categoría
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 items-end">
-                    <TermSelect
-                      label="Marca"
-                      value={d.brand}
-                      options={brandOptions}
-                      onChange={(v) => setDrafts((prev) => ({ ...prev, [key]: { ...d, brand: v } }))}
-                    />
-                    <TermSelect
-                      label="Categoría"
-                      value={d.category}
-                      options={categoryOptions}
-                      onChange={(v) => setDrafts((prev) => ({ ...prev, [key]: { ...d, category: v } }))}
-                    />
-                    <TermSelect
-                      label="Subcategoría"
-                      value={d.subcategory}
-                      options={subcategoryOptions}
-                      onChange={(v) =>
-                        setDrafts((prev) => ({ ...prev, [key]: { ...d, subcategory: v } }))
-                      }
-                      optional
-                    />
-                    <button
-                      type="button"
-                      disabled={busy === `ai-${key}`}
-                      onClick={() => void suggestAi(p)}
-                      className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-violet-500/40 text-violet-300 hover:bg-violet-500/10 disabled:opacity-50"
-                    >
-                      {busy === `ai-${key}` ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5" />
-                      )}
-                      IA
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy === key || (!d.brand && !d.category)}
-                      onClick={() => void save(p)}
-                      className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 text-white disabled:opacity-50"
-                    >
-                      {busy === key ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Check className="w-3.5 h-3.5" />
-                      )}
-                      Guardar
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {total > limit && (
-        <div className="flex items-center justify-between text-xs text-surface-400">
-          <button
-            type="button"
-            disabled={offset === 0}
-            onClick={() => setOffset(Math.max(0, offset - limit))}
-            className="px-3 py-1.5 rounded-lg border border-surface-700 disabled:opacity-40"
-          >
-            Anterior
-          </button>
-          <span>
-            {offset + 1}–{Math.min(offset + limit, total)} / {total}
-          </span>
-          <button
-            type="button"
-            disabled={offset + limit >= total}
-            onClick={() => setOffset(offset + limit)}
-            className="px-3 py-1.5 rounded-lg border border-surface-700 disabled:opacity-40"
-          >
-            Siguiente
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TermSelect({
-  label,
-  value,
-  options,
-  onChange,
-  optional,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
-  optional?: boolean;
-}) {
-  return (
-    <label className="flex flex-col gap-0.5 min-w-[140px]">
-      <span className="text-[10px] text-surface-500 uppercase tracking-wide">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-surface-700 bg-surface-900 px-2 py-1.5 text-xs text-white"
-      >
-        <option value="">{optional ? "—" : `Elegir ${label.toLowerCase()}…`}</option>
-        {value && !options.includes(value) && <option value={value}>{value}</option>}
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 function ConfigTab({
   terms,

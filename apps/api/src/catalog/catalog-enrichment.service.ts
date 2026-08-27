@@ -11,6 +11,7 @@ import {
   looksLikeProviderCode,
   matchingRawCategories,
   matchesDisplayCategory,
+  parentWouldCycle,
   normalizeBrandKey,
   normalizeCatalogLabel,
   normalizeEan,
@@ -337,6 +338,14 @@ export class CatalogEnrichmentService implements OnModuleInit {
       if (input.parentId === id) throw new BadRequestException("No puede ser padre de sí mismo");
       const parent = await this.prisma.platformCatalogTerm.findUnique({ where: { id: input.parentId } });
       if (!parent) throw new BadRequestException("Padre inexistente");
+      const ancestors = await this.prisma.platformCatalogTerm.findMany({
+        select: { id: true, parentId: true },
+      });
+      const parentOf: Record<string, string | null> = {};
+      for (const row of ancestors) parentOf[row.id] = row.parentId;
+      if (parentWouldCycle(id, input.parentId, parentOf)) {
+        throw new BadRequestException("Esa jerarquía formaría un ciclo");
+      }
     }
 
     const updated = await this.prisma.platformCatalogTerm.update({
