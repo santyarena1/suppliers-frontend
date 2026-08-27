@@ -10,7 +10,8 @@ export interface JwtPayload {
   brandId?: string;
   /**
    * Organización a la que pertenece quien usa la sesión, y su rol adentro. Ausente
-   * solo para el superadmin, que es transversal y no pertenece a ninguna.
+   * si no hay membresía. El superadmin de prueba opera el Comercio de Pruebas y
+   * sí la trae; un ROLE_ADMIN sin membresía sigue siendo transversal.
    *
    * `role` es el nivel de plataforma; el alcance real de negocio lo da esto. Las
    * sesiones emitidas antes de que existieran estos campos no los traen, así que

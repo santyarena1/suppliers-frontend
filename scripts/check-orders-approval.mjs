@@ -71,8 +71,9 @@ async function main() {
   const ajeno = comercios.find((t) => t.id !== conVendedor.id);
   if (!ajeno) throw new Error("Hace falta un segundo comercio para probar el aislamiento");
 
-  const vendedor = conVendedor.members.find((m) => m.tenantRole === "SELLER");
-  const administrador = conVendedor.members.find((m) => m.tenantRole === "OWNER" || m.tenantRole === "ADMIN");
+  const impersonable = (m) => m.platformRole !== "ROLE_ADMIN";
+  const vendedor = conVendedor.members.find((m) => impersonable(m) && m.tenantRole === "SELLER");
+  const administrador = conVendedor.members.find((m) => impersonable(m) && (m.tenantRole === "OWNER" || m.tenantRole === "ADMIN"));
 
   console.log(`Comercio: ${conVendedor.name} (vendedor ${vendedor.username}, administrador ${administrador.username})`);
   console.log(`Comercio ajeno: ${ajeno.name}\n`);
@@ -82,7 +83,7 @@ async function main() {
 
   const tokenVendedor = await sesion(vendedor.userId);
   const tokenAdmin = await sesion(administrador.userId);
-  const tokenAjeno = await sesion(ajeno.members[0].userId);
+  const tokenAjeno = await sesion((ajeno.members.find(impersonable) ?? ajeno.members[0]).userId);
 
   const proveedores = (await call("GET", "/my/providers", tokenVendedor)).payload.data ?? [];
   const vinculado = proveedores.find((p) => p.linked && pedidoDe(p.provider, []));

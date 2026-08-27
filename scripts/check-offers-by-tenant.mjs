@@ -50,11 +50,13 @@ async function main() {
 
   const tree = (await call("GET", "/admin/tenants", adminToken)).payload.data;
   const tenants = (tree.tenants ?? tree).filter((t) => (t.members ?? []).length > 0);
-
-  const administrador = (t) => t.members.find((m) => m.tenantRole === "ADMIN" || m.tenantRole === "OWNER") ?? t.members[0];
+  const impersonable = (m) => m.platformRole !== "ROLE_ADMIN";
+  const administrador = (t) =>
+    t.members.find((m) => impersonable(m) && (m.tenantRole === "ADMIN" || m.tenantRole === "OWNER"))
+    ?? t.members.find(impersonable);
   const conAdmin = tenants.find((t) => administrador(t));
   if (!conAdmin) throw new Error("No hay ninguna organización con personas para probar");
-  const otra = tenants.find((t) => t.id !== conAdmin.id);
+  const otra = tenants.find((t) => t.id !== conAdmin.id && administrador(t));
   if (!otra) throw new Error("Hace falta una segunda organización para probar el aislamiento");
 
   console.log(`Organización que sincroniza: ${conAdmin.name}`);
@@ -121,17 +123,31 @@ async function main() {
   check("Volver el markup a cero recupera el precio original", Math.abs(vuelve - crudo) < 0.02,
     `${vuelve} vs ${crudo}`);
 
-  // El superadmin no pertenece a ninguna organización: no tiene catálogo, pero
-  // tampoco tiene que romperse.
+  // El superadmin de prueba opera el Comercio de Pruebas: ve el mismo catálogo
+  // que testuser1, sin "entrar como". Si ese comercio no tiene este proveedor,
+  // ambos ven vacío — lo importante es que no sea un error y que coincidan.
+  const demo = (tree.tenants ?? tree).find((t) => t.name === "Comercio de Pruebas");
+  const testuser = demo?.members.find((m) => m.username === "testuser1" || m.username === "testuser");
   const busquedaAdmin = await call("GET", `/search/provider/${PROVIDER}?name=${termino}`, adminToken);
-  const vacio = Array.isArray(busquedaAdmin.payload.data) ? busquedaAdmin.payload.data : busquedaAdmin.payload;
-  check("El superadmin ve el catálogo vacío en vez de un error",
-    busquedaAdmin.status === 200 && vacio.length === 0, `HTTP ${busquedaAdmin.status}, ${vacio.length} resultados`);
+  const resultadosAdmin = Array.isArray(busquedaAdmin.payload.data) ? busquedaAdmin.payload.data : busquedaAdmin.payload;
+  check("La búsqueda del superadmin no falla", busquedaAdmin.status === 200,
+    `HTTP ${busquedaAdmin.status}, ${Array.isArray(resultadosAdmin) ? resultadosAdmin.length : "?"} resultados`);
+  if (testuser) {
+    const tokenTestuser = await sesion(testuser.userId);
+    const busquedaTestuser = await call("GET", `/search/provider/${PROVIDER}?name=${termino}`, tokenTestuser);
+    const resultadosTestuser = Array.isArray(busquedaTestuser.payload.data)
+      ? busquedaTestuser.payload.data
+      : busquedaTestuser.payload;
+    const idsAdmin = (Array.isArray(resultadosAdmin) ? resultadosAdmin : []).map((p) => p.externalId).sort().join(",");
+    const idsTestuser = (Array.isArray(resultadosTestuser) ? resultadosTestuser : []).map((p) => p.externalId).sort().join(",");
+    check("El superadmin ve el mismo catálogo que testuser1", idsAdmin === idsTestuser,
+      `admin=${(resultadosAdmin ?? []).length} · testuser=${(resultadosTestuser ?? []).length}`);
+  }
 
   const destacados = await call("GET", "/catalog/featured", adminToken);
   check("Los destacados tampoco fallan para el superadmin", destacados.status === 200, `HTTP ${destacados.status}`);
 
-  const vendedor = conDueño.members.find((m) => m.tenantRole === "SELLER" || m.tenantRole === "VIEWER");
+  const vendedor = conAdmin.members.find((m) => impersonable(m) && (m.tenantRole === "SELLER" || m.tenantRole === "VIEWER"));
   if (vendedor) {
     const tokenVendedor = await sesion(vendedor.userId);
     const intento = await call("DELETE", `/providers/${PROVIDER}/products`, tokenVendedor);

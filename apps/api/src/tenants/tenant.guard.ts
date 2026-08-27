@@ -12,8 +12,8 @@ export type RequestWithTenant = FastifyRequest & {
  * Deja la organización de quien hace el pedido colgada del request, para que
  * `@CurrentTenant()` la lea sin volver a la base.
  *
- * Nunca rechaza: el superadmin no pertenece a ninguna organización y tiene que
- * poder usar los endpoints que no la necesitan. Quien sí la necesite la pide con
+ * Nunca rechaza: un ROLE_ADMIN sin membresía tiene que poder usar los endpoints
+ * que no necesitan organización (el árbol). Quien sí la necesite la pide con
  * `@CurrentTenant()`, que es el que falla si no hay.
  */
 @Injectable()

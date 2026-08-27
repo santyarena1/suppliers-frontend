@@ -63,7 +63,12 @@ node scripts/check-impersonation.mjs
 ```
 
 Los usuarios de ejemplo comparten la contraseña `password123`. El superadmin de
-staging no: tiene una propia, porque la API es de acceso público.
+prueba opera el Comercio de Pruebas: mismas credenciales de proveedor que
+`testuser1`, mismo catálogo y mismo carrito, sin “entrar como”. En un entorno de
+demo la contraseña de entrada también se alinea a `password123` al correr el seed
+(no se toca producción). En staging público, si el superadmin todavía tiene una
+contraseña propia, alcanza con volver a entrar después del deploy para que el
+token traiga la organización.
 
 ## Cuidado
 

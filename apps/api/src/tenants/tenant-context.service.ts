@@ -14,8 +14,9 @@ export interface TenantContext {
  * Resuelve a qué organización pertenece una persona.
  *
  * Es la única fuente de verdad del alcance de negocio: el `role` del `User` es solo
- * el nivel de plataforma. El superadmin no pertenece a ninguna organización a
- * propósito, así que para él siempre devuelve `null`.
+ * el nivel de plataforma. Si el superadmin tiene membresía (en entornos de prueba
+ * opera el Comercio de Pruebas), acá se resuelve igual que para cualquier persona.
+ * Sin membresía, devuelve `null` y el árbol sigue andando.
  */
 @Injectable()
 export class TenantContextService {

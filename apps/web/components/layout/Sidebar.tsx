@@ -71,7 +71,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         modules: myModules,
         tenantType: tenant?.type ?? null,
         tenantRole: tenant?.role ?? null,
-        isSuperadmin: user?.role === "ROLE_ADMIN" && !tenant,
+        isSuperadmin: user?.role === "ROLE_ADMIN",
       }),
     [user?.role, myModules, tenant?.type, tenant?.role, tenant, sessionTick],
   );

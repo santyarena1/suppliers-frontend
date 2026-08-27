@@ -19,8 +19,9 @@ import type { UserRole } from "@/lib/auth";
  *  - `tenantTypes` — tipo de organización de la sesión.
  *  - `tenantRoles` — rol interno (vendedor vs gerente, etc.).
  *  - `roles` — fallback de plataforma.
- * Superadmin (`ROLE_ADMIN` sin tenant) ve administración y no las pantallas
- * de una organización: esas aparecen al entrar como alguien que sí tiene.
+ * Superadmin (`ROLE_ADMIN`) siempre ve administración. Si además tiene
+ * membresía (el de prueba opera el Comercio de Pruebas), ve las pantallas
+ * de esa organización sin dejar de ser administrador.
  */
 
 export type NavSectionId = "providers" | "portfolio" | "brands" | "system";
@@ -231,9 +232,12 @@ export function canSeeNavItem(item: NavItemDef, ctx: NavContext): boolean {
     if (!ctx.tenantRole || !item.tenantRoles.includes(ctx.tenantRole)) return false;
   }
 
-  const superadmin = ctx.isSuperadmin || (ctx.role === "ROLE_ADMIN" && !ctx.tenantType);
+  const platformAdmin = ctx.isSuperadmin || ctx.role === "ROLE_ADMIN";
 
-  if (ctx.tenantType && !superadmin) {
+  // Quien pertenece a una organización ve lo que pasó los filtros de tipo y
+  // rol interno. El administrador de plataforma también, si tiene membresía:
+  // no hay que "entrar como" para mirar el catálogo del comercio de pruebas.
+  if (ctx.tenantType && !platformAdmin) {
     return true;
   }
 

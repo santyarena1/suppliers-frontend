@@ -189,7 +189,7 @@ Un solo carrito por comercio, en la API.
 - Si uno agrega un teclado en el celular, aparece en la caja.
 - `VIEWER` no lo muta; si pide `/cart` puede verlo o no — propuesta: lo
   ve en lectura, no agrega ni saca.
-- El superadmin no tiene carrito.
+- El superadmin de prueba comparte el carrito del Comercio de Pruebas.
 - La web deja `localStorage`. Se hidrata de `GET /cart`.
 
 Cambio de esquema: la clave deja de ser persona+comercio+producto y pasa a

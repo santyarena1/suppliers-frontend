@@ -74,7 +74,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: alta `{ provider, externalId, name, price, imageUrl, quantity?, snapshot? }` · `DELETE /cart?provider=` vacía un proveedor
 - **Respuesta esperada**: ítems `{ id, provider, externalId, name, price, imageUrl, quantity, snapshot }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un carrito por comercio, no por persona. `VIEWER` puede GET, no muta. El superadmin no tiene carrito.
+- **Notas**: Un carrito por comercio, no por persona. `VIEWER` puede GET, no muta. El superadmin de prueba opera el Comercio de Pruebas y comparte ese carrito.
 
 ### [FEATURE] Proveedores visibles y canje de código de vinculación
 - **Método**: GET | POST

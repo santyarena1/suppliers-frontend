@@ -3,6 +3,10 @@
  * (ver docs/ARQUITECTURA_TENANTS.md): dos comercios, dos distribuidores y dos
  * marcas, cada uno con sus sub-usuarios y sus vínculos comerciales cruzados.
  *
+ * El superadmin de prueba queda como administrador del Comercio de Pruebas:
+ * mismas credenciales de proveedor que testuser1, sin “entrar como”. En
+ * entornos que no son producción también se alinea su contraseña a la demo.
+ *
  * Es idempotente: si una organización o un usuario ya existe, lo reutiliza.
  *
  * Uso:
@@ -43,7 +47,12 @@ const ORGANIZATIONS = [
     name: "Comercio de Pruebas",
     type: "RETAILER",
     contactEmail: "pruebas@nodo.test",
-    members: [{ username: "testuser1", role: "ADMIN", title: "Encargado de compras" }],
+    members: [
+      { username: "testuser1", role: "ADMIN", title: "Encargado de compras" },
+      // El superadmin de prueba opera este mismo comercio: mismas credenciales
+      // de proveedor que testuser1, sin tener que "entrar como".
+      { username: ADMIN_USER, role: "ADMIN", title: "Superadmin de prueba" },
+    ],
   },
   {
     name: "Tecno Store Palermo",
@@ -148,6 +157,13 @@ async function main() {
         console.log(`  = ${member.username}`);
         continue;
       }
+      const alreadyElsewhere = [...byName.values()].some(
+        (other) => other.id !== tenant.id && (other.members ?? []).some((c) => c.username === member.username)
+      );
+      if (alreadyElsewhere) {
+        console.log(`  = ${member.username} ya pertenece a otra organización`);
+        continue;
+      }
       // Si la persona ya tiene cuenta en la plataforma se la suma a la organización;
       // si no, se crea junto con la membresía.
       const account = existingUsers.get(member.username);
@@ -158,6 +174,8 @@ async function main() {
             role: member.role,
             title: member.title,
           });
+          // Sumar al superadmin no le cambia el rol de plataforma: sigue
+          // administrando el árbol y, además, ve lo mismo que testuser1.
         } else {
           await call("POST", `/admin/tenants/${tenant.id}/members/new-user`, {
             username: member.username,
@@ -209,7 +227,20 @@ async function main() {
     console.log(`↔ ${link.client} ← ${link.supplier}${seller ? ` (vendedor: ${seller.username})` : ""}`);
   }
 
+  const productionApi = /api-production-f4aa/.test(API_URL);
+  const adminAccount = (await call("GET", "/admin/users")).find((user) => user.username === ADMIN_USER);
+  if (adminAccount && !productionApi) {
+    try {
+      await call("PUT", `/admin/users/${adminAccount.id}/password`, { password: DEMO_PASSWORD });
+      console.log(`\nContraseña de ${ADMIN_USER} alineada con testuser1:`, DEMO_PASSWORD);
+    } catch (err) {
+      console.log(`\nNo se pudo alinear la contraseña de ${ADMIN_USER}: ${err.message}`);
+    }
+  }
+
   console.log("\nListo. Todos los usuarios de ejemplo usan la contraseña:", DEMO_PASSWORD);
+  console.log(`${ADMIN_USER} opera el Comercio de Pruebas: mismo catálogo y mismas cuentas de proveedor que testuser1.`);
+  console.log("Volvé a entrar con esa cuenta para que el token traiga la organización.");
 }
 
 main().catch((err) => {

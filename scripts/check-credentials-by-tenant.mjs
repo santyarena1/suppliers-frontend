@@ -45,32 +45,34 @@ async function main() {
   if (!adminToken) throw new Error("No se pudo entrar como administrador");
 
   const tree = (await call("GET", "/admin/tenants", adminToken)).payload.data;
-  const tenants = (tree.tenants ?? tree).filter((t) => (t.members ?? []).length > 0);
+  const impersonable = (m) => m.platformRole !== "ROLE_ADMIN";
+  const tenants = (tree.tenants ?? tree).filter((t) => (t.members ?? []).some(impersonable));
 
-  // Hace falta una organización con dos personas y otra distinta para contrastar.
-  const conEquipo = tenants.find((t) => t.members.length >= 2);
+  // Hace falta una organización con dos personas (que no sean el superadmin) y otra distinta para contrastar.
+  const conEquipo = tenants.find((t) => t.members.filter(impersonable).length >= 2);
   if (!conEquipo) throw new Error("No hay ninguna organización con dos personas para probar");
-  const otra = tenants.find((t) => t.id !== conEquipo.id);
+  const otra = tenants.find((t) => t.id !== conEquipo.id && t.members.some(impersonable));
   if (!otra) throw new Error("Hace falta una segunda organización para probar el aislamiento");
 
-  console.log(`Organización con equipo: ${conEquipo.name} (${conEquipo.members.length} personas)`);
+  console.log(`Organización con equipo: ${conEquipo.name} (${conEquipo.members.filter(impersonable).length} personas)`);
   console.log(`Organización ajena: ${otra.name}\n`);
 
   const sesion = async (userId) =>
     (await call("POST", `/admin/users/${userId}/impersonate`, adminToken)).payload.data?.token;
 
+  const equipo = conEquipo.members.filter(impersonable);
   const [unoToken, otroToken] = await Promise.all([
-    sesion(conEquipo.members[0].userId),
-    sesion(conEquipo.members[1].userId),
+    sesion(equipo[0].userId),
+    sesion(equipo[1].userId),
   ]);
-  const ajenoToken = await sesion(otra.members[0].userId);
+  const ajenoToken = await sesion(otra.members.find(impersonable).userId);
 
   const secreto = `prueba-${Date.now()}`;
   const guardado = await call("POST", "/credentials", unoToken, {
     providerName: PROVIDER,
     credentials: { marca: secreto },
   });
-  check(`${conEquipo.members[0].username} puede guardar una credencial`,
+  check(`${equipo[0].username} puede guardar una credencial`,
     guardado.status === 200 || guardado.status === 201, `HTTP ${guardado.status}`);
 
   try {
@@ -107,10 +109,22 @@ async function main() {
       estadoCompanero.payload.data?.hasCredentials === true,
       `hasCredentials=${estadoCompanero.payload.data?.hasCredentials}`);
 
-    // El superadmin no pertenece a ninguna organización: no puede tener credenciales.
+    // El superadmin de prueba opera el Comercio de Pruebas: ve las credenciales
+    // de ese comercio, no las de la organización que se usó para esta prueba
+    // (salvo que sea la misma).
     const superadmin = await call("GET", "/credentials/me", adminToken);
-    check("El superadmin no puede tener credenciales propias", superadmin.status === 403,
-      `HTTP ${superadmin.status}`);
+    check("El superadmin puede leer las credenciales de su comercio",
+      superadmin.status === 200, `HTTP ${superadmin.status}`);
+    const demo = tenants.find((t) => t.name === "Comercio de Pruebas");
+    if (demo && conEquipo.id === demo.id) {
+      check("En el comercio de pruebas ve la misma credencial que testuser1",
+        JSON.stringify(superadmin.payload.data ?? []).includes(secreto),
+        "aparece en /credentials/me");
+    } else {
+      check("La credencial de otra organización no le aparece al superadmin",
+        !JSON.stringify(superadmin.payload.data ?? []).includes(secreto),
+        `HTTP ${superadmin.status}`);
+    }
   } finally {
     await call("DELETE", `/credentials/${PROVIDER}`, unoToken);
     await call("PUT", `/providers/${PROVIDER}/config`, unoToken, { priceMarkupPercent: 0 });

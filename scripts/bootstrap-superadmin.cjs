@@ -35,6 +35,35 @@ async function main() {
     create: { username: USERNAME, email: EMAIL, passwordHash, role: "ROLE_ADMIN", active: true },
   });
 
+  // En entornos de prueba el superadmin opera el mismo comercio que testuser1:
+  // mismas credenciales de proveedor, sin impersonar. Si todavía no hay comercio
+  // de pruebas, el seed lo crea y lo suma.
+  const alreadyMember = await prisma.tenantMembership.findFirst({ where: { userId: user.id } });
+  if (!alreadyMember) {
+    const demoUser = (await prisma.user.findUnique({ where: { username: "testuser1" } }))
+      ?? (await prisma.user.findUnique({ where: { username: "testuser" } }));
+    const demoMembership = demoUser
+      ? await prisma.tenantMembership.findFirst({
+          where: { userId: demoUser.id, active: true, tenant: { type: "RETAILER", active: true } },
+          orderBy: { createdAt: "asc" },
+        })
+      : null;
+    const demoTenant = demoMembership
+      ? await prisma.tenant.findUnique({ where: { id: demoMembership.tenantId } })
+      : await prisma.tenant.findFirst({ where: { name: "Comercio de Pruebas", type: "RETAILER", active: true } });
+    if (demoTenant) {
+      await prisma.tenantMembership.create({
+        data: {
+          tenantId: demoTenant.id,
+          userId: user.id,
+          role: "ADMIN",
+          title: "Superadmin de prueba",
+        },
+      });
+      console.log(`OK ${user.username} opera ${demoTenant.name} (mismo catálogo que testuser1)`);
+    }
+  }
+
   console.log(`OK superadmin: ${user.username} (${user.id}) en ${process.env.RAILWAY_ENVIRONMENT_NAME ?? "entorno desconocido"}`);
   await prisma.$disconnect();
 }

@@ -512,9 +512,9 @@ export class ProvidersController {
     return this.providersService.deleteAllProducts(tenant.tenantId, assertProvider(provider));
   }
 
-  // El catálogo es de la organización, así que quien no pertenece a ninguna —el
-  // superadmin— no tiene nada que ver acá. Devuelve vacío en vez de fallar: es la
-  // respuesta honesta, y para mirar el catálogo de alguien está "entrar como".
+  // El catálogo es de la organización. Sin membresía no hay nada que mostrar
+  // (vacío, no error). El superadmin de prueba opera el Comercio de Pruebas y
+  // acá ve el mismo catálogo que testuser1.
 
   @Get("search/provider/:provider")
   search(

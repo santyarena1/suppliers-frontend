@@ -17,7 +17,10 @@ consultor que atiende dos comercios), pero el caso normal es una sola.
 **Rol de plataforma (`User.role`)** — `ROLE_USER`, `ROLE_ADMIN`, `ROLE_BRAND`. Solo indica
 nivel de acceso a Nodo. **El alcance funcional lo define siempre la membresía.**
 
-**Superadmin** — `User.role = ROLE_ADMIN` sin membresías. Ve y administra todo el árbol.
+**Superadmin** — `User.role = ROLE_ADMIN`. Siempre ve y administra el árbol. En
+entornos de prueba también opera el **Comercio de Pruebas** (la misma organización
+que `testuser1`): mismas credenciales de proveedor, mismo catálogo y mismo carrito,
+sin tener que “entrar como”. El `ROLE_ADMIN` no se pierde por tener membresía.
 
 ---
 
@@ -157,6 +160,11 @@ cualquier usuario debe verse su organización, sus pares internos, y las organiz
 relacionadas directa (vínculo propio) o indirectamente (vínculo de su organización).
 
 En pantalla, siempre nombres normalizados. Nunca slugs ni claves internas.
+
+El superadmin de prueba (`superadmin`) es miembro administrador del Comercio de
+Pruebas. Eso no lo convierte en un usuario más: sigue viendo el árbol, y al mismo
+tiempo busca, carga credenciales y usa el carrito de ese comercio. “Entrar como”
+sigue existiendo para mirar la plataforma con los ojos de otra persona.
 
 ---
 

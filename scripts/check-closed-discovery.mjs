@@ -55,8 +55,9 @@ async function main() {
   const conCatalogo = comercios.find((t) => (t.suppliers ?? []).length > 0) ?? comercios[0];
   const sinNada = comercios.find((t) => t.id !== conCatalogo.id);
 
-  const tokenCon = await sesion(conCatalogo.members[0].userId);
-  const tokenSin = await sesion(sinNada.members[0].userId);
+  const impersonable = (m) => m.platformRole !== "ROLE_ADMIN";
+  const tokenCon = await sesion((conCatalogo.members.find(impersonable) ?? conCatalogo.members[0]).userId);
+  const tokenSin = await sesion((sinNada.members.find(impersonable) ?? sinNada.members[0]).userId);
 
   const mios = (await call("GET", "/my/providers", tokenCon)).payload.data ?? [];
   const suyos = (await call("GET", "/my/providers", tokenSin)).payload.data ?? [];
