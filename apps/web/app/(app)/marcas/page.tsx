@@ -58,6 +58,7 @@ export default function MarcasHomePage() {
                 <article key={brand.linkId} className="border border-surface-800 rounded-xl p-4 bg-surface-900 flex flex-col gap-3">
                   <div className="flex items-center gap-3">
                     {brand.landing?.logoUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img src={brand.landing.logoUrl} alt="" className="w-11 h-11 rounded-lg object-contain bg-white/5" />
                     ) : (
                       <div className="w-11 h-11 rounded-lg bg-brand-600/20 flex items-center justify-center">
@@ -73,6 +74,9 @@ export default function MarcasHomePage() {
                         Landing
                       </a>
                     )}
+                    <Link href={`/mensajes?linkId=${brand.linkId}`} className="text-[11px] text-brand-400">
+                      Hablar
+                    </Link>
                   </div>
                   {brand.actions.length === 0 ? (
                     <p className="text-xs text-surface-500">Sin acciones vigentes para este local.</p>

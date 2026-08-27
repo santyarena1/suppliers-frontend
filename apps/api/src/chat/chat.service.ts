@@ -16,7 +16,7 @@ import {
 } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
-import { canWriteChat, chatLinkVisibleTo, chatThreadVisibleTo, formatChatPeerLine, type ChatActor } from "./chat.access";
+import { canWriteChat, chatLinkVisibleTo, chatThreadVisibleTo, formatChatPeerLine, isChatSupplierSide, type ChatActor } from "./chat.access";
 import { ChatHub } from "./chat.hub";
 import type { SendChatMessageDto } from "./dto/chat.dto";
 
@@ -85,10 +85,9 @@ export class ChatService {
   async listThreads(tenant: TenantContext) {
     const links = await this.visibleLinks(tenant);
     const linkIds = links.map((link) => link.id);
-    const mine =
-      tenant.tenantType === "DISTRIBUTOR"
-        ? { distroUserId: tenant.userId }
-        : { storeUserId: tenant.userId };
+    const mine = isChatSupplierSide(tenant.tenantType)
+      ? { distroUserId: tenant.userId }
+      : { storeUserId: tenant.userId };
     const threads = await this.prisma.chatThread.findMany({
       where: { linkId: { in: linkIds }, ...mine },
       include: {
@@ -149,13 +148,12 @@ export class ChatService {
         return rows;
       };
       const have = new Set(
-        threads.map((row) => `${row.linkId}:${tenant.tenantType === "DISTRIBUTOR" ? row.storeUserId : row.distroUserId}`)
+        threads.map((row) => `${row.linkId}:${isChatSupplierSide(tenant.tenantType) ? row.storeUserId : row.distroUserId}`)
       );
       for (const link of links) {
-        const defPeople =
-          tenant.tenantType === "DISTRIBUTOR"
-            ? await peopleOf(link.clientTenantId, "RETAILER")
-            : await peopleOf(link.supplierTenantId, "DISTRIBUTOR");
+        const defPeople = isChatSupplierSide(tenant.tenantType)
+          ? await peopleOf(link.clientTenantId, "RETAILER")
+          : await peopleOf(link.supplierTenantId, link.supplierTenant.type as TenantType);
         const assigned =
           tenant.tenantType === "RETAILER" && link.accountManagerId
             ? defPeople.find((row) => row.id === link.accountManagerId)
@@ -190,19 +188,19 @@ export class ChatService {
 
   async listPeers(tenant: TenantContext, linkId: string) {
     const link = await this.requireLink(tenant, linkId);
-    const otherType: TenantType = tenant.tenantType === "RETAILER" ? "DISTRIBUTOR" : "RETAILER";
+    const otherType: TenantType =
+      tenant.tenantType === "RETAILER" ? (link.supplierTenant.type as TenantType) : "RETAILER";
     const otherTenantId = tenant.tenantType === "RETAILER" ? link.supplierTenantId : link.clientTenantId;
     const people = await this.peopleWhoCanChat(otherTenantId, otherType);
-    const mine =
-      tenant.tenantType === "DISTRIBUTOR"
-        ? { distroUserId: tenant.userId, linkId }
-        : { storeUserId: tenant.userId, linkId };
+    const mine = isChatSupplierSide(tenant.tenantType)
+      ? { distroUserId: tenant.userId, linkId }
+      : { storeUserId: tenant.userId, linkId };
     const existing = await this.prisma.chatThread.findMany({
       where: mine,
       select: { distroUserId: true, storeUserId: true },
     });
     const threaded = new Set(
-      existing.map((row) => (tenant.tenantType === "DISTRIBUTOR" ? row.storeUserId : row.distroUserId))
+      existing.map((row) => (isChatSupplierSide(tenant.tenantType) ? row.storeUserId : row.distroUserId))
     );
     const def = await this.defaultPeer(tenant, link);
     return {
@@ -573,7 +571,7 @@ export class ChatService {
     const where =
       tenant.tenantType === "RETAILER"
         ? { clientTenantId: tenant.tenantId, status: { in: open } }
-        : tenant.tenantType === "DISTRIBUTOR"
+        : isChatSupplierSide(tenant.tenantType)
           ? { supplierTenantId: tenant.tenantId, status: { in: open } }
           : { id: "__none__" };
     const links = await this.prisma.tenantLink.findMany({
@@ -632,7 +630,7 @@ export class ChatService {
   }
 
   private async resolvePair(tenant: TenantContext, link: LinkRow, peerUserId?: string) {
-    if (tenant.tenantType === "DISTRIBUTOR") {
+    if (isChatSupplierSide(tenant.tenantType)) {
       const store = peerUserId
         ? await this.requirePerson(link.clientTenantId, "RETAILER", peerUserId)
         : await this.defaultStorePeer(link);
@@ -640,23 +638,28 @@ export class ChatService {
       return { distroUserId: tenant.userId, storeUserId: store.id };
     }
     if (tenant.tenantType === "RETAILER") {
+      const supplierType = link.supplierTenant.type as TenantType;
       const distro = peerUserId
-        ? await this.requirePerson(link.supplierTenantId, "DISTRIBUTOR", peerUserId)
-        : await this.defaultDistroPeer(link);
-      if (!distro) throw new BadRequestException("No hay nadie en el distribuidor con quien hablar");
+        ? await this.requirePerson(link.supplierTenantId, supplierType, peerUserId)
+        : await this.defaultSupplierPeer(link);
+      if (!distro) throw new BadRequestException("No hay nadie en esa organización con quien hablar");
       return { distroUserId: distro.id, storeUserId: tenant.userId };
     }
-    throw new ForbiddenException("Este chat es entre comercio y distribuidor");
+    throw new ForbiddenException("Este chat es entre un comercio y un proveedor o una marca");
   }
 
   private async defaultPeer(tenant: TenantContext, link: LinkRow) {
-    return tenant.tenantType === "DISTRIBUTOR" ? this.defaultStorePeer(link) : this.defaultDistroPeer(link);
+    return isChatSupplierSide(tenant.tenantType) ? this.defaultStorePeer(link) : this.defaultSupplierPeer(link);
+  }
+
+  private async defaultSupplierPeer(link: LinkRow) {
+    const people = await this.peopleWhoCanChat(link.supplierTenantId, link.supplierTenant.type as TenantType);
+    const assigned = link.accountManagerId ? people.find((row) => row.id === link.accountManagerId) : null;
+    return assigned ?? people[0] ?? null;
   }
 
   private async defaultDistroPeer(link: LinkRow) {
-    const people = await this.peopleWhoCanChat(link.supplierTenantId, "DISTRIBUTOR");
-    const assigned = link.accountManagerId ? people.find((row) => row.id === link.accountManagerId) : null;
-    return assigned ?? people[0] ?? null;
+    return this.defaultSupplierPeer(link);
   }
 
   private async defaultStorePeer(link: LinkRow) {
@@ -696,6 +699,8 @@ export class ChatService {
       ADMIN: 1,
       BUYER: 2,
       SELLER: 2,
+      COMMERCIAL: 2,
+      MARKETING: 3,
       PRODUCT_MANAGER: 3,
     };
     return members
@@ -790,7 +795,9 @@ export class ChatService {
     link: { id: string; supplierTenant: { providerKey: string | null } },
     tenant: TenantContext
   ) {
-    if (tenant.tenantType === "DISTRIBUTOR") return `/clientes/${link.id}`;
+    if (isChatSupplierSide(tenant.tenantType)) {
+      return tenant.tenantType === "BRAND" ? "/marca/cuentas" : `/clientes/${link.id}`;
+    }
     if (link.supplierTenant.providerKey) return `/proveedores/${link.supplierTenant.providerKey}`;
     return null;
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { publicBrandApi, type PublicBrandLanding } from "@/lib/api";
 import NodoLogo from "@/components/NodoLogo";
@@ -27,10 +28,10 @@ export default function PublicBrandLandingPage() {
   return (
     <div className="min-h-screen bg-surface-950 text-white">
       <header className="border-b border-surface-800 px-4 sm:px-8 py-4 flex items-center justify-between">
-        <a href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <NodoLogo className="w-6 h-6" />
           <NodoWordmark className="h-3" />
-        </a>
+        </Link>
         <span className="text-[11px] text-surface-500">Marca en NODO</span>
       </header>
 
@@ -56,6 +57,7 @@ export default function PublicBrandLandingPage() {
             <div className={`px-4 sm:px-8 py-16 sm:py-24 ${landing.heroUrl ? "bg-black/65" : "bg-gradient-to-br from-violet-800/50 via-brand-800/30 to-surface-950"}`}>
               <div className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-6 items-center sm:items-start">
                 {landing.logoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={landing.logoUrl} alt="" className="w-20 h-20 rounded-2xl object-contain bg-white/10 border border-white/15" />
                 )}
                 <div>

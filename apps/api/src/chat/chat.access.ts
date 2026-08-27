@@ -8,6 +8,11 @@ export type ChatActor = {
   userId: string;
 };
 
+/** Distro o marca: el lado proveedor del TenantLink. El hilo sigue siendo dos personas. */
+export function isChatSupplierSide(type: TenantType): boolean {
+  return type === "DISTRIBUTOR" || type === "BRAND";
+}
+
 /**
  * Puede esta persona ver el vínculo (y por lo tanto empezar un chat ahí).
  * REVOKED no se habla. SUSPENDED sí: a veces hay que explicar por qué.
@@ -18,8 +23,11 @@ export function chatLinkVisibleTo(
 ): boolean {
   if (link.status === "REVOKED") return false;
   if (actor.tenantType === "RETAILER") return link.clientTenantId === actor.tenantId;
-  if (actor.tenantType === "DISTRIBUTOR") {
+  if (isChatSupplierSide(actor.tenantType)) {
     if (link.supplierTenantId !== actor.tenantId) return false;
+    if (actor.tenantType === "BRAND" && actor.tenantRole === "COMMERCIAL") {
+      return link.accountManagerId === actor.userId;
+    }
     return clientLinkVisibleTo(link, actor);
   }
   return false;
@@ -34,7 +42,7 @@ export function chatThreadVisibleTo(
   actor: ChatActor
 ): boolean {
   if (!chatLinkVisibleTo(thread.link, actor)) return false;
-  if (actor.tenantType === "DISTRIBUTOR") return thread.distroUserId === actor.userId;
+  if (isChatSupplierSide(actor.tenantType)) return thread.distroUserId === actor.userId;
   if (actor.tenantType === "RETAILER") return thread.storeUserId === actor.userId;
   return false;
 }

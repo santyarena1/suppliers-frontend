@@ -75,6 +75,34 @@ describe("chatLinkVisibleTo", () => {
       })
     ).toBe(false);
   });
+
+  it("una marca habla con el comercio de su propio vínculo", () => {
+    const brandLink = { ...link, supplierTenantId: "marca" };
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "marca",
+        tenantType: "BRAND",
+        tenantRole: "OWNER",
+        userId: "u",
+      })
+    ).toBe(true);
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "marca",
+        tenantType: "BRAND",
+        tenantRole: "COMMERCIAL",
+        userId: "otro",
+      })
+    ).toBe(false);
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "comercio",
+        tenantType: "RETAILER",
+        tenantRole: "BUYER",
+        userId: "u",
+      })
+    ).toBe(true);
+  });
 });
 
 describe("canWriteChat", () => {
@@ -94,6 +122,13 @@ describe("canWriteChat", () => {
     expect(canWriteChat("SELLER", "DISTRIBUTOR")).toBe(true);
     expect(canWriteChat("PRODUCT_MANAGER", "DISTRIBUTOR")).toBe(true);
     expect(canWriteChat("OWNER", "DISTRIBUTOR")).toBe(true);
+  });
+
+  it("en la marca escriben dueño, marketing y comercial", () => {
+    expect(canWriteChat("OWNER", "BRAND")).toBe(true);
+    expect(canWriteChat("MARKETING", "BRAND")).toBe(true);
+    expect(canWriteChat("COMMERCIAL", "BRAND")).toBe(true);
+    expect(canWriteChat("VIEWER", "BRAND")).toBe(false);
   });
 });
 

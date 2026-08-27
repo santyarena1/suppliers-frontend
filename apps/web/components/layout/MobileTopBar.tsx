@@ -23,6 +23,7 @@ export default function MobileTopBar({ onOpen }: Props) {
   const tenant = getTenant();
   const distributor = tenant?.type === "DISTRIBUTOR";
   const retailer = tenant?.type === "RETAILER";
+  const brand = tenant?.type === "BRAND";
 
   return (
     <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-surface-900 border-b border-surface-800 flex items-center justify-between px-4 h-12">
@@ -34,7 +35,7 @@ export default function MobileTopBar({ onOpen }: Props) {
         <NodoWordmark className="h-3.5" />
       </div>
       <div className="flex items-center gap-1">
-        {(retailer || distributor) && (
+        {(retailer || distributor || brand) && (
           <Link href="/mensajes" className="relative w-10 h-10 flex items-center justify-center text-surface-300 hover:text-white" aria-label="Mensajes">
             <MessageSquare className="w-5 h-5" />
             {chatUnread > 0 && (

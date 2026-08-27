@@ -35,7 +35,7 @@ export function tenantRouteRedirect(
     if (
       matchesPrefix(pathname, RETAILER_ONLY) ||
       matchesPrefix(pathname, DISTRIBUTOR_ONLY) ||
-      matchesPrefix(pathname, ["/mensajes", "/pedidos"])
+      matchesPrefix(pathname, ["/pedidos"])
     ) {
       return "/";
     }

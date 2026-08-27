@@ -58,14 +58,15 @@ como marca no ve búsqueda, carrito, comparador ni cartera de Tipo 2.
 5. **Avisos hacia Tipo 1.** Al activar una acción (si `notifyRetailers`) y a
    mano desde Cuentas. El comercio lee `/avisos`. Distro y marca pueden
    `POST /my/notifications/send` a un comercio vinculado.
-6. **Nav.** `/` BrandHome · `/marca/acciones` · `/marca/landing` ·
-   `/marca/cuentas` · reusa `/equipo`, `/codigos`, `/publicidad`. Comercio:
-   `/marcas` y `/avisos`.
+6. **Chat persona a persona** con el comercio vinculado. Mismo producto que
+   Tipo 2 (`distroUserId` + `storeUserId` sobre el `TenantLink`). Un comercial
+   de marca no ve el hilo de otro. UI: `/mensajes`.
+7. **Nav.** `/` BrandHome · `/marca/acciones` · `/marca/landing` ·
+   `/marca/cuentas` · `/mensajes` · reusa `/equipo`, `/codigos`, `/publicidad`.
+   Comercio: `/marcas` y `/avisos`.
 
 ## Qué no está en este recorte
 
-- Chat marca↔comercio (mismo producto persona a persona de Tipo 2, cuando se
-  enganche; no un buzón por vínculo).
 - Materiales, capacitaciones, Excel de disponibilidad del módulo viejo.
 - Borrar `ROLE_BRAND` del enum de plataforma (sigue existiendo por usuarios
   históricos; ya no manda la nav).

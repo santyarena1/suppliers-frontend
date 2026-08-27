@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import { brandApi, type BrandAccounts } from "@/lib/api";
 import { Handshake, Loader2 } from "lucide-react";
@@ -84,10 +85,12 @@ export default function BrandAccountsPage() {
                 ) : (
                   <div className="border border-surface-800 rounded-xl overflow-hidden divide-y divide-surface-800">
                     {accounts.retailers.map((row) => (
-                      <div key={row.linkId} className="px-4 py-2.5 flex items-center justify-between">
-                        <p className="text-sm text-surface-200">{row.name}</p>
-                        <span className="text-[11px] text-surface-500">{row.status}</span>
-                      </div>
+                    <div key={row.linkId} className="px-4 py-2.5 flex items-center justify-between">
+                      <p className="text-sm text-surface-200">{row.name}</p>
+                      <Link href={`/mensajes?linkId=${row.linkId}`} className="text-[11px] text-brand-400">
+                        Hablar
+                      </Link>
+                    </div>
                     ))}
                   </div>
                 )}

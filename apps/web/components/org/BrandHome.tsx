@@ -11,6 +11,7 @@ import {
   Handshake,
   Loader2,
   Megaphone,
+  MessageSquare,
   QrCode,
   Sparkles,
   Users,
@@ -103,6 +104,7 @@ export default function BrandHome() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <HomeLink href="/marca/acciones" icon={ClipboardList} title="Acciones" subtitle="Unidades, USD o rebate con vigencia" />
                 <HomeLink href="/marca/cuentas" icon={Handshake} title="Cuentas" subtitle="Comercios y distribuidores en alcance" />
+                <HomeLink href="/mensajes" icon={MessageSquare} title="Mensajes" subtitle="Hablá con cada comercio vinculado" />
                 <HomeLink href="/marca/landing" icon={Globe} title="Landing" subtitle="Página pública de la marca" />
                 {org?.canManagePortfolio && (
                   <HomeLink href="/codigos" icon={QrCode} title="Códigos" subtitle="Vincular un comercio sin revelar la marca" />
