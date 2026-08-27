@@ -8,8 +8,10 @@ import {
 import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
 import { Prisma } from "@prisma/client";
 import { CryptoService } from "../common/crypto/crypto.service";
+import { AssetsService } from "../assets/assets.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { candidateWhere, missingWhere, resolveRunPriority } from "./image-sync-candidates";
+import { firstLiveImage, isStoredAssetPath, probeLiveImage } from "./live-image";
 import { buildImageSearchQuery, hasProductImage } from "./product-image";
 import { SerperImagesClient } from "./serper-images.client";
 
@@ -42,7 +44,8 @@ export class ImageSyncService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
-    private readonly serper: SerperImagesClient
+    private readonly serper: SerperImagesClient,
+    private readonly assets: AssetsService
   ) {}
 
   async onModuleInit() {
@@ -244,7 +247,12 @@ export class ImageSyncService implements OnModuleInit {
     const query = queryOverride?.trim() || buildImageSearchQuery(product);
     if (!query) throw new BadRequestException("No hay texto para buscar este producto");
     const apiKey = await this.readApiKey();
-    const images = await this.serper.searchImages(apiKey, query, 10);
+    const raw = await this.serper.searchImages(apiKey, query, 10);
+    const images = (
+      await Promise.all(
+        raw.map(async (img) => ((await probeLiveImage(img.imageUrl)) ? img : null))
+      )
+    ).filter((img): img is NonNullable<typeof img> => Boolean(img));
     return { query, images };
   }
 
@@ -255,10 +263,10 @@ export class ImageSyncService implements OnModuleInit {
   ) {
     const product = await this.prisma.providerSyncCache.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException("Producto no encontrado");
-    const url = imageUrl.trim();
+    const stored = await this.persistUsableImage(imageUrl.trim(), source);
     await this.prisma.providerSyncCache.update({
       where: { id: productId },
-      data: { imageUrl: url },
+      data: { imageUrl: stored },
     });
     const query = buildImageSearchQuery(product);
     const fill = await this.upsertFill({
@@ -269,7 +277,7 @@ export class ImageSyncService implements OnModuleInit {
       name: product.name,
       brand: product.brand,
       query,
-      imageUrl: url,
+      imageUrl: stored,
       source,
       status: "filled",
       error: null,
@@ -400,7 +408,7 @@ export class ImageSyncService implements OnModuleInit {
             continue;
           }
           try {
-            const url = await this.serper.firstPhoto(apiKey, query);
+            const url = await this.firstStoredSerperPhoto(apiKey, query);
             if (!url) {
               skipped += 1;
               await this.upsertFill({
@@ -414,7 +422,7 @@ export class ImageSyncService implements OnModuleInit {
                 imageUrl: null,
                 source: "serper",
                 status: "skipped",
-                error: "Serper no devolvió fotos",
+                error: "Serper no devolvió una foto que cargue",
               });
             } else {
               const stillMissing = await this.prisma.providerSyncCache.updateMany({
@@ -496,6 +504,34 @@ export class ImageSyncService implements OnModuleInit {
     }
 
     return { runId: run.id, processed, updated, skipped, failed, status };
+  }
+
+  private async firstStoredSerperPhoto(apiKey: string, query: string): Promise<string | null> {
+    const hits = await this.serper.searchImages(apiKey, query, 10);
+    const live = await firstLiveImage(hits.map((h) => h.imageUrl));
+    if (!live) return null;
+    return this.saveLiveAsset(live.mime, live.ext, live.buffer);
+  }
+
+  /** No guarda una URL remota: o es un asset propio, o se baja y se comprueba que sea una foto real. */
+  private async persistUsableImage(url: string, source: string): Promise<string> {
+    if (!url) throw new BadRequestException("Falta la imagen");
+    if (isStoredAssetPath(url)) return url;
+    const live = await probeLiveImage(url);
+    if (!live) {
+      throw new BadRequestException("Esa foto no carga. Elegí otra o subila de la PC.");
+    }
+    if (source === "upload") return url;
+    return this.saveLiveAsset(live.mime, live.ext, live.buffer);
+  }
+
+  private async saveLiveAsset(mime: string, ext: string, buffer: Buffer): Promise<string> {
+    const saved = await this.assets.saveImage({
+      filename: `serper${ext}`,
+      mimetype: mime,
+      buffer,
+    });
+    return saved.url;
   }
 
   private async upsertFill(data: {

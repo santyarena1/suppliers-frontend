@@ -1,3 +1,5 @@
+import { assetUrl } from "./assets";
+
 export function parsePrice(v: string | number | undefined | null): number {
   if (v == null) return 0;
   if (typeof v === "number") return v;
@@ -16,6 +18,7 @@ export function formatUSD(n: number): string {
 
 export function proxyImg(url: string | undefined | null, opts?: { trim?: boolean }): string {
   if (!url) return "";
+  if (url.startsWith("/assets/") || url.startsWith("/uploads/")) return assetUrl(url);
   const trim = opts?.trim === false ? "&trim=0" : "";
   return `/img-proxy?url=${encodeURIComponent(url)}${trim}`;
 }
