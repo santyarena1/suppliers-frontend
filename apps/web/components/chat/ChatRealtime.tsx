@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { chatApi, type ChatMessage } from "@/lib/api";
-import { getToken, getUser } from "@/lib/auth";
+import { getToken, getTenant, getUser } from "@/lib/auth";
 import {
   bumpChatUnread,
   getActiveChatThread,
@@ -43,7 +43,9 @@ export default function ChatRealtime() {
 
   useEffect(() => {
     const token = getToken();
+    const tenant = getTenant();
     if (!token) return;
+    if (tenant?.type !== "RETAILER" && tenant?.type !== "DISTRIBUTOR") return;
     let stopped = false;
     let source: EventSource | null = null;
     let retry = 1000;
@@ -105,6 +107,7 @@ export default function ChatRealtime() {
         "typing",
         "presence",
         "ping",
+        "cart_updated",
       ]) {
         source.addEventListener(type, onEvent(type));
       }

@@ -519,15 +519,11 @@ export class TenantsService {
     if (!TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole)) {
       throw new BadRequestException("Solo el dueño o un administrador pueden editar la organización");
     }
-    if (dto.advertisingEnabled !== undefined && tenant.tenantType === "RETAILER") {
-      throw new BadRequestException("La publicidad es de distribuidores y marcas");
-    }
     const row = await this.prisma.tenant.update({
       where: { id: tenant.tenantId },
       data: {
         ...(dto.contactEmail === undefined ? {} : { contactEmail: dto.contactEmail }),
         ...(dto.contactPhone === undefined ? {} : { contactPhone: dto.contactPhone }),
-        ...(dto.advertisingEnabled === undefined ? {} : { advertisingEnabled: dto.advertisingEnabled }),
       },
     });
     return this.getOwnOrg({ ...tenant, tenantName: row.name });
@@ -640,11 +636,11 @@ export class TenantsService {
     return this.revokeAccessCode(codeId);
   }
 
-  private assertCanIssueCodes(tenant: TenantContext, opts: { mutate: boolean }) {
+  private assertCanIssueCodes(tenant: TenantContext, _opts: { mutate: boolean }) {
     if (tenant.tenantType === "RETAILER") {
       throw new ForbiddenException("Los códigos de vinculación son del distribuidor o la marca");
     }
-    if (opts.mutate && !TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole)) {
+    if (!TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole)) {
       throw new ForbiddenException("Solo el dueño o un administrador gestionan los códigos");
     }
   }

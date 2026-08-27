@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import GeneratedPassword from "@/components/admin/GeneratedPassword";
 import {
@@ -12,7 +13,7 @@ import {
   type TenantRole,
 } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
-import { KeyRound, Loader2, Plus, Trash2, Users, Building2 } from "lucide-react";
+import { KeyRound, Loader2, Plus, Trash2, Users, Building2, Megaphone } from "lucide-react";
 
 const inputClass =
   "w-full bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500";
@@ -429,23 +430,16 @@ function OrgProfile({
           className={inputClass}
         />
       </div>
-      {org.type === "DISTRIBUTOR" && (
-        <label className="flex items-center gap-2 text-xs text-surface-300">
-          <input
-            type="checkbox"
-            checked={org.advertisingEnabled}
-            onChange={async (e) => {
-              try {
-                const res = await myApi.updateOrg({ advertisingEnabled: e.target.checked });
-                onSaved(res.data);
-              } catch (err) {
-                onError(errMsg(err, "No se pudo cambiar la visibilidad"));
-              }
-            }}
-            className="accent-brand-600"
-          />
-          Visible para comercios sin vínculo (publicidad)
-        </label>
+      {org.type === "DISTRIBUTOR" && org.canManagePortfolio && (
+        <Link
+          href="/publicidad"
+          className="flex items-center gap-2 text-xs text-brand-300 hover:text-brand-200 border border-surface-800 rounded-lg px-3 py-2"
+        >
+          <Megaphone className="w-3.5 h-3.5" />
+          {org.advertisingEnabled
+            ? "Publicidad: elegir espacios y ver el resumen a pagar"
+            : "Publicidad: todavía no está habilitada. El admin de NODO la prende cuando pagan."}
+        </Link>
       )}
       <div>
         <button

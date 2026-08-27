@@ -584,7 +584,7 @@ function TenantPanel({
                 }
                 className="accent-brand-600"
               />
-              Publicidad contratada: la descubren comercios sin vínculo
+              Publicidad paga: pueden contratar espacios. El descubrimiento cerrado solo se abre si además tienen una campaña activa en Descubrimiento.
             </label>
           ) : (
             <span />

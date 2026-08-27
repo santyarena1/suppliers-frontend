@@ -74,7 +74,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: cliente `{ accountManagerId?, status?, discountPercent?, notes? }` · código `{ label?, maxUses?, expiresInDays? }`
 - **Respuesta esperada**: cartera `{ canManage, canAssignSeller, canEditTerms, sellers, clients: [{ linkId, client, accountManager, discountPercent, ordersCount, lastOrderAt, lastOrderTotal, inactive }] }` · detalle con `orders[]` · códigos `{ canManage, codes }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: La navegación de un distribuidor no muestra búsqueda ni carrito. Un `PRODUCT_MANAGER` solo ve pedidos de las marcas de su `ProductManagerScope`. Un comercio activo sin pedido en 30 días llega marcado `inactive`. UI: `/clientes`, `/codigos`, `/pedidos`. Ver `docs/PLAN_TIPO2.md`.
+- **Notas**: La navegación de un distribuidor no muestra búsqueda ni carrito. Un `PRODUCT_MANAGER` ve por defecto pedidos de las marcas de su `ProductManagerScope`; `GET /my/clients/orders?scope=all` abre toda la cartera. Un comercio activo sin pedido en 30 días llega marcado `inactive`. `GET /my/access-codes` es solo `OWNER`/`ADMIN` (el vendedor no lista secretos). UI: `/clientes`, `/codigos`, `/pedidos`. Ver `docs/PLAN_TIPO2.md`.
 
 ### [FEATURE] Chat comercial (un hilo por vínculo)
 - **Método**: GET | POST | PATCH | DELETE | SSE
@@ -83,7 +83,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: abrir `{ linkId }` · enviar `{ body?, kind?, payload?, replyToId? }` · reaccionar `{ emoji }` (`👍 ✅ 👀 ❓ 🔥 ❤️`) · avisar pedido `{ orderId, threadId? }` · adjunto `multipart` foto/PDF/Excel ≤ 10 MB
 - **Respuesta esperada**: lista `{ canWrite, unreadTotal, threads: [{ threadId, linkId, peer, lastMessage, unreadCount, peerOnline }] }` · hilo `{ peer, accountManager, pins, peerLastReadAt, peerOnline, peerHref }` · mensajes `{ hasMore, messages }` · stream SSE `hello|unread|message|message_edited|message_deleted|message_reacted|read|typing|presence|ping`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un hilo por `TenantLink`. La historia es de la organización: si cambia el vendedor, el hilo queda y se anuncia. Un vendedor del distro solo ve sus cuentas. `REVOKED` no se habla; `SUSPENDED` sí. El superadmin no entra a estos hilos desde Administración. UI: `/mensajes`. Ver `docs/PLAN_TIPO2.md`.
+- **Notas**: Un hilo por `TenantLink`. La historia es de la organización: si cambia el vendedor, el hilo queda y se anuncia. Un vendedor del distro solo ve sus cuentas. En el comercio escriben `OWNER`/`ADMIN`/`BUYER`; el `SELLER` del local solo lee. En el distribuidor escriben `OWNER`/`ADMIN`/`SELLER`/`PRODUCT_MANAGER`. `REVOKED` no se habla; `SUSPENDED` sí. El hub SSE usa Redis (`REDIS_URL`) cuando hay más de una réplica. El superadmin no entra a estos hilos desde Administración. UI: `/mensajes`. Ver `docs/PLAN_TIPO2.md`.
 
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
@@ -162,6 +162,24 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: status `{ hasSerperKey, missing, pending, pendingVisible, pendingDeferred, filled, running, byProvider, lastRun }` · first-photo `{ started, reason? }` · missing `{ items: [{ id, provider, name, query, inCatalog, ... }] }`
 - **Estado**: IMPLEMENTADO
 - **Notas**: Rellena `ProviderSyncCache.imageUrl` **solo si está vacío** (salvo edición manual). Busca en `POST https://google.serper.dev/images` (`X-API-KEY`, `gl=ar`, `hl=es`). **No guarda una URL rota**: descarga la foto, comprueba que sea JPEG/PNG/WebP/GIF usable y la persiste en `/assets/...`. Si la primera de Serper no carga, prueba las siguientes; si ninguna sirve, el producto queda `skipped` (sin foto). Corre en segundo plano de a tandas de 50. La API key se cifra y nunca se devuelve. Cada producto tocado queda en `ImageSyncFill` (historial editable). **Prioridad**: primero los que se muestran en algún catálogo (`TenantProductOffer.active` y `stock > 0`); sin stock, ocultos o sin oferta quedan para **después** (cuando ya no hay visibles pendientes, el cron los hace solo). **Editar**: `POST /admin/images/products/:productId/serper-search` `{ query? }` → `{ query, images[] }` (solo fotos que cargan); `PUT /admin/images/products/:productId/image` `{ imageUrl, source: serper_pick|upload }`. **Historial**: `GET /admin/images/history?page=&take=&status=&provider=&q=`. **Cron** 8:00 y 20:00 `America/Argentina/Buenos_Aires`, tope 200 por corrida (`IMAGE_SYNC_CRON_LIMIT`), se apaga con `IMAGE_SYNC_CRON_DISABLED=true` o `PUT /admin/images/cron { enabled }`. Los “sin resultado” no se reintentan solos: se editan desde el historial. El sync de catálogo no borra una foto de Serper si el proveedor sigue vacío.
+
+### [FEATURE] Carrito de la organización
+- **Método**: GET | PUT
+- **Ruta**: `/cart/org` · `/cart/clients/:linkId`
+- **Auth**: Bearer, organización. `GET/PUT /cart/org` es del comercio (`RETAILER`). `GET /cart/clients/:linkId` es del distribuidor, sobre un vínculo visible.
+- **Body / Params**: `{ items: CartItem[], schemes: CartScheme[] }`
+- **Respuesta esperada**: `{ tenantId, items, schemes, updatedByUserId, updatedAt }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un solo carrito por local, no por persona. El SSE `cart_updated` avisa al equipo del comercio y al vendedor/dueño del distro vinculado. `/cart/items` queda por compatibilidad y la web ya no lo usa.
+
+### [FEATURE] Publicidad paga (espacios, campañas, stats)
+- **Método**: GET | PUT | POST
+- **Ruta**: `/admin/ads` · `/admin/ads/slots/:slotId` · `/my/ads` · `/my/ads/campaigns` · `/my/ads/campaigns/:id` · `/ads/creatives` · `/ads/campaigns/:id/track`
+- **Auth**: Bearer. Admin: `ROLE_ADMIN`. Contratar: `OWNER`/`ADMIN` de `DISTRIBUTOR` o `BRAND` con `advertisingEnabled`. Creatives y track: usuario autenticado.
+- **Body / Params**: slot `{ enabled?, monthlyPriceUsd?, maxConcurrent?, name?, description? }` · campaña `{ slotId, title, subtitle?, imageUrl?, linkUrl?, status: DRAFT|ACTIVE|PAUSED|ENDED }` · track `{ kind: impression|click, path? }`
+- **Respuesta esperada**: overview `{ allowed, monthlyDue, slots, campaigns[] }` con `stats: { impressions, clicks }` · creatives `{ campaignId, slot, placement, title, subtitle, imageUrl, linkUrl, advertiser, provider }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El flag `advertisingEnabled` lo prende el superadmin (cuenta que paga). No lo cambia la org. Descubrimiento cerrado: un distro no vinculado solo aparece con campaña **ACTIVE** en el slot `discovery`. Cupo por espacio (`maxConcurrent`). UI: `/publicidad`, Admin → Publicidad.
 
 ## Pendiente (futuro)
 

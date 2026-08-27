@@ -1,4 +1,4 @@
-import { TENANT_ROLES_CAN_WRITE_CHAT, type TenantRole, type TenantType } from "@nodo/shared";
+import { tenantCanWriteChat, type TenantRole, type TenantType } from "@nodo/shared";
 import { clientLinkVisibleTo } from "../tenants/portfolio";
 
 export type ChatActor = {
@@ -26,8 +26,8 @@ export function chatLinkVisibleTo(
   return false;
 }
 
-export function canWriteChat(role: TenantRole): boolean {
-  return TENANT_ROLES_CAN_WRITE_CHAT.includes(role);
+export function canWriteChat(role: TenantRole, tenantType: TenantType = "DISTRIBUTOR"): boolean {
+  return tenantCanWriteChat(tenantType, role);
 }
 
 export function chatPeerName(

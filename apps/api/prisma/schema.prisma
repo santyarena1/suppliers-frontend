@@ -120,8 +120,10 @@ model Tenant {
   offers        TenantProductOffer[]
   priceHistory  ProductPriceHistory[]
   cartItems     CartItem[]
+  orgCart       OrgCart?
   orders        ProviderOrder[]
   opsAliases    TenantOpsAlias[]
+  adCampaigns   AdCampaign[]
 
   @@index([type, active])
   @@index([mirrorsCommercialFromId])
@@ -1274,4 +1276,70 @@ model ImageSyncFill {
   @@index([createdAt])
   @@index([status])
   @@index([provider])
+}
+
+/// Carrito de la organización: lo ven todos los del local y el vendedor del distro.
+model OrgCart {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items           Json     @default("[]")
+  schemes         Json     @default("[]")
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
+}
+
+enum AdCampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+/// Espacio publicitario. El superadmin los prende y les pone precio.
+model AdSlot {
+  id               String       @id @default(uuid())
+  key              String       @unique
+  name             String
+  description      String       @default("")
+  /// search | home | discovery
+  placement        String
+  monthlyPriceUsd  Decimal      @db.Decimal(10, 2)
+  maxConcurrent    Int          @default(1)
+  enabled          Boolean      @default(false)
+  campaigns        AdCampaign[]
+}
+
+model AdCampaign {
+  id        String           @id @default(uuid())
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  slotId    String
+  slot      AdSlot           @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  status    AdCampaignStatus @default(DRAFT)
+  title     String
+  subtitle  String           @default("")
+  imageUrl  String?
+  linkUrl   String?
+  startsAt  DateTime         @default(now())
+  endsAt    DateTime?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  events    AdEvent[]
+
+  @@index([tenantId, status])
+  @@index([slotId, status])
+}
+
+model AdEvent {
+  id         String     @id @default(uuid())
+  campaignId String
+  campaign   AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// impression | click
+  kind       String
+  path       String?
+  createdAt  DateTime   @default(now())
+
+  @@index([campaignId, createdAt])
+  @@index([kind, createdAt])
 }

@@ -260,10 +260,6 @@ export class UpdateOwnOrgDto {
   @ValidateIf((_, value) => value !== null)
   @IsString()
   contactPhone?: string | null;
-
-  @IsOptional()
-  @IsBoolean()
-  advertisingEnabled?: boolean;
 }
 
 export class UpdateOwnClientDto {

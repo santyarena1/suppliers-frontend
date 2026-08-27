@@ -7,12 +7,13 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   TENANT_LINK_STATUS_LABELS,
   myApi,
+  orgCartApi,
   type OwnClientDetail,
   type OwnPortfolio,
   type TenantLinkStatus,
 } from "@/lib/api";
 import { formatUSD } from "@/lib/format";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, MessageSquare, ShoppingCart } from "lucide-react";
 
 const inputClass =
   "bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-500";
@@ -21,18 +22,37 @@ function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
 }
 
+type CartLine = {
+  name?: string;
+  qty?: number;
+  provider?: string;
+  price?: string | number;
+  channel?: string;
+};
+
 export default function ClienteDetallePage() {
   const params = useParams<{ linkId: string }>();
   const linkId = params.linkId;
   const [detail, setDetail] = useState<OwnClientDetail | null>(null);
   const [portfolio, setPortfolio] = useState<OwnPortfolio | null>(null);
+  const [cart, setCart] = useState<{ items: CartLine[]; updatedAt: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [aviso, setAviso] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
-    const [clientRes, listRes] = await Promise.all([myApi.client(linkId), myApi.clients()]);
+    const [clientRes, listRes, cartRes] = await Promise.all([
+      myApi.client(linkId),
+      myApi.clients(),
+      orgCartApi.client(linkId).catch(() => null),
+    ]);
     setDetail(clientRes.data);
     setPortfolio(listRes.data);
+    if (cartRes) {
+      setCart({
+        items: Array.isArray(cartRes.data.items) ? (cartRes.data.items as CartLine[]) : [],
+        updatedAt: cartRes.data.updatedAt,
+      });
+    }
     setLoading(false);
   }, [linkId]);
 
@@ -53,6 +73,8 @@ export default function ClienteDetallePage() {
     }
   }
 
+  const cartCount = cart?.items.reduce((sum, item) => sum + (item.qty ?? 0), 0) ?? 0;
+
   return (
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
@@ -62,7 +84,7 @@ export default function ClienteDetallePage() {
           </Link>
           <div className="min-w-0">
             <h1 className="text-base font-semibold text-white truncate">{detail?.client.name ?? "Cliente"}</h1>
-            <p className="text-xs text-surface-500">Pedidos y condiciones del vínculo</p>
+            <p className="text-xs text-surface-500">Pedidos, carrito y condiciones del vínculo</p>
           </div>
         </div>
         <PrefsPanel />
@@ -167,12 +189,45 @@ export default function ClienteDetallePage() {
                     Contacto: {[detail.client.contactEmail, detail.client.contactPhone].filter(Boolean).join(" · ")}
                   </p>
                 )}
-                <Link
-                  href={`/mensajes?linkId=${detail.linkId}`}
-                  className="self-start inline-flex items-center gap-1.5 mt-1 text-xs font-medium bg-brand-600/15 hover:bg-brand-600/25 text-brand-200 rounded-lg px-3 py-2"
-                >
-                  Hablar
-                </Link>
+                {detail.status !== "REVOKED" && (
+                  <Link
+                    href={`/mensajes?linkId=${detail.linkId}`}
+                    className="self-start inline-flex items-center gap-1.5 mt-1 text-xs font-medium bg-brand-600/15 hover:bg-brand-600/25 text-brand-200 rounded-lg px-3 py-2"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Hablar
+                  </Link>
+                )}
+              </section>
+
+              <section className="border border-surface-800 rounded-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-800">
+                  <ShoppingCart className="w-3.5 h-3.5 text-surface-400" />
+                  <h2 className="text-xs font-semibold text-white">Carrito del local</h2>
+                  <span className="text-[11px] text-surface-500">{cartCount} ítems</span>
+                </div>
+                {!cart || cart.items.length === 0 ? (
+                  <p className="text-xs text-surface-500 px-4 py-6">
+                    Este comercio todavía no armó el carrito. Cuando lo haga, acá se ve el mismo que usan ellos.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-surface-800">
+                    {cart.items.slice(0, 40).map((item, index) => (
+                      <div key={`${item.provider}-${item.name}-${index}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                        <p className="text-sm text-surface-200 flex-1 min-w-[140px]">{item.name ?? "Producto"}</p>
+                        <span className="text-[11px] text-surface-500">{item.provider}</span>
+                        <span className="text-[11px] text-surface-400">×{item.qty ?? 1}</span>
+                        {item.channel === "offline" && (
+                          <span className="text-[10px] text-amber-400">offline</span>
+                        )}
+                      </div>
+                    ))}
+                    {cart.updatedAt && (
+                      <p className="text-[11px] text-surface-600 px-4 py-2">
+                        Actualizado {new Date(cart.updatedAt).toLocaleString("es-AR")}
+                      </p>
+                    )}
+                  </div>
+                )}
               </section>
 
               <section className="border border-surface-800 rounded-xl overflow-hidden">

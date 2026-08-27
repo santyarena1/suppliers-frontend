@@ -92,7 +92,7 @@ export class ChatService {
       return tb.localeCompare(ta);
     });
     const unreadTotal = items.reduce((sum, item) => sum + item.unreadCount, 0);
-    return { canWrite: canWriteChat(tenant.tenantRole), unreadTotal, threads: items };
+    return { canWrite: canWriteChat(tenant.tenantRole, tenant.tenantType), unreadTotal, threads: items };
   }
 
   async open(tenant: TenantContext, linkId: string) {
@@ -134,15 +134,29 @@ export class ChatService {
 
   async send(tenant: TenantContext, threadId: string, dto: SendChatMessageDto) {
     this.assertWrite(tenant);
-    const thread = await this.requireThread(tenant, threadId);
     const kind = dto.kind ?? "TEXT";
+    if (kind === "ORDER" || kind === "PRODUCT") {
+      throw new BadRequestException("Ese tipo de mensaje lo arma NODO, no se manda a mano");
+    }
     if (kind === "TEXT" && !dto.body?.trim()) {
       throw new BadRequestException("El mensaje está vacío");
     }
+    if (kind === "IMAGE" || kind === "FILE") {
+      const url = dto.payload && typeof dto.payload.url === "string" ? dto.payload.url : "";
+      if (!/^\/assets\/[0-9a-f-]{36}$/i.test(url)) {
+        throw new BadRequestException("El archivo tiene que ser uno que subiste en este chat");
+      }
+    }
+    return this.persistMessage(tenant, threadId, dto);
+  }
+
+  private async persistMessage(tenant: TenantContext, threadId: string, dto: SendChatMessageDto) {
+    const thread = await this.requireThread(tenant, threadId);
     if (dto.replyToId) {
       const reply = await this.prisma.chatMessage.findUnique({ where: { id: dto.replyToId } });
       if (!reply || reply.threadId !== threadId) throw new BadRequestException("Ese mensaje no está en este hilo");
     }
+    const kind = dto.kind ?? "TEXT";
     const row = await this.prisma.chatMessage.create({
       data: {
         threadId,
@@ -340,7 +354,7 @@ export class ChatService {
       ? await this.requireThread(tenant, threadId)
       : await this.threadForProvider(tenant, order.provider);
     if (!target) throw new BadRequestException("No hay un vínculo con ese distribuidor para avisar");
-    return this.send(tenant, target.id, {
+    return this.persistMessage(tenant, target.id, {
       kind: "ORDER",
       body: `Pedido a ${PROVIDER_LABELS[order.provider as Provider] ?? order.provider}`,
       payload: {
@@ -450,7 +464,7 @@ export class ChatService {
   }
 
   private assertWrite(tenant: TenantContext) {
-    if (!canWriteChat(tenant.tenantRole)) {
+    if (!canWriteChat(tenant.tenantRole, tenant.tenantType)) {
       throw new ForbiddenException("Tu rol es de solo lectura");
     }
   }

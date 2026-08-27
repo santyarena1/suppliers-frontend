@@ -440,8 +440,13 @@ function OrderCard({
       await chatApi.shareOrder(order.id);
       setShared(true);
       setTimeout(() => setShared(false), 2500);
-    } catch { /* el interceptor muestra el error si hay 401; acá no bloqueamos el pedido */ }
-    finally {
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      onAviso({
+        ok: false,
+        text: msg || "No se pudo avisar. Hace falta un vínculo con ese distribuidor.",
+      });
+    } finally {
       setSharing(false);
     }
   }

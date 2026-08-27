@@ -7,6 +7,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
+import SponsoredStrip from "@/components/ads/SponsoredStrip";
 import { OfflinePricesHelpButton } from "@/components/OfflinePricesHelp";
 import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
@@ -658,6 +659,8 @@ function SearchPage() {
               {hydrated && !loading && !searched && (
                 <SearchLanding onCategoryClick={handleCategoryClick} />
               )}
+
+              {hydrated && !loading && filtered.length > 0 && <SponsoredStrip />}
 
               {/* Grid */}
               {hydrated && !loading && filtered.length > 0 && viewMode === "grid" && (

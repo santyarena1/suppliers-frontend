@@ -1,7 +1,7 @@
 import type { TenantType } from "@/lib/auth";
 
 const RETAILER_ONLY = ["/search", "/comparador", "/cart", "/proveedores", "/marcas"];
-const DISTRIBUTOR_ONLY = ["/clientes", "/codigos"];
+const DISTRIBUTOR_ONLY = ["/clientes", "/codigos", "/publicidad"];
 // `/mensajes` y `/equipo` son de los dos tipos: no redirigir.
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {

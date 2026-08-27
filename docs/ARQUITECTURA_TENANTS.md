@@ -175,9 +175,9 @@ hecho. Esta tabla es el producto, no la migración.
 | 5 | Tipo 1 autónomo: el dueño arma su equipo, canjea códigos y carga el contacto, sin pasar por el superadmin. | Hecho |
 | 6 | Tipo 2: panel del distribuidor (cartera por vendedor, códigos, pedidos de clientes, inactivos, alcance del PM). | Hecho |
 | 7 | Tipo 3: reconstruir marcas sobre el mismo `Tenant` / `TenantLink`. | Pendiente — `docs/PLAN_TIPO3.md` |
-| 8 | Publicidad paga de verdad (contratación, vigencia, slots). Hoy es un flag. | Pendiente |
+| 8 | Publicidad paga: espacios, precio, cupo, campañas, impresiones/clicks. El flag `advertisingEnabled` es “esta cuenta paga”. | Hecho |
 | 9 | Chat entre comercio y vendedor del distribuidor. | Hecho — un hilo por `TenantLink`, `/mensajes` |
-| — | Mudar el carrito de la web al de la API (dos vendedores del mismo local no se pisan). | Pendiente |
+| — | Carrito de la organización en la API (un armado por local, visible al distro). | Hecho — `/cart/org` |
 
 Detalle del Tipo 2 y de lo que queda: `docs/PLAN_TIPO2.md`. Planteo de marcas: `docs/PLAN_TIPO3.md`.
 

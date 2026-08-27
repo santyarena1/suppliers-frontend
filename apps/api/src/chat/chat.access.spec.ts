@@ -79,9 +79,21 @@ describe("chatLinkVisibleTo", () => {
 
 describe("canWriteChat", () => {
   it("el visor solo lee", () => {
-    expect(canWriteChat("VIEWER")).toBe(false);
-    expect(canWriteChat("SELLER")).toBe(true);
-    expect(canWriteChat("OWNER")).toBe(true);
+    expect(canWriteChat("VIEWER", "RETAILER")).toBe(false);
+    expect(canWriteChat("VIEWER", "DISTRIBUTOR")).toBe(false);
+  });
+
+  it("en el comercio escriben dueño, admin y comprador; el vendedor del local no", () => {
+    expect(canWriteChat("OWNER", "RETAILER")).toBe(true);
+    expect(canWriteChat("ADMIN", "RETAILER")).toBe(true);
+    expect(canWriteChat("BUYER", "RETAILER")).toBe(true);
+    expect(canWriteChat("SELLER", "RETAILER")).toBe(false);
+  });
+
+  it("en el distribuidor el vendedor y el PM sí escriben", () => {
+    expect(canWriteChat("SELLER", "DISTRIBUTOR")).toBe(true);
+    expect(canWriteChat("PRODUCT_MANAGER", "DISTRIBUTOR")).toBe(true);
+    expect(canWriteChat("OWNER", "DISTRIBUTOR")).toBe(true);
   });
 });
 

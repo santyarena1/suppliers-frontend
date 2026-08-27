@@ -5,7 +5,7 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import { myApi, type OwnClient, type OwnOrg } from "@/lib/api";
 import { formatUSD } from "@/lib/format";
-import { ArrowRight, ClipboardList, Handshake, Loader2, MessageSquare, QrCode, Users } from "lucide-react";
+import { ArrowRight, ClipboardList, Handshake, Loader2, Megaphone, MessageSquare, QrCode, Users } from "lucide-react";
 
 export default function DistributorHome() {
   const [org, setOrg] = useState<OwnOrg | null>(null);
@@ -57,21 +57,15 @@ export default function DistributorHome() {
                   <HomeLink href="/codigos" icon={QrCode} title="Códigos" subtitle="Vincular un comercio nuevo" />
                 )}
                 <HomeLink href="/equipo" icon={Users} title="Equipo" subtitle="Vendedores y roles" />
-              </div>
-              {org?.canManagePortfolio && (
-                <label className="flex items-center gap-2 text-xs text-surface-300 border border-surface-800 rounded-xl px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={org.advertisingEnabled}
-                    onChange={async (e) => {
-                      const res = await myApi.updateOrg({ advertisingEnabled: e.target.checked });
-                      setOrg(res.data);
-                    }}
-                    className="accent-brand-600"
+                {org?.canManagePortfolio && (
+                  <HomeLink
+                    href="/publicidad"
+                    icon={Megaphone}
+                    title="Publicidad"
+                    subtitle={org.advertisingEnabled ? "Espacios, costo y visitas" : "Pedile al admin de NODO que habilite tu cuenta"}
                   />
-                  Visible para comercios sin vínculo (publicidad)
-                </label>
-              )}
+                )}
+              </div>
               {inactivos.length > 0 && (
                 <section className="border border-amber-500/20 bg-amber-500/5 rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-amber-500/15">

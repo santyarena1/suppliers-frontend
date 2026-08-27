@@ -1,6 +1,6 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
-  Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare,
+  Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -31,6 +31,7 @@ export type NavItemId =
   | "clients"
   | "client-orders"
   | "codes"
+  | "ads"
   | "chat"
   | "team"
   | "brands-portal"
@@ -116,6 +117,15 @@ export const NAV_ITEMS: NavItemDef[] = [
     label: "Códigos",
     icon: QrCode,
     tenantTypes: ["DISTRIBUTOR"],
+    tenantRoles: ["OWNER", "ADMIN"],
+    section: "portfolio",
+  },
+  {
+    id: "ads",
+    href: "/publicidad",
+    label: "Publicidad",
+    icon: Megaphone,
+    tenantTypes: ["DISTRIBUTOR", "BRAND"],
     tenantRoles: ["OWNER", "ADMIN"],
     section: "portfolio",
   },
