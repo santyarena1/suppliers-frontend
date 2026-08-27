@@ -36,7 +36,10 @@ function notifyHandlers(type: string, payload: { threadId?: string; data: unknow
 export default function ChatRealtime() {
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
-  pathnameRef.current = pathname;
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     const token = getToken();

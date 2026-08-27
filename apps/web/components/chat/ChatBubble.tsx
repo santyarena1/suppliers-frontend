@@ -10,7 +10,7 @@ import {
 } from "@/lib/api";
 import { assetUrl } from "@/lib/assets";
 import { formatUSD } from "@/lib/format";
-import { avatarTone, initials } from "@/lib/chat-ui";
+import { avatarTone, canEditChatText, initials } from "@/lib/chat-ui";
 
 function linkify(text: string) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
@@ -95,12 +95,7 @@ export default function ChatBubble({
   }
 
   const payload = (msg.payload ?? {}) as Record<string, unknown>;
-  const canEdit =
-    mine &&
-    canWrite &&
-    msg.kind === "TEXT" &&
-    !msg.deletedAt &&
-    Date.now() - new Date(msg.createdAt).getTime() < 15 * 60 * 1000;
+  const canEdit = mine && canWrite && canEditChatText(msg);
   const reactions = msg.reactions ?? [];
   const authorName = msg.author?.username ?? "?";
 

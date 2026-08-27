@@ -1,3 +1,24 @@
+let tempSeq = 0;
+
+export function newChatTempId() {
+  tempSeq += 1;
+  return `tmp-${tempSeq}`;
+}
+
+export function isoNow() {
+  return new Date().toISOString();
+}
+
+export function nowMs() {
+  return Date.now();
+}
+
+const EDIT_WINDOW_MS = 15 * 60 * 1000;
+
+export function canEditChatText(msg: { kind: string; deletedAt: string | null; createdAt: string }) {
+  return msg.kind === "TEXT" && !msg.deletedAt && nowMs() - new Date(msg.createdAt).getTime() < EDIT_WINDOW_MS;
+}
+
 /** Iniciales visibles de un nombre de organización o persona. */
 export function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);

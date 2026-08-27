@@ -11,7 +11,7 @@ import {
 } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { assetUrl } from "@/lib/assets";
-import { avatarTone, initials, listWhen } from "@/lib/chat-ui";
+import { avatarTone, initials, isoNow, listWhen, newChatTempId, nowMs } from "@/lib/chat-ui";
 import {
   chatSoundEnabled,
   draftKey,
@@ -79,7 +79,10 @@ export default function ChatApp({
   const searchTimer = useRef<number | null>(null);
   const atBottom = useRef(true);
   const activeId = useRef<string | null>(null);
-  activeId.current = active?.threadId ?? null;
+
+  useEffect(() => {
+    activeId.current = active?.threadId ?? null;
+  }, [active?.threadId]);
 
   useEffect(() => {
     setSoundOn(chatSoundEnabled());
@@ -89,8 +92,9 @@ export default function ChatApp({
   }, []);
 
   useEffect(() => {
-    setActiveChatThread(active?.threadId ?? null);
-    setMuted(active ? isChatMuted(active.threadId) : false);
+    const threadId = active?.threadId ?? null;
+    setActiveChatThread(threadId);
+    setMuted(threadId ? isChatMuted(threadId) : false);
     return () => setActiveChatThread(null);
   }, [active?.threadId]);
 
@@ -114,7 +118,7 @@ export default function ChatApp({
   }, [pathname, router]);
 
   const openLink = useCallback(async (linkId: string) => {
-    if (active?.linkId === linkId && active.threadId) {
+    if (active && active.linkId === linkId && active.threadId) {
       goToThread(active.threadId);
       return;
     }
@@ -142,7 +146,7 @@ export default function ChatApp({
     } finally {
       setLoadingThread(false);
     }
-  }, [active?.linkId, active?.threadId, goToThread, loadList]);
+  }, [active, goToThread, loadList]);
 
   const openThread = useCallback(async (threadId: string) => {
     if (activeId.current === threadId && messages.length > 0) {
@@ -257,16 +261,16 @@ export default function ChatApp({
   }, [filter, threads]);
 
   const firstUnreadId = useMemo(() => {
-    if (!active?.lastReadAt) return messages.find((m) => m.author?.id !== me)?.id;
+    if (!active || !active.lastReadAt) return messages.find((m) => m.author?.id !== me)?.id;
     const at = new Date(active.lastReadAt).getTime();
     return messages.find((m) => m.author?.id !== me && new Date(m.createdAt).getTime() > at)?.id;
-  }, [active?.lastReadAt, me, messages]);
+  }, [active, me, messages]);
 
   const peerSeenAt = active?.peerLastReadAt ? new Date(active.peerLastReadAt).getTime() : 0;
 
   async function sendText(body = draft.trim(), replyToId = reply?.id, replaceId?: string) {
     if (!active || !body || sending || !canWrite) return;
-    const tempId = replaceId ?? `tmp-${Date.now()}`;
+    const tempId = replaceId ?? newChatTempId();
     if (!replaceId) {
       setMessages((prev) => [
         ...prev,
@@ -282,7 +286,7 @@ export default function ChatApp({
             : null,
           editedAt: null,
           deletedAt: null,
-          createdAt: new Date().toISOString(),
+          createdAt: isoNow(),
           pending: true,
         },
       ]);
@@ -343,7 +347,7 @@ export default function ChatApp({
     setDraft(value);
     if (active) localStorage.setItem(draftKey(active.threadId), value);
     if (!active || !canWrite) return;
-    const now = Date.now();
+    const now = nowMs();
     if (now - typingAt.current > 2000) {
       typingAt.current = now;
       void chatApi.typing(active.threadId);
