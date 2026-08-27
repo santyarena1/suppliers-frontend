@@ -1,4 +1,10 @@
-import { catalogStockWhere, displayedStock, isDisplayedInStock, parseIncludeOutOfStock } from "./catalog-stock";
+import {
+  catalogStockWhere,
+  displayedStock,
+  hidesZeroStockFromCatalog,
+  isDisplayedInStock,
+  parseIncludeOutOfStock,
+} from "./catalog-stock";
 
 describe("displayedStock", () => {
   it("deja el stock tal cual si no hay umbral", () => {
@@ -27,16 +33,32 @@ describe("isDisplayedInStock", () => {
   });
 });
 
-describe("catalogStockWhere", () => {
-  it("sin filtro extra si piden ver sin stock", () => {
-    expect(catalogStockWhere(true, 5)).toEqual({});
+describe("hidesZeroStockFromCatalog", () => {
+  it("KEEP (o sin config) deja ver stock 0", () => {
+    expect(hidesZeroStockFromCatalog("KEEP")).toBe(false);
+    expect(hidesZeroStockFromCatalog(null)).toBe(false);
+    expect(hidesZeroStockFromCatalog(undefined)).toBe(false);
+    expect(hidesZeroStockFromCatalog("")).toBe(false);
   });
 
-  it("deja pasar null o stock por encima del umbral", () => {
-    expect(catalogStockWhere(false, 0)).toEqual({
+  it("HIDE y DELETE no listan stock 0", () => {
+    expect(hidesZeroStockFromCatalog("HIDE")).toBe(true);
+    expect(hidesZeroStockFromCatalog("DELETE")).toBe(true);
+  });
+});
+
+describe("catalogStockWhere", () => {
+  it("sin filtro si piden ver sin stock o la config es mostrar igual", () => {
+    expect(catalogStockWhere(true, 5, "HIDE")).toEqual({});
+    expect(catalogStockWhere(false, 5, "KEEP")).toEqual({});
+    expect(catalogStockWhere(false, 5)).toEqual({});
+  });
+
+  it("con HIDE deja pasar null o stock por encima del umbral", () => {
+    expect(catalogStockWhere(false, 0, "HIDE")).toEqual({
       OR: [{ stock: null }, { stock: { gt: 0 } }],
     });
-    expect(catalogStockWhere(false, 5)).toEqual({
+    expect(catalogStockWhere(false, 5, "DELETE")).toEqual({
       OR: [{ stock: null }, { stock: { gt: 5 } }],
     });
   });

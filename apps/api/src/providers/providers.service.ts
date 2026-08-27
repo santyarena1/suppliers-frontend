@@ -6,7 +6,7 @@ import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service"
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
-import { catalogStockWhere, isDisplayedInStock } from "./catalog-stock";
+import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct } from "./types";
@@ -130,7 +130,7 @@ export class ProvidersService {
         syncedExternalIds.push(...items.map((i) => i.externalId));
         await onPage(items);
       });
-    }, { omitsUnavailableProducts: Boolean(adapter.omitsUnavailableProducts) });
+    });
 
     // Enriquecimiento lento (ej. scrapear ficha por producto) — no bloquea
     // la respuesta de este sync ni el próximo, corre solo en background y
@@ -209,8 +209,7 @@ export class ProvidersService {
   private async runSync(
     tenantId: string,
     provider: Provider,
-    run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>,
-    opts: { omitsUnavailableProducts?: boolean } = {}
+    run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>
   ) {
     const config = await this.getConfig(tenantId, provider);
     const minStock = config.minStockThreshold || 0;
@@ -238,8 +237,7 @@ export class ProvidersService {
       tenantId,
       provider,
       syncStartedAt,
-      config.missingProductAction,
-      Boolean(opts.omitsUnavailableProducts)
+      config.missingProductAction
     );
     const zeroStockCount = await this.applyZeroStockAction(
       tenantId,
@@ -269,23 +267,16 @@ export class ProvidersService {
   /**
    * Productos que esta organización tenía para este proveedor pero no vinieron en la
    * última sincronización. Solo se tocan sus ofertas: la ficha es de todos.
-   *
-   * Si el proveedor omite los agotados del feed, KEEP igual marca stock 0: si no,
-   * quedan con el stock viejo y aparecen en el catálogo como si siguieran a la venta.
+   * KEEP / OUT_OF_STOCK / HIDE / DELETE salen de la config del distribuidor.
    */
   private async applyMissingProductAction(
     tenantId: string,
     provider: Provider,
     syncStartedAt: Date,
-    action: string,
-    omitsUnavailableProducts: boolean
+    action: string
   ) {
+    if (action === "KEEP") return 0;
     const where = { tenantId, provider, syncedAt: { lt: syncStartedAt } };
-    if (action === "KEEP") {
-      if (!omitsUnavailableProducts) return 0;
-      const res = await this.prisma.tenantProductOffer.updateMany({ where, data: { stock: 0 } });
-      return res.count;
-    }
     if (action === "DELETE") {
       const res = await this.prisma.tenantProductOffer.deleteMany({ where });
       return res.count;
@@ -483,6 +474,11 @@ export class ProvidersService {
     if (!(await this.isProviderVisible(provider))) return [];
     if (!(await this.visibility.isLinked(tenantId, provider))) return [];
     const rules = await this.rulesFor(tenantId, provider);
+    const stockWhere = catalogStockWhere(
+      Boolean(opts.includeOutOfStock),
+      rules.minStockThreshold,
+      rules.zeroStockAction
+    );
     const [offers, enrichment] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
@@ -490,9 +486,7 @@ export class ProvidersService {
           provider,
           active: true,
           AND: [
-            ...(opts.includeOutOfStock
-              ? []
-              : [catalogStockWhere(false, rules.minStockThreshold)]),
+            ...(Object.keys(stockWhere).length ? [stockWhere] : []),
             { product: { name: { contains: name, mode: "insensitive" } } },
           ],
         },
@@ -546,12 +540,13 @@ export class ProvidersService {
   private async rulesFor(tenantId: string, provider: Provider): Promise<OfferRules> {
     const config = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
-      select: { priceMarkupPercent: true, minStockThreshold: true },
+      select: { priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
     });
     if (!config) return NO_RULES;
     return {
       markupPercent: Number(config.priceMarkupPercent) || 0,
       minStockThreshold: config.minStockThreshold || 0,
+      zeroStockAction: config.zeroStockAction || "KEEP",
     };
   }
 
@@ -559,7 +554,7 @@ export class ProvidersService {
   private async rulesByProvider(tenantId: string): Promise<Map<string, OfferRules>> {
     const configs = await this.prisma.providerSyncConfig.findMany({
       where: { tenantId },
-      select: { provider: true, priceMarkupPercent: true, minStockThreshold: true },
+      select: { provider: true, priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
     });
     return new Map(
       configs.map((c) => [
@@ -567,6 +562,7 @@ export class ProvidersService {
         {
           markupPercent: Number(c.priceMarkupPercent) || 0,
           minStockThreshold: c.minStockThreshold || 0,
+          zeroStockAction: c.zeroStockAction || "KEEP",
         },
       ])
     );
@@ -822,13 +818,27 @@ export class ProvidersService {
       this.catalogEnrichment.categoryMatchFilters(category),
     ]);
 
+    const keepProviders = providers.filter(
+      (p) => !hidesZeroStockFromCatalog((rules.get(p) ?? NO_RULES).zeroStockAction)
+    );
+    const hideProviders = providers.filter(
+      (p) => hidesZeroStockFromCatalog((rules.get(p) ?? NO_RULES).zeroStockAction)
+    );
+    const stockOr = [
+      ...(keepProviders.length ? [{ provider: { in: keepProviders } }] : []),
+      ...(hideProviders.length
+        ? [{ AND: [{ provider: { in: hideProviders } }, catalogStockWhere(false, 0, "HIDE")] }]
+        : []),
+    ];
+    const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
+
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
         tenantId,
         active: true,
         provider: { in: providers },
         AND: [
-          ...(includeOutOfStock ? [] : [catalogStockWhere(false, 0)]),
+          ...stockConstraint,
           {
             OR: [
               { product: { category: { in: match.rawCategories } } },
@@ -846,7 +856,12 @@ export class ProvidersService {
     return offers
       .filter((offer) => this.catalogEnrichment.productMatchesCategory(offer.product, category, enrichment))
       .map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment))
-      .filter((product) => includeOutOfStock || isDisplayedInStock(product.stock, rules.get(product.provider)?.minStockThreshold ?? 0))
+      .filter((product) => {
+        if (includeOutOfStock) return true;
+        const action = (rules.get(product.provider) ?? NO_RULES).zeroStockAction;
+        if (!hidesZeroStockFromCatalog(action)) return true;
+        return isDisplayedInStock(product.stock, 0);
+      })
       .slice(0, limit);
   }
 

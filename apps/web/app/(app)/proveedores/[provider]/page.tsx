@@ -546,7 +546,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                             />
                             <p className="text-[11px] text-surface-500 mt-1">
                               Si el proveedor informa esta cantidad o menos, lo tratamos como sin stock (stock 0). Ej: 0 = usar el stock tal cual lo informa.
-                              La búsqueda y el catálogo no muestran stock 0 salvo que actives «Incluir sin stock».
                             </p>
                           </div>
                           <div>
@@ -561,7 +560,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                               ))}
                             </select>
                             <p className="text-[11px] text-surface-500 mt-1">
-                              «Ocultar» los saca incluso del filtro «Incluir sin stock». «Mostrar igual» los deja en la base: no aparecen en búsqueda salvo ese filtro.
+                              «Mostrar igual»: siguen en el catálogo. «Ocultar»: no se listan en búsqueda, salvo que actives «Incluir sin stock». «Eliminar»: se borran en la sync.
                             </p>
                           </div>
                           <div>
@@ -576,7 +575,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                               ))}
                             </select>
                             <p className="text-[11px] text-surface-500 mt-1">
-                              En Invid y AIR el listado solo trae lo que está a la venta: lo que no vino se marca stock 0 aunque elijas «No hacer nada», para que no quede en el catálogo con stock viejo.
+                              Si este distribuidor deja de mandar un producto: no hacer nada, marcarlo sin stock, ocultarlo o borrarlo.
                             </p>
                           </div>
                         </div>

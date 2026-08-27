@@ -6,9 +6,11 @@ import { displayedStock } from "./catalog-stock";
 export interface OfferRules {
   markupPercent: number;
   minStockThreshold: number;
+  /** KEEP = listar stock 0; HIDE/DELETE = no listarlos salvo includeOutOfStock. */
+  zeroStockAction: string;
 }
 
-export const NO_RULES: OfferRules = { markupPercent: 0, minStockThreshold: 0 };
+export const NO_RULES: OfferRules = { markupPercent: 0, minStockThreshold: 0, zeroStockAction: "KEEP" };
 
 export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   price: number | null;

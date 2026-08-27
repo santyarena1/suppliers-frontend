@@ -46,13 +46,6 @@ export interface ProviderAdapter {
   readonly provider: Provider;
   /** Catálogo público: se puede sincronizar sin guardar credenciales. */
   readonly publicCatalog?: boolean;
-  /**
-   * El feed es una lista de disponibles: lo que no vino en esta sync no está
-   * a la venta (Invid Excel, AIR stock:"F"). Los faltantes se marcan stock 0
-   * aunque la acción configurada sea KEEP, para que el catálogo no los muestre
-   * como si siguieran en stock.
-   */
-  readonly omitsUnavailableProducts?: boolean;
   /** Recorre el catálogo completo del proveedor, invocando onPage por cada
    * tanda para que el caller la persista sin acumular todo en memoria. */
   syncAll(credentials: Record<string, string>, onPage: (items: NormalizedProduct[]) => Promise<void>): Promise<void>;

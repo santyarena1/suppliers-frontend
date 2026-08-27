@@ -1,10 +1,4 @@
-import { extractDetailPatch, InvidAdapter } from "./invid.adapter";
-
-describe("InvidAdapter", () => {
-  it("declara que el Excel omite los agotados", () => {
-    expect(new InvidAdapter().omitsUnavailableProducts).toBe(true);
-  });
-});
+import { extractDetailPatch } from "./invid.adapter";
 
 describe("extractDetailPatch", () => {
   it("marca stock 0 si la ficha de la tienda dice out of stock", () => {

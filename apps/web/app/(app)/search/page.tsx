@@ -247,7 +247,6 @@ function SearchPage() {
       arr = arr.filter((p) => p.name?.toLowerCase().includes(q));
     }
     if (hideNoImage) arr = arr.filter((p) => !!p.imageUrl);
-    if (!includeOutOfStock) arr = arr.filter((p) => p.stock == null || p.stock > 0);
     if (minPrice) {
       const m = parseFloat(minPrice);
       if (!isNaN(m)) arr = arr.filter((p) => parsePrice(p.price) >= m);
@@ -261,7 +260,7 @@ function SearchPage() {
     if (sortBy === "name_asc") arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     return arr;
   }, [
-    results, refineText, hideNoImage, includeOutOfStock, minPrice, maxPrice, sortBy, priceMode,
+    results, refineText, hideNoImage, minPrice, maxPrice, sortBy, priceMode,
     purchasePolicies, withIva, withIibb, iibbEpoch,
   ]);
 

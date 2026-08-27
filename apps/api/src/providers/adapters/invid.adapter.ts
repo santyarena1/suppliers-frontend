@@ -76,8 +76,6 @@ const COLUMN_INDEX = {
 @Injectable()
 export class InvidAdapter implements ProviderAdapter {
   readonly provider = "INVID" as const;
-  /** El Excel es una lista de precios de productos a la venta: no manda los agotados. */
-  readonly omitsUnavailableProducts = true;
 
   async syncAll(
     credentials: Record<string, string>,

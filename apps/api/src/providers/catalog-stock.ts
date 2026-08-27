@@ -22,12 +22,18 @@ export function isDisplayedInStock(
   return stock == null || stock > 0;
 }
 
-/** Filtro Prisma para no listar ofertas sin stock, salvo que pidan verlas. */
+/** Si la config del distribuidor no es «Mostrar igual», el catálogo oculta stock 0. */
+export function hidesZeroStockFromCatalog(zeroStockAction?: string | null): boolean {
+  return Boolean(zeroStockAction) && zeroStockAction !== "KEEP";
+}
+
+/** Filtro Prisma: respeta zeroStockAction y el pedido explícito de ver sin stock. */
 export function catalogStockWhere(
   includeOutOfStock: boolean,
-  minStockThreshold: number
+  minStockThreshold: number,
+  zeroStockAction?: string | null
 ): Prisma.TenantProductOfferWhereInput {
-  if (includeOutOfStock) return {};
+  if (includeOutOfStock || !hidesZeroStockFromCatalog(zeroStockAction)) return {};
   const min = Math.max(minStockThreshold, 0);
   return {
     OR: [{ stock: null }, { stock: { gt: min } }],

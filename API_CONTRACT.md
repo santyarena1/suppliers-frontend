@@ -137,7 +137,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `name` (búsqueda) · `includeOutOfStock=true` para listar también ofertas con stock 0 (o debajo del umbral del comercio)
 - **Respuesta esperada**: `ProductDTO[]` · categorías con conteo solo de ofertas con stock
 - **Estado**: IMPLEMENTADO
-- **Notas**: Por defecto no se listan productos con stock 0. La ficha individual (`GET /providers/:provider/products/:externalId`) sí los devuelve si se entra por link. Invid y AIR omiten los agotados del feed: en la sync, lo que no vino se marca stock 0 aunque `missingProductAction` sea KEEP. La UI tiene el filtro «Incluir sin stock» en Búsqueda y en el catálogo del proveedor.
+- **Notas**: Por defecto, si en ese distribuidor la config de stock 0 no es «Mostrar igual», no se listan productos con stock 0 (ni debajo del umbral). `includeOutOfStock=true` los incluye igual. La ficha individual (`GET /providers/:provider/products/:externalId`) sí los devuelve si se entra por link. Qué hacer en la sync con faltantes o stock 0 lo define cada proveedor (`missingProductAction`, `zeroStockAction`), no un comportamiento especial por marca.
 
 ### [FEATURE] Módulo Catálogo (admin)
 - **Método**: GET | POST | PATCH | PUT | DELETE
