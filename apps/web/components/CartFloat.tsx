@@ -82,23 +82,31 @@ function PreviewLinePrice({ item }: { item: CartItem }) {
   useIibbRatesEpoch();
   const pricing = purchaseLinePricing(item, policy, priceModeForCartItem(item), item.qty);
   const includeIibb = withIibb && pricing.mode !== "offline";
-  const shown = displayAmountFromPricing(
-    pricing,
-    { withIva, withIibb: includeIibb, provider: item.provider },
-    item.qty
-  );
-  const primary =
-    currency === "USD"
-      ? formatUSD(shown.displayUsd)
-      : formatARS(convert(shown.displayUsd).amount);
-  const taxText = withIva
-    ? displayTaxBadge(item, { withIva, withIibb: includeIibb, provider: item.provider })
-    : "Sin imp.";
+  const taxOpts = { withIva, withIibb: includeIibb, provider: item.provider };
+  const shown = displayAmountFromPricing(pricing, taxOpts, item.qty);
+  const shownUnit = displayAmountFromPricing(pricing, taxOpts, 1);
+
+  function fmt(usd: number) {
+    return currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
+  }
+
+  const lineTotal = fmt(shown.displayUsd);
+  const unitPrice = fmt(shownUnit.displayUsd);
+  const taxText = withIva ? displayTaxBadge(item, taxOpts) : "Sin imp.";
 
   return (
-    <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-      <span className="text-[12px] font-semibold tabular-nums text-white">{primary}</span>
-      <span className="text-[10px] tabular-nums text-surface-500">+ {taxText}</span>
+    <div className="mt-1 space-y-0.5">
+      <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+        <span className="text-[12px] font-semibold tabular-nums text-white">{lineTotal}</span>
+        {item.qty > 1 && (
+          <span className="text-[10px] tabular-nums text-surface-400">
+            ({item.qty} × {unitPrice})
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] tabular-nums text-surface-500">
+        {item.qty > 1 ? `${unitPrice} c/u · ` : ""}+ {taxText}
+      </p>
     </div>
   );
 }
