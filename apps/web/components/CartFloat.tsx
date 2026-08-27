@@ -183,15 +183,17 @@ function PreviewLinePrice({ item }: { item: CartItem }) {
   });
 
   return (
-    <p className="mt-1 text-[10px] leading-snug text-surface-500 truncate" title={parts.join(" · ")}>
-      <span className="font-semibold tabular-nums text-white">{fmt(totalUsd)}</span>
-      {parts.length > 0 && (
-        <span className="tabular-nums">
-          {" "}
-          · {parts.join(" · ")}
-        </span>
-      )}
-    </p>
+    <div className="mt-1 flex items-start justify-between gap-2">
+      <p
+        className="min-w-0 flex-1 text-[10px] leading-snug text-surface-500 truncate tabular-nums"
+        title={parts.join(" · ")}
+      >
+        {parts.join(" · ")}
+      </p>
+      <span className="flex-shrink-0 text-[12px] font-semibold tabular-nums text-white leading-snug text-right min-w-[4.5rem]">
+        {fmt(totalUsd)}
+      </span>
+    </div>
   );
 }
 
@@ -229,7 +231,9 @@ function PreviewLine({ item }: { item: CartItem }) {
           >
             {item.name}
           </Link>
-          <PreviewQty item={item} />
+          <div className="flex-shrink-0 min-w-[4.5rem] flex justify-end">
+            <PreviewQty item={item} />
+          </div>
         </div>
         <PreviewLinePrice item={item} />
       </div>
