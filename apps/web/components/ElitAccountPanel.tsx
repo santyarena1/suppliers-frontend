@@ -8,7 +8,6 @@ import {
   ElitSaleNote,
   ElitMovement,
   ElitPayment,
-  uploadAuthedFile,
 } from "@/lib/api";
 import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
@@ -16,7 +15,8 @@ import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines } from "@/components/account/draftDetail";
-import { CheckoutField, CheckoutGhostButton, CheckoutInput, CheckoutSelect, CheckoutSubmit } from "@/components/checkout/CheckoutForm";
+import ElitPaymentModal from "@/components/account/ElitPaymentModal";
+import { CheckoutGhostButton } from "@/components/checkout/CheckoutForm";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import {
   useAccountHistoryState,
@@ -185,7 +185,7 @@ export default function ElitAccountPanel() {
         refreshing={loading}
         fromCache={fromCache}
         amountTotal={amountTotal}
-        hint="Pedidos, comprobantes e informes de pago de tu cuenta en elit.com.ar. Mes actual por defecto, de a 25. Actualizar vuelve a consultar el portal."
+        hint="Pedidos y comprobantes de elit.com.ar. Informes de pago: Adjuntar abre el formulario de Elit (banco, tipo, fecha, importe y un archivo)."
         header={
           section === "cta" && account?.balance != null ? (
             <div className="flex items-center gap-2">
@@ -477,14 +477,6 @@ function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: 
   );
 }
 
-function pickOpId(raw: unknown): string | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const rec = raw as Record<string, unknown>;
-  const nested = rec.data && typeof rec.data === "object" ? (rec.data as Record<string, unknown>) : rec;
-  const id = nested.id ?? nested._id ?? rec.id ?? rec._id;
-  return id != null ? String(id) : undefined;
-}
-
 function ElitPaymentSection({
   payments,
   canCreate,
@@ -497,100 +489,11 @@ function ElitPaymentSection({
   onDone: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [banks, setBanks] = useState<{ id?: number; name: string }[]>([]);
-  const [operations, setOperations] = useState<{ bank?: number; code?: string; name?: string }[]>([]);
-  const [bankId, setBankId] = useState("");
-  const [opCode, setOpCode] = useState("");
-  const [date, setDate] = useState("");
-  const [amount, setAmount] = useState("");
-  const [number, setNumber] = useState("");
-  const [opId, setOpId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function loadOptions() {
-    setOpen(true);
-    setErr(null);
-    try {
-      const res = await elitAccountApi.paymentOptions();
-      setBanks(res.data.banks);
-      setOperations(res.data.operations);
-    } catch (e: unknown) {
-      const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(m || "No se pudieron cargar bancos/operaciones de Elit");
-    }
-  }
-
-  const opsForBank = operations.filter((o) => !bankId || String(o.bank) === bankId);
-  const selectedBank = banks.find((b) => String(b.id) === bankId);
-  const selectedOp = opsForBank.find((o) => o.code === opCode) ?? operations.find((o) => o.code === opCode);
-
-  async function createOp() {
-    setBusy(true);
-    setErr(null);
-    setMsg(null);
-    try {
-      const body = {
-        type: selectedOp?.code || opCode || undefined,
-        bank: selectedBank?.id ?? (bankId ? Number(bankId) : undefined),
-        bankName: selectedBank?.name,
-        operationName: selectedOp?.name,
-        date: date || undefined,
-        amount: amount ? Number(amount) : undefined,
-        number: number || undefined,
-      };
-      const res = await elitAccountApi.createOperation(body);
-      let id = pickOpId(res.data);
-      if (!id) {
-        const list = await elitAccountApi.payments();
-        id = pickOpId(list.data.active);
-      }
-      if (!id) throw new Error("Elit creó la operación pero no devolvió un id. Revisá Informes de pago en su sitio.");
-      setOpId(id);
-      setMsg(`Operación ${id} creada. Ahora adjuntá el comprobante.`);
-    } catch (e: unknown) {
-      const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(m || (e instanceof Error ? e.message : "No se pudo crear la operación"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function attach(file: File) {
-    if (!opId) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      await uploadAuthedFile(`/providers/ELIT/payments/operation/${encodeURIComponent(opId)}/attach`, file);
-      setMsg("Comprobante adjunto. Cerrá el informe para mandarlo.");
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "No se pudo adjuntar");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function finish() {
-    setBusy(true);
-    setErr(null);
-    try {
-      await elitAccountApi.finishPayment();
-      setMsg("Informe enviado.");
-      setOpId(null);
-      onDone();
-    } catch (e: unknown) {
-      const m = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setErr(m || "No se pudo cerrar el informe");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-surface-500">
-        Subí el comprobante acá para no entrar a Elit. No se abre un informe vacío: primero elegís banco, tipo, fecha e importe.
+        Adjuntar abre el informe de Elit (no es por pedido): banco, tipo, fecha, importe y un archivo. Enviar crea la operación, adjunta el comprobante y cierra el informe.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
@@ -617,53 +520,18 @@ function ElitPaymentSection({
         </table>
         {payments.length === 0 && <p className="text-center text-xs text-surface-500 py-4">Sin informes en este período.</p>}
       </div>
-      {canCreate !== false && (
-        <CheckoutGhostButton type="button" onClick={loadOptions}>Nuevo informe</CheckoutGhostButton>
+      {canCreate !== false ? (
+        <CheckoutGhostButton type="button" onClick={() => setOpen(true)}>Adjuntar comprobante</CheckoutGhostButton>
+      ) : (
+        <p className="text-xs text-amber-200/90">
+          Elit no deja crear otro informe ahora: suele haber uno abierto. Cuando se acredite o se cierre, aparece Adjuntar.
+        </p>
       )}
       {open && (
-        <div className="grid gap-3 sm:grid-cols-2 border-t border-surface-800 pt-4">
-          <CheckoutField label="Banco">
-            <CheckoutSelect value={bankId} onChange={(e) => { setBankId(e.target.value); setOpCode(""); }}>
-              <option value="">Elegí banco</option>
-              {banks.map((b) => (
-                <option key={String(b.id ?? b.name)} value={b.id != null ? String(b.id) : ""}>{b.name}</option>
-              ))}
-            </CheckoutSelect>
-          </CheckoutField>
-          <CheckoutField label="Tipo">
-            <CheckoutSelect value={opCode} onChange={(e) => setOpCode(e.target.value)}>
-              <option value="">Elegí operación</option>
-              {opsForBank.map((o) => (
-                <option key={String(o.code)} value={o.code || ""}>{o.name}</option>
-              ))}
-            </CheckoutSelect>
-          </CheckoutField>
-          <CheckoutField label="Fecha">
-            <CheckoutInput type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </CheckoutField>
-          <CheckoutField label="Importe">
-            <CheckoutInput type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </CheckoutField>
-          <CheckoutField label="N° operación" className="sm:col-span-2">
-            <CheckoutInput value={number} onChange={(e) => setNumber(e.target.value)} />
-          </CheckoutField>
-          <div className="sm:col-span-2 flex flex-wrap gap-2">
-            <CheckoutSubmit type="button" loading={busy} disabled={busy || !opCode} onClick={createOp}>
-              Crear operación
-            </CheckoutSubmit>
-            {opId && (
-              <>
-                <label className="h-10 px-3 inline-flex items-center text-xs border border-surface-700 text-surface-200 rounded-sm cursor-pointer">
-                  Adjuntar archivo
-                  <input type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void attach(f); }} />
-                </label>
-                <CheckoutGhostButton type="button" loading={busy} disabled={busy} onClick={finish}>Cerrar informe</CheckoutGhostButton>
-              </>
-            )}
-          </div>
-          {msg && <p className="sm:col-span-2 text-xs text-emerald-400">{msg}</p>}
-          {err && <p className="sm:col-span-2 text-xs text-red-400">{err}</p>}
-        </div>
+        <ElitPaymentModal
+          onClose={() => setOpen(false)}
+          onSent={() => { void onDone(); }}
+        />
       )}
     </div>
   );

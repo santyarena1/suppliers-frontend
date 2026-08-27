@@ -190,6 +190,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Replica el popup «Comprobantes de Pago» de Invid. El POST rellena los hidden del form scrapeado y manda los archivos a los mismos `name` del portal. Un informe después de las 17:00 lo toma Invid con el TC del día siguiente (aviso en la UI). Echeq = Galicia.
 
+### [FEATURE] Informes de pago Elit (banco, tipo, fecha, importe, un archivo)
+- **Método**: GET | POST
+- **Ruta**: `/providers/ELIT/payments/options` · `POST /providers/ELIT/payments/operation` · `POST /providers/ELIT/payments/operation/:id/attach` · `POST /providers/ELIT/payments/finish`
+- **Auth**: Bearer, organización comercio con cuenta Elit cargada
+- **Body / Params**: options sin body. Operación `{ type, bank, bankName, operationName, date, amount, number }`. Attach `multipart/form-data` con un `file`. Finish `{}`.
+- **Respuesta esperada**: options `{ banks[], operations[] }` (cada operación puede traer `validations: { date, amount, number }`). Create/attach/finish: payload de Elit (el create suele traer `id` de la operación).
+- **Estado**: IMPLEMENTADO
+- **Notas**: No es por pedido: es un informe de cuenta. La UI es un modal **Enviar** (crear + adjuntar + cerrar). **No** usar `GET /account/payments?include=options` — Elit crea un informe vacío. New Bytes, Air y Grupo Núcleo no tienen upload de comprobantes: solo ver/descargar (GN ni eso).
+
 ## Pendiente (futuro)
 
 

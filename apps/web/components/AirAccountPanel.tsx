@@ -172,7 +172,7 @@ export default function AirAccountPanel() {
         refreshing={loading}
         fromCache={fromCache}
         amountTotal={amountTotal}
-        hint={account?.note || "Datos del portal www.air-intra.com (debe/haber y comprobantes). Mes actual por defecto, de a 25."}
+        hint="Debe/haber y comprobantes de air-intra.com. Se ven y descargan PDFs; Air no tiene adjuntar pago desde Nodo."
         header={
           section === "cta" && account?.balance != null ? (
             <div className="flex items-center gap-2">
@@ -232,7 +232,11 @@ export default function AirAccountPanel() {
           title={detail.title}
           lines={airLines(detail.row)}
           documents={airDocs(detail.row)}
-          note={airDocs(detail.row).length === 0 ? "Esta fila no trajo un link de PDF en el portal." : undefined}
+          note={
+            airDocs(detail.row).length === 0
+              ? "Esta fila no trajo un PDF en el portal. Air no admite adjuntar pagos desde Nodo."
+              : undefined
+          }
           onClose={() => setDetail(null)}
         />
       )}

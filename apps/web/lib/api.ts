@@ -1463,7 +1463,7 @@ export const elitAccountApi = {
   paymentOptions: () =>
     api.get<{
       banks: { id?: number; name: string }[];
-      operations: { bank?: number; code?: string; name?: string }[];
+      operations: { bank?: number; code?: string; name?: string; validations?: unknown }[];
     }>("/providers/ELIT/payments/options"),
   createOperation: (body: {
     type?: string;
