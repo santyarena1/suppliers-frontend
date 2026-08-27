@@ -71,8 +71,7 @@ chat de un compañero.
 
 ### Qué vendría después (prioridad)
 
-1. Reconstruir Tipo 3 (marcas) sobre este mismo modelo. El módulo `/marca` actual no aplica.
-   Ver `docs/PLAN_TIPO3.md`.
+1. Tipo 3 de marcas (org por término, landing, acciones, avisos). Ver `docs/PLAN_TIPO3.md`.
 2. Cupos de descuento por vendedor y metas (si el producto lo pide).
 3. Facturación de publicidad (hoy el resumen a pagar es interno; el cobro es fuera de NODO).
 

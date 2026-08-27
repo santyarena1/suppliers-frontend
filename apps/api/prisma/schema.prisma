@@ -22,6 +22,8 @@ model User {
   passwordHash String
   role         UserRole      @default(ROLE_USER)
   active       Boolean       @default(true)
+  /// Usuario creado por la plataforma (dueño placeholder de una marca del catálogo).
+  managedByPlatform Boolean  @default(false)
   endDate      DateTime?
   brandId      String?
   brand        BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])
@@ -97,6 +99,11 @@ model Tenant {
   /// Marcas: cuenta del módulo de Marcas que representa esta organización.
   brandId            String?       @unique
   brand              BrandAccount? @relation("TenantBrand", fields: [brandId], references: [id])
+  /// Término canónico de catálogo (kind=BRAND) que esta organización representa.
+  catalogTermId      String?       @unique
+  catalogTerm        PlatformCatalogTerm? @relation("BrandCatalogTerm", fields: [catalogTermId], references: [id], onDelete: SetNull)
+  /// Org creada sola al unificar una marca en el catálogo. El placeholder es el dueño.
+  managedByPlatform  Boolean       @default(false)
   contactEmail       String?
   contactPhone       String?
   notes              String?
@@ -126,6 +133,10 @@ model Tenant {
   orders        ProviderOrder[]
   opsAliases    TenantOpsAlias[]
   adCampaigns   AdCampaign[]
+  brandLanding  BrandLanding?
+  brandActions  BrandAction[]
+  notificationsFrom OrgNotification[] @relation("NotifFrom")
+  notificationsTo   OrgNotification[] @relation("NotifTo")
 
   @@index([type, active])
   @@index([mirrorsCommercialFromId])
@@ -191,6 +202,7 @@ model PlatformCatalogTerm {
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   aliases   PlatformCatalogAlias[]
+  brandTenant Tenant? @relation("BrandCatalogTerm")
 
   @@unique([kind, label])
   @@index([kind, visible])
@@ -738,7 +750,116 @@ enum OrderApprovalStatus {
   REJECTED
 }
 
-// ---------- Marcas ----------
+// ---------- Tipo 3: marca sobre Tenant ----------
+
+enum BrandActionKind {
+  PURCHASE_QTY
+  PURCHASE_AMOUNT
+  REBATE
+}
+
+enum BrandActionStatus {
+  DRAFT
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum BrandActionRewardKind {
+  NONE
+  FLAT
+  PER_UNIT
+}
+
+enum BrandActionScopeKind {
+  DISTRIBUTOR
+  RETAILER
+  PRODUCT
+}
+
+enum OrgNotificationKind {
+  BRAND_ACTION
+  BRAND_LANDING
+  DISTRIBUTOR_NOTE
+  SYSTEM
+}
+
+/// Landing pública de una marca. La URL usa publicKey opaca; en el panel B2B se ve el nombre.
+model BrandLanding {
+  id          String   @id @default(uuid())
+  tenantId    String   @unique
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publicKey   String   @unique
+  published   Boolean  @default(false)
+  headline    String?
+  about       String?
+  logoUrl     String?
+  heroUrl     String?
+  websiteUrl  String?
+  supportEmail String?
+  supportPhone String?
+  /// Bloques [{ type: "text"|"image"|"faq", title?, body?, url? }]
+  blocks      Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Acción comercial medible: comprar X en Y distribuidores para Z comercios, con vigencia y rebate.
+model BrandAction {
+  id              String                 @id @default(uuid())
+  tenantId        String
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind            BrandActionKind
+  status          BrandActionStatus      @default(DRAFT)
+  title           String
+  description     String?
+  startsAt        DateTime
+  endsAt          DateTime
+  targetQty       Decimal?               @db.Decimal(14, 4)
+  targetAmountUsd Decimal?               @db.Decimal(14, 4)
+  rewardKind      BrandActionRewardKind  @default(NONE)
+  rewardUsd       Decimal?               @db.Decimal(14, 4)
+  notifyRetailers Boolean                @default(true)
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  scopes          BrandActionScope[]
+
+  @@index([tenantId, status, startsAt])
+  @@index([status, startsAt, endsAt])
+}
+
+model BrandActionScope {
+  id       String               @id @default(uuid())
+  actionId String
+  action   BrandAction          @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  kind     BrandActionScopeKind
+  /// tenantId (comercio o distro) o clave de producto `PROVIDER:externalId`
+  refId    String
+
+  @@unique([actionId, kind, refId])
+  @@index([kind, refId])
+}
+
+/// Aviso a un comercio. Lo mandan marca, distro o el sistema. No cruza locales.
+model OrgNotification {
+  id           String               @id @default(uuid())
+  toTenantId   String
+  toTenant     Tenant               @relation("NotifTo", fields: [toTenantId], references: [id], onDelete: Cascade)
+  fromTenantId String?
+  fromTenant   Tenant?              @relation("NotifFrom", fields: [fromTenantId], references: [id], onDelete: SetNull)
+  kind         OrgNotificationKind
+  title        String
+  body         String
+  actionId     String?
+  landingKey   String?
+  readAt       DateTime?
+  createdAt    DateTime             @default(now())
+
+  @@index([toTenantId, createdAt])
+  @@index([toTenantId, readAt])
+}
+
+// ---------- Marcas (módulo viejo, no es fuente de verdad de Tipo 3) ----------
 
 enum AccessStatus {
   PENDING

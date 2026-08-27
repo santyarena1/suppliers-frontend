@@ -23,6 +23,7 @@ import {
   UpsertLinkDto,
 } from "./dto/tenant.dto";
 import type { TenantContext } from "./tenant-context.service";
+import { tenantLinkRejection } from "./link-sides";
 
 const MEMBERSHIP_INCLUDE = {
   user: {
@@ -364,12 +365,8 @@ export class TenantsService {
       this.assertTenantExists(dto.supplierTenantId),
     ]);
     if (client.id === supplier.id) throw new BadRequestException("Una organización no puede vincularse consigo misma");
-    if (client.type !== "RETAILER") {
-      throw new BadRequestException("El lado cliente del vínculo tiene que ser un comercio");
-    }
-    if (supplier.type === "RETAILER") {
-      throw new BadRequestException("El lado proveedor tiene que ser un distribuidor o una marca");
-    }
+    const linkError = tenantLinkRejection(client.type, supplier.type);
+    if (linkError) throw new BadRequestException(linkError);
     if (dto.accountManagerId) {
       const isMember = await this.prisma.tenantMembership.findUnique({
         where: { tenantId_userId: { tenantId: supplier.id, userId: dto.accountManagerId } },

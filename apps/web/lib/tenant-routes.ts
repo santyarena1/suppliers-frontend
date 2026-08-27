@@ -1,8 +1,9 @@
 import type { TenantType } from "@/lib/auth";
 
-const RETAILER_ONLY = ["/search", "/comparador", "/cart", "/proveedores", "/marcas"];
-const DISTRIBUTOR_ONLY = ["/clientes", "/codigos", "/publicidad"];
-// `/mensajes` y `/equipo` son de los dos tipos: no redirigir.
+const RETAILER_ONLY = ["/search", "/comparador", "/cart", "/proveedores", "/marcas", "/avisos"];
+const DISTRIBUTOR_ONLY = ["/clientes"];
+const BRAND_ONLY = ["/marca"];
+const SUPPLIER_ONLY = ["/codigos", "/publicidad"];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -18,7 +19,26 @@ export function tenantRouteRedirect(
   isSuperadmin: boolean
 ): string | null {
   if (isSuperadmin || !tenantType) return null;
-  if (tenantType === "DISTRIBUTOR" && matchesPrefix(pathname, RETAILER_ONLY)) return "/";
-  if (tenantType === "RETAILER" && matchesPrefix(pathname, DISTRIBUTOR_ONLY)) return "/";
+  if (tenantType === "DISTRIBUTOR") {
+    if (matchesPrefix(pathname, RETAILER_ONLY) || matchesPrefix(pathname, BRAND_ONLY)) return "/";
+  }
+  if (tenantType === "RETAILER") {
+    if (
+      matchesPrefix(pathname, DISTRIBUTOR_ONLY) ||
+      matchesPrefix(pathname, BRAND_ONLY) ||
+      matchesPrefix(pathname, SUPPLIER_ONLY)
+    ) {
+      return "/";
+    }
+  }
+  if (tenantType === "BRAND") {
+    if (
+      matchesPrefix(pathname, RETAILER_ONLY) ||
+      matchesPrefix(pathname, DISTRIBUTOR_ONLY) ||
+      matchesPrefix(pathname, ["/mensajes", "/pedidos"])
+    ) {
+      return "/";
+    }
+  }
   return null;
 }
