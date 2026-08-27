@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import type { CatalogAliasKind, CatalogEnrichmentSource, CatalogMatchKind } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogAiService } from "./catalog-ai.service";
@@ -23,6 +23,7 @@ import {
 
 @Injectable()
 export class CatalogEnrichmentService implements OnModuleInit {
+  private readonly logger = new Logger(CatalogEnrichmentService.name);
   private cache: CatalogEnrichmentContext = {
     aliases: {},
     identities: {},
@@ -40,7 +41,13 @@ export class CatalogEnrichmentService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.refreshCache(true);
+    // No bloquear el listen: si Postgres está saturado en el rolling deploy, el
+    // /health tiene que responder igual. El cache se calienta en background.
+    void this.refreshCache(true).catch((err) => {
+      this.logger.warn(
+        `Cache de catálogo no cargó al arrancar: ${err instanceof Error ? err.message : String(err)}`
+      );
+    });
   }
 
   async getContext(force = false): Promise<CatalogEnrichmentContext> {
