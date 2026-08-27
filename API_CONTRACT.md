@@ -130,6 +130,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: No cruza locales. No se unifica en automático: el comercio elige. Las claves crudas son el texto que ya guardó cada pedido.
 
+### [FEATURE] Búsqueda de catálogo oculta stock 0
+- **Método**: GET
+- **Ruta**: `/search/provider/:provider` · `/catalog/by-category` · `/catalog/featured` · `/catalog/categories`
+- **Auth**: Bearer, organización de la sesión
+- **Body / Params**: `name` (búsqueda) · `includeOutOfStock=true` para listar también ofertas con stock 0 (o debajo del umbral del comercio)
+- **Respuesta esperada**: `ProductDTO[]` · categorías con conteo solo de ofertas con stock
+- **Estado**: IMPLEMENTADO
+- **Notas**: Por defecto no se listan productos con stock 0. La ficha individual (`GET /providers/:provider/products/:externalId`) sí los devuelve si se entra por link. Invid y AIR omiten los agotados del feed: en la sync, lo que no vino se marca stock 0 aunque `missingProductAction` sea KEEP. La UI tiene el filtro «Incluir sin stock» en Búsqueda y en el catálogo del proveedor.
+
 ### [FEATURE] Módulo Catálogo (admin)
 - **Método**: GET | POST | PATCH | PUT | DELETE
 - **Ruta**: `/admin/catalog-enrichment/board` · `/terms` · `/link` · `/move` · `/visibility` · `/incomplete` · `/products/assign` · `/preview` · `/ai/suggest-merges` · `/ai/product-hint` · `/openai`

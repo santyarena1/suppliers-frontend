@@ -36,6 +36,7 @@ import { AirCheckoutDraftDto, AirCheckoutPreviewDto } from "./dto/air-checkout.d
 import { ElitCheckoutDraftDto, ElitCheckoutPreviewDto } from "./dto/elit-checkout.dto";
 import { ElitPaymentOperationDto } from "./dto/elit-payment.dto";
 import { AccountPortalCache, wantsRefresh } from "./account-portal-cache";
+import { parseIncludeOutOfStock } from "./catalog-stock";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -561,10 +562,13 @@ export class ProvidersController {
   search(
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Param("provider") provider: string,
-    @Query("name") name = ""
+    @Query("name") name = "",
+    @Query("includeOutOfStock") includeOutOfStock?: string
   ) {
     if (!tenant) return [];
-    return this.providersService.search(commercialId(tenant), assertProvider(provider), name);
+    return this.providersService.search(commercialId(tenant), assertProvider(provider), name, {
+      includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock),
+    });
   }
 
   @Get("providers/:provider/products/:externalId")
@@ -608,10 +612,16 @@ export class ProvidersController {
   getByCategory(
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Query("category") category: string,
-    @Query("take") take?: string
+    @Query("take") take?: string,
+    @Query("includeOutOfStock") includeOutOfStock?: string
   ) {
     if (!category) throw new BadRequestException("Falta el parámetro category");
     if (!tenant) return [];
-    return this.providersService.getByCategory(commercialId(tenant), category, take ? Number(take) : 60);
+    return this.providersService.getByCategory(
+      commercialId(tenant),
+      category,
+      take ? Number(take) : 60,
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+    );
   }
 }

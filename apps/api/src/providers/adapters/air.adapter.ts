@@ -49,6 +49,8 @@ const FIELD_MAP: { [K in keyof NormalizedProduct]?: (r: AirCsvRow) => Normalized
 @Injectable()
 export class AirAdapter implements ProviderAdapter {
   readonly provider = "AIR" as const;
+  /** La exportación usa stock:"F" (con stock físico): los agotados no vienen. */
+  readonly omitsUnavailableProducts = true;
 
   async syncAll(
     credentials: Record<string, string>,

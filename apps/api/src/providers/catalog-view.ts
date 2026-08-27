@@ -1,5 +1,6 @@
 import type { ProviderSyncCache, TenantProductOffer } from "@prisma/client";
 import { resolveCatalogDisplay, type CatalogEnrichmentContext } from "../catalog/catalog-enrichment";
+import { displayedStock } from "./catalog-stock";
 
 /** Lo que la organización decidió para un proveedor y hay que aplicar al leer. */
 export interface OfferRules {
@@ -55,7 +56,7 @@ export function toProductView(
     currency: offer.currency,
     ivaPercent: offer.ivaPercent == null ? null : Number(offer.ivaPercent),
     // Debajo del mínimo que el comercio considera vendible, es como no tener.
-    stock: rawStock != null && rules.minStockThreshold > 0 && rawStock <= rules.minStockThreshold ? 0 : rawStock,
+    stock: displayedStock(rawStock, rules.minStockThreshold),
     stockStatus: offer.stockStatus,
     active: offer.active,
     needsResync: offer.needsResync,

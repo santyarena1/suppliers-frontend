@@ -94,6 +94,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [results, setResults] = useState<ProductDTO[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
 
   const [config, setConfig] = useState<ProviderConfig | null>(null);
   const [loadingConfig, setLoadingConfig] = useState(true);
@@ -261,18 +262,22 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     }
   }
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
+  async function runCatalogSearch(withZero: boolean) {
     setSearching(true);
     setSearched(true);
     try {
-      const res = await searchApi.byProvider(provider, query);
+      const res = await searchApi.byProvider(provider, query, { includeOutOfStock: withZero });
       setResults(Array.isArray(res.data) ? res.data : []);
     } catch {
       setResults([]);
     } finally {
       setSearching(false);
     }
+  }
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    await runCatalogSearch(includeOutOfStock);
   }
 
   if (!valid) {
@@ -541,6 +546,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                             />
                             <p className="text-[11px] text-surface-500 mt-1">
                               Si el proveedor informa esta cantidad o menos, lo tratamos como sin stock (stock 0). Ej: 0 = usar el stock tal cual lo informa.
+                              La búsqueda y el catálogo no muestran stock 0 salvo que actives «Incluir sin stock».
                             </p>
                           </div>
                           <div>
@@ -554,6 +560,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                 <option key={k} value={k}>{ZERO_STOCK_ACTION_LABELS[k]}</option>
                               ))}
                             </select>
+                            <p className="text-[11px] text-surface-500 mt-1">
+                              «Ocultar» los saca incluso del filtro «Incluir sin stock». «Mostrar igual» los deja en la base: no aparecen en búsqueda salvo ese filtro.
+                            </p>
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-surface-400 mb-1.5">Producto que dejó de venir en la última sync</label>
@@ -566,6 +575,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                 <option key={k} value={k}>{MISSING_ACTION_LABELS[k]}</option>
                               ))}
                             </select>
+                            <p className="text-[11px] text-surface-500 mt-1">
+                              En Invid y AIR el listado solo trae lo que está a la venta: lo que no vino se marca stock 0 aunque elijas «No hacer nada», para que no quede en el catálogo con stock viejo.
+                            </p>
                           </div>
                         </div>
 
@@ -656,8 +668,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                 {tab === "catalog" && (
                   <div className="flex flex-col gap-4">
-                    <form onSubmit={handleSearch} className="flex gap-2 max-w-xl">
-                      <div className="relative flex-1">
+                    <form onSubmit={handleSearch} className="flex gap-2 max-w-xl flex-wrap items-center">
+                      <div className="relative flex-1 min-w-[220px]">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500" />
                         <input
                           value={query}
@@ -669,10 +681,23 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       <button
                         type="submit"
                         disabled={searching}
-                        className="bg-surface-700 hover:bg-surface-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 transition-all"
+                        className="bg-surface-700 hover:bg-surface-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2.5 transition-all"
                       >
                         {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
                       </button>
+                      <label className="flex items-center gap-2 text-xs text-surface-400 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={includeOutOfStock}
+                          onChange={(e) => {
+                            const next = e.target.checked;
+                            setIncludeOutOfStock(next);
+                            if (searched && query.trim()) void runCatalogSearch(next);
+                          }}
+                          className="rounded border-surface-600 bg-surface-800 text-brand-500 focus:ring-brand-500/30"
+                        />
+                        Incluir sin stock
+                      </label>
                     </form>
 
                     {searched && !searching && (
