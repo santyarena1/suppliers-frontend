@@ -7,6 +7,7 @@ import {
   normalizeCatalogLabel,
   normalizeEan,
   normalizePartNumber,
+  parentWouldCycle,
   resolveCatalogDisplay,
   suggestAliasMerges,
   suggestIdentityMerges,
@@ -211,5 +212,21 @@ describe("nombre que queda al unificar", () => {
     ];
     expect(defaultUnifyName(rows)).toBe("Notebooks");
     expect(selectableUnifyNames(rows)[0]).toBe("Notebooks");
+  });
+});
+
+describe("parentWouldCycle", () => {
+  const tree = { a: null, b: "a", c: "b" };
+
+  it("deja adoptar una categoría suelta", () => {
+    expect(parentWouldCycle("c", "a", { a: null, b: "a", c: null })).toBe(false);
+  });
+
+  it("bloquea poner un padre debajo de su hija", () => {
+    expect(parentWouldCycle("a", "c", tree)).toBe(true);
+  });
+
+  it("bloquea ser padre de sí mismo", () => {
+    expect(parentWouldCycle("a", "a", tree)).toBe(true);
   });
 });
