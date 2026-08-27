@@ -13,6 +13,7 @@ export interface SearchUiState {
   minPrice?: string;
   maxPrice?: string;
   hideNoImage?: boolean;
+  includeOutOfStock?: boolean;
   scrollTop?: number;
 }
 

@@ -208,8 +208,13 @@ export const authApi = {
 // --- Search ---
 export interface SearchAllOptions {
   providers?: Provider[];
+  includeOutOfStock?: boolean;
   onProviderResult?: (provider: Provider, products: ProductDTO[]) => void;
   onProviderError?: (provider: Provider, error: unknown) => void;
+}
+
+function searchParams(name: string, includeOutOfStock?: boolean) {
+  return includeOutOfStock ? { name, includeOutOfStock: true } : { name };
 }
 
 export const searchApi = {
@@ -220,7 +225,9 @@ export const searchApi = {
     const results = await Promise.allSettled(
       providers.map(async (p) => {
         try {
-          const r = await api.get<ProductDTO[]>(`/search/provider/${p}`, { params: { name } });
+          const r = await api.get<ProductDTO[]>(`/search/provider/${p}`, {
+            params: searchParams(name, opts.includeOutOfStock),
+          });
           const data = Array.isArray(r.data) ? r.data : [];
           opts.onProviderResult?.(p, data);
           return { provider: p, data };
@@ -236,8 +243,10 @@ export const searchApi = {
     }
     return { data: merged };
   },
-  byProvider: (provider: Provider, name: string) =>
-    api.get<ProductDTO[]>(`/search/provider/${provider}`, { params: { name } }),
+  byProvider: (provider: Provider, name: string, opts: { includeOutOfStock?: boolean } = {}) =>
+    api.get<ProductDTO[]>(`/search/provider/${provider}`, {
+      params: searchParams(name, opts.includeOutOfStock),
+    }),
   filtered: async (name: string, filters: Record<string, boolean>, opts: SearchAllOptions = {}) => {
     const providers = (await loadLinkedProviders()).filter((p) => filters[p]);
     return searchApi.all(name, { ...opts, providers });
@@ -1510,7 +1519,14 @@ export const catalogApi = {
     api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`),
   categories: () => api.get<CategoryCount[]>("/catalog/categories"),
   featured: (take = 24) => api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
-  byCategory: (category: string, take = 60) => api.get<ProductDTO[]>("/catalog/by-category", { params: { category, take } }),
+  byCategory: (category: string, take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
+    api.get<ProductDTO[]>("/catalog/by-category", {
+      params: {
+        category,
+        take,
+        ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+      },
+    }),
   providerDisplay: () => api.get<ProviderDisplay[]>("/catalog/provider-display"),
 };
 

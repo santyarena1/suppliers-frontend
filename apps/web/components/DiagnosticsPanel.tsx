@@ -45,7 +45,7 @@ export default function DiagnosticsPanel() {
     setResults((prev) => ({ ...prev, [provider]: { status: "running" } }));
     const start = performance.now();
     try {
-      const res = await searchApi.byProvider(provider, query.trim());
+      const res = await searchApi.byProvider(provider, query.trim(), { includeOutOfStock: true });
       const duration = Math.round(performance.now() - start);
       const data = Array.isArray(res.data) ? res.data : [];
       setResults((prev) => ({

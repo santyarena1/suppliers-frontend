@@ -84,11 +84,13 @@ function SearchPage() {
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
   const lastUrlQRef = useRef<string | null>(null);
+  const lastSearchKind = useRef<"search" | "category">("search");
 
   function syncSearchUrl(q: string) {
     const trimmed = q.trim();
@@ -102,7 +104,7 @@ function SearchPage() {
     }
   }
 
-  async function handleCategoryClick(category: string) {
+  async function handleCategoryClick(category: string, withZero = includeOutOfStock) {
     setError("");
     setLoading(true);
     setSearched(true);
@@ -111,8 +113,9 @@ function SearchPage() {
     setRefineText("");
     setMinPrice("");
     setMaxPrice("");
+    lastSearchKind.current = "category";
     try {
-      const res = await catalogApi.byCategory(category);
+      const res = await catalogApi.byCategory(category, 60, { includeOutOfStock: withZero });
       const data = Array.isArray(res.data) ? res.data : [];
       setResults(data);
       persistResults(category, data);
@@ -151,9 +154,11 @@ function SearchPage() {
     });
   }, []);
 
-  async function runSearch(term: string, opts?: { track?: boolean }) {
+  async function runSearch(term: string, opts?: { track?: boolean; includeOutOfStock?: boolean }) {
     const q = term.trim();
     if (!q) return;
+    const withZero = opts?.includeOutOfStock ?? includeOutOfStock;
+    lastSearchKind.current = "search";
     setError("");
     setLoading(true);
     setSearched(true);
@@ -165,6 +170,7 @@ function SearchPage() {
     try {
       const res = await searchApi.all(q, {
         providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
+        includeOutOfStock: withZero,
       });
       const data = res.data;
       setResults(data);
@@ -184,6 +190,14 @@ function SearchPage() {
   async function handleSearch(e?: React.FormEvent) {
     e?.preventDefault();
     await runSearch(query);
+  }
+
+  function toggleOutOfStock() {
+    const next = !includeOutOfStock;
+    setIncludeOutOfStock(next);
+    if (!searched || !activeQuery.trim()) return;
+    if (lastSearchKind.current === "category") void handleCategoryClick(activeQuery, next);
+    else void runSearch(activeQuery, { track: false, includeOutOfStock: next });
   }
 
   function resetToHome() {
@@ -214,6 +228,7 @@ function SearchPage() {
     if (typeof ui?.minPrice === "string") setMinPrice(ui.minPrice);
     if (typeof ui?.maxPrice === "string") setMaxPrice(ui.maxPrice);
     if (typeof ui?.hideNoImage === "boolean") setHideNoImage(ui.hideNoImage);
+    if (typeof ui?.includeOutOfStock === "boolean") setIncludeOutOfStock(ui.includeOutOfStock);
     syncSearchUrl(q);
     // Restaurar scroll después del paint
     requestAnimationFrame(() => {
@@ -374,8 +389,9 @@ function SearchPage() {
       minPrice,
       maxPrice,
       hideNoImage,
+      includeOutOfStock,
     });
-  }, [searched, sortBy, viewMode, refineText, minPrice, maxPrice, hideNoImage, setUiState]);
+  }, [searched, sortBy, viewMode, refineText, minPrice, maxPrice, hideNoImage, includeOutOfStock, setUiState]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -462,6 +478,19 @@ function SearchPage() {
                 </span>
               )}
               <PrefsPanel />
+
+              <button
+                type="button"
+                onClick={toggleOutOfStock}
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
+                  includeOutOfStock
+                    ? "border-brand-500 text-brand-400 bg-brand-600/10"
+                    : "border-surface-700 text-surface-400 hover:text-surface-200"
+                }`}
+                title="Por defecto no se listan productos con stock 0"
+              >
+                Incluir sin stock
+              </button>
 
               <button
                 onClick={() => setShowFilters(!showFilters)}
@@ -582,6 +611,19 @@ function SearchPage() {
                     Con imagen
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={toggleOutOfStock}
+                    className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                      includeOutOfStock
+                        ? "border-brand-500 bg-brand-600/15 text-brand-400"
+                        : "border-surface-700 text-surface-500 hover:text-surface-300"
+                    }`}
+                    title="Por defecto el catálogo oculta los productos con stock 0"
+                  >
+                    Incluir sin stock
+                  </button>
+
                   {retailer && (
                     <span className="flex items-center gap-1">
                       {anyOffline ? (
@@ -664,7 +706,21 @@ function SearchPage() {
                 <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
                   <Package className="w-9 h-9 text-surface-700 mb-1" />
                   <p className="text-sm font-medium text-surface-300">Sin resultados</p>
-                  <p className="text-xs text-surface-500">Probá con otro término o activá más proveedores</p>
+                  <p className="text-xs text-surface-500">
+                    {includeOutOfStock
+                      ? "Probá con otro término o activá más proveedores"
+                      : "Probá con otro término, más proveedores, o «Incluir sin stock»"}
+                  </p>
+                </div>
+              )}
+
+              {hydrated && !loading && searched && !error && results.length > 0 && filtered.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
+                  <Package className="w-9 h-9 text-surface-700 mb-1" />
+                  <p className="text-sm font-medium text-surface-300">Nada con esos filtros</p>
+                  <p className="text-xs text-surface-500">
+                    {includeOutOfStock ? "Probá limpiar los filtros de esta búsqueda" : "Activá «Incluir sin stock» o limpiá los filtros"}
+                  </p>
                 </div>
               )}
 
