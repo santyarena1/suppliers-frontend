@@ -1,6 +1,6 @@
-import { BadGatewayException, BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import axios from "axios";
-import { parseAccountStatement, parseOrdersTable } from "./invid-order.parser";
+import { applyInvidOrderRates, parseAccountStatement, parseOrdersTable } from "./invid-order.parser";
 import { parseFileUploadForms } from "./html-table";
 import { documentFile } from "./document-file";
 import { assertHttpsHost } from "./safe-url";
@@ -11,6 +11,8 @@ const INVID_HOSTS = ["www.invidcomputers.com", "invidcomputers.com"];
 
 @Injectable()
 export class InvidAccountService {
+  private readonly logger = new Logger(InvidAccountService.name);
+
   private async login(username: string, password: string): Promise<string> {
     try {
       const res = await axios.post(
@@ -42,20 +44,48 @@ export class InvidAccountService {
   async getOrders(credentials: Record<string, string>) {
     const { username, password } = this.creds(credentials);
     const cookie = await this.login(username, password);
-    const res = await axios.get<string>(`${SITE_BASE}/lista_pedidos_invid.php`, {
-      headers: { Cookie: cookie },
-      timeout: 20_000,
-      responseType: "text",
-    });
+    const [res, currentRate] = await Promise.all([
+      axios.get<string>(`${SITE_BASE}/lista_pedidos_invid.php`, {
+        headers: { Cookie: cookie },
+        timeout: 20_000,
+        responseType: "text",
+      }),
+      this.fetchCurrentRate(cookie),
+    ]);
     const parsed = parseOrdersTable(res.data);
     const paymentUploads = parseFileUploadForms(res.data);
     return {
-      orders: parsed.orders,
+      orders: applyInvidOrderRates(parsed.orders, currentRate),
+      currentExchangeRate: currentRate > 0 ? currentRate : undefined,
       paymentUploads,
       note: paymentUploads.length === 0
         ? "Si Invid muestra un formulario para adjuntar el comprobante de pago en esta sesión, aparece acá. Si no, el alta se hace desde su portal."
         : undefined,
     };
+  }
+
+  /** Cotización viva del portal. Si falla, el listado igual se muestra. */
+  private async fetchCurrentRate(cookie: string): Promise<number> {
+    try {
+      const res = await axios.get<string>(`${SITE_BASE}/ajaxCarrito.php`, {
+        headers: { Cookie: cookie },
+        params: { funcion: "traerCotizacionOpcionPago", opcion: "67" },
+        timeout: 8_000,
+        responseType: "text",
+      });
+      const raw = res.data as unknown;
+      const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
+        cotizacion?: number | string;
+        cotizac?: number | string;
+      };
+      const n = Number(parsed?.cotizacion ?? parsed?.cotizac);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch (err) {
+      this.logger.warn(
+        `Invid no devolvió cotización actual: ${err instanceof Error ? err.message : String(err)}`
+      );
+      return 0;
+    }
   }
 
   async getAccountStatement(credentials: Record<string, string>) {

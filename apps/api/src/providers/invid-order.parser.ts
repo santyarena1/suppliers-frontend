@@ -243,6 +243,19 @@ export interface InvidOrderItem {
   total?: string;
 }
 
+export interface InvidOrderTotals {
+  net?: number;
+  iva?: number;
+  internos?: number;
+  percepciones?: number;
+  shipping?: number;
+  /** Resto no discriminado (total − neto − envío − lo que sí vino). */
+  taxes?: number;
+  total?: number;
+}
+
+export type InvidExchangeRateSource = "order" | "current";
+
 export interface InvidOrderRow {
   orderNumber: string;
   webOrderNumber: string;
@@ -255,6 +268,252 @@ export interface InvidOrderRow {
   payment?: string;
   items: InvidOrderItem[];
   links: { href: string; label: string }[];
+  totals?: InvidOrderTotals;
+  exchangeRate?: number;
+  exchangeRateSource?: InvidExchangeRateSource;
+  amountArs?: number;
+}
+
+const LINE_STATUS = /^(abierto|cerrado|cancelado|pendiente|pedido|vencido|anulado|facturado)$/i;
+
+export function formatUsMoney(n: number): string {
+  return `US$ ${round2(n).toFixed(2)}`;
+}
+
+function isMoneyText(t: string): boolean {
+  return /(?:US\$|AR\$|USD)\s*[\d.,]+/i.test(t) || /^\$?\s*[\d]+[.,]\d{2}$/.test(t.trim());
+}
+
+function isQtyText(t: string): boolean {
+  return /^\d{1,5}$/.test(t.trim());
+}
+
+function isUselessName(s: string): boolean {
+  return !s
+    || LINE_STATUS.test(s)
+    || isMoneyText(s)
+    || isQtyText(s)
+    || /x---det--/i.test(s)
+    || /^(https?:|\/|\.)/i.test(s);
+}
+
+function extractProductCode(text: string, html: string): string | undefined {
+  const fromParen = text.match(/\((\d{4,})\)/)?.[1];
+  if (fromParen) return fromParen;
+  const fromHref = html.match(/x---det--(\d+)/i)?.[1]
+    ?? html.match(/nro_?art(?:iculo)?=(\d+)/i)?.[1];
+  if (fromHref) return fromHref;
+  const bare = text.match(/\b(0?41\d{4,})\b/)?.[1];
+  return bare;
+}
+
+function parseItemRow(tdHtmls: string[]): InvidOrderItem | null {
+  const texts = tdHtmls.map(stripTags);
+  if (texts.length < 2) return null;
+  const joined = texts.join(" ");
+  if (/calificaci[oó]n/i.test(joined) && /producto/i.test(joined)) return null;
+  if (/producto/i.test(joined) && /precio/i.test(joined)) return null;
+  if (/cargar a pedido/i.test(joined)) return null;
+  if (/^total:/i.test(joined) || texts.some((t) => /^total:/i.test(t))) return null;
+  if (texts.some((t) => /forma de (entrega|pago)/i.test(t))) return null;
+
+  let priceIdx = -1;
+  for (let i = 0; i < texts.length; i++) {
+    if (isMoneyText(texts[i])) priceIdx = i;
+  }
+  let qtyIdx = -1;
+  for (let i = texts.length - 1; i >= 0; i--) {
+    if (i !== priceIdx && isQtyText(texts[i])) {
+      qtyIdx = i;
+      break;
+    }
+  }
+
+  const htmlBlob = tdHtmls.join(" ");
+  const candidates = texts
+    .map((t, i) => {
+      const anchors = extractAnchors(tdHtmls[i] ?? "");
+      const titles = [...(tdHtmls[i] ?? "").matchAll(/\b(?:title|alt)="([^"]+)"/gi)]
+        .map((m) => decodeEntities(m[1]).trim())
+        .filter(Boolean);
+      const linkLabel = anchors.map((a) => a.label).find((l) => l && !isUselessName(l));
+      const title = titles.find((s) => s && !isUselessName(s));
+      const label = [t, linkLabel, title].find((s) => s && !isUselessName(s)) ?? "";
+      return { t, i, label, html: tdHtmls[i] ?? "" };
+    })
+    .filter((c) => c.i !== priceIdx && c.i !== qtyIdx && (c.label || extractProductCode(c.t, c.html)));
+
+  const named = candidates.sort((a, b) => {
+    const score = (x: (typeof candidates)[number]) => {
+      let s = 0;
+      if (/\(\d{4,}\)/.test(x.label || x.t)) s += 10;
+      if (/x---det--/i.test(x.html)) s += 8;
+      s += Math.min((x.label || x.t).length, 80) / 80;
+      return s;
+    };
+    return score(b) - score(a);
+  })[0];
+
+  if (priceIdx < 0 && qtyIdx < 0) return null;
+
+  const rawName = named?.label || named?.t || "";
+  if (/^(subtotal|neto|total:?|iva|i\.v\.a\.?|imp(?:uestos?)?\.?\s*internos|internos|perc(?:epci[oó]n(?:es)?)?|iibb|env[ií]o|flete)\b/i.test(rawName)) {
+    return null;
+  }
+  const code = extractProductCode(`${rawName} ${joined}`, htmlBlob);
+  if (!rawName && !code) return null;
+  if (rawName && LINE_STATUS.test(rawName) && !code) return null;
+
+  const name = rawName && !LINE_STATUS.test(rawName) ? rawName : (code ? `(${code})` : rawName);
+  const price = priceIdx >= 0 ? texts[priceIdx] : undefined;
+  const qty = qtyIdx >= 0 ? texts[qtyIdx] : undefined;
+  let total: string | undefined;
+  if (price && qty) {
+    const p = parseInvidMoney(price);
+    const q = Number(qty);
+    if (p > 0 && Number.isFinite(q) && q > 0) total = formatUsMoney(p * q);
+  }
+  return { code, name, price, qty, total };
+}
+
+function pickLabeledMoney(text: string, re: RegExp): number | undefined {
+  const m = text.match(re);
+  if (!m) return undefined;
+  const n = parseInvidMoney(m[1]);
+  return n > 0 ? n : undefined;
+}
+
+function assignTotalLabel(label: string, value: string, totals: InvidOrderTotals) {
+  if (!/\d/.test(value)) return;
+  const n = parseInvidMoney(value);
+  if (!Number.isFinite(n)) return;
+  const l = label.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!l) return;
+  if (/^total\b/.test(l)) {
+    totals.total = n;
+    return;
+  }
+  if (/(subtotal|neto|mercader)/.test(l) && !/\biva\b|i\.v\.a/.test(l)) {
+    totals.net = n;
+    return;
+  }
+  if (/\biva\b|i\.v\.a/.test(l)) {
+    totals.iva = n;
+    return;
+  }
+  if (/interno/.test(l)) {
+    totals.internos = n;
+    return;
+  }
+  if (/perc|iibb/.test(l)) {
+    totals.percepciones = n;
+    return;
+  }
+  if (/env[ií]o|flete/.test(l)) {
+    totals.shipping = n;
+    return;
+  }
+}
+
+function parseExchangeRateValue(raw: string): number | undefined {
+  const n = parseInvidMoney(raw);
+  if (!Number.isFinite(n) || n < 10 || n >= 100_000) return undefined;
+  return n;
+}
+
+function parseOutlineTotals(html: string): { totals: InvidOrderTotals; exchangeRate?: number } {
+  const totals: InvidOrderTotals = {};
+  let exchangeRate: number | undefined;
+  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html))) {
+    const texts = extractTdHtml(m[1]).map(stripTags).filter((t) => t.length > 0);
+    if (texts.length === 0) continue;
+    const joined = texts.join(" ");
+    if (parseItemRow(extractTdHtml(m[1]))) continue;
+    const label = texts[0];
+    const value = texts.length >= 2 ? texts[texts.length - 1] : texts[0];
+    assignTotalLabel(label, value, totals);
+    assignTotalLabel(joined, joined, totals);
+    if (/cotizaci[oó]n|tipo\s+de\s+cambio|\btc\b/.test(joined.toLowerCase())) {
+      const rate = parseExchangeRateValue(value) ?? parseExchangeRateValue(joined);
+      if (rate) exchangeRate = rate;
+    }
+  }
+
+  const text = stripTags(html);
+  if (totals.iva == null) {
+    totals.iva = pickLabeledMoney(text, /\bI\.?V\.?A\.?(?:\s*\(?\d+(?:[.,]\d+)?\s*%\)?)?\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.internos == null) {
+    totals.internos = pickLabeledMoney(text, /imp(?:uestos?)?\.?\s*internos\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.percepciones == null) {
+    totals.percepciones = pickLabeledMoney(text, /perc(?:epci[oó]n(?:es)?)?(?:\s*(?:iibb|IIBB))?\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.shipping == null) {
+    totals.shipping = pickLabeledMoney(text, /(?:env[ií]o|flete|costo de env[ií]o)\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.net == null) {
+    totals.net = pickLabeledMoney(text, /(?:subtotal|neto)\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.total == null) {
+    totals.total = pickLabeledMoney(text, /\btotal\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (exchangeRate == null) {
+    const rateMatch = text.match(/cotizaci[oó]n(?:\s*(?:del\s+d[oó]lar|usd)?)?\s*[:.]?\s*([\d.,]+)/i)
+      ?? text.match(/tipo\s+de\s+cambio\s*[:.]?\s*([\d.,]+)/i);
+    if (rateMatch) exchangeRate = parseExchangeRateValue(rateMatch[1]);
+  }
+
+  return { totals, exchangeRate };
+}
+
+function finalizeTotals(orderAmount: string, items: InvidOrderItem[], parsed: InvidOrderTotals): InvidOrderTotals | undefined {
+  const totals: InvidOrderTotals = { ...parsed };
+  const lineNet = round2(items.reduce((sum, it) => {
+    const qty = Number(String(it.qty ?? "").replace(/[^\d]/g, ""));
+    const price = parseInvidMoney(it.price);
+    if (price > 0 && Number.isFinite(qty) && qty > 0) return sum + price * qty;
+    return sum + parseInvidMoney(it.total);
+  }, 0));
+  if (totals.net == null && lineNet > 0) totals.net = lineNet;
+
+  const total = (totals.total && totals.total > 0) ? totals.total : parseInvidMoney(orderAmount);
+  if (total > 0) totals.total = total;
+
+  const accounted = round2(
+    (totals.net ?? 0)
+    + (totals.iva ?? 0)
+    + (totals.internos ?? 0)
+    + (totals.percepciones ?? 0)
+    + (totals.shipping ?? 0)
+  );
+  const hasSplit = totals.iva != null || totals.internos != null || totals.percepciones != null;
+  if (totals.net != null && totals.total != null && totals.total - accounted > 0.05 && !hasSplit) {
+    totals.taxes = round2(totals.total - accounted);
+  }
+
+  const hasBreakdown = totals.net != null || totals.iva != null || totals.internos != null
+    || totals.percepciones != null || totals.shipping != null || totals.taxes != null;
+  return hasBreakdown ? totals : undefined;
+}
+
+/** Completa TC (del HTML o el actual de Invid) y el equivalente en pesos. */
+export function applyInvidOrderRates(orders: InvidOrderRow[], currentRate: number): InvidOrderRow[] {
+  const live = Number.isFinite(currentRate) && currentRate > 0 ? currentRate : 0;
+  return orders.map((order) => {
+    const fromOrder = order.exchangeRate && order.exchangeRate > 0 ? order.exchangeRate : 0;
+    const exchangeRate = fromOrder || live || undefined;
+    const exchangeRateSource: InvidExchangeRateSource | undefined = fromOrder
+      ? "order"
+      : exchangeRate
+        ? "current"
+        : undefined;
+    const usd = parseInvidMoney(order.amount);
+    const amountArs = exchangeRate && usd > 0 ? round2(usd * exchangeRate) : undefined;
+    return { ...order, exchangeRate, exchangeRateSource, amountArs };
+  });
 }
 
 function extractTdHtml(trInner: string): string[] {
@@ -277,28 +536,28 @@ function extractAnchors(html: string): { href: string; label: string }[] {
   return links;
 }
 
-function parseOutlineBlock(html: string): Pick<InvidOrderRow, "items" | "delivery" | "payment" | "links"> {
+function parseOutlineBlock(html: string): Pick<
+  InvidOrderRow,
+  "items" | "delivery" | "payment" | "links" | "totals" | "exchangeRate"
+> {
   const items: InvidOrderItem[] = [];
   const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html))) {
-    const texts = extractTdHtml(m[1]).map(stripTags);
-    if (texts.length < 3) continue;
-    const joined = texts.join(" ");
-    if (/calificaci[oó]n/i.test(joined) && /producto/i.test(joined)) continue;
-    if (/cargar a pedido/i.test(joined)) continue;
-    if (/^total:/i.test(joined) || texts.some((t) => /^total:/i.test(t))) continue;
-    const name = texts.length >= 4 ? texts[1] : texts[0];
-    if (!name || /forma de (entrega|pago)/i.test(name)) continue;
-    const price = texts.length >= 4 ? texts[2] : texts[1];
-    const qty = texts.length >= 4 ? texts[3] : texts[2];
-    if (!/\d/.test(price || "") && !/\d/.test(qty || "")) continue;
-    const code = name.match(/\((\d{4,})\)/)?.[1];
-    items.push({ code, name, price, qty });
+    const item = parseItemRow(extractTdHtml(m[1]));
+    if (item) items.push(item);
   }
   const delivery = stripTags(html.match(/<b>\s*Forma de Entrega\s*<\/b>\s*([^<]+)/i)?.[1] ?? "") || undefined;
   const payment = stripTags(html.match(/<b>\s*Forma de Pago\s*<\/b>\s*([^<]+)/i)?.[1] ?? "") || undefined;
-  return { items, delivery, payment, links: extractAnchors(html) };
+  const meta = parseOutlineTotals(html);
+  return {
+    items,
+    delivery,
+    payment,
+    links: extractAnchors(html),
+    totals: meta.totals,
+    exchangeRate: meta.exchangeRate,
+  };
 }
 
 export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
@@ -341,7 +600,14 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
     const outlineHtml = nextOrder >= 0 ? after.slice(0, nextOrder) : after.slice(0, 20_000);
     const outline = /id=["']menu\d+outline["']/i.test(outlineHtml)
       ? parseOutlineBlock(outlineHtml)
-      : { items: [] as InvidOrderItem[], delivery: undefined, payment: undefined, links: [] as { href: string; label: string }[] };
+      : {
+          items: [] as InvidOrderItem[],
+          delivery: undefined,
+          payment: undefined,
+          links: [] as { href: string; label: string }[],
+          totals: undefined as InvidOrderTotals | undefined,
+          exchangeRate: undefined as number | undefined,
+        };
 
     orders.push({
       orderNumber,
@@ -355,6 +621,8 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
       payment: outline.payment,
       items: outline.items,
       links: outline.links,
+      totals: finalizeTotals(amount, outline.items, outline.totals ?? {}),
+      exchangeRate: outline.exchangeRate,
     });
   }
   return { orders };

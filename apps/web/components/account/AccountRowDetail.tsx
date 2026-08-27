@@ -20,6 +20,7 @@ export default function AccountRowDetail({
   title,
   lines,
   items,
+  totals,
   documents,
   note,
   upload,
@@ -29,6 +30,7 @@ export default function AccountRowDetail({
   title: string;
   lines: AccountDetailLine[];
   items?: AccountDetailItem[];
+  totals?: AccountDetailLine[];
   documents?: AccountDetailDoc[];
   note?: string;
   upload?: {
@@ -62,7 +64,7 @@ export default function AccountRowDetail({
         role="dialog"
         aria-modal="true"
         aria-labelledby="account-row-title"
-        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
       >
         <div className="px-5 py-4 border-b border-surface-800 flex items-start justify-between gap-3 sticky top-0 bg-surface-950">
           <h2 id="account-row-title" className="text-base font-semibold text-white tracking-tight">{title}</h2>
@@ -86,6 +88,14 @@ export default function AccountRowDetail({
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Ítems</p>
               <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+                    <th className="text-left font-semibold pb-1.5 pr-2">Producto</th>
+                    <th className="text-right font-semibold pb-1.5">Cant.</th>
+                    <th className="text-right font-semibold pb-1.5 pl-2">P. unit.</th>
+                    <th className="text-right font-semibold pb-1.5 pl-2">Total</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-surface-800">
                   {items!.map((it, i) => (
                     <tr key={i}>
@@ -94,11 +104,26 @@ export default function AccountRowDetail({
                         {it.name}
                       </td>
                       <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{it.qty ?? ""}</td>
-                      <td className="py-1.5 text-right tabular-nums text-surface-200 whitespace-nowrap">{it.total ?? it.price ?? ""}</td>
+                      <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{it.price ?? ""}</td>
+                      <td className="py-1.5 text-right tabular-nums text-surface-200 whitespace-nowrap pl-2">{it.total ?? ""}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {(totals ?? []).length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Importes</p>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                {totals!.filter((l) => l.value).map((l) => (
+                  <div key={l.label} className="contents">
+                    <dt className="text-[10px] uppercase tracking-wider text-surface-500 pt-0.5">{l.label}</dt>
+                    <dd className="text-surface-200 text-right tabular-nums break-words">{l.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           )}
 

@@ -172,6 +172,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Rellena `ProviderSyncCache.imageUrl` **solo si está vacío** (salvo edición manual). Busca en `POST https://google.serper.dev/images` (`X-API-KEY`, `gl=ar`, `hl=es`). **No guarda una URL rota**: descarga la foto, comprueba que sea JPEG/PNG/WebP/GIF usable y la persiste en `/assets/...`. Si la primera de Serper no carga, prueba las siguientes; si ninguna sirve, el producto queda `skipped` (sin foto). Corre en segundo plano de a tandas de 50. La API key se cifra y nunca se devuelve. Cada producto tocado queda en `ImageSyncFill` (historial editable). **Prioridad**: primero los que se muestran en algún catálogo (`TenantProductOffer.active` y `stock > 0`); sin stock, ocultos o sin oferta quedan para **después** (cuando ya no hay visibles pendientes, el cron los hace solo). **Editar**: `POST /admin/images/products/:productId/serper-search` `{ query? }` → `{ query, images[] }` (solo fotos que cargan); `PUT /admin/images/products/:productId/image` `{ imageUrl, source: serper_pick|upload }`. **Historial**: `GET /admin/images/history?page=&take=&status=&provider=&q=`. **Cron** 8:00 y 20:00 `America/Argentina/Buenos_Aires`, tope 200 por corrida (`IMAGE_SYNC_CRON_LIMIT`), se apaga con `IMAGE_SYNC_CRON_DISABLED=true` o `PUT /admin/images/cron { enabled }`. Los “sin resultado” no se reintentan solos: se editan desde el historial. El sync de catálogo no borra una foto de Serper si el proveedor sigue vacío.
 
+### [FEATURE] Detalle de pedidos Invid (productos, TC, impuestos)
+- **Método**: GET
+- **Ruta**: `/providers/INVID/orders`
+- **Auth**: Bearer, organización comercio con cuenta Invid cargada
+- **Body / Params**: `refresh=1` opcional para saltear cache
+- **Respuesta esperada**: `{ orders: InvidOrder[], currentExchangeRate?, paymentUploads?, note? }`. Cada pedido incluye `items[]` (código, nombre, precio s/IVA, cantidad, total de línea), `totals?` (`net`, `iva`, `internos`, `percepciones`, `shipping`, `taxes`, `total`), `exchangeRate?`, `exchangeRateSource` (`order` | `current`) y `amountArs?`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: El HTML del portal a veces pone el estado de línea (Abierto) en una columna: el parser identifica producto / precio / cantidad por contenido, no por posición. No se inventan alícuotas. Si Invid no discrimina IVA/IIBB, `taxes` es el resto entre el neto de las líneas y el total. El TC del HTML del pedido manda; si no viene, se usa la cotización actual de Invid (`traerCotizacionOpcionPago`) y se etiqueta como actual, no histórica.
+
 ## Pendiente (futuro)
 
 

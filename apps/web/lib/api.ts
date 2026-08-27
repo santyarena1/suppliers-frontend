@@ -864,6 +864,15 @@ export interface InvidOrderItem {
   qty?: string;
   total?: string;
 }
+export interface InvidOrderTotals {
+  net?: number;
+  iva?: number;
+  internos?: number;
+  percepciones?: number;
+  shipping?: number;
+  taxes?: number;
+  total?: number;
+}
 export interface InvidOrder {
   orderNumber: string;
   webOrderNumber: string;
@@ -876,6 +885,10 @@ export interface InvidOrder {
   payment?: string;
   items?: InvidOrderItem[];
   links?: { href: string; label: string }[];
+  totals?: InvidOrderTotals;
+  exchangeRate?: number;
+  exchangeRateSource?: "order" | "current";
+  amountArs?: number;
 }
 export interface InvidFileForm {
   action: string;
@@ -894,7 +907,7 @@ export interface InvidAccountMovement {
 }
 export const invidAccountApi = {
   orders: (opts?: { refresh?: boolean }) =>
-    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>(
+    api.get<{ orders: InvidOrder[]; currentExchangeRate?: number; paymentUploads?: InvidFileForm[]; note?: string }>(
       "/providers/INVID/orders",
       { params: opts?.refresh ? { refresh: 1 } : undefined }
     ),

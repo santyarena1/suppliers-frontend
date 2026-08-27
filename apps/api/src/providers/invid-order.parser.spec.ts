@@ -10,6 +10,7 @@ import {
   parseQuotedShipping,
   parseXmlCost,
   collectFormFields,
+  applyInvidOrderRates,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -127,6 +128,119 @@ describe("invid-order.parser", () => {
     });
     expect(order.items[0]).toMatchObject({ code: "0417914", name: expect.stringContaining("Cargador"), qty: "4" });
     expect(order.links.some((l) => l.href.includes("ultima.php"))).toBe(true);
+  });
+
+  it("no usa el estado de línea (Abierto) como nombre del producto", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img onclick="showhide('menu1outline','imgm1','tr1')" /></td>
+        <td class="valorizar">616098</td>
+        <td class="valorizar">208021</td>
+        <td class="text-center">Abierto</td>
+        <td class="text-center">27-08-2026</td>
+        <td class="text-right">US$ 213.82</td>
+        <td>Adjuntar</td>
+      </tr>
+      <tr id="menu1outline" style="display:none">
+        <td colspan="7">
+          <table class="tablaped">
+            <tr><td><b>Producto</b></td><td><b>Estado</b></td><td><b>Precio (s/IVA)</b></td><td><b>Cant.</b></td></tr>
+            <tr><td><a href="x---det--0418001">(0418001) Cable HDMI 2m</a></td><td>Abierto</td><td>US$ 8.62</td><td>4</td></tr>
+            <tr><td>(0418002) Mouse Logitech</td><td>Abierto</td><td>US$ 28.00</td><td>1</td></tr>
+            <tr><td>(0418003) Teclado Mecánico</td><td>Abierto</td><td>US$ 19.91</td><td>2</td></tr>
+            <tr><td>(0418004) Auriculares BT</td><td>Abierto</td><td>US$ 38.10</td><td>2</td></tr>
+            <tr><td>Subtotal</td><td></td><td></td><td>US$ 178.50</td></tr>
+            <tr><td>IVA</td><td></td><td></td><td>US$ 35.32</td></tr>
+            <tr><td>Total:</td><td></td><td></td><td>US$ 213.82</td></tr>
+          </table>
+          <b>Forma de Entrega</b> RETIRA<br>
+          <b>Forma de Pago</b> Depósito/Transferencia Banco<br>
+          Cotización: 1280.50
+        </td>
+      </tr>
+    `;
+    const order = parseOrdersTable(html).orders[0];
+    expect(order.items).toHaveLength(4);
+    expect(order.items.map((it) => it.name)).toEqual([
+      expect.stringContaining("Cable HDMI"),
+      expect.stringContaining("Mouse Logitech"),
+      expect.stringContaining("Teclado"),
+      expect.stringContaining("Auriculares"),
+    ]);
+    expect(order.items.some((it) => /abierto/i.test(it.name))).toBe(false);
+    expect(order.items[0]).toMatchObject({ code: "0418001", qty: "4", price: "US$ 8.62", total: "US$ 34.48" });
+    expect(order.totals).toMatchObject({ net: 178.5, iva: 35.32, total: 213.82 });
+    expect(order.exchangeRate).toBe(1280.5);
+    expect(order.delivery).toBe("RETIRA");
+  });
+
+  it("toma el código del href si la celda no trae el nombre", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img onclick="showhide('menu1outline','imgm1','tr1')" /></td>
+        <td>616098</td><td>Abierto</td><td>27-08-2026</td><td>US$ 8.62</td>
+      </tr>
+      <tr id="menu1outline">
+        <td>
+          <table>
+            <tr><td><a href="/x---det--0418123"></a></td><td>Abierto</td><td>US$ 8.62</td><td>1</td></tr>
+          </table>
+        </td>
+      </tr>
+    `;
+    const item = parseOrdersTable(html).orders[0].items[0];
+    expect(item.code).toBe("0418123");
+    expect(item.name).toBe("(0418123)");
+  });
+
+  it("completa TC actual y pesos cuando el HTML del pedido no trae cotización", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img /></td>
+        <td>9901</td><td>88421</td><td>Pendiente</td><td>21-08-2026</td><td>US$ 150.00</td><td></td>
+      </tr>
+    `;
+    const [order] = applyInvidOrderRates(parseOrdersTable(html).orders, 1200);
+    expect(order.exchangeRate).toBe(1200);
+    expect(order.exchangeRateSource).toBe("current");
+    expect(order.amountArs).toBe(180000);
+  });
+
+  it("no pisa el TC histórico del pedido con el actual", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img onclick="showhide('menu1outline','imgm1','tr1')" /></td>
+        <td>1</td><td>2</td><td>Abierto</td><td>27-08-2026</td><td>US$ 10.00</td><td></td>
+      </tr>
+      <tr id="menu1outline"><td>Cotización: 1000</td></tr>
+    `;
+    const [order] = applyInvidOrderRates(parseOrdersTable(html).orders, 1500);
+    expect(order.exchangeRate).toBe(1000);
+    expect(order.exchangeRateSource).toBe("order");
+    expect(order.amountArs).toBe(10000);
+  });
+
+  it("arma impuestos genéricos si Invid no discriminó IVA/IIBB", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img onclick="showhide('menu1outline','imgm1','tr1')" /></td>
+        <td>1</td><td>Abierto</td><td>27-08-2026</td><td>US$ 213.82</td>
+      </tr>
+      <tr id="menu1outline">
+        <td>
+          <table>
+            <tr><td>(0418001) Cable HDMI 2m</td><td>US$ 8.62</td><td>4</td></tr>
+            <tr><td>(0418002) Mouse Logitech</td><td>US$ 28.00</td><td>1</td></tr>
+            <tr><td>(0418003) Teclado Mecánico</td><td>US$ 19.91</td><td>2</td></tr>
+            <tr><td>(0418004) Auriculares BT</td><td>US$ 38.10</td><td>2</td></tr>
+          </table>
+        </td>
+      </tr>
+    `;
+    const order = parseOrdersTable(html).orders[0];
+    expect(order.totals?.net).toBe(178.5);
+    expect(order.totals?.iva).toBeUndefined();
+    expect(order.totals?.taxes).toBe(35.32);
   });
 
   it("conserva hrefs de la cuenta corriente", () => {
