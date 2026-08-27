@@ -71,7 +71,7 @@ export function mergeNbOrder(list: NewBytesOrder, detail: Partial<NewBytesOrder>
     if (key === "found") continue;
     if (value == null || value === "") continue;
     if (Array.isArray(value) && value.length === 0) continue;
-    (merged as Record<string, unknown>)[key] = value;
+    (merged as unknown as Record<string, unknown>)[key] = value;
   }
   return merged;
 }
