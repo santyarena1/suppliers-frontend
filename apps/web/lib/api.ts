@@ -1645,6 +1645,7 @@ export interface CatalogBoard {
     rawCount: number;
     linkedCount: number;
     termCount: number;
+    groupCount?: number;
     hiddenCount: number;
   };
 }
@@ -1718,7 +1719,11 @@ export const catalogEnrichmentApi = {
     label?: string;
     termId?: string;
     source?: "MANUAL" | "AUTO" | "AI";
-  }) => api.post("/admin/catalog-enrichment/link", data),
+  }) =>
+    api.post<{ term: { id: string; label: string }; items: { provider: string; rawKey: string }[] }>(
+      "/admin/catalog-enrichment/link",
+      data
+    ),
   move: (data: {
     kind: CatalogAliasKind;
     from: { provider: string; rawKey: string };
@@ -1747,7 +1752,8 @@ export const catalogEnrichmentApi = {
   }) => api.post("/admin/catalog-enrichment/products/assign", data),
   preview: (params: {
     kind: CatalogAliasKind;
-    rawKey: string;
+    rawKey?: string;
+    termId?: string;
     provider?: string;
     limit?: number;
   }) => api.get<CatalogPreviewProduct[]>("/admin/catalog-enrichment/preview", { params }),

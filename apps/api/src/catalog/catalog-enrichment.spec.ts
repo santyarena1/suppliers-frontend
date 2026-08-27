@@ -171,3 +171,45 @@ describe("identityIndexKey", () => {
     expect(identityIndexKey("EAN", "123")).toBe("EAN:123");
   });
 });
+
+// Mirrors apps/web/lib/unify-names.ts — al unificar se elige uno de los nombres marcados.
+function selectableUnifyNames(rows: { rawKey: string; termLabel?: string | null; count: number }[]) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of [...rows.map((r) => r.termLabel), ...rows.map((r) => r.rawKey)]) {
+    const v = (raw ?? "").trim();
+    if (!v || seen.has(v)) continue;
+    seen.add(v);
+    out.push(v);
+  }
+  return out;
+}
+
+function defaultUnifyName(rows: { rawKey: string; termLabel?: string | null; count: number }[]) {
+  if (rows.length === 0) return "";
+  const score = (label: string) =>
+    rows.filter((r) => r.termLabel === label || r.rawKey === label).reduce((s, r) => s + r.count, 0);
+  const names = selectableUnifyNames(rows);
+  return names.slice().sort((a, b) => score(b) - score(a) || a.localeCompare(b, "es"))[0] ?? rows[0].rawKey;
+}
+
+describe("nombre que queda al unificar", () => {
+  it("elige uno de los seleccionados (el de más productos), no un nombre nuevo", () => {
+    const rows = [
+      { rawKey: "notebooks", count: 2 },
+      { rawKey: "Notebooks", count: 10 },
+      { rawKey: "NOTEBOOK", count: 3 },
+    ];
+    expect(defaultUnifyName(rows)).toBe("Notebooks");
+    expect(selectableUnifyNames(rows)).toEqual(["notebooks", "Notebooks", "NOTEBOOK"]);
+  });
+
+  it("si ya hay grupo, ese nombre queda porque junta los productos", () => {
+    const rows = [
+      { rawKey: "nb", termLabel: "Notebooks", count: 8 },
+      { rawKey: "notebooks", termLabel: "Notebooks", count: 5 },
+    ];
+    expect(defaultUnifyName(rows)).toBe("Notebooks");
+    expect(selectableUnifyNames(rows)[0]).toBe("Notebooks");
+  });
+});
