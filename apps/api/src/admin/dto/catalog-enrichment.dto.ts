@@ -279,8 +279,13 @@ export class PreviewRawQueryDto {
   @IsIn(CATALOG_ALIAS_KINDS)
   kind!: (typeof CATALOG_ALIAS_KINDS)[number];
 
+  @IsOptional()
   @IsString()
-  rawKey!: string;
+  rawKey?: string;
+
+  @IsOptional()
+  @IsString()
+  termId?: string;
 
   @IsOptional()
   @IsString()

@@ -248,6 +248,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
         rawCount: rows.length,
         linkedCount: rows.filter((r) => r.termId).length,
         termCount: terms.length,
+        groupCount: termCards.filter((t) => t.members.length > 0).length,
         hiddenCount: terms.filter((t) => !t.visible).length,
       },
     };
@@ -984,26 +985,48 @@ export class CatalogEnrichmentService implements OnModuleInit {
   async previewProducts(input: {
     kind: CatalogAliasKind;
     provider?: string | null;
-    rawKey: string;
+    rawKey?: string;
+    termId?: string;
     limit?: number;
   }) {
     const field = this.fieldForKind(input.kind);
+    const take = Math.min(Number(input.limit) || 12, 40);
+    const select = {
+      provider: true,
+      externalId: true,
+      name: true,
+      brand: true,
+      category: true,
+      subcategory: true,
+      sku: true,
+      partNumber: true,
+    } as const;
+
+    if (input.termId) {
+      const aliases = await this.prisma.platformCatalogAlias.findMany({
+        where: { termId: input.termId, kind: input.kind },
+        select: { rawKey: true },
+      });
+      const keys = [...new Set(aliases.map((a) => a.rawKey).filter(Boolean))];
+      if (keys.length === 0) return [];
+      return this.prisma.providerSyncCache.findMany({
+        where: { [field]: { in: keys } },
+        select,
+        take,
+        orderBy: { name: "asc" },
+      });
+    }
+
+    const rawKey = (input.rawKey ?? "").trim();
+    if (!rawKey) throw new BadRequestException("Falta rawKey o termId");
+
     return this.prisma.providerSyncCache.findMany({
       where: {
         ...(input.provider ? { provider: input.provider } : {}),
-        [field]: input.rawKey,
+        [field]: rawKey,
       },
-      select: {
-        provider: true,
-        externalId: true,
-        name: true,
-        brand: true,
-        category: true,
-        subcategory: true,
-        sku: true,
-        partNumber: true,
-      },
-      take: Math.min(input.limit ?? 12, 40),
+      select,
+      take,
       orderBy: { name: "asc" },
     });
   }

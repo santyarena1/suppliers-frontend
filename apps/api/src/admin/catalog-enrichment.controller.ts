@@ -184,6 +184,7 @@ export class CatalogEnrichmentController {
       kind: query.kind,
       provider: query.provider ?? null,
       rawKey: query.rawKey,
+      termId: query.termId,
       limit: query.limit,
     });
   }

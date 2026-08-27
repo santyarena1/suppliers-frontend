@@ -113,9 +113,10 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
   - move `{ kind, from:{provider,rawKey}, toLabel?|toTermId?, deleteEmptySourceTerm? }`
   - terms CRUD `{ kind, label, parentId?, visible? }`
   - assign producto `{ provider, externalId, displayBrand?, displayCategory?, displaySubcategory? }`
-- **Respuesta esperada**: board `{ rows, terms, stats }` · incomplete `{ items, total }` · preview productos
+  - preview `?kind&rawKey&provider?` **o** `?kind&termId` (productos de un grupo ya unificado)
+- **Respuesta esperada**: board `{ rows, terms, stats }` · `stats.groupCount` = grupos con al menos un alias · incomplete `{ items, total }` · preview productos
 - **Estado**: IMPLEMENTADO
-- **Notas**: Lista todas las categorías/marcas crudas de todos los distribuidores. Vincular o trasladar productos a un término canónico (con visibilidad y jerarquía padre/hijo). Overrides por producto en `PlatformProductCatalogOverride` (no pelean con el sync). Sin flujo especial de códigos Air. La API key de OpenAI se gestiona en **Configuración → Credenciales API** (`PUT/DELETE /admin/catalog-enrichment/openai`).
+- **Notas**: Lista todas las categorías/marcas crudas de todos los distribuidores. Vincular o trasladar productos a un término canónico (con visibilidad y jerarquía padre/hijo). Overrides por producto en `PlatformProductCatalogOverride` (no pelean con el sync). Sin flujo especial de códigos Air. La API key de OpenAI se gestiona en **Configuración → Credenciales API** (`PUT/DELETE /admin/catalog-enrichment/openai`). La UI de Unificadas agrupa por `board.terms` (un renglón por nombre elegido, con `members` y productos). Al fusionar se elige uno de los nombres seleccionados; no hace falta inventar uno nuevo.
 
 ### [FEATURE] Credenciales API (UI Configuración)
 - **Método**: PUT | DELETE (mismos endpoints existentes)
