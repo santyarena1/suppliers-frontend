@@ -16,33 +16,52 @@ export function tokenizeProductName(name: string): string[] {
     .filter((t) => t.length > 1 && !STOP.has(t));
 }
 
+/** 7600, 7600x, rtx4060 — no “am5”. */
+export function isModelSkuToken(t: string): boolean {
+  if (!t) return false;
+  return /^\d{3,}[a-z]*$/i.test(t) || /[a-z]+\d{3,}[a-z]*/i.test(t);
+}
+
+function tokensAlign(queryToken: string, retailToken: string): boolean {
+  if (queryToken === retailToken) return true;
+  if (isModelSkuToken(queryToken) || isModelSkuToken(retailToken)) return false;
+  if (queryToken.length <= 2 || retailToken.length <= 2) return false;
+  return retailToken.includes(queryToken) || queryToken.includes(retailToken);
+}
+
 /**
  * % de palabras del producto del proveedor que aparecen en el título del local.
  * No penaliza palabras extra del local (adornos / marketing).
+ * 7600 no cuenta como match de 7600X.
  */
 export function providerNameMatchRatio(providerName: string, retailName: string): number {
   const providerTokens = [...new Set(tokenizeProductName(providerName))];
   if (providerTokens.length === 0) return 0;
 
-  const retailTokens = new Set(tokenizeProductName(retailName));
-  if (retailTokens.size === 0) return 0;
+  const retailTokens = [...new Set(tokenizeProductName(retailName))];
+  if (retailTokens.length === 0) return 0;
 
   let hits = 0;
   for (const t of providerTokens) {
-    if (retailTokens.has(t)) {
-      hits += 1;
-      continue;
-    }
-    // Modelos parciales: "360" vs tokens del local, o "th240" ⊆ "th240v2"
-    for (const r of retailTokens) {
-      if (r.includes(t) || t.includes(r)) {
-        hits += 1;
-        break;
-      }
-    }
+    if (retailTokens.some((r) => tokensAlign(t, r))) hits += 1;
   }
 
-  return hits / providerTokens.length;
+  let ratio = hits / providerTokens.length;
+
+  const querySkus = providerTokens.filter(isModelSkuToken);
+  const retailSkus = retailTokens.filter(isModelSkuToken);
+  if (querySkus.some((sku) => !retailTokens.includes(sku))) {
+    // 7600 no es 7600X: no puede ganar “mejores coincidencias”.
+    ratio = Math.min(ratio, 0.4);
+  }
+  if (retailSkus.some((sku) => !querySkus.includes(sku) && !providerTokens.includes(sku))) {
+    ratio = Math.min(ratio, 0.72);
+  }
+  if (/\b(combo|kit|pack)\b/i.test(retailName)) {
+    ratio = Math.min(ratio, 0.7);
+  }
+
+  return ratio;
 }
 
 export const BEST_MATCH_THRESHOLD = 0.85;

@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { coerceStoredRetailPrice, isSaneRetailPrice, isCentsBasedStore, repairPricesAgainstPeers } from "./retail-price.util";
 import {
   extractSearchTokens,
+  isModelSkuToken,
   normalizeSearchText,
   passesRelevanceGate,
   scoreRetailMatch,
@@ -53,15 +54,21 @@ export class RetailSearchService {
 
     const strong = tokenObjs.filter((t) => t.strong).map((t) => t.t);
     const queryTokens = [...new Set([...strong, ...tokens.slice(0, 4)])];
+    const skuTokens = [...new Set(tokenObjs.filter((t) => isModelSkuToken(t.t)).map((t) => t.t))];
+
+    // Si la query trae un SKU (7600), el pool tiene que contenerlo.
+    // Si no, “ryzen” solo llena el cupo con 7600X / 5600 / combos.
+    const tokenFilters =
+      skuTokens.length > 0
+        ? skuTokens.map((t) => ({ searchText: { contains: t } }))
+        : [{ OR: queryTokens.map((t) => ({ searchText: { contains: t } })) }];
 
     const where: Prisma.RetailProductWhereInput = {
       active: true,
-      OR: queryTokens.map((t) => ({
-        searchText: { contains: t },
-      })),
+      AND: tokenFilters,
     };
 
-    const poolSize = Math.min(Math.max(take * 12, 200), 800);
+    const poolSize = Math.min(Math.max(take * (skuTokens.length > 0 ? 20 : 12), 200), 1500);
     const rows = await this.prisma.retailProduct.findMany({
       where,
       include: {
@@ -90,14 +97,17 @@ export class RetailSearchService {
     );
     const withRepaired = scored
       .map((x, i) => ({ ...x, price: repairedPrices[i] ?? x.price }))
-      .filter((x) => isSaneRetailPrice(x.price))
-      .sort((a, b) => b.score - a.score || a.price - b.price);
+      .filter((x) => isSaneRetailPrice(x.price));
 
-    const topScore = withRepaired[0]?.score ?? 0;
-    const relevant =
-      topScore > 0 && withRepaired.length > take
-        ? withRepaired.filter((x) => x.score >= topScore * 0.35)
-        : withRepaired;
+    const topScore = withRepaired.reduce((m, x) => Math.max(m, x.score), 0);
+    const tightBand = topScore > 0 ? topScore * 0.72 : 0;
+    const exactish = withRepaired
+      .filter((x) => x.score >= tightBand)
+      .sort((a, b) => a.price - b.price || b.score - a.score);
+    const rest = withRepaired
+      .filter((x) => x.score < tightBand)
+      .sort((a, b) => b.score - a.score || a.price - b.price);
+    const relevant = [...exactish, ...rest];
 
     const diversified = diversifyByStore(relevant, take, 4);
 
