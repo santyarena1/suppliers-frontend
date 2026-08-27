@@ -1,6 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleInit } from "@nestjs/common";
 import type { CatalogAliasKind, CatalogEnrichmentSource, CatalogMatchKind } from "@prisma/client";
-import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogAiService } from "./catalog-ai.service";
 import { CatalogSettingsService } from "./catalog-settings.service";
@@ -8,9 +7,11 @@ import {
   groupCategoriesByDisplay,
   indexCatalogAliases,
   indexCatalogIdentities,
+  indexCatalogOverrides,
   looksLikeProviderCode,
   matchingRawCategories,
   matchesDisplayCategory,
+  normalizeCatalogLabel,
   normalizeEan,
   normalizePartNumber,
   suggestAliasMerges,
@@ -22,7 +23,13 @@ import {
 
 @Injectable()
 export class CatalogEnrichmentService implements OnModuleInit {
-  private cache: CatalogEnrichmentContext = { aliases: {}, identities: {} };
+  private cache: CatalogEnrichmentContext = {
+    aliases: {},
+    identities: {},
+    overrides: {},
+    hiddenCategoryLabels: new Set(),
+    hiddenBrandLabels: new Set(),
+  };
   private cacheLoadedAt = 0;
   private readonly cacheTtlMs = 30_000;
 
@@ -45,32 +52,46 @@ export class CatalogEnrichmentService implements OnModuleInit {
 
   async refreshCache(force = false) {
     if (!force && Date.now() - this.cacheLoadedAt <= this.cacheTtlMs) return;
-    const [aliasRows, identityRows] = await Promise.all([
+    const [aliasRows, identityRows, overrideRows, hiddenTerms] = await Promise.all([
       this.prisma.platformCatalogAlias.findMany(),
       this.prisma.platformProductIdentity.findMany(),
+      this.prisma.platformProductCatalogOverride.findMany(),
+      this.prisma.platformCatalogTerm.findMany({
+        where: { visible: false },
+        select: { kind: true, label: true },
+      }),
     ]);
+    const hiddenCategoryLabels = new Set<string>();
+    const hiddenBrandLabels = new Set<string>();
+    for (const t of hiddenTerms) {
+      if (t.kind === "CATEGORY" || t.kind === "SUBCATEGORY") hiddenCategoryLabels.add(t.label);
+      if (t.kind === "BRAND") hiddenBrandLabels.add(t.label);
+    }
     this.cache = {
       aliases: indexCatalogAliases(aliasRows),
       identities: indexCatalogIdentities(identityRows),
+      overrides: indexCatalogOverrides(overrideRows),
+      hiddenCategoryLabels,
+      hiddenBrandLabels,
     };
     this.cacheLoadedAt = Date.now();
   }
 
   async overview() {
-    const [aliasCount, identityCount, productCount, codedCategories] = await Promise.all([
+    const [termCount, aliasCount, overrideCount, productCount, incomplete] = await Promise.all([
+      this.prisma.platformCatalogTerm.count(),
       this.prisma.platformCatalogAlias.count(),
-      this.prisma.platformProductIdentity.count(),
+      this.prisma.platformProductCatalogOverride.count(),
       this.prisma.providerSyncCache.count(),
-      this.prisma.providerSyncCache.count({
-        where: { provider: "AIR", category: { not: null } },
-      }),
+      this.countIncomplete(),
     ]);
 
     return {
+      termCount,
       aliasCount,
-      identityCount,
+      overrideCount,
       productCount,
-      airCodedProducts: codedCategories,
+      incompleteCount: incomplete,
       aiConfigured: await this.settings.hasOpenAiKey(),
     };
   }
@@ -83,22 +104,25 @@ export class CatalogEnrichmentService implements OnModuleInit {
     return this.settings.clearOpenAiKey();
   }
 
+  private fieldForKind(kind: CatalogAliasKind) {
+    return kind === "BRAND" ? "brand" : kind === "CATEGORY" ? "category" : "subcategory";
+  }
+
   async listRawValues(params: {
     kind: CatalogAliasKind;
     provider?: string;
     codesOnly?: boolean;
     limit?: number;
   }) {
-    const limit = Math.min(Math.max(params.limit ?? 80, 1), 200);
-    const column =
-      params.kind === "BRAND" ? "brand" : params.kind === "CATEGORY" ? "category" : "subcategory";
+    const limit = Math.min(Math.max(params.limit ?? 80, 1), 500);
+    const column = this.fieldForKind(params.kind);
 
     type Row = { raw_key: string; provider: string; count: bigint };
     const rows = params.provider
       ? await this.prisma.$queryRawUnsafe<Row[]>(
           `SELECT ficha."${column}" AS raw_key, ficha.provider AS provider, COUNT(*)::bigint AS count
            FROM "ProviderSyncCache" ficha
-           WHERE ficha."${column}" IS NOT NULL AND ficha.provider = $1
+           WHERE ficha."${column}" IS NOT NULL AND TRIM(ficha."${column}") <> '' AND ficha.provider = $1
            GROUP BY ficha."${column}", ficha.provider
            ORDER BY count DESC
            LIMIT $2`,
@@ -108,7 +132,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
       : await this.prisma.$queryRawUnsafe<Row[]>(
           `SELECT ficha."${column}" AS raw_key, ficha.provider AS provider, COUNT(*)::bigint AS count
            FROM "ProviderSyncCache" ficha
-           WHERE ficha."${column}" IS NOT NULL
+           WHERE ficha."${column}" IS NOT NULL AND TRIM(ficha."${column}") <> ''
            GROUP BY ficha."${column}", ficha.provider
            ORDER BY count DESC
            LIMIT $1`,
@@ -145,6 +169,500 @@ export class CatalogEnrichmentService implements OnModuleInit {
     return stats;
   }
 
+  /** Tablero: todas las categorías/marcas crudas + vínculos + visibilidad. */
+  async getBoard(kind: CatalogAliasKind) {
+    const [rawStats, terms, aliases] = await Promise.all([
+      this.listRawValues({ kind, limit: 400 }),
+      this.prisma.platformCatalogTerm.findMany({
+        where: { kind },
+        include: { parent: { select: { id: true, label: true, kind: true } } },
+        orderBy: { label: "asc" },
+      }),
+      this.prisma.platformCatalogAlias.findMany({ where: { kind } }),
+    ]);
+
+    const aliasByKey = new Map<string, (typeof aliases)[number]>();
+    for (const a of aliases) {
+      aliasByKey.set(`${a.provider}:${a.rawKey}`, a);
+    }
+
+    const membersByTerm = new Map<string, { provider: string; rawKey: string; count: number }[]>();
+    const rows = rawStats.map((s) => {
+      const provider = s.provider ?? "";
+      const alias = aliasByKey.get(`${provider}:${s.rawKey}`);
+      const termId = alias?.termId ?? null;
+      if (termId) {
+        const arr = membersByTerm.get(termId) ?? [];
+        arr.push({ provider, rawKey: s.rawKey, count: s.count });
+        membersByTerm.set(termId, arr);
+      }
+      const term = termId ? terms.find((t) => t.id === termId) : null;
+      return {
+        id: `${kind}:${provider}:${s.rawKey}`,
+        provider,
+        rawKey: s.rawKey,
+        count: s.count,
+        sampleNames: s.sampleNames,
+        looksLikeCode: s.looksLikeCode,
+        termId,
+        termLabel: term?.label ?? alias?.label ?? null,
+        visible: term?.visible ?? true,
+        parentId: term?.parentId ?? null,
+        parentLabel: term?.parent?.label ?? null,
+        linked: [] as { provider: string; rawKey: string; count: number }[],
+      };
+    });
+
+    for (const row of rows) {
+      if (!row.termId) continue;
+      row.linked = (membersByTerm.get(row.termId) ?? []).filter(
+        (m) => !(m.provider === row.provider && m.rawKey === row.rawKey)
+      );
+    }
+
+    const termCards = terms.map((t) => ({
+      id: t.id,
+      label: t.label,
+      kind: t.kind,
+      visible: t.visible,
+      parentId: t.parentId,
+      parentLabel: t.parent?.label ?? null,
+      members: membersByTerm.get(t.id) ?? [],
+      productCount: (membersByTerm.get(t.id) ?? []).reduce((s, m) => s + m.count, 0),
+    }));
+
+    return {
+      kind,
+      rows,
+      terms: termCards,
+      stats: {
+        rawCount: rows.length,
+        linkedCount: rows.filter((r) => r.termId).length,
+        termCount: terms.length,
+        hiddenCount: terms.filter((t) => !t.visible).length,
+      },
+    };
+  }
+
+  async listTerms(kind?: CatalogAliasKind) {
+    return this.prisma.platformCatalogTerm.findMany({
+      where: kind ? { kind } : undefined,
+      include: {
+        parent: { select: { id: true, label: true, kind: true } },
+        children: { select: { id: true, label: true, kind: true } },
+        _count: { select: { aliases: true } },
+      },
+      orderBy: [{ kind: "asc" }, { label: "asc" }],
+    });
+  }
+
+  async ensureTerm(input: {
+    kind: CatalogAliasKind;
+    label: string;
+    parentId?: string | null;
+    visible?: boolean;
+    source?: CatalogEnrichmentSource;
+  }) {
+    const label = input.label.trim();
+    if (!label) throw new BadRequestException("Falta label");
+    if (input.parentId) {
+      const parent = await this.prisma.platformCatalogTerm.findUnique({ where: { id: input.parentId } });
+      if (!parent) throw new BadRequestException("Padre inexistente");
+    }
+    const existing = await this.prisma.platformCatalogTerm.findUnique({
+      where: { kind_label: { kind: input.kind, label } },
+    });
+    if (existing) {
+      if (
+        (input.parentId !== undefined && input.parentId !== existing.parentId) ||
+        (input.visible !== undefined && input.visible !== existing.visible)
+      ) {
+        return this.prisma.platformCatalogTerm.update({
+          where: { id: existing.id },
+          data: {
+            ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+            ...(input.visible !== undefined ? { visible: input.visible } : {}),
+          },
+        });
+      }
+      return existing;
+    }
+    return this.prisma.platformCatalogTerm.create({
+      data: {
+        kind: input.kind,
+        label,
+        parentId: input.parentId ?? null,
+        visible: input.visible ?? true,
+        source: input.source ?? "MANUAL",
+      },
+    });
+  }
+
+  async createTerm(input: {
+    kind: CatalogAliasKind;
+    label: string;
+    parentId?: string | null;
+    visible?: boolean;
+  }) {
+    const term = await this.ensureTerm(input);
+    await this.refreshCache(true);
+    return term;
+  }
+
+  async updateTerm(
+    id: string,
+    input: { label?: string; parentId?: string | null; visible?: boolean }
+  ) {
+    const term = await this.prisma.platformCatalogTerm.findUnique({ where: { id } });
+    if (!term) throw new NotFoundException("Término no encontrado");
+
+    const label = input.label?.trim();
+    if (label && label !== term.label) {
+      const clash = await this.prisma.platformCatalogTerm.findUnique({
+        where: { kind_label: { kind: term.kind, label } },
+      });
+      if (clash) throw new BadRequestException("Ya existe un término con ese nombre");
+    }
+    if (input.parentId) {
+      if (input.parentId === id) throw new BadRequestException("No puede ser padre de sí mismo");
+      const parent = await this.prisma.platformCatalogTerm.findUnique({ where: { id: input.parentId } });
+      if (!parent) throw new BadRequestException("Padre inexistente");
+    }
+
+    const updated = await this.prisma.platformCatalogTerm.update({
+      where: { id },
+      data: {
+        ...(label ? { label } : {}),
+        ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+        ...(input.visible !== undefined ? { visible: input.visible } : {}),
+      },
+    });
+
+    if (label && label !== term.label) {
+      await this.prisma.platformCatalogAlias.updateMany({
+        where: { termId: id },
+        data: { label },
+      });
+    }
+
+    await this.refreshCache(true);
+    return updated;
+  }
+
+  async deleteTerm(id: string, force = false) {
+    const term = await this.prisma.platformCatalogTerm.findUnique({
+      where: { id },
+      include: { _count: { select: { aliases: true, children: true } } },
+    });
+    if (!term) throw new NotFoundException("Término no encontrado");
+    if (!force && (term._count.aliases > 0 || term._count.children > 0)) {
+      throw new BadRequestException("El término tiene vínculos o subcategorías; usá force o vacialo antes");
+    }
+    if (force) {
+      await this.prisma.platformCatalogAlias.updateMany({ where: { termId: id }, data: { termId: null } });
+      await this.prisma.platformCatalogTerm.updateMany({ where: { parentId: id }, data: { parentId: null } });
+    }
+    await this.prisma.platformCatalogTerm.delete({ where: { id } });
+    await this.refreshCache(true);
+    return { ok: true };
+  }
+
+  async linkRaws(input: {
+    kind: CatalogAliasKind;
+    items: { provider: string; rawKey: string }[];
+    label?: string;
+    termId?: string;
+    source?: CatalogEnrichmentSource;
+  }) {
+    let term =
+      input.termId
+        ? await this.prisma.platformCatalogTerm.findUnique({ where: { id: input.termId } })
+        : null;
+    if (input.termId && !term) throw new NotFoundException("Término no encontrado");
+    if (!term) {
+      const label = (input.label ?? input.items[0]?.rawKey ?? "").trim();
+      if (!label) throw new BadRequestException("Falta label o termId");
+      term = await this.ensureTerm({ kind: input.kind, label, source: input.source ?? "MANUAL" });
+    }
+
+    const source = input.source ?? "MANUAL";
+    const items = input.items
+      .map((i) => ({ provider: (i.provider ?? "").trim(), rawKey: i.rawKey.trim() }))
+      .filter((i) => i.rawKey);
+    if (items.length === 0) throw new BadRequestException("Faltan items");
+
+    await this.prisma.$transaction(
+      items.map(({ provider, rawKey }) =>
+        this.prisma.platformCatalogAlias.upsert({
+          where: { kind_provider_rawKey: { kind: input.kind, provider, rawKey } },
+          create: {
+            kind: input.kind,
+            provider,
+            rawKey,
+            groupId: term!.id,
+            label: term!.label,
+            termId: term!.id,
+            source,
+          },
+          update: {
+            groupId: term!.id,
+            label: term!.label,
+            termId: term!.id,
+            source,
+          },
+        })
+      )
+    );
+
+    await this.refreshCache(true);
+    return { term, items };
+  }
+
+  /**
+   * Traslada productos de un raw (proveedor+clave) hacia un término/label destino.
+   * Crea overrides por producto + re-vincula el raw al destino.
+   * Opcionalmente elimina el término vacío de origen.
+   */
+  async moveProducts(input: {
+    kind: CatalogAliasKind;
+    from: { provider: string; rawKey: string };
+    toTermId?: string;
+    toLabel?: string;
+    deleteEmptySourceTerm?: boolean;
+    source?: CatalogEnrichmentSource;
+  }) {
+    const field = this.fieldForKind(input.kind);
+    const fromProvider = input.from.provider.trim();
+    const fromRaw = input.from.rawKey.trim();
+    if (!fromRaw) throw new BadRequestException("Falta origen");
+
+    let target =
+      input.toTermId
+        ? await this.prisma.platformCatalogTerm.findUnique({ where: { id: input.toTermId } })
+        : null;
+    if (input.toTermId && !target) throw new NotFoundException("Término destino no encontrado");
+    if (!target) {
+      const label = (input.toLabel ?? "").trim();
+      if (!label) throw new BadRequestException("Falta destino");
+      target = await this.ensureTerm({ kind: input.kind, label, source: input.source ?? "MANUAL" });
+    }
+
+    const products = await this.prisma.providerSyncCache.findMany({
+      where: { provider: fromProvider, [field]: fromRaw },
+      select: { provider: true, externalId: true },
+    });
+
+    const enrichmentSource = input.source ?? "MANUAL";
+    const displayField =
+      input.kind === "BRAND"
+        ? "displayBrand"
+        : input.kind === "CATEGORY"
+          ? "displayCategory"
+          : "displaySubcategory";
+
+    const CHUNK = 100;
+    for (let i = 0; i < products.length; i += CHUNK) {
+      const slice = products.slice(i, i + CHUNK);
+      await this.prisma.$transaction(
+        slice.map((p) =>
+          this.prisma.platformProductCatalogOverride.upsert({
+            where: {
+              provider_externalId: { provider: p.provider, externalId: p.externalId },
+            },
+            create: {
+              provider: p.provider,
+              externalId: p.externalId,
+              [displayField]: target!.label,
+              source: enrichmentSource,
+            },
+            update: {
+              [displayField]: target!.label,
+              source: enrichmentSource,
+            },
+          })
+        )
+      );
+    }
+
+    const sourceAlias = await this.prisma.platformCatalogAlias.findUnique({
+      where: {
+        kind_provider_rawKey: { kind: input.kind, provider: fromProvider, rawKey: fromRaw },
+      },
+    });
+    const sourceTermId = sourceAlias?.termId ?? null;
+
+    await this.linkRaws({
+      kind: input.kind,
+      items: [{ provider: fromProvider, rawKey: fromRaw }],
+      termId: target.id,
+      source: enrichmentSource,
+    });
+
+    let deletedSourceTerm: string | null = null;
+    if (input.deleteEmptySourceTerm && sourceTermId && sourceTermId !== target.id) {
+      const remaining = await this.prisma.platformCatalogAlias.count({
+        where: { termId: sourceTermId },
+      });
+      if (remaining === 0) {
+        await this.prisma.platformCatalogTerm.delete({ where: { id: sourceTermId } }).catch(() => null);
+        deletedSourceTerm = sourceTermId;
+      }
+    }
+
+    await this.refreshCache(true);
+    return {
+      moved: products.length,
+      target,
+      deletedSourceTerm,
+    };
+  }
+
+  /** Si el raw no tiene término, crea uno con su nombre y setea visible. */
+  async toggleRawVisibility(input: {
+    kind: CatalogAliasKind;
+    provider: string;
+    rawKey: string;
+    visible: boolean;
+  }) {
+    const linked = await this.linkRaws({
+      kind: input.kind,
+      items: [{ provider: input.provider, rawKey: input.rawKey }],
+      label: input.rawKey,
+    });
+    return this.updateTerm(linked.term.id, { visible: input.visible });
+  }
+
+  async countIncomplete() {
+    const total = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT COUNT(*)::bigint AS count FROM "ProviderSyncCache"
+       WHERE (brand IS NULL OR TRIM(brand) = '')
+          OR (category IS NULL OR TRIM(category) = '')`
+    );
+    return Number(total[0]?.count ?? 0);
+  }
+
+  async listIncomplete(params: { limit?: number; offset?: number; q?: string }) {
+    const limit = Math.min(Math.max(params.limit ?? 40, 1), 100);
+    const offset = Math.max(params.offset ?? 0, 0);
+    const q = params.q?.trim();
+
+    const whereSql = q
+      ? `WHERE ((brand IS NULL OR TRIM(brand) = '') OR (category IS NULL OR TRIM(category) = ''))
+           AND (name ILIKE $3 OR sku ILIKE $3 OR "partNumber" ILIKE $3)`
+      : `WHERE (brand IS NULL OR TRIM(brand) = '') OR (category IS NULL OR TRIM(category) = '')`;
+
+    type Row = {
+      provider: string;
+      externalId: string;
+      name: string;
+      brand: string | null;
+      category: string | null;
+      subcategory: string | null;
+      ean: string | null;
+      partNumber: string | null;
+      sku: string | null;
+    };
+
+    const items = q
+      ? await this.prisma.$queryRawUnsafe<Row[]>(
+          `SELECT provider, "externalId", name, brand, category, subcategory, ean, "partNumber", sku
+           FROM "ProviderSyncCache" ${whereSql}
+           ORDER BY name ASC LIMIT $1 OFFSET $2`,
+          limit,
+          offset,
+          `%${q}%`
+        )
+      : await this.prisma.$queryRawUnsafe<Row[]>(
+          `SELECT provider, "externalId", name, brand, category, subcategory, ean, "partNumber", sku
+           FROM "ProviderSyncCache" ${whereSql}
+           ORDER BY name ASC LIMIT $1 OFFSET $2`,
+          limit,
+          offset
+        );
+
+    const ctx = await this.getContext();
+    const enriched = items
+      .map((p) => {
+        const override = ctx.overrides[`${p.provider}:${p.externalId}`];
+        const displayBrand = override?.displayBrand ?? p.brand;
+        const displayCategory = override?.displayCategory ?? p.category;
+        const displaySubcategory = override?.displaySubcategory ?? p.subcategory;
+        return {
+          ...p,
+          displayBrand,
+          displayCategory,
+          displaySubcategory,
+          missingBrand: !displayBrand?.trim(),
+          missingCategory: !displayCategory?.trim(),
+          missingSubcategory: !displaySubcategory?.trim(),
+        };
+      })
+      .filter((p) => p.missingBrand || p.missingCategory);
+
+    return {
+      items: enriched,
+      total: await this.countIncomplete(),
+      limit,
+      offset,
+    };
+  }
+
+  async assignProduct(input: {
+    provider: string;
+    externalId: string;
+    displayBrand?: string | null;
+    displayCategory?: string | null;
+    displaySubcategory?: string | null;
+    source?: CatalogEnrichmentSource;
+  }) {
+    const product = await this.prisma.providerSyncCache.findUnique({
+      where: {
+        provider_externalId: { provider: input.provider, externalId: input.externalId },
+      },
+    });
+    if (!product) throw new NotFoundException("Producto no encontrado");
+
+    const source = input.source ?? "MANUAL";
+    const row = await this.prisma.platformProductCatalogOverride.upsert({
+      where: {
+        provider_externalId: { provider: input.provider, externalId: input.externalId },
+      },
+      create: {
+        provider: input.provider,
+        externalId: input.externalId,
+        displayBrand: input.displayBrand?.trim() || null,
+        displayCategory: input.displayCategory?.trim() || null,
+        displaySubcategory: input.displaySubcategory?.trim() || null,
+        source,
+      },
+      update: {
+        ...(input.displayBrand !== undefined
+          ? { displayBrand: input.displayBrand?.trim() || null }
+          : {}),
+        ...(input.displayCategory !== undefined
+          ? { displayCategory: input.displayCategory?.trim() || null }
+          : {}),
+        ...(input.displaySubcategory !== undefined
+          ? { displaySubcategory: input.displaySubcategory?.trim() || null }
+          : {}),
+        source,
+      },
+    });
+
+    if (row.displayBrand) {
+      await this.ensureTerm({ kind: "BRAND", label: row.displayBrand, source });
+    }
+    if (row.displayCategory) {
+      await this.ensureTerm({ kind: "CATEGORY", label: row.displayCategory, source });
+    }
+    if (row.displaySubcategory) {
+      await this.ensureTerm({ kind: "SUBCATEGORY", label: row.displaySubcategory, source });
+    }
+
+    await this.refreshCache(true);
+    return row;
+  }
+
   async listAliases(kind?: CatalogAliasKind, provider?: string) {
     return this.prisma.platformCatalogAlias.findMany({
       where: {
@@ -165,27 +683,14 @@ export class CatalogEnrichmentService implements OnModuleInit {
   }) {
     const rawKeys = [...new Set(input.rawKeys.map((k) => k.trim()).filter(Boolean))];
     if (rawKeys.length === 0) throw new BadRequestException("Faltan rawKeys");
-    const label = input.label.trim();
-    if (!label) throw new BadRequestException("Falta label");
-
-    const groupId = input.groupId?.trim() || randomUUID();
     const provider = input.provider?.trim() || "";
-    const source = input.source ?? "MANUAL";
-
-    await this.prisma.$transaction(
-      rawKeys.map((rawKey) =>
-        this.prisma.platformCatalogAlias.upsert({
-          where: {
-            kind_provider_rawKey: { kind: input.kind, provider, rawKey },
-          },
-          create: { kind: input.kind, provider, rawKey, groupId, label, source },
-          update: { groupId, label, source },
-        })
-      )
-    );
-
-    await this.refreshCache(true);
-    return { groupId, label, rawKeys, kind: input.kind, provider };
+    return this.linkRaws({
+      kind: input.kind,
+      items: rawKeys.map((rawKey) => ({ provider, rawKey })),
+      label: input.label,
+      termId: input.groupId,
+      source: input.source,
+    });
   }
 
   async deleteAlias(id: string) {
@@ -316,11 +821,49 @@ export class CatalogEnrichmentService implements OnModuleInit {
     });
   }
 
+  async aiSuggestMerges(kind: CatalogAliasKind = "CATEGORY") {
+    const stats = await this.listRawValues({ kind, limit: 150 });
+    const knownLabels = (await this.listTerms(kind)).map((t) => t.label);
+    const values = stats.map((s) => s.rawKey);
+    const result = await this.ai.suggestCategoryClusters(values, knownLabels);
+
+    const clusters = result.clusters
+      .map((c) => ({
+        label: c.label,
+        confidence: c.confidence,
+        members: stats
+          .filter((s) =>
+            c.members.some(
+              (m) => normalizeCatalogLabel(m) === normalizeCatalogLabel(s.rawKey) || m === s.rawKey
+            )
+          )
+          .map((s) => ({ provider: s.provider ?? "", rawKey: s.rawKey, count: s.count })),
+      }))
+      .filter((c) => c.members.length >= 2);
+
+    return { clusters, usedAi: result.usedAi, kind };
+  }
+
   async aiCategoryClusters(provider?: string) {
-    const stats = await this.listRawValues({ kind: "CATEGORY", provider, limit: 120 });
-    const knownLabels = (await this.listAliases("CATEGORY")).map((a) => a.label);
-    const categories = stats.map((s) => s.rawKey);
-    return this.ai.suggestCategoryClusters(categories, knownLabels);
+    const r = await this.aiSuggestMerges("CATEGORY");
+    if (provider) {
+      return {
+        clusters: r.clusters
+          .map((c) => ({
+            label: c.label,
+            members: c.members.filter((m) => m.provider === provider).map((m) => m.rawKey),
+          }))
+          .filter((c) => c.members.length >= 1),
+        usedAi: r.usedAi,
+      };
+    }
+    return {
+      clusters: r.clusters.map((c) => ({
+        label: c.label,
+        members: c.members.map((m) => m.rawKey),
+      })),
+      usedAi: r.usedAi,
+    };
   }
 
   async aiProductHint(provider: string, externalId: string) {
@@ -329,9 +872,9 @@ export class CatalogEnrichmentService implements OnModuleInit {
     });
     if (!product) throw new NotFoundException("Producto no encontrado");
 
-    const [brandStats, categoryStats] = await Promise.all([
-      this.listRawValues({ kind: "BRAND", limit: 80 }),
-      this.listRawValues({ kind: "CATEGORY", limit: 80 }),
+    const [brands, categories] = await Promise.all([
+      this.listTerms("BRAND"),
+      this.listTerms("CATEGORY"),
     ]);
 
     return this.ai.suggestProductMetadata({
@@ -342,8 +885,8 @@ export class CatalogEnrichmentService implements OnModuleInit {
       subcategory: product.subcategory,
       ean: product.ean,
       partNumber: product.partNumber,
-      knownBrands: brandStats.map((s) => s.rawKey),
-      knownCategories: categoryStats.map((s) => s.rawKey),
+      knownBrands: brands.map((s) => s.label),
+      knownCategories: categories.map((s) => s.label),
     });
   }
 
@@ -353,15 +896,24 @@ export class CatalogEnrichmentService implements OnModuleInit {
     rawKey: string;
     limit?: number;
   }) {
-    const field =
-      input.kind === "BRAND" ? "brand" : input.kind === "CATEGORY" ? "category" : "subcategory";
+    const field = this.fieldForKind(input.kind);
     return this.prisma.providerSyncCache.findMany({
       where: {
         ...(input.provider ? { provider: input.provider } : {}),
         [field]: input.rawKey,
       },
-      select: { provider: true, externalId: true, name: true, brand: true, category: true, subcategory: true },
-      take: Math.min(input.limit ?? 8, 20),
+      select: {
+        provider: true,
+        externalId: true,
+        name: true,
+        brand: true,
+        category: true,
+        subcategory: true,
+        sku: true,
+        partNumber: true,
+      },
+      take: Math.min(input.limit ?? 12, 40),
+      orderBy: { name: "asc" },
     });
   }
 

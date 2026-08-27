@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -15,12 +16,20 @@ import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service"
 import {
   AiProductHintQueryDto,
   ApplyCatalogSuggestionDto,
+  AssignProductDto,
+  CreateCatalogTermDto,
+  IncompleteQueryDto,
+  LinkCatalogRawsDto,
+  MoveCatalogProductsDto,
   PreviewRawQueryDto,
   RawValuesQueryDto,
   SaveOpenAiKeyDto,
+  ToggleRawVisibilityDto,
+  UpdateCatalogTermDto,
   UpsertCatalogAliasDto,
   UpsertCatalogIdentityDto,
 } from "./dto/catalog-enrichment.dto";
+import { CATALOG_ALIAS_KINDS } from "../catalog/catalog-enrichment";
 
 @UseGuards(RolesGuard)
 @Roles("ROLE_ADMIN")
@@ -41,6 +50,61 @@ export class CatalogEnrichmentController {
   @Delete("openai")
   clearOpenAi() {
     return this.catalog.clearOpenAiKey();
+  }
+
+  @Get("board")
+  board(@Query("kind") kind: string) {
+    const k = (CATALOG_ALIAS_KINDS as readonly string[]).includes(kind) ? kind : "CATEGORY";
+    return this.catalog.getBoard(k as (typeof CATALOG_ALIAS_KINDS)[number]);
+  }
+
+  @Get("terms")
+  terms(@Query("kind") kind?: string) {
+    const k =
+      kind && (CATALOG_ALIAS_KINDS as readonly string[]).includes(kind)
+        ? (kind as (typeof CATALOG_ALIAS_KINDS)[number])
+        : undefined;
+    return this.catalog.listTerms(k);
+  }
+
+  @Post("terms")
+  createTerm(@Body() dto: CreateCatalogTermDto) {
+    return this.catalog.createTerm(dto);
+  }
+
+  @Patch("terms/:id")
+  updateTerm(@Param("id") id: string, @Body() dto: UpdateCatalogTermDto) {
+    return this.catalog.updateTerm(id, dto);
+  }
+
+  @Delete("terms/:id")
+  deleteTerm(@Param("id") id: string, @Query("force") force?: string) {
+    return this.catalog.deleteTerm(id, force === "1" || force === "true");
+  }
+
+  @Post("link")
+  link(@Body() dto: LinkCatalogRawsDto) {
+    return this.catalog.linkRaws(dto);
+  }
+
+  @Post("move")
+  move(@Body() dto: MoveCatalogProductsDto) {
+    return this.catalog.moveProducts(dto);
+  }
+
+  @Post("visibility")
+  visibility(@Body() dto: ToggleRawVisibilityDto) {
+    return this.catalog.toggleRawVisibility(dto);
+  }
+
+  @Get("incomplete")
+  incomplete(@Query() query: IncompleteQueryDto) {
+    return this.catalog.listIncomplete(query);
+  }
+
+  @Post("products/assign")
+  assignProduct(@Body() dto: AssignProductDto) {
+    return this.catalog.assignProduct(dto);
   }
 
   @Get("raw-values")
@@ -86,6 +150,15 @@ export class CatalogEnrichmentController {
   @Post("suggestions/apply")
   applySuggestion(@Body() dto: ApplyCatalogSuggestionDto) {
     return this.catalog.applySuggestion(dto);
+  }
+
+  @Post("ai/suggest-merges")
+  aiSuggestMerges(@Query("kind") kind?: string) {
+    const k =
+      kind && (CATALOG_ALIAS_KINDS as readonly string[]).includes(kind)
+        ? (kind as (typeof CATALOG_ALIAS_KINDS)[number])
+        : "CATEGORY";
+    return this.catalog.aiSuggestMerges(k);
   }
 
   @Post("ai/category-clusters")

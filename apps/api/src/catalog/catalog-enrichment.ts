@@ -27,9 +27,32 @@ export type CatalogIdentityRow = {
   displaySubcategory: string | null;
 };
 
+export type CatalogOverrideRow = {
+  provider: string;
+  externalId: string;
+  displayBrand: string | null;
+  displayCategory: string | null;
+  displaySubcategory: string | null;
+};
+
+/** provider:externalId → override */
+export type CatalogOverrideIndex = Record<string, CatalogOverrideRow>;
+
+export type CatalogTermMeta = {
+  id: string;
+  kind: CatalogAliasKind;
+  label: string;
+  parentId: string | null;
+  visible: boolean;
+};
+
 export type CatalogEnrichmentContext = {
   aliases: CatalogAliasIndex;
   identities: CatalogIdentityIndex;
+  overrides: CatalogOverrideIndex;
+  /** Labels de categoría ocultos en el catálogo público. */
+  hiddenCategoryLabels: Set<string>;
+  hiddenBrandLabels: Set<string>;
 };
 
 export type CatalogAliasIndex = Partial<
@@ -70,12 +93,25 @@ export type IdentitySuggestion = {
 
 export type ProductCatalogSlice = {
   provider: string;
+  externalId?: string;
   brand: string | null;
   category: string | null;
   subcategory: string | null;
   ean: string | null;
   partNumber: string | null;
 };
+
+export function overrideIndexKey(provider: string, externalId: string) {
+  return `${provider}:${externalId}`;
+}
+
+export function indexCatalogOverrides(rows: CatalogOverrideRow[]): CatalogOverrideIndex {
+  const index: CatalogOverrideIndex = {};
+  for (const row of rows) {
+    index[overrideIndexKey(row.provider, row.externalId)] = row;
+  }
+  return index;
+}
 
 export function normalizeEan(raw: string): string | null {
   const digits = raw.replace(/\D/g, "");
@@ -142,6 +178,11 @@ export function resolveCatalogDisplay(
   product: ProductCatalogSlice,
   ctx?: CatalogEnrichmentContext
 ): { displayBrand: string | null; displayCategory: string | null; displaySubcategory: string | null } {
+  const override =
+    product.externalId && ctx?.overrides
+      ? ctx.overrides[overrideIndexKey(product.provider, product.externalId)]
+      : undefined;
+
   const identity =
     resolveIdentity(ctx?.identities, "EAN", product.ean, normalizeEan) ??
     resolveIdentity(ctx?.identities, "PART_NUMBER", product.partNumber, normalizePartNumber);
@@ -159,9 +200,24 @@ export function resolveCatalogDisplay(
     resolveAlias(ctx?.aliases, "SUBCATEGORY", null, product.subcategory);
 
   return {
-    displayBrand: identity?.displayBrand ?? brandAlias?.label ?? product.brand ?? null,
-    displayCategory: identity?.displayCategory ?? categoryAlias?.label ?? product.category ?? null,
-    displaySubcategory: identity?.displaySubcategory ?? subcategoryAlias?.label ?? product.subcategory ?? null,
+    displayBrand:
+      override?.displayBrand ??
+      identity?.displayBrand ??
+      brandAlias?.label ??
+      product.brand ??
+      null,
+    displayCategory:
+      override?.displayCategory ??
+      identity?.displayCategory ??
+      categoryAlias?.label ??
+      product.category ??
+      null,
+    displaySubcategory:
+      override?.displaySubcategory ??
+      identity?.displaySubcategory ??
+      subcategoryAlias?.label ??
+      product.subcategory ??
+      null,
   };
 }
 
@@ -353,6 +409,7 @@ export function groupCategoriesByDisplay(
       { provider: "", brand: null, category: row.rawCategory, subcategory: null, ean: null, partNumber: null },
       ctx
     ).displayCategory ?? row.rawCategory;
+    if (ctx?.hiddenCategoryLabels?.has(display)) continue;
     merged.set(display, (merged.get(display) ?? 0) + row.count);
   }
   return [...merged.entries()]

@@ -28,6 +28,9 @@ describe("catalog-enrichment", () => {
         displaySubcategory: null,
       },
     ]),
+    overrides: {},
+    hiddenCategoryLabels: new Set<string>(),
+    hiddenBrandLabels: new Set<string>(),
   };
 
   it("resuelve código Air y alias de marca", () => {
@@ -80,6 +83,35 @@ describe("catalog-enrichment", () => {
   it("heurística de clusters", () => {
     const clusters = heuristicCategoryClusters(["Memorias RAM", "Memorias Ram", "Periféricos"]);
     expect(clusters.some((c) => c.members.includes("Memorias RAM"))).toBe(true);
+  });
+
+  it("prioriza override por producto", () => {
+    const withOverride = {
+      ...ctx,
+      overrides: {
+        "ELIT:sku1": {
+          provider: "ELIT",
+          externalId: "sku1",
+          displayBrand: "Corsair",
+          displayCategory: "Teclados",
+          displaySubcategory: null,
+        },
+      },
+    };
+    const out = resolveCatalogDisplay(
+      {
+        provider: "ELIT",
+        externalId: "sku1",
+        brand: "Otra",
+        category: "Periféricos",
+        subcategory: null,
+        ean: null,
+        partNumber: null,
+      },
+      withOverride
+    );
+    expect(out.displayBrand).toBe("Corsair");
+    expect(out.displayCategory).toBe("Teclados");
   });
 });
 

@@ -1594,10 +1594,11 @@ export type CatalogAliasKind = "BRAND" | "CATEGORY" | "SUBCATEGORY";
 export type CatalogMatchKind = "EAN" | "PART_NUMBER";
 
 export interface CatalogEnrichmentOverview {
+  termCount: number;
   aliasCount: number;
-  identityCount: number;
+  overrideCount: number;
   productCount: number;
-  airCodedProducts: number;
+  incompleteCount: number;
   aiConfigured: boolean;
 }
 
@@ -1610,57 +1611,159 @@ export interface CatalogRawValueStat {
   looksLikeCode: boolean;
 }
 
-export interface CatalogSuggestions {
-  aliasSuggestions: {
-    kind: CatalogAliasKind;
-    provider: string | null;
-    rawKeys: string[];
-    labels: string[];
-    reason: string;
-    suggestedLabel: string;
-  }[];
-  codeSuggestions: {
-    kind: CatalogAliasKind;
-    provider: string | null;
-    rawKeys: string[];
-    labels: string[];
-    reason: string;
-    suggestedLabel: string;
-  }[];
-  identitySuggestions: {
-    matchKind: CatalogMatchKind;
-    matchKey: string;
-    productCount: number;
-    brands: string[];
-    categories: string[];
-    suggestedBrand: string | null;
-    suggestedCategory: string | null;
-    reason: string;
-  }[];
+export interface CatalogBoardRow {
+  id: string;
+  provider: string;
+  rawKey: string;
+  count: number;
+  sampleNames: string[];
+  looksLikeCode: boolean;
+  termId: string | null;
+  termLabel: string | null;
+  visible: boolean;
+  parentId: string | null;
+  parentLabel: string | null;
+  linked: { provider: string; rawKey: string; count: number }[];
+}
+
+export interface CatalogTermCard {
+  id: string;
+  label: string;
+  kind: CatalogAliasKind;
+  visible: boolean;
+  parentId: string | null;
+  parentLabel: string | null;
+  members: { provider: string; rawKey: string; count: number }[];
+  productCount: number;
+}
+
+export interface CatalogBoard {
+  kind: CatalogAliasKind;
+  rows: CatalogBoardRow[];
+  terms: CatalogTermCard[];
+  stats: {
+    rawCount: number;
+    linkedCount: number;
+    termCount: number;
+    hiddenCount: number;
+  };
+}
+
+export interface CatalogTerm {
+  id: string;
+  kind: CatalogAliasKind;
+  label: string;
+  parentId: string | null;
+  visible: boolean;
+  parent?: { id: string; label: string; kind: CatalogAliasKind } | null;
+  children?: { id: string; label: string; kind: CatalogAliasKind }[];
+  _count?: { aliases: number };
+}
+
+export interface CatalogIncompleteProduct {
+  provider: string;
+  externalId: string;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  subcategory: string | null;
+  displayBrand: string | null;
+  displayCategory: string | null;
+  displaySubcategory: string | null;
+  missingBrand: boolean;
+  missingCategory: boolean;
+  missingSubcategory: boolean;
+  sku: string | null;
+  partNumber: string | null;
+  ean: string | null;
+}
+
+export interface CatalogPreviewProduct {
+  provider: string;
+  externalId: string;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  subcategory: string | null;
+  sku: string | null;
+  partNumber: string | null;
+}
+
+export interface CatalogMergeCluster {
+  label: string;
+  confidence?: string;
+  members: { provider: string; rawKey: string; count: number }[];
 }
 
 export const catalogEnrichmentApi = {
   overview: () => api.get<CatalogEnrichmentOverview>("/admin/catalog-enrichment/overview"),
-  rawValues: (params: { kind: CatalogAliasKind; provider?: string; codesOnly?: boolean; limit?: number }) =>
-    api.get<CatalogRawValueStat[]>("/admin/catalog-enrichment/raw-values", { params }),
-  suggestions: (provider?: string) =>
-    api.get<CatalogSuggestions>("/admin/catalog-enrichment/suggestions", { params: provider ? { provider } : {} }),
-  upsertAlias: (data: {
+  board: (kind: CatalogAliasKind) =>
+    api.get<CatalogBoard>("/admin/catalog-enrichment/board", { params: { kind } }),
+  terms: (kind?: CatalogAliasKind) =>
+    api.get<CatalogTerm[]>("/admin/catalog-enrichment/terms", { params: kind ? { kind } : {} }),
+  createTerm: (data: {
     kind: CatalogAliasKind;
-    provider?: string | null;
-    rawKeys: string[];
     label: string;
-    groupId?: string;
+    parentId?: string | null;
+    visible?: boolean;
+  }) => api.post<CatalogTerm>("/admin/catalog-enrichment/terms", data),
+  updateTerm: (id: string, data: { label?: string; parentId?: string | null; visible?: boolean }) =>
+    api.patch<CatalogTerm>(`/admin/catalog-enrichment/terms/${id}`, data),
+  deleteTerm: (id: string, force?: boolean) =>
+    api.delete(`/admin/catalog-enrichment/terms/${id}`, { params: force ? { force: "1" } : {} }),
+  link: (data: {
+    kind: CatalogAliasKind;
+    items: { provider: string; rawKey: string }[];
+    label?: string;
+    termId?: string;
     source?: "MANUAL" | "AUTO" | "AI";
-  }) => api.post("/admin/catalog-enrichment/aliases", data),
-  applySuggestion: (data: Record<string, unknown>) =>
-    api.post("/admin/catalog-enrichment/suggestions/apply", data),
-  aiCategoryClusters: (provider?: string) =>
-    api.post<{ clusters: { label: string; members: string[] }[]; usedAi: boolean }>(
-      "/admin/catalog-enrichment/ai/category-clusters",
-      {},
-      { params: provider ? { provider } : {} }
+  }) => api.post("/admin/catalog-enrichment/link", data),
+  move: (data: {
+    kind: CatalogAliasKind;
+    from: { provider: string; rawKey: string };
+    toTermId?: string;
+    toLabel?: string;
+    deleteEmptySourceTerm?: boolean;
+  }) => api.post<{ moved: number }>("/admin/catalog-enrichment/move", data),
+  visibility: (data: {
+    kind: CatalogAliasKind;
+    provider: string;
+    rawKey: string;
+    visible: boolean;
+  }) => api.post("/admin/catalog-enrichment/visibility", data),
+  incomplete: (params?: { limit?: number; offset?: number; q?: string }) =>
+    api.get<{ items: CatalogIncompleteProduct[]; total: number; limit: number; offset: number }>(
+      "/admin/catalog-enrichment/incomplete",
+      { params }
     ),
+  assignProduct: (data: {
+    provider: string;
+    externalId: string;
+    displayBrand?: string | null;
+    displayCategory?: string | null;
+    displaySubcategory?: string | null;
+    source?: "MANUAL" | "AUTO" | "AI";
+  }) => api.post("/admin/catalog-enrichment/products/assign", data),
+  preview: (params: {
+    kind: CatalogAliasKind;
+    rawKey: string;
+    provider?: string;
+    limit?: number;
+  }) => api.get<CatalogPreviewProduct[]>("/admin/catalog-enrichment/preview", { params }),
+  aiSuggestMerges: (kind: CatalogAliasKind) =>
+    api.post<{ clusters: CatalogMergeCluster[]; usedAi: boolean; kind: CatalogAliasKind }>(
+      "/admin/catalog-enrichment/ai/suggest-merges",
+      {},
+      { params: { kind } }
+    ),
+  aiProductHint: (provider: string, externalId: string) =>
+    api.get<{
+      displayBrand: string | null;
+      displayCategory: string | null;
+      displaySubcategory: string | null;
+      reasoning: string;
+      source: string;
+    }>("/admin/catalog-enrichment/ai/product-hint", { params: { provider, externalId } }),
   saveOpenAi: (apiKey: string) =>
     api.put<{ hasOpenAiKey: boolean }>("/admin/catalog-enrichment/openai", { apiKey }),
   clearOpenAi: () => api.delete<{ hasOpenAiKey: boolean }>("/admin/catalog-enrichment/openai"),

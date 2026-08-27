@@ -159,15 +159,38 @@ enum CatalogEnrichmentSource {
   AI
 }
 
-/// Superadmin: unifica marcas/categorías crudas (incl. códigos numéricos de Air).
+/// Término canónico de catálogo (marca, categoría o subcategoría) a nivel plataforma.
+model PlatformCatalogTerm {
+  id        String           @id @default(uuid())
+  kind      CatalogAliasKind
+  label     String
+  /// Jerarquía: una CATEGORY puede ser padre de SUBCATEGORY (u otra CATEGORY anidada).
+  parentId  String?
+  parent    PlatformCatalogTerm?  @relation("CatalogTermTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  PlatformCatalogTerm[] @relation("CatalogTermTree")
+  /// Si false, no se muestra en el catálogo público (grilla de categorías / marcas).
+  visible   Boolean          @default(true)
+  source    CatalogEnrichmentSource @default(MANUAL)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  aliases   PlatformCatalogAlias[]
+
+  @@unique([kind, label])
+  @@index([kind, visible])
+  @@index([parentId])
+}
+
+/// Superadmin: vincula valores crudos de distribuidores a un término canónico.
 model PlatformCatalogAlias {
   id        String           @id @default(uuid())
   kind      CatalogAliasKind
-  /// Vacío = cross-proveedor; set para códigos propios del distribuidor (ej. Rubro Air).
+  /// Vacío = cross-proveedor; set = scoped al distribuidor.
   provider  String           @default("")
   rawKey    String
   groupId   String
   label     String
+  termId    String?
+  term      PlatformCatalogTerm? @relation(fields: [termId], references: [id], onDelete: SetNull)
   source    CatalogEnrichmentSource @default(MANUAL)
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
@@ -175,6 +198,23 @@ model PlatformCatalogAlias {
   @@unique([kind, provider, rawKey])
   @@index([kind, groupId])
   @@index([kind, provider])
+  @@index([termId])
+}
+
+/// Override por producto (traslado / completar marca-categoría sin pelear con el sync).
+model PlatformProductCatalogOverride {
+  id                 String                  @id @default(uuid())
+  provider           String
+  externalId         String
+  displayBrand       String?
+  displayCategory    String?
+  displaySubcategory String?
+  source             CatalogEnrichmentSource @default(MANUAL)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([provider])
 }
 
 /// Superadmin: marca/categoría canónica para todos los productos con el mismo EAN o part number.

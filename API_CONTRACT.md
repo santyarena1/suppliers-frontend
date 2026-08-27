@@ -103,6 +103,20 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: No cruza locales. No se unifica en automático: el comercio elige. Las claves crudas son el texto que ya guardó cada pedido.
 
+### [FEATURE] Módulo Catálogo (admin)
+- **Método**: GET | POST | PATCH | PUT | DELETE
+- **Ruta**: `/admin/catalog-enrichment/board` · `/terms` · `/link` · `/move` · `/visibility` · `/incomplete` · `/products/assign` · `/preview` · `/ai/suggest-merges` · `/ai/product-hint` · `/openai`
+- **Auth**: Bearer ROLE_ADMIN
+- **Body / Params**:
+  - board `?kind=CATEGORY|BRAND|SUBCATEGORY`
+  - link `{ kind, items:[{provider,rawKey}], label?|termId? }`
+  - move `{ kind, from:{provider,rawKey}, toLabel?|toTermId?, deleteEmptySourceTerm? }`
+  - terms CRUD `{ kind, label, parentId?, visible? }`
+  - assign producto `{ provider, externalId, displayBrand?, displayCategory?, displaySubcategory? }`
+- **Respuesta esperada**: board `{ rows, terms, stats }` · incomplete `{ items, total }` · preview productos
+- **Estado**: IMPLEMENTADO
+- **Notas**: Lista todas las categorías/marcas crudas de todos los distribuidores. Vincular o trasladar productos a un término canónico (con visibilidad y jerarquía padre/hijo). Overrides por producto en `PlatformProductCatalogOverride` (no pelean con el sync). Sin flujo especial de códigos Air.
+
 ### [FEATURE] Sincronización de imágenes (Primera foto / Serper)
 - **Método**: GET | PUT | DELETE | POST
 - **Ruta**: `/admin/images/status` · `/admin/images/missing` · `/admin/images/history` · `/admin/images/serper` · `/admin/images/cron` · `/admin/images/first-photo` · `/admin/images/first-photo/stop` · `/admin/images/products/:productId/serper-search` · `/admin/images/products/:productId/image`

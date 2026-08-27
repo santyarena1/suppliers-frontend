@@ -1,5 +1,15 @@
-import { Transform } from "class-transformer";
-import { IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from "class-validator";
 import { CATALOG_ALIAS_KINDS, CATALOG_MATCH_KINDS } from "../../catalog/catalog-enrichment";
 
 export class RawValuesQueryDto {
@@ -24,6 +34,145 @@ export class SaveOpenAiKeyDto {
   @MinLength(8)
   @MaxLength(300)
   apiKey!: string;
+}
+
+export class CatalogRawItemDto {
+  @IsString()
+  provider!: string;
+
+  @IsString()
+  @MinLength(1)
+  rawKey!: string;
+}
+
+export class LinkCatalogRawsDto {
+  @IsIn(CATALOG_ALIAS_KINDS)
+  kind!: (typeof CATALOG_ALIAS_KINDS)[number];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CatalogRawItemDto)
+  items!: CatalogRawItemDto[];
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  termId?: string;
+
+  @IsOptional()
+  @IsEnum(["MANUAL", "AUTO", "AI"] as const)
+  source?: "MANUAL" | "AUTO" | "AI";
+}
+
+export class MoveCatalogProductsDto {
+  @IsIn(CATALOG_ALIAS_KINDS)
+  kind!: (typeof CATALOG_ALIAS_KINDS)[number];
+
+  @ValidateNested()
+  @Type(() => CatalogRawItemDto)
+  from!: CatalogRawItemDto;
+
+  @IsOptional()
+  @IsString()
+  toTermId?: string;
+
+  @IsOptional()
+  @IsString()
+  toLabel?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  deleteEmptySourceTerm?: boolean;
+
+  @IsOptional()
+  @IsEnum(["MANUAL", "AUTO", "AI"] as const)
+  source?: "MANUAL" | "AUTO" | "AI";
+}
+
+export class CreateCatalogTermDto {
+  @IsIn(CATALOG_ALIAS_KINDS)
+  kind!: (typeof CATALOG_ALIAS_KINDS)[number];
+
+  @IsString()
+  @MinLength(1)
+  label!: string;
+
+  @IsOptional()
+  @IsString()
+  parentId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  visible?: boolean;
+}
+
+export class UpdateCatalogTermDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  parentId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  visible?: boolean;
+}
+
+export class ToggleRawVisibilityDto {
+  @IsIn(CATALOG_ALIAS_KINDS)
+  kind!: (typeof CATALOG_ALIAS_KINDS)[number];
+
+  @IsString()
+  provider!: string;
+
+  @IsString()
+  @MinLength(1)
+  rawKey!: string;
+
+  @IsBoolean()
+  visible!: boolean;
+}
+
+export class AssignProductDto {
+  @IsString()
+  provider!: string;
+
+  @IsString()
+  externalId!: string;
+
+  @IsOptional()
+  @IsString()
+  displayBrand?: string | null;
+
+  @IsOptional()
+  @IsString()
+  displayCategory?: string | null;
+
+  @IsOptional()
+  @IsString()
+  displaySubcategory?: string | null;
+
+  @IsOptional()
+  @IsEnum(["MANUAL", "AUTO", "AI"] as const)
+  source?: "MANUAL" | "AUTO" | "AI";
+}
+
+export class IncompleteQueryDto {
+  @IsOptional()
+  limit?: number;
+
+  @IsOptional()
+  offset?: number;
+
+  @IsOptional()
+  @IsString()
+  q?: string;
 }
 
 export class UpsertCatalogAliasDto {
