@@ -8,7 +8,99 @@ import { ShoppingCart, ChevronUp, X, Minus, Plus, Package } from "lucide-react";
 import { useCart, type CartItem, type CartRef, cartItemKey } from "@/lib/cart";
 import { PROVIDER_LABELS, type Provider } from "@/lib/api";
 import { useProviderDisplay } from "@/lib/providerDisplay";
-import { proxyImg } from "@/lib/format";
+import { proxyImg, formatUSD, formatARS } from "@/lib/format";
+import { usePrefs } from "@/lib/prefs";
+import { usePurchasePolicy, usePurchasePolicies } from "@/lib/purchase";
+import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
+import { displayAmountFromPricing } from "@/lib/display-price";
+import { taxByKind, formatAlicuota, type TaxLine } from "@/lib/tax";
+import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
+import type { PurchasePolicy } from "@/lib/purchase-pricing";
+
+type BreakdownRow = { key: string; label: string; amountUsd: number };
+
+type LineBreakdown = {
+  rows: BreakdownRow[];
+  totalUsd: number;
+  unitNetUsd: number;
+  qty: number;
+};
+
+function buildCartLineBreakdown(
+  item: CartItem,
+  policy: PurchasePolicy | null | undefined,
+  withIva: boolean,
+  withIibb: boolean,
+): LineBreakdown {
+  const pricing = purchaseLinePricing(item, policy, priceModeForCartItem(item), item.qty);
+  const includeIibb = withIibb && pricing.mode !== "offline";
+  const qty = item.qty;
+  const rows: BreakdownRow[] = [{ key: "net", label: "Neto", amountUsd: pricing.net }];
+
+  if (withIva) {
+    const taxLines = pricing.lines;
+    const iva = taxByKind(taxLines, "iva");
+    const internos = taxByKind(taxLines, "internos");
+    let iibb: TaxLine | null = taxByKind(taxLines, "iibb");
+    let iibbEstimated = false;
+
+    if (includeIibb && (!iibb || iibb.unitAmount <= 0.0001)) {
+      const pct = getIibbRatePercent(item.provider);
+      if (pct != null && pct > 0 && pricing.unitNet > 0) {
+        iibb = {
+          kind: "iibb",
+          label: "IIBB",
+          percent: pct,
+          unitAmount: Math.round(pricing.unitNet * (pct / 100) * 10000) / 10000,
+        };
+        iibbEstimated = true;
+      }
+    }
+
+    if (iva && iva.unitAmount > 0.0001) {
+      rows.push({
+        key: "iva",
+        label: `IVA ${formatAlicuota(iva.percent)}`,
+        amountUsd: iva.unitAmount * qty,
+      });
+    }
+    if (internos && internos.unitAmount > 0.0001) {
+      rows.push({
+        key: "internos",
+        label: "Imp. internos",
+        amountUsd: internos.unitAmount * qty,
+      });
+    }
+    if (includeIibb && iibb && iibb.unitAmount > 0.0001) {
+      rows.push({
+        key: "iibb",
+        label: `IIBB ${formatAlicuota(iibb.percent)}${iibbEstimated ? " est." : ""}`,
+        amountUsd: iibb.unitAmount * qty,
+      });
+    }
+    for (const line of taxLines.filter((l) => l.kind === "other" && l.unitAmount > 0.0001)) {
+      rows.push({
+        key: `other-${line.label}`,
+        label: line.label,
+        amountUsd: line.unitAmount * qty,
+      });
+    }
+  }
+
+  const totalUsd = displayAmountFromPricing(
+    pricing,
+    { withIva, withIibb: includeIibb, provider: item.provider },
+    qty,
+  ).displayUsd;
+
+  return { rows, totalUsd, unitNetUsd: pricing.unitNet, qty };
+}
+
+function useMoneyFmt() {
+  const { currency, convert } = usePrefs();
+  return (usd: number) =>
+    currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
+}
 
 type ProviderGroup = {
   provider: string;
@@ -45,28 +137,62 @@ function PreviewQty({ item }: { item: CartItem }) {
 
   return (
     <div
-      className="flex items-center gap-0.5 rounded-md border border-slate-200/90 bg-white p-0.5 shadow-sm"
+      className="flex items-center gap-0.5 rounded-md border border-surface-700 bg-surface-900 p-0.5"
       onClick={(e) => e.stopPropagation()}
     >
       <button
         type="button"
         onClick={dec}
-        className="flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+        className="flex h-6 w-6 items-center justify-center rounded text-surface-400 hover:bg-surface-800 hover:text-white transition-colors"
         aria-label="Quitar uno"
       >
         <Minus className="w-3 h-3" />
       </button>
-      <span className="min-w-[1.25rem] text-center text-[11px] font-semibold tabular-nums text-slate-700">
+      <span className="min-w-[1.25rem] text-center text-[11px] font-semibold tabular-nums text-surface-100">
         {item.qty}
       </span>
       <button
         type="button"
         onClick={inc}
-        className="flex h-6 w-6 items-center justify-center rounded text-brand-600 hover:bg-brand-50 hover:text-brand-700 transition-colors"
+        className="flex h-6 w-6 items-center justify-center rounded text-brand-400 hover:bg-brand-600 hover:text-white transition-colors"
         aria-label="Agregar uno"
       >
         <Plus className="w-3 h-3" />
       </button>
+    </div>
+  );
+}
+
+function PreviewLinePrice({ item }: { item: CartItem }) {
+  const policy = usePurchasePolicy(item.provider);
+  const { withIva, withIibb } = usePrefs();
+  useIibbRatesEpoch();
+  const fmt = useMoneyFmt();
+  const { rows, totalUsd, unitNetUsd, qty } = buildCartLineBreakdown(
+    item,
+    policy,
+    withIva,
+    withIibb,
+  );
+
+  const parts = rows.map((row) => {
+    if (row.key === "net" && qty > 1) {
+      return `Neto ${qty}×${fmt(unitNetUsd)}`;
+    }
+    return `${row.label} ${fmt(row.amountUsd)}`;
+  });
+
+  return (
+    <div className="mt-1 flex items-start justify-between gap-2">
+      <p
+        className="min-w-0 flex-1 text-[10px] leading-snug text-surface-500 truncate tabular-nums"
+        title={parts.join(" · ")}
+      >
+        {parts.join(" · ")}
+      </p>
+      <span className="flex-shrink-0 text-[12px] font-semibold tabular-nums text-white leading-snug text-right min-w-[4.5rem]">
+        {fmt(totalUsd)}
+      </span>
     </div>
   );
 }
@@ -78,7 +204,7 @@ function PreviewLine({ item }: { item: CartItem }) {
     <div className="flex items-start gap-2.5 py-2">
       <Link
         href={href}
-        className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white"
+        className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-surface-700 bg-white"
         onClick={(e) => e.stopPropagation()}
       >
         {item.imageUrl ? (
@@ -90,27 +216,79 @@ function PreviewLine({ item }: { item: CartItem }) {
             unoptimized
           />
         ) : (
-          <span className="absolute inset-0 flex items-center justify-center bg-slate-50 text-slate-400">
+          <span className="absolute inset-0 flex items-center justify-center bg-surface-800 text-surface-500">
             <Package className="w-4 h-4" />
           </span>
         )}
       </Link>
 
       <div className="min-w-0 flex-1">
-        <Link
-          href={href}
-          className="block text-[12px] leading-snug text-slate-800 line-clamp-2 hover:text-brand-700 transition-colors"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {item.name}
-        </Link>
-        <p className="mt-0.5 text-[10px] text-slate-500 font-mono truncate">
-          #{item.externalId}
-          {item.channel === "offline" ? " · offline" : ""}
-        </p>
+        <div className="flex items-start justify-between gap-2">
+          <Link
+            href={href}
+            className="min-w-0 flex-1 block text-[12px] leading-snug text-surface-100 line-clamp-1 hover:text-white transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {item.name}
+          </Link>
+          <div className="flex-shrink-0 min-w-[4.5rem] flex justify-end">
+            <PreviewQty item={item} />
+          </div>
+        </div>
+        <PreviewLinePrice item={item} />
       </div>
+    </div>
+  );
+}
 
-      <PreviewQty item={item} />
+function PreviewTotals({ items }: { items: CartItem[] }) {
+  const policies = usePurchasePolicies();
+  const { withIva, withIibb } = usePrefs();
+  useIibbRatesEpoch();
+  const fmt = useMoneyFmt();
+
+  const summary = useMemo(() => {
+    const totals = new Map<string, number>();
+    let totalUsd = 0;
+
+    for (const item of items) {
+      const breakdown = buildCartLineBreakdown(
+        item,
+        policies[item.provider],
+        withIva,
+        withIibb,
+      );
+      totalUsd += breakdown.totalUsd;
+      for (const row of breakdown.rows) {
+        totals.set(row.key, (totals.get(row.key) ?? 0) + row.amountUsd);
+      }
+    }
+
+    const rows: BreakdownRow[] = [];
+    if (totals.has("net")) rows.push({ key: "net", label: "Neto", amountUsd: totals.get("net")! });
+    if (withIva) {
+      if (totals.has("iva")) rows.push({ key: "iva", label: "IVA", amountUsd: totals.get("iva")! });
+      if (totals.has("internos")) {
+        rows.push({ key: "internos", label: "Imp. internos", amountUsd: totals.get("internos")! });
+      }
+      if (totals.has("iibb")) rows.push({ key: "iibb", label: "IIBB", amountUsd: totals.get("iibb")! });
+    }
+
+    return { rows, totalUsd };
+  }, [items, policies, withIva, withIibb]);
+
+  if (items.length === 0) return null;
+
+  const detail = summary.rows.map((row) => `${row.label} ${fmt(row.amountUsd)}`).join(" · ");
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-surface-800 bg-surface-900 px-3.5 py-2">
+      <p className="min-w-0 truncate text-[10px] text-surface-500 tabular-nums" title={detail}>
+        {detail || (withIva ? "Total" : "Total s/imp.")}
+      </p>
+      <span className="flex-shrink-0 text-sm font-semibold tabular-nums text-white">
+        {fmt(summary.totalUsd)}
+      </span>
     </div>
   );
 }
@@ -160,6 +338,11 @@ export default function CartFloat() {
     [filter, groups]
   );
 
+  const visibleItems = useMemo(
+    () => visibleGroups.flatMap((g) => g.items),
+    [visibleGroups]
+  );
+
   const lineCount = items.length;
 
   if (hide) return null;
@@ -167,11 +350,11 @@ export default function CartFloat() {
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
       {open && (
-        <div className="w-[min(100vw-2rem,22rem)] overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 shadow-2xl backdrop-blur-md">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3.5 py-2.5">
+        <div className="w-[min(100vw-2rem,26rem)] overflow-hidden rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl backdrop-blur-md">
+          <div className="flex items-center justify-between gap-2 border-b border-surface-800 px-3.5 py-2.5">
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-slate-900">Carrito</p>
-              <p className="text-[10px] text-slate-500 tabular-nums">
+              <p className="text-xs font-semibold text-white">Carrito</p>
+              <p className="text-[10px] text-surface-500 tabular-nums">
                 {lineCount === 0
                   ? "Sin productos"
                   : `${lineCount} ${lineCount === 1 ? "línea" : "líneas"} · ${totalCount} u.`}
@@ -180,7 +363,7 @@ export default function CartFloat() {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              className="rounded-md p-1 text-surface-500 hover:bg-surface-800 hover:text-white"
               aria-label="Cerrar preview"
             >
               <X className="w-3.5 h-3.5" />
@@ -188,14 +371,14 @@ export default function CartFloat() {
           </div>
 
           {groups.length > 1 && (
-            <div className="flex gap-1 overflow-x-auto px-3 py-2 border-b border-slate-100 scrollbar-none">
+            <div className="flex gap-1 overflow-x-auto border-b border-surface-800 px-3 py-2 scrollbar-none">
               <button
                 type="button"
                 onClick={() => setFilter("all")}
                 className={`flex-shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors ${
                   filter === "all"
-                    ? "bg-brand-100 text-brand-700"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-brand-600 text-white"
+                    : "bg-surface-800 text-surface-400 hover:bg-surface-700 hover:text-surface-200"
                 }`}
               >
                 Todos
@@ -209,8 +392,8 @@ export default function CartFloat() {
                     onClick={() => setFilter(provider)}
                     className={`flex flex-shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold transition-colors ${
                       filter === provider
-                        ? "bg-brand-100 text-brand-700"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        ? "bg-brand-600 text-white"
+                        : "bg-surface-800 text-surface-400 hover:bg-surface-700 hover:text-surface-200"
                     }`}
                   >
                     {logo ? (
@@ -218,7 +401,7 @@ export default function CartFloat() {
                       <img src={logo} alt="" className="h-3.5 w-3.5 rounded-full object-contain bg-white" />
                     ) : null}
                     <span className="max-w-[5.5rem] truncate">{label}</span>
-                    <span className="tabular-nums opacity-70">{qty}</span>
+                    <span className="tabular-nums opacity-80">{qty}</span>
                   </button>
                 );
               })}
@@ -227,18 +410,18 @@ export default function CartFloat() {
 
           <div className="max-h-[min(50vh,20rem)] overflow-y-auto px-3.5">
             {visibleGroups.length === 0 ? (
-              <p className="py-8 text-center text-xs text-slate-500">
+              <p className="py-8 text-center text-xs text-surface-500">
                 Agregá productos desde la búsqueda para verlos acá.
               </p>
             ) : (
               visibleGroups.map((group, idx) => (
                 <div
                   key={group.provider}
-                  className={idx > 0 ? "border-t border-slate-100 pt-2 mt-1" : "pt-1"}
+                  className={idx > 0 ? "mt-1 border-t border-surface-800 pt-2" : "pt-1"}
                 >
                   {filter === "all" && (
                     <div className="flex items-center gap-2 py-1.5">
-                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-slate-200">
+                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-surface-700">
                         {display.logoUrl(group.provider) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -247,20 +430,20 @@ export default function CartFloat() {
                             className="h-full w-full object-contain p-0.5"
                           />
                         ) : (
-                          <span className="text-[8px] font-bold text-slate-600">
+                          <span className="text-[8px] font-bold text-slate-700">
                             {group.label.slice(0, 2).toUpperCase()}
                           </span>
                         )}
                       </span>
-                      <span className="text-[11px] font-semibold text-slate-700 truncate">
+                      <span className="truncate text-[11px] font-semibold text-surface-200">
                         {group.label}
                       </span>
-                      <span className="ml-auto text-[10px] tabular-nums text-slate-400">
+                      <span className="ml-auto text-[10px] tabular-nums text-surface-500">
                         {group.qty} u.
                       </span>
                     </div>
                   )}
-                  <div className="divide-y divide-slate-100/80">
+                  <div className="divide-y divide-surface-800/80">
                     {group.items.map((item) => (
                       <PreviewLine key={cartItemKey(item)} item={item} />
                     ))}
@@ -271,15 +454,18 @@ export default function CartFloat() {
           </div>
 
           {lineCount > 0 && (
-            <div className="border-t border-slate-100 px-3.5 py-2">
-              <Link
-                href="/cart"
-                onClick={() => setOpen(false)}
-                className="block text-center text-[10px] font-medium text-slate-500 hover:text-brand-700 transition-colors"
-              >
-                Abrir cotización completa →
-              </Link>
-            </div>
+            <>
+              <PreviewTotals items={visibleItems} />
+              <div className="border-t border-surface-800 px-3.5 py-2">
+                <Link
+                  href="/cart"
+                  onClick={() => setOpen(false)}
+                  className="block text-center text-[10px] font-medium text-surface-500 hover:text-brand-300 transition-colors"
+                >
+                  Abrir cotización completa →
+                </Link>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -290,7 +476,7 @@ export default function CartFloat() {
         className={`relative flex items-center gap-2 rounded-full shadow-xl pl-3.5 pr-4 py-3 transition-colors ${
           totalCount > 0
             ? "bg-brand-600 hover:bg-brand-500 text-white"
-            : "bg-white hover:bg-slate-50 text-slate-600 border border-slate-200"
+            : "bg-surface-900 hover:bg-surface-800 text-surface-300 border border-surface-700"
         }`}
         aria-label="Ver preview del carrito"
         aria-expanded={open}
