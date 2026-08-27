@@ -21,7 +21,9 @@ export default function AdminAdsPanel({ showToast }: { showToast: (msg: string, 
       showToast("No se pudo cargar la publicidad", false);
       setLoading(false);
     });
-  }, [showToast]);
+    // showToast cambia en cada render del padre
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function patch(slot: AdSlot, data: Partial<AdSlot>, ok: string) {
     try {
