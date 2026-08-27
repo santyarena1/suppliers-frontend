@@ -37,7 +37,7 @@ import Link from "next/link";
 import {
   Search, SlidersHorizontal, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight, Columns2, Check,
+  ChevronDown, ChevronRight, GitCompare, Check,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc";
@@ -755,17 +755,18 @@ function ListRowActions({ product, priceMode }: { product: ProductDTO; priceMode
         title="Agregar al comparador"
         aria-label="Agregar al comparador"
         onClick={addToCompare}
-        className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+        className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors shadow-sm ${
           compareFlash
-            ? "border-brand-500/50 bg-brand-500/20 text-brand-300"
-            : "border-surface-600/40 bg-surface-800/60 text-surface-400 hover:text-white hover:border-brand-500/40"
+            ? "border-violet-400 bg-violet-100 text-violet-700"
+            : "border-violet-300/70 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:border-violet-400/60 hover:text-violet-200"
         }`}
       >
-        {compareFlash ? <Check className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
+        {compareFlash ? <Check className="w-3.5 h-3.5" /> : <GitCompare className="w-3.5 h-3.5" />}
       </button>
       <AddToCartButton
         product={product}
         variant="stepper"
+        tone="dark"
         channel={showingOffline ? "offline" : "online"}
       />
     </div>

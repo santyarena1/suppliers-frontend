@@ -7,7 +7,7 @@ import {
   productDisplayCategory,
   type Provider,
 } from "@/lib/api";
-import { Package, ImageOff, MapPin, DollarSign, Columns2, Check } from "lucide-react";
+import { Package, ImageOff, MapPin, DollarSign, GitCompare, Check } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
@@ -241,13 +241,13 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
                 title="Agregar al comparador"
                 aria-label="Agregar al comparador"
                 onClick={addToCompare}
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors shadow-sm ${
                   compareFlash
-                    ? "border-brand-500/50 bg-brand-500/20 text-brand-300"
-                    : "border-surface-600/40 bg-surface-800/60 text-surface-400 hover:text-white hover:border-brand-500/40 hover:bg-brand-500/10"
+                    ? "border-violet-400 bg-violet-100 text-violet-700"
+                    : "border-violet-200/90 bg-violet-50 text-violet-600 hover:bg-violet-100 hover:border-violet-300 hover:text-violet-700"
                 }`}
               >
-                {compareFlash ? <Check className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
+                {compareFlash ? <Check className="w-3.5 h-3.5" /> : <GitCompare className="w-3.5 h-3.5" />}
               </button>
               <button
                 type="button"
@@ -265,6 +265,7 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
               <AddToCartButton
                 product={product}
                 variant="stepper"
+                tone="light"
                 channel={showingOffline ? "offline" : "online"}
               />
             </div>
