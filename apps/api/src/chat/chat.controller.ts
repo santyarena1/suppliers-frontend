@@ -12,6 +12,7 @@ import {
   Sse,
   UseGuards,
   BadRequestException,
+  ForbiddenException,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { SkipThrottle } from "@nestjs/throttler";
@@ -22,10 +23,12 @@ import { SkipEnvelope } from "../common/decorators/skip-envelope.decorator";
 import { AssetsService } from "../assets/assets.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
+import { canWriteChat } from "./chat.access";
 import { ChatHub } from "./chat.hub";
 import { ChatService } from "./chat.service";
 import {
   ChatMessagesQueryDto,
+  ChatPeersQueryDto,
   ChatSearchQueryDto,
   EditChatMessageDto,
   OpenChatDto,
@@ -59,9 +62,14 @@ export class ChatController {
     return this.chat.search(tenant, query.q, query.take);
   }
 
+  @Get("peers")
+  peers(@CurrentTenant() tenant: TenantContext, @Query() query: ChatPeersQueryDto) {
+    return this.chat.listPeers(tenant, query.linkId);
+  }
+
   @Post("open")
   open(@CurrentTenant() tenant: TenantContext, @Body() dto: OpenChatDto) {
-    return this.chat.open(tenant, dto.linkId);
+    return this.chat.open(tenant, dto.linkId, dto.peerUserId);
   }
 
   @Post("share-order")
@@ -144,7 +152,10 @@ export class ChatController {
   }
 
   @Post("upload")
-  async upload(@Req() req: FastifyRequest) {
+  async upload(@CurrentTenant() tenant: TenantContext, @Req() req: FastifyRequest) {
+    if (!canWriteChat(tenant.tenantRole, tenant.tenantType)) {
+      throw new ForbiddenException("Tu rol es de solo lectura");
+    }
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();

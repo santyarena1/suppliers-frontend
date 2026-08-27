@@ -312,7 +312,7 @@ export const myApi = {
   providers: () => api.get<VisibleProvider[]>("/my/providers"),
   redeemCode: (code: string) => api.post<RedeemedCode>("/my/redeem-code", { code }),
   org: () => api.get<OwnOrg>("/my/org"),
-  updateOrg: (data: Partial<{ contactEmail: string | null; contactPhone: string | null; advertisingEnabled: boolean }>) =>
+  updateOrg: (data: Partial<{ contactEmail: string | null; contactPhone: string | null }>) =>
     api.put<OwnOrg>("/my/org", data),
   team: () => api.get<OwnTeam>("/my/team"),
   addMember: (data: { username: string; email: string; password?: string; role: TenantRole; title?: string }) =>
@@ -334,8 +334,13 @@ export const myApi = {
     linkId: string,
     data: Partial<{ accountManagerId: string | null; status: TenantLinkStatus; discountPercent: number | null; notes: string | null }>
   ) => api.put<OwnClient>(`/my/clients/${linkId}`, data),
-  clientOrders: (linkId?: string) =>
-    api.get<OwnClientOrder[]>(linkId ? `/my/clients/orders?linkId=${encodeURIComponent(linkId)}` : "/my/clients/orders"),
+  clientOrders: (linkId?: string, scope?: "brands" | "all") => {
+    const q = new URLSearchParams();
+    if (linkId) q.set("linkId", linkId);
+    if (scope) q.set("scope", scope);
+    const qs = q.toString();
+    return api.get<OwnClientOrder[]>(qs ? `/my/clients/orders?${qs}` : "/my/clients/orders");
+  },
 };
 
 export type ChatKind = "TEXT" | "IMAGE" | "FILE" | "ORDER" | "PRODUCT" | "SYSTEM";
@@ -344,7 +349,18 @@ export interface ChatThreadSummary {
   threadId: string | null;
   linkId: string;
   status: TenantLinkStatus;
-  peer: { name: string; type: TenantType; contactEmail: string | null; contactPhone: string | null };
+  peer: {
+    userId: string;
+    username: string;
+    name: string;
+    role: TenantRole | null;
+    roleLabel: string;
+    orgName: string;
+    type: TenantType;
+    contactEmail: string | null;
+    contactPhone: string | null;
+    isAccountManager: boolean;
+  };
   accountManager: { id: string; username: string; email: string } | null;
   lastMessage: { kind: ChatKind; text: string; author: string | null } | null;
   lastMessageAt: string | null;
@@ -396,7 +412,21 @@ export const chatApi = {
   threads: () => api.get<{ canWrite: boolean; unreadTotal: number; threads: ChatThreadSummary[] }>("/my/chat/threads"),
   unread: () => api.get<{ unreadTotal: number }>("/my/chat/unread"),
   search: (q: string) => api.get<{ messages: ChatMessage[] }>(`/my/chat/search?q=${encodeURIComponent(q)}`),
-  open: (linkId: string) => api.post<ChatThreadDetail>("/my/chat/open", { linkId }),
+  open: (linkId: string, peerUserId?: string) =>
+    api.post<ChatThreadDetail>("/my/chat/open", { linkId, peerUserId }),
+  peers: (linkId: string) =>
+    api.get<{
+      linkId: string;
+      peers: {
+        userId: string;
+        username: string;
+        role: TenantRole;
+        roleLabel: string;
+        isAccountManager: boolean;
+        isDefault: boolean;
+        hasThread: boolean;
+      }[];
+    }>(`/my/chat/peers?linkId=${encodeURIComponent(linkId)}`),
   thread: (threadId: string) => api.get<ChatThreadDetail>(`/my/chat/threads/${threadId}`),
   messages: (threadId: string, before?: string) =>
     api.get<{ hasMore: boolean; messages: ChatMessage[] }>(
@@ -420,6 +450,92 @@ export const chatApi = {
       byteSize: number;
       kind: "IMAGE" | "FILE";
     }>,
+};
+
+export interface OrgCartSnapshot {
+  tenantId: string;
+  items: unknown[];
+  schemes: unknown[];
+  updatedByUserId: string | null;
+  updatedAt: string | null;
+}
+
+export const orgCartApi = {
+  get: () => api.get<OrgCartSnapshot>("/cart/org"),
+  save: (data: { items: unknown[]; schemes: unknown[] }) => api.put<OrgCartSnapshot>("/cart/org", data),
+  client: (linkId: string) => api.get<OrgCartSnapshot>(`/cart/clients/${linkId}`),
+};
+
+export interface AdSlot {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  placement: string;
+  monthlyPriceUsd: number;
+  maxConcurrent: number;
+  enabled: boolean;
+}
+
+export interface AdCampaign {
+  id: string;
+  tenantId: string;
+  advertiser?: string;
+  status: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
+  title: string;
+  subtitle: string;
+  imageUrl: string | null;
+  linkUrl: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  slot: { id: string; key: string; name: string; placement: string; monthlyPriceUsd: number };
+  stats?: { impressions: number; clicks: number };
+}
+
+export interface AdCreative {
+  campaignId: string;
+  slot: string;
+  placement: string;
+  title: string;
+  subtitle: string;
+  imageUrl: string | null;
+  linkUrl: string | null;
+  advertiser: string;
+  provider: string | null;
+}
+
+export const adsApi = {
+  mine: () =>
+    api.get<{ allowed: boolean; monthlyDue: number; slots: AdSlot[]; campaigns: AdCampaign[] }>("/my/ads"),
+  createCampaign: (data: {
+    slotId: string;
+    title: string;
+    subtitle?: string;
+    imageUrl?: string;
+    linkUrl?: string;
+    status?: AdCampaign["status"];
+  }) => api.post<AdCampaign>("/my/ads/campaigns", data),
+  updateCampaign: (
+    id: string,
+    data: {
+      slotId: string;
+      title: string;
+      subtitle?: string;
+      imageUrl?: string;
+      linkUrl?: string;
+      status?: AdCampaign["status"];
+    }
+  ) => api.put<AdCampaign>(`/my/ads/campaigns/${id}`, data),
+  creatives: (placement?: string) =>
+    api.get<AdCreative[]>(placement ? `/ads/creatives?placement=${encodeURIComponent(placement)}` : "/ads/creatives"),
+  track: (campaignId: string, kind: "impression" | "click", path?: string) =>
+    api.post(`/ads/campaigns/${campaignId}/track`, { kind, path }),
+};
+
+export const adminAdsApi = {
+  list: () => api.get<{ slots: AdSlot[]; campaigns: AdCampaign[] }>("/admin/ads"),
+  updateSlot: (slotId: string, data: Partial<Pick<AdSlot, "enabled" | "monthlyPriceUsd" | "maxConcurrent" | "name" | "description">>) =>
+    api.put<AdSlot>(`/admin/ads/slots/${slotId}`, data),
 };
 
 export interface OwnOrg {
@@ -451,6 +567,7 @@ export interface OwnClient {
   lastOrderAt?: string | null;
   lastOrderTotal?: number | null;
   inactive?: boolean;
+  inBrandScope?: boolean;
   canEditTerms?: boolean;
   canAssignSeller?: boolean;
 }
@@ -459,6 +576,8 @@ export interface OwnPortfolio {
   canManage: boolean;
   canAssignSeller: boolean;
   canEditTerms: boolean;
+  isProductManager?: boolean;
+  managedBrands?: string[];
   sellers: { userId: string; username: string; email: string; tenantRole: TenantRole; title: string | null }[];
   clients: OwnClient[];
 }
@@ -474,6 +593,9 @@ export interface OwnClientOrder {
   approvedBy: string | null;
   createdAt: string;
   clientName?: string | null;
+  linkId?: string | null;
+  linkStatus?: TenantLinkStatus | null;
+  inBrandScope?: boolean;
 }
 
 export interface OwnClientDetail extends OwnClient {

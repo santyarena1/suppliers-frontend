@@ -53,12 +53,27 @@ export class PortfolioService {
       clientLinkVisibleTo(link, { tenantRole: tenant.tenantRole, userId: tenant.userId })
     );
     const clientIds = visible.map((link) => link.clientTenantId);
-    const orderStats = await this.orderStatsFor(tenant, clientIds);
+    const [orderStats, brandStats] = await Promise.all([
+      this.orderStatsFor(tenant, clientIds, { ignorePmScope: true }),
+      tenant.tenantRole === "PRODUCT_MANAGER"
+        ? this.orderStatsFor(tenant, clientIds)
+        : Promise.resolve(null),
+    ]);
+
+    const scopes =
+      tenant.tenantRole === "PRODUCT_MANAGER"
+        ? await this.prisma.productManagerScope.findMany({
+            where: { tenantId: tenant.tenantId, userId: tenant.userId },
+            select: { brandName: true },
+          })
+        : [];
 
     return {
       canManage: TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole),
       canAssignSeller: TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole),
       canEditTerms: canEditClientTerms(tenant.tenantRole),
+      isProductManager: tenant.tenantRole === "PRODUCT_MANAGER",
+      managedBrands: scopes.map((scope) => scope.brandName),
       sellers: sellers.map((membership) => ({
         userId: membership.user.id,
         username: membership.user.username,
@@ -68,12 +83,15 @@ export class PortfolioService {
       })),
       clients: visible.map((link) => {
         const stats = orderStats.get(link.clientTenantId) ?? { count: 0, lastAt: null, lastTotal: null };
+        const inBrandScope =
+          tenant.tenantRole !== "PRODUCT_MANAGER" || (brandStats?.get(link.clientTenantId)?.count ?? 0) > 0;
         return {
           ...this.serializeClient(link),
           ordersCount: stats.count,
           lastOrderAt: stats.lastAt,
           lastOrderTotal: stats.lastTotal,
           inactive: clientIsInactive(link.status, stats.lastAt),
+          inBrandScope,
         };
       }),
     };
@@ -158,20 +176,31 @@ export class PortfolioService {
     }
   }
 
-  async listClientOrders(tenant: TenantContext, linkId?: string) {
+  async listClientOrders(tenant: TenantContext, linkId?: string, scope?: "brands" | "all") {
     this.assertDistributor(tenant);
     if (linkId) {
       const link = await this.requireClientLink(tenant, linkId);
-      return this.ordersOf(tenant, link.clientTenantId);
+      return this.ordersOf(tenant, link.clientTenantId, scope);
     }
     const links = await this.prisma.tenantLink.findMany({
       where: { supplierTenantId: tenant.tenantId },
-      select: { clientTenantId: true, accountManagerId: true, clientTenant: { select: { id: true, name: true } } },
+      select: {
+        id: true,
+        status: true,
+        clientTenantId: true,
+        accountManagerId: true,
+        clientTenant: { select: { id: true, name: true } },
+      },
     });
     const visible = links.filter((link) =>
       clientLinkVisibleTo(link, { tenantRole: tenant.tenantRole, userId: tenant.userId })
     );
-    const byClient = new Map(visible.map((link) => [link.clientTenantId, link.clientTenant.name]));
+    const byClient = new Map(
+      visible.map((link) => [
+        link.clientTenantId,
+        { name: link.clientTenant.name, linkId: link.id, status: link.status },
+      ])
+    );
     const rows = await this.prisma.providerOrder.findMany({
       where: { tenantId: { in: [...byClient.keys()] } },
       orderBy: { createdAt: "desc" },
@@ -181,11 +210,20 @@ export class PortfolioService {
         approvedBy: { select: { username: true } },
       },
     });
-    const filtered = await this.filterOrdersForPm(tenant, rows);
-    return filtered.map((row) => ({
-      ...this.serializeOrder(row),
-      clientName: byClient.get(row.tenantId) ?? null,
-    }));
+    const inPmScope =
+      tenant.tenantRole === "PRODUCT_MANAGER" ? await this.filterOrdersForPm(tenant, rows) : rows;
+    const inScopeIds = new Set(inPmScope.map((row) => row.id));
+    const shown = tenant.tenantRole === "PRODUCT_MANAGER" && scope !== "all" ? inPmScope : rows;
+    return shown.map((row) => {
+      const client = byClient.get(row.tenantId);
+      return {
+        ...this.serializeOrder(row),
+        clientName: client?.name ?? null,
+        linkId: client?.linkId ?? null,
+        linkStatus: client?.status ?? null,
+        inBrandScope: inScopeIds.has(row.id),
+      };
+    });
   }
 
   private assertDistributor(tenant: TenantContext) {
@@ -222,11 +260,15 @@ export class PortfolioService {
     };
   }
 
-  private async orderStatsFor(tenant: TenantContext, clientIds: string[]) {
+  private async orderStatsFor(
+    tenant: TenantContext,
+    clientIds: string[],
+    opts?: { ignorePmScope?: boolean }
+  ) {
     const stats = new Map<string, { count: number; lastAt: string | null; lastTotal: number | null }>();
     if (clientIds.length === 0) return stats;
 
-    if (tenant.tenantRole === "PRODUCT_MANAGER") {
+    if (tenant.tenantRole === "PRODUCT_MANAGER" && !opts?.ignorePmScope) {
       const rows = await this.prisma.providerOrder.findMany({
         where: { tenantId: { in: clientIds } },
         orderBy: { createdAt: "desc" },
@@ -278,7 +320,7 @@ export class PortfolioService {
     return stats;
   }
 
-  private async ordersOf(tenant: TenantContext, clientTenantId: string) {
+  private async ordersOf(tenant: TenantContext, clientTenantId: string, scope?: "brands" | "all") {
     const rows = await this.prisma.providerOrder.findMany({
       where: { tenantId: clientTenantId },
       orderBy: { createdAt: "desc" },
@@ -288,7 +330,10 @@ export class PortfolioService {
         approvedBy: { select: { username: true } },
       },
     });
-    const filtered = await this.filterOrdersForPm(tenant, rows);
+    const filtered =
+      tenant.tenantRole === "PRODUCT_MANAGER" && scope !== "all"
+        ? await this.filterOrdersForPm(tenant, rows)
+        : rows;
     return filtered.map((row) => this.serializeOrder(row));
   }
 

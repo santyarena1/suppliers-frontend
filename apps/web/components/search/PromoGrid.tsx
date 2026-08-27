@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { Banner } from "@/lib/api";
+import { adsApi, type AdCreative, type Banner } from "@/lib/api";
 import {
   BANNER_BENTO_CONTAINER,
   BANNER_SLOT_BENTO,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/brand-presets";
 import { assetUrl } from "@/lib/assets";
 import { demoBannerForSlot } from "@/lib/demoBanners";
+import { trackAdClick, trackAdImpression } from "@/components/ads/ad-track";
 
 function pickBanner(banners: Banner[], slot: BannerSlot): Banner | undefined {
   const matches = banners.filter(
@@ -35,19 +37,40 @@ function SlotShell({
   );
 }
 
-function FilledBanner({ banner, isDemo }: { banner: Banner; isDemo?: boolean }) {
+function FilledBanner({
+  banner,
+  isDemo,
+  campaignId,
+}: {
+  banner: Banner;
+  isDemo?: boolean;
+  campaignId?: string;
+}) {
+  useEffect(() => {
+    if (campaignId) trackAdImpression(campaignId);
+  }, [campaignId]);
+
   const inner = (
     <>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={assetUrl(banner.imageUrl)}
-        alt={banner.title || "Promoción"}
-        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-      />
+      {banner.imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={assetUrl(banner.imageUrl)}
+          alt={banner.title || "Promoción"}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-brand-700/40 via-surface-900 to-surface-950" />
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
       {isDemo && (
         <span className="absolute top-2 right-2 z-10 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-black/60 text-white/80 border border-white/15">
           Demo
+        </span>
+      )}
+      {campaignId && !isDemo && (
+        <span className="absolute top-2 right-2 z-10 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/80 text-black">
+          Patrocinado
         </span>
       )}
       {(banner.title || banner.subtitle) && (
@@ -66,19 +89,34 @@ function FilledBanner({ banner, isDemo }: { banner: Banner; isDemo?: boolean }) 
   );
 
   const cls = "group absolute inset-0 block";
+  const onPaidClick = campaignId ? () => trackAdClick(campaignId) : undefined;
 
   if (banner.linkUrl && !isDemo) {
     const external = banner.linkUrl.startsWith("http");
     return external ? (
-      <a href={banner.linkUrl} target="_blank" rel="noopener noreferrer" className={cls}>
+      <a href={banner.linkUrl} target="_blank" rel="noopener noreferrer" className={cls} onClick={onPaidClick}>
         {inner}
       </a>
     ) : (
-      <Link href={banner.linkUrl} className={cls}>{inner}</Link>
+      <Link href={banner.linkUrl} className={cls} onClick={onPaidClick}>{inner}</Link>
     );
   }
 
   return <div className={cls}>{inner}</div>;
+}
+
+function paidAsBanner(creative: AdCreative, slot: BannerSlot): Banner {
+  return {
+    id: creative.campaignId,
+    position: "search",
+    slot,
+    imageUrl: creative.imageUrl ?? "",
+    title: creative.title,
+    subtitle: creative.subtitle || `Patrocinado · ${creative.advertiser}`,
+    linkUrl: creative.linkUrl,
+    order: 0,
+    active: true,
+  };
 }
 
 type PromoGridProps = {
@@ -92,11 +130,24 @@ type PromoGridProps = {
  * Cada slot mantiene su posición; si no hay banner real, se muestra uno de demo.
  */
 export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProps) {
+  const [paid, setPaid] = useState<AdCreative[]>([]);
+
+  useEffect(() => {
+    adsApi
+      .creatives("search")
+      .then((res) => setPaid(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setPaid([]));
+  }, []);
+
   const bySlot = BANNER_SLOT_ORDER.map((slot) => {
+    const paidMatch = paid.find((creative) => creative.slot === slot);
+    if (paidMatch) {
+      return { slot, banner: paidAsBanner(paidMatch, slot), isDemo: false, campaignId: paidMatch.campaignId };
+    }
     const real = pickBanner(banners, slot);
-    if (real) return { slot, banner: real, isDemo: false };
-    if (useDemoFill) return { slot, banner: demoBannerForSlot(slot), isDemo: true };
-    return { slot, banner: undefined, isDemo: false };
+    if (real) return { slot, banner: real, isDemo: false, campaignId: undefined };
+    if (useDemoFill) return { slot, banner: demoBannerForSlot(slot), isDemo: true, campaignId: undefined };
+    return { slot, banner: undefined, isDemo: false, campaignId: undefined };
   });
 
   const anyVisible = bySlot.some((s) => !!s.banner);
@@ -105,10 +156,10 @@ export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProp
   return (
     <section className="mb-8">
       <div className={BANNER_BENTO_CONTAINER}>
-        {bySlot.map(({ slot, banner, isDemo }) =>
+        {bySlot.map(({ slot, banner, isDemo, campaignId }) =>
           banner ? (
             <SlotShell key={slot} slot={slot}>
-              <FilledBanner banner={banner} isDemo={isDemo} />
+              <FilledBanner banner={banner} isDemo={isDemo} campaignId={campaignId} />
             </SlotShell>
           ) : null,
         )}

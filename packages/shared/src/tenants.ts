@@ -71,7 +71,22 @@ export const TENANT_ROLES_CAN_MANAGE_TEAM: readonly TenantRole[] = ["OWNER", "AD
 /** Asignar vendedor, suspender un vínculo y prender publicidad. */
 export const TENANT_ROLES_CAN_MANAGE_PORTFOLIO: readonly TenantRole[] = ["OWNER", "ADMIN"];
 
-/** Escribir en el chat del vínculo. El visor solo lee. */
+/**
+ * Quién escribe en el chat, por tipo de organización.
+ * En el comercio: dueño, administrador y comprador (el vendedor del local no).
+ * En el distribuidor: dueño, administrador, vendedor y PM.
+ */
+export const TENANT_ROLES_CAN_WRITE_CHAT_BY_TYPE: Record<TenantType, readonly TenantRole[]> = {
+  RETAILER: ["OWNER", "ADMIN", "BUYER"],
+  DISTRIBUTOR: ["OWNER", "ADMIN", "SELLER", "PRODUCT_MANAGER"],
+  BRAND: ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL"],
+};
+
+export function tenantCanWriteChat(type: TenantType, role: TenantRole): boolean {
+  return TENANT_ROLES_CAN_WRITE_CHAT_BY_TYPE[type].includes(role);
+}
+
+/** @deprecated Usar tenantCanWriteChat(type, role). */
 export const TENANT_ROLES_CAN_WRITE_CHAT: readonly TenantRole[] = [
   "OWNER",
   "ADMIN",

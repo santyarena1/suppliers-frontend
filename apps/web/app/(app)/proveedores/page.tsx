@@ -151,7 +151,7 @@ export default function ProveedoresPage() {
                               <Link
                                 href={`/mensajes?linkId=${linkId}`}
                                 className="flex items-center justify-center gap-1 text-xs font-medium border border-brand-500/40 hover:border-brand-400 text-brand-200 hover:text-white rounded-lg px-2.5 py-1.5 transition-all"
-                                title="Hablar con el vendedor"
+                                title={accountManager ? `Hablar con ${accountManager.name}` : "Hablar con el vendedor asignado"}
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
                                 Hablar

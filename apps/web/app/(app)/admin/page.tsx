@@ -12,14 +12,15 @@ import OrganizationsTree from "@/components/admin/OrganizationsTree";
 import CatalogEnrichmentPanel from "@/components/admin/CatalogEnrichmentPanel";
 import DiagnosticsPanel from "@/components/DiagnosticsPanel";
 import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
+import AdminAdsPanel from "@/components/admin/AdminAdsPanel";
 import {
   Users, ShieldCheck,
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
-  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon,
+  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone,
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "organizations" | "users" | "permissions" | "retail" | "catalog" | "images" | "diagnostics";
+type Tab = "organizations" | "users" | "permissions" | "retail" | "catalog" | "images" | "ads" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "organizations", label: "Organizaciones", icon: <Network className="w-3.5 h-3.5" /> },
@@ -28,6 +29,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "retail", label: "Locales / precios", icon: <DollarSign className="w-3.5 h-3.5" /> },
   { key: "catalog", label: "Catálogo", icon: <Tags className="w-3.5 h-3.5" /> },
   { key: "images", label: "Imágenes", icon: <ImageIcon className="w-3.5 h-3.5" /> },
+  { key: "ads", label: "Publicidad", icon: <Megaphone className="w-3.5 h-3.5" /> },
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
@@ -41,7 +43,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   admin: "Administración",
 };
 
-const TAB_KEYS: Tab[] = ["organizations", "users", "permissions", "retail", "catalog", "images", "diagnostics"];
+const TAB_KEYS: Tab[] = ["organizations", "users", "permissions", "retail", "catalog", "images", "ads", "diagnostics"];
 
 export default function AdminPage() {
   return (
@@ -117,6 +119,7 @@ function AdminPageInner() {
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
             {tab === "images" && <ImageSyncPanel showToast={showToast} />}
+            {tab === "ads" && <AdminAdsPanel showToast={showToast} />}
             {tab === "diagnostics" && <DiagnosticsPanel />}
           </div>
 

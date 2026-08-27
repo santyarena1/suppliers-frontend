@@ -69,6 +69,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [importing, setImporting] = useState(false);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [chatLinkId, setChatLinkId] = useState<string | null>(null);
+  const [chatSeller, setChatSeller] = useState<string | null>(null);
 
   const tabFromQuery = useRef(false);
   const autoTabDone = useRef(false);
@@ -87,6 +88,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     void loadMyProviders().then((list) => {
       const row = list.find((item) => item.provider === provider && item.linked);
       setChatLinkId(row?.linkId ?? null);
+      setChatSeller(row?.accountManager?.name ?? null);
     });
   }, [provider]);
 
@@ -302,10 +304,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
               {chatLinkId && (
                 <Link
                   href={`/mensajes?linkId=${chatLinkId}`}
-                  className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium border border-brand-500/40 hover:border-brand-400 text-brand-200 hover:text-white rounded-lg px-2.5 py-1.5"
+                  className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium border border-brand-500/40 hover:border-brand-400 text-brand-200 hover:text-white rounded-lg px-2.5 py-1.5 max-w-[14rem] truncate"
+                  title={chatSeller ? `Hablar con ${chatSeller}` : "Hablar"}
                 >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  Hablar
+                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
+                  {chatSeller ? `Hablar con ${chatSeller}` : "Hablar"}
                 </Link>
               )}
               <PrefsPanel />
