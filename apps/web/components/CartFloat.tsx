@@ -175,27 +175,23 @@ function PreviewLinePrice({ item }: { item: CartItem }) {
     withIibb,
   );
 
+  const parts = rows.map((row) => {
+    if (row.key === "net" && qty > 1) {
+      return `Neto ${qty}×${fmt(unitNetUsd)}`;
+    }
+    return `${row.label} ${fmt(row.amountUsd)}`;
+  });
+
   return (
-    <div className="mt-1.5 rounded-lg border border-surface-800 bg-surface-900 px-2 py-1.5">
-      <div className="space-y-0.5">
-        {rows.map((row) => (
-          <div key={row.key} className="flex items-baseline justify-between gap-2 text-[10px] leading-snug">
-            <span className="text-surface-500 truncate">
-              {row.key === "net" && qty > 1
-                ? `Neto · ${qty} × ${fmt(unitNetUsd)}`
-                : row.label}
-            </span>
-            <span className="flex-shrink-0 tabular-nums text-surface-300">{fmt(row.amountUsd)}</span>
-          </div>
-        ))}
-      </div>
-      <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-surface-800 pt-1">
-        <span className="text-[11px] font-medium text-surface-200">
-          {withIva ? "Total línea" : "Total s/imp."}
+    <p className="mt-1 text-[10px] leading-snug text-surface-500 truncate" title={parts.join(" · ")}>
+      <span className="font-semibold tabular-nums text-white">{fmt(totalUsd)}</span>
+      {parts.length > 0 && (
+        <span className="tabular-nums">
+          {" "}
+          · {parts.join(" · ")}
         </span>
-        <span className="text-[12px] font-semibold tabular-nums text-white">{fmt(totalUsd)}</span>
-      </div>
-    </div>
+      )}
+    </p>
   );
 }
 
@@ -203,10 +199,10 @@ function PreviewLine({ item }: { item: CartItem }) {
   const href = `/product/${encodeURIComponent(item.provider)}/${encodeURIComponent(item.externalId)}`;
 
   return (
-    <div className="flex items-start gap-2.5 py-2.5">
+    <div className="flex items-start gap-2.5 py-2">
       <Link
         href={href}
-        className="relative h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg border border-surface-700 bg-white"
+        className="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-surface-700 bg-white"
         onClick={(e) => e.stopPropagation()}
       >
         {item.imageUrl ? (
@@ -226,22 +222,16 @@ function PreviewLine({ item }: { item: CartItem }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <Link
-              href={href}
-              className="block text-[12px] leading-snug text-surface-100 line-clamp-2 hover:text-white transition-colors"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {item.name}
-            </Link>
-            <p className="mt-0.5 text-[10px] text-surface-500 font-mono truncate">
-              #{item.externalId}
-              {item.channel === "offline" ? " · offline" : ""}
-            </p>
-            <PreviewLinePrice item={item} />
-          </div>
+          <Link
+            href={href}
+            className="min-w-0 flex-1 block text-[12px] leading-snug text-surface-100 line-clamp-1 hover:text-white transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {item.name}
+          </Link>
           <PreviewQty item={item} />
         </div>
+        <PreviewLinePrice item={item} />
       </div>
     </div>
   );
@@ -285,24 +275,16 @@ function PreviewTotals({ items }: { items: CartItem[] }) {
 
   if (items.length === 0) return null;
 
+  const detail = summary.rows.map((row) => `${row.label} ${fmt(row.amountUsd)}`).join(" · ");
+
   return (
-    <div className="border-t border-surface-800 bg-surface-900 px-3.5 py-2">
-      {summary.rows.length > 1 && (
-        <div className="mb-1.5 space-y-0.5">
-          {summary.rows.map((row) => (
-            <div key={row.key} className="flex justify-between gap-2 text-[10px]">
-              <span className="text-surface-500">{row.label}</span>
-              <span className="tabular-nums text-surface-400">{fmt(row.amountUsd)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-          {withIva ? "Total preview" : "Total s/imp."}
-        </span>
-        <span className="text-sm font-semibold tabular-nums text-white">{fmt(summary.totalUsd)}</span>
-      </div>
+    <div className="flex items-center justify-between gap-3 border-t border-surface-800 bg-surface-900 px-3.5 py-2">
+      <p className="min-w-0 truncate text-[10px] text-surface-500 tabular-nums" title={detail}>
+        {detail || (withIva ? "Total" : "Total s/imp.")}
+      </p>
+      <span className="flex-shrink-0 text-sm font-semibold tabular-nums text-white">
+        {fmt(summary.totalUsd)}
+      </span>
     </div>
   );
 }
