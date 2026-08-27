@@ -182,7 +182,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
   /** Tablero: todas las categorías/marcas crudas + vínculos + visibilidad. */
   async getBoard(kind: CatalogAliasKind) {
     const [rawStats, terms, aliases] = await Promise.all([
-      this.listRawValues({ kind, limit: 400 }),
+      this.listRawValues({ kind, limit: 500 }),
       this.prisma.platformCatalogTerm.findMany({
         where: { kind },
         include: { parent: { select: { id: true, label: true, kind: true } } },
@@ -237,6 +237,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
       visible: t.visible,
       parentId: t.parentId,
       parentLabel: t.parent?.label ?? null,
+      inMenu: t.inMenu,
       members: membersByTerm.get(t.id) ?? [],
       productCount: (membersByTerm.get(t.id) ?? []).reduce((s, m) => s + m.count, 0),
     }));
@@ -272,6 +273,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
     label: string;
     parentId?: string | null;
     visible?: boolean;
+    inMenu?: boolean;
     source?: CatalogEnrichmentSource;
   }) {
     const label = input.label.trim();
@@ -286,13 +288,15 @@ export class CatalogEnrichmentService implements OnModuleInit {
     if (existing) {
       if (
         (input.parentId !== undefined && input.parentId !== existing.parentId) ||
-        (input.visible !== undefined && input.visible !== existing.visible)
+        (input.visible !== undefined && input.visible !== existing.visible) ||
+        (input.inMenu !== undefined && input.inMenu !== existing.inMenu)
       ) {
         return this.prisma.platformCatalogTerm.update({
           where: { id: existing.id },
           data: {
             ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
             ...(input.visible !== undefined ? { visible: input.visible } : {}),
+            ...(input.inMenu !== undefined ? { inMenu: input.inMenu } : {}),
           },
         });
       }
@@ -304,6 +308,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
         label,
         parentId: input.parentId ?? null,
         visible: input.visible ?? true,
+        inMenu: input.inMenu ?? false,
         source: input.source ?? "MANUAL",
       },
     });
@@ -314,6 +319,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
     label: string;
     parentId?: string | null;
     visible?: boolean;
+    inMenu?: boolean;
   }) {
     const term = await this.ensureTerm(input);
     await this.refreshCache(true);
@@ -322,7 +328,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
 
   async updateTerm(
     id: string,
-    input: { label?: string; parentId?: string | null; visible?: boolean }
+    input: { label?: string; parentId?: string | null; visible?: boolean; inMenu?: boolean }
   ) {
     const term = await this.prisma.platformCatalogTerm.findUnique({ where: { id } });
     if (!term) throw new NotFoundException("Término no encontrado");
@@ -354,6 +360,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
         ...(label ? { label } : {}),
         ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
         ...(input.visible !== undefined ? { visible: input.visible } : {}),
+        ...(input.inMenu !== undefined ? { inMenu: input.inMenu } : {}),
       },
     });
 

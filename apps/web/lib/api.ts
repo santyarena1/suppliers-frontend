@@ -1631,6 +1631,7 @@ export interface CatalogTermCard {
   label: string;
   kind: CatalogAliasKind;
   visible: boolean;
+  inMenu?: boolean;
   parentId: string | null;
   parentLabel: string | null;
   members: { provider: string; rawKey: string; count: number }[];
@@ -1656,6 +1657,7 @@ export interface CatalogTerm {
   label: string;
   parentId: string | null;
   visible: boolean;
+  inMenu?: boolean;
   parent?: { id: string; label: string; kind: CatalogAliasKind } | null;
   children?: { id: string; label: string; kind: CatalogAliasKind }[];
   _count?: { aliases: number };
@@ -1708,9 +1710,12 @@ export const catalogEnrichmentApi = {
     label: string;
     parentId?: string | null;
     visible?: boolean;
+    inMenu?: boolean;
   }) => api.post<CatalogTerm>("/admin/catalog-enrichment/terms", data),
-  updateTerm: (id: string, data: { label?: string; parentId?: string | null; visible?: boolean }) =>
-    api.patch<CatalogTerm>(`/admin/catalog-enrichment/terms/${id}`, data),
+  updateTerm: (
+    id: string,
+    data: { label?: string; parentId?: string | null; visible?: boolean; inMenu?: boolean }
+  ) => api.patch<CatalogTerm>(`/admin/catalog-enrichment/terms/${id}`, data),
   deleteTerm: (id: string, force?: boolean) =>
     api.delete(`/admin/catalog-enrichment/terms/${id}`, { params: force ? { force: "1" } : {} }),
   link: (data: {
