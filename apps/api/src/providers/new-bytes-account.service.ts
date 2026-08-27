@@ -8,6 +8,7 @@ import {
 } from "./new-bytes-client";
 import {
   normalizeComprobante,
+  normalizeOrderDetail,
   normalizeOrderRow,
   pickBalanceFromClient,
   type NbComprobanteRow,
@@ -104,19 +105,22 @@ export class NewBytesAccountService {
     return documentFile(file.buffer, file.contentType, `comprobante-${voucherId}`);
   }
 
-  async getOrderDetail(credentials: Record<string, string>, id: string) {
+  async getOrderDetail(credentials: Record<string, string>, id: string, kind?: string) {
     if (!id?.trim()) throw new BadRequestException("Falta id");
     const api = await this.client(credentials);
-    try {
-      const body = await api.get(`miCuenta/pedidos/${encodeURIComponent(id)}`);
-      return { found: true, raw: body };
-    } catch {
+    const encoded = encodeURIComponent(id.trim());
+    const purchaseFirst = kind === "purchase";
+    const paths = purchaseFirst
+      ? [`miCuenta/ordenesDeCompra/${encoded}`, `miCuenta/pedidos/${encoded}`]
+      : [`miCuenta/pedidos/${encoded}`, `miCuenta/ordenesDeCompra/${encoded}`];
+    for (const path of paths) {
       try {
-        const body = await api.get(`miCuenta/ordenesDeCompra/${encodeURIComponent(id)}`);
-        return { found: true, raw: body };
+        const body = await api.get(path);
+        return { found: true as const, ...normalizeOrderDetail(body) };
       } catch {
-        return { found: false, raw: null };
+        /* probar el otro recurso */
       }
     }
+    return { found: false as const };
   }
 }

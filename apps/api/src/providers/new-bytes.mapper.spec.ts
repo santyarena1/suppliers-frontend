@@ -12,6 +12,7 @@ import {
   normalizeComprobante,
   normalizeOrderRow,
   parseNbAvailability,
+  parseNbOrderItems,
   parseShippingQuote,
   pickBalanceFromClient,
 } from "./new-bytes.mapper";
@@ -111,6 +112,7 @@ describe("new-bytes.mapper", () => {
     expect(order.orderNumber).toBe("88421");
     expect(order.webOrderNumber).toBe("88421");
     expect(order.status).toBe("Pendiente");
+    expect(order.items).toBeUndefined();
 
     const movement = normalizeComprobante({
       voucherId: 99,
@@ -125,6 +127,54 @@ describe("new-bytes.mapper", () => {
     expect(movement.subtotalUsd).toBe(100);
     expect(movement.totalArs).toBe(121000);
     expect(movement.perceptions).toBe(5);
+  });
+
+  it("lee ítems e importes del detalle de pedido con los campos del carrito NB", () => {
+    const detail = normalizeOrderRow({
+      data: {
+        albNumber: "88421",
+        branch: 1,
+        statusDescription: "Facturado",
+        date: "21-08-2026",
+        amount: 150.5,
+        note: "retiro viernes",
+        dropShipping: false,
+        trackingNumber: "ANDREANI-9",
+        invoice: "FC-001",
+        medioDePago: { description: "Depósito en Banco" },
+        medioDeEnvio: { description: "Retiro en sucursal" },
+        shippingAddress: { direccion: "Av. Jujuy 1039", localidad: "CABA", codigoPostal: "1229" },
+        subtotal: { subTotal: 124, subTotalFinal: 150.5, iva: 26.04, perceptionsIIBB: 0.46, currencyQuote: 1400 },
+        items: [
+          {
+            productId: 108613,
+            amount: 2,
+            subtotal: 100,
+            product: { id: 108613, title: "RTX 3070", price: { value: 50 } },
+          },
+          { productId: 12, amount: 1, title: "Mouse", price: { value: 24 } },
+        ],
+      },
+    });
+    expect(detail.orderNumber).toBe("88421");
+    expect(detail.notes).toBe("retiro viernes");
+    expect(detail.payment).toBe("Depósito en Banco");
+    expect(detail.delivery).toBe("Retiro en sucursal");
+    expect(detail.address).toMatch(/Jujuy 1039/);
+    expect(detail.trackingNumber).toBe("ANDREANI-9");
+    expect(detail.invoice).toBe("FC-001");
+    expect(detail.items).toEqual([
+      { code: "108613", name: "RTX 3070", qty: 2, price: 50, total: 100 },
+      { code: "12", name: "Mouse", qty: 1, price: 24, total: 24 },
+    ]);
+    expect(detail.subtotalUsd).toBe(124);
+    expect(detail.iva).toBe(26.04);
+    expect(detail.perceptions).toBe(0.46);
+    expect(detail.perceptionLabel).toBe("IIBB");
+    expect(detail.totalUsd).toBe(150.5);
+    expect(detail.exchangeRate).toBe(1400);
+    expect(detail.totalArs).toBe(150.5 * 1400);
+    expect(parseNbOrderItems({ items: [] })).toEqual([]);
   });
 
   it("excluye medios de pago que redirigen a tarjeta / MercadoPago", () => {

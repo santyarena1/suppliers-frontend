@@ -198,6 +198,14 @@ export function extractItemPatch(body: unknown): Partial<NormalizedProduct> {
   return patch;
 }
 
+export interface NbOrderItem {
+  code?: string;
+  name: string;
+  qty?: number;
+  price?: number;
+  total?: number;
+}
+
 export interface NbOrderRow {
   orderNumber?: string;
   webOrderNumber?: string;
@@ -212,19 +220,169 @@ export interface NbOrderRow {
   trackingNumber?: string;
   dropShipping?: boolean;
   total?: number;
+  notes?: string;
+  payment?: string;
+  delivery?: string;
+  address?: string;
+  items?: NbOrderItem[];
+  subtotalUsd?: number;
+  iva?: number;
+  perceptions?: number;
+  perceptionLabel?: string;
+  totalUsd?: number;
+  totalArs?: number;
+  exchangeRate?: number;
   [key: string]: unknown;
 }
 
+const ITEM_LIST_KEYS = ["items", "details", "products", "articulos", "orderItems", "lineas", "lines", "cartItems"];
+
+function looksLikeNbItem(raw: unknown): boolean {
+  const rec = asRecord(raw);
+  if (!rec) return false;
+  return Boolean(
+    rec.productId != null
+    || rec.product
+    || rec.amount != null
+    || rec.qty != null
+    || rec.quantity != null
+    || rec.sku
+    || rec.title
+  );
+}
+
+function unwrapOrderRecord(body: unknown): Record<string, unknown> {
+  const rec = asRecord(body) ?? {};
+  const list = unwrapNbList(body);
+  if (list.length === 1 && asRecord(list[0]) && !looksLikeNbItem(list[0])) {
+    return asRecord(list[0]) ?? rec;
+  }
+  const nested = asRecord(rec.data);
+  if (nested) return nested;
+  return rec;
+}
+
+function pickNbLabel(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "string" || typeof raw === "number") return asString(raw);
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  return asString(rec.description)
+    || asString(rec.nombre)
+    || asString(rec.label)
+    || asString(rec.name)
+    || asString(rec.title);
+}
+
+export function formatNbAddressLine(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw === "string" || typeof raw === "number") return asString(raw);
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const street = asString(rec.direccion) || asString(rec.address) || asString(rec.calle) || asString(rec.addressLine);
+  const place = asString(rec.localidad) || asString(rec.placeString) || asString(rec.place);
+  const province = asString(rec.provincia) || asString(rec.province);
+  const postal = asString(rec.codigoPostal) || asString(rec.postalCode) || asString(rec.cp);
+  const line = [street, place, province, postal].filter(Boolean).join(", ");
+  return line || asString(rec.label) || asString(rec.identificador);
+}
+
+function parseNbItemPrice(rec: Record<string, unknown>, product: Record<string, unknown>): number | undefined {
+  const priceObj = asRecord(product.price) ?? asRecord(rec.price);
+  return asNumber(priceObj?.value)
+    ?? asNumber(priceObj?.finalPrice)
+    ?? asNumber(rec.priceUsd)
+    ?? asNumber(rec.unitPrice)
+    ?? asNumber(rec.price)
+    ?? asNumber(product.price);
+}
+
+export function parseNbOrderItems(raw: unknown): NbOrderItem[] {
+  const rec = asRecord(raw) ?? unwrapOrderRecord(raw);
+  let rows: unknown[] = [];
+  for (const key of ITEM_LIST_KEYS) {
+    const value = rec[key];
+    if (Array.isArray(value) && value.length > 0) {
+      rows = value;
+      break;
+    }
+  }
+  if (rows.length === 0) {
+    const nested = asRecord(rec.data);
+    if (nested) {
+      for (const key of ITEM_LIST_KEYS) {
+        const value = nested[key];
+        if (Array.isArray(value) && value.length > 0) {
+          rows = value;
+          break;
+        }
+      }
+    }
+  }
+  if (rows.length === 0) {
+    const list = unwrapNbList(raw);
+    if (list.length > 0 && list.every(looksLikeNbItem)) rows = list;
+  }
+  return rows.map((row) => {
+    const item = asRecord(row) ?? {};
+    const product = asRecord(item.product) ?? item;
+    const code = asString(item.productId)
+      || asString(product.id)
+      || asString(item.sku)
+      || asString(product.sku)
+      || asString(item.codigo)
+      || asString(item.code);
+    const name = asString(product.title)
+      || asString(item.title)
+      || asString(item.name)
+      || asString(item.detalle)
+      || asString(item.description)
+      || code
+      || "Ítem";
+    const qty = asNumber(item.amount) ?? asNumber(item.qty) ?? asNumber(item.quantity) ?? asNumber(item.cantidad);
+    const price = parseNbItemPrice(item, product);
+    const total = asNumber(item.subtotal) ?? asNumber(item.total) ?? asNumber(item.lineTotal)
+      ?? (price != null && qty != null ? price * qty : undefined);
+    return { code, name, qty, price, total };
+  }).filter((it) => it.name);
+}
+
+function extraOrderFields(rec: Record<string, unknown>): Partial<NbOrderRow> {
+  const items = parseNbOrderItems(rec);
+  const subs = parseNbSubtotales(rec.subtotal != null ? rec.subtotal : rec);
+  const quote = asNumber(asRecord(rec.subtotal)?.currencyQuote) ?? asNumber(rec.currencyQuote) ?? asNumber(rec.cotizacion);
+  const notes = asString(rec.note) || asString(rec.notes) || asString(rec.observaciones) || asString(rec.comentario);
+  const payment = pickNbLabel(rec.paymentDescription ?? rec.medioDePago ?? rec.payMethod ?? rec.payment);
+  const delivery = pickNbLabel(rec.shippingDescription ?? rec.medioDeEnvio ?? rec.delivery ?? rec.envio ?? rec.shipping);
+  const address = formatNbAddressLine(rec.shippingAddress ?? rec.address ?? rec.direccion ?? rec.destino);
+  const drop = rec.dropShipping;
+  return {
+    notes,
+    payment,
+    delivery,
+    address,
+    ...(drop != null ? { dropShipping: drop === true || drop === "true" || drop === 1 } : {}),
+    items: items.length > 0 ? items : undefined,
+    subtotalUsd: subs.subtotalUsd,
+    iva: subs.iva,
+    perceptions: subs.perceptions,
+    perceptionLabel: subs.perceptions != null ? subs.perceptionLabel : undefined,
+    totalUsd: subs.totalUsd,
+    exchangeRate: quote,
+    totalArs: subs.totalUsd != null && quote != null ? subs.totalUsd * quote : undefined,
+  };
+}
+
 export function normalizeOrderRow(raw: unknown): NbOrderRow {
-  const rec = asRecord(raw) ?? {};
+  const rec = unwrapOrderRecord(raw);
   const orderNumber = asString(rec.orderNumber) || asString(rec.orderId) || asString(rec.id);
   const albNumber = asString(rec.albNumber);
   const branch = asString(rec.branch);
   const status = asString(rec.statusDescription) || asString(rec.status) || asString(rec.estado) || "";
   const date = asString(rec.date) || asString(rec.fecha) || asString(rec.createdAt) || "";
   const amount = rec.amount ?? rec.total ?? rec.importe;
+  const extra = extraOrderFields(rec);
   return {
-    ...rec,
     orderNumber: orderNumber ?? albNumber,
     webOrderNumber: albNumber || (branch && orderNumber ? `${branch}-${orderNumber}` : orderNumber),
     albNumber,
@@ -236,7 +394,12 @@ export function normalizeOrderRow(raw: unknown): NbOrderRow {
     clientName: asString(rec.clientName),
     trackingNumber: asString(rec.trackingNumber),
     invoice: asString(rec.invoice),
+    ...extra,
   };
+}
+
+export function normalizeOrderDetail(raw: unknown): NbOrderRow {
+  return normalizeOrderRow(raw);
 }
 
 export interface NbComprobanteRow {

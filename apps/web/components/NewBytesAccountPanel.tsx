@@ -14,6 +14,7 @@ import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { mergeNbOrder, nbOrderAmountLines, nbOrderHeaderLines, nbOrderItems } from "@/components/account/nbOrderDetail";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import {
   useAccountHistoryState,
@@ -59,12 +60,38 @@ export default function NewBytesAccountPanel() {
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [orderFull, setOrderFull] = useState<NewBytesOrder | null>(null);
+  const [orderLoading, setOrderLoading] = useState(false);
 
   const section = history.section as SectionId;
 
   useEffect(() => {
+    if (detail?.kind !== "order") {
+      setOrderFull(null);
+      setOrderLoading(false);
+      return;
+    }
+    setOrderFull(detail.row);
+    setOrderLoading(false);
+    const kind = detail.title === "Orden de compra" ? "purchase" : "orders";
+    const id = kind === "purchase"
+      ? String(detail.row.orderNumber || detail.row.albNumber || detail.row.webOrderNumber || "")
+      : String(detail.row.albNumber || detail.row.orderNumber || detail.row.webOrderNumber || "");
+    if (!id || (detail.row.items && detail.row.items.length > 0)) return;
+    let cancelled = false;
+    setOrderLoading(true);
+    void newBytesAccountApi.orderDetail(id, { kind })
+      .then((res) => {
+        if (cancelled || res.data.found === false) return;
+        setOrderFull((prev) => mergeNbOrder(prev ?? detail.row, res.data));
+      })
+      .catch(() => { /* se queda el resumen del listado */ })
+      .finally(() => { if (!cancelled) setOrderLoading(false); });
+    return () => { cancelled = true; };
+  }, [detail]);
+
+  useEffect(() => {
     void loadSection(section, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al cambiar sección
   }, [section]);
 
   async function loadSection(id: SectionId, refresh: boolean) {
@@ -171,6 +198,8 @@ export default function NewBytesAccountPanel() {
   })();
 
   const ready = rowsForSection != null;
+  const openOrder = detail?.kind === "order" ? (orderFull ?? detail.row) : null;
+  const openAmounts = openOrder ? nbOrderAmountLines(openOrder) : null;
 
   return (
     <>
@@ -188,7 +217,7 @@ export default function NewBytesAccountPanel() {
         refreshing={loading}
         fromCache={fromCache}
         amountTotal={amountTotal}
-        hint="Pedidos y facturas de nb.com.ar. Los comprobantes se ven y descargan; New Bytes no tiene adjuntar pago desde Nodo."
+        hint="Pedidos y facturas de nb.com.ar. Ver más carga productos e importes del portal. No hay adjuntar pago."
         header={
           section === "cta" && balance != null ? (
             <div className="flex items-center gap-2">
@@ -266,22 +295,20 @@ export default function NewBytesAccountPanel() {
           onClose={() => setDetail(null)}
         />
       )}
-      {detail?.kind === "order" && (
+      {detail?.kind === "order" && openOrder && openAmounts && (
         <AccountRowDetail
           open
-          title={`${detail.title} ${detail.row.orderNumber || detail.row.albNumber || ""}`.trim()}
-          lines={[
-            { label: "N°", value: String(detail.row.orderNumber || detail.row.albNumber || "") },
-            { label: "Pedido web", value: detail.row.webOrderNumber || "" },
-            { label: "Sucursal", value: detail.row.branch != null ? String(detail.row.branch) : "" },
-            { label: "Estado", value: detail.row.status || "" },
-            { label: "Detalle estado", value: detail.row.statusDescription || "" },
-            { label: "Fecha", value: detail.row.date || "" },
-            { label: "Importe", value: detail.row.amount != null ? String(detail.row.amount) : "" },
-            { label: "Cliente", value: detail.row.clientName || "" },
-            { label: "Tracking", value: detail.row.trackingNumber || "" },
-            { label: "Factura", value: detail.row.invoice || "" },
-          ]}
+          title={`${detail.title} ${openOrder.orderNumber || openOrder.albNumber || ""}`.trim()}
+          lines={nbOrderHeaderLines(openOrder)}
+          items={nbOrderItems(openOrder)}
+          totals={openAmounts.lines}
+          note={[
+            orderLoading ? "Cargando ítems del portal…" : "",
+            !orderLoading && !(openOrder.items && openOrder.items.length)
+              ? "New Bytes no trajo productos en este pedido. El listado a veces solo manda el encabezado."
+              : "",
+            ...openAmounts.notes,
+          ].filter(Boolean).join(" ")}
           onClose={() => setDetail(null)}
         />
       )}

@@ -1062,7 +1062,7 @@ export interface NewBytesOrder {
   orderNumber?: string;
   webOrderNumber?: string;
   albNumber?: string;
-  branch?: string;
+  branch?: string | number;
   status: string;
   statusDescription?: string;
   date: string;
@@ -1070,6 +1070,25 @@ export interface NewBytesOrder {
   clientName?: string;
   trackingNumber?: string;
   invoice?: string;
+  notes?: string;
+  payment?: string;
+  delivery?: string;
+  address?: string;
+  dropShipping?: boolean;
+  items?: {
+    code?: string;
+    name: string;
+    qty?: number;
+    price?: number;
+    total?: number;
+  }[];
+  subtotalUsd?: number;
+  iva?: number;
+  perceptions?: number;
+  perceptionLabel?: string;
+  totalUsd?: number;
+  totalArs?: number;
+  exchangeRate?: number;
 }
 export interface NewBytesComprobante {
   voucherId?: string | number;
@@ -1207,8 +1226,11 @@ export const newBytesAccountApi = {
       "/providers/NEW_BYTES/account-statement",
       { params: opts?.refresh ? { refresh: 1 } : undefined }
     ),
-  orderDetail: (id: string) =>
-    api.get<{ found: boolean; raw: unknown }>(`/providers/NEW_BYTES/orders/${encodeURIComponent(id)}`),
+  orderDetail: (id: string, opts?: { kind?: "orders" | "purchase" }) =>
+    api.get<NewBytesOrder & { found: boolean }>(
+      `/providers/NEW_BYTES/orders/${encodeURIComponent(id)}`,
+      { params: opts?.kind ? { kind: opts.kind } : undefined }
+    ),
 };
 
 export type NewBytesCheckoutItemInput = { code: string; qty: number; name?: string };

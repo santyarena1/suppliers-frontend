@@ -242,8 +242,12 @@ export class ProvidersController {
   }
 
   @Get("providers/NEW_BYTES/orders/:id")
-  async newBytesOrderDetail(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
-    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(tenant), id);
+  async newBytesOrderDetail(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("id") id: string,
+    @Query("kind") kind?: string
+  ) {
+    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(tenant), id, kind);
   }
 
   @Get("providers/NEW_BYTES/checkout/addresses")

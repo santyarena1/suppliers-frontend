@@ -199,6 +199,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: No es por pedido: es un informe de cuenta. La UI es un modal **Enviar** (crear + adjuntar + cerrar). **No** usar `GET /account/payments?include=options` — Elit crea un informe vacío. New Bytes, Air y Grupo Núcleo no tienen upload de comprobantes: solo ver/descargar (GN ni eso).
 
+### [FEATURE] Detalle de pedidos New Bytes (productos e importes)
+- **Método**: GET
+- **Ruta**: `/providers/NEW_BYTES/orders/:id`
+- **Auth**: Bearer, organización comercio con cuenta New Bytes (user/password del portal)
+- **Body / Params**: `id` = `albNumber` (Mis pedidos) u `orderNumber` (órdenes de compra). Query `kind=orders|purchase` para probar primero `miCuenta/pedidos/:id` o `miCuenta/ordenesDeCompra/:id`.
+- **Respuesta esperada**: `{ found, orderNumber, albNumber, status, date, items[], notes?, payment?, delivery?, address?, trackingNumber?, invoice?, subtotalUsd?, iva?, perceptions?, perceptionLabel?, totalUsd?, totalArs?, exchangeRate? }`. `found: false` si New Bytes no tiene ese id. Los ítems usan los mismos campos del carrito (`productId`, `product.title`, `amount`, `price.value`, `subtotal`).
+- **Estado**: IMPLEMENTADO
+- **Notas**: El listado `GET /providers/NEW_BYTES/orders` suele ser solo encabezado. Ver más vuelve a consultar el detalle. No se inventan nombres ni alícuotas: si el portal no manda ítems, la UI lo dice.
+
 ## Pendiente (futuro)
 
 
