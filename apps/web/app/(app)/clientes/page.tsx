@@ -28,6 +28,7 @@ export default function ClientesPage() {
   const [status, setStatus] = useState<"ALL" | TenantLinkStatus>("ALL");
   const [sellerId, setSellerId] = useState("ALL");
   const [onlyInactive, setOnlyInactive] = useState(false);
+  const [onlyMyBrands, setOnlyMyBrands] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -53,9 +54,10 @@ export default function ClientesPage() {
       if (sellerId === "NONE" && client.accountManager) return false;
       if (sellerId !== "ALL" && sellerId !== "NONE" && client.accountManager?.id !== sellerId) return false;
       if (onlyInactive && !client.inactive) return false;
+      if (portfolio?.isProductManager && onlyMyBrands && client.inBrandScope === false) return false;
       return true;
     });
-  }, [portfolio, q, status, sellerId, onlyInactive]);
+  }, [portfolio, q, status, sellerId, onlyInactive, onlyMyBrands]);
 
   const inactiveCount = (portfolio?.clients ?? []).filter((client) => client.inactive).length;
 
@@ -136,6 +138,17 @@ export default function ClientesPage() {
                   />
                   Sin pedido reciente{inactiveCount > 0 ? ` (${inactiveCount})` : ""}
                 </label>
+                {portfolio?.isProductManager && (
+                  <label className="flex items-center gap-1.5 text-xs text-surface-400">
+                    <input
+                      type="checkbox"
+                      checked={onlyMyBrands}
+                      onChange={(e) => setOnlyMyBrands(e.target.checked)}
+                      className="accent-brand-600"
+                    />
+                    Solo mis marcas{portfolio.managedBrands?.length ? ` (${portfolio.managedBrands.join(", ")})` : ""}
+                  </label>
+                )}
               </div>
               {clients.length === 0 ? (
                 <p className="text-xs text-surface-500">Ningún comercio coincide con el filtro.</p>
@@ -176,14 +189,16 @@ function ClientRow({ client }: { client: OwnClient }) {
         {client.ordersCount ?? 0} pedidos · {when(client.lastOrderAt)}
         {client.lastOrderTotal != null ? ` · ${formatUSD(client.lastOrderTotal)}` : ""}
       </span>
-      <Link
-        href={`/mensajes?linkId=${client.linkId}`}
-        className="w-10 h-10 flex items-center justify-center rounded-full text-surface-500 hover:text-brand-300 hover:bg-surface-800"
-        aria-label="Abrir chat"
-        title="Hablar"
-      >
-        <MessageSquare className="w-4 h-4" />
-      </Link>
+      {client.status !== "REVOKED" && (
+        <Link
+          href={`/mensajes?linkId=${client.linkId}`}
+          className="w-10 h-10 flex items-center justify-center rounded-full text-surface-500 hover:text-brand-300 hover:bg-surface-800"
+          aria-label="Abrir chat"
+          title="Abrir chat con esa persona del comercio"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </Link>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { isChatReactionEmoji } from "@nodo/shared";
-import { canWriteChat, chatLinkVisibleTo, chatPeerName } from "./chat.access";
+import { canWriteChat, chatLinkVisibleTo, chatPeerName, chatThreadVisibleTo, formatChatPeerLine } from "./chat.access";
 
 describe("chatLinkVisibleTo", () => {
   const link = {
@@ -79,9 +79,21 @@ describe("chatLinkVisibleTo", () => {
 
 describe("canWriteChat", () => {
   it("el visor solo lee", () => {
-    expect(canWriteChat("VIEWER")).toBe(false);
-    expect(canWriteChat("SELLER")).toBe(true);
-    expect(canWriteChat("OWNER")).toBe(true);
+    expect(canWriteChat("VIEWER", "RETAILER")).toBe(false);
+    expect(canWriteChat("VIEWER", "DISTRIBUTOR")).toBe(false);
+  });
+
+  it("en el comercio escriben dueño, admin y comprador; el vendedor del local no", () => {
+    expect(canWriteChat("OWNER", "RETAILER")).toBe(true);
+    expect(canWriteChat("ADMIN", "RETAILER")).toBe(true);
+    expect(canWriteChat("BUYER", "RETAILER")).toBe(true);
+    expect(canWriteChat("SELLER", "RETAILER")).toBe(false);
+  });
+
+  it("en el distribuidor el vendedor y el PM sí escriben", () => {
+    expect(canWriteChat("SELLER", "DISTRIBUTOR")).toBe(true);
+    expect(canWriteChat("PRODUCT_MANAGER", "DISTRIBUTOR")).toBe(true);
+    expect(canWriteChat("OWNER", "DISTRIBUTOR")).toBe(true);
   });
 });
 
@@ -100,5 +112,64 @@ describe("chatPeerName", () => {
   it("cada lado ve el nombre del otro", () => {
     expect(chatPeerName(named, "RETAILER")).toBe("New Bytes");
     expect(chatPeerName(named, "DISTRIBUTOR")).toBe("Local Centro");
+  });
+});
+
+describe("formatChatPeerLine", () => {
+  it("junta usuario, rol y organización", () => {
+    expect(
+      formatChatPeerLine({ username: "juan", roleLabel: "Vendedor", orgName: "Elit" })
+    ).toBe("juan · Vendedor · Elit");
+    expect(
+      formatChatPeerLine({ name: "maría", roleLabel: "Comprador", orgName: "TecnoStore" })
+    ).toBe("maría · Comprador · TecnoStore");
+  });
+});
+
+describe("chatThreadVisibleTo", () => {
+  const link = {
+    clientTenantId: "comercio",
+    supplierTenantId: "distro",
+    accountManagerId: "seller-1",
+    status: "ACTIVE",
+  };
+  const thread = { distroUserId: "seller-1", storeUserId: "buyer-1", link };
+
+  it("el vendedor no ve el chat del dueño del distro con el mismo local", () => {
+    expect(
+      chatThreadVisibleTo(thread, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "OWNER",
+        userId: "owner-1",
+      })
+    ).toBe(false);
+    expect(
+      chatThreadVisibleTo(thread, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "SELLER",
+        userId: "seller-1",
+      })
+    ).toBe(true);
+  });
+
+  it("el dueño del local no ve el chat del comprador con el mismo vendedor", () => {
+    expect(
+      chatThreadVisibleTo(thread, {
+        tenantId: "comercio",
+        tenantType: "RETAILER",
+        tenantRole: "OWNER",
+        userId: "owner-local",
+      })
+    ).toBe(false);
+    expect(
+      chatThreadVisibleTo(thread, {
+        tenantId: "comercio",
+        tenantType: "RETAILER",
+        tenantRole: "BUYER",
+        userId: "buyer-1",
+      })
+    ).toBe(true);
   });
 });

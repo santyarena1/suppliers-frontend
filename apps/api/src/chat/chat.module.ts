@@ -9,6 +9,6 @@ import { ChatService } from "./chat.service";
   imports: [forwardRef(() => TenantsModule), AssetsModule],
   controllers: [ChatController],
   providers: [ChatService, ChatHub],
-  exports: [ChatService],
+  exports: [ChatService, ChatHub],
 })
 export class ChatModule {}

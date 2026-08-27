@@ -17,6 +17,7 @@ function ChatShell() {
     <ChatApp
       initialThreadId={threadId}
       initialLinkId={params.get("linkId") ?? undefined}
+      initialPeerUserId={params.get("peerUserId") ?? undefined}
     />
   );
 }

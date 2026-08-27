@@ -1,7 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
-import { ProductDTO } from "@/lib/api";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { orgCartApi, ProductDTO } from "@/lib/api";
+import { getTenant, getUser } from "@/lib/auth";
+import { subscribeChatEvents } from "@/components/chat/ChatRealtime";
 import { extractTaxLines } from "@/lib/tax";
 
 export type CartChannel = "online" | "offline";
@@ -127,23 +129,87 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [schemes, setSchemes] = useState<CartScheme[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const skipPush = useRef(true);
+  const saveTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
-      if (stored) {
-        const parsed = migrateLegacy(JSON.parse(stored));
-        setItems(parsed.items);
-        setSchemes(parsed.schemes);
+    let cancelled = false;
+    async function boot() {
+      const tenant = getTenant();
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
+        const local = stored ? migrateLegacy(JSON.parse(stored)) : { items: [] as CartItem[], schemes: [] as CartScheme[] };
+        if (tenant?.type === "RETAILER") {
+          try {
+            const remote = await orgCartApi.get();
+            const remoteItems = Array.isArray(remote.data.items) ? (remote.data.items as CartItem[]) : [];
+            const remoteSchemes = Array.isArray(remote.data.schemes) ? (remote.data.schemes as CartScheme[]) : [];
+            if (remoteItems.length > 0 || remoteSchemes.length > 0) {
+              if (!cancelled) {
+                setItems(remoteItems.map((it) => ({ ...it, channel: it.channel === "offline" ? "offline" : "online" })));
+                setSchemes(remoteSchemes);
+              }
+            } else if (local.items.length > 0) {
+              if (!cancelled) {
+                setItems(local.items);
+                setSchemes(local.schemes);
+              }
+              await orgCartApi.save({ items: local.items, schemes: local.schemes });
+            }
+          } catch {
+            if (!cancelled) {
+              setItems(local.items);
+              setSchemes(local.schemes);
+            }
+          }
+        } else if (stored) {
+          if (!cancelled) {
+            setItems(local.items);
+            setSchemes(local.schemes);
+          }
+        }
+      } catch { /* ignore */ }
+      if (!cancelled) {
+        skipPush.current = false;
+        setHydrated(true);
       }
-    } catch { /* ignore */ }
-    setHydrated(true);
+    }
+    void boot();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, schemes }));
+    const tenant = getTenant();
+    if (tenant?.type !== "RETAILER" || skipPush.current) return;
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      void orgCartApi.save({ items, schemes }).catch(() => {
+        /* si falla, queda el localStorage y se reintenta en el próximo cambio */
+      });
+    }, 450);
+    return () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    };
   }, [items, schemes, hydrated]);
+
+  useEffect(() => {
+    return subscribeChatEvents((type, payload) => {
+      if (type !== "cart_updated") return;
+      const me = getUser()?.id;
+      const data = payload.data as { items?: CartItem[]; schemes?: CartScheme[]; updatedByUserId?: string | null };
+      if (!data || data.updatedByUserId === me) return;
+      skipPush.current = true;
+      if (Array.isArray(data.items)) setItems(data.items);
+      if (Array.isArray(data.schemes)) setSchemes(data.schemes);
+      requestAnimationFrame(() => {
+        skipPush.current = false;
+      });
+    });
+  }, []);
 
   const add = useCallback((product: ProductDTO, qty = 1, opts: AddToCartOpts = {}): CartItem => {
     const ref = normalizeRef({

@@ -112,8 +112,12 @@ export class MyTenantController {
   }
 
   @Get("clients/orders")
-  clientOrders(@CurrentTenant() tenant: TenantContext, @Query("linkId") linkId?: string) {
-    return this.portfolio.listClientOrders(tenant, linkId);
+  clientOrders(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("linkId") linkId?: string,
+    @Query("scope") scope?: "brands" | "all"
+  ) {
+    return this.portfolio.listClientOrders(tenant, linkId, scope);
   }
 
   @Get("clients/:linkId")

@@ -66,6 +66,7 @@ export class TenantVisibilityService {
       ];
     }
 
+    const now = new Date();
     const [links, publicitados, configs] = await Promise.all([
       this.prisma.tenantLink.findMany({
         where: {
@@ -78,14 +79,20 @@ export class TenantVisibilityService {
           accountManager: { select: { username: true, email: true } },
         },
       }),
-      this.prisma.tenant.findMany({
+      this.prisma.adCampaign.findMany({
         where: {
-          type: "DISTRIBUTOR",
-          active: true,
-          advertisingEnabled: true,
-          providerKey: { not: null },
+          status: "ACTIVE",
+          startsAt: { lte: now },
+          OR: [{ endsAt: null }, { endsAt: { gte: now } }],
+          slot: { key: "discovery", enabled: true },
+          tenant: {
+            type: "DISTRIBUTOR",
+            active: true,
+            advertisingEnabled: true,
+            providerKey: { not: null },
+          },
         },
-        select: { id: true, name: true, providerKey: true },
+        select: { tenant: { select: { id: true, name: true, providerKey: true } } },
       }),
       this.prisma.providerSyncConfig.findMany({
         where: { tenantId },
@@ -121,7 +128,8 @@ export class TenantVisibilityService {
 
     // La publicidad paga solo agrega presencia: deja que el comercio sepa que el
     // distribuidor existe y pueda conectarse, no le abre el catálogo de nadie.
-    for (const anunciante of publicitados) {
+    for (const row of publicitados) {
+      const anunciante = row.tenant;
       const key = anunciante.providerKey as Provider;
       if (visibles.has(key) || anunciante.id === tenantId) continue;
       visibles.set(key, {

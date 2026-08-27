@@ -19,6 +19,19 @@ export function canEditChatText(msg: { kind: string; deletedAt: string | null; c
   return msg.kind === "TEXT" && !msg.deletedAt && nowMs() - new Date(msg.createdAt).getTime() < EDIT_WINDOW_MS;
 }
 
+/** Organización en una línea; persona + rol (y “asignado”) en la otra. */
+export function chatPeerLines(peer: {
+  name: string;
+  roleLabel: string;
+  orgName: string;
+  isAccountManager?: boolean;
+}) {
+  const org = peer.orgName.trim() || peer.name;
+  const person = [peer.name, peer.roleLabel].filter(Boolean).join(" · ");
+  const assigned = peer.isAccountManager ? " · asignado" : "";
+  return { org, person: `${person}${assigned}` };
+}
+
 /** Iniciales visibles de un nombre de organización o persona. */
 export function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
