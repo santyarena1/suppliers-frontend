@@ -17,7 +17,11 @@ consultor que atiende dos comercios), pero el caso normal es una sola.
 **Rol de plataforma (`User.role`)** — `ROLE_USER`, `ROLE_ADMIN`, `ROLE_BRAND`. Solo indica
 nivel de acceso a Nodo. **El alcance funcional lo define siempre la membresía.**
 
-**Superadmin** — `User.role = ROLE_ADMIN` sin membresías. Ve y administra todo el árbol.
+**Superadmin** — `User.role = ROLE_ADMIN`. Siempre ve y administra el árbol. En
+entornos de prueba pertenece a **Administración**: carrito y pedidos propios.
+Credenciales de proveedor, distribuidores y marcas vinculados se leen del
+**Comercio de Pruebas** (los de `testuser1`) vía `Tenant.mirrorsCommercialFromId`.
+El `ROLE_ADMIN` no se pierde. No hace falta “entrar como” para buscar.
 
 ---
 
@@ -149,6 +153,11 @@ cualquier usuario debe verse su organización, sus pares internos, y las organiz
 relacionadas directa (vínculo propio) o indirectamente (vínculo de su organización).
 
 En pantalla, siempre nombres normalizados. Nunca slugs ni claves internas.
+
+El superadmin de prueba (`superadmin`) pertenece a Administración. El carrito y
+los pedidos son los de esa organización. Credenciales, distribuidores y marcas
+vinculados se leen del Comercio de Pruebas. “Entrar como” sigue existiendo para
+mirar la plataforma con los ojos de otra persona.
 
 ---
 

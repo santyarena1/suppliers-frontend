@@ -5,9 +5,10 @@ import type { RequestWithTenant } from "../../tenants/tenant.guard";
 /**
  * La organización de quien hace el pedido. Requiere `TenantGuard` en el controlador.
  *
- * Falla si la persona no pertenece a ninguna, que es justo el caso del superadmin:
- * sus datos no son de nadie, así que no puede cargar credenciales ni comprar. Para
- * eso está "entrar como", que le da la sesión de alguien que sí tiene organización.
+ * Falla si la persona no pertenece a ninguna. El superadmin de prueba está en
+ * Administración y sí tiene organización: credenciales y vínculos los lee del
+ * Comercio de Pruebas; carrito y pedidos son los suyos. Un ROLE_ADMIN sin
+ * membresía sigue sin poder cargar credenciales ni comprar.
  */
 export const CurrentTenant = createParamDecorator((_data: unknown, ctx: ExecutionContext): TenantContext => {
   const request = ctx.switchToHttp().getRequest<RequestWithTenant>();

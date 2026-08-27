@@ -21,7 +21,9 @@ membresía**. Nunca resolver permisos de negocio mirando solo `User.role`.
 | 2 — Distribuidor / proveedor | `DISTRIBUTOR` | `OWNER`, `SELLER`, `PRODUCT_MANAGER`, `VIEWER` |
 | 3 — Marca | `BRAND` | `OWNER`, `MARKETING`, `COMMERCIAL`, `VIEWER` |
 
-`SUPERADMIN` es transversal: no pertenece a ninguna organización y ve y administra todo.
+`SUPERADMIN` es transversal: ve y administra todo. En entornos de prueba pertenece
+a Administración (carrito propio) y espeja el Comercio de Pruebas para credenciales
+de proveedor y vínculos. No hace falta “entrar como” para probar el catálogo.
 
 ## Decisiones cerradas
 

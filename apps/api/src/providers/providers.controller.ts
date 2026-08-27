@@ -6,7 +6,7 @@ import { CurrentTenant, CurrentTenantOrNone } from "../common/decorators/current
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { CredentialsService } from "../credentials/credentials.service";
-import type { TenantContext } from "../tenants/tenant-context.service";
+import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TENANT_ROLES_CAN_PURGE_CATALOG } from "@nodo/shared";
 import { assertTenantRole } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
@@ -81,12 +81,12 @@ export class ProvidersController {
   // Las credenciales son de la organización: quien las pide es el comercio, no la
   // persona que las cargó.
   private async invidCredentials(tenant: TenantContext) {
-    const stored = await this.credentialsService.getByProvider(tenant.tenantId, "INVID");
+    const stored = await this.credentialsService.getByProvider(commercialId(tenant), "INVID");
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
   private async newBytesCredentials(tenant: TenantContext) {
-    const stored = await this.credentialsService.getByProvider(tenant.tenantId, "NEW_BYTES");
+    const stored = await this.credentialsService.getByProvider(commercialId(tenant), "NEW_BYTES");
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
@@ -289,7 +289,7 @@ export class ProvidersController {
   }
 
   private async credentialsOf(tenant: TenantContext, provider: Provider) {
-    const stored = await this.credentialsService.getByProvider(tenant.tenantId, provider);
+    const stored = await this.credentialsService.getByProvider(commercialId(tenant), provider);
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
@@ -486,7 +486,7 @@ export class ProvidersController {
 
   @Post("providers/:provider/sync")
   sync(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
-    return this.providersService.sync(tenant.tenantId, assertProvider(provider));
+    return this.providersService.sync(commercialId(tenant), assertProvider(provider));
   }
 
   /**
@@ -514,18 +514,18 @@ export class ProvidersController {
       );
     }
 
-    const result = await this.providersService.importFromRows(tenant.tenantId, prov, items);
+    const result = await this.providersService.importFromRows(commercialId(tenant), prov, items);
     return { ...result, rowsInFile: rows.length, rowsSkipped: skipped, unmappedColumns };
   }
 
   @Get("providers/:provider/status")
   status(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
-    return this.providersService.status(tenant.tenantId, assertProvider(provider));
+    return this.providersService.status(commercialId(tenant), assertProvider(provider));
   }
 
   @Get("providers/:provider/config")
   getConfig(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
-    return this.providersService.getConfig(tenant.tenantId, assertProvider(provider));
+    return this.providersService.getConfig(commercialId(tenant), assertProvider(provider));
   }
 
   @Put("providers/:provider/config")
@@ -534,7 +534,7 @@ export class ProvidersController {
     @Param("provider") provider: string,
     @Body() dto: UpdateProviderConfigDto
   ) {
-    return this.providersService.updateConfig(tenant.tenantId, assertProvider(provider), dto);
+    return this.providersService.updateConfig(commercialId(tenant), assertProvider(provider), dto);
   }
 
   // Estos dos ya no tocan el catálogo de nadie más: borran las ofertas de esta
@@ -544,18 +544,18 @@ export class ProvidersController {
   @Post("providers/:provider/clear-zero-stock")
   clearZeroStock(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_PURGE_CATALOG);
-    return this.providersService.clearZeroStock(tenant.tenantId, assertProvider(provider));
+    return this.providersService.clearZeroStock(commercialId(tenant), assertProvider(provider));
   }
 
   @Delete("providers/:provider/products")
   deleteAllProducts(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_PURGE_CATALOG);
-    return this.providersService.deleteAllProducts(tenant.tenantId, assertProvider(provider));
+    return this.providersService.deleteAllProducts(commercialId(tenant), assertProvider(provider));
   }
 
-  // El catálogo es de la organización, así que quien no pertenece a ninguna —el
-  // superadmin— no tiene nada que ver acá. Devuelve vacío en vez de fallar: es la
-  // respuesta honesta, y para mirar el catálogo de alguien está "entrar como".
+  // El catálogo se lee de la organización comercial (espejo si hay). Sin
+  // membresía no hay nada que mostrar (vacío, no error). El superadmin de
+  // prueba ve el catálogo del Comercio de Pruebas; el carrito es el suyo.
 
   @Get("search/provider/:provider")
   search(
@@ -564,7 +564,7 @@ export class ProvidersController {
     @Query("name") name = ""
   ) {
     if (!tenant) return [];
-    return this.providersService.search(tenant.tenantId, assertProvider(provider), name);
+    return this.providersService.search(commercialId(tenant), assertProvider(provider), name);
   }
 
   @Get("providers/:provider/products/:externalId")
@@ -574,7 +574,7 @@ export class ProvidersController {
     @Param("externalId") externalId: string
   ) {
     const product = await this.providersService.getProduct(
-      tenant.tenantId,
+      commercialId(tenant),
       assertProvider(provider),
       externalId
     );
@@ -589,19 +589,19 @@ export class ProvidersController {
     @Param("externalId") externalId: string
   ) {
     if (!tenant) return [];
-    return this.providersService.getPriceHistory(tenant.tenantId, assertProvider(provider), externalId);
+    return this.providersService.getPriceHistory(commercialId(tenant), assertProvider(provider), externalId);
   }
 
   @Get("catalog/categories")
   getCategories(@CurrentTenantOrNone() tenant: TenantContext | null) {
     if (!tenant) return [];
-    return this.providersService.getCategories(tenant.tenantId);
+    return this.providersService.getCategories(commercialId(tenant));
   }
 
   @Get("catalog/featured")
   getFeatured(@CurrentTenantOrNone() tenant: TenantContext | null, @Query("take") take?: string) {
     if (!tenant) return [];
-    return this.providersService.getFeatured(tenant.tenantId, take ? Number(take) : 24);
+    return this.providersService.getFeatured(commercialId(tenant), take ? Number(take) : 24);
   }
 
   @Get("catalog/by-category")
@@ -612,6 +612,6 @@ export class ProvidersController {
   ) {
     if (!category) throw new BadRequestException("Falta el parámetro category");
     if (!tenant) return [];
-    return this.providersService.getByCategory(tenant.tenantId, category, take ? Number(take) : 60);
+    return this.providersService.getByCategory(commercialId(tenant), category, take ? Number(take) : 60);
   }
 }

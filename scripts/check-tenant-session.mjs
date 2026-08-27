@@ -3,9 +3,10 @@
  * pertenece quien la usa.
  *
  * Comprueba que el token de una persona traiga su organización y su rol adentro,
- * que el del superadmin no traiga ninguna (es transversal a propósito), que la
- * suplantación herede la organización del suplantado, y que no quede nadie sin
- * organización salvo los administradores.
+ * que el superadmin de prueba esté en Administración (carrito propio) y espeje
+ * el Comercio de Pruebas para credenciales y vínculos, que la suplantación
+ * herede la organización del suplantado, y que no quede nadie sin organización
+ * salvo un ROLE_ADMIN que todavía no tenga membresía.
  *
  * Uso: API_URL=... ADMIN_PASSWORD=... node scripts/check-tenant-session.mjs
  */
@@ -48,8 +49,14 @@ async function main() {
 
   const adminToken = await login(ADMIN_USER, ADMIN_PASSWORD);
   const adminClaims = decode(adminToken);
-  check("El superadmin no pertenece a ninguna organización", !adminClaims.tenantId,
-    adminClaims.tenantName ?? "sin organización");
+  check("El superadmin sigue siendo administrador de plataforma", adminClaims.role === "ROLE_ADMIN",
+    adminClaims.role ?? "sin rol");
+  check("El superadmin tiene organización propia (no el comercio de testuser1)",
+    adminClaims.tenantName === "Administración" && adminClaims.tenantRole === "OWNER",
+    adminClaims.tenantName ? `${adminClaims.tenantRole} en ${adminClaims.tenantName}` : "sin organización");
+  check("Las credenciales y los vínculos los lee del Comercio de Pruebas",
+    Boolean(adminClaims.commercialTenantId) && adminClaims.commercialTenantId !== adminClaims.tenantId,
+    adminClaims.commercialTenantId ?? "sin espejo");
 
   const userToken = await login(DEMO_USER, DEMO_PASSWORD);
   const userClaims = decode(userToken);

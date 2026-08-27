@@ -29,7 +29,7 @@ export interface SessionUser {
   id: string;
   email?: string;
   brandId?: string;
-  /** Organización de la persona. Ausente solo para el superadmin. */
+  /** Organización de la persona. El superadmin de prueba está en Administración. */
   tenantId?: string;
   tenantName?: string;
   tenantType?: TenantType;
