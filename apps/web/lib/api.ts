@@ -277,7 +277,90 @@ export interface RedeemedCode {
 export const myApi = {
   providers: () => api.get<VisibleProvider[]>("/my/providers"),
   redeemCode: (code: string) => api.post<RedeemedCode>("/my/redeem-code", { code }),
+  org: () => api.get<OwnOrg>("/my/org"),
+  updateOrg: (data: Partial<{ contactEmail: string | null; contactPhone: string | null; advertisingEnabled: boolean }>) =>
+    api.put<OwnOrg>("/my/org", data),
+  team: () => api.get<OwnTeam>("/my/team"),
+  addMember: (data: { username: string; email: string; password?: string; role: TenantRole; title?: string }) =>
+    api.post<TenantMember & { generatedPassword?: string }>("/my/team", data),
+  updateMember: (membershipId: string, data: Partial<{ role: TenantRole; title: string | null; active: boolean }>) =>
+    api.put<TenantMember>(`/my/team/${membershipId}`, data),
+  removeMember: (membershipId: string) => api.delete(`/my/team/${membershipId}`),
+  resetMemberPassword: (membershipId: string) =>
+    api.post<{ membershipId: string; generatedPassword: string }>(`/my/team/${membershipId}/password`),
+  setManagedBrands: (membershipId: string, brandNames: string[]) =>
+    api.put(`/my/team/${membershipId}/managed-brands`, { brandNames }),
+  accessCodes: () => api.get<{ canManage: boolean; codes: TenantAccessCode[] }>("/my/access-codes"),
+  createAccessCode: (data: { label?: string; maxUses?: number; expiresInDays?: number }) =>
+    api.post<TenantAccessCode>("/my/access-codes", data),
+  revokeAccessCode: (codeId: string) => api.delete(`/my/access-codes/${codeId}`),
+  clients: () => api.get<OwnPortfolio>("/my/clients"),
+  client: (linkId: string) => api.get<OwnClientDetail>(`/my/clients/${linkId}`),
+  updateClient: (
+    linkId: string,
+    data: Partial<{ accountManagerId: string | null; status: TenantLinkStatus; discountPercent: number | null; notes: string | null }>
+  ) => api.put<OwnClient>(`/my/clients/${linkId}`, data),
+  clientOrders: (linkId?: string) =>
+    api.get<OwnClientOrder[]>(linkId ? `/my/clients/orders?linkId=${encodeURIComponent(linkId)}` : "/my/clients/orders"),
 };
+
+export interface OwnOrg {
+  id: string;
+  name: string;
+  type: TenantType;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  advertisingEnabled: boolean;
+  providerKey: Provider | null;
+  tenantRole: TenantRole;
+  canManageTeam: boolean;
+  canManagePortfolio: boolean;
+}
+
+export interface OwnTeam {
+  canManage: boolean;
+  members: TenantMember[];
+}
+
+export interface OwnClient {
+  linkId: string;
+  status: TenantLinkStatus;
+  discountPercent: number | null;
+  notes: string | null;
+  accountManager: { id: string; username: string; email: string } | null;
+  client: { id: string; name: string; type: TenantType; contactEmail?: string | null; contactPhone?: string | null };
+  ordersCount?: number;
+  lastOrderAt?: string | null;
+  lastOrderTotal?: number | null;
+  inactive?: boolean;
+  canEditTerms?: boolean;
+  canAssignSeller?: boolean;
+}
+
+export interface OwnPortfolio {
+  canManage: boolean;
+  canAssignSeller: boolean;
+  canEditTerms: boolean;
+  sellers: { userId: string; username: string; email: string; tenantRole: TenantRole; title: string | null }[];
+  clients: OwnClient[];
+}
+
+export interface OwnClientOrder {
+  id: string;
+  provider: Provider;
+  providerName: string;
+  status: string;
+  approvalStatus: OrderApprovalStatus;
+  total: number | null;
+  createdBy: string | null;
+  approvedBy: string | null;
+  createdAt: string;
+  clientName?: string | null;
+}
+
+export interface OwnClientDetail extends OwnClient {
+  orders: OwnClientOrder[];
+}
 
 export type OrderApprovalStatus = "NOT_REQUIRED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 
@@ -1932,6 +2015,8 @@ export const TENANT_ROLES_BY_TYPE: Record<TenantType, TenantRole[]> = {
 
 /** Roles que pueden vaciar el catálogo de la organización. */
 export const TENANT_ROLES_CAN_PURGE_CATALOG: TenantRole[] = ["OWNER", "ADMIN"];
+
+export const TENANT_ROLES_CAN_MANAGE_TEAM: TenantRole[] = ["OWNER", "ADMIN"];
 
 export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   PENDING: "Pendiente",

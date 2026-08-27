@@ -225,3 +225,67 @@ export class SetProductManagerScopeDto {
   @IsString({ each: true })
   brandNames!: string[];
 }
+
+/** Alta de una persona desde la propia organización (no desde el árbol de superadmin). */
+export class CreateOwnMemberDto {
+  @IsString()
+  @MinLength(3)
+  @MaxLength(60)
+  username!: string;
+
+  @IsEmail()
+  email!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(8)
+  password?: string;
+
+  @IsIn(TENANT_ROLES as unknown as string[])
+  role!: TenantRole;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  title?: string;
+}
+
+export class UpdateOwnOrgDto {
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsEmail()
+  contactEmail?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  contactPhone?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  advertisingEnabled?: boolean;
+}
+
+export class UpdateOwnClientDto {
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  accountManagerId?: string | null;
+
+  @IsOptional()
+  @IsIn(LINK_STATUSES as unknown as string[])
+  status?: TenantLinkStatus;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @Type(() => Number)
+  discountPercent?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  notes?: string | null;
+}

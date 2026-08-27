@@ -58,6 +58,24 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
 
+### [FEATURE] Equipo de la organización (Tipo 1 autónomo)
+- **Método**: GET | POST | PUT | DELETE
+- **Ruta**: `/my/org` · `/my/team` · `/my/team/:membershipId` · `/my/team/:membershipId/password` · `/my/team/:membershipId/managed-brands`
+- **Auth**: Bearer, organización de la sesión. Mutaciones: `OWNER` o `ADMIN` interno.
+- **Body / Params**: alta `{ username, email, password?, role, title? }` (sin password la plataforma genera una y la devuelve una vez) · edición `{ role?, title?, active? }`
+- **Respuesta esperada**: org `{ id, name, type, tenantRole, canManageTeam, canManagePortfolio, ... }` · team `{ canManage, members: TenantMember[] }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El dueño del comercio (y el del distribuidor) arma su equipo sin el árbol de superadmin. Un `ADMIN` no crea ni toca a un `OWNER`. No se puede quitar al último dueño ni a uno mismo. Contacto de la org: `PUT /my/org`. UI: `/equipo`.
+
+### [FEATURE] Cartera y códigos del distribuidor (Tipo 2)
+- **Método**: GET | POST | PUT | DELETE
+- **Ruta**: `/my/clients` · `/my/clients/:linkId` · `/my/clients/orders` · `/my/access-codes` · `/my/access-codes/:codeId`
+- **Auth**: Bearer, organización `DISTRIBUTOR`. Un `SELLER` solo ve (y edita descuento/notas de) las cuentas asignadas.
+- **Body / Params**: cliente `{ accountManagerId?, status?, discountPercent?, notes? }` · código `{ label?, maxUses?, expiresInDays? }`
+- **Respuesta esperada**: cartera `{ canManage, canAssignSeller, canEditTerms, sellers, clients: [{ linkId, client, accountManager, discountPercent, ordersCount, lastOrderAt, lastOrderTotal, inactive }] }` · detalle con `orders[]` · códigos `{ canManage, codes }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: La navegación de un distribuidor no muestra búsqueda ni carrito. Un `PRODUCT_MANAGER` solo ve pedidos de las marcas de su `ProductManagerScope`. Un comercio activo sin pedido en 30 días llega marcado `inactive`. UI: `/clientes`, `/codigos`, `/pedidos`. Ver `docs/PLAN_TIPO2.md`.
+
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
 - **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/insights`, `/orders/:id/approve`, `/orders/:id/reject`

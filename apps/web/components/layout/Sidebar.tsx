@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, X } from "lucide-react";
-import { clearSession, getUser, type UserRole } from "@/lib/auth";
+import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules } from "@/lib/permissions";
 import { useResults } from "@/lib/results";
@@ -26,7 +26,7 @@ import NodoWordmark from "../NodoWordmark";
 const COLLAPSED_KEY = "nodo.sidebar.collapsed";
 const OPEN_SECTION_KEY = "nodo.sidebar.openSection";
 const PROVIDERS_OPEN_KEY = "nodo.sidebar.providersOpen";
-const SECTION_IDS = new Set<NavSectionId>(["providers", "brands", "system"]);
+const SECTION_IDS = new Set<NavSectionId>(["providers", "portfolio", "brands", "system"]);
 
 const ROLE_LABEL: Partial<Record<UserRole, { text: string; className: string }>> = {
   ROLE_ADMIN: { text: "Administrador", className: "text-brand-400" },
@@ -61,6 +61,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const user = getUser();
+  const tenant = getTenant();
   const { totalCount, byProvider } = useCart();
   const providerCount = Object.keys(byProvider).length;
   const myModules = useMyModules();
@@ -95,8 +96,15 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   }, [onProvidersRoute]);
 
   const items = useMemo(
-    () => visibleNavItems({ role: user?.role ?? null, modules: myModules }),
-    [user?.role, myModules],
+    () =>
+      visibleNavItems({
+        role: user?.role ?? null,
+        modules: myModules,
+        tenantType: tenant?.type ?? null,
+        tenantRole: tenant?.role ?? null,
+        isSuperadmin: user?.role === "ROLE_ADMIN",
+      }),
+    [user?.role, myModules, tenant?.type, tenant?.role],
   );
 
   const pinned = items.filter((item) => !item.section);
@@ -363,6 +371,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
           {!iconMode && (
             <div className="min-w-0">
               <p className="text-xs font-medium text-surface-100 truncate">{user?.username}</p>
+              {tenant && (
+                <p className="text-[10px] text-surface-400 truncate">{tenant.name}</p>
+              )}
               {roleMeta && (
                 <p className={`text-[10px] font-medium ${roleMeta.className}`}>{roleMeta.text}</p>
               )}

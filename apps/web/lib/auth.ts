@@ -21,7 +21,7 @@ export function getToken(): string | null {
 
 export type UserRole = "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
 export type TenantType = "RETAILER" | "DISTRIBUTOR" | "BRAND";
-export type TenantRole = "OWNER" | "BUYER" | "SELLER" | "PRODUCT_MANAGER" | "MARKETING" | "COMMERCIAL" | "VIEWER";
+export type TenantRole = "OWNER" | "ADMIN" | "BUYER" | "SELLER" | "PRODUCT_MANAGER" | "MARKETING" | "COMMERCIAL" | "VIEWER";
 
 export interface SessionUser {
   username: string;

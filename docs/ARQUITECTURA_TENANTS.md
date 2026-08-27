@@ -163,17 +163,21 @@ mirar la plataforma con los ojos de otra persona.
 
 ## 6. Fases
 
+El aislamiento por organización (lo que `docs/PLAN_AISLAMIENTO.md` numeraba 0–5) ya está
+hecho. Esta tabla es el producto, no la migración.
+
 | Fase | Contenido | Estado |
 |---|---|---|
-| 1 | Modelo de datos: `Tenant`, `TenantMembership`, `TenantLink`, `TenantAccessCode`, `ProductManagerScope`, campos de aprobación en `ProviderOrder`. | Hecho |
-| 2 | Superadmin: árbol de organizaciones, alta y edición de organizaciones y membresías, datos semilla de ejemplo. | Hecho |
-| 3a | Partir el catálogo: ficha del producto global, precio y stock por organización. Arregla el bug del markup compartido. | Pendiente |
-| 3b | Mover `Credential`, `ProviderSyncConfig`, `CartItem` y `ProviderOrder` de `userId` a `tenantId`. | Pendiente |
-| 3c | Organización y rol interno en el JWT, y guard de membresía además del guard de rol de plataforma. | Pendiente |
-| 3d | Filtrar la búsqueda por los `TenantLink` activos del comercio. | Pendiente |
-| 4 | Aprobación de órdenes end to end en la interfaz del comercio. | Pendiente |
-| 5 | Códigos y QR de vinculación: generación, canje anónimo y auditoría. | Pendiente |
-| 6 | Panel del distribuidor: cartera de clientes por vendedor, descuentos, resumen de órdenes. | Pendiente |
-| 7 | Panel de la marca: acciones comerciales dirigidas, objetivos y reportes. | Pendiente |
-| 8 | Publicidad paga y descubrimiento controlado. | Pendiente |
+| 1 | Modelo de datos: `Tenant`, `TenantMembership`, `TenantLink`, `TenantAccessCode`, `ProductManagerScope`, aprobación en `ProviderOrder`. | Hecho |
+| 2 | Superadmin: árbol, alta de organizaciones y membresías, seed. | Hecho |
+| 3 | Catálogo por organización, credenciales por organización, JWT con membresía, descubrimiento cerrado. | Hecho |
+| 4 | Pedidos y aprobación en la interfaz del comercio. | Hecho |
+| 5 | Tipo 1 autónomo: el dueño arma su equipo, canjea códigos y carga el contacto, sin pasar por el superadmin. | Hecho |
+| 6 | Tipo 2: panel del distribuidor (cartera por vendedor, códigos, pedidos de clientes, inactivos, alcance del PM). | Hecho |
+| 7 | Tipo 3: reconstruir marcas sobre el mismo `Tenant` / `TenantLink`. | Pendiente |
+| 8 | Publicidad paga de verdad (contratación, vigencia, slots). Hoy es un flag. | Pendiente |
 | 9 | Chat entre comercio y vendedor del distribuidor. | Pendiente |
+| — | Mudar el carrito de la web al de la API (dos vendedores del mismo local no se pisan). | Pendiente |
+
+Detalle del Tipo 2 y de lo que queda: `docs/PLAN_TIPO2.md`.
+

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import DistributorOrders from "@/components/org/DistributorOrders";
 import { ordersApi, type TenantOrder } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
 import { providerOrdersHref } from "@/lib/providerOrders";
@@ -39,8 +40,16 @@ type FilterKey = "all" | "pending" | "offline" | "done" | "rejected";
  * Pedidos de la organización. Un vendedor arma el pedido y lo deja firmado acá;
  * el dueño o un administrador lo aprueba y recién entonces sale al proveedor.
  * Los offline se guardan ya aprobados y se pueden editar en Nodo.
+ *
+ * El distribuidor ve los pedidos de sus comercios, no el tablero de compras.
  */
 export default function PedidosPage() {
+  const tenant = getTenant();
+  if (tenant?.type === "DISTRIBUTOR") return <DistributorOrders />;
+  return <RetailerPedidosPage />;
+}
+
+function RetailerPedidosPage() {
   const [orders, setOrders] = useState<TenantOrder[]>([]);
   const [canApprove, setCanApprove] = useState(false);
   const [loading, setLoading] = useState(true);

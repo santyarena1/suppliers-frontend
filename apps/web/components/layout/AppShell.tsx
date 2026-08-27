@@ -6,6 +6,7 @@ import AuthGuard from "../AuthGuard";
 import ImpersonationBanner from "../ImpersonationBanner";
 import MobileTopBar from "./MobileTopBar";
 import Sidebar from "./Sidebar";
+import TenantRouteGate from "../org/TenantRouteGate";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -29,7 +30,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
           <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
           <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
-            {children}
+            <TenantRouteGate>{children}</TenantRouteGate>
           </div>
         </div>
       </div>

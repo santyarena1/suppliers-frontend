@@ -65,6 +65,12 @@ export const TENANT_ROLES_CAN_APPROVE_ORDERS: readonly TenantRole[] = ["OWNER", 
 /** Roles que pueden vaciar el catálogo de la organización. */
 export const TENANT_ROLES_CAN_PURGE_CATALOG: readonly TenantRole[] = ["OWNER", "ADMIN"];
 
+/** Equipo, códigos de vinculación y cartera de clientes: dueño o administrador. */
+export const TENANT_ROLES_CAN_MANAGE_TEAM: readonly TenantRole[] = ["OWNER", "ADMIN"];
+
+/** Asignar vendedor, suspender un vínculo y prender publicidad. */
+export const TENANT_ROLES_CAN_MANAGE_PORTFOLIO: readonly TenantRole[] = ["OWNER", "ADMIN"];
+
 export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   PENDING: "Pendiente",
   ACTIVE: "Activo",

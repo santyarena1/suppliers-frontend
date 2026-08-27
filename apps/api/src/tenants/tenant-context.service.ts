@@ -3,6 +3,7 @@ import type { JwtPayload, TenantRole, TenantType } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 
 export interface TenantContext {
+  userId: string;
   tenantId: string;
   tenantName: string;
   tenantType: TenantType;
@@ -44,6 +45,7 @@ export class TenantContextService {
     if (!membership) return null;
 
     return {
+      userId,
       tenantId: membership.tenant.id,
       tenantName: membership.tenant.name,
       tenantType: membership.tenant.type as TenantType,
@@ -63,6 +65,7 @@ export class TenantContextService {
     if (fromDb) return fromDb;
     if (user.tenantId && user.tenantName && user.tenantType && user.tenantRole) {
       return {
+        userId: user.userId,
         tenantId: user.tenantId,
         tenantName: user.tenantName,
         tenantType: user.tenantType,

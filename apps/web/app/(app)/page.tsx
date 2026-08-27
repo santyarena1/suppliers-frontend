@@ -6,7 +6,9 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import DistributorHome from "@/components/org/DistributorHome";
 import { credentialsApi, Provider } from "@/lib/api";
+import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
 import { usePrefs } from "@/lib/prefs";
 import { useCart } from "@/lib/cart";
@@ -16,7 +18,7 @@ import {
   Search, TrendingUp, Clock, ArrowRight, ShoppingCart, Key,
   Sparkles, Zap, Cpu, Monitor, HardDrive, Smartphone, Gamepad2,
   Wifi, Mouse, Battery, Building2, DollarSign, ChevronRight,
-  Package, BarChart3, Loader2
+  Package, BarChart3, Loader2, UserCog
 } from "lucide-react";
 
 const CATEGORY_SHORTCUTS = [
@@ -62,9 +64,17 @@ const HERO_SLIDES = [
 ];
 
 export default function HomePage() {
+  const tenant = getTenant();
+  if (tenant?.type === "DISTRIBUTOR") return <DistributorHome />;
+  return <RetailerHome />;
+}
+
+function RetailerHome() {
   const router = useRouter();
   const { currency, currentRate, dollarLabel, dollarType } = usePrefs();
   const { totalCount, items: cartItems } = useCart();
+  const tenant = getTenant();
+  const canTeam = tenant?.role === "OWNER" || tenant?.role === "ADMIN";
 
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<SearchEntry[]>([]);
@@ -335,6 +345,9 @@ export default function HomePage() {
                 <CtaCard href="/proveedores" icon={Key} title="Cargar cuentas" description="Conectá el usuario y la contraseña de tu organización en cada proveedor" color="brand" />
                 <CtaCard href="/cart" icon={ShoppingCart} title="Ver carrito" description={`${totalCount} ${totalCount === 1 ? "unidad" : "unidades"} de ${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}`} color="emerald" />
                 <CtaCard href="/search" icon={Package} title="Buscar productos" description="Consultá precios actualizados de los proveedores configurados" color="orange" />
+                {canTeam && (
+                  <CtaCard href="/equipo" icon={UserCog} title="Equipo" description="Agregá compradores y vendedores de tu local, sin pasar por administración" color="brand" />
+                )}
               </section>
             </div>
           </div>

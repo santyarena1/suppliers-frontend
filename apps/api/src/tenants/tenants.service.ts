@@ -1,20 +1,24 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
 import { Prisma, UserRole } from "@prisma/client";
 import {
   TENANT_ROLES_BY_TYPE,
+  TENANT_ROLES_CAN_MANAGE_PORTFOLIO,
+  TENANT_ROLES_CAN_MANAGE_TEAM,
   type TenantRole,
   type TenantType,
 } from "@nodo/shared";
+import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   CreateAccessCodeDto,
   CreateMembershipDto,
+  CreateOwnMemberDto,
   CreateTenantDto,
-  CreateTenantUserDto,
   SetProductManagerScopeDto,
   UpdateMembershipDto,
+  UpdateOwnOrgDto,
   UpdateTenantDto,
   UpsertLinkDto,
 } from "./dto/tenant.dto";
@@ -268,7 +272,10 @@ export class TenantsService {
   }
 
   /** Crea el usuario y su membresía en una sola operación. */
-  async createMemberUser(tenantId: string, dto: CreateTenantUserDto) {
+  async createMemberUser(
+    tenantId: string,
+    dto: { username: string; email: string; password: string; role: TenantRole; title?: string }
+  ) {
     const tenant = await this.assertTenantExists(tenantId);
     this.assertRoleAllowed(tenant.type, dto.role);
 
@@ -486,6 +493,174 @@ export class TenantsService {
       tenantType: code.tenant.type,
       provider: code.tenant.providerKey,
     };
+  }
+
+  // ---------- Lo que la organización hace sobre sí misma ----------
+
+  async getOwnOrg(tenant: TenantContext) {
+    const row = await this.assertTenantExists(tenant.tenantId);
+    const canManageTeam = TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole);
+    const canManagePortfolio = TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole);
+    return {
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      contactEmail: row.contactEmail,
+      contactPhone: row.contactPhone,
+      advertisingEnabled: row.advertisingEnabled,
+      providerKey: row.providerKey,
+      tenantRole: tenant.tenantRole,
+      canManageTeam,
+      canManagePortfolio,
+    };
+  }
+
+  async updateOwnOrg(tenant: TenantContext, dto: UpdateOwnOrgDto) {
+    if (!TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole)) {
+      throw new BadRequestException("Solo el dueño o un administrador pueden editar la organización");
+    }
+    if (dto.advertisingEnabled !== undefined && tenant.tenantType === "RETAILER") {
+      throw new BadRequestException("La publicidad es de distribuidores y marcas");
+    }
+    const row = await this.prisma.tenant.update({
+      where: { id: tenant.tenantId },
+      data: {
+        ...(dto.contactEmail === undefined ? {} : { contactEmail: dto.contactEmail }),
+        ...(dto.contactPhone === undefined ? {} : { contactPhone: dto.contactPhone }),
+        ...(dto.advertisingEnabled === undefined ? {} : { advertisingEnabled: dto.advertisingEnabled }),
+      },
+    });
+    return this.getOwnOrg({ ...tenant, tenantName: row.name });
+  }
+
+  async listOwnTeam(tenant: TenantContext) {
+    const members = await this.prisma.tenantMembership.findMany({
+      where: { tenantId: tenant.tenantId },
+      include: MEMBERSHIP_INCLUDE,
+      orderBy: { createdAt: "asc" },
+    });
+    const scopes = await this.prisma.productManagerScope.findMany({
+      where: { tenantId: tenant.tenantId },
+    });
+    return {
+      canManage: TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole),
+      members: members.map((membership) => ({
+        ...this.serializeMember(membership),
+        managedBrands: scopes.filter((scope) => scope.userId === membership.userId).map((scope) => scope.brandName),
+      })),
+    };
+  }
+
+  async createOwnMember(tenant: TenantContext, dto: CreateOwnMemberDto) {
+    this.assertCanManageTeam(tenant);
+    this.assertRoleAllowed(tenant.tenantType, dto.role);
+    if (tenant.tenantRole !== "OWNER" && dto.role === "OWNER") {
+      throw new BadRequestException("Solo el dueño puede agregar a otro dueño");
+    }
+    const generated = dto.password ? null : generatePassword();
+    const membership = await this.createMemberUser(tenant.tenantId, {
+      username: dto.username,
+      email: dto.email,
+      password: dto.password ?? generated!,
+      role: dto.role,
+      title: dto.title,
+    });
+    return {
+      ...this.serializeMember(membership),
+      managedBrands: [] as string[],
+      ...(generated ? { generatedPassword: generated } : {}),
+    };
+  }
+
+  async updateOwnMember(tenant: TenantContext, membershipId: string, dto: UpdateMembershipDto) {
+    this.assertCanManageTeam(tenant);
+    const membership = await this.assertMembershipInTenant(membershipId, tenant.tenantId);
+    if (tenant.tenantRole !== "OWNER" && (membership.role === "OWNER" || dto.role === "OWNER")) {
+      throw new BadRequestException("Solo el dueño puede cambiar el rol de otro dueño");
+    }
+    const updated = await this.updateMember(membershipId, dto);
+    return this.serializeMember(updated);
+  }
+
+  async removeOwnMember(tenant: TenantContext, membershipId: string) {
+    this.assertCanManageTeam(tenant);
+    const membership = await this.assertMembershipInTenant(membershipId, tenant.tenantId);
+    if (tenant.tenantRole !== "OWNER" && membership.role === "OWNER") {
+      throw new BadRequestException("Solo el dueño puede quitar a otro dueño");
+    }
+    if (membership.userId === tenant.userId) {
+      throw new BadRequestException("No podés quitarte a vos mismo");
+    }
+    return this.removeMember(membershipId);
+  }
+
+  async resetOwnMemberPassword(tenant: TenantContext, membershipId: string) {
+    this.assertCanManageTeam(tenant);
+    const membership = await this.assertMembershipInTenant(membershipId, tenant.tenantId);
+    if (tenant.tenantRole !== "OWNER" && membership.role === "OWNER") {
+      throw new BadRequestException("Solo el dueño puede resetear la clave de otro dueño");
+    }
+    const password = generatePassword();
+    await this.prisma.user.update({
+      where: { id: membership.userId },
+      data: { passwordHash: await argon2.hash(password) },
+    });
+    return { membershipId, generatedPassword: password };
+  }
+
+  async setOwnProductManagerScope(tenant: TenantContext, membershipId: string, dto: SetProductManagerScopeDto) {
+    this.assertCanManageTeam(tenant);
+    await this.assertMembershipInTenant(membershipId, tenant.tenantId);
+    return this.setProductManagerScope(membershipId, dto);
+  }
+
+  async listOwnAccessCodes(tenant: TenantContext) {
+    this.assertCanIssueCodes(tenant, { mutate: false });
+    const codes = await this.prisma.tenantAccessCode.findMany({
+      where: { tenantId: tenant.tenantId },
+      orderBy: { createdAt: "desc" },
+    });
+    return {
+      canManage: TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole),
+      codes,
+    };
+  }
+
+  async createOwnAccessCode(tenant: TenantContext, dto: CreateAccessCodeDto) {
+    this.assertCanIssueCodes(tenant, { mutate: true });
+    return this.createAccessCode(tenant.tenantId, dto);
+  }
+
+  async revokeOwnAccessCode(tenant: TenantContext, codeId: string) {
+    this.assertCanIssueCodes(tenant, { mutate: true });
+    const code = await this.prisma.tenantAccessCode.findUnique({ where: { id: codeId } });
+    if (!code || code.tenantId !== tenant.tenantId) {
+      throw new NotFoundException("Código no encontrado");
+    }
+    return this.revokeAccessCode(codeId);
+  }
+
+  private assertCanIssueCodes(tenant: TenantContext, opts: { mutate: boolean }) {
+    if (tenant.tenantType === "RETAILER") {
+      throw new ForbiddenException("Los códigos de vinculación son del distribuidor o la marca");
+    }
+    if (opts.mutate && !TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole)) {
+      throw new ForbiddenException("Solo el dueño o un administrador gestionan los códigos");
+    }
+  }
+
+  private assertCanManageTeam(tenant: TenantContext) {
+    if (!TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole)) {
+      throw new ForbiddenException("Solo el dueño o un administrador gestionan el equipo");
+    }
+  }
+
+  private async assertMembershipInTenant(membershipId: string, tenantId: string) {
+    const membership = await this.prisma.tenantMembership.findUnique({ where: { id: membershipId } });
+    if (!membership || membership.tenantId !== tenantId) {
+      throw new NotFoundException("Membresía no encontrada");
+    }
+    return membership;
   }
 
   // ---------- Alcance del Product Manager ----------

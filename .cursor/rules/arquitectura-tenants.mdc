@@ -25,6 +25,9 @@ membresía**. Nunca resolver permisos de negocio mirando solo `User.role`.
 a Administración (carrito propio) y espeja el Comercio de Pruebas para credenciales
 de proveedor y vínculos. No hace falta “entrar como” para probar el catálogo.
 
+Un comercio (`RETAILER`) arma su equipo en `/equipo`. Un distribuidor (`DISTRIBUTOR`)
+entra a cartera (`/clientes`, `/codigos`, `/pedidos`), no al buscador. Detalle: `docs/PLAN_TIPO2.md`.
+
 ## Decisiones cerradas
 
 - Las credenciales de proveedor pertenecen a la **organización**, no a la persona.

@@ -1,24 +1,25 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
-  Settings, Users, GitCompare,
+  Settings, Users, GitCompare, Handshake, QrCode, UserCog,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { ModuleKey, TenantType } from "@/lib/api";
+import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
 import type { UserRole } from "@/lib/auth";
 
 /**
  * Navegación declarativa del sidebar.
  *
  * Inicio / Búsqueda / Comparador / Carrito van sueltos (acceso diario).
- * El resto vive en 3 secciones colapsables alineadas a los tipos de
- * organización (`TenantType`): Proveedores, Marcas, Sistema.
+ * El resto vive en secciones colapsables alineadas a los tipos de
+ * organización (`TenantType`): Proveedores (comercio), Cartera (distribuidor),
+ * Marcas y Sistema.
  *
  * Sistema:
  *  - Configuración — apariencia, preferencias y ajustes generales del sistema
  *  - Administración — usuarios, orgs, locales/precios, imágenes, diagnóstico
  */
 
-export type NavSectionId = "providers" | "brands" | "system";
+export type NavSectionId = "providers" | "portfolio" | "brands" | "system";
 
 export type NavItemId =
   | "home"
@@ -27,6 +28,10 @@ export type NavItemId =
   | "cart"
   | "orders"
   | "providers"
+  | "clients"
+  | "client-orders"
+  | "codes"
+  | "team"
   | "brands-portal"
   | "brands-panel"
   | "brands-admin"
@@ -42,6 +47,8 @@ export interface NavItemDef {
   module?: ModuleKey;
   /** Tipos de organización que ven este ítem. Se ignora si no hay tenant en sesión. */
   tenantTypes?: TenantType[];
+  /** Roles internos. Si falta, cualquier rol de esa organización lo ve. */
+  tenantRoles?: TenantRole[];
   /** Fallback mientras /me no exponga la membresía. */
   roles?: UserRole[];
   badge?: "cart";
@@ -56,15 +63,16 @@ export interface NavSectionDef {
 
 export const NAV_SECTIONS: NavSectionDef[] = [
   { id: "providers", label: "Proveedores" },
+  { id: "portfolio", label: "Cartera" },
   { id: "brands", label: "Marcas" },
   { id: "system", label: "Sistema" },
 ];
 
 export const NAV_ITEMS: NavItemDef[] = [
   { id: "home", href: "/", label: "Inicio", icon: Home, exact: true },
-  { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search" },
-  { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search" },
-  { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers" },
+  { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search", tenantTypes: ["RETAILER"] },
+  { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
+  { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"] },
 
   {
     id: "orders",
@@ -83,6 +91,31 @@ export const NAV_ITEMS: NavItemDef[] = [
     module: "providers",
     tenantTypes: ["RETAILER"],
     section: "providers",
+  },
+  {
+    id: "clients",
+    href: "/clientes",
+    label: "Clientes",
+    icon: Handshake,
+    tenantTypes: ["DISTRIBUTOR"],
+    section: "portfolio",
+  },
+  {
+    id: "client-orders",
+    href: "/pedidos",
+    label: "Pedidos",
+    icon: ClipboardList,
+    tenantTypes: ["DISTRIBUTOR"],
+    section: "portfolio",
+  },
+  {
+    id: "codes",
+    href: "/codigos",
+    label: "Códigos",
+    icon: QrCode,
+    tenantTypes: ["DISTRIBUTOR"],
+    tenantRoles: ["OWNER", "ADMIN"],
+    section: "portfolio",
   },
 
   {
@@ -117,6 +150,14 @@ export const NAV_ITEMS: NavItemDef[] = [
 
   { id: "settings", href: "/configuracion", label: "Configuración", icon: Settings, section: "system" },
   {
+    id: "team",
+    href: "/equipo",
+    label: "Equipo",
+    icon: UserCog,
+    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
+    section: "system",
+  },
+  {
     id: "admin",
     href: "/admin",
     label: "Administración",
@@ -132,6 +173,7 @@ export interface NavContext {
   modules: ModuleKey[] | null;
   /** Presente cuando la sesión conozca la organización activa. */
   tenantType?: TenantType | null;
+  tenantRole?: TenantRole | null;
   isSuperadmin?: boolean;
 }
 
@@ -156,6 +198,7 @@ export function canSeeNavItem(item: NavItemDef, ctx: NavContext): boolean {
 
   if (ctx.tenantType && !superadmin) {
     if (item.tenantTypes && !item.tenantTypes.includes(ctx.tenantType)) return false;
+    if (item.tenantRoles && ctx.tenantRole && !item.tenantRoles.includes(ctx.tenantRole)) return false;
     return true;
   }
 
