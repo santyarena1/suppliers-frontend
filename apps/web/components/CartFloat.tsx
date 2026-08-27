@@ -12,8 +12,95 @@ import { proxyImg, formatUSD, formatARS } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { usePurchasePolicy, usePurchasePolicies } from "@/lib/purchase";
 import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
-import { displayAmountFromPricing, displayTaxBadge } from "@/lib/display-price";
-import { useIibbRatesEpoch } from "@/lib/iibb-rates";
+import { displayAmountFromPricing } from "@/lib/display-price";
+import { taxByKind, formatAlicuota, type TaxLine } from "@/lib/tax";
+import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
+import type { PurchasePolicy } from "@/lib/purchase-pricing";
+
+type BreakdownRow = { key: string; label: string; amountUsd: number };
+
+type LineBreakdown = {
+  rows: BreakdownRow[];
+  totalUsd: number;
+  unitNetUsd: number;
+  qty: number;
+};
+
+function buildCartLineBreakdown(
+  item: CartItem,
+  policy: PurchasePolicy | null | undefined,
+  withIva: boolean,
+  withIibb: boolean,
+): LineBreakdown {
+  const pricing = purchaseLinePricing(item, policy, priceModeForCartItem(item), item.qty);
+  const includeIibb = withIibb && pricing.mode !== "offline";
+  const qty = item.qty;
+  const rows: BreakdownRow[] = [{ key: "net", label: "Neto", amountUsd: pricing.net }];
+
+  if (withIva) {
+    const taxLines = pricing.lines;
+    const iva = taxByKind(taxLines, "iva");
+    const internos = taxByKind(taxLines, "internos");
+    let iibb: TaxLine | null = taxByKind(taxLines, "iibb");
+    let iibbEstimated = false;
+
+    if (includeIibb && (!iibb || iibb.unitAmount <= 0.0001)) {
+      const pct = getIibbRatePercent(item.provider);
+      if (pct != null && pct > 0 && pricing.unitNet > 0) {
+        iibb = {
+          kind: "iibb",
+          label: "IIBB",
+          percent: pct,
+          unitAmount: Math.round(pricing.unitNet * (pct / 100) * 10000) / 10000,
+        };
+        iibbEstimated = true;
+      }
+    }
+
+    if (iva && iva.unitAmount > 0.0001) {
+      rows.push({
+        key: "iva",
+        label: `IVA ${formatAlicuota(iva.percent)}`,
+        amountUsd: iva.unitAmount * qty,
+      });
+    }
+    if (internos && internos.unitAmount > 0.0001) {
+      rows.push({
+        key: "internos",
+        label: "Imp. internos",
+        amountUsd: internos.unitAmount * qty,
+      });
+    }
+    if (includeIibb && iibb && iibb.unitAmount > 0.0001) {
+      rows.push({
+        key: "iibb",
+        label: `IIBB ${formatAlicuota(iibb.percent)}${iibbEstimated ? " est." : ""}`,
+        amountUsd: iibb.unitAmount * qty,
+      });
+    }
+    for (const line of taxLines.filter((l) => l.kind === "other" && l.unitAmount > 0.0001)) {
+      rows.push({
+        key: `other-${line.label}`,
+        label: line.label,
+        amountUsd: line.unitAmount * qty,
+      });
+    }
+  }
+
+  const totalUsd = displayAmountFromPricing(
+    pricing,
+    { withIva, withIibb: includeIibb, provider: item.provider },
+    qty,
+  ).displayUsd;
+
+  return { rows, totalUsd, unitNetUsd: pricing.unitNet, qty };
+}
+
+function useMoneyFmt() {
+  const { currency, convert } = usePrefs();
+  return (usd: number) =>
+    currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
+}
 
 type ProviderGroup = {
   provider: string;
@@ -78,35 +165,36 @@ function PreviewQty({ item }: { item: CartItem }) {
 
 function PreviewLinePrice({ item }: { item: CartItem }) {
   const policy = usePurchasePolicy(item.provider);
-  const { currency, withIva, withIibb, convert } = usePrefs();
+  const { withIva, withIibb } = usePrefs();
   useIibbRatesEpoch();
-  const pricing = purchaseLinePricing(item, policy, priceModeForCartItem(item), item.qty);
-  const includeIibb = withIibb && pricing.mode !== "offline";
-  const taxOpts = { withIva, withIibb: includeIibb, provider: item.provider };
-  const shown = displayAmountFromPricing(pricing, taxOpts, item.qty);
-  const shownUnit = displayAmountFromPricing(pricing, taxOpts, 1);
-
-  function fmt(usd: number) {
-    return currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
-  }
-
-  const lineTotal = fmt(shown.displayUsd);
-  const unitPrice = fmt(shownUnit.displayUsd);
-  const taxText = withIva ? displayTaxBadge(item, taxOpts) : "Sin imp.";
+  const fmt = useMoneyFmt();
+  const { rows, totalUsd, unitNetUsd, qty } = buildCartLineBreakdown(
+    item,
+    policy,
+    withIva,
+    withIibb,
+  );
 
   return (
-    <div className="mt-1 space-y-0.5">
-      <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-        <span className="text-[12px] font-semibold tabular-nums text-white">{lineTotal}</span>
-        {item.qty > 1 && (
-          <span className="text-[10px] tabular-nums text-surface-400">
-            ({item.qty} × {unitPrice})
-          </span>
-        )}
+    <div className="mt-1.5 rounded-lg border border-surface-800 bg-surface-900 px-2 py-1.5">
+      <div className="space-y-0.5">
+        {rows.map((row) => (
+          <div key={row.key} className="flex items-baseline justify-between gap-2 text-[10px] leading-snug">
+            <span className="text-surface-500 truncate">
+              {row.key === "net" && qty > 1
+                ? `Neto · ${qty} × ${fmt(unitNetUsd)}`
+                : row.label}
+            </span>
+            <span className="flex-shrink-0 tabular-nums text-surface-300">{fmt(row.amountUsd)}</span>
+          </div>
+        ))}
       </div>
-      <p className="text-[10px] tabular-nums text-surface-500">
-        {item.qty > 1 ? `${unitPrice} c/u · ` : ""}+ {taxText}
-      </p>
+      <div className="mt-1 flex items-baseline justify-between gap-2 border-t border-surface-800 pt-1">
+        <span className="text-[11px] font-medium text-surface-200">
+          {withIva ? "Total línea" : "Total s/imp."}
+        </span>
+        <span className="text-[12px] font-semibold tabular-nums text-white">{fmt(totalUsd)}</span>
+      </div>
     </div>
   );
 }
@@ -161,36 +249,60 @@ function PreviewLine({ item }: { item: CartItem }) {
 
 function PreviewTotals({ items }: { items: CartItem[] }) {
   const policies = usePurchasePolicies();
-  const { currency, withIva, withIibb, convert } = usePrefs();
+  const { withIva, withIibb } = usePrefs();
   useIibbRatesEpoch();
+  const fmt = useMoneyFmt();
 
-  const totalUsd = useMemo(() => {
-    return items.reduce((sum, item) => {
-      const policy = policies[item.provider];
-      const pricing = purchaseLinePricing(item, policy, priceModeForCartItem(item), item.qty);
-      const includeIibb = withIibb && pricing.mode !== "offline";
-      const shown = displayAmountFromPricing(
-        pricing,
-        { withIva, withIibb: includeIibb, provider: item.provider },
-        item.qty
+  const summary = useMemo(() => {
+    const totals = new Map<string, number>();
+    let totalUsd = 0;
+
+    for (const item of items) {
+      const breakdown = buildCartLineBreakdown(
+        item,
+        policies[item.provider],
+        withIva,
+        withIibb,
       );
-      return sum + shown.displayUsd;
-    }, 0);
+      totalUsd += breakdown.totalUsd;
+      for (const row of breakdown.rows) {
+        totals.set(row.key, (totals.get(row.key) ?? 0) + row.amountUsd);
+      }
+    }
+
+    const rows: BreakdownRow[] = [];
+    if (totals.has("net")) rows.push({ key: "net", label: "Neto", amountUsd: totals.get("net")! });
+    if (withIva) {
+      if (totals.has("iva")) rows.push({ key: "iva", label: "IVA", amountUsd: totals.get("iva")! });
+      if (totals.has("internos")) {
+        rows.push({ key: "internos", label: "Imp. internos", amountUsd: totals.get("internos")! });
+      }
+      if (totals.has("iibb")) rows.push({ key: "iibb", label: "IIBB", amountUsd: totals.get("iibb")! });
+    }
+
+    return { rows, totalUsd };
   }, [items, policies, withIva, withIibb]);
 
   if (items.length === 0) return null;
 
-  const label =
-    currency === "USD"
-      ? formatUSD(totalUsd)
-      : formatARS(convert(totalUsd).amount);
-
   return (
-    <div className="flex items-center justify-between gap-2 border-t border-surface-800 bg-surface-900 px-3.5 py-2">
-      <span className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-        Subtotal preview
-      </span>
-      <span className="text-sm font-semibold tabular-nums text-white">{label}</span>
+    <div className="border-t border-surface-800 bg-surface-900 px-3.5 py-2">
+      {summary.rows.length > 1 && (
+        <div className="mb-1.5 space-y-0.5">
+          {summary.rows.map((row) => (
+            <div key={row.key} className="flex justify-between gap-2 text-[10px]">
+              <span className="text-surface-500">{row.label}</span>
+              <span className="tabular-nums text-surface-400">{fmt(row.amountUsd)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
+          {withIva ? "Total preview" : "Total s/imp."}
+        </span>
+        <span className="text-sm font-semibold tabular-nums text-white">{fmt(summary.totalUsd)}</span>
+      </div>
     </div>
   );
 }
@@ -252,7 +364,7 @@ export default function CartFloat() {
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
       {open && (
-        <div className="w-[min(100vw-2rem,24rem)] overflow-hidden rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl backdrop-blur-md">
+        <div className="w-[min(100vw-2rem,26rem)] overflow-hidden rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl backdrop-blur-md">
           <div className="flex items-center justify-between gap-2 border-b border-surface-800 px-3.5 py-2.5">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-white">Carrito</p>
