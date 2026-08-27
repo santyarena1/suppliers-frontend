@@ -317,7 +317,18 @@ export interface ChatThreadSummary {
   threadId: string | null;
   linkId: string;
   status: TenantLinkStatus;
-  peer: { name: string; type: TenantType; contactEmail: string | null; contactPhone: string | null };
+  peer: {
+    userId: string;
+    username: string;
+    name: string;
+    role: TenantRole | null;
+    roleLabel: string;
+    orgName: string;
+    type: TenantType;
+    contactEmail: string | null;
+    contactPhone: string | null;
+    isAccountManager: boolean;
+  };
   accountManager: { id: string; username: string; email: string } | null;
   lastMessage: { kind: ChatKind; text: string; author: string | null } | null;
   lastMessageAt: string | null;
@@ -369,7 +380,21 @@ export const chatApi = {
   threads: () => api.get<{ canWrite: boolean; unreadTotal: number; threads: ChatThreadSummary[] }>("/my/chat/threads"),
   unread: () => api.get<{ unreadTotal: number }>("/my/chat/unread"),
   search: (q: string) => api.get<{ messages: ChatMessage[] }>(`/my/chat/search?q=${encodeURIComponent(q)}`),
-  open: (linkId: string) => api.post<ChatThreadDetail>("/my/chat/open", { linkId }),
+  open: (linkId: string, peerUserId?: string) =>
+    api.post<ChatThreadDetail>("/my/chat/open", { linkId, peerUserId }),
+  peers: (linkId: string) =>
+    api.get<{
+      linkId: string;
+      peers: {
+        userId: string;
+        username: string;
+        role: TenantRole;
+        roleLabel: string;
+        isAccountManager: boolean;
+        isDefault: boolean;
+        hasThread: boolean;
+      }[];
+    }>(`/my/chat/peers?linkId=${encodeURIComponent(linkId)}`),
   thread: (threadId: string) => api.get<ChatThreadDetail>(`/my/chat/threads/${threadId}`),
   messages: (threadId: string, before?: string) =>
     api.get<{ hasMore: boolean; messages: ChatMessage[] }>(

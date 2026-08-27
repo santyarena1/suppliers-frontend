@@ -28,6 +28,7 @@ import { ChatHub } from "./chat.hub";
 import { ChatService } from "./chat.service";
 import {
   ChatMessagesQueryDto,
+  ChatPeersQueryDto,
   ChatSearchQueryDto,
   EditChatMessageDto,
   OpenChatDto,
@@ -61,9 +62,14 @@ export class ChatController {
     return this.chat.search(tenant, query.q, query.take);
   }
 
+  @Get("peers")
+  peers(@CurrentTenant() tenant: TenantContext, @Query() query: ChatPeersQueryDto) {
+    return this.chat.listPeers(tenant, query.linkId);
+  }
+
   @Post("open")
   open(@CurrentTenant() tenant: TenantContext, @Body() dto: OpenChatDto) {
-    return this.chat.open(tenant, dto.linkId);
+    return this.chat.open(tenant, dto.linkId, dto.peerUserId);
   }
 
   @Post("share-order")

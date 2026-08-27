@@ -25,6 +25,16 @@ export class SendChatMessageDto {
 export class OpenChatDto {
   @IsUUID()
   linkId!: string;
+
+  /** La otra persona. Si no viene, se usa el vendedor asignado o el dueño del otro lado. */
+  @IsOptional()
+  @IsUUID()
+  peerUserId?: string;
+}
+
+export class ChatPeersQueryDto {
+  @IsUUID()
+  linkId!: string;
 }
 
 export class EditChatMessageDto {

@@ -41,9 +41,11 @@ function sameAuthorClose(a: ChatMessage, b: ChatMessage) {
 export default function ChatApp({
   initialThreadId,
   initialLinkId,
+  initialPeerUserId,
 }: {
   initialThreadId?: string;
   initialLinkId?: string;
+  initialPeerUserId?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -71,6 +73,9 @@ export default function ChatApp({
   const [soundOn, setSoundOn] = useState(true);
   const [muted, setMuted] = useState(false);
   const [headerOpen, setHeaderOpen] = useState(false);
+  const [peers, setPeers] = useState<
+    { userId: string; username: string; roleLabel: string; isAccountManager: boolean; isDefault: boolean; hasThread: boolean }[]
+  >([]);
   const scroller = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -99,6 +104,14 @@ export default function ChatApp({
   }, [active?.threadId]);
 
   useEffect(() => {
+    if (!headerOpen || !active?.linkId) {
+      setPeers([]);
+      return;
+    }
+    chatApi.peers(active.linkId).then((res) => setPeers(res.data.peers)).catch(() => setPeers([]));
+  }, [headerOpen, active?.linkId]);
+
+  useEffect(() => {
     if (!aviso) return;
     const t = setTimeout(() => setAviso(null), 4000);
     return () => clearTimeout(t);
@@ -117,14 +130,19 @@ export default function ChatApp({
     if (pathname !== `/mensajes/${threadId}`) router.replace(`/mensajes/${threadId}`);
   }, [pathname, router]);
 
-  const openLink = useCallback(async (linkId: string) => {
-    if (active && active.linkId === linkId && active.threadId) {
+  const openLink = useCallback(async (linkId: string, peerUserId?: string) => {
+    if (
+      active &&
+      active.linkId === linkId &&
+      active.threadId &&
+      (!peerUserId || active.peer.userId === peerUserId)
+    ) {
       goToThread(active.threadId);
       return;
     }
     setLoadingThread(true);
     try {
-      const opened = await chatApi.open(linkId);
+      const opened = await chatApi.open(linkId, peerUserId);
       setActive(opened.data);
       const page = await chatApi.messages(opened.data.threadId);
       setMessages(page.data.messages);
@@ -187,9 +205,9 @@ export default function ChatApp({
 
   useEffect(() => {
     if (initialThreadId) void openThread(initialThreadId);
-    else if (initialLinkId) void openLink(initialLinkId);
+    else if (initialLinkId) void openLink(initialLinkId, initialPeerUserId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialLinkId, initialThreadId]);
+  }, [initialLinkId, initialThreadId, initialPeerUserId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -256,7 +274,11 @@ export default function ChatApp({
     const needle = filter.trim().toLowerCase();
     if (!needle) return threads;
     return threads.filter(
-      (t) => t.peer.name.toLowerCase().includes(needle) || (t.lastMessage?.text ?? "").toLowerCase().includes(needle)
+      (t) =>
+        t.peer.name.toLowerCase().includes(needle) ||
+        t.peer.orgName.toLowerCase().includes(needle) ||
+        t.peer.roleLabel.toLowerCase().includes(needle) ||
+        (t.lastMessage?.text ?? "").toLowerCase().includes(needle)
     );
   }, [filter, threads]);
 
@@ -477,19 +499,22 @@ export default function ChatApp({
               <MessageSquare className="w-8 h-8 text-surface-600" />
               <p className="text-sm text-surface-300">Todavía no hay conversaciones</p>
               <p className="text-xs text-surface-500 leading-relaxed max-w-[16rem]">
-                El chat nace con el vínculo. Cuando un comercio se conecta con un distribuidor, el hilo queda acá — aunque cambie el vendedor.
+                Cada persona tiene su propio chat. El vendedor no ve el del PM; el dueño del local no ve el del comprador.
               </p>
             </div>
           ) : (
             <>
               {visibleThreads.map((item) => {
-                const selected = active?.linkId === item.linkId;
+                const selected = item.threadId
+                  ? active?.threadId === item.threadId
+                  : active?.linkId === item.linkId && active?.peer.userId === item.peer.userId;
                 const unread = item.unreadCount > 0;
+                const subtitle = [item.peer.roleLabel, item.peer.orgName].filter(Boolean).join(" · ");
                 return (
                   <button
-                    key={item.linkId}
+                    key={item.threadId ?? `${item.linkId}:${item.peer.userId}`}
                     type="button"
-                    onClick={() => (item.threadId ? openThread(item.threadId) : openLink(item.linkId))}
+                    onClick={() => (item.threadId ? openThread(item.threadId) : openLink(item.linkId, item.peer.userId))}
                     className={`w-full text-left px-3 py-2.5 flex gap-3 transition-colors ${
                       selected ? "bg-brand-600/12" : "hover:bg-surface-900"
                     }`}
@@ -511,6 +536,7 @@ export default function ChatApp({
                           {listWhen(item.lastMessageAt)}
                         </span>
                       </span>
+                      <span className="text-[11px] text-surface-500 truncate block">{subtitle}</span>
                       <span className="flex items-center gap-2 mt-0.5">
                         <span className={`text-[12px] truncate flex-1 ${unread ? "text-surface-200" : "text-surface-500"}`}>
                           {item.lastMessage
@@ -566,7 +592,7 @@ export default function ChatApp({
             </div>
             <p className="text-sm font-medium text-white">Elegí una conversación</p>
             <p className="text-xs text-surface-500 max-w-xs leading-relaxed">
-              Es el hilo de la cuenta, no de una persona. Si cambia el vendedor, la historia queda.
+              Hablás con una persona, no con toda la cuenta. En el encabezado ves el nombre, el rol y la organización.
             </p>
           </div>
         ) : (
@@ -585,7 +611,9 @@ export default function ChatApp({
                     {active.peerOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />}
                   </span>
                   <span className="text-[11px] text-surface-500 truncate block">
-                    {active.peerOnline ? "En línea" : active.accountManager ? `Vendedor: ${active.accountManager.username}` : "Sin vendedor asignado"}
+                    {[active.peer.roleLabel, active.peer.orgName, active.peerOnline ? "en línea" : null]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </span>
               </button>
@@ -604,7 +632,8 @@ export default function ChatApp({
               </button>
             </header>
             {headerOpen && (
-              <div className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 py-3 text-[12px] text-surface-400 flex flex-wrap gap-x-4 gap-y-2">
+              <div className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 py-3 text-[12px] text-surface-400 flex flex-col gap-2">
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {active.peer.contactPhone && (
                   <a href={`tel:${active.peer.contactPhone}`} className="inline-flex items-center gap-1.5 text-brand-300">
                     <Phone className="w-3.5 h-3.5" /> {active.peer.contactPhone}
@@ -621,6 +650,28 @@ export default function ChatApp({
                   </Link>
                 )}
                 {active.status !== "ACTIVE" && <span>Vínculo {active.status.toLowerCase()}</span>}
+                </div>
+                {peers.filter((p) => p.userId !== active.peer.userId).length > 0 && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">Hablar con otra persona</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {peers
+                        .filter((p) => p.userId !== active.peer.userId)
+                        .map((p) => (
+                          <button
+                            key={p.userId}
+                            type="button"
+                            onClick={() => void openLink(active.linkId, p.userId)}
+                            className="text-[11px] rounded-full px-2.5 py-1 bg-surface-800 text-surface-200 hover:text-white"
+                          >
+                            {p.username}
+                            <span className="text-surface-500"> · {p.roleLabel}</span>
+                            {p.isAccountManager ? " · asignado" : ""}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {active.pins.length > 0 && (

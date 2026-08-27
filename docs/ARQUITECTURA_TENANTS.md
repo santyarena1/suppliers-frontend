@@ -176,7 +176,7 @@ hecho. Esta tabla es el producto, no la migración.
 | 6 | Tipo 2: panel del distribuidor (cartera por vendedor, códigos, pedidos de clientes, inactivos, alcance del PM). | Hecho |
 | 7 | Tipo 3: reconstruir marcas sobre el mismo `Tenant` / `TenantLink`. | Pendiente — `docs/PLAN_TIPO3.md` |
 | 8 | Publicidad paga: espacios, precio, cupo, campañas, impresiones/clicks. El flag `advertisingEnabled` es “esta cuenta paga”. | Hecho |
-| 9 | Chat entre comercio y vendedor del distribuidor. | Hecho — un hilo por `TenantLink`, `/mensajes` |
+| 9 | Chat persona a persona (usuario + rol + org), no un buzón por vínculo. | Hecho — `/mensajes` |
 | — | Carrito de la organización en la API (un armado por local, visible al distro). | Hecho — `/cart/org` |
 
 Detalle del Tipo 2 y de lo que queda: `docs/PLAN_TIPO2.md`. Planteo de marcas: `docs/PLAN_TIPO3.md`.

@@ -47,16 +47,18 @@ comercio: no hay búsqueda ni carrito. Hay cartera. Una URL de comercio redirige
 
 ### Chat comercial
 
-Un hilo por `TenantLink`. La historia es de las dos organizaciones: si el vendedor
-cambia, el hilo queda y NODO avisa en el chat. No hay DMs persona a persona.
+Un hilo entre **dos personas**, dentro de un `TenantLink`. El vendedor asignado
+es el contacto por defecto al tocar “Hablar”, pero no es un buzón compartido:
+el PM, el dueño y el comprador tienen conversaciones distintas. Nadie ve el
+chat de un compañero.
 
-- El comercio ve un hilo por distribuidor vinculado. El vendedor del distro solo
-  las cuentas asignadas. `REVOKED` no se habla; `SUSPENDED` sí.
-- En el comercio escriben dueño, administrador y comprador. El vendedor del local
-  no escribe (el carrito es de la org; el chat comercial lo habla quien compra).
+- En la lista y el encabezado se ve **usuario + rol + organización** (los dos lados).
+- El comercio escribe: dueño, administrador y comprador. El vendedor del local no.
+- El distro escribe: dueño, administrador, vendedor y PM.
+- `REVOKED` no se habla; `SUSPENDED` sí.
 - Tiempo real por SSE (`GET /my/chat/stream?token=`). Con `REDIS_URL` el hub
   publica a las otras réplicas.
-- Pedidos de NODO se anuncian solos. El comercio también puede “Avisar al vendedor”.
+- Pedidos de NODO se anuncian en el hilo de quien armó el pedido con el vendedor asignado.
 - Adjuntos: foto, PDF, Excel, hasta 10 MB. Enter envía; Shift+Enter baja de línea.
 
 ### Camino que se implementó

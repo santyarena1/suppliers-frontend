@@ -45,6 +45,8 @@ model User {
   chatReads            ChatRead[]
   chatPins             ChatPin[]
   chatReactions        ChatReaction[]
+  chatThreadsAsDistro  ChatThread[]          @relation("ChatDistroParticipant")
+  chatThreadsAsStore   ChatThread[]          @relation("ChatStoreParticipant")
 
   @@index([brandId])
 }
@@ -288,7 +290,7 @@ model TenantLink {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  chatThread ChatThread?
+  chatThreads ChatThread[]
 
   @@unique([clientTenantId, supplierTenantId])
   @@index([supplierTenantId, status])
@@ -331,11 +333,16 @@ enum ChatMessageKind {
   SYSTEM
 }
 
-/// Un hilo por vínculo comercial. Queda en la organización si cambia el vendedor.
+/// Un hilo entre DOS personas, dentro de un vínculo comercio↔distribuidor.
+/// El vendedor no ve el chat del PM; el dueño del local no ve el del comprador.
 model ChatThread {
   id            String   @id @default(uuid())
-  linkId        String   @unique
+  linkId        String
   link          TenantLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  distroUserId  String
+  distroUser    User     @relation("ChatDistroParticipant", fields: [distroUserId], references: [id], onDelete: Cascade)
+  storeUserId   String
+  storeUser     User     @relation("ChatStoreParticipant", fields: [storeUserId], references: [id], onDelete: Cascade)
   lastMessageAt DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -343,6 +350,11 @@ model ChatThread {
   messages ChatMessage[]
   reads    ChatRead[]
   pins     ChatPin[]
+
+  @@unique([linkId, distroUserId, storeUserId])
+  @@index([distroUserId])
+  @@index([storeUserId])
+  @@index([linkId])
 }
 
 model ChatMessage {
