@@ -39,12 +39,13 @@ export default function PrefsPanel() {
             ${currentRate.venta.toLocaleString("es-AR")}
           </span>
         )}
-        {withIva ? (
-          <span className="bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">
-            IVA{withIibb ? "+IIBB" : ""}
+        <span className="bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+          {withIva ? "IVA" : "s/IVA"}
+        </span>
+        {withIibb && (
+          <span className="bg-amber-500/20 text-amber-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+            IIBB
           </span>
-        ) : (
-          <span className="bg-surface-700 text-surface-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">s/IVA</span>
         )}
       </button>
 
@@ -118,7 +119,7 @@ export default function PrefsPanel() {
               >
                 <div className="flex items-center gap-2">
                   <Receipt className="w-3.5 h-3.5 text-surface-400" />
-                  <span className="text-xs text-surface-200">Mostrar con impuestos</span>
+                  <span className="text-xs text-surface-200">Mostrar con IVA</span>
                 </div>
                 <div className={`w-8 h-4 rounded-full relative transition-colors ${withIva ? "bg-brand-600" : "bg-surface-600"}`}>
                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${withIva ? "left-4" : "left-0.5"}`} />
@@ -139,7 +140,7 @@ export default function PrefsPanel() {
                   <div className="text-left min-w-0">
                     <span className="text-xs text-surface-200 block">Incluir percepciones / IIBB</span>
                     <span className="text-[10px] text-surface-500 leading-tight block">
-                      {iibbHint || "Cargá las alícuotas en Configuración."}
+                      Independiente del IVA. {iibbHint || "Cargá las alícuotas en Configuración."}
                     </span>
                   </div>
                 </div>

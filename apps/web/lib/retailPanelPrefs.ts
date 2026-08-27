@@ -18,9 +18,9 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 export function loadRetailSort(): RetailSortKey {
-  const v = readJson<string>(SORT_KEY, "relevance");
+  const v = readJson<string>(SORT_KEY, "price_asc");
   if (v === "price_asc" || v === "price_desc" || v === "store_asc" || v === "relevance") return v;
-  return "relevance";
+  return "price_asc";
 }
 
 export function saveRetailSort(sort: RetailSortKey) {

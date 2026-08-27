@@ -14,6 +14,7 @@ import {
   normalizeSearchText,
   passesRelevanceGate,
   scoreRetailMatch,
+  textHasToken,
 } from "./retail-search.util";
 
 describe("centavos: solo Multiplo", () => {
@@ -141,5 +142,60 @@ describe("retail search relevance", () => {
     expect(passesRelevanceGate(exact, tokens)).toBe(true);
     expect(passesRelevanceGate(fan, tokens)).toBe(false);
     expect(exact.score).toBeGreaterThan(fan.score);
+  });
+});
+
+describe("modelo SKU: 7600 vs 7600X", () => {
+  const q = "Ryzen 5 7600";
+
+  it("no trata 7600X como el 7600", () => {
+    const tokens = extractSearchTokens(q);
+    expect(tokens.map((t) => t.t)).toEqual(expect.arrayContaining(["ryzen", "7600"]));
+    const exact = scoreRetailMatch(
+      normalizeSearchText("PROCESADOR AMD (AM5) RYZEN 5 7600 C/COOLER"),
+      tokens
+    );
+    const x = scoreRetailMatch(
+      normalizeSearchText("Micro Procesador AMD Ryzen 5 7600X 5.3 GHz Turbo S/Cooler - AM5"),
+      tokens
+    );
+    expect(passesRelevanceGate(exact, tokens)).toBe(true);
+    expect(passesRelevanceGate(x, tokens)).toBe(false);
+    expect(exact.skuHits).toBe(1);
+    expect(x.skuHits).toBe(0);
+  });
+
+  it("el 7600 puro rankea sobre un combo con el mismo CPU", () => {
+    const tokens = extractSearchTokens(q);
+    const exact = scoreRetailMatch(
+      normalizeSearchText("Procesador Amd Ryzen 5 7600 Am5 6 Nucleos"),
+      tokens
+    );
+    const combo = scoreRetailMatch(
+      normalizeSearchText("Combo AMD Ryzen 5 7600 + B650 + 16GB RAM"),
+      tokens
+    );
+    expect(passesRelevanceGate(exact, tokens)).toBe(true);
+    expect(exact.score).toBeGreaterThan(combo.score);
+  });
+
+  it("textHasToken no deja que 7600 pegue en 7600x", () => {
+    expect(textHasToken("ryzen 5 7600x am5", "7600")).toBe(false);
+    expect(textHasToken("ryzen 5 7600 am5", "7600")).toBe(true);
+  });
+
+  it("entre 7600 exactos el score queda en banda para ordenar por precio", () => {
+    const tokens = extractSearchTokens(q);
+    const titles = [
+      "PROCESADOR AMD (AM5) RYZEN 5 7600 C/COOLER",
+      "Procesador Gamer Amd Ryzen 5 7600 Am5 6 Nucleos",
+      "Procesador AMD Ryzen 5 7600 6/12 5.1GHz AM5",
+      "Micro AMD Ryzen 5 7600 3.8 Ghz AM5",
+    ];
+    const scores = titles.map((t) => scoreRetailMatch(normalizeSearchText(t), tokens));
+    expect(scores.every((s) => passesRelevanceGate(s, tokens))).toBe(true);
+    const max = Math.max(...scores.map((s) => s.score));
+    const min = Math.min(...scores.map((s) => s.score));
+    expect(min).toBeGreaterThan(max * 0.72);
   });
 });

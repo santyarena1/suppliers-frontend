@@ -136,15 +136,53 @@ function fromInvidRow(row: unknown[], net: number): TaxLine[] | null {
   return lines.length ? lines : null;
 }
 
+function nestedRecord(raw: Record<string, unknown>, key: string): Record<string, unknown> | null {
+  const v = raw[key];
+  if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
+  return null;
+}
+
+/** New Bytes manda `price.percepcion`; Elit a veces un lump en el raw. */
+function percepcionFromRaw(raw: Record<string, unknown>, net: number): TaxLine | null {
+  const priceObj = nestedRecord(raw, "price");
+  const perc = asNum(
+    raw.percepcion ??
+      raw.perceptionsIIBB ??
+      priceObj?.percepcion ??
+      priceObj?.perceptionsIIBB
+  );
+  if (perc == null || perc === 0) return null;
+  const t = amountFromRate(net, perc);
+  if (t.amount <= 0.0001) return null;
+  return { kind: "iibb", label: "Percepciones", percent: t.percent, unitAmount: t.amount };
+}
+
+function appendPercepcion(raw: Record<string, unknown>, net: number, lines: TaxLine[]): TaxLine[] {
+  if (taxByKind(lines, "iibb")) return lines;
+  const perc = percepcionFromRaw(raw, net);
+  if (!perc) return lines;
+  const internos = taxByKind(lines, "internos");
+  let next = lines;
+  if (internos && Math.abs(internos.unitAmount - perc.unitAmount) < 0.02) {
+    next = lines.filter((l) => l.kind !== "internos");
+  }
+  return [...next, perc];
+}
+
 function fromNamedRaw(raw: Record<string, unknown>, net: number): TaxLine[] | null {
   const gn = fromGnImpuestos(raw.impuestos, net);
-  if (gn) return gn;
+  if (gn) return appendPercepcion(raw, net, gn);
 
-  const ivaField = asNum(raw.IVA ?? raw.iva ?? raw.IVA_PORCENTAJE);
+  const priceObj = nestedRecord(raw, "price");
+  const ivaField = asNum(
+    raw.IVA ?? raw.iva ?? raw.IVA_PORCENTAJE ?? priceObj?.iva ?? priceObj?.IVA
+  );
   if (ivaField == null) return null;
   const t = amountFromRate(net, ivaField);
   const lines: TaxLine[] = [{ kind: "iva", label: "IVA", percent: t.percent, unitAmount: t.amount }];
-  const listed = asNum(raw["PRECIO FINAL"] ?? raw.precioFinal ?? raw.precio_final);
+  const listed = asNum(
+    raw["PRECIO FINAL"] ?? raw.precioFinal ?? raw.precio_final ?? priceObj?.finalPrice
+  );
   if (listed != null && net > 0) {
     const leftover = round4(listed - net - t.amount);
     if (leftover > 0.005) {
@@ -156,7 +194,7 @@ function fromNamedRaw(raw: Record<string, unknown>, net: number): TaxLine[] | nu
       });
     }
   }
-  return lines;
+  return appendPercepcion(raw, net, lines);
 }
 
 function fallbackLines(p: TaxableProduct, net: number): TaxLine[] {
@@ -200,8 +238,10 @@ export function extractTaxLines(p: TaxableProduct): TaxLine[] {
     const inv = fromInvidRow(raw, net);
     if (inv) return inv;
   } else if (raw && typeof raw === "object") {
-    const named = fromNamedRaw(raw as Record<string, unknown>, net);
+    const rec = raw as Record<string, unknown>;
+    const named = fromNamedRaw(rec, net);
     if (named) return named;
+    return appendPercepcion(rec, net, fallbackLines(p, net));
   }
 
   return fallbackLines(p, net);

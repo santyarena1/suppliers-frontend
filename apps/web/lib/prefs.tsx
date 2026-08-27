@@ -26,7 +26,7 @@ interface PrefsContextValue {
   setCurrency: (c: Currency) => void;
   withIva: boolean;
   setWithIva: (v: boolean) => void;
-  /** Incluir IIBB/percepciones en precios de búsqueda. Default: false. */
+  /** Incluir percepciones/IIBB. Independiente del IVA. Default: false. */
   withIibb: boolean;
   setWithIibb: (v: boolean) => void;
   dollarType: DollarType;
@@ -54,13 +54,9 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
     const i = localStorage.getItem("pref_iva");
     const iibb = localStorage.getItem("pref_iibb");
     const d = localStorage.getItem("pref_dollar") as DollarType | null;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (c) setCurrencyState(c);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (i != null) setWithIvaState(i === "1");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (iibb != null) setWithIibbState(iibb === "1");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (d) setDollarTypeState(d);
   }, []);
 
@@ -71,18 +67,10 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const setWithIva = useCallback((v: boolean) => {
     setWithIvaState(v);
     localStorage.setItem("pref_iva", v ? "1" : "0");
-    if (!v) {
-      setWithIibbState(false);
-      localStorage.setItem("pref_iibb", "0");
-    }
   }, []);
   const setWithIibb = useCallback((v: boolean) => {
     setWithIibbState(v);
     localStorage.setItem("pref_iibb", v ? "1" : "0");
-    if (v) {
-      setWithIvaState(true);
-      localStorage.setItem("pref_iva", "1");
-    }
   }, []);
   const setDollarType = useCallback((t: DollarType) => {
     setDollarTypeState(t);
@@ -109,7 +97,6 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshRates();
   }, [refreshRates]);
 

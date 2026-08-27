@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowDownAZ,
   ArrowLeftRight,
   Eraser,
   GitCompare,
@@ -21,29 +22,37 @@ import { usePrefs } from "@/lib/prefs";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { usePurchasePolicies } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
-import { displayAmountFromPricing } from "@/lib/display-price";
+import { displayTaxTitle } from "@/lib/display-price";
+import { compareEntrySortArs } from "@/lib/compare-price";
 import {
-  entryKey,
   loadCompareEntries,
+  loadManualOrder,
   newProviderEntry,
   newRetailEntry,
+  sameProviderProduct,
   saveCompareEntries,
+  saveManualOrder,
   type CompareEntry,
   type CompareProviderEntry,
+  type CompareRetailEntry,
 } from "@/lib/compare-store";
 import { repairImplausibleSalePrice } from "@/lib/retailMatch";
 
 export default function ComparadorPage() {
   const [entries, setEntries] = useState<CompareEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  const [retailFor, setRetailFor] = useState<CompareProviderEntry | null>(null);
+  const [manualOrder, setManualOrder] = useState(false);
+  const [retailForId, setRetailForId] = useState<string | null>(null);
   const [flash, setFlash] = useState("");
-  const { withIva, withIibb, currency, convert } = usePrefs();
+  const [dragId, setDragId] = useState<string | null>(null);
+  const { withIva, withIibb, currency, convert, currentRate } = usePrefs();
   const iibbEpoch = useIibbRatesEpoch();
   const policies = usePurchasePolicies();
+  const usdArs = currentRate?.venta ?? 0;
 
   useEffect(() => {
     setEntries(loadCompareEntries());
+    setManualOrder(loadManualOrder());
     setHydrated(true);
   }, []);
 
@@ -52,7 +61,19 @@ export default function ComparadorPage() {
     saveCompareEntries(entries);
   }, [entries, hydrated]);
 
-  const existingKeys = useMemo(() => new Set(entries.map(entryKey)), [entries]);
+  useEffect(() => {
+    if (!hydrated) return;
+    saveManualOrder(manualOrder);
+  }, [manualOrder, hydrated]);
+
+  const existingProductKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of entries) {
+      if (e.kind === "provider") s.add(`${e.product.provider}:${e.product.externalId}`);
+      else if (e.sourceProduct) s.add(`${e.sourceProduct.provider}:${e.sourceProduct.externalId}`);
+    }
+    return s;
+  }, [entries]);
   const existingRetailIds = useMemo(() => {
     const s = new Set<string>();
     for (const e of entries) {
@@ -66,47 +87,118 @@ export default function ComparadorPage() {
     window.setTimeout(() => setFlash(""), 2200);
   }, []);
 
+  const sortCtx = useMemo(
+    () => ({ withIva, withIibb, usdArs, policies }),
+    // iibbEpoch fuerza recálculo cuando se aprende una alícuota
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [withIva, withIibb, usdArs, policies, iibbEpoch]
+  );
+
+  const displayed = useMemo(() => {
+    if (manualOrder) return entries;
+    return [...entries].sort(
+      (a, b) => compareEntrySortArs(a, sortCtx) - compareEntrySortArs(b, sortCtx)
+    );
+  }, [entries, manualOrder, sortCtx]);
+
   const addProvider = useCallback(
     (product: ProductDTO, mode: PriceMode) => {
-      const key = `provider:${product.provider}:${product.externalId}:${mode}`;
-      let duplicate = false;
+      let msg = "";
       setEntries((prev) => {
-        if (prev.some((e) => entryKey(e) === key)) {
-          duplicate = true;
-          return prev;
+        const idx = prev.findIndex((e) => sameProviderProduct(e, product));
+        if (idx >= 0) {
+          const current = prev[idx];
+          if (current.kind === "provider" && current.mode === mode) {
+            msg = "Ya está en el comparador";
+            return prev;
+          }
+          msg = `Pasó a ${mode === "list" ? "Normal" : mode === "offline" ? "Offline" : "Esquema"}`;
+          const next = [...prev];
+          next[idx] = { kind: "provider", id: current.id, product, mode };
+          return next;
         }
+        msg = `Agregado · ${mode === "list" ? "Normal" : mode === "offline" ? "Offline" : "Esquema"}`;
         return [...prev, newProviderEntry(product, mode)];
       });
-      showFlash(
-        duplicate
-          ? "Ya está en el comparador"
-          : `Agregado · ${mode === "list" ? "Normal" : mode === "offline" ? "Offline" : "Esquema"}`
-      );
+      showFlash(msg);
     },
     [showFlash]
   );
 
   const addRetail = useCallback(
-    (hit: RetailSearchHit, from?: CompareProviderEntry) => {
+    (hit: RetailSearchHit, from?: CompareProviderEntry | CompareRetailEntry) => {
       let duplicate = false;
       setEntries((prev) => {
         if (prev.some((e) => e.kind === "retail" && e.hit.id === hit.id)) {
           duplicate = true;
           return prev;
         }
-        const costUsd = from
-          ? purchaseLinePricing(from.product, policies[from.product.provider], from.mode).unitNet
+        const source =
+          from?.kind === "provider"
+            ? from.product
+            : from?.kind === "retail"
+              ? from.sourceProduct
+              : null;
+        const costUsd = source
+          ? purchaseLinePricing(
+              source,
+              policies[source.provider],
+              from?.kind === "provider" ? from.mode : from?.sourceMode ?? "list"
+            ).unitNet
           : null;
         return [
           ...prev,
           newRetailEntry(hit, {
             costUsd,
-            linkedName: from?.product.name ?? null,
+            linkedName: source?.name ?? null,
+            sourceProduct: source ?? null,
+            sourceMode: from?.kind === "provider" ? from.mode : from?.sourceMode ?? null,
           }),
         ];
       });
       showFlash(duplicate ? "Ese local ya está en el tablero" : `Local agregado · ${hit.store.name}`);
-      setRetailFor(null);
+    },
+    [policies, showFlash]
+  );
+
+  const replaceWithRetail = useCallback(
+    (id: string, hit: RetailSearchHit) => {
+      let duplicate = false;
+      let replaced = false;
+      setEntries((prev) => {
+        if (prev.some((e) => e.id !== id && e.kind === "retail" && e.hit.id === hit.id)) {
+          duplicate = true;
+          return prev;
+        }
+        return prev.map((e) => {
+          if (e.id !== id) return e;
+          replaced = true;
+          if (e.kind === "provider") {
+            return newRetailEntry(hit, {
+              id: e.id,
+              costUsd: purchaseLinePricing(e.product, policies[e.product.provider], e.mode).unitNet,
+              linkedName: e.product.name,
+              sourceProduct: e.product,
+              sourceMode: e.mode,
+            });
+          }
+          return {
+            ...e,
+            hit,
+            costUsd:
+              e.sourceProduct
+                ? purchaseLinePricing(
+                    e.sourceProduct,
+                    policies[e.sourceProduct.provider],
+                    e.sourceMode ?? "list"
+                  ).unitNet
+                : e.costUsd,
+          };
+        });
+      });
+      if (duplicate) showFlash("Ese local ya está en el tablero");
+      else if (replaced) showFlash(`Columna en local · ${hit.store.name}`);
+      setRetailForId(null);
     },
     [policies, showFlash]
   );
@@ -118,55 +210,65 @@ export default function ComparadorPage() {
   const changeMode = useCallback((id: string, mode: PriceMode) => {
     setEntries((prev) =>
       prev.map((e) => {
-        if (e.id !== id || e.kind !== "provider") return e;
-        const key = `provider:${e.product.provider}:${e.product.externalId}:${mode}`;
-        if (prev.some((o) => o.id !== id && entryKey(o) === key)) return e;
-        return { ...e, mode };
+        if (e.id !== id) return e;
+        if (e.kind === "provider") {
+          return { ...e, mode };
+        }
+        if (e.sourceProduct) {
+          return { kind: "provider", id: e.id, product: e.sourceProduct, mode };
+        }
+        return e;
       })
     );
   }, []);
 
-  const duplicateMode = useCallback(
-    (entry: CompareProviderEntry, mode: PriceMode) => {
-      addProvider(entry.product, mode);
+  const moveColumn = useCallback(
+    (fromId: string, toId: string) => {
+      if (!fromId || !toId || fromId === toId) return;
+      setManualOrder(true);
+      setEntries((prev) => {
+        const base = manualOrder
+          ? prev
+          : [...prev].sort(
+              (a, b) => compareEntrySortArs(a, sortCtx) - compareEntrySortArs(b, sortCtx)
+            );
+        const from = base.findIndex((e) => e.id === fromId);
+        const to = base.findIndex((e) => e.id === toId);
+        if (from < 0 || to < 0) return prev;
+        const next = [...base];
+        const [item] = next.splice(from, 1);
+        next.splice(to, 0, item);
+        return next;
+      });
     },
-    [addProvider]
+    [manualOrder, sortCtx]
   );
 
   const providerCosts = useMemo(() => {
-    void iibbEpoch;
-    return entries
+    return displayed
       .filter((e): e is CompareProviderEntry => e.kind === "provider")
-      .map((e) => {
-        const pricing = purchaseLinePricing(e.product, policies[e.product.provider], e.mode);
-        const usd = displayAmountFromPricing(pricing, {
-          withIva,
-          withIibb: withIibb && pricing.mode !== "offline",
-          provider: e.product.provider,
-        }).unitDisplayUsd;
-        return { id: e.id, usd };
-      });
-  }, [entries, policies, withIva, withIibb, iibbEpoch]);
+      .map((e) => ({ id: e.id, ars: compareEntrySortArs(e, sortCtx) }));
+  }, [displayed, sortCtx]);
 
   const cheapestProviderId = useMemo(() => {
     if (providerCosts.length < 2) return null;
     let best = providerCosts[0];
     for (const row of providerCosts) {
-      if (row.usd < best.usd) best = row;
+      if (row.ars < best.ars) best = row;
     }
     return best.id;
   }, [providerCosts]);
 
   const retailSales = useMemo(() => {
-    return entries
-      .filter((e) => e.kind === "retail")
+    return displayed
+      .filter((e): e is CompareRetailEntry => e.kind === "retail")
       .map((e) => {
         const costArs =
           e.costUsd != null && e.costUsd > 0 ? convert(e.costUsd).amount : null;
         const sale = repairImplausibleSalePrice(e.hit.price, costArs);
         return { id: e.id, sale };
       });
-  }, [entries, convert]);
+  }, [displayed, convert]);
 
   const bestRetailId = useMemo(() => {
     if (retailSales.length < 2) return null;
@@ -180,14 +282,13 @@ export default function ComparadorPage() {
   const summary = useMemo(() => {
     const providers = providerCosts.length;
     const retails = retailSales.length;
-    const minCost = providerCosts.length
-      ? Math.min(...providerCosts.map((p) => p.usd))
-      : null;
-    const minSale = retailSales.length
-      ? Math.min(...retailSales.map((r) => r.sale))
-      : null;
+    const minCost = providerCosts.length ? Math.min(...providerCosts.map((p) => p.ars)) : null;
+    const minSale = retailSales.length ? Math.min(...retailSales.map((r) => r.sale)) : null;
     return { providers, retails, minCost, minSale };
   }, [providerCosts, retailSales]);
+
+  const sortHint = displayTaxTitle({ withIva, withIibb });
+  const retailFor = retailForId ? entries.find((e) => e.id === retailForId) : null;
 
   return (
     <>
@@ -200,7 +301,9 @@ export default function ComparadorPage() {
             <div className="min-w-0">
               <h1 className="text-lg font-semibold text-white tracking-tight">Comparador</h1>
               <p className="text-xs text-surface-500 leading-relaxed mt-0.5 max-w-xl">
-                Confrontá el mismo ítem en normal, offline o esquema, entre distribuidores y contra locales importados.
+                Mismo ítem en normal, offline, esquema o local. El orden es de menor a mayor
+                con el IVA y las percepciones que elijas por separado; los locales no usan esos
+                toggles (ya vienen con todo incluido).
               </p>
             </div>
           </div>
@@ -210,6 +313,7 @@ export default function ComparadorPage() {
                 type="button"
                 onClick={() => {
                   setEntries([]);
+                  setManualOrder(false);
                   showFlash("Tablero vacío");
                 }}
                 className="inline-flex items-center gap-1.5 text-xs font-medium text-surface-400 hover:text-white border border-surface-700 hover:border-surface-500 rounded-lg px-3 py-1.5 transition-colors"
@@ -223,7 +327,12 @@ export default function ComparadorPage() {
         </div>
 
         <div className="mt-4 max-w-3xl">
-          <CompareSearch onAdd={addProvider} existingKeys={existingKeys} />
+          <CompareSearch
+            onAddProvider={addProvider}
+            onAddRetail={(hit) => addRetail(hit)}
+            existingProductKeys={existingProductKeys}
+            existingRetailIds={existingRetailIds}
+          />
         </div>
 
         {entries.length > 0 && (
@@ -236,9 +345,9 @@ export default function ComparadorPage() {
                   <span className="text-surface-600">·</span>
                   desde{" "}
                   <span className="text-white font-semibold tabular-nums">
-                    {currency === "USD"
-                      ? formatUSD(summary.minCost)
-                      : formatARS(convert(summary.minCost).amount)}
+                    {currency === "USD" && usdArs > 0
+                      ? formatUSD(summary.minCost / usdArs)
+                      : formatARS(summary.minCost)}
                   </span>
                 </>
               )}
@@ -258,8 +367,30 @@ export default function ComparadorPage() {
                 )}
               </span>
             )}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-900 border border-surface-700 px-2.5 py-1 text-surface-400">
+              Orden: {manualOrder ? "manual" : `menor → mayor · ${sortHint}`}
+            </span>
+            {manualOrder && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEntries((prev) =>
+                    [...prev].sort(
+                      (a, b) => compareEntrySortArs(a, sortCtx) - compareEntrySortArs(b, sortCtx)
+                    )
+                  );
+                  setManualOrder(false);
+                  showFlash("Ordenado de menor a mayor");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full border border-brand-500/40 bg-brand-600/10 px-2.5 py-1 text-brand-300 hover:text-white"
+              >
+                <ArrowDownAZ className="w-3 h-3" />
+                Menor a mayor
+              </button>
+            )}
             <span className="text-surface-600 hidden sm:inline">
-              Tip: duplicá una columna en Offline/Esquema o sumá un local desde la card.
+              Tocá Normal / Offline / Esquema / Local para cambiar esa columna, no para duplicarla.
+              Arrastrá para un orden propio.
             </span>
           </div>
         )}
@@ -275,7 +406,7 @@ export default function ComparadorPage() {
         ) : (
           <div className="px-4 sm:px-6 py-5">
             <div className="flex gap-4 items-stretch min-w-min pb-4">
-              {entries.map((entry) =>
+              {displayed.map((entry) =>
                 entry.kind === "provider" ? (
                   <ProviderCompareColumn
                     key={entry.id}
@@ -283,8 +414,12 @@ export default function ComparadorPage() {
                     isCheapest={entry.id === cheapestProviderId}
                     onRemove={() => remove(entry.id)}
                     onChangeMode={(mode) => changeMode(entry.id, mode)}
-                    onDuplicateMode={(mode) => duplicateMode(entry, mode)}
-                    onAddRetail={() => setRetailFor(entry)}
+                    onPickLocal={() => setRetailForId(entry.id)}
+                    onDragStart={() => setDragId(entry.id)}
+                    onDropOn={() => {
+                      if (dragId) moveColumn(dragId, entry.id);
+                      setDragId(null);
+                    }}
                   />
                 ) : (
                   <RetailCompareColumn
@@ -292,6 +427,15 @@ export default function ComparadorPage() {
                     entry={entry}
                     isBestSale={entry.id === bestRetailId}
                     onRemove={() => remove(entry.id)}
+                    onChangeMode={
+                      entry.sourceProduct ? (mode) => changeMode(entry.id, mode) : undefined
+                    }
+                    onPickLocal={() => setRetailForId(entry.id)}
+                    onDragStart={() => setDragId(entry.id)}
+                    onDropOn={() => {
+                      if (dragId) moveColumn(dragId, entry.id);
+                      setDragId(null);
+                    }}
                   />
                 )
               )}
@@ -302,17 +446,23 @@ export default function ComparadorPage() {
 
       {retailFor && (
         <RetailPicker
-          seedName={retailFor.product.name}
+          seedName={
+            retailFor.kind === "provider"
+              ? retailFor.product.name
+              : retailFor.linkedName || retailFor.hit.name
+          }
           costUsd={
-            purchaseLinePricing(
-              retailFor.product,
-              policies[retailFor.product.provider],
-              retailFor.mode
-            ).unitNet
+            retailFor.kind === "provider"
+              ? purchaseLinePricing(
+                  retailFor.product,
+                  policies[retailFor.product.provider],
+                  retailFor.mode
+                ).unitNet
+              : retailFor.costUsd
           }
           existingRetailIds={existingRetailIds}
-          onPick={(hit) => addRetail(hit, retailFor)}
-          onClose={() => setRetailFor(null)}
+          onPick={(hit) => replaceWithRetail(retailFor.id, hit)}
+          onClose={() => setRetailForId(null)}
         />
       )}
 
@@ -333,21 +483,21 @@ function EmptyState() {
       </div>
       <h2 className="text-base font-semibold text-white mb-2">Armá tu comparación</h2>
       <p className="text-sm text-surface-400 leading-relaxed mb-6">
-        Buscá arriba y agregá productos. Podés poner el mismo SKU en normal, offline y esquema,
-        cruzarlo con otro distribuidor, y sumar precios de locales importados.
+        Buscá arriba un mayorista o un local. El tablero ordena de menor a mayor. IVA y
+        percepciones se eligen por separado. Un toque en Normal, Esquema o Local cambia esa columna.
       </p>
       <ul className="text-left text-xs text-surface-500 space-y-2 bg-surface-900/60 border border-surface-800 rounded-xl p-4">
         <li className="flex gap-2">
           <span className="text-brand-400 font-bold">1.</span>
-          Elegí un producto del buscador (Normal / Offline / Esquema).
+          Elegí un producto. Si ya está, el modo (Normal / Offline / Esquema) reemplaza la columna.
         </li>
         <li className="flex gap-2">
           <span className="text-amber-400 font-bold">2.</span>
-          Duplicá la columna en otro formato o cambiá el chip de modo.
+          Activá el IVA y las percepciones por separado (arriba a la derecha). El orden usa esas capas; no se mezclan. En esquema u offline cambia la base, no el toggle.
         </li>
         <li className="flex gap-2">
           <span className="text-emerald-400 font-bold">3.</span>
-          Desde “Local”, agregá tiendas importadas para ver venta y margen.
+          Locales se insertan como referencia (precio final). Arrastrá las cards si querés otro orden.
         </li>
       </ul>
     </div>

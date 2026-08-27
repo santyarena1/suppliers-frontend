@@ -69,9 +69,9 @@ function timeAgo(iso: string): string {
 }
 
 const SORT_OPTIONS: { value: RetailSortKey; label: string }[] = [
-  { value: "relevance", label: "Relevancia" },
   { value: "price_asc", label: "Precio ↑" },
   { value: "price_desc", label: "Precio ↓" },
+  { value: "relevance", label: "Relevancia" },
   { value: "store_asc", label: "Local A-Z" },
 ];
 
@@ -117,7 +117,7 @@ export default function SalePricePanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [sortBy, setSortBy] = useState<RetailSortKey>(() =>
-    typeof window !== "undefined" ? loadRetailSort() : "relevance",
+    typeof window !== "undefined" ? loadRetailSort() : "price_asc",
   );
   const [hiddenStoreIds, setHiddenStoreIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -268,18 +268,30 @@ export default function SalePricePanel({
     return sortedHits.map((hit) => map.get(hit.id)!);
   }, [results, hiddenStoreIds, sortBy, seedQuery, q, costArs]);
 
-  const bestMatches = useMemo(
-    () =>
-      [...visibleResults]
-        .filter((x) => x.matchRatio >= BEST_MATCH_THRESHOLD)
-        .sort((a, b) => b.matchRatio - a.matchRatio || a.hit.price - b.hit.price),
-    [visibleResults],
-  );
+  const bestMatches = useMemo(() => {
+    const best = visibleResults.filter((x) => x.matchRatio >= BEST_MATCH_THRESHOLD);
+    if (sortBy === "price_asc") return [...best].sort((a, b) => a.hit.price - b.hit.price);
+    if (sortBy === "price_desc") return [...best].sort((a, b) => b.hit.price - a.hit.price);
+    if (sortBy === "store_asc") {
+      return [...best].sort(
+        (a, b) => a.hit.store.name.localeCompare(b.hit.store.name, "es") || a.hit.price - b.hit.price
+      );
+    }
+    return [...best].sort((a, b) => b.matchRatio - a.matchRatio || a.hit.price - b.hit.price);
+  }, [visibleResults, sortBy]);
 
   const otherMatches = useMemo(() => {
     const bestIds = new Set(bestMatches.map((x) => x.hit.id));
-    return visibleResults.filter((x) => !bestIds.has(x.hit.id));
-  }, [visibleResults, bestMatches]);
+    const rest = visibleResults.filter((x) => !bestIds.has(x.hit.id));
+    if (sortBy === "price_asc") return [...rest].sort((a, b) => a.hit.price - b.hit.price);
+    if (sortBy === "price_desc") return [...rest].sort((a, b) => b.hit.price - a.hit.price);
+    if (sortBy === "store_asc") {
+      return [...rest].sort(
+        (a, b) => a.hit.store.name.localeCompare(b.hit.store.name, "es") || a.hit.price - b.hit.price
+      );
+    }
+    return rest;
+  }, [visibleResults, bestMatches, sortBy]);
 
   if (!active) return null;
 

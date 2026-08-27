@@ -31,12 +31,30 @@ export type DisplayAmount = {
   iibbPercent: number | null;
 };
 
+function resolveIibb(
+  pricing: { unitNet: number; lines: TaxLine[] },
+  provider?: string | null
+): { unit: number; percent: number | null; estimated: boolean } {
+  const existing = taxByKind(pricing.lines, "iibb");
+  const existingUnit = existing && existing.unitAmount > 0.0001 ? existing.unitAmount : 0;
+  if (existingUnit > 0.0001) {
+    return { unit: existingUnit, percent: existing?.percent ?? null, estimated: false };
+  }
+  const pct = getIibbRatePercent(provider);
+  if (pct != null && pct > 0 && pricing.unitNet > 0) {
+    return { unit: round4(pricing.unitNet * (pct / 100)), percent: pct, estimated: true };
+  }
+  return { unit: 0, percent: null, estimated: false };
+}
+
 /**
- * Precio a mostrar en búsqueda / cards / ficha.
- * - sin impuestos: neto
- * - con impuestos, sin IIBB: IVA + internos (excluye percepciones aunque el producto las traiga)
- * - con impuestos + IIBB: suma IIBB del producto o la alícuota del distribuidor
+ * IVA e IIBB son capas independientes. El precio de display es:
+ *   neto
+ * + (si withIva) IVA + internos
+ * + (si withIibb) percepciones / IIBB del producto o alícuota del distribuidor
  *   (configurable en Configuración; sugerido New Bytes/Air 7%, Invid/Elit/GN 3%)
+ *
+ * Offline no suma IIBB (eso lo decide el modo de compra, no este toggle).
  */
 export function displayAmountFromPricing(
   pricing: {
@@ -49,32 +67,20 @@ export function displayAmountFromPricing(
   opts: DisplayTaxOpts,
   qty = 1
 ): DisplayAmount {
-  if (!opts.withIva) {
-    return {
-      displayUsd: pricing.net,
-      unitDisplayUsd: pricing.unitNet,
-      iibbUnitUsd: 0,
-      iibbIncluded: false,
-      estimatedIibb: false,
-      iibbPercent: null,
-    };
-  }
-
-  const existing = taxByKind(pricing.lines, "iibb");
-  const existingUnit = existing && existing.unitAmount > 0.0001 ? existing.unitAmount : 0;
   const nonIibbTax = pricing.lines
     .filter((l) => l.kind !== "iibb")
     .reduce((s, l) => s + l.unitAmount, 0);
-
   const hasLineDetail = pricing.lines.some((l) => l.unitAmount > 0.0001);
-  const unitWithoutIibb = hasLineDetail
+  const unitWithIva = hasLineDetail
     ? round4(pricing.unitNet + nonIibbTax)
     : pricing.unitGross;
 
+  const baseUnit = opts.withIva ? unitWithIva : pricing.unitNet;
+
   if (!opts.withIibb) {
     return {
-      displayUsd: round4(unitWithoutIibb * qty),
-      unitDisplayUsd: unitWithoutIibb,
+      displayUsd: round4(baseUnit * qty),
+      unitDisplayUsd: round4(baseUnit),
       iibbUnitUsd: 0,
       iibbIncluded: false,
       estimatedIibb: false,
@@ -82,27 +88,15 @@ export function displayAmountFromPricing(
     };
   }
 
-  let iibbUnit = existingUnit;
-  let iibbPercent = existing?.percent ?? null;
-  let estimated = false;
-
-  if (iibbUnit <= 0.0001) {
-    const pct = getIibbRatePercent(opts.provider);
-    if (pct != null && pct > 0 && pricing.unitNet > 0) {
-      iibbUnit = round4(pricing.unitNet * (pct / 100));
-      iibbPercent = pct;
-      estimated = true;
-    }
-  }
-
-  const unitDisplay = round4(unitWithoutIibb + iibbUnit);
+  const iibb = resolveIibb(pricing, opts.provider);
+  const unitDisplay = round4(baseUnit + iibb.unit);
   return {
     displayUsd: round4(unitDisplay * qty),
     unitDisplayUsd: unitDisplay,
-    iibbUnitUsd: iibbUnit,
-    iibbIncluded: iibbUnit > 0.0001,
-    estimatedIibb: estimated,
-    iibbPercent,
+    iibbUnitUsd: iibb.unit,
+    iibbIncluded: iibb.unit > 0.0001,
+    estimatedIibb: iibb.estimated,
+    iibbPercent: iibb.percent,
   };
 }
 
@@ -111,8 +105,6 @@ export function displayTaxBadge(
   product: TaxableProduct,
   opts: DisplayTaxOpts
 ): string {
-  if (!opts.withIva) return "Sin imp.";
-
   const lines = extractTaxLines(product);
   const iva = taxByKind(lines, "iva");
   const internos = taxByKind(lines, "internos");
@@ -124,33 +116,39 @@ export function displayTaxBadge(
       (ratePct != null && ratePct > 0));
 
   const parts: string[] = [];
-  if (iva && iva.unitAmount > 0.0001) {
-    parts.push(`IVA ${formatAlicuota(iva.percent)}`);
+  if (!opts.withIva && !opts.withIibb) return "Neto";
+
+  if (opts.withIva) {
+    if (iva && iva.unitAmount > 0.0001) {
+      parts.push(`IVA ${formatAlicuota(iva.percent)}`);
+    }
+    if (internos && internos.unitAmount > 0.0001) {
+      parts.push("int.");
+    }
+    if (parts.length === 0) {
+      const without = lines.filter((l) => l.kind !== "iibb");
+      const tax = without.reduce((s, l) => s + l.unitAmount, 0);
+      const net = parsePrice(product.price);
+      if (tax > 0.0001 && net > 0) {
+        parts.push(`IVA/int. ${formatTaxPercent(tax / net)}%`);
+      }
+    }
+  } else {
+    parts.push("s/IVA");
   }
-  if (internos && internos.unitAmount > 0.0001) {
-    parts.push("int.");
-  }
+
   if (willShowIibb) {
     const pct = productIibb?.percent ?? ratePct;
     parts.push(pct != null ? `IIBB ${formatAlicuota(pct)}` : "IIBB");
   }
 
   if (parts.length > 0) return parts.join(" · ");
-
-  // Fallback: etiqueta genérica sin inventar IIBB
-  if (!opts.withIibb) {
-    const without = lines.filter((l) => l.kind !== "iibb");
-    const tax = without.reduce((s, l) => s + l.unitAmount, 0);
-    const net = parsePrice(product.price);
-    if (tax > 0.0001 && net > 0) {
-      return `Impuestos ${formatTaxPercent(tax / net)}%`;
-    }
-  }
   return taxLabel(product);
 }
 
 export function displayTaxTitle(opts: DisplayTaxOpts): string {
-  if (!opts.withIva) return "Precio sin impuestos";
-  if (opts.withIibb) return "Precio con impuestos e IIBB";
-  return "Precio con impuestos (sin IIBB)";
+  if (opts.withIva && opts.withIibb) return "Con IVA y percepciones";
+  if (opts.withIva) return "Con IVA (sin percepciones)";
+  if (opts.withIibb) return "Neto + percepciones (sin IVA)";
+  return "Precio neto";
 }
