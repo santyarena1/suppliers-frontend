@@ -8,9 +8,16 @@ import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
 import { OfflinePricesHelpButton } from "@/components/OfflinePricesHelp";
-import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
+import {
+  searchApi,
+  catalogApi,
+  ProductDTO,
+  Provider,
+  productDisplayBrand,
+  productDisplayCategory,
+} from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
-import { useIsRetailer, usePurchasePolicies } from "@/lib/purchase";
+import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { usePrefs } from "@/lib/prefs";
@@ -18,13 +25,19 @@ import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
 import { parsePrice, proxyImg } from "@/lib/format";
+import {
+  entryKey,
+  loadCompareEntries,
+  newProviderEntry,
+  saveCompareEntries,
+} from "@/lib/compare-store";
 import ProviderBadge from "@/components/ProviderBadge";
 import Image from "next/image";
 import Link from "next/link";
 import {
   Search, SlidersHorizontal, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Columns2, Check,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc";
@@ -707,6 +720,58 @@ function SearchPage() {
   );
 }
 
+function ListRowActions({ product, priceMode }: { product: ProductDTO; priceMode: "list" | "offline" }) {
+  const [compareFlash, setCompareFlash] = useState(false);
+  const policy = usePurchasePolicy(product.provider);
+  const pricing = purchaseLinePricing(product, policy, priceMode);
+  const showingOffline = pricing.adjusted && pricing.mode === "offline";
+
+  function addToCompare(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const entry = newProviderEntry(product, priceMode);
+    const current = loadCompareEntries();
+    const key = entryKey(entry);
+    if (!current.some((c) => entryKey(c) === key)) {
+      saveCompareEntries([...current, entry]);
+    }
+    setCompareFlash(true);
+    setTimeout(() => setCompareFlash(false), 700);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("nodo-compare-updated"));
+    }
+  }
+
+  return (
+    <div
+      className="flex items-center justify-end gap-1.5"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <button
+        type="button"
+        title="Agregar al comparador"
+        aria-label="Agregar al comparador"
+        onClick={addToCompare}
+        className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors ${
+          compareFlash
+            ? "border-brand-500/50 bg-brand-500/20 text-brand-300"
+            : "border-surface-600/40 bg-surface-800/60 text-surface-400 hover:text-white hover:border-brand-500/40"
+        }`}
+      >
+        {compareFlash ? <Check className="w-3.5 h-3.5" /> : <Columns2 className="w-3.5 h-3.5" />}
+      </button>
+      <AddToCartButton
+        product={product}
+        variant="stepper"
+        channel={showingOffline ? "offline" : "online"}
+      />
+    </div>
+  );
+}
+
 function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: "list" | "offline" }) {
   return (
     <div className="flex flex-col divide-y divide-surface-800 border border-surface-800 rounded-xl overflow-hidden">
@@ -715,35 +780,44 @@ function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: "list"
         <span>Producto</span>
         <span className="text-right w-28">Proveedor</span>
         <span className="text-right w-28">Precio</span>
-        <span className="w-8" />
+        <span className="w-[7.5rem] text-right">Acciones</span>
       </div>
-      {items.map((p, i) => (
-        <Link
-          key={`${p.provider}-${p.externalId}-${i}`}
-          href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
-          className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 items-center px-4 py-3 bg-surface-950 hover:bg-surface-900 transition-colors"
-        >
-          <div className="w-10 h-10 relative flex-shrink-0 bg-surface-800 rounded overflow-hidden">
-            {p.imageUrl
-              ? <Image src={proxyImg(p.imageUrl)} alt="" fill className="object-contain" unoptimized />
-              : <Package className="w-4 h-4 text-surface-600 absolute inset-0 m-auto" />
-            }
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm text-surface-100 font-medium truncate">{p.name}</p>
-            {p.externalId && <p className="text-[11px] text-surface-500 font-mono">#{p.externalId}</p>}
-          </div>
-          <div className="w-28 text-right flex justify-end">
-            <ProviderBadge provider={p.provider} variant="inline" size="sm" />
-          </div>
-          <div className="w-28 text-right">
-            <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
-          </div>
-          <div onClick={(e) => e.stopPropagation()}>
-            <AddToCartButton product={p} variant="icon" />
-          </div>
-        </Link>
-      ))}
+      {items.map((p, i) => {
+        const brand = productDisplayBrand(p);
+        const category = productDisplayCategory(p);
+        const metaLine = [brand, category].filter(Boolean).join(" · ");
+        return (
+          <Link
+            key={`${p.provider}-${p.externalId}-${i}`}
+            href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
+            className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 items-center px-4 py-3 bg-surface-950 hover:bg-surface-900 transition-colors"
+          >
+            <div className="w-10 h-10 relative flex-shrink-0 bg-surface-800 rounded overflow-hidden">
+              {p.imageUrl
+                ? <Image src={proxyImg(p.imageUrl)} alt="" fill className="object-contain" unoptimized />
+                : <Package className="w-4 h-4 text-surface-600 absolute inset-0 m-auto" />
+              }
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-surface-100 font-medium truncate">{p.name}</p>
+              {metaLine ? (
+                <p className="text-[11px] text-surface-500 truncate">{metaLine}</p>
+              ) : p.externalId ? (
+                <p className="text-[11px] text-surface-500 font-mono">#{p.externalId}</p>
+              ) : null}
+            </div>
+            <div className="w-28 text-right flex justify-end">
+              <ProviderBadge provider={p.provider} variant="inline" size="sm" />
+            </div>
+            <div className="w-28 text-right">
+              <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
+            </div>
+            <div className="w-[7.5rem]">
+              <ListRowActions product={p} priceMode={priceMode} />
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }

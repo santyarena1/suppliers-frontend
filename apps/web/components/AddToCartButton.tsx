@@ -2,87 +2,108 @@
 
 import { useCart, type CartRef } from "@/lib/cart";
 import { ProductDTO } from "@/lib/api";
-import { Check, Plus, Minus } from "lucide-react";
-import { useState } from "react";
+import { Plus, Minus } from "lucide-react";
 
 interface Props {
   product: ProductDTO;
-  variant?: "icon" | "full" | "inline";
+  /** @deprecated Se mantiene por compat; siempre se muestra el stepper. */
+  variant?: "icon" | "full" | "inline" | "stepper";
   channel?: "online" | "offline";
   schemeId?: string | null;
 }
 
-export default function AddToCartButton({ product, variant = "icon", channel = "online", schemeId = null }: Props) {
+/**
+ * Control − / cantidad / + ligado al carrito de Nodo.
+ * Siempre visible: con 0 unidades el − queda deshabilitado.
+ */
+export default function AddToCartButton({
+  product,
+  variant = "stepper",
+  channel = "online",
+  schemeId = null,
+}: Props) {
   const { add, has, items, setQty, remove } = useCart();
-  const ref: CartRef = { provider: product.provider, externalId: product.externalId, channel, schemeId };
-  const inCart = has(ref);
+  const ref: CartRef = {
+    provider: product.provider,
+    externalId: product.externalId,
+    channel,
+    schemeId,
+  };
   const item = items.find(
-    (i) => i.provider === product.provider && i.externalId === product.externalId && (i.channel ?? "online") === channel && (i.schemeId ?? null) === schemeId
+    (i) =>
+      i.provider === product.provider &&
+      i.externalId === product.externalId &&
+      (i.channel ?? "online") === channel &&
+      (i.schemeId ?? null) === schemeId
   );
-  const [flash, setFlash] = useState(false);
+  const qty = item?.qty ?? 0;
+  const inCart = has(ref);
 
-  function handleAdd(e: React.MouseEvent) {
+  function bump(delta: number, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    add(product, 1, { channel, schemeId });
-    setFlash(true);
-    setTimeout(() => setFlash(false), 600);
-  }
-
-  if (variant === "inline" && inCart && item) {
-    return (
-      <div className="flex items-center gap-1.5 bg-surface-800 border border-surface-700 rounded-md p-0.5">
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (item.qty <= 1) remove(ref);
-            else setQty(ref, item.qty - 1);
-          }}
-          className="text-surface-400 hover:text-white p-1 rounded transition-colors"
-        >
-          <Minus className="w-3 h-3" />
-        </button>
-        <span className="text-xs font-semibold text-white min-w-[1.25rem] text-center tabular-nums">{item.qty}</span>
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); add(product, 1, { channel, schemeId }); }}
-          className="text-surface-400 hover:text-white p-1 rounded transition-colors"
-        >
-          <Plus className="w-3 h-3" />
-        </button>
-      </div>
-    );
+    if (delta > 0) {
+      add(product, delta, { channel, schemeId });
+      return;
+    }
+    if (!item) return;
+    if (item.qty <= 1) remove(ref);
+    else setQty(ref, item.qty - 1);
   }
 
   if (variant === "full") {
     return (
       <button
-        onClick={handleAdd}
+        type="button"
+        onClick={(e) => bump(1, e)}
         className={`w-full flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 transition-all ${
-          flash || inCart
+          inCart
             ? "bg-emerald-600 hover:bg-emerald-500 text-white"
             : "bg-brand-600 hover:bg-brand-500 text-white"
         }`}
       >
-        {inCart ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-        {inCart ? `En carrito${item?.qty ? ` (${item.qty})` : ""}` : "Agregar al carrito"}
+        <Plus className="w-4 h-4" />
+        {inCart ? `En carrito (${qty})` : "Agregar al carrito"}
       </button>
     );
   }
 
+  // stepper / icon / inline → mismo control − qty +
   return (
-    <button
-      onClick={handleAdd}
-      className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all ${
-        flash
-          ? "bg-emerald-500 text-white scale-110"
-          : inCart
-            ? "bg-emerald-600/20 text-emerald-400 border border-emerald-500/30"
-            : "bg-surface-800 hover:bg-brand-600 text-surface-400 hover:text-white border border-surface-700 hover:border-brand-500"
-      }`}
-      title={inCart ? "En carrito" : "Agregar"}
+    <div
+      className="flex items-center gap-0.5 bg-surface-800 border border-surface-700 rounded-lg p-0.5"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
     >
-      {inCart ? <Check className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-    </button>
+      <button
+        type="button"
+        disabled={qty <= 0}
+        onClick={(e) => bump(-1, e)}
+        className="flex items-center justify-center w-7 h-7 rounded-md text-surface-400 hover:text-white hover:bg-surface-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-surface-400 transition-colors"
+        aria-label="Quitar uno"
+        title="Quitar uno"
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+      <span
+        className={`min-w-[1.75rem] text-center text-xs font-semibold tabular-nums ${
+          qty > 0 ? "text-white" : "text-surface-500"
+        }`}
+        aria-label={`Cantidad en carrito: ${qty}`}
+      >
+        {qty}
+      </span>
+      <button
+        type="button"
+        onClick={(e) => bump(1, e)}
+        className="flex items-center justify-center w-7 h-7 rounded-md text-surface-400 hover:text-white hover:bg-brand-600 hover:text-white transition-colors"
+        aria-label="Agregar uno"
+        title="Agregar uno"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+    </div>
   );
 }
