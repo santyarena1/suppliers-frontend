@@ -415,8 +415,9 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
         <div>
           <h2 className="text-sm font-semibold text-white mb-1">Precios de venta (referencia)</h2>
           <p className="text-xs text-surface-500 leading-relaxed max-w-2xl">
-            Catálogo de precios en locales. El cron actualiza por tandas; “Sincronizar todo” hace un
-            full en segundo plano hasta terminar (si hay un batch del cron, lo corta y encola el full).
+            Catálogo de precios en locales. El automático corre **cada 5 minutos las 24 h**
+            (al despertar el API arranca al toque, no espera a la mañana). “Sincronizar todo”
+            hace un full en segundo plano; si hay un batch del cron, lo corta y encola el full.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
