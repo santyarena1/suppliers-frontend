@@ -54,9 +54,9 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/my/providers`, `/my/redeem-code`
 - **Auth**: Bearer usuario con organización
 - **Body / Params**: canje `{ code }`
-- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent, linkId }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
+- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, supplierContact, discountPercent, linkId }` · `accountManager` = `{ id, name, email, title, role, roleLabel, orgEmail, orgPhone }` · `supplierContact` = `{ email, phone }` de la empresa del distribuidor · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
 - **Estado**: IMPLEMENTADO
-- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
+- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones. En Tipo 1, `/proveedores/:provider` muestra la ficha del vendedor asignado (nombre, cargo, rol, email y teléfono/email de la empresa). El `User` no tiene teléfono personal.
 
 ### [FEATURE] Equipo de la organización (Tipo 1 autónomo)
 - **Método**: GET | POST | PUT | DELETE

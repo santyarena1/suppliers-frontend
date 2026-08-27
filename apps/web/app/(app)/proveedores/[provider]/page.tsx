@@ -7,7 +7,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
-  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders
+  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders, type VisibleProvider
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import { isRetailerSession } from "@/lib/purchase";
@@ -23,6 +23,7 @@ import ElitAccountPanel from "@/components/ElitAccountPanel";
 import GrupoNucleoAccountPanel from "@/components/GrupoNucleoAccountPanel";
 import AirAccountPanel from "@/components/AirAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
+import AssignedSellerCard from "@/components/org/AssignedSellerCard";
 import {
   AlertTriangle, ArrowLeft, Boxes, CheckCircle2, FileSpreadsheet, ImageOff, KeyRound,
   Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
@@ -70,6 +71,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [chatLinkId, setChatLinkId] = useState<string | null>(null);
   const [chatSeller, setChatSeller] = useState<string | null>(null);
+  const [visibleRow, setVisibleRow] = useState<VisibleProvider | null>(null);
 
   const tabFromQuery = useRef(false);
   const autoTabDone = useRef(false);
@@ -86,7 +88,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
   useEffect(() => {
     void loadMyProviders().then((list) => {
-      const row = list.find((item) => item.provider === provider && item.linked);
+      const row = list.find((item) => item.provider === provider && item.linked) ?? null;
+      setVisibleRow(row);
       setChatLinkId(row?.linkId ?? null);
       setChatSeller(row?.accountManager?.name ?? null);
     });
@@ -355,6 +358,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     </span>
                   </div>
                 </div>
+
+                {isRetailer && visibleRow && (
+                  <AssignedSellerCard
+                    seller={visibleRow.accountManager ?? null}
+                    contact={visibleRow.supplierContact}
+                    linkId={visibleRow.linkId}
+                  />
+                )}
 
                 {/* Tabs */}
                 <div className="flex border-b border-surface-800">

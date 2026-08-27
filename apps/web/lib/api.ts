@@ -287,7 +287,18 @@ export interface VisibleProvider {
   linked: boolean;
   /** Aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
-  accountManager: { name: string; email: string } | null;
+  accountManager: {
+    id: string;
+    name: string;
+    email: string;
+    title?: string | null;
+    role?: string | null;
+    roleLabel?: string | null;
+    orgEmail?: string | null;
+    orgPhone?: string | null;
+  } | null;
+  /** Contacto de la empresa del distribuidor. */
+  supplierContact?: { email: string | null; phone: string | null } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
   linkId?: string | null;

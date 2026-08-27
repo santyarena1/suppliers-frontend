@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { mapAssignedSeller, type AssignedSellerView } from "./assigned-seller";
 
 export type PurchasePolicyView = {
   acceptsOffline: boolean;
@@ -18,7 +19,9 @@ export interface VisibleProvider {
   linked: boolean;
   /** `true` cuando aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
-  accountManager: { name: string; email: string } | null;
+  accountManager: AssignedSellerView | null;
+  /** Contacto de la empresa del distribuidor (no es el teléfono personal del vendedor). */
+  supplierContact: { email: string | null; phone: string | null } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
   linkId: string | null;
@@ -59,6 +62,7 @@ export class TenantVisibilityService {
           linked: true,
           advertised: false,
           accountManager: null,
+          supplierContact: null,
           discountPercent: null,
           linkId: null,
           purchase: purchaseFromConfig(propio.providerKey, ownConfig),
@@ -75,8 +79,15 @@ export class TenantVisibilityService {
           supplierTenant: { active: true, providerKey: { not: null } },
         },
         include: {
-          supplierTenant: { select: { name: true, providerKey: true } },
-          accountManager: { select: { username: true, email: true } },
+          supplierTenant: { select: { id: true, name: true, providerKey: true, contactEmail: true, contactPhone: true } },
+          accountManager: {
+            select: {
+              id: true,
+              username: true,
+              email: true,
+              memberships: { where: { active: true }, select: { tenantId: true, role: true, title: true } },
+            },
+          },
         },
       }),
       this.prisma.adCampaign.findMany({
@@ -112,14 +123,24 @@ export class TenantVisibilityService {
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
+      const org = {
+        contactEmail: link.supplierTenant.contactEmail,
+        contactPhone: link.supplierTenant.contactPhone,
+      };
+      const membership = link.accountManager?.memberships.find((m) => m.tenantId === link.supplierTenant.id)
+        ?? link.accountManager?.memberships[0]
+        ?? null;
       visibles.set(key, {
         provider: key,
         name: link.supplierTenant.name,
         linked: true,
         advertised: false,
-        accountManager: link.accountManager
-          ? { name: link.accountManager.username, email: link.accountManager.email }
-          : null,
+        accountManager: mapAssignedSeller({
+          user: link.accountManager,
+          membership,
+          org,
+        }),
+        supplierContact: { email: org.contactEmail, phone: org.contactPhone },
         linkId: link.id,
         discountPercent: link.discountPercent == null ? null : Number(link.discountPercent),
         purchase: purchaseFromConfig(key, configByProvider.get(key)),
@@ -138,6 +159,7 @@ export class TenantVisibilityService {
         linked: false,
         advertised: true,
         accountManager: null,
+        supplierContact: null,
         discountPercent: null,
         linkId: null,
         purchase: purchaseFromConfig(key, null),
