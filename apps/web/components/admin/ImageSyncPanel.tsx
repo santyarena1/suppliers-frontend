@@ -18,6 +18,7 @@ import ImageUploadPreviewModal from "@/components/ImageUploadPreviewModal";
 import {
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   Image as ImageIcon,
   KeyRound,
   Loader2,
@@ -35,6 +36,10 @@ function thumb(url: string | null | undefined) {
   if (!url) return "";
   if (url.startsWith("/assets/") || url.startsWith("/uploads/")) return assetUrl(url);
   return proxyImg(url, { trim: false });
+}
+
+function productHref(provider: string, externalId: string) {
+  return `/product/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}`;
 }
 
 function fmtWhen(iso: string) {
@@ -234,12 +239,12 @@ export default function ImageSyncPanel({
         : 0;
 
   return (
-    <div className="max-w-4xl flex flex-col gap-6">
+    <div className="w-full flex flex-col gap-6">
       <div>
         <h2 className="text-sm font-semibold text-white">Sincronización de imágenes</h2>
         <p className="text-xs text-surface-500 mt-1">
-          Solo productos sin foto. Primera foto busca en Serper y guarda la primera imagen, de a 50.
-          El automático corre dos veces al día y va completando el catálogo (~{status?.cronLimit ?? 200} por corrida).
+          Solo productos sin foto. Primera foto busca en Serper, prueba que la imagen cargue y la guarda
+          en Nodo (no se deja una URL rota). El automático corre dos veces al día (~{status?.cronLimit ?? 200} por corrida).
         </p>
       </div>
 
@@ -432,13 +437,12 @@ export default function ImageSyncPanel({
         {history.length === 0 ? (
           <p className="text-sm text-surface-500">Todavía no hay movimientos. Corré Primera foto o esperá el cron.</p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {history.map((row) => (
               <li key={row.id} className="border border-surface-800 rounded-xl p-3 flex gap-3 items-start">
                 <div className="w-16 h-16 rounded-md bg-white overflow-hidden flex-shrink-0 relative border border-surface-800">
                   {row.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={thumb(row.imageUrl)} alt="" className="w-full h-full object-contain p-0.5" />
+                    <SafeThumb url={row.imageUrl} />
                   ) : (
                     <ImageIcon className="w-5 h-5 text-surface-400 absolute inset-0 m-auto" />
                   )}
@@ -472,6 +476,15 @@ export default function ImageSyncPanel({
                       <Upload className="w-3 h-3" />
                       Subir de la PC
                     </button>
+                    <a
+                      href={productHref(row.provider, row.externalId)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Ver ficha
+                    </a>
                   </div>
                 </div>
               </li>
@@ -539,6 +552,15 @@ export default function ImageSyncPanel({
                   >
                     Subir
                   </button>
+                  <a
+                    href={productHref(it.provider, it.externalId)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-surface-400 border border-surface-700 rounded px-1.5 py-0.5"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Ver ficha
+                  </a>
                 </div>
               </li>
             ))}
@@ -574,6 +596,8 @@ export default function ImageSyncPanel({
         <SerperPicker
           productId={"productId" in picker ? picker.productId : picker.id}
           name={picker.name}
+          provider={picker.provider}
+          externalId={picker.externalId}
           initialQuery={picker.query}
           onClose={() => setPicker(null)}
           onPick={(url) => void applyImage("productId" in picker ? picker.productId : picker.id, url, "serper_pick")}
@@ -587,6 +611,8 @@ export default function ImageSyncPanel({
 function SerperPicker({
   productId,
   name,
+  provider,
+  externalId,
   initialQuery,
   onClose,
   onPick,
@@ -594,6 +620,8 @@ function SerperPicker({
 }: {
   productId: string;
   name: string;
+  provider: string;
+  externalId: string;
   initialQuery: string;
   onClose: () => void;
   onPick: (url: string) => void;
@@ -628,10 +656,21 @@ function SerperPicker({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
       <div
-        className="bg-surface-900 border border-surface-700 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5"
+        className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold text-white line-clamp-2">{name}</h3>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-sm font-semibold text-white line-clamp-2">{name}</h3>
+          <a
+            href={productHref(provider, externalId)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 flex-shrink-0 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Ver ficha
+          </a>
+        </div>
         <form
           className="flex gap-2 mt-3"
           onSubmit={(e) => {
@@ -655,31 +694,17 @@ function SerperPicker({
         ) : hits.length === 0 ? (
           <p className="text-sm text-surface-500 mt-6">No hubo resultados. Probá otro texto.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
             {hits.map((hit) => (
-              <button
+              <PickerHit
                 key={hit.imageUrl}
-                type="button"
-                disabled={Boolean(picking)}
-                onClick={() => {
+                hit={hit}
+                picking={picking}
+                onPick={() => {
                   setPicking(hit.imageUrl);
                   onPick(hit.imageUrl);
                 }}
-                className="border border-surface-700 hover:border-brand-500 rounded-lg overflow-hidden bg-white aspect-square relative"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={thumb(hit.thumbnailUrl || hit.imageUrl)} alt="" className="w-full h-full object-contain p-1" />
-                {picking === hit.imageUrl && (
-                  <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                    <Loader2 className="w-5 h-5 animate-spin text-white" />
-                  </span>
-                )}
-                {hit.source && (
-                  <span className="absolute bottom-0 inset-x-0 text-[10px] bg-black/60 text-white px-1 py-0.5 truncate">
-                    {hit.source}
-                  </span>
-                )}
-              </button>
+              />
             ))}
           </div>
         )}
@@ -688,5 +713,55 @@ function SerperPicker({
         </button>
       </div>
     </div>
+  );
+}
+
+function SafeThumb({ url }: { url: string }) {
+  const [broken, setBroken] = useState(false);
+  if (broken) {
+    return <ImageIcon className="w-5 h-5 text-surface-400 absolute inset-0 m-auto" />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={thumb(url)} alt="" className="w-full h-full object-contain p-0.5" onError={() => setBroken(true)} />
+  );
+}
+
+function PickerHit({
+  hit,
+  picking,
+  onPick,
+}: {
+  hit: SerperImageHit;
+  picking: string | null;
+  onPick: () => void;
+}) {
+  const [broken, setBroken] = useState(false);
+  if (broken) return null;
+  return (
+    <button
+      type="button"
+      disabled={Boolean(picking)}
+      onClick={onPick}
+      className="border border-surface-700 hover:border-brand-500 rounded-lg overflow-hidden bg-white aspect-square relative"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={thumb(hit.thumbnailUrl || hit.imageUrl)}
+        alt=""
+        className="w-full h-full object-contain p-1"
+        onError={() => setBroken(true)}
+      />
+      {picking === hit.imageUrl && (
+        <span className="absolute inset-0 bg-black/40 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-white" />
+        </span>
+      )}
+      {hit.source && (
+        <span className="absolute bottom-0 inset-x-0 text-[10px] bg-black/60 text-white px-1 py-0.5 truncate">
+          {hit.source}
+        </span>
+      )}
+    </button>
   );
 }
