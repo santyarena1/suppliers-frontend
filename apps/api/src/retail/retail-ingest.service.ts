@@ -15,6 +15,8 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const STALE_MS = 15 * 60_000;
+
 function firstImage(images?: { url?: string }[]): string | null {
   const url = images?.find((i) => i?.url)?.url;
   return url?.trim() || null;
@@ -48,6 +50,8 @@ export class RetailIngestService implements OnModuleInit {
   private cancelRequested = false;
   private pendingFull = false;
   private activeRunId: string | null = null;
+  /** Sube al abortar un lock colgado, para que el `finally` viejo no pise la corrida nueva. */
+  private runGeneration = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -73,6 +77,53 @@ export class RetailIngestService implements OnModuleInit {
 
   getCurrentMode() {
     return this.currentMode;
+  }
+
+  /**
+   * Si el proceso quedó con `running=true` pero no hay heartbeat, libera el lock.
+   * Sin esto el cron se salta para siempre (una corrida de la mañana deja el día muerto).
+   */
+  async recoverStaleLock(): Promise<boolean> {
+    const staleBefore = new Date(Date.now() - STALE_MS);
+    await this.prisma.retailIngestRun.updateMany({
+      where: { status: "RUNNING", heartbeatAt: { lt: staleBefore } },
+      data: {
+        status: "ERROR",
+        finishedAt: new Date(),
+        errorMessage: "Sin progreso (timeout / proceso reiniciado)",
+      },
+    });
+
+    if (!this.running) return false;
+
+    let heartbeat: Date | null = null;
+    if (this.activeRunId) {
+      const run = await this.prisma.retailIngestRun.findUnique({
+        where: { id: this.activeRunId },
+        select: { heartbeatAt: true, status: true },
+      });
+      heartbeat = run?.heartbeatAt ?? null;
+      if (run && run.status !== "RUNNING") {
+        this.logger.warn("Ingesta retail: lock en memoria con corrida ya cerrada — se libera");
+        this.abortCurrentRun();
+        return true;
+      }
+    }
+
+    if (!heartbeat || heartbeat < staleBefore) {
+      this.logger.warn("Ingesta retail colgada: se libera el lock para que el cron siga");
+      this.abortCurrentRun();
+      return true;
+    }
+    return false;
+  }
+
+  private abortCurrentRun() {
+    this.runGeneration += 1;
+    this.cancelRequested = true;
+    this.running = false;
+    this.currentMode = null;
+    this.activeRunId = null;
   }
 
   /**
@@ -111,9 +162,10 @@ export class RetailIngestService implements OnModuleInit {
     const store = await this.prisma.retailStore.findUnique({ where: { id: storeId } });
     if (!store) throw new Error("Local no encontrado");
 
+    this.cancelRequested = false;
+    const gen = ++this.runGeneration;
     this.running = true;
     this.currentMode = "full";
-    this.cancelRequested = false;
     const run = await this.prisma.retailIngestRun.create({
       data: {
         status: "RUNNING",
@@ -129,7 +181,7 @@ export class RetailIngestService implements OnModuleInit {
       // Corrige divisor + precios ya divididos de más antes de re-sincronizar
       await this.repairFalselyDividedCatalogs();
       const pageDelayMs = Math.max(0, Number(this.config.get("RETAIL_INGEST_PAGE_DELAY_MS") ?? 50));
-      const count = await this.ingestStore(store.externalId, pageDelayMs, run.id);
+      const count = await this.ingestStore(store.externalId, pageDelayMs, run.id, gen);
       await this.prisma.retailStore.update({
         where: { id: store.id },
         data: { syncedAt: new Date() },
@@ -154,12 +206,14 @@ export class RetailIngestService implements OnModuleInit {
       });
       throw err;
     } finally {
-      this.running = false;
-      this.currentMode = null;
-      this.activeRunId = null;
-      if (this.pendingFull) {
-        this.pendingFull = false;
-        void this.runFullIngest();
+      if (this.runGeneration === gen) {
+        this.running = false;
+        this.currentMode = null;
+        this.activeRunId = null;
+        if (this.pendingFull) {
+          this.pendingFull = false;
+          void this.runFullIngest();
+        }
       }
     }
   }
@@ -178,9 +232,10 @@ export class RetailIngestService implements OnModuleInit {
       };
     }
 
+    this.cancelRequested = false;
+    const gen = ++this.runGeneration;
     this.running = true;
     this.currentMode = opts.mode;
-    this.cancelRequested = false;
     const run = await this.prisma.retailIngestRun.create({
       data: { status: "RUNNING", mode: opts.mode, heartbeatAt: new Date() },
     });
@@ -237,7 +292,7 @@ export class RetailIngestService implements OnModuleInit {
       let idx = 0;
       const workers = Array.from({ length: concurrency }, async () => {
         while (idx < targets.length) {
-          if (this.cancelRequested) break;
+          if (this.cancelRequested || this.runGeneration !== gen) break;
           const current = idx++;
           if (current >= targets.length) break;
           const store = targets[current];
@@ -246,7 +301,7 @@ export class RetailIngestService implements OnModuleInit {
               where: { id: run.id },
               data: { currentStoreName: store.name, heartbeatAt: new Date() },
             });
-            const count = await this.ingestStore(store.externalId, pageDelayMs, run.id);
+            const count = await this.ingestStore(store.externalId, pageDelayMs, run.id, gen);
             productsUpserted += count;
             await this.prisma.retailStore.update({
               where: { id: store.id },
@@ -305,18 +360,20 @@ export class RetailIngestService implements OnModuleInit {
       this.logger.error(`Ingesta retail ERROR: ${message}`);
       throw err;
     } finally {
-      this.running = false;
-      this.currentMode = null;
-      this.activeRunId = null;
-      this.cancelRequested = false;
-      if (this.pendingFull) {
-        this.pendingFull = false;
-        this.logger.log("Iniciando full retail encolado…");
-        void this.runFullIngest().catch((err) => {
-          this.logger.error(
-            `Full encolado falló: ${err instanceof Error ? err.message : String(err)}`
-          );
-        });
+      if (this.runGeneration === gen) {
+        this.running = false;
+        this.currentMode = null;
+        this.activeRunId = null;
+        this.cancelRequested = false;
+        if (this.pendingFull) {
+          this.pendingFull = false;
+          this.logger.log("Iniciando full retail encolado…");
+          void this.runFullIngest().catch((err) => {
+            this.logger.error(
+              `Full encolado falló: ${err instanceof Error ? err.message : String(err)}`
+            );
+          });
+        }
       }
     }
   }
@@ -420,7 +477,8 @@ export class RetailIngestService implements OnModuleInit {
   private async ingestStore(
     externalStoreId: number,
     pageDelayMs: number,
-    runId: string | null
+    runId: string | null,
+    gen: number
   ): Promise<number> {
     const store = await this.prisma.retailStore.findUnique({ where: { externalId: externalStoreId } });
     if (!store) return 0;
@@ -446,7 +504,7 @@ export class RetailIngestService implements OnModuleInit {
     );
 
     while (true) {
-      if (this.cancelRequested) break;
+      if (this.cancelRequested || this.runGeneration !== gen) break;
 
       let pageData;
       try {

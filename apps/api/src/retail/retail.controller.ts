@@ -69,19 +69,7 @@ export class RetailController {
   @Roles("ROLE_ADMIN")
   @Get("admin/retail/ingest/status")
   async ingestStatus() {
-    // Recupera corridas RUNNING huérfanas (sin heartbeat > 15 min)
-    const staleBefore = new Date(Date.now() - 15 * 60_000);
-    await this.prisma.retailIngestRun.updateMany({
-      where: {
-        status: "RUNNING",
-        heartbeatAt: { lt: staleBefore },
-      },
-      data: {
-        status: "ERROR",
-        finishedAt: new Date(),
-        errorMessage: "Sin progreso (timeout / proceso reiniciado)",
-      },
-    });
+    await this.ingest.recoverStaleLock();
 
     const last = await this.prisma.retailIngestRun.findFirst({ orderBy: { startedAt: "desc" } });
     const [stores, products] = await Promise.all([

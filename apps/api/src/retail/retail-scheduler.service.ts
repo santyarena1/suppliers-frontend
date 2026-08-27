@@ -1,9 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Cron } from "@nestjs/schedule";
+import { Cron, Timeout } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
 import { RetailIngestService } from "./retail-ingest.service";
-
-const TZ = "America/Argentina/Buenos_Aires";
+import { isRetailDaytime } from "./retail-time";
 
 @Injectable()
 export class RetailSchedulerService {
@@ -14,42 +13,42 @@ export class RetailSchedulerService {
     private readonly config: ConfigService
   ) {}
 
-  /**
-   * Día (06:00–20:55 AR): cada 5 minutos, batch de tiendas más viejas.
-   * Así los precios se mueven seguido sin intentar un full sync imposible en 5 min.
-   */
-  @Cron("*/5 6-20 * * *", { timeZone: TZ })
-  async handleDaytime() {
-    await this.tick("day");
+  /** Cada 5 minutos, las 24 h. Si el proceso se durmió, el Timeout de boot cubre el hueco. */
+  @Cron("*/5 * * * *")
+  async handleCron() {
+    await this.tick("cron");
   }
 
-  /**
-   * Noche (21–05 AR): cada hora, un batch más grande (menos carga / menos urgencia).
-   */
-  @Cron("0 21-23,0-5 * * *", { timeZone: TZ })
-  async handleNight() {
-    await this.tick("night");
+  /** Al levantar o despertar el API: no esperar al próximo ciclo de 5 minutos. */
+  @Timeout(10_000)
+  async handleBoot() {
+    await this.tick("boot");
   }
 
-  private async tick(slot: "day" | "night") {
+  private async tick(source: "cron" | "boot") {
     if (this.config.get("RETAIL_INGEST_DISABLED") === "true") return;
+
+    const recovered = await this.ingest.recoverStaleLock();
+    if (recovered) {
+      this.logger.warn(`Cron retail ${source}: se liberó una ingesta colgada`);
+    }
     if (this.ingest.isRunning()) {
-      this.logger.debug(`Cron retail ${slot}: ya hay ingesta en curso, se salta`);
+      this.logger.debug(`Cron retail ${source}: ya hay ingesta en curso, se salta`);
       return;
     }
 
     const dayBatch = Math.max(1, Number(this.config.get("RETAIL_INGEST_DAY_BATCH") ?? 8));
     const nightBatch = Math.max(1, Number(this.config.get("RETAIL_INGEST_NIGHT_BATCH") ?? 20));
-    const maxStores = slot === "day" ? dayBatch : nightBatch;
+    const maxStores = isRetailDaytime() ? dayBatch : nightBatch;
 
     try {
       const result = await this.ingest.runBatchIngest(maxStores);
       this.logger.log(
-        `Cron retail ${slot}: ${result.storesDone} tiendas / ${result.productsUpserted} productos (run ${result.runId})`
+        `Cron retail ${source}: ${result.storesDone} tiendas / ${result.productsUpserted} productos (run ${result.runId})`
       );
     } catch (err) {
       this.logger.warn(
-        `Cron retail ${slot} falló: ${err instanceof Error ? err.message : String(err)}`
+        `Cron retail ${source} falló: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
