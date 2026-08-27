@@ -153,12 +153,19 @@ export class CatalogEnrichmentController {
   }
 
   @Post("ai/suggest-merges")
-  aiSuggestMerges(@Query("kind") kind?: string) {
+  aiSuggestMerges(
+    @Query("kind") kind?: string,
+    @Query("offset") offset?: string,
+    @Body() body?: { excludeKeys?: string[] }
+  ) {
     const k =
       kind && (CATALOG_ALIAS_KINDS as readonly string[]).includes(kind)
         ? (kind as (typeof CATALOG_ALIAS_KINDS)[number])
         : "CATEGORY";
-    return this.catalog.aiSuggestMerges(k);
+    return this.catalog.aiSuggestMerges(k, {
+      excludeKeys: body?.excludeKeys,
+      offset: offset ? Number(offset) : 0,
+    });
   }
 
   @Post("ai/category-clusters")

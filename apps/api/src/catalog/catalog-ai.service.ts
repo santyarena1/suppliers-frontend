@@ -30,7 +30,7 @@ export class CatalogAiService {
     categories: string[],
     knownLabels: string[]
   ): Promise<{ clusters: AiCategoryCluster[]; usedAi: boolean }> {
-    const unique = [...new Set(categories.filter(Boolean))].slice(0, 120);
+    const unique = [...new Set(categories.filter(Boolean))].slice(0, 200);
     if (unique.length === 0) return { clusters: [], usedAi: false };
 
     if (!(await this.isConfigured())) {
@@ -39,10 +39,14 @@ export class CatalogAiService {
 
     try {
       const clusters = await this.chatJson<AiCategoryCluster[]>(
-        `Agrupá categorías de catálogo IT que significan lo mismo. Devolvé JSON array de objetos { "label": string, "members": string[], "confidence": "alta"|"media"|"baja" }.
-El label debe ser uno de los members o una variante clara. Solo agrupá si hay alta confianza semántica.
-Categorías existentes en plataforma (preferí estos labels cuando aplique): ${knownLabels.slice(0, 40).join(", ")}
-Categorías a analizar: ${JSON.stringify(unique)}`
+        `Agrupá nombres de catálogo IT (categorías o marcas) que significan lo mismo aunque estén escritos distinto o en distintos distribuidores.
+Devolvé JSON array de objetos { "label": string, "members": string[], "confidence": "alta"|"media"|"baja" }.
+Reglas:
+- Cada member debe aparecer EXACTO como en la lista de entrada.
+- Preferí labels canónicos de esta lista si aplica: ${knownLabels.slice(0, 50).join(", ") || "(ninguno aún)"}
+- Devolvé TODOS los grupos razonables (hasta 40), no solo 2 o 3.
+- Incluí variantes ortográficas, plural/singular y abreviaturas.
+Entrada: ${JSON.stringify(unique)}`
       );
       if (Array.isArray(clusters) && clusters.length > 0) {
         return { clusters: clusters.slice(0, 30), usedAi: true };

@@ -3,6 +3,7 @@ import {
   identityIndexKey,
   indexCatalogAliases,
   indexCatalogIdentities,
+  normalizeBrandKey,
   normalizeCatalogLabel,
   normalizeEan,
   normalizePartNumber,
@@ -10,6 +11,7 @@ import {
   suggestAliasMerges,
   suggestIdentityMerges,
   suggestProviderCodeLabels,
+  suggestRowMerges,
   type RawValueStat,
 } from "./catalog-enrichment";
 
@@ -83,6 +85,37 @@ describe("catalog-enrichment", () => {
   it("heurística de clusters", () => {
     const clusters = heuristicCategoryClusters(["Memorias RAM", "Memorias Ram", "Periféricos"]);
     expect(clusters.some((c) => c.members.includes("Memorias RAM"))).toBe(true);
+  });
+
+  it("normaliza marcas ignorando guiones y espacios", () => {
+    expect(normalizeBrandKey("TP-LINK")).toBe(normalizeBrandKey("TP LINK"));
+    expect(normalizeBrandKey("TP-LINK")).toBe(normalizeBrandKey("tplink"));
+    expect(normalizeBrandKey("ASUS")).toBe(normalizeBrandKey("Asus"));
+  });
+
+  it("sugiere fusionar la misma marca en todos los distribuidores", () => {
+    const suggestions = suggestRowMerges(
+      [
+        { provider: "ELIT", rawKey: "ASUS", count: 100 },
+        { provider: "INVID", rawKey: "Asus", count: 40 },
+        { provider: "NEW_BYTES", rawKey: "ASUS", count: 80 },
+        { provider: "AIR", rawKey: "TP-LINK", count: 10 },
+        { provider: "ELIT", rawKey: "TP LINK", count: 12 },
+        { provider: "INVID", rawKey: "SoloUna", count: 3 },
+      ],
+      "BRAND"
+    );
+    const asus = suggestions.find((s) => normalizeBrandKey(s.label) === "asus");
+    expect(asus).toBeTruthy();
+    expect(asus!.members).toHaveLength(3);
+    expect(asus!.reason).toContain("distribuidores");
+
+    const tplink = suggestions.find((s) => normalizeBrandKey(s.label) === "tplink");
+    expect(tplink).toBeTruthy();
+    expect(tplink!.members).toHaveLength(2);
+    expect(suggestions.some((s) => s.members.length === 1 && s.members[0].rawKey === "SoloUna")).toBe(
+      false
+    );
   });
 
   it("prioriza override por producto", () => {

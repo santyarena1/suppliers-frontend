@@ -1692,6 +1692,7 @@ export interface CatalogPreviewProduct {
 export interface CatalogMergeCluster {
   label: string;
   confidence?: string;
+  reason?: string;
   members: { provider: string; rawKey: string; count: number }[];
 }
 
@@ -1750,12 +1751,18 @@ export const catalogEnrichmentApi = {
     provider?: string;
     limit?: number;
   }) => api.get<CatalogPreviewProduct[]>("/admin/catalog-enrichment/preview", { params }),
-  aiSuggestMerges: (kind: CatalogAliasKind) =>
-    api.post<{ clusters: CatalogMergeCluster[]; usedAi: boolean; kind: CatalogAliasKind }>(
-      "/admin/catalog-enrichment/ai/suggest-merges",
-      {},
-      { params: { kind } }
-    ),
+  aiSuggestMerges: (kind: CatalogAliasKind, opts?: { excludeKeys?: string[]; offset?: number }) =>
+    api.post<{
+      clusters: CatalogMergeCluster[];
+      usedAi: boolean;
+      kind: CatalogAliasKind;
+      total: number;
+      offset: number;
+      hasMore: boolean;
+      unlinkedCount: number;
+    }>("/admin/catalog-enrichment/ai/suggest-merges", { excludeKeys: opts?.excludeKeys ?? [] }, {
+      params: { kind, offset: opts?.offset ?? 0 },
+    }),
   aiProductHint: (provider: string, externalId: string) =>
     api.get<{
       displayBrand: string | null;

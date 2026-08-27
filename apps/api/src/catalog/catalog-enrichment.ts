@@ -232,6 +232,171 @@ export function normalizeCatalogLabel(raw: string): string {
     .trim();
 }
 
+/**
+ * Clave agresiva para marcas: ignora mayúsculas, guiones, espacios y puntuación.
+ * "TP-LINK" = "TP LINK" = "Tplink" = "tp-link".
+ */
+export function normalizeBrandKey(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+export type MergeRow = {
+  provider: string;
+  rawKey: string;
+  count: number;
+};
+
+export type RowMergeSuggestion = {
+  label: string;
+  confidence: "alta" | "media" | "baja";
+  reason: string;
+  members: MergeRow[];
+};
+
+/**
+ * Agrupa filas (proveedor + nombre) para unificar.
+ * Marcas: misma clave sin guiones/espacios → un solo grupo (ASUS en todos los distros).
+ * Categorías: normalización + similaridad laxa.
+ */
+export function suggestRowMerges(
+  rows: MergeRow[],
+  kind: CatalogAliasKind
+): RowMergeSuggestion[] {
+  if (kind === "BRAND") {
+    return suggestBrandRowMerges(rows);
+  }
+  return suggestCategoryRowMerges(rows);
+}
+
+function suggestBrandRowMerges(rows: MergeRow[]): RowMergeSuggestion[] {
+  const byKey = new Map<string, MergeRow[]>();
+  for (const row of rows) {
+    const key = normalizeBrandKey(row.rawKey);
+    if (key.length < 2) continue;
+    const arr = byKey.get(key) ?? [];
+    arr.push(row);
+    byKey.set(key, arr);
+  }
+
+  const out: RowMergeSuggestion[] = [];
+  for (const [, members] of byKey) {
+    // Misma marca en 2+ proveedores, o 2+ escrituras distintas
+    const providers = new Set(members.map((m) => m.provider));
+    const spellings = new Set(members.map((m) => m.rawKey));
+    if (providers.size < 2 && spellings.size < 2) continue;
+
+    out.push({
+      label: pickCanonicalBrandLabel(members.map((m) => m.rawKey)),
+      confidence: "alta",
+      reason:
+        providers.size > 1
+          ? `Misma marca en ${providers.size} distribuidores`
+          : "Misma marca escrita distinto",
+      members: members.sort((a, b) => a.provider.localeCompare(b.provider) || a.rawKey.localeCompare(b.rawKey, "es")),
+    });
+  }
+
+  return out.sort(
+    (a, b) =>
+      b.members.reduce((s, m) => s + m.count, 0) - a.members.reduce((s, m) => s + m.count, 0)
+  );
+}
+
+function suggestCategoryRowMerges(rows: MergeRow[]): RowMergeSuggestion[] {
+  const byNorm = new Map<string, MergeRow[]>();
+  for (const row of rows) {
+    const n = normalizeCatalogLabel(row.rawKey);
+    if (n.length < 2) continue;
+    const arr = byNorm.get(n) ?? [];
+    arr.push(row);
+    byNorm.set(n, arr);
+  }
+
+  const out: RowMergeSuggestion[] = [];
+  const used = new Set<string>();
+
+  for (const [, members] of byNorm) {
+    const providers = new Set(members.map((m) => m.provider));
+    const spellings = new Set(members.map((m) => m.rawKey));
+    if (providers.size < 2 && spellings.size < 2) continue;
+    for (const m of members) used.add(`${m.provider}:${m.rawKey}`);
+    out.push({
+      label: pickBestCatalogLabel([...spellings]),
+      confidence: "alta",
+      reason:
+        providers.size > 1
+          ? `Misma categoría en ${providers.size} distribuidores`
+          : "Misma categoría escrita distinto",
+      members: members.sort((a, b) => a.rawKey.localeCompare(b.rawKey, "es")),
+    });
+  }
+
+  // Similaridad laxa entre grupos restantes (solo nombres distintos)
+  const remaining = rows.filter((r) => !used.has(`${r.provider}:${r.rawKey}`));
+  const byLabel = new Map<string, MergeRow[]>();
+  for (const r of remaining) {
+    const arr = byLabel.get(r.rawKey) ?? [];
+    arr.push(r);
+    byLabel.set(r.rawKey, arr);
+  }
+  const labels = [...byLabel.keys()];
+  const norms = labels.map((raw) => ({ raw, n: normalizeCatalogLabel(raw) }));
+  const claimed = new Set<string>();
+
+  for (let i = 0; i < norms.length; i++) {
+    if (claimed.has(norms[i].raw)) continue;
+    const groupLabels = [norms[i].raw];
+    for (let j = i + 1; j < norms.length; j++) {
+      if (claimed.has(norms[j].raw)) continue;
+      if (labelsLikelySame(norms[i].n, norms[j].n)) groupLabels.push(norms[j].raw);
+    }
+    if (groupLabels.length < 2) continue;
+    const members = groupLabels.flatMap((l) => byLabel.get(l) ?? []);
+    if (members.length < 2) continue;
+    for (const l of groupLabels) claimed.add(l);
+    out.push({
+      label: pickBestCatalogLabel(groupLabels),
+      confidence: "media",
+      reason: "Nombres parecidos",
+      members,
+    });
+  }
+
+  return out.sort(
+    (a, b) =>
+      b.members.reduce((s, m) => s + m.count, 0) - a.members.reduce((s, m) => s + m.count, 0)
+  );
+}
+
+/** Prefiere la forma más “de marca”: con guiones/mayúsculas consistentes si aparece. */
+export function pickCanonicalBrandLabel(spellings: string[]): string {
+  const uniq = [...new Set(spellings.map((s) => s.trim()).filter(Boolean))];
+  if (uniq.length === 0) return "";
+  if (uniq.length === 1) return uniq[0];
+
+  // Contar frecuencia case-insensitive
+  const freq = new Map<string, { sample: string; count: number }>();
+  for (const s of spellings) {
+    const k = s.trim();
+    if (!k) continue;
+    const cur = freq.get(k) ?? { sample: k, count: 0 };
+    cur.count++;
+    freq.set(k, cur);
+  }
+  const ranked = [...freq.values()].sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    // Preferir con guión / mayúsculas tipo marca (TP-LINK)
+    const score = (s: string) =>
+      (/-/.test(s) ? 2 : 0) + (/[A-Z]/.test(s) && /[a-z]/.test(s) ? 0 : /[A-Z]{2,}/.test(s) ? 1 : 0);
+    return score(b.sample) - score(a.sample) || a.sample.localeCompare(b.sample, "es");
+  });
+  return ranked[0]?.sample ?? uniq[0];
+}
+
 export function looksLikeProviderCode(raw: string): boolean {
   const t = raw.trim();
   if (!t) return false;
@@ -367,22 +532,90 @@ export function suggestIdentityMerges(
   return out.sort((a, b) => b.productCount - a.productCount).slice(0, 40);
 }
 
-export function heuristicCategoryClusters(categories: string[]): { label: string; members: string[] }[] {
-  const groups = new Map<string, string[]>();
-  for (const cat of categories) {
+export function heuristicCategoryClusters(categories: string[]): { label: string; members: string[]; confidence?: string }[] {
+  const unique = [...new Set(categories.filter(Boolean))];
+  const byNorm = new Map<string, string[]>();
+  for (const cat of unique) {
     const n = normalizeCatalogLabel(cat);
-    if (n.length < 3) continue;
-    const arr = groups.get(n) ?? [];
+    if (n.length < 2) continue;
+    const arr = byNorm.get(n) ?? [];
     arr.push(cat);
-    groups.set(n, arr);
+    byNorm.set(n, arr);
   }
-  return [...groups.entries()]
-    .filter(([, members]) => members.length >= 2)
-    .map(([, members]) => ({
-      label: members.sort((a, b) => b.length - a.length)[0] ?? members[0],
-      members: [...new Set(members)],
-    }))
-    .slice(0, 30);
+
+  const clusters: { label: string; members: string[]; confidence?: string }[] = [];
+  const used = new Set<string>();
+
+  for (const [, members] of byNorm) {
+    const uniq = [...new Set(members)];
+    if (uniq.length < 2) continue;
+    clusters.push({
+      label: pickBestCatalogLabel(uniq),
+      members: uniq,
+      confidence: "alta",
+    });
+    for (const m of uniq) used.add(m);
+  }
+
+  const remaining = unique.filter((c) => !used.has(c));
+  const norms = remaining.map((c) => ({ raw: c, n: normalizeCatalogLabel(c) })).filter((x) => x.n.length >= 4);
+  for (let i = 0; i < norms.length; i++) {
+    if (used.has(norms[i].raw)) continue;
+    const group = [norms[i].raw];
+    for (let j = i + 1; j < norms.length; j++) {
+      if (used.has(norms[j].raw)) continue;
+      if (labelsLikelySame(norms[i].n, norms[j].n)) group.push(norms[j].raw);
+    }
+    if (group.length >= 2) {
+      clusters.push({
+        label: pickBestCatalogLabel(group),
+        members: [...new Set(group)],
+        confidence: "media",
+      });
+      for (const m of group) used.add(m);
+    }
+  }
+
+  return clusters
+    .sort((a, b) => b.members.length - a.members.length)
+    .slice(0, 80);
+}
+
+function pickBestCatalogLabel(members: string[]): string {
+  return [...members].sort((a, b) => b.length - a.length || a.localeCompare(b, "es"))[0] ?? members[0];
+}
+
+/** Similaridad laxa: mismo stem, contención o tokens compartidos. */
+export function labelsLikelySame(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a))) return true;
+  const ta = a.split(" ").filter((t) => t.length > 2);
+  const tb = b.split(" ").filter((t) => t.length > 2);
+  if (ta.length && tb.length) {
+    const setB = new Set(tb);
+    const shared = ta.filter((t) => setB.has(t));
+    if (shared.length >= 1 && shared.length >= Math.min(ta.length, tb.length)) return true;
+    if (ta[0] && ta[0] === tb[0] && ta[0].length >= 5) return true;
+  }
+  if (Math.abs(a.length - b.length) <= 2 && a.length <= 18 && catalogEditDistance(a, b) <= 2) return true;
+  return false;
+}
+
+function catalogEditDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (Math.abs(m - n) > 2) return 99;
+  const dp = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[m][n];
 }
 
 export function matchingRawCategories(

@@ -11,12 +11,14 @@ import {
   looksLikeProviderCode,
   matchingRawCategories,
   matchesDisplayCategory,
+  normalizeBrandKey,
   normalizeCatalogLabel,
   normalizeEan,
   normalizePartNumber,
   suggestAliasMerges,
   suggestIdentityMerges,
   suggestProviderCodeLabels,
+  suggestRowMerges,
   type CatalogEnrichmentContext,
   type RawValueStat,
 } from "./catalog-enrichment";
@@ -821,27 +823,109 @@ export class CatalogEnrichmentService implements OnModuleInit {
     });
   }
 
-  async aiSuggestMerges(kind: CatalogAliasKind = "CATEGORY") {
-    const stats = await this.listRawValues({ kind, limit: 150 });
-    const knownLabels = (await this.listTerms(kind)).map((t) => t.label);
-    const values = stats.map((s) => s.rawKey);
-    const result = await this.ai.suggestCategoryClusters(values, knownLabels);
+  async aiSuggestMerges(
+    kind: CatalogAliasKind = "CATEGORY",
+    opts?: { excludeKeys?: string[]; offset?: number }
+  ) {
+    const board = await this.getBoard(kind);
+    const unlinked = board.rows.filter((r) => !r.termId);
+    const knownLabels = board.terms.map((t) => t.label);
+    const exclude = new Set(opts?.excludeKeys ?? []);
 
-    const clusters = result.clusters
-      .map((c) => ({
-        label: c.label,
-        confidence: c.confidence,
-        members: stats
-          .filter((s) =>
-            c.members.some(
-              (m) => normalizeCatalogLabel(m) === normalizeCatalogLabel(s.rawKey) || m === s.rawKey
+    // 1) Heurística por filas (clave para marcas: ASUS en todos los distros)
+    const rowClusters = suggestRowMerges(
+      unlinked.map((r) => ({ provider: r.provider, rawKey: r.rawKey, count: r.count })),
+      kind
+    ).map((c) => ({
+      label: c.label,
+      confidence: c.confidence,
+      reason: c.reason,
+      members: c.members,
+    }));
+
+    // 2) IA / heurística de strings para lo que aún no entró en un grupo
+    const covered = new Set(
+      rowClusters.flatMap((c) => c.members.map((m) => `${m.provider}:${m.rawKey}`))
+    );
+    const leftover = unlinked.filter((r) => !covered.has(`${r.provider}:${r.rawKey}`));
+    let usedAi = false;
+    const aiExtra: typeof rowClusters = [];
+
+    if (leftover.length >= 2) {
+      const values = [...new Set(leftover.map((s) => s.rawKey))];
+      if (values.length >= 2) {
+        const result = await this.ai.suggestCategoryClusters(values, knownLabels);
+        usedAi = result.usedAi;
+        for (const c of result.clusters) {
+          const seed = leftover.filter((s) =>
+            c.members.some((m) =>
+              kind === "BRAND"
+                ? normalizeBrandKey(m) === normalizeBrandKey(s.rawKey) || m === s.rawKey
+                : normalizeCatalogLabel(m) === normalizeCatalogLabel(s.rawKey) || m === s.rawKey
             )
-          )
-          .map((s) => ({ provider: s.provider ?? "", rawKey: s.rawKey, count: s.count })),
-      }))
-      .filter((c) => c.members.length >= 2);
+          );
+          if (seed.length < 1) continue;
+          // Expandir a todos los unlinked con la misma clave (todas las Asus, etc.)
+          const keys =
+            kind === "BRAND"
+              ? new Set(seed.map((m) => normalizeBrandKey(m.rawKey)))
+              : new Set(seed.map((m) => normalizeCatalogLabel(m.rawKey)));
+          const members = unlinked
+            .filter((s) =>
+              kind === "BRAND"
+                ? keys.has(normalizeBrandKey(s.rawKey))
+                : keys.has(normalizeCatalogLabel(s.rawKey))
+            )
+            .map((s) => ({ provider: s.provider, rawKey: s.rawKey, count: s.count }));
+          if (members.length < 2) continue;
+          aiExtra.push({
+            label: c.label,
+            confidence: (c.confidence as "alta" | "media" | "baja") || "media",
+            reason: usedAi
+              ? kind === "BRAND"
+                ? "Sugerencia IA (marca)"
+                : "Sugerencia IA"
+              : "Nombres parecidos",
+            members,
+          });
+        }
+      }
+    }
 
-    return { clusters, usedAi: result.usedAi, kind };
+    const merged = [...rowClusters, ...aiExtra];
+    const seen = new Set<string>();
+    const clusters = merged
+      .filter((c) => {
+        if (c.members.length < 2) return false;
+        const fingerprint = c.members
+          .map((m) => `${m.provider}:${m.rawKey}`)
+          .sort()
+          .join("|");
+        if (seen.has(fingerprint) || exclude.has(`cluster:${fingerprint}`)) return false;
+        const keys = c.members.map((m) => `${m.provider}:${m.rawKey}`);
+        if (keys.every((k) => exclude.has(k))) return false;
+        seen.add(fingerprint);
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          b.members.reduce((s, m) => s + m.count, 0) - a.members.reduce((s, m) => s + m.count, 0) ||
+          a.label.localeCompare(b.label, "es")
+      );
+
+    const offset = Math.max(0, opts?.offset ?? 0);
+    const pageSize = kind === "BRAND" ? 25 : 15;
+    const page = clusters.slice(offset, offset + pageSize);
+
+    return {
+      clusters: page,
+      usedAi,
+      kind,
+      total: clusters.length,
+      offset,
+      hasMore: offset + pageSize < clusters.length,
+      unlinkedCount: unlinked.length,
+    };
   }
 
   async aiCategoryClusters(provider?: string) {
