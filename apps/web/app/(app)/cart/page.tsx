@@ -17,7 +17,7 @@ import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/pur
 import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
 import { buildSellerMessage } from "@/lib/seller-message";
 import { offlineOrdersFromCart } from "@/lib/offline-order";
-import { proxyImg, formatUSD } from "@/lib/format";
+import { proxyImg, formatUSD, parsePrice } from "@/lib/format";
 import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -26,8 +26,9 @@ import {
   formatAlicuota,
   perceptionGroupLabel,
   linePerceptionFromOrder,
+  type TaxLine,
 } from "@/lib/tax";
-import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
+import { cartLinesFromItems, useCheckoutWarmup, useWarmAllCheckoutCarts } from "@/lib/checkoutWarmup";
 import { rememberIibbRate, getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import {
   ALL_PROVIDERS,
@@ -86,9 +87,21 @@ const EMPTY_TOTALS: Totals = {
   perceptionLines: [],
 };
 
-function cartPerception(item: CartItem, siblings: CartItem[], extra?: TaxExtra) {
+function cartPerception(item: CartItem, siblings: CartItem[], extra?: TaxExtra): TaxLine | null {
   if (item.channel === "offline") return null;
-  return linePerceptionFromOrder(item, siblings, extra);
+  const quoted = linePerceptionFromOrder(item, siblings, extra);
+  if (quoted && quoted.unitAmount > 0.0001) return quoted;
+  if (priceModeForCartItem(item) === "offline") return null;
+  const pct = extra?.percepcionPercent ?? getIibbRatePercent(item.provider);
+  if (pct == null || pct <= 0) return null;
+  const unitNet = parsePrice(item.price);
+  if (unitNet <= 0) return null;
+  return {
+    kind: "iibb",
+    label: extra?.perceptionLines?.[0]?.label || "Percepciones",
+    percent: pct,
+    unitAmount: Math.round(unitNet * (pct / 100) * 10000) / 10000,
+  };
 }
 
 export default function CartPage() {
@@ -102,7 +115,7 @@ export default function CartPage() {
 function CartPageInner() {
   const {
     items, schemes, onlineByProvider, offlineByProvider,
-    setQty, remove, clear, clearProvider, onlineCount, offlineCount,
+    setQty, remove, clear, clearProvider, onlineCount, offlineCount, hydrated,
   } = useCart();
   const searchParams = useSearchParams();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
@@ -186,19 +199,39 @@ function CartPageInner() {
   function totalsFor(its: CartItem[], extra?: TaxExtra): Totals {
     let subtotalUSD = 0, ivaUSD = 0, internosUSD = 0, iibbUSD = 0, otherUSD = 0;
     const perceptionLines: PerceptionLine[] = [...(extra?.perceptionLines ?? [])];
+    const quotedLump = (extra?.perceptionsUSD ?? 0) > 0.0005;
+    const estimatePct = channelTab !== "offline" && !quotedLump;
+    void iibbEpoch;
     for (const it of its) {
       const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
       subtotalUSD += pricing.net;
+      let lineIibb = 0;
       for (const line of pricing.lines) {
         const amt = line.unitAmount * it.qty;
         if (line.kind === "iva") ivaUSD += amt;
         else if (line.kind === "internos") internosUSD += amt;
         else if (line.kind === "iibb") {
+          lineIibb += amt;
           iibbUSD += amt;
           if (amt > 0.0005 && !extra?.perceptionLines?.length) {
             perceptionLines.push({ label: line.label || "Percepciones", amount: amt });
           }
         } else otherUSD += amt;
+      }
+      if (estimatePct && lineIibb <= 0.0005 && priceModeForCartItem(it) !== "offline") {
+        const pct = extra?.percepcionPercent ?? getIibbRatePercent(it.provider);
+        if (pct != null && pct > 0) {
+          const amt = pricing.net * (pct / 100);
+          if (amt > 0.0005) {
+            iibbUSD += amt;
+            if (!extra?.perceptionLines?.length) {
+              perceptionLines.push({
+                label: `Percepciones ${pct % 1 === 0 ? pct : pct.toFixed(1)}%`,
+                amount: amt,
+              });
+            }
+          }
+        }
       }
     }
     const shippingUSD = extra?.shippingUSD ?? 0;
@@ -207,16 +240,6 @@ function CartPageInner() {
     ivaUSD += shippingIva;
     iibbUSD += shippingIibb;
     if (extra?.perceptionsUSD) iibbUSD += extra.perceptionsUSD;
-    if (channelTab !== "offline" && iibbUSD <= 0.0005) {
-      void iibbEpoch;
-      for (const it of its) {
-        if (priceModeForCartItem(it) === "offline") continue;
-        const pct = getIibbRatePercent(it.provider);
-        if (pct == null || pct <= 0) continue;
-        const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
-        iibbUSD += pricing.net * (pct / 100);
-      }
-    }
     const taxUSD = ivaUSD + internosUSD + iibbUSD + otherUSD;
     let totalUSD = withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD;
     if (withIva && extra?.totalUSD != null) totalUSD = Math.max(totalUSD, extra.totalUSD);
@@ -227,7 +250,7 @@ function CartPageInner() {
       iibbUSD,
       otherUSD,
       shippingUSD,
-      quotedShipping: extra != null,
+      quotedShipping: extra?.shippingUSD != null,
       taxUSD,
       totalUSD,
       itemCount: its.reduce((s, it) => s + it.qty, 0),
@@ -240,16 +263,27 @@ function CartPageInner() {
   const elitLines = useMemo(() => cartLinesFromItems(onlineByProvider.ELIT ?? []), [onlineByProvider.ELIT]);
   const nbLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_BYTES ?? []), [onlineByProvider.NEW_BYTES]);
   const airLines = useMemo(() => cartLinesFromItems(onlineByProvider.AIR ?? []), [onlineByProvider.AIR]);
-  const invidWarm = useCheckoutWarmup("INVID", invidLines);
-  const elitWarm = useCheckoutWarmup("ELIT", elitLines);
-  const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines);
-  const airWarm = useCheckoutWarmup("AIR", airLines);
+  const gnLines = useMemo(() => cartLinesFromItems(onlineByProvider.GRUPO_NUCLEO ?? []), [onlineByProvider.GRUPO_NUCLEO]);
+  const warmEnabled = hydrated && channelTab === "online";
+  const invidWarm = useCheckoutWarmup("INVID", invidLines, warmEnabled);
+  const elitWarm = useCheckoutWarmup("ELIT", elitLines, warmEnabled);
+  const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines, warmEnabled);
+  const airWarm = useCheckoutWarmup("AIR", airLines, warmEnabled);
+  const gnWarm = useCheckoutWarmup("GRUPO_NUCLEO", gnLines, warmEnabled);
+  useWarmAllCheckoutCarts(onlineByProvider, warmEnabled);
 
   const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
   const elitQuoted = elitPreview ?? (elitWarm.status === "ready" ? elitWarm.data?.preview ?? null : null);
   const nbQuoted = nbSnapshot ?? (nbWarm.status === "ready" ? nbWarm.data?.preview ?? null : null);
   const airQuoted: AirCheckoutPreview | null =
     airWarm.status === "ready" ? airWarm.data?.preview ?? null : null;
+  const warmSnap: Record<string, { status: string }> = {
+    INVID: invidWarm,
+    ELIT: elitWarm,
+    NEW_BYTES: nbWarm,
+    AIR: airWarm,
+    GRUPO_NUCLEO: gnWarm,
+  };
 
   const invidExtra: TaxExtra | undefined = invidQuoted?.stockOk
     ? { shippingUSD: invidQuoted.shippingCost ?? 0, percepcionPercent: invidQuoted.percepcionPercent ?? 0 }
@@ -291,7 +325,28 @@ function CartPageInner() {
       }
     : undefined;
 
-  // Aprender alícuotas IIBB de cotizaciones reales para usarlas en búsqueda.
+  function extraFor(provider: string): TaxExtra | undefined {
+    if (channelTab === "offline") return undefined;
+    const cfgPct = getIibbRatePercent(provider);
+    const cfg: TaxExtra | undefined =
+      cfgPct != null && cfgPct > 0 ? { percepcionPercent: cfgPct } : undefined;
+    const hasScheme = (onlineByProvider[provider] ?? []).some((it) => it.schemeId);
+    if (hasScheme) return cfg;
+    let quoted: TaxExtra | undefined;
+    if (provider === "INVID") quoted = invidExtra;
+    else if (provider === "ELIT") quoted = elitExtra;
+    else if (provider === "NEW_BYTES") quoted = nbExtra;
+    else if (provider === "AIR") quoted = airExtra;
+    const quotedHasPerc =
+      quoted != null &&
+      ((quoted.perceptionsUSD ?? 0) > 0.0005 || (quoted.percepcionPercent ?? 0) > 0);
+    if (quotedHasPerc) return quoted;
+    if (!quoted) return cfg;
+    // Air a veces cotiza sin leftover de percepción: se mezcla el % configurado.
+    if (provider === "AIR" && cfg) return { ...quoted, percepcionPercent: cfg.percepcionPercent };
+    return quoted;
+  }
+
   useEffect(() => {
     if (invidQuoted?.stockOk && (invidQuoted.percepcionPercent ?? 0) > 0) {
       rememberIibbRate("INVID", invidQuoted.percepcionPercent!);
@@ -322,17 +377,6 @@ function CartPageInner() {
     }
   }, [airQuoted, airPerc]);
 
-  function extraFor(provider: string): TaxExtra | undefined {
-    if (channelTab === "offline") return undefined;
-    const its = onlineByProvider[provider] ?? [];
-    if (its.some((it) => it.schemeId)) return undefined;
-    if (provider === "INVID") return invidExtra;
-    if (provider === "ELIT") return elitExtra;
-    if (provider === "NEW_BYTES") return nbExtra;
-    if (provider === "AIR") return airExtra;
-    return undefined;
-  }
-
   const grand = useMemo(() => {
     const tot = totalsFor(viewItems);
     const parts = Object.entries(viewByProvider).map(([p, its]) => totalsFor(its, extraFor(p)));
@@ -351,14 +395,14 @@ function CartPageInner() {
       productCount: acc.productCount + t.productCount,
       perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
     }), { ...EMPTY_TOTALS });
-  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, channelTab, policies, iibbEpoch]);
+  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
     for (const [p, its] of Object.entries(viewByProvider)) {
       m[p] = totalsFor(its, extraFor(p));
     }
     return m;
-  }, [viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, channelTab, policies]);
+  }, [viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
 
   function fmt(usd: number, digits = currency === "USD" ? 2 : 0) {
     if (currency === "USD") return formatUSD(usd);
@@ -837,6 +881,9 @@ function CartPageInner() {
                     <div className="flex flex-wrap items-center gap-2 min-h-9">
                       {sortedProviders.map((p) => {
                         const t = providerTotals[p];
+                        const warming =
+                          (onlineByProvider[p]?.length ?? 0) > 0 &&
+                          (warmSnap[p]?.status === "loading" || warmSnap[p]?.status === "idle");
                         return (
                           <div key={p} className="inline-flex h-9 overflow-hidden border border-surface-700 rounded-sm">
                             <button
@@ -845,6 +892,7 @@ function CartPageInner() {
                             >
                               <ProviderBadge provider={p} variant="inline" size="sm" />
                               <span className="tabular-nums text-surface-300">{fmt(t.totalUSD)}</span>
+                              {warming && <Loader2 className="w-3.5 h-3.5 animate-spin text-surface-500" />}
                             </button>
                             <Link
                               href={providerOrdersHref(p)}
@@ -862,67 +910,77 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && activeTab === "INVID" && onlineByProvider.INVID?.length > 0 && (
-                    <InvidDraftPanel
-                      compact
-                      items={onlineByProvider.INVID}
-                      onCreated={(message) => {
-                        setInvidPreview(null);
-                        setNotice(message || "Borrador creado en Invid");
-                        setActiveTab("all");
-                        clearProvider("INVID", "online");
-                      }}
-                      onPreviewed={setInvidPreview}
-                    />
+                  {channelTab === "online" && onlineByProvider.INVID?.length > 0 && (activeTab === "all" || activeTab === "INVID") && (
+                    <div className={activeTab === "INVID" ? undefined : "hidden"} aria-hidden={activeTab !== "INVID"}>
+                      <InvidDraftPanel
+                        compact
+                        items={onlineByProvider.INVID}
+                        onCreated={(message) => {
+                          setInvidPreview(null);
+                          setNotice(message || "Borrador creado en Invid");
+                          setActiveTab("all");
+                          clearProvider("INVID", "online");
+                        }}
+                        onPreviewed={setInvidPreview}
+                      />
+                    </div>
                   )}
 
-                  {channelTab === "online" && activeTab === "NEW_BYTES" && onlineByProvider.NEW_BYTES?.length > 0 && (
-                    <NewBytesDraftPanel
-                      compact
-                      items={onlineByProvider.NEW_BYTES}
-                      onCreated={(message) => {
-                        setNbSnapshot(null);
-                        setNotice(message || "Pedido creado en NewBytes");
-                        setActiveTab("all");
-                        clearProvider("NEW_BYTES", "online");
-                      }}
-                      onPreviewed={setNbSnapshot}
-                    />
+                  {channelTab === "online" && onlineByProvider.NEW_BYTES?.length > 0 && (activeTab === "all" || activeTab === "NEW_BYTES") && (
+                    <div className={activeTab === "NEW_BYTES" ? undefined : "hidden"} aria-hidden={activeTab !== "NEW_BYTES"}>
+                      <NewBytesDraftPanel
+                        compact
+                        items={onlineByProvider.NEW_BYTES}
+                        onCreated={(message) => {
+                          setNbSnapshot(null);
+                          setNotice(message || "Pedido creado en NewBytes");
+                          setActiveTab("all");
+                          clearProvider("NEW_BYTES", "online");
+                        }}
+                        onPreviewed={setNbSnapshot}
+                      />
+                    </div>
                   )}
 
-                  {channelTab === "online" && activeTab === "ELIT" && onlineByProvider.ELIT?.length > 0 && (
-                    <ElitCheckoutPanel
-                      items={onlineByProvider.ELIT}
-                      onCreated={(message) => {
-                        setElitPreview(null);
-                        setNotice(message || "Pedido creado en Elit");
-                        setActiveTab("all");
-                        clearProvider("ELIT", "online");
-                      }}
-                      onPreviewed={setElitPreview}
-                    />
+                  {channelTab === "online" && onlineByProvider.ELIT?.length > 0 && (activeTab === "all" || activeTab === "ELIT") && (
+                    <div className={activeTab === "ELIT" ? undefined : "hidden"} aria-hidden={activeTab !== "ELIT"}>
+                      <ElitCheckoutPanel
+                        items={onlineByProvider.ELIT}
+                        onCreated={(message) => {
+                          setElitPreview(null);
+                          setNotice(message || "Pedido creado en Elit");
+                          setActiveTab("all");
+                          clearProvider("ELIT", "online");
+                        }}
+                        onPreviewed={setElitPreview}
+                      />
+                    </div>
                   )}
 
-                  {channelTab === "online" && activeTab === "GRUPO_NUCLEO" && onlineByProvider.GRUPO_NUCLEO?.length > 0 && (
-                    <GrupoNucleoCheckoutPanel
-                      items={onlineByProvider.GRUPO_NUCLEO}
-                      onCreated={(message) => {
-                        setNotice(message || "Pedido creado en Grupo Núcleo");
-                        setActiveTab("all");
-                        clearProvider("GRUPO_NUCLEO", "online");
-                      }}
-                    />
+                  {channelTab === "online" && onlineByProvider.GRUPO_NUCLEO?.length > 0 && (activeTab === "all" || activeTab === "GRUPO_NUCLEO") && (
+                    <div className={activeTab === "GRUPO_NUCLEO" ? undefined : "hidden"} aria-hidden={activeTab !== "GRUPO_NUCLEO"}>
+                      <GrupoNucleoCheckoutPanel
+                        items={onlineByProvider.GRUPO_NUCLEO}
+                        onCreated={(message) => {
+                          setNotice(message || "Pedido creado en Grupo Núcleo");
+                          setActiveTab("all");
+                          clearProvider("GRUPO_NUCLEO", "online");
+                        }}
+                      />
+                    </div>
                   )}
 
-                  {channelTab === "online" && activeTab === "AIR" && onlineByProvider.AIR?.length > 0 && (
-                    <AirCheckoutPanel
-                      items={onlineByProvider.AIR}
-                      onCreated={(message) => {
-                        setNotice(message || "Canasto enviado a Air");
-                        setActiveTab("all");
-                        clearProvider("AIR", "online");
-                      }}
-                    />
+                  {channelTab === "online" && onlineByProvider.AIR?.length > 0 && (activeTab === "all" || activeTab === "AIR") && (
+                    <div className={activeTab === "AIR" ? undefined : "hidden"} aria-hidden={activeTab !== "AIR"}>
+                      <AirCheckoutPanel
+                        items={onlineByProvider.AIR}
+                        onCreated={(message) => {
+                          setNotice(message || "Canasto enviado a Air");
+                          setActiveTab("all");
+                          clearProvider("AIR", "online");
+                        }}
+                      />
+                    </div>
                   )}
                   {channelTab === "offline" && viewItems.length > 0 && (
                     <div className="flex flex-col gap-2">
@@ -1054,7 +1112,9 @@ function SummaryBar({
           </>
         )}
         {withIva && showInvidNote && !totals.quotedShipping && (
-          <span className="text-xs text-surface-600">Perc./envío al validar</span>
+          <span className="text-xs text-surface-600">
+            {totals.iibbUSD > 0.004 ? "Envío al validar" : "Perc./envío al validar"}
+          </span>
         )}
       </div>
       <div className="text-right flex-shrink-0">

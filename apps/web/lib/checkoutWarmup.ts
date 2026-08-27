@@ -286,17 +286,48 @@ export function ensureCheckoutWarmup(
   }, debounceMs);
 }
 
-export function useCheckoutWarmup<P extends WarmProvider>(provider: P, items: CartLine[]): WarmSnapshot<P> {
+export function useCheckoutWarmup<P extends WarmProvider>(
+  provider: P,
+  items: CartLine[],
+  enabled = true
+): WarmSnapshot<P> {
   const itemsKey = cartItemsKey(items);
   const [snap, setSnap] = useState<WarmSnapshot<P>>(() => toSnap(provider, itemsKey));
 
   useEffect(() => {
-    ensureCheckoutWarmup(provider, items, 0);
+    if (enabled && items.length > 0) ensureCheckoutWarmup(provider, items, 0);
     const sync = () => setSnap(toSnap(provider, cartItemsKey(items)));
     sync();
     window.addEventListener(EVT, sync);
     return () => window.removeEventListener(EVT, sync);
-  }, [provider, itemsKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [provider, itemsKey, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return snap.itemsKey === itemsKey ? snap : toSnap(provider, itemsKey);
+}
+
+/**
+ * En “Todos” arma el canasto real de cada distribuidor en segundo plano
+ * (Invid, New Bytes, Elit, Grupo Núcleo, Air), sin esperar a abrir la pestaña.
+ * No borra el cache si todavía no hidrató el carrito: un paint vacío no cancela un warmup en curso.
+ */
+export function useWarmAllCheckoutCarts(
+  onlineByProvider: Record<string, { externalId: string; qty: number; name?: string }[]>,
+  enabled: boolean
+) {
+  const signature = WARM_PROVIDERS.map((p) => {
+    const items = onlineByProvider[p] ?? [];
+    return `${p}:${cartItemsKey(cartLinesFromItems(items))}`;
+  }).join(";");
+
+  useEffect(() => {
+    if (!enabled) return;
+    for (const provider of WARM_PROVIDERS) {
+      const items = onlineByProvider[provider] ?? [];
+      if (items.length === 0) {
+        forgetCheckoutWarmup(provider);
+        continue;
+      }
+      ensureCheckoutWarmup(provider, cartLinesFromItems(items), 0);
+    }
+  }, [enabled, signature, onlineByProvider]);
 }
