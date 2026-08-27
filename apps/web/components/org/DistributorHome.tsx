@@ -5,7 +5,7 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import { myApi, type OwnClient, type OwnOrg } from "@/lib/api";
 import { formatUSD } from "@/lib/format";
-import { ArrowRight, ClipboardList, Handshake, Loader2, QrCode, Users } from "lucide-react";
+import { ArrowRight, ClipboardList, Handshake, Loader2, MessageSquare, QrCode, Users } from "lucide-react";
 
 export default function DistributorHome() {
   const [org, setOrg] = useState<OwnOrg | null>(null);
@@ -49,9 +49,10 @@ export default function DistributorHome() {
                   value={String(inactivos.length)}
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <HomeLink href="/clientes" icon={Handshake} title="Clientes" subtitle="Cartera y vendedores" />
                 <HomeLink href="/pedidos" icon={ClipboardList} title="Pedidos" subtitle="Lo que pidieron tus comercios" />
+                <HomeLink href="/mensajes" icon={MessageSquare} title="Mensajes" subtitle="El hilo de cada cuenta" />
                 {org?.canManagePortfolio && (
                   <HomeLink href="/codigos" icon={QrCode} title="Códigos" subtitle="Vincular un comercio nuevo" />
                 )}

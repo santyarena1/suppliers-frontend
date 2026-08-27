@@ -71,6 +71,25 @@ export const TENANT_ROLES_CAN_MANAGE_TEAM: readonly TenantRole[] = ["OWNER", "AD
 /** Asignar vendedor, suspender un vínculo y prender publicidad. */
 export const TENANT_ROLES_CAN_MANAGE_PORTFOLIO: readonly TenantRole[] = ["OWNER", "ADMIN"];
 
+/** Escribir en el chat del vínculo. El visor solo lee. */
+export const TENANT_ROLES_CAN_WRITE_CHAT: readonly TenantRole[] = [
+  "OWNER",
+  "ADMIN",
+  "BUYER",
+  "SELLER",
+  "PRODUCT_MANAGER",
+  "MARKETING",
+  "COMMERCIAL",
+];
+
+/** Reacciones del chat comercial. Un emoji por persona por mensaje. */
+export const CHAT_REACTION_EMOJIS = ["👍", "✅", "👀", "❓", "🔥", "❤️"] as const;
+export type ChatReactionEmoji = (typeof CHAT_REACTION_EMOJIS)[number];
+
+export function isChatReactionEmoji(value: string): value is ChatReactionEmoji {
+  return (CHAT_REACTION_EMOJIS as readonly string[]).includes(value);
+}
+
 export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   PENDING: "Pendiente",
   ACTIVE: "Activo",

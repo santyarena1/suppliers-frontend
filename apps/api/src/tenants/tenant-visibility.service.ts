@@ -20,6 +20,8 @@ export interface VisibleProvider {
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
+  /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
+  linkId: string | null;
   /** Cómo este comercio compra offline / en esquema a este distribuidor. */
   purchase: PurchasePolicyView;
 }
@@ -58,6 +60,7 @@ export class TenantVisibilityService {
           advertised: false,
           accountManager: null,
           discountPercent: null,
+          linkId: null,
           purchase: purchaseFromConfig(propio.providerKey, ownConfig),
         },
       ];
@@ -110,6 +113,7 @@ export class TenantVisibilityService {
         accountManager: link.accountManager
           ? { name: link.accountManager.username, email: link.accountManager.email }
           : null,
+        linkId: link.id,
         discountPercent: link.discountPercent == null ? null : Number(link.discountPercent),
         purchase: purchaseFromConfig(key, configByProvider.get(key)),
       });
@@ -127,6 +131,7 @@ export class TenantVisibilityService {
         advertised: true,
         accountManager: null,
         discountPercent: null,
+        linkId: null,
         purchase: purchaseFromConfig(key, null),
       });
     }

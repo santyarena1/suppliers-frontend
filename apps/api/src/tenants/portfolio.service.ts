@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import {
   PROVIDER_LABELS,
@@ -15,6 +15,7 @@ import {
   orderMatchesPmScope,
 } from "./portfolio";
 import type { TenantContext } from "./tenant-context.service";
+import { ChatService } from "../chat/chat.service";
 
 const LINK_INCLUDE = {
   clientTenant: { select: { id: true, name: true, type: true, contactEmail: true, contactPhone: true } },
@@ -23,7 +24,10 @@ const LINK_INCLUDE = {
 
 @Injectable()
 export class PortfolioService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
+  ) {}
 
   async listClients(tenant: TenantContext) {
     this.assertDistributor(tenant);
@@ -119,7 +123,39 @@ export class PortfolioService {
       },
       include: LINK_INCLUDE,
     });
+    void this.announceLinkChange(link, updated);
     return this.serializeClient(updated);
+  }
+
+  private async announceLinkChange(
+    before: { id: string; accountManagerId: string | null; status: string; discountPercent: Prisma.Decimal | null; accountManager: { username: string } | null },
+    after: { id: string; accountManagerId: string | null; status: string; discountPercent: Prisma.Decimal | null; accountManager: { username: string } | null }
+  ) {
+    if (!this.chat) return;
+    if (before.accountManagerId !== after.accountManagerId) {
+      const name = after.accountManager?.username;
+      await this.chat.notifyLinkChange(
+        after.id,
+        "seller_changed",
+        name ? `Ahora te atiende ${name}` : "Quedó sin vendedor asignado"
+      );
+    }
+    const beforeDto = before.discountPercent == null ? null : Number(before.discountPercent);
+    const afterDto = after.discountPercent == null ? null : Number(after.discountPercent);
+    if (beforeDto !== afterDto) {
+      await this.chat.notifyLinkChange(
+        after.id,
+        "discount_changed",
+        afterDto == null ? "Se quitó el descuento pactado" : `El descuento del vínculo pasó a ${afterDto}%`
+      );
+    }
+    if (before.status !== after.status) {
+      await this.chat.notifyLinkChange(
+        after.id,
+        "status_changed",
+        `El vínculo quedó ${after.status === "ACTIVE" ? "activo" : after.status === "SUSPENDED" ? "suspendido" : after.status.toLowerCase()}`
+      );
+    }
   }
 
   async listClientOrders(tenant: TenantContext, linkId?: string) {

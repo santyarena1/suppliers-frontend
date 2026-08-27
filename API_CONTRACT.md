@@ -54,7 +54,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/my/providers`, `/my/redeem-code`
 - **Auth**: Bearer usuario con organización
 - **Body / Params**: canje `{ code }`
-- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
+- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent, linkId }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
 - **Estado**: IMPLEMENTADO
 - **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
 
@@ -75,6 +75,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: cartera `{ canManage, canAssignSeller, canEditTerms, sellers, clients: [{ linkId, client, accountManager, discountPercent, ordersCount, lastOrderAt, lastOrderTotal, inactive }] }` · detalle con `orders[]` · códigos `{ canManage, codes }`
 - **Estado**: IMPLEMENTADO
 - **Notas**: La navegación de un distribuidor no muestra búsqueda ni carrito. Un `PRODUCT_MANAGER` solo ve pedidos de las marcas de su `ProductManagerScope`. Un comercio activo sin pedido en 30 días llega marcado `inactive`. UI: `/clientes`, `/codigos`, `/pedidos`. Ver `docs/PLAN_TIPO2.md`.
+
+### [FEATURE] Chat comercial (un hilo por vínculo)
+- **Método**: GET | POST | PATCH | DELETE | SSE
+- **Ruta**: `/my/chat/threads` · `/my/chat/unread` · `/my/chat/search` · `/my/chat/open` · `/my/chat/share-order` · `/my/chat/threads/:threadId` · `/my/chat/threads/:threadId/messages` · `/my/chat/threads/:threadId/read` · `/my/chat/threads/:threadId/typing` · `/my/chat/threads/:threadId/pins` · `/my/chat/messages/:messageId` · `/my/chat/messages/:messageId/reactions` · `/my/chat/upload` · `/my/chat/stream`
+- **Auth**: Bearer, organización `RETAILER` o `DISTRIBUTOR`. El visor solo lee. SSE autentica con `?token=` porque `EventSource` no manda `Authorization`.
+- **Body / Params**: abrir `{ linkId }` · enviar `{ body?, kind?, payload?, replyToId? }` · reaccionar `{ emoji }` (`👍 ✅ 👀 ❓ 🔥 ❤️`) · avisar pedido `{ orderId, threadId? }` · adjunto `multipart` foto/PDF/Excel ≤ 10 MB
+- **Respuesta esperada**: lista `{ canWrite, unreadTotal, threads: [{ threadId, linkId, peer, lastMessage, unreadCount, peerOnline }] }` · hilo `{ peer, accountManager, pins, peerLastReadAt, peerOnline, peerHref }` · mensajes `{ hasMore, messages }` · stream SSE `hello|unread|message|message_edited|message_deleted|message_reacted|read|typing|presence|ping`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un hilo por `TenantLink`. La historia es de la organización: si cambia el vendedor, el hilo queda y se anuncia. Un vendedor del distro solo ve sus cuentas. `REVOKED` no se habla; `SUSPENDED` sí. El superadmin no entra a estos hilos desde Administración. UI: `/mensajes`. Ver `docs/PLAN_TIPO2.md`.
 
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST

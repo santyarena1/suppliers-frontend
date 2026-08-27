@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { providerHasIvaRate, PROVIDER_LABELS, type Provider } from "@nodo/shared";
@@ -23,6 +23,7 @@ import {
   snapshotOfflineOrder,
 } from "./offline-order";
 import { OrderApprovalService } from "./order-approval.service";
+import { ChatService } from "../chat/chat.service";
 import {
   catalogKey,
   computePurchaseInsights,
@@ -50,7 +51,8 @@ export class OrdersService {
     private readonly newBytes: NewBytesOrderService,
     private readonly grupoNucleo: GrupoNucleoOrderService,
     private readonly air: AirOrderService,
-    private readonly elit: ElitOrderService
+    private readonly elit: ElitOrderService,
+    @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
   list(tenant: TenantContext) {
@@ -123,6 +125,15 @@ export class OrdersService {
         },
       });
       created.push(this.approval.serialize(row));
+      void this.chat?.notifyOrderCreated({
+        tenantId: row.tenantId,
+        provider: row.provider,
+        id: row.id,
+        total: row.total,
+        status: row.status,
+        approvalStatus: row.approvalStatus,
+        createdByUserId: row.createdByUserId,
+      });
     }
     return created;
   }

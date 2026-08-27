@@ -7,7 +7,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
-  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders
+  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import { isRetailerSession } from "@/lib/purchase";
@@ -25,7 +25,7 @@ import AirAccountPanel from "@/components/AirAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import {
   AlertTriangle, ArrowLeft, Boxes, CheckCircle2, FileSpreadsheet, ImageOff, KeyRound,
-  Loader2, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
+  Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
 } from "lucide-react";
 
 const MISSING_ACTION_LABELS: Record<MissingProductAction, string> = {
@@ -68,6 +68,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [syncing, setSyncing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [chatLinkId, setChatLinkId] = useState<string | null>(null);
 
   const tabFromQuery = useRef(false);
   const autoTabDone = useRef(false);
@@ -80,6 +81,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setTab(initialTab as ProviderTab);
       tabFromQuery.current = true;
     }
+  }, [provider]);
+
+  useEffect(() => {
+    void loadMyProviders().then((list) => {
+      const row = list.find((item) => item.provider === provider && item.linked);
+      setChatLinkId(row?.linkId ?? null);
+    });
   }, [provider]);
 
   const [query, setQuery] = useState("");
@@ -285,7 +293,18 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 </p>
               </div>
             </div>
-            <PrefsPanel />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {chatLinkId && (
+                <Link
+                  href={`/mensajes?linkId=${chatLinkId}`}
+                  className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium border border-brand-500/40 hover:border-brand-400 text-brand-200 hover:text-white rounded-lg px-2.5 py-1.5"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  Hablar
+                </Link>
+              )}
+              <PrefsPanel />
+            </div>
           </header>
 
           {!implemented ? (

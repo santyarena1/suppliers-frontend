@@ -1,0 +1,104 @@
+import { isChatReactionEmoji } from "@nodo/shared";
+import { canWriteChat, chatLinkVisibleTo, chatPeerName } from "./chat.access";
+
+describe("chatLinkVisibleTo", () => {
+  const link = {
+    clientTenantId: "comercio",
+    supplierTenantId: "distro",
+    accountManagerId: "seller-1",
+    status: "ACTIVE",
+  };
+
+  it("el comercio ve el hilo de su vínculo", () => {
+    expect(
+      chatLinkVisibleTo(link, {
+        tenantId: "comercio",
+        tenantType: "RETAILER",
+        tenantRole: "BUYER",
+        userId: "u",
+      })
+    ).toBe(true);
+    expect(
+      chatLinkVisibleTo(link, {
+        tenantId: "otro",
+        tenantType: "RETAILER",
+        tenantRole: "OWNER",
+        userId: "u",
+      })
+    ).toBe(false);
+  });
+
+  it("el vendedor del distribuidor solo ve sus cuentas", () => {
+    expect(
+      chatLinkVisibleTo(link, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "SELLER",
+        userId: "seller-1",
+      })
+    ).toBe(true);
+    expect(
+      chatLinkVisibleTo(link, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "SELLER",
+        userId: "otro",
+      })
+    ).toBe(false);
+  });
+
+  it("un vínculo revocado no se habla", () => {
+    expect(
+      chatLinkVisibleTo(
+        { ...link, status: "REVOKED" },
+        { tenantId: "comercio", tenantType: "RETAILER", tenantRole: "OWNER", userId: "u" }
+      )
+    ).toBe(false);
+  });
+
+  it("suspendido sigue visible: hay que poder explicar", () => {
+    expect(
+      chatLinkVisibleTo(
+        { ...link, status: "SUSPENDED" },
+        { tenantId: "comercio", tenantType: "RETAILER", tenantRole: "OWNER", userId: "u" }
+      )
+    ).toBe(true);
+  });
+
+  it("una marca no entra a los hilos comercio↔distribuidor", () => {
+    expect(
+      chatLinkVisibleTo(link, {
+        tenantId: "marca",
+        tenantType: "BRAND",
+        tenantRole: "OWNER",
+        userId: "u",
+      })
+    ).toBe(false);
+  });
+});
+
+describe("canWriteChat", () => {
+  it("el visor solo lee", () => {
+    expect(canWriteChat("VIEWER")).toBe(false);
+    expect(canWriteChat("SELLER")).toBe(true);
+    expect(canWriteChat("OWNER")).toBe(true);
+  });
+});
+
+describe("isChatReactionEmoji", () => {
+  it("acepta el set cerrado y nada más", () => {
+    expect(isChatReactionEmoji("👍")).toBe(true);
+    expect(isChatReactionEmoji("💩")).toBe(false);
+  });
+});
+
+describe("chatPeerName", () => {
+  const named = {
+    clientTenant: { name: "Local Centro" },
+    supplierTenant: { name: "New Bytes" },
+  };
+  it("cada lado ve el nombre del otro", () => {
+    expect(chatPeerName(named, "RETAILER")).toBe("New Bytes");
+    expect(chatPeerName(named, "DISTRIBUTOR")).toBe("Local Centro");
+  });
+});

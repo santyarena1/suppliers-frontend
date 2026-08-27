@@ -167,6 +167,12 @@ export default function ClienteDetallePage() {
                     Contacto: {[detail.client.contactEmail, detail.client.contactPhone].filter(Boolean).join(" · ")}
                   </p>
                 )}
+                <Link
+                  href={`/mensajes?linkId=${detail.linkId}`}
+                  className="self-start text-xs font-medium text-brand-400 hover:text-brand-300"
+                >
+                  Abrir chat
+                </Link>
               </section>
 
               <section className="border border-surface-800 rounded-xl overflow-hidden">

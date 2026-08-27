@@ -26,7 +26,9 @@ a Administración (carrito propio) y espeja el Comercio de Pruebas para credenci
 de proveedor y vínculos. No hace falta “entrar como” para probar el catálogo.
 
 Un comercio (`RETAILER`) arma su equipo en `/equipo`. Un distribuidor (`DISTRIBUTOR`)
-entra a cartera (`/clientes`, `/codigos`, `/pedidos`), no al buscador. Detalle: `docs/PLAN_TIPO2.md`.
+entra a cartera (`/clientes`, `/codigos`, `/pedidos`) y al chat (`/mensajes`), no al
+buscador. Detalle: `docs/PLAN_TIPO2.md`. Tipo 3 (marcas) se reconstruye aparte:
+`docs/PLAN_TIPO3.md`. El módulo `/marca` actual no aplica.
 
 ## Decisiones cerradas
 

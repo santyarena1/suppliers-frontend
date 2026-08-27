@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { CredentialsModule } from "../credentials/credentials.module";
 import { CatalogModule } from "../catalog/catalog.module";
 import { TenantsModule } from "../tenants/tenants.module";
+import { ChatModule } from "../chat/chat.module";
 import { ProvidersController } from "./providers.controller";
 import { ProvidersService } from "./providers.service";
 import { ProviderRegistry } from "./provider-registry";
@@ -27,7 +28,7 @@ import { OrderApprovalService } from "../orders/order-approval.service";
 import { AccountPortalCache } from "./account-portal-cache";
 
 @Module({
-  imports: [CredentialsModule, TenantsModule, CatalogModule],
+  imports: [CredentialsModule, TenantsModule, CatalogModule, ChatModule],
   controllers: [ProvidersController],
   providers: [
     ProvidersService,

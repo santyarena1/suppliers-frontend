@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import PrefsPanel from "@/components/PrefsPanel";
+import AccessCodeQr from "@/components/org/AccessCodeQr";
 import { myApi, type TenantAccessCode } from "@/lib/api";
+import { getTenant } from "@/lib/auth";
 import { Copy, Loader2, QrCode, X } from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
@@ -22,6 +24,7 @@ export default function CodigosPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [aviso, setAviso] = useState<{ ok: boolean; text: string } | null>(null);
+  const orgName = getTenant()?.name ?? null;
 
   const load = useCallback(async () => {
     const res = await myApi.accessCodes();
@@ -117,6 +120,7 @@ export default function CodigosPage() {
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
+                      <AccessCodeQr code={code.code} label={code.label} orgName={orgName} />
                       {canManage && (
                         <button
                           type="button"

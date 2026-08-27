@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import DistributorOrders from "@/components/org/DistributorOrders";
-import { ordersApi, type TenantOrder } from "@/lib/api";
+import { chatApi, ordersApi, type TenantOrder } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -27,6 +27,7 @@ import {
   Inbox,
   Layers,
   Loader2,
+  MessageSquare,
   Pencil,
   StickyNote,
   Trash2,
@@ -406,6 +407,8 @@ function OrderCard({
   const [showAllItems, setShowAllItems] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [shared, setShared] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [notes, setNotes] = useState(order.notes ?? "");
   const [draft, setDraft] = useState(order.items);
 
@@ -429,6 +432,18 @@ function OrderCard({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* ignore */ }
+  }
+
+  async function shareInChat() {
+    setSharing(true);
+    try {
+      await chatApi.shareOrder(order.id);
+      setShared(true);
+      setTimeout(() => setShared(false), 2500);
+    } catch { /* el interceptor muestra el error si hay 401; acá no bloqueamos el pedido */ }
+    finally {
+      setSharing(false);
+    }
   }
 
   async function save() {
@@ -978,6 +993,17 @@ function OrderCard({
                 >
                   {copied ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {copied ? "Copiado" : "Copiar mensaje"}
+                </button>
+              )}
+              {!editing && (
+                <button
+                  type="button"
+                  onClick={() => void shareInChat()}
+                  disabled={sharing}
+                  className="h-9 px-3 border border-brand-500/30 bg-brand-600/10 text-brand-100 hover:bg-brand-600/20 disabled:opacity-40 rounded-lg text-xs inline-flex items-center gap-1.5"
+                >
+                  {sharing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+                  {shared ? "Avisado en NODO" : "Avisar al vendedor"}
                 </button>
               )}
               {!offline && !editing && (

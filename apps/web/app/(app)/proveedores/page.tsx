@@ -14,7 +14,7 @@ import {
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
-import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
+import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, MessageSquare, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
@@ -103,7 +103,7 @@ export default function ProveedoresPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {linked.map(({ provider, name, accountManager }) => {
+                    {linked.map(({ provider, name, accountManager, linkId }) => {
                       const s = statuses[provider];
                       const result = syncResult[provider];
                       const isSyncing = syncing === provider;
@@ -147,6 +147,16 @@ export default function ProveedoresPage() {
                           )}
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
+                            {linkId && (
+                              <Link
+                                href={`/mensajes?linkId=${linkId}`}
+                                className="flex items-center justify-center gap-1 text-xs font-medium border border-brand-500/40 hover:border-brand-400 text-brand-200 hover:text-white rounded-lg px-2.5 py-1.5 transition-all"
+                                title="Hablar con el vendedor"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Hablar
+                              </Link>
+                            )}
                             <Link
                               href={`/proveedores/${provider}?tab=${canSyncProvider(s) ? "sync" : "credentials"}`}
                               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-lg py-1.5 transition-all"

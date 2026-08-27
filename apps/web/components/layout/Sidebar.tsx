@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, X } from "lucide-react";
 import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
+import { useChatUnread } from "@/lib/chat-unread";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules } from "@/lib/permissions";
 import { useResults } from "@/lib/results";
@@ -63,6 +64,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const user = getUser();
   const tenant = getTenant();
   const { totalCount, byProvider } = useCart();
+  const chatUnread = useChatUnread();
   const providerCount = Object.keys(byProvider).length;
   const myModules = useMyModules();
   const { clearResults } = useResults();
@@ -160,7 +162,12 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
 
     const Icon = item.icon;
     const active = item.id === activeId;
-    const badge = item.badge === "cart" && totalCount > 0 ? totalCount : undefined;
+    const badge =
+      item.badge === "cart" && totalCount > 0
+        ? totalCount
+        : item.badge === "chat" && chatUnread > 0
+          ? chatUnread
+          : undefined;
     const sublabel = item.sublabel === "providers" && providerCount > 0 && badge == null
       ? `${providerCount} prov.`
       : undefined;

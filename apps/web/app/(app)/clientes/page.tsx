@@ -5,7 +5,7 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import { TENANT_LINK_STATUS_LABELS, myApi, type OwnClient, type OwnPortfolio, type TenantLinkStatus } from "@/lib/api";
 import { formatUSD } from "@/lib/format";
-import { Handshake, Loader2 } from "lucide-react";
+import { Handshake, Loader2, MessageSquare } from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
@@ -156,16 +156,13 @@ export default function ClientesPage() {
 
 function ClientRow({ client }: { client: OwnClient }) {
   return (
-    <Link
-      href={`/clientes/${client.linkId}`}
-      className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-surface-900/60 transition-colors"
-    >
-      <div className="flex-1 min-w-[160px]">
+    <div className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-surface-900/60 transition-colors">
+      <Link href={`/clientes/${client.linkId}`} className="flex-1 min-w-[160px]">
         <p className="text-sm text-white">{client.client.name}</p>
         <p className="text-[11px] text-surface-500">
           {client.accountManager ? `Vendedor: ${client.accountManager.username}` : "Sin vendedor asignado"}
         </p>
-      </div>
+      </Link>
       {client.inactive && (
         <span className="text-[10px] font-medium uppercase tracking-wide text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
           Inactivo
@@ -179,6 +176,14 @@ function ClientRow({ client }: { client: OwnClient }) {
         {client.ordersCount ?? 0} pedidos · {when(client.lastOrderAt)}
         {client.lastOrderTotal != null ? ` · ${formatUSD(client.lastOrderTotal)}` : ""}
       </span>
-    </Link>
+      <Link
+        href={`/mensajes?linkId=${client.linkId}`}
+        className="text-surface-500 hover:text-brand-300 p-1"
+        aria-label="Abrir chat"
+        title="Hablar"
+      >
+        <MessageSquare className="w-4 h-4" />
+      </Link>
+    </div>
   );
 }

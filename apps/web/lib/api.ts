@@ -257,6 +257,8 @@ export interface VisibleProvider {
   advertised: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
+  /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
+  linkId?: string | null;
   /** Pedido offline / esquema que configuró este comercio para el distribuidor. */
   purchase?: {
     acceptsOffline: boolean;
@@ -302,6 +304,90 @@ export const myApi = {
   ) => api.put<OwnClient>(`/my/clients/${linkId}`, data),
   clientOrders: (linkId?: string) =>
     api.get<OwnClientOrder[]>(linkId ? `/my/clients/orders?linkId=${encodeURIComponent(linkId)}` : "/my/clients/orders"),
+};
+
+export type ChatKind = "TEXT" | "IMAGE" | "FILE" | "ORDER" | "PRODUCT" | "SYSTEM";
+
+export interface ChatThreadSummary {
+  threadId: string | null;
+  linkId: string;
+  status: TenantLinkStatus;
+  peer: { name: string; type: TenantType; contactEmail: string | null; contactPhone: string | null };
+  accountManager: { id: string; username: string; email: string } | null;
+  lastMessage: { kind: ChatKind; text: string; author: string | null } | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+  peerOnline?: boolean;
+  peerHref?: string | null;
+}
+
+export interface ChatReaction {
+  emoji: string;
+  users: { id: string; username: string }[];
+}
+
+export interface ChatMessage {
+  id: string;
+  threadId: string;
+  kind: ChatKind;
+  body: string;
+  payload: Record<string, unknown> | null;
+  author: { id: string; username: string } | null;
+  replyTo: { id: string; body: string; kind: ChatKind; author: string | null } | null;
+  editedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  reactions?: ChatReaction[];
+  peerName?: string;
+  pending?: boolean;
+  failed?: boolean;
+}
+
+export interface ChatThreadDetail {
+  threadId: string;
+  linkId: string;
+  status: TenantLinkStatus;
+  canWrite: boolean;
+  peer: ChatThreadSummary["peer"];
+  accountManager: ChatThreadSummary["accountManager"];
+  lastReadAt: string | null;
+  peerLastReadAt?: string | null;
+  peerReads?: { userId: string; username: string; lastReadAt: string }[];
+  peerOnline?: boolean;
+  peerHref?: string | null;
+  pins: ChatMessage[];
+}
+
+export const CHAT_REACTION_EMOJIS = ["👍", "✅", "👀", "❓", "🔥", "❤️"] as const;
+
+export const chatApi = {
+  threads: () => api.get<{ canWrite: boolean; unreadTotal: number; threads: ChatThreadSummary[] }>("/my/chat/threads"),
+  unread: () => api.get<{ unreadTotal: number }>("/my/chat/unread"),
+  search: (q: string) => api.get<{ messages: ChatMessage[] }>(`/my/chat/search?q=${encodeURIComponent(q)}`),
+  open: (linkId: string) => api.post<ChatThreadDetail>("/my/chat/open", { linkId }),
+  thread: (threadId: string) => api.get<ChatThreadDetail>(`/my/chat/threads/${threadId}`),
+  messages: (threadId: string, before?: string) =>
+    api.get<{ hasMore: boolean; messages: ChatMessage[] }>(
+      `/my/chat/threads/${threadId}/messages${before ? `?before=${encodeURIComponent(before)}` : ""}`
+    ),
+  send: (threadId: string, data: { body?: string; kind?: ChatKind; payload?: Record<string, unknown>; replyToId?: string }) =>
+    api.post<ChatMessage>(`/my/chat/threads/${threadId}/messages`, data),
+  read: (threadId: string) => api.post(`/my/chat/threads/${threadId}/read`),
+  typing: (threadId: string) => api.post(`/my/chat/threads/${threadId}/typing`),
+  pin: (threadId: string, messageId: string) => api.post<ChatThreadDetail>(`/my/chat/threads/${threadId}/pins`, { messageId }),
+  unpin: (threadId: string, messageId: string) => api.delete<ChatThreadDetail>(`/my/chat/threads/${threadId}/pins/${messageId}`),
+  edit: (messageId: string, body: string) => api.patch<ChatMessage>(`/my/chat/messages/${messageId}`, { body }),
+  remove: (messageId: string) => api.delete<ChatMessage>(`/my/chat/messages/${messageId}`),
+  react: (messageId: string, emoji: string) => api.post<ChatMessage>(`/my/chat/messages/${messageId}/reactions`, { emoji }),
+  shareOrder: (orderId: string, threadId?: string) => api.post<ChatMessage>("/my/chat/share-order", { orderId, threadId }),
+  upload: (file: File) =>
+    uploadAuthedFile("/my/chat/upload", file) as Promise<{
+      url: string;
+      filename: string;
+      mimeType: string;
+      byteSize: number;
+      kind: "IMAGE" | "FILE";
+    }>,
 };
 
 export interface OwnOrg {

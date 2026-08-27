@@ -17,6 +17,7 @@ import { HealthModule } from "./health/health.module";
 import { ProvidersModule } from "./providers/providers.module";
 import { AdminModule } from "./admin/admin.module";
 import { TenantsModule } from "./tenants/tenants.module";
+import { ChatModule } from "./chat/chat.module";
 import { RetailModule } from "./retail/retail.module";
 import { AssetsModule } from "./assets/assets.module";
 import { ImagesModule } from "./images/images.module";
@@ -48,6 +49,7 @@ import { ImagesModule } from "./images/images.module";
     ProvidersModule,
     AdminModule,
     TenantsModule,
+    ChatModule,
     RetailModule,
     AssetsModule,
     ImagesModule,

@@ -7,6 +7,7 @@ import ImpersonationBanner from "../ImpersonationBanner";
 import MobileTopBar from "./MobileTopBar";
 import Sidebar from "./Sidebar";
 import TenantRouteGate from "../org/TenantRouteGate";
+import ChatRealtime from "../chat/ChatRealtime";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,6 +19,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthGuard>
+      <ChatRealtime />
       <div className="flex h-screen flex-col overflow-hidden">
         <ImpersonationBanner />
         <div className="flex flex-1 overflow-hidden">

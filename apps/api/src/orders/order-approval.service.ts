@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import type { Prisma, ProviderOrder } from "@prisma/client";
 import {
   PROVIDER_LABELS,
@@ -10,6 +10,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
+import { ChatService } from "../chat/chat.service";
 import { isOrderItemEditable } from "./offline-order";
 
 /** Lo que devuelve el checkout cuando el pedido queda esperando una firma. */
@@ -40,7 +41,8 @@ interface DraftLike {
 export class OrderApprovalService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly visibility: TenantVisibilityService
+    private readonly visibility: TenantVisibilityService,
+    @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
   /** Todo pedido nace de alguien que puede comprar; el rol de solo lectura no compra. */
@@ -92,6 +94,16 @@ export class OrderApprovalService {
         draftInput: draft as Prisma.InputJsonValue,
         channel: "ONLINE",
       },
+    });
+
+    void this.chat?.notifyOrderCreated({
+      tenantId: order.tenantId,
+      provider: order.provider,
+      id: order.id,
+      total: order.total,
+      status: order.status,
+      approvalStatus: order.approvalStatus,
+      createdByUserId: order.createdByUserId,
     });
 
     return {

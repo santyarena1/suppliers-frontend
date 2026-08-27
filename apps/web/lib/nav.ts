@@ -1,6 +1,6 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
-  Settings, Users, GitCompare, Handshake, QrCode, UserCog,
+  Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -31,6 +31,7 @@ export type NavItemId =
   | "clients"
   | "client-orders"
   | "codes"
+  | "chat"
   | "team"
   | "brands-portal"
   | "brands-panel"
@@ -51,7 +52,7 @@ export interface NavItemDef {
   tenantRoles?: TenantRole[];
   /** Fallback mientras /me no exponga la membresía. */
   roles?: UserRole[];
-  badge?: "cart";
+  badge?: "cart" | "chat";
   sublabel?: "providers";
   section?: NavSectionId;
 }
@@ -73,6 +74,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search", tenantTypes: ["RETAILER"] },
   { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"] },
+  { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR"] },
 
   {
     id: "orders",

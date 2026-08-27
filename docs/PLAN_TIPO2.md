@@ -16,6 +16,8 @@ Un `OWNER` o `ADMIN` del local no depende del árbol de superadmin para operar e
 | Contacto de la organización | `/equipo` · `PUT /my/org` | Hecho |
 | Cargar credenciales de proveedor | ficha del distribuidor | Hecho |
 | No entrar por URL a pantallas de Tipo 2 | `TenantRouteGate` | Hecho |
+| Chat con cada distribuidor vinculado | `/mensajes` · `GET/POST /my/chat/*` | Hecho |
+| Avisar un pedido al vendedor desde Pedidos | `POST /my/chat/share-order` | Hecho |
 | Carrito compartido entre vendedores del mismo local (API, no navegador) | — | Pendiente |
 
 El canje sigue siendo anónimo hasta que sale bien. El alta de personas crea un usuario
@@ -34,20 +36,32 @@ comercio: no hay búsqueda ni carrito. Hay cartera. Una URL de comercio redirige
 | Descuento y notas del vínculo | `OWNER` / `ADMIN`, y el `SELLER` en sus cuentas | Hecho |
 | Ver pedidos de esos comercios | según visibilidad de la cuenta | Hecho |
 | Generar / revocar códigos (usos, vencimiento) | `OWNER` / `ADMIN` | Hecho |
+| QR imprimible del código (local, sin mandar el secreto a nadie) | `OWNER` / `ADMIN` | Hecho |
 | Equipo (vendedores, PM) y contacto | `OWNER` / `ADMIN` | Hecho |
 | Flag de publicidad (descubrimiento sin vínculo) | `OWNER` / `ADMIN` | Hecho (flag, no cobro) |
 | Product Manager: pedidos solo de sus marcas | `PRODUCT_MANAGER` | Hecho (ítem o catálogo) |
 | Alertas de clientes sin pedido en 30 días | todos los que ven la cuenta | Hecho |
+| Chat con cada comercio de la cartera | todos los que ven la cuenta; `VIEWER` solo lee | Hecho |
 | Cupos de descuento con tope, metas | — | No: ideas del plan maestro |
 | Publicidad con vigencia y slot | — | Fase 8 |
-| Chat con el comercio | — | Fase 9 |
-| QR imprimible del código | — | El código se copia; el ícono es de sección |
+
+### Chat comercial
+
+Un hilo por `TenantLink`. La historia es de las dos organizaciones: si el vendedor
+cambia, el hilo queda y NODO avisa en el chat. No hay DMs persona a persona.
+
+- El comercio ve un hilo por distribuidor vinculado. El vendedor del distro solo
+  las cuentas asignadas. `REVOKED` no se habla; `SUSPENDED` sí.
+- Tiempo real por SSE (`GET /my/chat/stream?token=`), no leídos, typing, visto,
+  presencia, reacciones, pines, editar 15 min, borrar (autor u OWNER/ADMIN).
+- Pedidos de NODO se anuncian solos. El comercio también puede “Avisar al vendedor”.
+- Adjuntos: foto, PDF, Excel, hasta 10 MB. Enter envía; Shift+Enter baja de línea.
 
 ### Camino que se implementó
 
-1. Endpoints `/my/*` (org, team, access-codes, clients) con el `TenantRole` de la sesión.
+1. Endpoints `/my/*` (org, team, access-codes, clients, chat) con el `TenantRole` de la sesión.
 2. Nav derivada de `tenantType` / `tenantRole`, no de `User.role`.
-3. Home distinta para `DISTRIBUTOR`, más `/pedidos` de cartera.
+3. Home distinta para `DISTRIBUTOR`, más `/pedidos` de cartera y `/mensajes`.
 4. Guardas de ruta: un comercio no entra a `/clientes`; un distribuidor no entra a `/search`.
 5. El superadmin sigue viendo el árbol; para usar el panel Tipo 2 se entra como esa persona.
 
@@ -56,8 +70,8 @@ comercio: no hay búsqueda ni carrito. Hay cartera. Una URL de comercio redirige
 1. Mudar el carrito de la web al de la API, para que dos vendedores del mismo local no se pisen.
 2. Publicidad con vigencia y slot, no solo el boolean.
 3. Reconstruir Tipo 3 (marcas) sobre este mismo modelo. El módulo `/marca` actual no aplica.
-4. Chat entre comercio y vendedor asignado.
-5. Cupos de descuento por vendedor y metas (si el producto lo pide).
+   Ver `docs/PLAN_TIPO3.md`.
+4. Cupos de descuento por vendedor y metas (si el producto lo pide).
 
 ## Verificación
 

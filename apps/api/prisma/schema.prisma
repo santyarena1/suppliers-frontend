@@ -41,6 +41,10 @@ model User {
   memberships          TenantMembership[]
   managedAccounts      TenantLink[]          @relation("AccountManager")
   productManagerScopes ProductManagerScope[]
+  chatMessages         ChatMessage[]
+  chatReads            ChatRead[]
+  chatPins             ChatPin[]
+  chatReactions        ChatReaction[]
 
   @@index([brandId])
 }
@@ -282,6 +286,8 @@ model TenantLink {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
+  chatThread ChatThread?
+
   @@unique([clientTenantId, supplierTenantId])
   @@index([supplierTenantId, status])
 }
@@ -312,6 +318,85 @@ model TenantAccessCodeRedemption {
   redeemedAt         DateTime         @default(now())
 
   @@index([redeemedByTenantId])
+}
+
+enum ChatMessageKind {
+  TEXT
+  IMAGE
+  FILE
+  ORDER
+  PRODUCT
+  SYSTEM
+}
+
+/// Un hilo por vínculo comercial. Queda en la organización si cambia el vendedor.
+model ChatThread {
+  id            String   @id @default(uuid())
+  linkId        String   @unique
+  link          TenantLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages ChatMessage[]
+  reads    ChatRead[]
+  pins     ChatPin[]
+}
+
+model ChatMessage {
+  id           String          @id @default(uuid())
+  threadId     String
+  thread       ChatThread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorUserId String?
+  author       User?           @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
+  kind         ChatMessageKind @default(TEXT)
+  body         String          @default("")
+  payload      Json?
+  replyToId    String?
+  replyTo      ChatMessage?    @relation("ChatReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      ChatMessage[]   @relation("ChatReply")
+  editedAt     DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime        @default(now())
+
+  pins      ChatPin[]
+  reactions ChatReaction[]
+
+  @@index([threadId, createdAt])
+  @@index([authorUserId])
+}
+
+/// Un emoji por persona por mensaje. Toggle: el mismo otra vez lo saca.
+model ChatReaction {
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime    @default(now())
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@index([messageId])
+}
+
+model ChatRead {
+  threadId   String
+  userId     String
+  thread     ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime
+  @@id([threadId, userId])
+}
+
+model ChatPin {
+  threadId   String
+  messageId  String
+  pinnedById String
+  thread     ChatThread  @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  message    ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [pinnedById], references: [id], onDelete: Cascade)
+  createdAt  DateTime    @default(now())
+  @@id([threadId, messageId])
 }
 
 /// Marcas que un Product Manager controla dentro de su distribuidor.
