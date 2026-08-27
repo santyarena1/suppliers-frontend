@@ -54,7 +54,7 @@ export class AirAccountService {
       invoices,
       pending,
       drafts: drafts.map(mapProviderDraft),
-      note: "Datos del portal www.air-intra.com (consultas/debehaber y comprobantes).",
+      note: "Datos del portal www.air-intra.com (debe/haber y comprobantes para ver o descargar). Air no admite adjuntar pagos desde Nodo.",
     };
   }
 

@@ -72,7 +72,12 @@ describe("elit-rsc.parser", () => {
       operations: [{ bank: 916, code: 12, name: "TRANSFERENCIA DOLAR BILLETE", validations: { date: true } }],
     });
     expect(options.banks[0]).toEqual({ id: 916, name: "BANCO MACRO" });
-    expect(options.operations[0]).toMatchObject({ bank: 916, code: "12", name: "TRANSFERENCIA DOLAR BILLETE" });
+    expect(options.operations[0]).toMatchObject({
+      bank: 916,
+      code: "12",
+      name: "TRANSFERENCIA DOLAR BILLETE",
+      validations: { date: true },
+    });
   });
 
   it("extrae movimientos de cta cte por invoiceCode", () => {

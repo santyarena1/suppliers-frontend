@@ -21,7 +21,8 @@ export default function ProviderCartPreloader() {
         forgetCheckoutWarmup(provider);
         continue;
       }
-      ensureCheckoutWarmup(provider, cartLinesFromItems(items), 600);
+      // Sync inmediato Nodo → portal: al agregar desde búsqueda ya queda en el carrito del distribuidor.
+      ensureCheckoutWarmup(provider, cartLinesFromItems(items), 80);
     }
   }, [hydrated, onlineByProvider]);
 

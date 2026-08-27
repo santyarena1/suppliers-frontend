@@ -36,6 +36,7 @@ import { AirCheckoutDraftDto, AirCheckoutPreviewDto } from "./dto/air-checkout.d
 import { ElitCheckoutDraftDto, ElitCheckoutPreviewDto } from "./dto/elit-checkout.dto";
 import { ElitPaymentOperationDto } from "./dto/elit-payment.dto";
 import { AccountPortalCache, wantsRefresh } from "./account-portal-cache";
+import { parseIncludeOutOfStock } from "./catalog-stock";
 
 function assertProvider(value: string): Provider {
   if (!ALL_PROVIDERS.includes(value as Provider)) {
@@ -121,19 +122,31 @@ export class ProvidersController {
 
   @Post("providers/INVID/payments/attach")
   async invidPaymentAttach(@CurrentTenant() tenant: TenantContext, @Req() req: FastifyRequest) {
-    const file = await req.file();
-    if (!file) throw new BadRequestException("No se recibió ningún archivo");
-    const buffer = await file.toBuffer();
+    const files: { field: string; filename: string; mimetype: string; buffer: Buffer }[] = [];
     const extra: Record<string, string> = {};
-    for (const [k, v] of Object.entries(file.fields ?? {})) {
-      if (k === "file") continue;
-      const val = Array.isArray(v) ? v[0] : v;
-      if (val && typeof val === "object" && "value" in val) extra[k] = String((val as { value: unknown }).value);
-      else if (typeof val === "string") extra[k] = val;
+    for await (const part of req.parts()) {
+      if (part.type === "file") {
+        if (!part.filename) continue;
+        files.push({
+          field: part.fieldname,
+          filename: part.filename,
+          mimetype: part.mimetype,
+          buffer: await part.toBuffer(),
+        });
+      } else {
+        extra[part.fieldname] = String(part.value ?? "");
+      }
     }
+    if (files.length === 0) throw new BadRequestException("No se recibió ningún archivo");
+    const bank = extra.bank || extra.banco;
+    const notes = extra.notes || extra.observaciones;
+    if (!bank?.trim()) throw new BadRequestException("Elegí el banco");
+    if (!notes?.trim()) throw new BadRequestException("Completá las observaciones");
+    extra.bank = bank;
+    extra.notes = notes;
     return this.invidAccountService.attachPayment(
       await this.invidCredentials(tenant),
-      { filename: file.filename, mimetype: file.mimetype, buffer },
+      files,
       extra
     );
   }
@@ -561,10 +574,13 @@ export class ProvidersController {
   search(
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Param("provider") provider: string,
-    @Query("name") name = ""
+    @Query("name") name = "",
+    @Query("includeOutOfStock") includeOutOfStock?: string
   ) {
     if (!tenant) return [];
-    return this.providersService.search(commercialId(tenant), assertProvider(provider), name);
+    return this.providersService.search(commercialId(tenant), assertProvider(provider), name, {
+      includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock),
+    });
   }
 
   @Get("providers/:provider/products/:externalId")
@@ -608,10 +624,16 @@ export class ProvidersController {
   getByCategory(
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Query("category") category: string,
-    @Query("take") take?: string
+    @Query("take") take?: string,
+    @Query("includeOutOfStock") includeOutOfStock?: string
   ) {
     if (!category) throw new BadRequestException("Falta el parámetro category");
     if (!tenant) return [];
-    return this.providersService.getByCategory(commercialId(tenant), category, take ? Number(take) : 60);
+    return this.providersService.getByCategory(
+      commercialId(tenant),
+      category,
+      take ? Number(take) : 60,
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+    );
   }
 }

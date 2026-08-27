@@ -242,7 +242,7 @@ function decodeEntities(s: string): string {
 }
 
 /** Extrae categoría/subcategoría (breadcrumb), disponibilidad y ficha técnica de una página de producto ya descargada. */
-function extractDetailPatch(html: string): Partial<NormalizedProduct> {
+export function extractDetailPatch(html: string): Partial<NormalizedProduct> {
   const patch: Partial<NormalizedProduct> = {};
 
   // Breadcrumb: "breadcrumb"> <a ...>Cat</a> / <a ...>Subcat</a> / <li>Nombre...
@@ -259,8 +259,10 @@ function extractDetailPatch(html: string): Partial<NormalizedProduct> {
   const availMatch = html.match(/name="product:availability"\s+content="([^"]*)"/i);
   if (availMatch) {
     const val = availMatch[1].toLowerCase();
-    if (val.includes("out of stock") || val.includes("sin stock")) patch.stockStatus = "Sin stock (tienda)";
-    else if (val.includes("in stock")) patch.stockStatus = "Disponible (tienda)";
+    if (val.includes("out of stock") || val.includes("sin stock")) {
+      patch.stockStatus = "Sin stock (tienda)";
+      patch.stock = 0;
+    } else if (val.includes("in stock")) patch.stockStatus = "Disponible (tienda)";
   }
 
   // Descripción corta: metatag dc.description (resumen de la mini-ficha técnica).

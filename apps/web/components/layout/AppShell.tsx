@@ -8,6 +8,7 @@ import MobileTopBar from "./MobileTopBar";
 import Sidebar from "./Sidebar";
 import TenantRouteGate from "../org/TenantRouteGate";
 import ChatRealtime from "../chat/ChatRealtime";
+import CartFloat from "../CartFloat";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -36,6 +37,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </div>
+      <CartFloat />
     </AuthGuard>
   );
 }

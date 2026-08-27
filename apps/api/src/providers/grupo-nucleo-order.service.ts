@@ -210,7 +210,7 @@ export class GrupoNucleoOrderService {
       balance: null,
       drafts,
       note:
-        "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá están solo los pedidos creados desde Nodo. No hay descarga de factura; la API solo permite informar una etiqueta con POST /API_V1/UpdateSaleOrderDeliveryLabel.",
+        "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá están solo los pedidos creados desde Nodo. No hay descarga de factura ni adjuntar pagos.",
     };
   }
 

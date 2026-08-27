@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import PrefsPanel from "@/components/PrefsPanel";
 import InvidDraftPanel from "@/components/InvidDraftPanel";
 import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
@@ -91,10 +92,19 @@ function cartPerception(item: CartItem, siblings: CartItem[], extra?: TaxExtra) 
 }
 
 export default function CartPage() {
+  return (
+    <Suspense fallback={<div className="flex h-full items-center justify-center text-surface-500 text-sm">Cargando carrito…</div>}>
+      <CartPageInner />
+    </Suspense>
+  );
+}
+
+function CartPageInner() {
   const {
     items, schemes, onlineByProvider, offlineByProvider,
     setQty, remove, clear, clearProvider, onlineCount, offlineCount,
   } = useCart();
+  const searchParams = useSearchParams();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
   const iibbEpoch = useIibbRatesEpoch();
   const retailer = useIsRetailer();
@@ -114,6 +124,7 @@ export default function CartPage() {
   const [confirmingOffline, setConfirmingOffline] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
   const pedidosRef = useRef<HTMLDivElement>(null);
+  const appliedProviderParam = useRef<string | null>(null);
 
   const viewByProvider = channelTab === "offline" ? offlineByProvider : onlineByProvider;
   const viewItems = useMemo(
@@ -122,6 +133,24 @@ export default function CartPage() {
   );
   const anyOfflinePolicy = Object.values(policies).some((p) => p.acceptsOffline);
   const showOfflineTab = retailer;
+
+  // Deep-link desde el flotante: /cart?provider=ELIT
+  useEffect(() => {
+    const raw = searchParams.get("provider");
+    if (!raw) {
+      appliedProviderParam.current = null;
+      return;
+    }
+    const provider = raw.toUpperCase();
+    if (appliedProviderParam.current === provider) return;
+    const online = onlineByProvider[provider]?.length ?? 0;
+    const offline = offlineByProvider[provider]?.length ?? 0;
+    if (online === 0 && offline === 0) return;
+    if (online === 0 && offline > 0) setChannelTab("offline");
+    else setChannelTab("online");
+    setActiveTab(provider);
+    appliedProviderParam.current = provider;
+  }, [searchParams, onlineByProvider, offlineByProvider]);
 
   useEffect(() => {
     if (activeTab !== "all" && !viewByProvider[activeTab]?.length) setActiveTab("all");

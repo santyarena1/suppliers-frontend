@@ -188,7 +188,7 @@ export default function NewBytesAccountPanel() {
         refreshing={loading}
         fromCache={fromCache}
         amountTotal={amountTotal}
-        hint="Pedidos, comprobantes y órdenes de compra de tu cuenta en nb.com.ar. Mes actual por defecto, de a 25. Actualizar vuelve a consultar el portal."
+        hint="Pedidos y facturas de nb.com.ar. Los comprobantes se ven y descargan; New Bytes no tiene adjuntar pago desde Nodo."
         header={
           section === "cta" && balance != null ? (
             <div className="flex items-center gap-2">
@@ -258,7 +258,11 @@ export default function NewBytesAccountPanel() {
             { label: "Percepciones", value: detail.row.perceptions != null ? String(detail.row.perceptions) : "" },
           ]}
           documents={nbVoucherDocs(detail.row)}
-          note={!detail.row.voucherUrl ? "Este comprobante no trajo voucherUrl: no hay PDF para descargar." : undefined}
+          note={
+            !detail.row.voucherUrl
+              ? "Este comprobante no trajo PDF para descargar. New Bytes no admite adjuntar pagos desde Nodo."
+              : undefined
+          }
           onClose={() => setDetail(null)}
         />
       )}

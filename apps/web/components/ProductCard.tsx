@@ -1,7 +1,13 @@
 "use client";
 
-import { ProductDTO, PROVIDER_LABELS, type Provider } from "@/lib/api";
-import { Package, ImageOff, MapPin, DollarSign } from "lucide-react";
+import {
+  ProductDTO,
+  PROVIDER_LABELS,
+  productDisplayBrand,
+  productDisplayCategory,
+  type Provider,
+} from "@/lib/api";
+import { Package, ImageOff, MapPin, DollarSign, GitCompare, Check } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
@@ -13,6 +19,12 @@ import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import { displayAmountFromPricing, displayTaxBadge, displayTaxTitle } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
+import {
+  entryKey,
+  loadCompareEntries,
+  newProviderEntry,
+  saveCompareEntries,
+} from "@/lib/compare-store";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
 import ProductSyncedAt from "./ProductSyncedAt";
@@ -48,10 +60,15 @@ function CardProviderPill({ provider }: { provider: string }) {
 export default function ProductCard({ product, priceMode = "list" }: { product: ProductDTO; priceMode?: PriceMode }) {
   const [imgErr, setImgErr] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
+  const [compareFlash, setCompareFlash] = useState(false);
   const { currency, withIva, withIibb, convert } = usePrefs();
   useIibbRatesEpoch();
   const policy = usePurchasePolicy(product.provider);
   const href = `/product/${encodeURIComponent(product.provider)}/${encodeURIComponent(product.externalId)}`;
+
+  const brand = productDisplayBrand(product);
+  const category = productDisplayCategory(product);
+  const metaLine = [brand, category].filter(Boolean).join(" · ");
 
   const pricing = purchaseLinePricing(product, policy, priceMode);
   const includeIibb = withIibb && pricing.mode !== "offline";
@@ -87,6 +104,25 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
   const taxOpts = { withIva, withIibb: includeIibb, provider: product.provider };
   const taxText = withIva ? `+ ${displayTaxBadge(product, taxOpts)}` : "Sin imp.";
   const taxTitle = displayTaxTitle(taxOpts);
+
+  function addToCompare(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const entry = newProviderEntry(product, priceMode);
+    const current = loadCompareEntries();
+    const key = entryKey(entry);
+    if (current.some((c) => entryKey(c) === key)) {
+      setCompareFlash(true);
+      setTimeout(() => setCompareFlash(false), 700);
+      return;
+    }
+    saveCompareEntries([...current, entry]);
+    setCompareFlash(true);
+    setTimeout(() => setCompareFlash(false), 700);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("nodo-compare-updated"));
+    }
+  }
 
   return (
     <div className="group relative rounded-2xl overflow-hidden flex flex-col product-card transition-shadow duration-300">
@@ -144,6 +180,11 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
           <p className="product-card-title text-[13px] leading-snug line-clamp-2 font-semibold tracking-tight transition-colors">
             {product.name}
           </p>
+          {metaLine && (
+            <p className="mt-1 text-[11px] leading-snug text-slate-400 dark:text-surface-500 line-clamp-1">
+              {metaLine}
+            </p>
+          )}
         </Link>
 
         <div className="mt-auto flex flex-col gap-2.5">
@@ -197,6 +238,19 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 type="button"
+                title="Agregar al comparador"
+                aria-label="Agregar al comparador"
+                onClick={addToCompare}
+                className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors shadow-sm ${
+                  compareFlash
+                    ? "border-violet-400 bg-violet-100 text-violet-700"
+                    : "border-violet-200/90 bg-violet-50 text-violet-600 hover:bg-violet-100 hover:border-violet-300 hover:text-violet-700"
+                }`}
+              >
+                {compareFlash ? <Check className="w-3.5 h-3.5" /> : <GitCompare className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                type="button"
                 title="Ver precios de venta en locales (referencia de mercado)"
                 aria-label="Ver precios de venta"
                 onClick={(e) => {
@@ -210,7 +264,8 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
               </button>
               <AddToCartButton
                 product={product}
-                variant="icon"
+                variant="stepper"
+                tone="light"
                 channel={showingOffline ? "offline" : "online"}
               />
             </div>

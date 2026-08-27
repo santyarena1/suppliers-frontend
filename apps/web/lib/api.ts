@@ -96,6 +96,29 @@ export async function uploadAuthedFile(path: string, file: File, extra?: Record<
   return body.data ?? body;
 }
 
+export async function uploadAuthedFiles(
+  path: string,
+  files: { field: string; file: File }[],
+  extra?: Record<string, string>
+) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const form = new FormData();
+  for (const { field, file } of files) form.append(field, file, file.name);
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) form.append(k, v);
+  }
+  const res = await fetch(`${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const body = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; data?: unknown };
+  if (!res.ok || body.success === false) {
+    throw new Error(body.message || `No se pudo subir (${res.status})`);
+  }
+  return body.data ?? body;
+}
+
 export const assetsApi = {
   upload: (file: File) =>
     uploadAuthedFile("/assets/upload", file) as Promise<{ url: string }>,
@@ -208,8 +231,13 @@ export const authApi = {
 // --- Search ---
 export interface SearchAllOptions {
   providers?: Provider[];
+  includeOutOfStock?: boolean;
   onProviderResult?: (provider: Provider, products: ProductDTO[]) => void;
   onProviderError?: (provider: Provider, error: unknown) => void;
+}
+
+function searchParams(name: string, includeOutOfStock?: boolean) {
+  return includeOutOfStock ? { name, includeOutOfStock: true } : { name };
 }
 
 export const searchApi = {
@@ -220,7 +248,9 @@ export const searchApi = {
     const results = await Promise.allSettled(
       providers.map(async (p) => {
         try {
-          const r = await api.get<ProductDTO[]>(`/search/provider/${p}`, { params: { name } });
+          const r = await api.get<ProductDTO[]>(`/search/provider/${p}`, {
+            params: searchParams(name, opts.includeOutOfStock),
+          });
           const data = Array.isArray(r.data) ? r.data : [];
           opts.onProviderResult?.(p, data);
           return { provider: p, data };
@@ -236,8 +266,10 @@ export const searchApi = {
     }
     return { data: merged };
   },
-  byProvider: (provider: Provider, name: string) =>
-    api.get<ProductDTO[]>(`/search/provider/${provider}`, { params: { name } }),
+  byProvider: (provider: Provider, name: string, opts: { includeOutOfStock?: boolean } = {}) =>
+    api.get<ProductDTO[]>(`/search/provider/${provider}`, {
+      params: searchParams(name, opts.includeOutOfStock),
+    }),
   filtered: async (name: string, filters: Record<string, boolean>, opts: SearchAllOptions = {}) => {
     const providers = (await loadLinkedProviders()).filter((p) => filters[p]);
     return searchApi.all(name, { ...opts, providers });
@@ -977,6 +1009,15 @@ export interface InvidOrderItem {
   qty?: string;
   total?: string;
 }
+export interface InvidOrderTotals {
+  net?: number;
+  iva?: number;
+  internos?: number;
+  percepciones?: number;
+  shipping?: number;
+  taxes?: number;
+  total?: number;
+}
 export interface InvidOrder {
   orderNumber: string;
   webOrderNumber: string;
@@ -989,6 +1030,27 @@ export interface InvidOrder {
   payment?: string;
   items?: InvidOrderItem[];
   links?: { href: string; label: string }[];
+  totals?: InvidOrderTotals;
+  exchangeRate?: number;
+  exchangeRateSource?: "order" | "current";
+  amountArs?: number;
+  canAttachPayment?: boolean;
+  paymentHref?: string;
+}
+export interface InvidPaymentBank {
+  value: string;
+  label: string;
+}
+export interface InvidPaymentForm {
+  action: string;
+  method: string;
+  fields: Record<string, string>;
+  banks: InvidPaymentBank[];
+  bankField: string;
+  notesField: string;
+  fileFields: string[];
+  notice?: string;
+  orderField?: string;
 }
 export interface InvidFileForm {
   action: string;
@@ -1007,7 +1069,13 @@ export interface InvidAccountMovement {
 }
 export const invidAccountApi = {
   orders: (opts?: { refresh?: boolean }) =>
-    api.get<{ orders: InvidOrder[]; paymentUploads?: InvidFileForm[]; note?: string }>(
+    api.get<{
+      orders: InvidOrder[];
+      currentExchangeRate?: number;
+      paymentForm?: InvidPaymentForm;
+      paymentUploads?: InvidFileForm[];
+      note?: string;
+    }>(
       "/providers/INVID/orders",
       { params: opts?.refresh ? { refresh: 1 } : undefined }
     ),
@@ -1517,7 +1585,7 @@ export const elitAccountApi = {
   paymentOptions: () =>
     api.get<{
       banks: { id?: number; name: string }[];
-      operations: { bank?: number; code?: string; name?: string }[];
+      operations: { bank?: number; code?: string; name?: string; validations?: unknown }[];
     }>("/providers/ELIT/payments/options"),
   createOperation: (body: {
     type?: string;
@@ -1632,7 +1700,14 @@ export const catalogApi = {
     api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`),
   categories: () => api.get<CategoryCount[]>("/catalog/categories"),
   featured: (take = 24) => api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
-  byCategory: (category: string, take = 60) => api.get<ProductDTO[]>("/catalog/by-category", { params: { category, take } }),
+  byCategory: (category: string, take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
+    api.get<ProductDTO[]>("/catalog/by-category", {
+      params: {
+        category,
+        take,
+        ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+      },
+    }),
   providerDisplay: () => api.get<ProviderDisplay[]>("/catalog/provider-display"),
 };
 

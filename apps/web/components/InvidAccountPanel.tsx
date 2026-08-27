@@ -8,7 +8,7 @@ import {
   InvidAccountMovement,
   InvidNodoDraft,
   InvidFileForm,
-  uploadAuthedFile,
+  InvidPaymentForm,
 } from "@/lib/api";
 import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
@@ -16,6 +16,8 @@ import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { invidOrderAmountLines, invidOrderHeaderLines, invidOrderItems } from "@/components/account/invidOrderDetail";
+import InvidPaymentModal from "@/components/account/InvidPaymentModal";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import {
   useAccountHistoryState,
@@ -23,6 +25,7 @@ import {
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
 import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
+import { usePrefs } from "@/lib/prefs";
 
 type Detail =
   | { kind: "order"; row: InvidOrder }
@@ -34,6 +37,8 @@ type SectionId = "cta" | "orders" | "nodo";
 type CtaPayload = { balance: number | null; movements: InvidAccountMovement[] };
 type OrdersPayload = {
   orders: InvidOrder[];
+  currentExchangeRate?: number;
+  paymentForm?: InvidPaymentForm | null;
   paymentUploads: InvidFileForm[];
   note: string | null;
 };
@@ -47,24 +52,26 @@ const SECTIONS = [
 
 const CACHE = {
   cta: "INVID:cta",
-  orders: "INVID:orders",
+  orders: "INVID:orders:v3",
   nodo: "INVID:nodo",
 } as const;
 
 export default function InvidAccountPanel() {
   const history = useAccountHistoryState("cta");
+  const prefs = usePrefs();
   const [balance, setBalance] = useState<number | null>(null);
   const [movements, setMovements] = useState<InvidAccountMovement[] | null>(null);
   const [orders, setOrders] = useState<InvidOrder[] | null>(null);
+  const [currentExchangeRate, setCurrentExchangeRate] = useState<number | undefined>(undefined);
   const [paymentUploads, setPaymentUploads] = useState<InvidFileForm[]>([]);
+  const [paymentForm, setPaymentForm] = useState<InvidPaymentForm | null>(null);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<InvidNodoDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [paymentOrder, setPaymentOrder] = useState<InvidOrder | null>(null);
 
   const section = history.section as SectionId;
 
@@ -98,6 +105,8 @@ export default function InvidAccountPanel() {
             const res = await invidAccountApi.orders({ refresh });
             return {
               orders: res.data.orders ?? [],
+              currentExchangeRate: res.data.currentExchangeRate,
+              paymentForm: res.data.paymentForm ?? null,
               paymentUploads: res.data.paymentUploads ?? [],
               note: res.data.note ?? null,
             };
@@ -105,6 +114,8 @@ export default function InvidAccountPanel() {
           { refresh }
         );
         setOrders(data.orders);
+        setCurrentExchangeRate(data.currentExchangeRate);
+        setPaymentForm(data.paymentForm ?? null);
         setPaymentUploads(data.paymentUploads);
         setUploadNote(data.note);
         setFromCache(hit);
@@ -191,7 +202,7 @@ export default function InvidAccountPanel() {
         refreshing={loading}
         fromCache={fromCache}
         amountTotal={amountTotal}
-        hint="Datos reales de tu cuenta en invidcomputers.com. Ver más muestra ítems, entrega/pago y PDFs si el portal los linkea. Mes actual por defecto, de a 25. Actualizar vuelve a consultar el portal."
+        hint="Datos reales de tu cuenta en invidcomputers.com. Ver más muestra productos, impuestos y TC. Adjuntar abre el formulario de comprobantes de Invid (banco, observaciones y archivos)."
         header={
           section === "cta" && balance != null ? (
             <div className="flex items-center gap-2">
@@ -235,67 +246,37 @@ export default function InvidAccountPanel() {
           <OrdersTable
             rows={paged.items as InvidOrder[]}
             onOpen={(o) => setDetail({ kind: "order", row: o })}
+            onAttach={(o) => setPaymentOrder(o)}
           />
         )}
       </AccountHistoryChrome>
 
       {detail?.kind === "order" && (
-        <AccountRowDetail
-          open
-          title={`Pedido ${detail.row.orderNumber}`}
-          lines={[
-            { label: "Orden", value: detail.row.orderNumber },
-            { label: "Pedido web", value: detail.row.webOrderNumber },
-            { label: "Estado", value: detail.row.status },
-            { label: "Fecha", value: detail.row.date },
-            { label: "Importe", value: detail.row.amount },
-            { label: "Factura", value: detail.row.invoice },
-            { label: "Entrega", value: detail.row.delivery || "" },
-            { label: "Pago", value: detail.row.payment || "" },
-          ]}
-          items={(detail.row.items ?? []).map((it) => ({
-            code: it.code,
-            name: it.name,
-            qty: it.qty,
-            price: it.price,
-            total: it.total,
-          }))}
-          documents={[
-            ...(detail.row.invoiceHrefs ?? []).map((href, i) => ({
-              label: "Descargar factura",
-              href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
-              filename: `invid-factura-${detail.row.orderNumber || i}.pdf`,
-            })),
-            ...(detail.row.links ?? [])
-              .filter((l) => !/ultima\.php/i.test(l.href))
-              .map((l) => ({
-                label: l.label || "Descargar",
-                href: `/providers/INVID/documents?href=${encodeURIComponent(l.href)}`,
-                filename: l.label || "invid-doc",
-              })),
-          ]}
-          note={
-            paymentUploads.length === 0
-              ? (uploadNote || "Si Invid no muestra un formulario de comprobante en esta sesión, el alta se hace desde su portal.")
+        <InvidOrderDetail
+          row={detail.row}
+          currentExchangeRate={currentExchangeRate}
+          fallbackNodoRate={
+            prefs.currentRate?.venta
+              ? { rate: prefs.currentRate.venta, label: `Cotización ${prefs.dollarLabel(prefs.dollarType)} (Nodo)` }
               : undefined
           }
-          upload={
-            paymentUploads.length > 0
-              ? {
-                  label: "Subir comprobante de pago",
-                  loading: uploading,
-                  error: uploadError,
-                  onFile: (file) => {
-                    setUploading(true);
-                    setUploadError(null);
-                    void uploadAuthedFile("/providers/INVID/payments/attach", file)
-                      .then(() => { setUploadError(null); })
-                      .catch((e: unknown) => setUploadError(e instanceof Error ? e.message : "No se pudo subir"))
-                      .finally(() => setUploading(false));
-                  },
-                }
-              : undefined
-          }
+          canAttach={canAttachInvidPayment(detail.row, paymentForm, paymentUploads)}
+          note={[
+            ...invidOrderAmountLines(
+              detail.row,
+              detail.row.exchangeRate
+                ? undefined
+                : currentExchangeRate
+                  ? { rate: currentExchangeRate, label: "TC actual Invid" }
+                  : prefs.currentRate?.venta
+                    ? { rate: prefs.currentRate.venta, label: `Cotización ${prefs.dollarLabel(prefs.dollarType)} (Nodo)` }
+                    : undefined
+            ).notes,
+            !canAttachInvidPayment(detail.row, paymentForm, paymentUploads)
+              ? (uploadNote || "")
+              : "",
+          ].filter(Boolean).join(" ")}
+          onAttach={() => setPaymentOrder(detail.row)}
           onClose={() => setDetail(null)}
         />
       )}
@@ -329,7 +310,88 @@ export default function InvidAccountPanel() {
           onClose={() => setDetail(null)}
         />
       )}
+      {paymentOrder && (
+        <InvidPaymentModal
+          order={paymentOrder}
+          form={paymentForm}
+          onClose={() => setPaymentOrder(null)}
+        />
+      )}
     </>
+  );
+}
+
+function canAttachInvidPayment(
+  row: InvidOrder,
+  paymentForm: InvidPaymentForm | null,
+  paymentUploads: InvidFileForm[]
+) {
+  return Boolean(
+    row.canAttachPayment
+    || row.paymentHref
+    || /adjuntar/i.test(row.invoice)
+    || ((paymentForm || paymentUploads.length > 0) && !/cerrado|cancelado|vencido/i.test(row.status))
+  );
+}
+
+function InvidOrderDetail({
+  row,
+  currentExchangeRate,
+  fallbackNodoRate,
+  canAttach,
+  note,
+  onAttach,
+  onClose,
+}: {
+  row: InvidOrder;
+  currentExchangeRate?: number;
+  fallbackNodoRate?: { rate: number; label: string };
+  canAttach: boolean;
+  note?: string;
+  onAttach: () => void;
+  onClose: () => void;
+}) {
+  const fallback = row.exchangeRate
+    ? undefined
+    : currentExchangeRate
+      ? { rate: currentExchangeRate, label: "TC actual Invid" }
+      : fallbackNodoRate;
+  const amounts = invidOrderAmountLines(row, fallback);
+  return (
+    <AccountRowDetail
+      open
+      title={`Pedido ${row.orderNumber}`}
+      lines={invidOrderHeaderLines(row)}
+      items={invidOrderItems(row)}
+      totals={amounts.lines}
+      documents={[
+        ...(row.invoiceHrefs ?? []).map((href, i) => ({
+          label: "Descargar factura",
+          href: `/providers/INVID/documents?href=${encodeURIComponent(href)}`,
+          filename: `invid-factura-${row.orderNumber || i}.pdf`,
+        })),
+        ...(row.links ?? [])
+          .filter((l) => !/ultima\.php/i.test(l.href))
+          .map((l) => ({
+            label: l.label || "Descargar",
+            href: `/providers/INVID/documents?href=${encodeURIComponent(l.href)}`,
+            filename: l.label || "invid-doc",
+          })),
+      ]}
+      extra={
+        canAttach ? (
+          <button
+            type="button"
+            onClick={onAttach}
+            className="h-10 px-3 inline-flex items-center justify-center rounded-sm text-[13px] font-medium border border-sky-500/40 text-sky-300 hover:border-sky-300 hover:text-white"
+          >
+            Adjuntar comprobante
+          </button>
+        ) : null
+      }
+      note={[...amounts.notes, note || ""].filter(Boolean).join(" ")}
+      onClose={onClose}
+    />
   );
 }
 
@@ -376,9 +438,11 @@ function MovementsTable({
 function OrdersTable({
   rows,
   onOpen,
+  onAttach,
 }: {
   rows: InvidOrder[];
   onOpen: (o: InvidOrder) => void;
+  onAttach: (o: InvidOrder) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -409,7 +473,20 @@ function OrdersTable({
               </td>
               <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount || "—"}</td>
-              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(o)} /></td>
+              <td className="px-2 py-2 text-right">
+                <div className="flex items-center justify-end gap-3">
+                  {(o.canAttachPayment || /adjuntar/i.test(o.invoice)) && (
+                    <button
+                      type="button"
+                      onClick={() => onAttach(o)}
+                      className="text-[11px] font-medium text-emerald-400 hover:text-white underline underline-offset-2 whitespace-nowrap"
+                    >
+                      Adjuntar
+                    </button>
+                  )}
+                  <VerMasButton onClick={() => onOpen(o)} />
+                </div>
+              </td>
             </tr>
           ))}
         </tbody>

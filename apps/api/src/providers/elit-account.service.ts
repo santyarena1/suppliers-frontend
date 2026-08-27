@@ -61,7 +61,7 @@ export class ElitAccountService {
       payments: payments.payments,
       canCreateReport: payments.canCreateReport,
       drafts: drafts.map(mapProviderDraft),
-      note: "Pedidos, comprobantes e informes de pago de tu cuenta en elit.com.ar.",
+      note: "Pedidos, comprobantes e informes de pago de elit.com.ar. Adjuntar abre banco, tipo, fecha, importe y un archivo.",
     };
   }
 

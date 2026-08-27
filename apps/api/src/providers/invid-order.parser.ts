@@ -243,6 +243,44 @@ export interface InvidOrderItem {
   total?: string;
 }
 
+export interface InvidOrderTotals {
+  net?: number;
+  iva?: number;
+  internos?: number;
+  percepciones?: number;
+  shipping?: number;
+  /** Resto no discriminado (total − neto − envío − lo que sí vino). */
+  taxes?: number;
+  total?: number;
+}
+
+export type InvidExchangeRateSource = "order" | "current";
+
+export interface InvidPaymentBank {
+  value: string;
+  label: string;
+}
+
+export interface InvidPaymentForm {
+  action: string;
+  method: string;
+  fields: Record<string, string>;
+  banks: InvidPaymentBank[];
+  bankField: string;
+  notesField: string;
+  fileFields: string[];
+  notice?: string;
+  orderField?: string;
+}
+
+export const INVID_PAYMENT_NOTICE = [
+  "No envíes el comprobante si necesitás que se realicen cambios en el pedido, primero contactate con nosotros.",
+  "Usá el campo Observaciones si necesitás aclararnos alguna cuestión: utilizás dinero a favor en tu cuenta, el pago es parcial, te queda un saldo en efectivo, etc.",
+  "Si el pago se realizó a través de más de un banco, seleccioná el banco al cual hayas depositado la mayor cantidad de dinero.",
+  "En el caso de Echeq, seleccioná Galicia.",
+  "Los informes de pagos enviados luego de las 17:00 hs serán tomados con el TC del día siguiente.",
+].join(" ");
+
 export interface InvidOrderRow {
   orderNumber: string;
   webOrderNumber: string;
@@ -255,6 +293,254 @@ export interface InvidOrderRow {
   payment?: string;
   items: InvidOrderItem[];
   links: { href: string; label: string }[];
+  totals?: InvidOrderTotals;
+  exchangeRate?: number;
+  exchangeRateSource?: InvidExchangeRateSource;
+  amountArs?: number;
+  canAttachPayment?: boolean;
+  paymentHref?: string;
+}
+
+const LINE_STATUS = /^(abierto|cerrado|cancelado|pendiente|pedido|vencido|anulado|facturado)$/i;
+
+export function formatUsMoney(n: number): string {
+  return `US$ ${round2(n).toFixed(2)}`;
+}
+
+function isMoneyText(t: string): boolean {
+  return /(?:US\$|AR\$|USD)\s*[\d.,]+/i.test(t) || /^\$?\s*[\d]+[.,]\d{2}$/.test(t.trim());
+}
+
+function isQtyText(t: string): boolean {
+  return /^\d{1,5}$/.test(t.trim());
+}
+
+function isUselessName(s: string): boolean {
+  return !s
+    || LINE_STATUS.test(s)
+    || isMoneyText(s)
+    || isQtyText(s)
+    || /x---det--/i.test(s)
+    || /^(https?:|\/|\.)/i.test(s);
+}
+
+function extractProductCode(text: string, html: string): string | undefined {
+  const fromParen = text.match(/\((\d{4,})\)/)?.[1];
+  if (fromParen) return fromParen;
+  const fromHref = html.match(/x---det--(\d+)/i)?.[1]
+    ?? html.match(/nro_?art(?:iculo)?=(\d+)/i)?.[1];
+  if (fromHref) return fromHref;
+  const bare = text.match(/\b(0?41\d{4,})\b/)?.[1];
+  return bare;
+}
+
+function parseItemRow(tdHtmls: string[]): InvidOrderItem | null {
+  const texts = tdHtmls.map(stripTags);
+  if (texts.length < 2) return null;
+  const joined = texts.join(" ");
+  if (/calificaci[oó]n/i.test(joined) && /producto/i.test(joined)) return null;
+  if (/producto/i.test(joined) && /precio/i.test(joined)) return null;
+  if (/cargar a pedido/i.test(joined)) return null;
+  if (/^total:/i.test(joined) || texts.some((t) => /^total:/i.test(t))) return null;
+  if (texts.some((t) => /forma de (entrega|pago)/i.test(t))) return null;
+
+  let priceIdx = -1;
+  for (let i = 0; i < texts.length; i++) {
+    if (isMoneyText(texts[i])) priceIdx = i;
+  }
+  let qtyIdx = -1;
+  for (let i = texts.length - 1; i >= 0; i--) {
+    if (i !== priceIdx && isQtyText(texts[i])) {
+      qtyIdx = i;
+      break;
+    }
+  }
+
+  const htmlBlob = tdHtmls.join(" ");
+  const candidates = texts
+    .map((t, i) => {
+      const anchors = extractAnchors(tdHtmls[i] ?? "");
+      const titles = [...(tdHtmls[i] ?? "").matchAll(/\b(?:title|alt)="([^"]+)"/gi)]
+        .map((m) => decodeEntities(m[1]).trim())
+        .filter(Boolean);
+      const linkLabel = anchors.map((a) => a.label).find((l) => l && !isUselessName(l));
+      const title = titles.find((s) => s && !isUselessName(s));
+      const label = [t, linkLabel, title].find((s) => s && !isUselessName(s)) ?? "";
+      return { t, i, label, html: tdHtmls[i] ?? "" };
+    })
+    .filter((c) => c.i !== priceIdx && c.i !== qtyIdx && (c.label || extractProductCode(c.t, c.html)));
+
+  const named = candidates.sort((a, b) => {
+    const score = (x: (typeof candidates)[number]) => {
+      let s = 0;
+      if (/\(\d{4,}\)/.test(x.label || x.t)) s += 10;
+      if (/x---det--/i.test(x.html)) s += 8;
+      s += Math.min((x.label || x.t).length, 80) / 80;
+      return s;
+    };
+    return score(b) - score(a);
+  })[0];
+
+  if (priceIdx < 0 && qtyIdx < 0) return null;
+
+  const rawName = named?.label || named?.t || "";
+  if (/^(subtotal|neto|total:?|iva|i\.v\.a\.?|imp(?:uestos?)?\.?\s*internos|internos|perc(?:epci[oó]n(?:es)?)?|iibb|env[ií]o|flete)\b/i.test(rawName)) {
+    return null;
+  }
+  const code = extractProductCode(`${rawName} ${joined}`, htmlBlob);
+  if (!rawName && !code) return null;
+  if (rawName && LINE_STATUS.test(rawName) && !code) return null;
+
+  const name = rawName && !LINE_STATUS.test(rawName) ? rawName : (code ? `(${code})` : rawName);
+  const price = priceIdx >= 0 ? texts[priceIdx] : undefined;
+  const qty = qtyIdx >= 0 ? texts[qtyIdx] : undefined;
+  let total: string | undefined;
+  if (price && qty) {
+    const p = parseInvidMoney(price);
+    const q = Number(qty);
+    if (p > 0 && Number.isFinite(q) && q > 0) total = formatUsMoney(p * q);
+  }
+  return { code, name, price, qty, total };
+}
+
+function pickLabeledMoney(text: string, re: RegExp): number | undefined {
+  const m = text.match(re);
+  if (!m) return undefined;
+  const n = parseInvidMoney(m[1]);
+  return n > 0 ? n : undefined;
+}
+
+function assignTotalLabel(label: string, value: string, totals: InvidOrderTotals) {
+  if (!/\d/.test(value)) return;
+  const n = parseInvidMoney(value);
+  if (!Number.isFinite(n)) return;
+  const l = label.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!l) return;
+  if (/^total\b/.test(l)) {
+    totals.total = n;
+    return;
+  }
+  if (/(subtotal|neto|mercader)/.test(l) && !/\biva\b|i\.v\.a/.test(l)) {
+    totals.net = n;
+    return;
+  }
+  if (/\biva\b|i\.v\.a/.test(l)) {
+    totals.iva = n;
+    return;
+  }
+  if (/interno/.test(l)) {
+    totals.internos = n;
+    return;
+  }
+  if (/perc|iibb/.test(l)) {
+    totals.percepciones = n;
+    return;
+  }
+  if (/env[ií]o|flete/.test(l)) {
+    totals.shipping = n;
+    return;
+  }
+}
+
+function parseExchangeRateValue(raw: string): number | undefined {
+  const n = parseInvidMoney(raw);
+  if (!Number.isFinite(n) || n < 10 || n >= 100_000) return undefined;
+  return n;
+}
+
+function parseOutlineTotals(html: string): { totals: InvidOrderTotals; exchangeRate?: number } {
+  const totals: InvidOrderTotals = {};
+  let exchangeRate: number | undefined;
+  const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html))) {
+    const texts = extractTdHtml(m[1]).map(stripTags).filter((t) => t.length > 0);
+    if (texts.length === 0) continue;
+    const joined = texts.join(" ");
+    if (parseItemRow(extractTdHtml(m[1]))) continue;
+    const label = texts[0];
+    const value = texts.length >= 2 ? texts[texts.length - 1] : texts[0];
+    assignTotalLabel(label, value, totals);
+    assignTotalLabel(joined, joined, totals);
+    if (/cotizaci[oó]n|tipo\s+de\s+cambio|\btc\b/.test(joined.toLowerCase())) {
+      const rate = parseExchangeRateValue(value) ?? parseExchangeRateValue(joined);
+      if (rate) exchangeRate = rate;
+    }
+  }
+
+  const text = stripTags(html);
+  if (totals.iva == null) {
+    totals.iva = pickLabeledMoney(text, /\bI\.?V\.?A\.?(?:\s*\(?\d+(?:[.,]\d+)?\s*%\)?)?\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.internos == null) {
+    totals.internos = pickLabeledMoney(text, /imp(?:uestos?)?\.?\s*internos\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.percepciones == null) {
+    totals.percepciones = pickLabeledMoney(text, /perc(?:epci[oó]n(?:es)?)?(?:\s*(?:iibb|IIBB))?\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.shipping == null) {
+    totals.shipping = pickLabeledMoney(text, /(?:env[ií]o|flete|costo de env[ií]o)\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.net == null) {
+    totals.net = pickLabeledMoney(text, /(?:subtotal|neto)\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (totals.total == null) {
+    totals.total = pickLabeledMoney(text, /\btotal\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
+  }
+  if (exchangeRate == null) {
+    const rateMatch = text.match(/cotizaci[oó]n(?:\s*(?:del\s+d[oó]lar|usd)?)?\s*[:.]?\s*([\d.,]+)/i)
+      ?? text.match(/tipo\s+de\s+cambio\s*[:.]?\s*([\d.,]+)/i);
+    if (rateMatch) exchangeRate = parseExchangeRateValue(rateMatch[1]);
+  }
+
+  return { totals, exchangeRate };
+}
+
+function finalizeTotals(orderAmount: string, items: InvidOrderItem[], parsed: InvidOrderTotals): InvidOrderTotals | undefined {
+  const totals: InvidOrderTotals = { ...parsed };
+  const lineNet = round2(items.reduce((sum, it) => {
+    const qty = Number(String(it.qty ?? "").replace(/[^\d]/g, ""));
+    const price = parseInvidMoney(it.price);
+    if (price > 0 && Number.isFinite(qty) && qty > 0) return sum + price * qty;
+    return sum + parseInvidMoney(it.total);
+  }, 0));
+  if (totals.net == null && lineNet > 0) totals.net = lineNet;
+
+  const total = (totals.total && totals.total > 0) ? totals.total : parseInvidMoney(orderAmount);
+  if (total > 0) totals.total = total;
+
+  const accounted = round2(
+    (totals.net ?? 0)
+    + (totals.iva ?? 0)
+    + (totals.internos ?? 0)
+    + (totals.percepciones ?? 0)
+    + (totals.shipping ?? 0)
+  );
+  const hasSplit = totals.iva != null || totals.internos != null || totals.percepciones != null;
+  if (totals.net != null && totals.total != null && totals.total - accounted > 0.05 && !hasSplit) {
+    totals.taxes = round2(totals.total - accounted);
+  }
+
+  const hasBreakdown = totals.net != null || totals.iva != null || totals.internos != null
+    || totals.percepciones != null || totals.shipping != null || totals.taxes != null;
+  return hasBreakdown ? totals : undefined;
+}
+
+/** Completa TC (del HTML o el actual de Invid) y el equivalente en pesos. */
+export function applyInvidOrderRates(orders: InvidOrderRow[], currentRate: number): InvidOrderRow[] {
+  const live = Number.isFinite(currentRate) && currentRate > 0 ? currentRate : 0;
+  return orders.map((order) => {
+    const fromOrder = order.exchangeRate && order.exchangeRate > 0 ? order.exchangeRate : 0;
+    const exchangeRate = fromOrder || live || undefined;
+    const exchangeRateSource: InvidExchangeRateSource | undefined = fromOrder
+      ? "order"
+      : exchangeRate
+        ? "current"
+        : undefined;
+    const usd = parseInvidMoney(order.amount);
+    const amountArs = exchangeRate && usd > 0 ? round2(usd * exchangeRate) : undefined;
+    return { ...order, exchangeRate, exchangeRateSource, amountArs };
+  });
 }
 
 function extractTdHtml(trInner: string): string[] {
@@ -277,28 +563,162 @@ function extractAnchors(html: string): { href: string; label: string }[] {
   return links;
 }
 
-function parseOutlineBlock(html: string): Pick<InvidOrderRow, "items" | "delivery" | "payment" | "links"> {
+function extractPopupHref(html: string): string | undefined {
+  const open = html.match(/window\.open\(\s*['"]([^'"]+)['"]/i)?.[1]
+    ?? html.match(/\b(?:location|href)\s*=\s*['"]([^'"]+\.php[^'"]*)['"]/i)?.[1]
+    ?? html.match(/data-(?:href|url|src)=['"]([^'"]+)['"]/i)?.[1]
+    ?? extractAnchors(html).find((l) => /comprob|adjunt|pago/i.test(`${l.href} ${l.label}`))?.href;
+  const href = open ? decodeEntities(open).trim() : "";
+  if (!href || /^(javascript:|#|mailto:)/i.test(href)) return undefined;
+  return href;
+}
+
+function collectNamedFields(block: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  const inputRe = /<input\b([^>]*)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = inputRe.exec(block))) {
+    const tag = m[0];
+    const type = (attr(tag, "type") ?? "text").toLowerCase();
+    if (["button", "submit", "image", "file"].includes(type)) continue;
+    const name = attr(tag, "name");
+    if (!name) continue;
+    if (type === "radio") {
+      if (/\bchecked\b/i.test(tag)) fields[name] = attr(tag, "value") ?? "";
+      continue;
+    }
+    if (type === "checkbox" && !/\bchecked\b/i.test(tag)) continue;
+    fields[name] = attr(tag, "value") ?? "";
+  }
+  const taRe = /<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi;
+  while ((m = taRe.exec(block))) {
+    const name = attr(`<x ${m[1]}>`, "name");
+    if (name && fields[name] == null) fields[name] = stripTags(m[2]);
+  }
+  return fields;
+}
+
+function formNotice(block: string): string | undefined {
+  const alert = block.match(/<(?:div|p|span)[^>]*(?:alert|msgalerta|aviso|importante)[^>]*>([\s\S]*?)<\/(?:div|p|span)>/i);
+  if (alert) {
+    const text = stripTags(alert[1].replace(/<br\s*\/?>/gi, " "));
+    if (text.length > 20) return text;
+  }
+  const important = block.match(/importante[:\s]*([\s\S]{40,800}?)(?:banco\s*\*|observaciones\s*\*|adjuntar|$)/i);
+  if (important) {
+    const text = stripTags(important[1].replace(/<br\s*\/?>/gi, " "));
+    if (text.length > 20) return text;
+  }
+  return undefined;
+}
+
+function radioNames(block: string): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const re = /<input\b[^>]*type=["']radio["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    const name = attr(m[0], "name");
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
+function textareaNames(block: string): { name: string; required: boolean }[] {
+  const out: { name: string; required: boolean }[] = [];
+  const re = /<textarea\b([^>]*)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    const name = attr(`<x ${m[1]}>`, "name");
+    if (!name) continue;
+    out.push({ name, required: /\brequired\b/i.test(m[1]) });
+  }
+  return out;
+}
+
+function fileFieldNames(block: string): string[] {
+  const names: string[] = [];
+  const re = /<input\b[^>]*type=["']file["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    names.push(attr(m[0], "name") || `file${names.length + 1}`);
+  }
+  return names;
+}
+
+/** Formulario real de «Comprobantes de Pago» del portal (banco, observaciones, archivos). */
+export function parseInvidPaymentForm(html: string): InvidPaymentForm | null {
+  const formRe = /<form\b([^>]*)>([\s\S]*?)<\/form>/gi;
+  let best: { score: number; attrs: string; body: string } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = formRe.exec(html))) {
+    const body = m[2];
+    const files = fileFieldNames(body);
+    if (files.length === 0) continue;
+    let score = files.length;
+    if (/comprob|pago|adjunt/i.test(body) || /comprob|pago|adjunt/i.test(m[1])) score += 4;
+    if (/banco/i.test(body)) score += 3;
+    if (/observ/i.test(body)) score += 3;
+    if (!best || score > best.score) best = { score, attrs: m[1], body };
+  }
+  if (!best) return null;
+
+  const fields = collectNamedFields(best.body);
+  const files = fileFieldNames(best.body);
+  const radios = radioNames(best.body);
+  const bankField = radios.find((n) => /banco|bank/i.test(n)) ?? radios[0] ?? "banco";
+  const banks = parseRadios(best.body, bankField);
+  const tas = textareaNames(best.body);
+  const notesField = tas.find((t) => /observ|nota|comment|mensaje/i.test(t.name))?.name
+    ?? tas[0]?.name
+    ?? "observaciones";
+  const orderField = Object.keys(fields).find((n) =>
+    /^(n_ped|nro_ped|n_pedido|nro_pedido|pedido|id_pedido|orden|n_orden|nro_orden)$/i.test(n)
+  );
+  const notice = formNotice(best.body);
+
+  return {
+    action: attr(`<form ${best.attrs}>`, "action") || "",
+    method: (attr(`<form ${best.attrs}>`, "method") || "post").toLowerCase(),
+    fields,
+    banks: banks.length > 0
+      ? banks.map((b) => ({ value: b.value, label: b.label }))
+      : [
+          { value: "Macro", label: "Macro" },
+          { value: "Galicia", label: "Galicia" },
+        ],
+    bankField,
+    notesField,
+    fileFields: files.slice(0, 3),
+    notice,
+    orderField,
+  };
+}
+
+function parseOutlineBlock(html: string): Pick<
+  InvidOrderRow,
+  "items" | "delivery" | "payment" | "links" | "totals" | "exchangeRate"
+> {
   const items: InvidOrderItem[] = [];
   const rowRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
   let m: RegExpExecArray | null;
   while ((m = rowRe.exec(html))) {
-    const texts = extractTdHtml(m[1]).map(stripTags);
-    if (texts.length < 3) continue;
-    const joined = texts.join(" ");
-    if (/calificaci[oó]n/i.test(joined) && /producto/i.test(joined)) continue;
-    if (/cargar a pedido/i.test(joined)) continue;
-    if (/^total:/i.test(joined) || texts.some((t) => /^total:/i.test(t))) continue;
-    const name = texts.length >= 4 ? texts[1] : texts[0];
-    if (!name || /forma de (entrega|pago)/i.test(name)) continue;
-    const price = texts.length >= 4 ? texts[2] : texts[1];
-    const qty = texts.length >= 4 ? texts[3] : texts[2];
-    if (!/\d/.test(price || "") && !/\d/.test(qty || "")) continue;
-    const code = name.match(/\((\d{4,})\)/)?.[1];
-    items.push({ code, name, price, qty });
+    const item = parseItemRow(extractTdHtml(m[1]));
+    if (item) items.push(item);
   }
   const delivery = stripTags(html.match(/<b>\s*Forma de Entrega\s*<\/b>\s*([^<]+)/i)?.[1] ?? "") || undefined;
   const payment = stripTags(html.match(/<b>\s*Forma de Pago\s*<\/b>\s*([^<]+)/i)?.[1] ?? "") || undefined;
-  return { items, delivery, payment, links: extractAnchors(html) };
+  const meta = parseOutlineTotals(html);
+  return {
+    items,
+    delivery,
+    payment,
+    links: extractAnchors(html),
+    totals: meta.totals,
+    exchangeRate: meta.exchangeRate,
+  };
 }
 
 export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
@@ -341,7 +761,19 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
     const outlineHtml = nextOrder >= 0 ? after.slice(0, nextOrder) : after.slice(0, 20_000);
     const outline = /id=["']menu\d+outline["']/i.test(outlineHtml)
       ? parseOutlineBlock(outlineHtml)
-      : { items: [] as InvidOrderItem[], delivery: undefined, payment: undefined, links: [] as { href: string; label: string }[] };
+      : {
+          items: [] as InvidOrderItem[],
+          delivery: undefined,
+          payment: undefined,
+          links: [] as { href: string; label: string }[],
+          totals: undefined as InvidOrderTotals | undefined,
+          exchangeRate: undefined as number | undefined,
+        };
+
+    const invoiceCell = cells[firstIsChrome ? (data.length >= 6 ? 6 : 5) : (data.length >= 6 ? 5 : 4)] ?? "";
+    const paymentHref = extractPopupHref(invoiceCell)
+      || invoiceHrefs.find((h) => /comprob|adjunt|pago/i.test(h));
+    const canAttachPayment = /adjuntar/i.test(invoice) || Boolean(paymentHref);
 
     orders.push({
       orderNumber,
@@ -355,6 +787,10 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
       payment: outline.payment,
       items: outline.items,
       links: outline.links,
+      totals: finalizeTotals(amount, outline.items, outline.totals ?? {}),
+      exchangeRate: outline.exchangeRate,
+      canAttachPayment,
+      paymentHref,
     });
   }
   return { orders };

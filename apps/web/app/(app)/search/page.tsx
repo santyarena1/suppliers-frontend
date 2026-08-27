@@ -9,9 +9,16 @@ import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
 import SponsoredStrip from "@/components/ads/SponsoredStrip";
 import { OfflinePricesHelpButton } from "@/components/OfflinePricesHelp";
-import { searchApi, catalogApi, ProductDTO, Provider } from "@/lib/api";
+import {
+  searchApi,
+  catalogApi,
+  ProductDTO,
+  Provider,
+  productDisplayBrand,
+  productDisplayCategory,
+} from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
-import { useIsRetailer, usePurchasePolicies } from "@/lib/purchase";
+import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { usePrefs } from "@/lib/prefs";
@@ -19,13 +26,19 @@ import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
 import { parsePrice, proxyImg } from "@/lib/format";
+import {
+  entryKey,
+  loadCompareEntries,
+  newProviderEntry,
+  saveCompareEntries,
+} from "@/lib/compare-store";
 import ProviderBadge from "@/components/ProviderBadge";
 import Image from "next/image";
 import Link from "next/link";
 import {
   Search, SlidersHorizontal, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, GitCompare, Check,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc";
@@ -72,11 +85,13 @@ function SearchPage() {
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
   const lastUrlQRef = useRef<string | null>(null);
+  const lastSearchKind = useRef<"search" | "category">("search");
 
   function syncSearchUrl(q: string) {
     const trimmed = q.trim();
@@ -90,7 +105,7 @@ function SearchPage() {
     }
   }
 
-  async function handleCategoryClick(category: string) {
+  async function handleCategoryClick(category: string, withZero = includeOutOfStock) {
     setError("");
     setLoading(true);
     setSearched(true);
@@ -99,8 +114,9 @@ function SearchPage() {
     setRefineText("");
     setMinPrice("");
     setMaxPrice("");
+    lastSearchKind.current = "category";
     try {
-      const res = await catalogApi.byCategory(category);
+      const res = await catalogApi.byCategory(category, 60, { includeOutOfStock: withZero });
       const data = Array.isArray(res.data) ? res.data : [];
       setResults(data);
       persistResults(category, data);
@@ -139,9 +155,11 @@ function SearchPage() {
     });
   }, []);
 
-  async function runSearch(term: string, opts?: { track?: boolean }) {
+  async function runSearch(term: string, opts?: { track?: boolean; includeOutOfStock?: boolean }) {
     const q = term.trim();
     if (!q) return;
+    const withZero = opts?.includeOutOfStock ?? includeOutOfStock;
+    lastSearchKind.current = "search";
     setError("");
     setLoading(true);
     setSearched(true);
@@ -153,6 +171,7 @@ function SearchPage() {
     try {
       const res = await searchApi.all(q, {
         providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
+        includeOutOfStock: withZero,
       });
       const data = res.data;
       setResults(data);
@@ -172,6 +191,14 @@ function SearchPage() {
   async function handleSearch(e?: React.FormEvent) {
     e?.preventDefault();
     await runSearch(query);
+  }
+
+  function toggleOutOfStock() {
+    const next = !includeOutOfStock;
+    setIncludeOutOfStock(next);
+    if (!searched || !activeQuery.trim()) return;
+    if (lastSearchKind.current === "category") void handleCategoryClick(activeQuery, next);
+    else void runSearch(activeQuery, { track: false, includeOutOfStock: next });
   }
 
   function resetToHome() {
@@ -202,6 +229,7 @@ function SearchPage() {
     if (typeof ui?.minPrice === "string") setMinPrice(ui.minPrice);
     if (typeof ui?.maxPrice === "string") setMaxPrice(ui.maxPrice);
     if (typeof ui?.hideNoImage === "boolean") setHideNoImage(ui.hideNoImage);
+    if (typeof ui?.includeOutOfStock === "boolean") setIncludeOutOfStock(ui.includeOutOfStock);
     syncSearchUrl(q);
     // Restaurar scroll después del paint
     requestAnimationFrame(() => {
@@ -362,8 +390,9 @@ function SearchPage() {
       minPrice,
       maxPrice,
       hideNoImage,
+      includeOutOfStock,
     });
-  }, [searched, sortBy, viewMode, refineText, minPrice, maxPrice, hideNoImage, setUiState]);
+  }, [searched, sortBy, viewMode, refineText, minPrice, maxPrice, hideNoImage, includeOutOfStock, setUiState]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -450,6 +479,19 @@ function SearchPage() {
                 </span>
               )}
               <PrefsPanel />
+
+              <button
+                type="button"
+                onClick={toggleOutOfStock}
+                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
+                  includeOutOfStock
+                    ? "border-brand-500 text-brand-400 bg-brand-600/10"
+                    : "border-surface-700 text-surface-400 hover:text-surface-200"
+                }`}
+                title="Por defecto no se listan productos con stock 0"
+              >
+                Incluir sin stock
+              </button>
 
               <button
                 onClick={() => setShowFilters(!showFilters)}
@@ -570,6 +612,19 @@ function SearchPage() {
                     Con imagen
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={toggleOutOfStock}
+                    className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                      includeOutOfStock
+                        ? "border-brand-500 bg-brand-600/15 text-brand-400"
+                        : "border-surface-700 text-surface-500 hover:text-surface-300"
+                    }`}
+                    title="Por defecto el catálogo oculta los productos con stock 0"
+                  >
+                    Incluir sin stock
+                  </button>
+
                   {retailer && (
                     <span className="flex items-center gap-1">
                       {anyOffline ? (
@@ -652,7 +707,21 @@ function SearchPage() {
                 <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
                   <Package className="w-9 h-9 text-surface-700 mb-1" />
                   <p className="text-sm font-medium text-surface-300">Sin resultados</p>
-                  <p className="text-xs text-surface-500">Probá con otro término o activá más proveedores</p>
+                  <p className="text-xs text-surface-500">
+                    {includeOutOfStock
+                      ? "Probá con otro término o activá más proveedores"
+                      : "Probá con otro término, más proveedores, o «Incluir sin stock»"}
+                  </p>
+                </div>
+              )}
+
+              {hydrated && !loading && searched && !error && results.length > 0 && filtered.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
+                  <Package className="w-9 h-9 text-surface-700 mb-1" />
+                  <p className="text-sm font-medium text-surface-300">Nada con esos filtros</p>
+                  <p className="text-xs text-surface-500">
+                    {includeOutOfStock ? "Probá limpiar los filtros de esta búsqueda" : "Activá «Incluir sin stock» o limpiá los filtros"}
+                  </p>
                 </div>
               )}
 
@@ -710,6 +779,59 @@ function SearchPage() {
   );
 }
 
+function ListRowActions({ product, priceMode }: { product: ProductDTO; priceMode: "list" | "offline" }) {
+  const [compareFlash, setCompareFlash] = useState(false);
+  const policy = usePurchasePolicy(product.provider);
+  const pricing = purchaseLinePricing(product, policy, priceMode);
+  const showingOffline = pricing.adjusted && pricing.mode === "offline";
+
+  function addToCompare(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const entry = newProviderEntry(product, priceMode);
+    const current = loadCompareEntries();
+    const key = entryKey(entry);
+    if (!current.some((c) => entryKey(c) === key)) {
+      saveCompareEntries([...current, entry]);
+    }
+    setCompareFlash(true);
+    setTimeout(() => setCompareFlash(false), 700);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("nodo-compare-updated"));
+    }
+  }
+
+  return (
+    <div
+      className="flex items-center justify-end gap-1.5"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      }}
+    >
+      <button
+        type="button"
+        title="Agregar al comparador"
+        aria-label="Agregar al comparador"
+        onClick={addToCompare}
+        className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors shadow-sm ${
+          compareFlash
+            ? "border-violet-400 bg-violet-100 text-violet-700"
+            : "border-violet-300/70 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:border-violet-400/60 hover:text-violet-200"
+        }`}
+      >
+        {compareFlash ? <Check className="w-3.5 h-3.5" /> : <GitCompare className="w-3.5 h-3.5" />}
+      </button>
+      <AddToCartButton
+        product={product}
+        variant="stepper"
+        tone="dark"
+        channel={showingOffline ? "offline" : "online"}
+      />
+    </div>
+  );
+}
+
 function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: "list" | "offline" }) {
   return (
     <div className="flex flex-col divide-y divide-surface-800 border border-surface-800 rounded-xl overflow-hidden">
@@ -718,35 +840,44 @@ function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: "list"
         <span>Producto</span>
         <span className="text-right w-28">Proveedor</span>
         <span className="text-right w-28">Precio</span>
-        <span className="w-8" />
+        <span className="w-[7.5rem] text-right">Acciones</span>
       </div>
-      {items.map((p, i) => (
-        <Link
-          key={`${p.provider}-${p.externalId}-${i}`}
-          href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
-          className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 items-center px-4 py-3 bg-surface-950 hover:bg-surface-900 transition-colors"
-        >
-          <div className="w-10 h-10 relative flex-shrink-0 bg-surface-800 rounded overflow-hidden">
-            {p.imageUrl
-              ? <Image src={proxyImg(p.imageUrl)} alt="" fill className="object-contain" unoptimized />
-              : <Package className="w-4 h-4 text-surface-600 absolute inset-0 m-auto" />
-            }
-          </div>
-          <div className="min-w-0">
-            <p className="text-sm text-surface-100 font-medium truncate">{p.name}</p>
-            {p.externalId && <p className="text-[11px] text-surface-500 font-mono">#{p.externalId}</p>}
-          </div>
-          <div className="w-28 text-right flex justify-end">
-            <ProviderBadge provider={p.provider} variant="inline" size="sm" />
-          </div>
-          <div className="w-28 text-right">
-            <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
-          </div>
-          <div onClick={(e) => e.stopPropagation()}>
-            <AddToCartButton product={p} variant="icon" />
-          </div>
-        </Link>
-      ))}
+      {items.map((p, i) => {
+        const brand = productDisplayBrand(p);
+        const category = productDisplayCategory(p);
+        const metaLine = [brand, category].filter(Boolean).join(" · ");
+        return (
+          <Link
+            key={`${p.provider}-${p.externalId}-${i}`}
+            href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
+            className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 items-center px-4 py-3 bg-surface-950 hover:bg-surface-900 transition-colors"
+          >
+            <div className="w-10 h-10 relative flex-shrink-0 bg-surface-800 rounded overflow-hidden">
+              {p.imageUrl
+                ? <Image src={proxyImg(p.imageUrl)} alt="" fill className="object-contain" unoptimized />
+                : <Package className="w-4 h-4 text-surface-600 absolute inset-0 m-auto" />
+              }
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-surface-100 font-medium truncate">{p.name}</p>
+              {metaLine ? (
+                <p className="text-[11px] text-surface-500 truncate">{metaLine}</p>
+              ) : p.externalId ? (
+                <p className="text-[11px] text-surface-500 font-mono">#{p.externalId}</p>
+              ) : null}
+            </div>
+            <div className="w-28 text-right flex justify-end">
+              <ProviderBadge provider={p.provider} variant="inline" size="sm" />
+            </div>
+            <div className="w-28 text-right">
+              <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
+            </div>
+            <div className="w-[7.5rem]">
+              <ListRowActions product={p} priceMode={priceMode} />
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }

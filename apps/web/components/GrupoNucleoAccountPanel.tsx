@@ -20,13 +20,12 @@ import {
 } from "@/components/account/useAccountHistory";
 import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
 
-type CachedPayload = { note: string | null; drafts: NodoProviderDraft[] };
+type CachedPayload = { drafts: NodoProviderDraft[] };
 
 const SECTIONS = [{ id: "nodo", label: "Desde Nodo" }] as const;
 
 export default function GrupoNucleoAccountPanel() {
   const history = useAccountHistoryState("nodo");
-  const [note, setNote] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,13 +49,11 @@ export default function GrupoNucleoAccountPanel() {
             grupoNucleoCheckoutApi.drafts().catch(() => ({ data: [] as NodoProviderDraft[] })),
           ]);
           return {
-            note: accountRes.data.note ?? null,
             drafts: draftsRes.data ?? accountRes.data.drafts ?? [],
           };
         },
         { refresh }
       );
-      setNote(data.note);
       setDrafts(data.drafts);
       setFromCache(hit);
     } catch (err: unknown) {
@@ -94,7 +91,7 @@ export default function GrupoNucleoAccountPanel() {
         refreshing={loading}
         fromCache={fromCache}
         amountTotal={amountTotal}
-        hint={note || "La API de Grupo Núcleo no publica historial de pedidos ni cuenta corriente. Acá van solo los pedidos creados desde Nodo. Mes actual por defecto, de a 25."}
+        hint="Grupo Núcleo no publica historial ni adjuntar comprobantes. Acá van solo los pedidos creados desde Nodo."
       >
         {loading && drafts == null ? (
           <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -149,7 +146,7 @@ export default function GrupoNucleoAccountPanel() {
           title="Pedido Grupo Núcleo"
           lines={draftLines(open)}
           items={draftItems(open)}
-          note="La API de GN no descarga facturas. Solo se puede informar el link de etiqueta de transporte (UpdateSaleOrderDeliveryLabel)."
+          note="Grupo Núcleo no descarga facturas ni admite adjuntar pagos desde Nodo. Solo se puede informar el link de etiqueta de transporte."
           onClose={() => setOpen(null)}
         />
       )}
