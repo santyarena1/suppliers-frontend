@@ -115,7 +115,16 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
   - assign producto `{ provider, externalId, displayBrand?, displayCategory?, displaySubcategory? }`
 - **Respuesta esperada**: board `{ rows, terms, stats }` · incomplete `{ items, total }` · preview productos
 - **Estado**: IMPLEMENTADO
-- **Notas**: Lista todas las categorías/marcas crudas de todos los distribuidores. Vincular o trasladar productos a un término canónico (con visibilidad y jerarquía padre/hijo). Overrides por producto en `PlatformProductCatalogOverride` (no pelean con el sync). Sin flujo especial de códigos Air.
+- **Notas**: Lista todas las categorías/marcas crudas de todos los distribuidores. Vincular o trasladar productos a un término canónico (con visibilidad y jerarquía padre/hijo). Overrides por producto en `PlatformProductCatalogOverride` (no pelean con el sync). Sin flujo especial de códigos Air. La API key de OpenAI se gestiona en **Configuración → Credenciales API** (`PUT/DELETE /admin/catalog-enrichment/openai`).
+
+### [FEATURE] Credenciales API (UI Configuración)
+- **Método**: PUT | DELETE (mismos endpoints existentes)
+- **Ruta UI**: `/configuracion?tab=credentials` (solo ROLE_ADMIN)
+- **Auth**: Bearer ROLE_ADMIN
+- **Body / Params**: OpenAI `{ apiKey }` · Serper `{ apiKey }`
+- **Respuesta esperada**: `{ hasOpenAiKey }` · `{ hasSerperKey }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Centraliza las claves de OpenAI (catálogo/IA) y Serper (imágenes). Ya no se editan dentro de Admin → Catálogo ni Admin → Imágenes.
 
 ### [FEATURE] Sincronización de imágenes (Primera foto / Serper)
 - **Método**: GET | PUT | DELETE | POST
