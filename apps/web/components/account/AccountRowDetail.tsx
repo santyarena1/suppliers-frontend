@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import NodoSpinner from "@/components/NodoSpinner";
 import { CheckoutGhostButton } from "@/components/checkout/CheckoutForm";
@@ -24,6 +24,7 @@ export default function AccountRowDetail({
   documents,
   note,
   upload,
+  extra,
   onClose,
 }: {
   open: boolean;
@@ -33,6 +34,7 @@ export default function AccountRowDetail({
   totals?: AccountDetailLine[];
   documents?: AccountDetailDoc[];
   note?: string;
+  extra?: ReactNode;
   upload?: {
     label: string;
     accept?: string;
@@ -126,6 +128,8 @@ export default function AccountRowDetail({
               </dl>
             </div>
           )}
+
+          {extra ? <div>{extra}</div> : null}
 
           {(documents ?? []).length > 0 && (
             <div className="flex flex-wrap gap-2">

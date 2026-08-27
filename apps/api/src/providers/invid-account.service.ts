@@ -1,6 +1,6 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import axios from "axios";
-import { applyInvidOrderRates, parseAccountStatement, parseOrdersTable } from "./invid-order.parser";
+import { applyInvidOrderRates, INVID_PAYMENT_NOTICE, parseAccountStatement, parseInvidPaymentForm, parseOrdersTable } from "./invid-order.parser";
 import { parseFileUploadForms } from "./html-table";
 import { documentFile } from "./document-file";
 import { assertHttpsHost } from "./safe-url";
@@ -53,14 +53,17 @@ export class InvidAccountService {
       this.fetchCurrentRate(cookie),
     ]);
     const parsed = parseOrdersTable(res.data);
+    const paymentForm = parseInvidPaymentForm(res.data);
+    if (paymentForm && !paymentForm.notice) paymentForm.notice = INVID_PAYMENT_NOTICE;
     const paymentUploads = parseFileUploadForms(res.data);
     return {
       orders: applyInvidOrderRates(parsed.orders, currentRate),
       currentExchangeRate: currentRate > 0 ? currentRate : undefined,
+      paymentForm: paymentForm ?? undefined,
       paymentUploads,
-      note: paymentUploads.length === 0
-        ? "Si Invid muestra un formulario para adjuntar el comprobante de pago en esta sesión, aparece acá. Si no, el alta se hace desde su portal."
-        : undefined,
+      note: paymentForm || paymentUploads.length > 0
+        ? undefined
+        : "Si Invid muestra Adjuntar en un pedido, se abre el formulario de comprobantes acá (banco, observaciones y archivos). Si no, el alta se hace desde su portal.",
     };
   }
 
@@ -121,33 +124,68 @@ export class InvidAccountService {
 
   async attachPayment(
     credentials: Record<string, string>,
-    file: { filename: string; mimetype: string; buffer: Buffer },
+    files: { field?: string; filename: string; mimetype: string; buffer: Buffer }[],
     extraFields?: Record<string, string>
   ) {
     const { username, password } = this.creds(credentials);
+    if (files.length === 0) throw new BadRequestException("Adjuntá al menos un comprobante");
     const cookie = await this.login(username, password);
     const page = await axios.get<string>(`${SITE_BASE}/lista_pedidos_invid.php`, {
       headers: { Cookie: cookie },
       timeout: 20_000,
       responseType: "text",
     });
-    const forms = parseFileUploadForms(page.data);
-    if (forms.length === 0) {
+    let html = page.data;
+    const paymentHref = extraFields?.paymentHref?.trim();
+    if (paymentHref) {
+      try {
+        const url = assertHttpsHost(paymentHref, `${SITE_BASE}/`, INVID_HOSTS);
+        const popup = await axios.get<string>(url.toString(), {
+          headers: { Cookie: cookie },
+          timeout: 20_000,
+          responseType: "text",
+        });
+        html = popup.data || html;
+      } catch (err) {
+        this.logger.warn(
+          `No se pudo abrir el popup de comprobantes: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
+    const form = parseInvidPaymentForm(html) ?? parseInvidPaymentForm(page.data);
+    const generic = parseFileUploadForms(page.data)[0];
+    if (!form && !generic) {
       throw new NotFoundException(
         "Invid no mostró un formulario para adjuntar comprobante en esta sesión. Hay que hacerlo desde su portal."
       );
     }
-    const form = forms[0];
-    const actionUrl = assertHttpsHost(form.action || "lista_pedidos_invid.php", `${SITE_BASE}/`, INVID_HOSTS);
+    const action = form?.action || generic?.action || "lista_pedidos_invid.php";
+    const actionUrl = assertHttpsHost(action, `${SITE_BASE}/`, INVID_HOSTS);
+    const fileFields = form?.fileFields?.length ? form.fileFields : [generic?.fileField || "file"];
     const body = new FormData();
-    for (const [k, v] of Object.entries({ ...form.fields, ...(extraFields ?? {}) })) {
+    const merged: Record<string, string> = {
+      ...(generic?.fields ?? {}),
+      ...(form?.fields ?? {}),
+      ...(extraFields ?? {}),
+    };
+    delete merged.paymentHref;
+    if (form?.orderField && extraFields?.orderNumber && !merged[form.orderField]) {
+      merged[form.orderField] = extraFields.orderNumber;
+    }
+    if (form?.bankField && extraFields?.bank) merged[form.bankField] = extraFields.bank;
+    if (form?.notesField && extraFields?.notes) merged[form.notesField] = extraFields.notes;
+    for (const [k, v] of Object.entries(merged)) {
+      if (k === "file" || k === "files" || /^file\d+$/i.test(k)) continue;
       body.append(k, v);
     }
-    body.append(
-      form.fileField || "file",
-      new Blob([new Uint8Array(file.buffer)], { type: file.mimetype || "application/octet-stream" }),
-      file.filename
-    );
+    files.slice(0, fileFields.length).forEach((file, i) => {
+      const field = file.field && fileFields.includes(file.field) ? file.field : fileFields[i] || fileFields[0];
+      body.append(
+        field,
+        new Blob([new Uint8Array(file.buffer)], { type: file.mimetype || "application/octet-stream" }),
+        file.filename
+      );
+    });
     const res = await axios.post<string>(actionUrl.toString(), body, {
       headers: { Cookie: cookie },
       timeout: 45_000,

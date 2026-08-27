@@ -256,6 +256,31 @@ export interface InvidOrderTotals {
 
 export type InvidExchangeRateSource = "order" | "current";
 
+export interface InvidPaymentBank {
+  value: string;
+  label: string;
+}
+
+export interface InvidPaymentForm {
+  action: string;
+  method: string;
+  fields: Record<string, string>;
+  banks: InvidPaymentBank[];
+  bankField: string;
+  notesField: string;
+  fileFields: string[];
+  notice?: string;
+  orderField?: string;
+}
+
+export const INVID_PAYMENT_NOTICE = [
+  "No envíes el comprobante si necesitás que se realicen cambios en el pedido, primero contactate con nosotros.",
+  "Usá el campo Observaciones si necesitás aclararnos alguna cuestión: utilizás dinero a favor en tu cuenta, el pago es parcial, te queda un saldo en efectivo, etc.",
+  "Si el pago se realizó a través de más de un banco, seleccioná el banco al cual hayas depositado la mayor cantidad de dinero.",
+  "En el caso de Echeq, seleccioná Galicia.",
+  "Los informes de pagos enviados luego de las 17:00 hs serán tomados con el TC del día siguiente.",
+].join(" ");
+
 export interface InvidOrderRow {
   orderNumber: string;
   webOrderNumber: string;
@@ -272,6 +297,8 @@ export interface InvidOrderRow {
   exchangeRate?: number;
   exchangeRateSource?: InvidExchangeRateSource;
   amountArs?: number;
+  canAttachPayment?: boolean;
+  paymentHref?: string;
 }
 
 const LINE_STATUS = /^(abierto|cerrado|cancelado|pendiente|pedido|vencido|anulado|facturado)$/i;
@@ -536,6 +563,140 @@ function extractAnchors(html: string): { href: string; label: string }[] {
   return links;
 }
 
+function extractPopupHref(html: string): string | undefined {
+  const open = html.match(/window\.open\(\s*['"]([^'"]+)['"]/i)?.[1]
+    ?? html.match(/\b(?:location|href)\s*=\s*['"]([^'"]+\.php[^'"]*)['"]/i)?.[1]
+    ?? html.match(/data-(?:href|url|src)=['"]([^'"]+)['"]/i)?.[1]
+    ?? extractAnchors(html).find((l) => /comprob|adjunt|pago/i.test(`${l.href} ${l.label}`))?.href;
+  const href = open ? decodeEntities(open).trim() : "";
+  if (!href || /^(javascript:|#|mailto:)/i.test(href)) return undefined;
+  return href;
+}
+
+function collectNamedFields(block: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  const inputRe = /<input\b([^>]*)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = inputRe.exec(block))) {
+    const tag = m[0];
+    const type = (attr(tag, "type") ?? "text").toLowerCase();
+    if (["button", "submit", "image", "file"].includes(type)) continue;
+    const name = attr(tag, "name");
+    if (!name) continue;
+    if (type === "radio") {
+      if (/\bchecked\b/i.test(tag)) fields[name] = attr(tag, "value") ?? "";
+      continue;
+    }
+    if (type === "checkbox" && !/\bchecked\b/i.test(tag)) continue;
+    fields[name] = attr(tag, "value") ?? "";
+  }
+  const taRe = /<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi;
+  while ((m = taRe.exec(block))) {
+    const name = attr(`<x ${m[1]}>`, "name");
+    if (name && fields[name] == null) fields[name] = stripTags(m[2]);
+  }
+  return fields;
+}
+
+function formNotice(block: string): string | undefined {
+  const alert = block.match(/<(?:div|p|span)[^>]*(?:alert|msgalerta|aviso|importante)[^>]*>([\s\S]*?)<\/(?:div|p|span)>/i);
+  if (alert) {
+    const text = stripTags(alert[1].replace(/<br\s*\/?>/gi, " "));
+    if (text.length > 20) return text;
+  }
+  const important = block.match(/importante[:\s]*([\s\S]{40,800}?)(?:banco\s*\*|observaciones\s*\*|adjuntar|$)/i);
+  if (important) {
+    const text = stripTags(important[1].replace(/<br\s*\/?>/gi, " "));
+    if (text.length > 20) return text;
+  }
+  return undefined;
+}
+
+function radioNames(block: string): string[] {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  const re = /<input\b[^>]*type=["']radio["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    const name = attr(m[0], "name");
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
+function textareaNames(block: string): { name: string; required: boolean }[] {
+  const out: { name: string; required: boolean }[] = [];
+  const re = /<textarea\b([^>]*)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    const name = attr(`<x ${m[1]}>`, "name");
+    if (!name) continue;
+    out.push({ name, required: /\brequired\b/i.test(m[1]) });
+  }
+  return out;
+}
+
+function fileFieldNames(block: string): string[] {
+  const names: string[] = [];
+  const re = /<input\b[^>]*type=["']file["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    names.push(attr(m[0], "name") || `file${names.length + 1}`);
+  }
+  return names;
+}
+
+/** Formulario real de «Comprobantes de Pago» del portal (banco, observaciones, archivos). */
+export function parseInvidPaymentForm(html: string): InvidPaymentForm | null {
+  const formRe = /<form\b([^>]*)>([\s\S]*?)<\/form>/gi;
+  let best: { score: number; attrs: string; body: string } | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = formRe.exec(html))) {
+    const body = m[2];
+    const files = fileFieldNames(body);
+    if (files.length === 0) continue;
+    let score = files.length;
+    if (/comprob|pago|adjunt/i.test(body) || /comprob|pago|adjunt/i.test(m[1])) score += 4;
+    if (/banco/i.test(body)) score += 3;
+    if (/observ/i.test(body)) score += 3;
+    if (!best || score > best.score) best = { score, attrs: m[1], body };
+  }
+  if (!best) return null;
+
+  const fields = collectNamedFields(best.body);
+  const files = fileFieldNames(best.body);
+  const radios = radioNames(best.body);
+  const bankField = radios.find((n) => /banco|bank/i.test(n)) ?? radios[0] ?? "banco";
+  const banks = parseRadios(best.body, bankField);
+  const tas = textareaNames(best.body);
+  const notesField = tas.find((t) => /observ|nota|comment|mensaje/i.test(t.name))?.name
+    ?? tas[0]?.name
+    ?? "observaciones";
+  const orderField = Object.keys(fields).find((n) =>
+    /^(n_ped|nro_ped|n_pedido|nro_pedido|pedido|id_pedido|orden|n_orden|nro_orden)$/i.test(n)
+  );
+  const notice = formNotice(best.body);
+
+  return {
+    action: attr(`<form ${best.attrs}>`, "action") || "",
+    method: (attr(`<form ${best.attrs}>`, "method") || "post").toLowerCase(),
+    fields,
+    banks: banks.length > 0
+      ? banks.map((b) => ({ value: b.value, label: b.label }))
+      : [
+          { value: "Macro", label: "Macro" },
+          { value: "Galicia", label: "Galicia" },
+        ],
+    bankField,
+    notesField,
+    fileFields: files.slice(0, 3),
+    notice,
+    orderField,
+  };
+}
+
 function parseOutlineBlock(html: string): Pick<
   InvidOrderRow,
   "items" | "delivery" | "payment" | "links" | "totals" | "exchangeRate"
@@ -609,6 +770,11 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
           exchangeRate: undefined as number | undefined,
         };
 
+    const invoiceCell = cells[firstIsChrome ? (data.length >= 6 ? 6 : 5) : (data.length >= 6 ? 5 : 4)] ?? "";
+    const paymentHref = extractPopupHref(invoiceCell)
+      || invoiceHrefs.find((h) => /comprob|adjunt|pago/i.test(h));
+    const canAttachPayment = /adjuntar/i.test(invoice) || Boolean(paymentHref);
+
     orders.push({
       orderNumber,
       webOrderNumber,
@@ -623,6 +789,8 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
       links: outline.links,
       totals: finalizeTotals(amount, outline.items, outline.totals ?? {}),
       exchangeRate: outline.exchangeRate,
+      canAttachPayment,
+      paymentHref,
     });
   }
   return { orders };

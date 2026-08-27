@@ -96,6 +96,29 @@ export async function uploadAuthedFile(path: string, file: File, extra?: Record<
   return body.data ?? body;
 }
 
+export async function uploadAuthedFiles(
+  path: string,
+  files: { field: string; file: File }[],
+  extra?: Record<string, string>
+) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const form = new FormData();
+  for (const { field, file } of files) form.append(field, file, file.name);
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) form.append(k, v);
+  }
+  const res = await fetch(`${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const body = (await res.json().catch(() => ({}))) as { success?: boolean; message?: string; data?: unknown };
+  if (!res.ok || body.success === false) {
+    throw new Error(body.message || `No se pudo subir (${res.status})`);
+  }
+  return body.data ?? body;
+}
+
 export const assetsApi = {
   upload: (file: File) =>
     uploadAuthedFile("/assets/upload", file) as Promise<{ url: string }>,
@@ -889,6 +912,23 @@ export interface InvidOrder {
   exchangeRate?: number;
   exchangeRateSource?: "order" | "current";
   amountArs?: number;
+  canAttachPayment?: boolean;
+  paymentHref?: string;
+}
+export interface InvidPaymentBank {
+  value: string;
+  label: string;
+}
+export interface InvidPaymentForm {
+  action: string;
+  method: string;
+  fields: Record<string, string>;
+  banks: InvidPaymentBank[];
+  bankField: string;
+  notesField: string;
+  fileFields: string[];
+  notice?: string;
+  orderField?: string;
 }
 export interface InvidFileForm {
   action: string;
@@ -907,7 +947,13 @@ export interface InvidAccountMovement {
 }
 export const invidAccountApi = {
   orders: (opts?: { refresh?: boolean }) =>
-    api.get<{ orders: InvidOrder[]; currentExchangeRate?: number; paymentUploads?: InvidFileForm[]; note?: string }>(
+    api.get<{
+      orders: InvidOrder[];
+      currentExchangeRate?: number;
+      paymentForm?: InvidPaymentForm;
+      paymentUploads?: InvidFileForm[];
+      note?: string;
+    }>(
       "/providers/INVID/orders",
       { params: opts?.refresh ? { refresh: 1 } : undefined }
     ),

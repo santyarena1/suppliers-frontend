@@ -11,6 +11,7 @@ import {
   parseXmlCost,
   collectFormFields,
   applyInvidOrderRates,
+  parseInvidPaymentForm,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -241,6 +242,52 @@ describe("invid-order.parser", () => {
     expect(order.totals?.net).toBe(178.5);
     expect(order.totals?.iva).toBeUndefined();
     expect(order.totals?.taxes).toBe(35.32);
+  });
+
+  it("marca Adjuntar en la factura y extrae el popup de comprobantes", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img /></td>
+        <td>616098</td><td>208021</td><td>Abierto</td><td>27-08-2026</td>
+        <td>US$ 213.82</td>
+        <td><a href="javascript:void(0)" onclick="window.open('comprobantes_pedido.php?n_ped=616098')">Adjuntar</a></td>
+      </tr>
+    `;
+    const order = parseOrdersTable(html).orders[0];
+    expect(order.canAttachPayment).toBe(true);
+    expect(order.paymentHref).toBe("comprobantes_pedido.php?n_ped=616098");
+    expect(order.invoice).toMatch(/Adjuntar/i);
+  });
+
+  it("lee el formulario de Comprobantes de Pago: banco, observaciones y 3 archivos", () => {
+    const html = `
+      <form action="lista_pedidos_invid.php" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="n_ped" value="" />
+        <div class="alert">IMPORTANTE: No envíes el comprobante si hay cambios. Echeq: Galicia. Después de las 17:00 hs rige el TC del día siguiente.</div>
+        Banco *
+        <input type="radio" name="banco" value="Macro" id="b_macro" />
+        <label for="b_macro">Macro</label>
+        <input type="radio" name="banco" value="Galicia" id="b_galicia" />
+        <label for="b_galicia">Galicia</label>
+        Observaciones *
+        <textarea name="observaciones" required></textarea>
+        Adjuntar comprobantes de pago *
+        <input type="file" name="archivo1" />
+        <input type="file" name="archivo2" />
+        <input type="file" name="archivo3" />
+        <button type="submit">Enviar</button>
+      </form>
+    `;
+    const form = parseInvidPaymentForm(html);
+    expect(form).toMatchObject({
+      action: "lista_pedidos_invid.php",
+      bankField: "banco",
+      notesField: "observaciones",
+      orderField: "n_ped",
+      fileFields: ["archivo1", "archivo2", "archivo3"],
+    });
+    expect(form?.banks.map((b) => b.label)).toEqual(["Macro", "Galicia"]);
+    expect(form?.notice).toMatch(/17:00/i);
   });
 
   it("conserva hrefs de la cuenta corriente", () => {
