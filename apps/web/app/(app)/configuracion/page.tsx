@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import IibbRatesEditor from "@/components/IibbRatesEditor";
@@ -12,9 +13,10 @@ import {
   BrandsTab,
   ProvidersTab,
 } from "@/components/admin/SystemConfigPanels";
+import ApiCredentialsPanel from "@/components/admin/ApiCredentialsPanel";
 import {
   Settings, Palette, DollarSign, Receipt, Check, RefreshCw, Sun, Moon, Sparkles,
-  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle, Percent,
+  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle, Percent, KeyRound,
 } from "lucide-react";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
@@ -23,19 +25,36 @@ const THEME_ICONS: Record<Theme, React.ElementType> = {
   light: Sun,
 };
 
-type ConfigTab = "prefs" | "appearance" | "providers" | "brands" | "banners";
+type ConfigTab = "prefs" | "appearance" | "providers" | "brands" | "banners" | "credentials";
+
+const ADMIN_TAB_KEYS: ConfigTab[] = ["appearance", "providers", "brands", "banners", "credentials"];
 
 const ADMIN_TABS: { key: ConfigTab; label: string; icon: React.ReactNode }[] = [
   { key: "appearance", label: "Identidad", icon: <Palette className="w-3.5 h-3.5" /> },
   { key: "providers", label: "Proveedores", icon: <Boxes className="w-3.5 h-3.5" /> },
   { key: "brands", label: "Marcas", icon: <Building2 className="w-3.5 h-3.5" /> },
   { key: "banners", label: "Banners", icon: <ImageIcon className="w-3.5 h-3.5" /> },
+  { key: "credentials", label: "Credenciales API", icon: <KeyRound className="w-3.5 h-3.5" /> },
 ];
 
 export default function ConfiguracionPage() {
+  return (
+    <Suspense fallback={<div className="flex flex-1 items-center justify-center text-surface-500 text-sm">Cargando…</div>}>
+      <ConfiguracionPageInner />
+    </Suspense>
+  );
+}
+
+function ConfiguracionPageInner() {
   const user = getUser();
   const admin = isAdmin();
-  const [tab, setTab] = useState<ConfigTab>("prefs");
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get("tab") as ConfigTab | null;
+  const [tab, setTab] = useState<ConfigTab>(() => {
+    if (initialTab === "prefs") return "prefs";
+    if (admin && initialTab && ADMIN_TAB_KEYS.includes(initialTab)) return initialTab;
+    return "prefs";
+  });
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const { theme, setTheme } = useTheme();
   const {
@@ -48,6 +67,13 @@ export default function ConfiguracionPage() {
   useEffect(() => {
     if (!admin && tab !== "prefs") setTab("prefs");
   }, [admin, tab]);
+
+  useEffect(() => {
+    const q = searchParams.get("tab") as ConfigTab | null;
+    if (!q) return;
+    if (q === "prefs") setTab("prefs");
+    else if (admin && ADMIN_TAB_KEYS.includes(q)) setTab(q);
+  }, [searchParams, admin]);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -272,6 +298,7 @@ export default function ConfiguracionPage() {
           {admin && tab === "providers" && <ProvidersTab showToast={showToast} />}
           {admin && tab === "brands" && <BrandsTab showToast={showToast} />}
           {admin && tab === "banners" && <BannersTab showToast={showToast} />}
+          {admin && tab === "credentials" && <ApiCredentialsPanel showToast={showToast} />}
         </div>
       </div>
 

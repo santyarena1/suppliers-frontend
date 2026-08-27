@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   ALL_PROVIDERS,
   PROVIDER_LABELS,
@@ -76,8 +77,6 @@ export default function ImageSyncPanel({
   const [histStatus, setHistStatus] = useState("");
   const [histQ, setHistQ] = useState("");
   const [loading, setLoading] = useState(true);
-  const [apiKey, setApiKey] = useState("");
-  const [savingKey, setSavingKey] = useState(false);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [provider, setProvider] = useState<string>("");
@@ -122,35 +121,6 @@ export default function ImageSyncPanel({
     const id = setInterval(() => void load(), 2500);
     return () => clearInterval(id);
   }, [status?.running, load]);
-
-  async function saveKey(e: FormEvent) {
-    e.preventDefault();
-    if (!apiKey.trim()) return;
-    setSavingKey(true);
-    try {
-      await imageSyncApi.saveSerper(apiKey.trim());
-      setApiKey("");
-      showToast("API key de Serper guardada");
-      await load();
-    } catch (err) {
-      showToast(errMsg(err, "No se pudo guardar la clave"), false);
-    } finally {
-      setSavingKey(false);
-    }
-  }
-
-  async function clearKey() {
-    setSavingKey(true);
-    try {
-      await imageSyncApi.clearSerper();
-      showToast("Se quitó la API key de Serper");
-      await load();
-    } catch (err) {
-      showToast(errMsg(err, "No se pudo borrar la clave"), false);
-    } finally {
-      setSavingKey(false);
-    }
-  }
 
   async function toggleCron() {
     if (!status) return;
@@ -248,55 +218,20 @@ export default function ImageSyncPanel({
         </p>
       </div>
 
-      <form onSubmit={saveKey} className="border border-surface-800 rounded-xl p-4 flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-sm text-surface-200">
-          <KeyRound className="w-4 h-4 text-surface-500" />
-          API de Serper
-          {status?.hasSerperKey ? (
-            <span className="text-[11px] uppercase tracking-wider text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5">
-              clave cargada
-            </span>
-          ) : (
-            <span className="text-[11px] uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5">
-              falta la clave
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-surface-500">
-          Se guarda cifrada. La sacás de{" "}
-          <a href="https://serper.dev/api-key" target="_blank" rel="noreferrer" className="text-brand-400 hover:underline">
-            serper.dev/api-key
-          </a>
-          .
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <input
-            type="password"
-            autoComplete="off"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={status?.hasSerperKey ? "Reemplazar clave…" : "X-API-KEY de Serper"}
-            className="flex-1 min-w-[200px] bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500"
-          />
-          <button
-            type="submit"
-            disabled={savingKey || apiKey.trim().length < 8}
-            className="bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg px-3 py-2"
+      {!status?.hasSerperKey && (
+        <div className="border border-amber-500/30 bg-amber-500/5 rounded-xl px-4 py-3 flex flex-wrap items-center gap-2 text-sm text-amber-200">
+          <KeyRound className="w-4 h-4 flex-shrink-0" />
+          <span className="flex-1 min-w-[200px]">
+            Falta la API key de Serper. Cargala en Configuración → Credenciales API.
+          </span>
+          <Link
+            href="/configuracion?tab=credentials"
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-100"
           >
-            {savingKey ? "Guardando…" : "Guardar"}
-          </button>
-          {status?.hasSerperKey && (
-            <button
-              type="button"
-              onClick={() => void clearKey()}
-              disabled={savingKey}
-              className="border border-surface-700 text-surface-300 hover:text-white text-sm rounded-lg px-3 py-2"
-            >
-              Quitar
-            </button>
-          )}
+            Ir a credenciales
+          </Link>
         </div>
-      </form>
+      )}
 
       <div className="border border-surface-800 rounded-xl p-4 flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-3">

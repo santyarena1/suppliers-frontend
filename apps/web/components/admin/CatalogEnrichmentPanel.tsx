@@ -20,7 +20,6 @@ import {
   Eye,
   EyeOff,
   GitMerge,
-  KeyRound,
   Layers,
   Link2,
   Loader2,
@@ -34,7 +33,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-type MainTab = "categories" | "brands" | "incomplete" | "config" | "openai";
+type MainTab = "categories" | "brands" | "incomplete" | "config";
 
 const NEW_TERM = "__new__";
 
@@ -51,7 +50,6 @@ export default function CatalogEnrichmentPanel({
   const [overview, setOverview] = useState<{
     incompleteCount: number;
     termCount: number;
-    aiConfigured: boolean;
     productCount: number;
   } | null>(null);
   const [catBoard, setCatBoard] = useState<CatalogBoard | null>(null);
@@ -61,7 +59,6 @@ export default function CatalogEnrichmentPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [aiClusters, setAiClusters] = useState<CatalogMergeCluster[]>([]);
   const [aiUsed, setAiUsed] = useState(false);
-  const [openAiKey, setOpenAiKey] = useState("");
   const [filter, setFilter] = useState("");
 
   const load = useCallback(async () => {
@@ -156,12 +153,11 @@ export default function CatalogEnrichmentPanel({
       </header>
 
       {overview && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {[
             { label: "Productos", value: overview.productCount },
             { label: "Términos", value: overview.termCount },
             { label: "Incompletos", value: overview.incompleteCount, warn: overview.incompleteCount > 0 },
-            { label: "OpenAI", value: overview.aiConfigured ? "ON" : "OFF" },
           ].map((s) => (
             <div
               key={s.label}
@@ -183,7 +179,6 @@ export default function CatalogEnrichmentPanel({
             ["brands", "Marcas", Tags],
             ["incomplete", "Incompletos", AlertTriangle],
             ["config", "Configuración", Settings2],
-            ["openai", "OpenAI", KeyRound],
           ] as const
         ).map(([key, label, Icon]) => (
           <button
@@ -241,19 +236,6 @@ export default function CatalogEnrichmentPanel({
 
       {tab === "config" && (
         <ConfigTab terms={terms} onChanged={load} showToast={showToast} busy={busy} setBusy={setBusy} />
-      )}
-
-      {tab === "openai" && (
-        <OpenAiTab
-          configured={overview?.aiConfigured ?? false}
-          openAiKey={openAiKey}
-          setOpenAiKey={setOpenAiKey}
-          onSaved={async () => {
-            setOpenAiKey("");
-            await load();
-          }}
-          showToast={showToast}
-        />
       )}
     </div>
   );
@@ -1117,62 +1099,5 @@ function ConfigTab({
         )}
       </section>
     </div>
-  );
-}
-
-function OpenAiTab({
-  configured,
-  openAiKey,
-  setOpenAiKey,
-  onSaved,
-  showToast,
-}: {
-  configured: boolean;
-  openAiKey: string;
-  setOpenAiKey: (v: string) => void;
-  onSaved: () => Promise<void>;
-  showToast: (msg: string, ok?: boolean) => void;
-}) {
-  const [saving, setSaving] = useState(false);
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    if (!openAiKey.trim()) return;
-    setSaving(true);
-    try {
-      await catalogEnrichmentApi.saveOpenAi(openAiKey.trim());
-      showToast("API key guardada");
-      await onSaved();
-    } catch {
-      showToast("No se pudo guardar", false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="rounded-xl border border-surface-800 p-4 bg-surface-900/30 space-y-3 max-w-lg">
-      <h3 className="text-sm font-medium text-white">API key de OpenAI</h3>
-      <p className="text-xs text-surface-500">
-        Opcional. Mejora sugerencias de fusión y completado de productos.
-        {configured && <span className="text-emerald-400"> Activa.</span>}
-      </p>
-      <form onSubmit={save} className="flex gap-2">
-        <input
-          type="password"
-          value={openAiKey}
-          onChange={(e) => setOpenAiKey(e.target.value)}
-          placeholder="sk-…"
-          className="flex-1 rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-2 text-sm text-white font-mono"
-        />
-        <button
-          type="submit"
-          disabled={saving || !openAiKey.trim()}
-          className="text-xs font-semibold px-4 py-2 rounded-lg bg-brand-600 text-white disabled:opacity-50"
-        >
-          Guardar
-        </button>
-      </form>
-    </section>
   );
 }
