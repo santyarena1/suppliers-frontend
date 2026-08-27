@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, CheckCheck, Pin, Smile } from "lucide-react";
 import {
@@ -10,12 +10,13 @@ import {
 } from "@/lib/api";
 import { assetUrl } from "@/lib/assets";
 import { formatUSD } from "@/lib/format";
+import { avatarTone, initials } from "@/lib/chat-ui";
 
 function linkify(text: string) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
   return parts.map((part, i) =>
     part.startsWith("http") ? (
-      <a key={i} href={part} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+      <a key={i} href={part} target="_blank" rel="noreferrer" className="underline underline-offset-2 break-all">
         {part}
       </a>
     ) : (
@@ -50,6 +51,7 @@ export default function ChatBubble({
   onDelete,
   onImage,
   onUpdated,
+  onRetry,
 }: {
   msg: ChatMessage;
   mine: boolean;
@@ -61,15 +63,35 @@ export default function ChatBubble({
   onDelete: () => void;
   onImage: (url: string) => void;
   onUpdated: (msg: ChatMessage) => void;
+  onRetry?: () => void;
 }) {
   const [menu, setMenu] = useState(false);
   const [reactOpen, setReactOpen] = useState(false);
+  const [actions, setActions] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editBody, setEditBody] = useState(msg.body);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!actions && !menu && !reactOpen) return;
+    const close = () => {
+      setActions(false);
+      setMenu(false);
+      setReactOpen(false);
+    };
+    const t = window.setTimeout(() => window.addEventListener("click", close), 0);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("click", close);
+    };
+  }, [actions, menu, reactOpen]);
+
   if (msg.kind === "SYSTEM") {
-    return <p className="text-[11px] text-center text-surface-500 py-1 px-6">{msg.body}</p>;
+    return (
+      <p className="self-center text-[11px] text-center text-surface-400 bg-surface-900/80 border border-surface-800 rounded-full px-3 py-1 my-2 max-w-[90%]">
+        {msg.body}
+      </p>
+    );
   }
 
   const payload = (msg.payload ?? {}) as Record<string, unknown>;
@@ -80,15 +102,17 @@ export default function ChatBubble({
     !msg.deletedAt &&
     Date.now() - new Date(msg.createdAt).getTime() < 15 * 60 * 1000;
   const reactions = msg.reactions ?? [];
+  const authorName = msg.author?.username ?? "?";
 
   async function toggleReact(emoji: string) {
     try {
       const res = await chatApi.react(msg.id, emoji);
       onUpdated(res.data);
     } catch {
-      /* el aviso lo muestra el hilo si hace falta */
+      /* el hilo muestra el aviso si hace falta */
     }
     setReactOpen(false);
+    setActions(false);
   }
 
   async function saveEdit() {
@@ -103,45 +127,56 @@ export default function ChatBubble({
     }
   }
 
+  const showBar = canWrite && !msg.deletedAt && !msg.pending && (actions || reactOpen || menu);
+
   return (
-    <div
-      className={`flex gap-2 group ${mine ? "justify-end" : "justify-start"} ${grouped ? "mt-0.5" : "mt-2"}`}
-      onMouseLeave={() => {
-        setMenu(false);
-        setReactOpen(false);
-      }}
-    >
+    <div className={`flex gap-2 ${mine ? "justify-end" : "justify-start"} ${grouped ? "mt-0.5" : "mt-2.5"}`}>
       {!mine && (
         <div
-          className={`w-7 h-7 rounded-full bg-surface-800 text-[10px] font-semibold text-surface-300 flex items-center justify-center flex-shrink-0 ${grouped ? "opacity-0" : ""}`}
+          className={`w-8 h-8 rounded-full text-[10px] font-semibold flex items-center justify-center flex-shrink-0 mt-0.5 ${grouped ? "opacity-0" : avatarTone(authorName)}`}
         >
-          {(msg.author?.username ?? "?").slice(0, 2).toUpperCase()}
+          {initials(authorName)}
         </div>
       )}
-      <div className={`max-w-[80%] sm:max-w-[70%] relative ${mine ? "items-end" : "items-start"} flex flex-col`}>
-        {!mine && !grouped && msg.author && (
-          <p className="text-[10px] font-medium text-brand-300 mb-0.5 px-1">{msg.author.username}</p>
+      <div className={`max-w-[85%] sm:max-w-[72%] relative flex flex-col ${mine ? "items-end" : "items-start"}`}>
+        {!mine && !grouped && (
+          <p className="text-[11px] font-medium text-surface-400 mb-0.5 px-1">{authorName}</p>
         )}
-        <div
-          className={`rounded-2xl px-3 py-2 text-sm relative ${
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (msg.failed && onRetry) {
+              onRetry();
+              return;
+            }
+            setActions((v) => !v);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setActions(true);
+          }}
+          className={`text-left rounded-2xl px-3 py-2 text-sm relative transition-opacity ${
             mine
               ? "bg-brand-600 text-white rounded-br-md"
               : "bg-surface-800 text-surface-100 rounded-bl-md"
-          } ${msg.pending ? "opacity-70" : ""} ${msg.failed ? "ring-1 ring-red-400" : ""}`}
+          } ${msg.pending ? "opacity-60" : ""} ${msg.failed ? "ring-1 ring-red-400" : ""}`}
         >
           {msg.replyTo && (
             <p
-              className={`text-[11px] mb-1 pl-2 border-l ${
-                mine ? "border-white/40 text-white/80" : "border-surface-500 text-surface-400"
+              className={`text-[11px] mb-1.5 pl-2 border-l-2 rounded-sm ${
+                mine ? "border-white/50 text-white/80" : "border-brand-400/60 text-surface-400"
               }`}
             >
-              {msg.replyTo.author}: {msg.replyTo.body || msg.replyTo.kind}
+              <span className="font-medium">{msg.replyTo.author}</span>
+              {" · "}
+              {(msg.replyTo.body || msg.replyTo.kind).slice(0, 80)}
             </p>
           )}
           {msg.deletedAt ? (
             <p className="italic opacity-70">Mensaje eliminado</p>
           ) : editing ? (
-            <div className="flex flex-col gap-1.5 min-w-[180px]">
+            <div className="flex flex-col gap-1.5 min-w-[180px]" onClick={(e) => e.stopPropagation()}>
               <textarea
                 value={editBody}
                 onChange={(e) => setEditBody(e.target.value)}
@@ -158,23 +193,35 @@ export default function ChatBubble({
               </div>
             </div>
           ) : msg.kind === "IMAGE" && typeof payload.url === "string" ? (
-            <button type="button" onClick={() => onImage(payload.url as string)}>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                onImage(payload.url as string);
+              }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={assetUrl(payload.url as string)} alt="" className="rounded-lg max-h-56" />
-            </button>
+              <img src={assetUrl(payload.url as string)} alt="" className="rounded-xl max-h-56 -mx-0.5" />
+            </span>
           ) : msg.kind === "FILE" && typeof payload.url === "string" ? (
-            <a href={assetUrl(payload.url as string)} target="_blank" rel="noreferrer" className="underline">
+            <a
+              href={assetUrl(payload.url as string)}
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+              onClick={(e) => e.stopPropagation()}
+            >
               {msg.body || (payload.filename as string) || "Archivo"}
             </a>
           ) : msg.kind === "ORDER" ? (
-            <Link href="/pedidos" className="flex flex-col gap-0.5">
+            <Link href="/pedidos" onClick={(e) => e.stopPropagation()} className="flex flex-col gap-0.5 min-w-[160px]">
               <p className="font-medium">{msg.body}</p>
               <p className="text-[11px] opacity-80">
                 {String(payload.providerName ?? "")}
                 {payload.total != null ? ` · ${formatUSD(Number(payload.total))}` : ""}
-                {payload.approvalStatus ? ` · ${String(payload.approvalStatus)}` : ""}
               </p>
-              <span className="text-[10px] underline underline-offset-2 opacity-80">Ver en Pedidos</span>
+              <span className="text-[10px] opacity-80 mt-0.5">Abrir en Pedidos →</span>
             </Link>
           ) : msg.kind === "PRODUCT" ? (
             <div className="flex flex-col gap-0.5">
@@ -182,16 +229,16 @@ export default function ChatBubble({
               {typeof payload.name === "string" && <p className="text-[11px] opacity-80">{payload.name}</p>}
             </div>
           ) : (
-            <p className="whitespace-pre-wrap break-words">{linkify(msg.body)}</p>
+            <p className="whitespace-pre-wrap break-words leading-relaxed">{linkify(msg.body)}</p>
           )}
           <div className={`flex items-center gap-1 mt-1 ${mine ? "justify-end" : ""}`}>
-            <span className="text-[10px] opacity-70">
+            <span className="text-[10px] opacity-70 tabular-nums">
               {messageTime(msg.createdAt)}
               {msg.editedAt ? " · editado" : ""}
               {msg.pending ? " · enviando" : ""}
-              {msg.failed ? " · no se envió" : ""}
+              {msg.failed ? " · tocá para reenviar" : ""}
             </span>
-            {mine && !msg.pending && (
+            {mine && !msg.pending && !msg.failed && (
               seen ? (
                 <CheckCheck className="w-3.5 h-3.5 text-sky-200" aria-label="Visto" />
               ) : (
@@ -199,57 +246,59 @@ export default function ChatBubble({
               )
             )}
           </div>
-        </div>
+        </button>
         {reactions.length > 0 && (
-          <div className={`flex flex-wrap gap-1 mt-1 ${mine ? "justify-end" : ""}`}>
+          <div className={`flex flex-wrap gap-1 -mt-1.5 px-1 ${mine ? "justify-end" : ""}`}>
             {reactions.map((reaction) => (
               <button
                 key={reaction.emoji}
                 type="button"
                 title={reaction.users.map((u) => u.username).join(", ")}
                 onClick={() => canWrite && void toggleReact(reaction.emoji)}
-                className="text-[11px] bg-surface-800 border border-surface-700 rounded-full px-1.5 py-0.5 hover:border-brand-500"
+                className="text-[11px] bg-surface-900 border border-surface-700 rounded-full px-1.5 py-0.5 hover:border-brand-500 shadow-sm"
               >
                 {reaction.emoji} {reaction.users.length}
               </button>
             ))}
           </div>
         )}
-        {canWrite && !msg.deletedAt && !msg.pending && (
+        {showBar && (
           <div
-            className={`absolute top-0 ${mine ? "left-0 -translate-x-full pr-1" : "right-0 translate-x-full pl-1"} hidden group-hover:flex items-center gap-0.5 bg-surface-900 border border-surface-700 rounded-md p-0.5 z-10`}
+            className={`mt-1 flex items-center gap-0.5 bg-surface-900 border border-surface-700 rounded-full px-1 py-0.5 shadow-lg z-10 ${mine ? "self-end" : "self-start"}`}
+            onClick={(e) => e.stopPropagation()}
           >
-            <button type="button" className="p-1 text-surface-400 hover:text-white" title="Reaccionar" onClick={() => setReactOpen((v) => !v)}>
+            <button type="button" className="p-1.5 text-surface-400 hover:text-white" title="Reaccionar" onClick={() => setReactOpen((v) => !v)}>
               <Smile className="w-3.5 h-3.5" />
             </button>
-            <button type="button" className="p-1 text-surface-400 hover:text-white text-[10px]" onClick={onReply}>
+            <button type="button" className="px-1.5 py-1 text-[11px] text-surface-300 hover:text-white" onClick={onReply}>
               Responder
             </button>
-            <button type="button" className="p-1 text-surface-400 hover:text-white" title="Fijar" onClick={onPin}>
+            <button type="button" className="p-1.5 text-surface-400 hover:text-white" title="Fijar" onClick={onPin}>
               <Pin className="w-3.5 h-3.5" />
             </button>
-            <button type="button" className="p-1 text-surface-400 hover:text-white text-[10px]" onClick={() => setMenu((v) => !v)}>
+            <button type="button" className="px-1.5 py-1 text-[11px] text-surface-300 hover:text-white" onClick={() => setMenu((v) => !v)}>
               Más
             </button>
           </div>
         )}
         {reactOpen && (
-          <div className={`absolute z-20 bg-surface-900 border border-surface-700 rounded-full px-1.5 py-1 flex gap-0.5 ${mine ? "right-0" : "left-0"} top-8`}>
+          <div className={`mt-1 bg-surface-900 border border-surface-700 rounded-full px-1.5 py-1 flex gap-0.5 shadow-lg ${mine ? "self-end" : "self-start"}`}>
             {CHAT_REACTION_EMOJIS.map((emoji) => (
-              <button key={emoji} type="button" className="text-base hover:scale-110" onClick={() => void toggleReact(emoji)}>
+              <button key={emoji} type="button" className="text-lg leading-none p-1 hover:scale-110 transition-transform" onClick={() => void toggleReact(emoji)}>
                 {emoji}
               </button>
             ))}
           </div>
         )}
         {menu && (
-          <div className={`absolute z-20 bg-surface-900 border border-surface-700 rounded-md py-1 text-[11px] min-w-[8rem] ${mine ? "right-0" : "left-0"} top-8`}>
+          <div className={`mt-1 bg-surface-900 border border-surface-700 rounded-xl py-1 text-[12px] min-w-[9rem] shadow-lg ${mine ? "self-end" : "self-start"}`}>
             <button
               type="button"
-              className="block w-full text-left px-3 py-1 hover:bg-surface-800 text-surface-200"
+              className="block w-full text-left px-3 py-1.5 hover:bg-surface-800 text-surface-200"
               onClick={() => {
                 void navigator.clipboard.writeText(msg.body);
                 setMenu(false);
+                setActions(false);
               }}
             >
               Copiar
@@ -257,11 +306,12 @@ export default function ChatBubble({
             {canEdit && (
               <button
                 type="button"
-                className="block w-full text-left px-3 py-1 hover:bg-surface-800 text-surface-200"
+                className="block w-full text-left px-3 py-1.5 hover:bg-surface-800 text-surface-200"
                 onClick={() => {
                   setEditing(true);
                   setEditBody(msg.body);
                   setMenu(false);
+                  setActions(false);
                 }}
               >
                 Editar
@@ -269,9 +319,10 @@ export default function ChatBubble({
             )}
             <button
               type="button"
-              className="block w-full text-left px-3 py-1 hover:bg-surface-800 text-red-300"
+              className="block w-full text-left px-3 py-1.5 hover:bg-surface-800 text-red-300"
               onClick={() => {
                 setMenu(false);
+                setActions(false);
                 onDelete();
               }}
             >

@@ -178,7 +178,7 @@ function ClientRow({ client }: { client: OwnClient }) {
       </span>
       <Link
         href={`/mensajes?linkId=${client.linkId}`}
-        className="text-surface-500 hover:text-brand-300 p-1"
+        className="w-10 h-10 flex items-center justify-center rounded-full text-surface-500 hover:text-brand-300 hover:bg-surface-800"
         aria-label="Abrir chat"
         title="Hablar"
       >
