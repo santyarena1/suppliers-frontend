@@ -18,9 +18,10 @@ consultor que atiende dos comercios), pero el caso normal es una sola.
 nivel de acceso a Nodo. **El alcance funcional lo define siempre la membresía.**
 
 **Superadmin** — `User.role = ROLE_ADMIN`. Siempre ve y administra el árbol. En
-entornos de prueba también opera el **Comercio de Pruebas** (la misma organización
-que `testuser1`): mismas credenciales de proveedor, mismo catálogo y mismo carrito,
-sin tener que “entrar como”. El `ROLE_ADMIN` no se pierde por tener membresía.
+entornos de prueba pertenece a **Administración**: carrito y pedidos propios.
+Credenciales de proveedor, distribuidores y marcas vinculados se leen del
+**Comercio de Pruebas** (los de `testuser1`) vía `Tenant.mirrorsCommercialFromId`.
+El `ROLE_ADMIN` no se pierde. No hace falta “entrar como” para buscar.
 
 ---
 
@@ -161,10 +162,10 @@ relacionadas directa (vínculo propio) o indirectamente (vínculo de su organiza
 
 En pantalla, siempre nombres normalizados. Nunca slugs ni claves internas.
 
-El superadmin de prueba (`superadmin`) es miembro administrador del Comercio de
-Pruebas. Eso no lo convierte en un usuario más: sigue viendo el árbol, y al mismo
-tiempo busca, carga credenciales y usa el carrito de ese comercio. “Entrar como”
-sigue existiendo para mirar la plataforma con los ojos de otra persona.
+El superadmin de prueba (`superadmin`) pertenece a Administración. El carrito y
+los pedidos son los de esa organización. Credenciales, distribuidores y marcas
+vinculados se leen del Comercio de Pruebas. “Entrar como” sigue existiendo para
+mirar la plataforma con los ojos de otra persona.
 
 ---
 

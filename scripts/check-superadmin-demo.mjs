@@ -1,7 +1,7 @@
 /**
- * El superadmin de prueba opera el Comercio de Pruebas: mismas credenciales
- * de proveedor y misma visibilidad que testuser1, sin "entrar como", y sin
- * perder el árbol de administración.
+ * El superadmin de prueba está en Administración: carrito y pedidos propios.
+ * Credenciales de proveedor, distribuidores y marcas vinculados se leen del
+ * Comercio de Pruebas (testuser1), sin "entrar como".
  *
  * Uso: API_URL=... ADMIN_PASSWORD=... node scripts/check-superadmin-demo.mjs
  */
@@ -52,8 +52,8 @@ async function main() {
 
   const claims = decode(adminToken);
   check("Sigue siendo administrador de plataforma", claims.role === "ROLE_ADMIN", claims.role);
-  check("El token trae el Comercio de Pruebas",
-    claims.tenantName === "Comercio de Pruebas" && claims.tenantType === "RETAILER" && claims.tenantRole === "ADMIN",
+  check("El token trae Administración (carrito propio)",
+    claims.tenantName === "Administración" && claims.tenantType === "RETAILER" && claims.tenantRole === "ADMIN",
     claims.tenantName ? `${claims.tenantRole} en ${claims.tenantName}` : "sin organización");
 
   const arbol = await call("GET", "/admin/tenants", adminToken);
@@ -62,6 +62,10 @@ async function main() {
 
   const demo = (dataOf(arbol)?.tenants ?? []).find((t) => t.name === "Comercio de Pruebas");
   if (!demo) throw new Error("No está el Comercio de Pruebas. Corré scripts/seed-demo-tenants.mjs");
+  check("El espejo comercial apunta al Comercio de Pruebas",
+    claims.commercialTenantId === demo.id,
+    claims.commercialTenantId ?? "sin espejo");
+
   const testuser = demo.members.find((m) => m.username === DEMO_USER || m.username === "testuser");
   if (!testuser) throw new Error(`No está ${DEMO_USER} en el Comercio de Pruebas`);
 
@@ -72,7 +76,7 @@ async function main() {
 
   const credsAdmin = await call("GET", "/credentials/me", adminToken);
   const credsTest = await call("GET", "/credentials/me", testToken);
-  check("El superadmin lee las credenciales del comercio", credsAdmin.status === 200,
+  check("El superadmin lee las credenciales del comercio de pruebas", credsAdmin.status === 200,
     `HTTP ${credsAdmin.status}`);
   const fingerprint = (res) =>
     (Array.isArray(dataOf(res)) ? dataOf(res) : [])
@@ -89,7 +93,8 @@ async function main() {
       .map((p) => p.provider)
       .sort()
       .join(",");
-  check("Ve los mismos proveedores que testuser1", visAdmin.status === 200 && names(visAdmin) === names(visTest),
+  check("Ve los mismos distribuidores y marcas vinculados que testuser1",
+    visAdmin.status === 200 && names(visAdmin) === names(visTest),
     `admin=[${names(visAdmin)}] · testuser=[${names(visTest)}]`);
 
   const cartFp = (res) =>
@@ -99,9 +104,12 @@ async function main() {
       .join("|");
   const cartAdmin = await call("GET", "/cart", adminToken);
   const cartTest = await call("GET", "/cart", testToken);
-  check("Comparte el carrito del comercio",
-    cartAdmin.status === 200 && cartTest.status === 200 && cartFp(cartAdmin) === cartFp(cartTest),
-    `HTTP ${cartAdmin.status} / ${cartTest.status}`);
+  check("El carrito del superadmin es el suyo, no el de testuser1",
+    cartAdmin.status === 200 && cartTest.status === 200 && claims.tenantId !== decode(testToken).tenantId,
+    `admin org=${claims.tenantName} · testuser org=${decode(testToken).tenantName ?? "?"}`);
+  check("Los carritos no se mezclan",
+    cartAdmin.status === 200 && (cartFp(cartAdmin) !== cartFp(cartTest) || cartFp(cartAdmin) === ""),
+    `admin=[${cartFp(cartAdmin) || "vacío"}] · testuser=[${cartFp(cartTest) || "vacío"}]`);
 
   const failed = checks.filter((ok) => !ok).length;
   console.log(`\n${checks.length - failed}/${checks.length} verificaciones pasaron`);

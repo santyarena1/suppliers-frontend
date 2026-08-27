@@ -109,9 +109,8 @@ async function main() {
       estadoCompanero.payload.data?.hasCredentials === true,
       `hasCredentials=${estadoCompanero.payload.data?.hasCredentials}`);
 
-    // El superadmin de prueba opera el Comercio de Pruebas: ve las credenciales
-    // de ese comercio, no las de la organización que se usó para esta prueba
-    // (salvo que sea la misma).
+    // El superadmin de prueba espeja el Comercio de Pruebas: ve esas credenciales,
+    // no las de otra organización (salvo que sea la misma).
     const superadmin = await call("GET", "/credentials/me", adminToken);
     check("El superadmin puede leer las credenciales de su comercio",
       superadmin.status === 200, `HTTP ${superadmin.status}`);

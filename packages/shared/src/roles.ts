@@ -10,8 +10,9 @@ export interface JwtPayload {
   brandId?: string;
   /**
    * Organización a la que pertenece quien usa la sesión, y su rol adentro. Ausente
-   * si no hay membresía. El superadmin de prueba opera el Comercio de Pruebas y
-   * sí la trae; un ROLE_ADMIN sin membresía sigue siendo transversal.
+   * si no hay membresía. El superadmin de prueba pertenece a Administración:
+   * carrito propio, y `commercialTenantId` apunta al Comercio de Pruebas para
+   * credenciales y vínculos.
    *
    * `role` es el nivel de plataforma; el alcance real de negocio lo da esto. Las
    * sesiones emitidas antes de que existieran estos campos no los traen, así que
@@ -21,6 +22,8 @@ export interface JwtPayload {
   tenantName?: string;
   tenantType?: TenantType;
   tenantRole?: TenantRole;
+  /** Organización de la que se leen credenciales, vínculos y catálogo. */
+  commercialTenantId?: string;
   /**
    * Presente solo cuando un administrador está usando la plataforma como este
    * usuario. Guarda el id y el nombre de quien inició la suplantación, para que

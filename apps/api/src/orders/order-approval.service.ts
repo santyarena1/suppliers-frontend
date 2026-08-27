@@ -8,6 +8,7 @@ import {
 } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
+import { commercialId } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 
 /** Lo que devuelve el checkout cuando el pedido queda esperando una firma. */
@@ -76,7 +77,7 @@ export class OrderApprovalService {
   ): Promise<HeldOrder | null> {
     this.assertCanOrder(tenant);
     if (!(await this.needsApproval(tenant))) return null;
-    await this.visibility.assertLinked(tenant.tenantId, provider);
+    await this.visibility.assertLinked(commercialId(tenant), provider);
 
     const items = Array.isArray(draft.items) ? draft.items : [];
     if (items.length === 0) {

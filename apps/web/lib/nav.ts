@@ -20,8 +20,8 @@ import type { UserRole } from "@/lib/auth";
  *  - `tenantRoles` — rol interno (vendedor vs gerente, etc.).
  *  - `roles` — fallback de plataforma.
  * Superadmin (`ROLE_ADMIN`) siempre ve administración. Si además tiene
- * membresía (el de prueba opera el Comercio de Pruebas), ve las pantallas
- * de esa organización sin dejar de ser administrador.
+ * membresía (Administración, espejando el Comercio de Pruebas), ve búsqueda
+ * y carrito: el carrito es el suyo; credenciales y vínculos, los de testuser1.
  */
 
 export type NavSectionId = "providers" | "portfolio" | "brands" | "system";

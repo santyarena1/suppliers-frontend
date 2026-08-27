@@ -75,8 +75,8 @@ El token lleva `tenantId`, `tenantName`, `tenantType` y `tenantRole`, tanto al i
 sesión como al entrar como otro usuario. `TenantContextService` los resuelve y cae a la
 base cuando el token no los trae, para que las sesiones viejas sigan sirviendo hasta que
 venzan. La migración le dio organización propia a quien no tenía. El superadmin de
-prueba opera el Comercio de Pruebas (mismas credenciales que testuser1) y sigue
-viendo el árbol. Verifica `scripts/check-tenant-session.mjs` y
+prueba está en Administración (carrito propio) y espeja el Comercio de Pruebas para
+credenciales y vínculos. Verifica `scripts/check-tenant-session.mjs` y
 `scripts/check-superadmin-demo.mjs`.
 
 ### Fase 2 — Credenciales por organización — **hecha**
@@ -106,8 +106,9 @@ Dos consecuencias visibles:
 
 - Un comercio solo ve los productos que sincronizó con su propia cuenta. Sin oferta no
   hay precio que mostrar, y un precio traído con la cuenta de otro no sería el suyo.
-- El superadmin de prueba opera el Comercio de Pruebas: ve ese catálogo, no el de
-  toda la plataforma. Para mirar otro comercio sigue existiendo "entrar como".
+- El superadmin de prueba espeja el Comercio de Pruebas: ve ese catálogo (mismas
+  credenciales y vínculos), con carrito propio. Para mirar otro comercio sigue
+  existiendo "entrar como".
 
 Los precios que había traían el markup adentro y no hay forma de saber cuál era el
 crudo. La migración se los atribuye a la organización que sincronizó ese proveedor por

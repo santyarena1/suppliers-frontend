@@ -123,9 +123,8 @@ async function main() {
   check("Volver el markup a cero recupera el precio original", Math.abs(vuelve - crudo) < 0.02,
     `${vuelve} vs ${crudo}`);
 
-  // El superadmin de prueba opera el Comercio de Pruebas: ve el mismo catálogo
-  // que testuser1, sin "entrar como". Si ese comercio no tiene este proveedor,
-  // ambos ven vacío — lo importante es que no sea un error y que coincidan.
+  // El superadmin de prueba espeja el Comercio de Pruebas: ve el mismo catálogo
+  // que testuser1 (credenciales y vínculos compartidos), con carrito propio.
   const demo = (tree.tenants ?? tree).find((t) => t.name === "Comercio de Pruebas");
   const testuser = demo?.members.find((m) => m.username === "testuser1" || m.username === "testuser");
   const busquedaAdmin = await call("GET", `/search/provider/${PROVIDER}?name=${termino}`, adminToken);

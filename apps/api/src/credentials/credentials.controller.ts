@@ -4,6 +4,7 @@ import { ALL_PROVIDERS, TENANT_ROLES_CAN_MANAGE_COMMERCE, type JwtPayload, type 
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import type { TenantContext } from "../tenants/tenant-context.service";
+import { commercialId } from "../tenants/tenant-context.service";
 import { assertTenantRole } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { CredentialsService } from "./credentials.service";
@@ -23,23 +24,23 @@ export class CredentialsController {
 
   @Get("me")
   mine(@CurrentTenant() tenant: TenantContext) {
-    return this.credentialsService.ofTenant(tenant.tenantId);
+    return this.credentialsService.ofTenant(commercialId(tenant));
   }
 
   @Get(":providerName")
   getByProvider(@CurrentTenant() tenant: TenantContext, @Param("providerName") providerName: string) {
-    return this.credentialsService.getByProvider(tenant.tenantId, assertProvider(providerName));
+    return this.credentialsService.getByProvider(commercialId(tenant), assertProvider(providerName));
   }
 
   @Post()
   save(@CurrentTenant() tenant: TenantContext, @CurrentUser() user: JwtPayload, @Body() dto: SaveCredentialDto) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
-    return this.credentialsService.save(tenant.tenantId, user.userId, dto);
+    return this.credentialsService.save(commercialId(tenant), user.userId, dto);
   }
 
   @Delete(":providerName")
   delete(@CurrentTenant() tenant: TenantContext, @Param("providerName") providerName: string) {
     assertTenantRole(tenant, TENANT_ROLES_CAN_MANAGE_COMMERCE);
-    return this.credentialsService.delete(tenant.tenantId, assertProvider(providerName));
+    return this.credentialsService.delete(commercialId(tenant), assertProvider(providerName));
   }
 }

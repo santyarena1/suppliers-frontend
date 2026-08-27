@@ -223,6 +223,11 @@ export class TenantsService {
       this.assertBrandMatchesType(tenant.type, dto.brandId);
     }
 
+    if (dto.mirrorsCommercialFromId === tenantId) {
+      throw new BadRequestException("Una organización no puede espejar su propio catálogo");
+    }
+    if (dto.mirrorsCommercialFromId) await this.assertTenantExists(dto.mirrorsCommercialFromId);
+
     return this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
@@ -234,6 +239,7 @@ export class TenantsService {
         ...(dto.notes === undefined ? {} : { notes: dto.notes }),
         ...(dto.advertisingEnabled === undefined ? {} : { advertisingEnabled: dto.advertisingEnabled }),
         ...(dto.active === undefined ? {} : { active: dto.active }),
+        ...(dto.mirrorsCommercialFromId === undefined ? {} : { mirrorsCommercialFromId: dto.mirrorsCommercialFromId }),
       },
       include: TENANT_INCLUDE,
     });

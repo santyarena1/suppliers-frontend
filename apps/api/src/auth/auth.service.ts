@@ -105,6 +105,7 @@ export class AuthService {
             tenantName: tenant.tenantName,
             tenantType: tenant.tenantType,
             tenantRole: tenant.tenantRole,
+            commercialTenantId: tenant.commercialTenantId,
           }
         : {}),
       ...extra,

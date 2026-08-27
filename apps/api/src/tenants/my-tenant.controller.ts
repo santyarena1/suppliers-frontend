@@ -20,6 +20,7 @@ import {
 } from "./dto/tenant.dto";
 import { PortfolioService } from "./portfolio.service";
 import type { TenantContext } from "./tenant-context.service";
+import { commercialId } from "./tenant-context.service";
 import { assertTenantRole, assertTenantType } from "./tenant-roles";
 import { TenantVisibilityService } from "./tenant-visibility.service";
 import { TenantGuard } from "./tenant.guard";
@@ -39,7 +40,7 @@ export class MyTenantController {
   /** Los proveedores que existen para esta organización. Para el resto, no existen. */
   @Get("providers")
   providers(@CurrentTenant() tenant: TenantContext) {
-    return this.visibility.listFor(tenant.tenantId);
+    return this.visibility.listFor(commercialId(tenant));
   }
 
   @Get("commerce")

@@ -109,6 +109,12 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  /** Credenciales y vínculos se leen de esa organización. Carrito propio. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsUUID()
+  mirrorsCommercialFromId?: string | null;
 }
 
 export class CreateMembershipDto {

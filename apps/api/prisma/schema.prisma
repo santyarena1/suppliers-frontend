@@ -92,6 +92,12 @@ model Tenant {
   /// Si el comprador del comercio puede confirmar pedidos sin espera de firma.
   /// Solo aplica a RETAILER. El vendedor nunca confirma, con o sin este tilde.
   buyerCanConfirm    Boolean       @default(false)
+  /// Credenciales, vínculos y catálogo se leen de esa organización. Carrito,
+  /// pedidos y equipo siguen siendo de esta. Lo usa el superadmin de prueba
+  /// para ver lo mismo que testuser1 sin compartir el carrito.
+  mirrorsCommercialFromId String?
+  mirrorsCommercialFrom   Tenant?  @relation("CommercialMirror", fields: [mirrorsCommercialFromId], references: [id], onDelete: SetNull)
+  commercialMirrors       Tenant[] @relation("CommercialMirror")
   active             Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -112,6 +118,7 @@ model Tenant {
   brandDiscountAssignments TenantBrandDiscountClient[]
 
   @@index([type, active])
+  @@index([mirrorsCommercialFromId])
 }
 
 model TenantMembership {

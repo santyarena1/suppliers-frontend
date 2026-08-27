@@ -44,10 +44,10 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `/admin/tenants`, `/admin/tenants/:id`, `/admin/tenants/:id/members`, `/admin/tenants/:id/members/new-user`, `/admin/tenants/members/:membershipId`, `/admin/tenants/members/:membershipId/managed-brands`, `/admin/tenants/links`, `/admin/tenants/links/:linkId`, `/admin/tenants/:id/access-codes`, `/admin/tenants/access-codes/:codeId`, `/admin/tenants/users/:userId/relations`
 - **Auth**: Bearer ROLE_ADMIN
-- **Body / Params**: organización `{ name, type: "RETAILER" | "DISTRIBUTOR" | "BRAND", providerKey?, brandId?, contactEmail?, contactPhone?, notes?, advertisingEnabled?, active? }` · membresía `{ userId | (username, email, password), role, title? }` · vínculo `{ clientTenantId, supplierTenantId, accountManagerId?, status?, discountPercent?, notes? }` · código `{ label?, maxUses?, expiresInDays? }`
+- **Body / Params**: organización `{ name, type: "RETAILER" | "DISTRIBUTOR" | "BRAND", providerKey?, brandId?, contactEmail?, contactPhone?, notes?, advertisingEnabled?, active?, mirrorsCommercialFromId? }` · membresía `{ userId | (username, email, password), role, title? }` · vínculo `{ clientTenantId, supplierTenantId, accountManagerId?, status?, discountPercent?, notes? }` · código `{ label?, maxUses?, expiresInDays? }`
 - **Respuesta esperada**: `GET /admin/tenants` devuelve `{ tenants: TenantNode[], unassignedUsers: [] }`, cada `TenantNode` con `members`, `suppliers`, `clients` y `accessCodes`
 - **Estado**: IMPLEMENTADO
-- **Notas**: `tenantRole` es el alcance dentro de la organización y `platformRole` el nivel de acceso a Nodo. El lado cliente de un vínculo siempre es un comercio. Ver `docs/ARQUITECTURA_TENANTS.md`.
+- **Notas**: `tenantRole` es el alcance dentro de la organización y `platformRole` el nivel de acceso a Nodo. El lado cliente de un vínculo siempre es un comercio. `mirrorsCommercialFromId` hace que credenciales, vínculos y catálogo se lean de otra organización; carrito y pedidos siguen siendo propios. Ver `docs/ARQUITECTURA_TENANTS.md`.
 
 ### [FEATURE] Alta pública de comercio
 - **Método**: POST
@@ -74,7 +74,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: alta `{ provider, externalId, name, price, imageUrl, quantity?, snapshot? }` · `DELETE /cart?provider=` vacía un proveedor
 - **Respuesta esperada**: ítems `{ id, provider, externalId, name, price, imageUrl, quantity, snapshot }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un carrito por comercio, no por persona. `VIEWER` puede GET, no muta. El superadmin de prueba opera el Comercio de Pruebas y comparte ese carrito.
+- **Notas**: Un carrito por comercio, no por persona. `VIEWER` puede GET, no muta. El superadmin de prueba tiene carrito propio; credenciales y vínculos los lee del Comercio de Pruebas.
 
 ### [FEATURE] Proveedores visibles y canje de código de vinculación
 - **Método**: GET | POST

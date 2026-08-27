@@ -8,6 +8,7 @@ import { InvidOrderService, type InvidDraftInput } from "../providers/invid-orde
 import { NewBytesOrderService, type NewBytesDraftInput } from "../providers/new-bytes-order.service";
 import type { OrderAuthor } from "../providers/provider-draft";
 import type { TenantContext } from "../tenants/tenant-context.service";
+import { commercialId } from "../tenants/tenant-context.service";
 import { OrderApprovalService } from "./order-approval.service";
 
 /**
@@ -76,7 +77,7 @@ export class OrdersService {
   }
 
   private async credentialsOf(tenant: TenantContext, provider: Provider) {
-    const stored = await this.credentials.getByProvider(tenant.tenantId, provider);
+    const stored = await this.credentials.getByProvider(commercialId(tenant), provider);
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 }
