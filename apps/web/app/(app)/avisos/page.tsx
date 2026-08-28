@@ -39,7 +39,7 @@ export default function AvisosPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Avisos</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Lo que te mandan las marcas y los distribuidores vinculados. No cruza con otros locales.
+            Lo que te mandan las organizaciones vinculadas. No cruza con otras cuentas.
           </p>
         </div>
         <PrefsPanel />

@@ -179,7 +179,7 @@ hecho. Esta tabla es el producto, no la migración.
 | 4 | Pedidos y aprobación en la interfaz del comercio. | Hecho |
 | 5 | Tipo 1 autónomo: el dueño arma su equipo, canjea códigos y carga el contacto, sin pasar por el superadmin. | Hecho |
 | 6 | Tipo 2: panel del distribuidor (cartera por vendedor, códigos, pedidos de clientes, inactivos, alcance del PM). | Hecho |
-| 7 | Tipo 3: org+usuario por marca del catálogo, landing pública, acciones medibles, avisos al comercio. | Hecho — `docs/PLAN_TIPO3.md` |
+| 7 | Tipo 3: org+usuario por marca del catálogo, landing pública, acciones medibles, avisos y chat con comercio y distro vinculado. | Hecho — `docs/PLAN_TIPO3.md` |
 | 8 | Publicidad paga: espacios, precio, cupo, campañas, impresiones/clicks. El flag `advertisingEnabled` es “esta cuenta paga”. | Hecho |
 | 9 | Chat persona a persona (org + usuario + rol), no un buzón por vínculo. | Hecho — `/mensajes` |
 | — | Carrito de la organización en la API (un armado por local, visible al distro). | Hecho — `/cart/org` |

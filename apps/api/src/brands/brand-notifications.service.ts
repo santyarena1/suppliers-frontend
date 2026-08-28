@@ -32,9 +32,9 @@ export class BrandNotificationsService {
     return { created: ids.length };
   }
 
-  async listForRetailer(tenant: TenantContext) {
-    if (tenant.tenantType !== "RETAILER") {
-      throw new ForbiddenException("Los avisos son del comercio");
+  async listMine(tenant: TenantContext) {
+    if (tenant.tenantType !== "RETAILER" && tenant.tenantType !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Los avisos son de quien está vinculado con la marca");
     }
     return this.prisma.orgNotification.findMany({
       where: { toTenantId: tenant.tenantId },
@@ -45,8 +45,8 @@ export class BrandNotificationsService {
   }
 
   async markRead(tenant: TenantContext, id: string) {
-    if (tenant.tenantType !== "RETAILER") {
-      throw new ForbiddenException("Los avisos son del comercio");
+    if (tenant.tenantType !== "RETAILER" && tenant.tenantType !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Los avisos son de quien está vinculado con la marca");
     }
     await this.prisma.orgNotification.updateMany({
       where: { id, toTenantId: tenant.tenantId, readAt: null },
@@ -55,7 +55,7 @@ export class BrandNotificationsService {
     return { ok: true };
   }
 
-  /** Marca o distro avisa a un comercio con el que está vinculado. */
+  /** Marca o distro avisa a una cuenta cliente vinculada (comercio, o distro de una marca). */
   async sendToRetailer(
     tenant: TenantContext,
     dto: { retailerTenantId: string; title: string; body: string }
@@ -73,7 +73,7 @@ export class BrandNotificationsService {
         status: { in: ["ACTIVE", "SUSPENDED"] },
       },
     });
-    if (!link) throw new BadRequestException("Ese comercio no está vinculado con tu organización");
+    if (!link) throw new BadRequestException("Esa organización no está vinculada con la tuya");
     const kind: OrgNotificationKind = tenant.tenantType === "BRAND" ? "SYSTEM" : "DISTRIBUTOR_NOTE";
     await this.notifyMany({
       toTenantIds: [dto.retailerTenantId],

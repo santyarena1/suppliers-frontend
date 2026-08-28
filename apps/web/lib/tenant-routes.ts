@@ -1,6 +1,7 @@
 import type { TenantType } from "@/lib/auth";
 
-const RETAILER_ONLY = ["/search", "/comparador", "/cart", "/proveedores", "/marcas", "/avisos"];
+const RETAILER_ONLY = ["/search", "/comparador", "/cart", "/proveedores"];
+const CLIENT_BRAND_PORTAL = ["/marcas", "/avisos"];
 const DISTRIBUTOR_ONLY = ["/clientes"];
 const BRAND_ONLY = ["/marca"];
 const SUPPLIER_ONLY = ["/codigos", "/publicidad"];
@@ -34,6 +35,7 @@ export function tenantRouteRedirect(
   if (tenantType === "BRAND") {
     if (
       matchesPrefix(pathname, RETAILER_ONLY) ||
+      matchesPrefix(pathname, CLIENT_BRAND_PORTAL) ||
       matchesPrefix(pathname, DISTRIBUTOR_ONLY) ||
       matchesPrefix(pathname, ["/pedidos"])
     ) {

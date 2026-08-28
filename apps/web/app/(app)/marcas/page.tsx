@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import { getTenant } from "@/lib/auth";
 import { brandApi, type RetailerBrandView } from "@/lib/api";
 import { Building2, ChevronRight, Loader2 } from "lucide-react";
 
@@ -14,6 +15,8 @@ export default function MarcasHomePage() {
   const [brands, setBrands] = useState<RetailerBrandView[]>([]);
   const [loading, setLoading] = useState(true);
   const [aviso, setAviso] = useState<string | null>(null);
+  const tenant = getTenant();
+  const distro = tenant?.type === "DISTRIBUTOR";
 
   useEffect(() => {
     brandApi
@@ -29,7 +32,9 @@ export default function MarcasHomePage() {
         <div>
           <h1 className="text-base font-semibold text-white">Marcas</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Solo las marcas con las que tu comercio está vinculado. El resto no aparecen.
+            {distro
+              ? "Solo las marcas con las que este distribuidor está vinculado. El resto no aparecen."
+              : "Solo las marcas con las que tu comercio está vinculado. El resto no aparecen."}
           </p>
         </div>
         <PrefsPanel />
@@ -45,12 +50,22 @@ export default function MarcasHomePage() {
             <div className="text-center py-16 max-w-md mx-auto">
               <Building2 className="w-10 h-10 text-surface-600 mx-auto mb-3" />
               <h2 className="text-sm font-semibold text-white mb-1">Sin marcas vinculadas</h2>
-              <p className="text-xs text-surface-400">
-                Canjeá el código que te dio la marca en Proveedores. Hasta entonces esa organización no existe para este local.
-              </p>
-              <Link href="/proveedores" className="inline-block mt-4 text-sm text-brand-400">
-                Ir a Proveedores →
-              </Link>
+              {distro ? (
+                <p className="text-xs text-surface-400">
+                  El vínculo con una marca lo arma NODO. Hasta entonces esa organización no existe para este
+                  distribuidor.
+                </p>
+              ) : (
+                <>
+                  <p className="text-xs text-surface-400">
+                    Canjeá el código que te dio la marca en Proveedores. Hasta entonces esa organización no existe para
+                    este local.
+                  </p>
+                  <Link href="/proveedores" className="inline-block mt-4 text-sm text-brand-400">
+                    Ir a Proveedores →
+                  </Link>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -79,7 +94,9 @@ export default function MarcasHomePage() {
                     </Link>
                   </div>
                   {brand.actions.length === 0 ? (
-                    <p className="text-xs text-surface-500">Sin acciones vigentes para este local.</p>
+                    <p className="text-xs text-surface-500">
+                      {distro ? "Sin acciones vigentes para este distribuidor." : "Sin acciones vigentes para este local."}
+                    </p>
                   ) : (
                     <ul className="flex flex-col gap-2">
                       {brand.actions.map((action) => (

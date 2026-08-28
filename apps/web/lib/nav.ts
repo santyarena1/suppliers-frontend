@@ -142,7 +142,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     href: "/marcas",
     label: "Marcas",
     icon: Building2,
-    tenantTypes: ["RETAILER"],
+    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
     section: "brands",
   },
   {
@@ -150,7 +150,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     href: "/avisos",
     label: "Avisos",
     icon: Bell,
-    tenantTypes: ["RETAILER"],
+    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
     section: "brands",
   },
   {

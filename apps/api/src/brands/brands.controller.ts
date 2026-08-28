@@ -81,7 +81,7 @@ export class RetailerBrandsController {
 
   @Get()
   list(@CurrentTenant() tenant: TenantContext) {
-    return this.actions.visibleToRetailer(tenant);
+    return this.actions.visibleToClient(tenant);
   }
 }
 
@@ -92,7 +92,7 @@ export class OrgNotificationsController {
 
   @Get()
   list(@CurrentTenant() tenant: TenantContext) {
-    return this.notes.listForRetailer(tenant);
+    return this.notes.listMine(tenant);
   }
 
   @Post(":id/read")

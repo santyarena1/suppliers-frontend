@@ -147,12 +147,17 @@ export class BrandActionsService {
       retailers: links
         .filter((l) => l.clientTenant.type === "RETAILER")
         .map((l) => ({ linkId: l.id, tenantId: l.clientTenant.id, name: l.clientTenant.name, status: l.status })),
+      linkedDistributors: links
+        .filter((l) => l.clientTenant.type === "DISTRIBUTOR")
+        .map((l) => ({ linkId: l.id, tenantId: l.clientTenant.id, name: l.clientTenant.name, status: l.status })),
       distributors: distros,
     };
   }
 
-  async visibleToRetailer(tenant: TenantContext) {
-    if (tenant.tenantType !== "RETAILER") throw new ForbiddenException("Esto es del comercio");
+  async visibleToClient(tenant: TenantContext) {
+    if (tenant.tenantType !== "RETAILER" && tenant.tenantType !== "DISTRIBUTOR") {
+      throw new ForbiddenException("Esto es de quien está vinculado con la marca");
+    }
     const links = await this.prisma.tenantLink.findMany({
       where: { clientTenantId: tenant.tenantId, status: { in: ["ACTIVE", "SUSPENDED"] }, supplierTenant: { type: "BRAND" } },
       include: {
@@ -185,7 +190,9 @@ export class BrandActionsService {
     const brands = [];
     for (const link of links) {
       const org = link.supplierTenant;
-      const mine = (byBrand.get(org.id) ?? []).filter((a) => this.actionTargetsRetailer(a, tenant.tenantId));
+      const mine = (byBrand.get(org.id) ?? []).filter((a) =>
+        this.actionTargetsClient(a, tenant.tenantId, tenant.tenantType)
+      );
       const withP = await Promise.all(mine.map((row) => this.withProgressForRetailer(row, tenant.tenantId)));
       brands.push({
         linkId: link.id,
@@ -198,12 +205,20 @@ export class BrandActionsService {
     return { brands };
   }
 
-  private actionTargetsRetailer(
+  private actionTargetsClient(
     action: { scopes: { kind: string; refId: string }[] },
-    retailerId: string
+    clientId: string,
+    clientType: TenantContext["tenantType"]
   ) {
-    const retailers = action.scopes.filter((s) => s.kind === "RETAILER").map((s) => s.refId);
-    return retailers.length === 0 || retailers.includes(retailerId);
+    if (clientType === "RETAILER") {
+      const retailers = action.scopes.filter((s) => s.kind === "RETAILER").map((s) => s.refId);
+      return retailers.length === 0 || retailers.includes(clientId);
+    }
+    if (clientType === "DISTRIBUTOR") {
+      const distros = action.scopes.filter((s) => s.kind === "DISTRIBUTOR").map((s) => s.refId);
+      return distros.length === 0 || distros.includes(clientId);
+    }
+    return false;
   }
 
   private async requireAction(tenantId: string, actionId: string) {

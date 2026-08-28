@@ -2537,6 +2537,7 @@ export interface PublicBrandLanding {
 
 export interface BrandAccounts {
   retailers: { linkId: string; tenantId: string; name: string; status: TenantLinkStatus }[];
+  linkedDistributors: { linkId: string; tenantId: string; name: string; status: TenantLinkStatus }[];
   distributors: { id: string; name: string; providerKey: string | null }[];
 }
 

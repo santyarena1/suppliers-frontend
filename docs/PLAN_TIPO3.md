@@ -55,15 +55,17 @@ como marca no ve búsqueda, carrito, comparador ni cartera de Tipo 2.
    vigencia, alcance (distros / comercios / SKU `PROVIDER:externalId`) y
    progreso sobre `ProviderOrder` `CREATED`/`OFFLINE`. Si el ítem no trae
    `brand`/`displayBrand`, no se inventa. Sin comercios vinculados, progreso 0.
-5. **Avisos hacia Tipo 1.** Al activar una acción (si `notifyRetailers`) y a
-   mano desde Cuentas. El comercio lee `/avisos`. Distro y marca pueden
-   `POST /my/notifications/send` a un comercio vinculado.
-6. **Chat persona a persona** con el comercio vinculado. Mismo producto que
-   Tipo 2 (`distroUserId` + `storeUserId` sobre el `TenantLink`). Un comercial
-   de marca no ve el hilo de otro. UI: `/mensajes`.
+5. **Avisos hacia Tipo 1 y Tipo 2.** Al activar una acción (si `notifyRetailers`)
+   y a mano desde Cuentas. Comercio y distro vinculado leen `/avisos`. Distro y
+   marca pueden `POST /my/notifications/send` a una cuenta cliente vinculada.
+6. **Chat persona a persona** con el comercio o el distro vinculado. Mismo
+   producto que Tipo 2 (`distroUserId` = persona del proveedor, `storeUserId` =
+   persona del cliente, sobre el `TenantLink`). Un distro puede estar de los dos
+   lados: proveedor frente al local, cliente frente a la marca. Un comercial de
+   marca no ve el hilo de otro. UI: `/mensajes`.
 7. **Nav.** `/` BrandHome · `/marca/acciones` · `/marca/landing` ·
    `/marca/cuentas` · `/mensajes` · reusa `/equipo`, `/codigos`, `/publicidad`.
-   Comercio: `/marcas` y `/avisos`.
+   Comercio y distro: `/marcas` y `/avisos`.
 
 ## Qué no está en este recorte
 

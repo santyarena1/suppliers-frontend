@@ -25,7 +25,7 @@ export default function BrandAccountsPage() {
   const load = useCallback(async () => {
     const res = await brandApi.accounts();
     setAccounts(res.data);
-    setRetailerId((current) => current || res.data.retailers[0]?.tenantId || "");
+    setRetailerId((current) => current || res.data.retailers[0]?.tenantId || res.data.linkedDistributors[0]?.tenantId || "");
     setLoading(false);
   }, []);
 
@@ -43,7 +43,7 @@ export default function BrandAccountsPage() {
       await brandApi.note({ retailerTenantId: retailerId, title: title.trim(), body: body.trim() });
       setTitle("");
       setBody("");
-      setAviso({ ok: true, text: "Aviso enviado al comercio" });
+      setAviso({ ok: true, text: "Aviso enviado" });
     } catch (err) {
       setAviso({ ok: false, text: errMsg(err, "No se pudo enviar") });
     } finally {
@@ -57,7 +57,7 @@ export default function BrandAccountsPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Cuentas</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Solo aparecen los comercios vinculados. Un distribuidor no vinculado no existe para esta marca.
+            Solo aparecen las organizaciones vinculadas. Un distro o un comercio no vinculado no existe para esta marca.
           </p>
         </div>
         <PrefsPanel />
@@ -96,12 +96,37 @@ export default function BrandAccountsPage() {
                 )}
               </section>
 
-              {accounts.retailers.length > 0 && (
+              <section>
+                <h2 className="text-sm font-semibold text-white mb-2">Distribuidores vinculados</h2>
+                {accounts.linkedDistributors.length === 0 ? (
+                  <div className="border border-surface-800 rounded-xl p-6 text-center">
+                    <p className="text-sm text-surface-400">
+                      Ningún distribuidor vinculado. Ese vínculo lo arma NODO.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border border-surface-800 rounded-xl overflow-hidden divide-y divide-surface-800">
+                    {accounts.linkedDistributors.map((row) => (
+                      <div key={row.linkId} className="px-4 py-2.5 flex items-center justify-between">
+                        <p className="text-sm text-surface-200">{row.name}</p>
+                        <Link href={`/mensajes?linkId=${row.linkId}`} className="text-[11px] text-brand-400">
+                          Hablar
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {(accounts.retailers.length > 0 || accounts.linkedDistributors.length > 0) && (
                 <section className="border border-surface-800 rounded-xl p-4 bg-surface-900 flex flex-col gap-2">
-                  <h2 className="text-sm font-semibold text-white">Avisar a un comercio</h2>
+                  <h2 className="text-sm font-semibold text-white">Avisar a una cuenta vinculada</h2>
                   <select className={inputClass} value={retailerId} onChange={(e) => setRetailerId(e.target.value)}>
                     {accounts.retailers.map((row) => (
-                      <option key={row.tenantId} value={row.tenantId}>{row.name}</option>
+                      <option key={row.tenantId} value={row.tenantId}>{row.name} (comercio)</option>
+                    ))}
+                    {accounts.linkedDistributors.map((row) => (
+                      <option key={row.tenantId} value={row.tenantId}>{row.name} (distribuidor)</option>
                     ))}
                   </select>
                   <input className={inputClass} placeholder="Título" value={title} onChange={(e) => setTitle(e.target.value)} />

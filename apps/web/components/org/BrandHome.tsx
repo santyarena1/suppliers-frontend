@@ -31,6 +31,7 @@ export default function BrandHome() {
   const [landing, setLanding] = useState<BrandLanding | null>(null);
   const [actions, setActions] = useState<BrandAction[]>([]);
   const [retailers, setRetailers] = useState(0);
+  const [linkedDistros, setLinkedDistros] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function BrandHome() {
         setLanding(landingRes.data);
         setActions(actionsRes.data.actions);
         setRetailers(accountsRes.data.retailers.length);
+        setLinkedDistros(accountsRes.data.linkedDistributors?.length ?? 0);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -66,8 +68,9 @@ export default function BrandHome() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <Stat label="Comercios vinculados" value={String(retailers)} />
+                <Stat label="Distros vinculados" value={String(linkedDistros)} />
                 <Stat label="Acciones activas" value={String(active.length)} />
                 <Stat label="Objetivos cumplidos" value={String(met)} />
               </div>
