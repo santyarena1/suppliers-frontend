@@ -28,7 +28,7 @@ export default function TgsCompraDetailPage() {
       <Link href="/sistema-tgs/compras" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Compras
       </Link>
-      {error && <TgsError err={error} fallback="Compra no encontrada" />}
+      <TgsError err={error} fallback="Compra no encontrada" />
       {!error && !compra && <TgsLoading />}
       {compra && (
         <>

@@ -12,6 +12,7 @@ export function TgsLoading() {
 }
 
 export function TgsError({ err, fallback }: { err: unknown; fallback: string }) {
+  if (!err) return null;
   return <p className="text-xs rounded-md px-3 py-2 bg-red-500/10 text-red-400">{tgsErr(err, fallback)}</p>;
 }
 

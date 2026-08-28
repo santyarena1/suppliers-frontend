@@ -76,7 +76,7 @@ export default function TgsRmaPage() {
           Filtrar
         </TgsButton>
       </form>
-      {error && <TgsError err={error} fallback="No se pudieron cargar los RMA" />}
+      <TgsError err={error} fallback="No se pudieron cargar los RMA" />
       {loading ? (
         <TgsLoading />
       ) : !items.length ? (

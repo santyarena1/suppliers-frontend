@@ -43,7 +43,7 @@ export default function TgsClienteDetailPage() {
       <Link href="/sistema-tgs/clientes" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Clientes
       </Link>
-      {error && <TgsError err={error} fallback="Cliente no encontrado" />}
+      <TgsError err={error} fallback="Cliente no encontrado" />
       {!error && !cliente && <TgsLoading />}
       {cliente && (
         <>

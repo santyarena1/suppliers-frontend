@@ -36,7 +36,7 @@ export default function TgsComprasPage() {
 
   return (
     <TgsPage title="Compras" subtitle="Ingresos de mercadería">
-      {error && <TgsError err={error} fallback="No se pudieron cargar las compras" />}
+      <TgsError err={error} fallback="No se pudieron cargar las compras" />
       {loading ? (
         <TgsLoading />
       ) : !items.length ? (

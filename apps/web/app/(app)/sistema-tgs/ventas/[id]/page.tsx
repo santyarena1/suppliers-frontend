@@ -39,7 +39,7 @@ export default function TgsVentaDetailPage() {
       <Link href="/sistema-tgs/ventas" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Ventas
       </Link>
-      {error && <TgsError err={error} fallback="Venta no encontrada" />}
+      <TgsError err={error} fallback="Venta no encontrada" />
       {!error && !venta && <TgsLoading />}
       {venta && (
         <>

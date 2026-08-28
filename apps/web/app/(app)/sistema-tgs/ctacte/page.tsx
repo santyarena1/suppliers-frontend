@@ -79,7 +79,7 @@ function TgsCtaCteInner() {
         />
         <TgsButton type="submit">Consultar</TgsButton>
       </form>
-      {error && <TgsError err={error} fallback="No se encontró la cuenta" />}
+      <TgsError err={error} fallback="No se encontró la cuenta" />
       {loading && <TgsLoading />}
       {!loading && account && <TgsCtaCteView account={account} onPage={setPage} />}
       {!loading && !account && !error && (

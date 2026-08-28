@@ -68,7 +68,7 @@ export default function TgsOrdenesPage() {
           Filtrar
         </TgsButton>
       </form>
-      {error && <TgsError err={error} fallback="No se pudieron cargar las órdenes" />}
+      <TgsError err={error} fallback="No se pudieron cargar las órdenes" />
       {loading ? (
         <TgsLoading />
       ) : !items.length ? (

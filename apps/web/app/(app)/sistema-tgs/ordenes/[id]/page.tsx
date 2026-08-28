@@ -38,7 +38,7 @@ export default function TgsOrdenDetailPage() {
       <Link href="/sistema-tgs/ordenes" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Órdenes
       </Link>
-      {error && <TgsError err={error} fallback="Orden no encontrada" />}
+      <TgsError err={error} fallback="Orden no encontrada" />
       {!error && !orden && <TgsLoading />}
       {orden && (
         <>

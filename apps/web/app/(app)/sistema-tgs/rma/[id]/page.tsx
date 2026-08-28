@@ -38,7 +38,7 @@ export default function TgsRmaDetailPage() {
       <Link href="/sistema-tgs/rma" className="text-xs text-surface-500 hover:text-white w-fit">
         ← RMA
       </Link>
-      {error && <TgsError err={error} fallback="RMA no encontrado" />}
+      <TgsError err={error} fallback="RMA no encontrado" />
       {!error && !rma && <TgsLoading />}
       {rma && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-900 border border-surface-800 rounded-xl p-4">

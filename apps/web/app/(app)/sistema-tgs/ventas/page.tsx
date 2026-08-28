@@ -82,7 +82,7 @@ export default function TgsVentasPage() {
           Filtrar
         </TgsButton>
       </form>
-      {error && <TgsError err={error} fallback="No se pudieron cargar las ventas" />}
+      <TgsError err={error} fallback="No se pudieron cargar las ventas" />
       {loading ? (
         <TgsLoading />
       ) : !items.length ? (

@@ -53,7 +53,7 @@ export default function TgsClientesPage() {
           Buscar
         </TgsButton>
       </form>
-      {error && <TgsError err={error} fallback="No se pudieron cargar los clientes" />}
+      <TgsError err={error} fallback="No se pudieron cargar los clientes" />
       {loading ? (
         <TgsLoading />
       ) : !items.length ? (

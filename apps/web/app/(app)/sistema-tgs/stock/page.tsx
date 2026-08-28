@@ -74,7 +74,7 @@ export default function TgsStockPage() {
           Buscar
         </TgsButton>
       </form>
-      {error && <TgsError err={error} fallback="No se pudo cargar el stock" />}
+      <TgsError err={error} fallback="No se pudo cargar el stock" />
       {loading ? (
         <TgsLoading />
       ) : !items.length ? (
