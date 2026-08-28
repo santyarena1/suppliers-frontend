@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, KeyRound, Package, RotateCcw, ShoppingBag, ShoppingBasket, Truck, Users, Wallet } from "lucide-react";
+import { ClipboardList, KeyRound, Package, PackagePlus, RotateCcw, ShoppingBag, ShoppingBasket, Truck, Users, Wallet } from "lucide-react";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsBadge from "@/components/tgs/TgsBadge";
 import TgsKeysForm from "@/components/tgs/TgsKeysForm";
@@ -16,6 +16,7 @@ const CARDS: { href: string; label: string; desc: string; icon: typeof Package; 
   { href: "/sistema-tgs/clientes", label: "Clientes", desc: "Agenda y saldo de cuenta", icon: Users, module: "clientes" },
   { href: "/sistema-tgs/ventas", label: "Ventas", desc: "Comprobantes e ítems", icon: ShoppingBag, module: "ventas" },
   { href: "/sistema-tgs/productos-vendidos", label: "Productos vendidos", desc: "Detalle por línea de venta", icon: ShoppingBasket, module: "ventas" },
+  { href: "/sistema-tgs/reposicion", label: "Reposición", desc: "Pendientes de entregar, sugeridos en tus distros para armar el pedido", icon: PackagePlus, module: "ventas" },
   { href: "/sistema-tgs/compras", label: "Compras", desc: "Ingresos de proveedores", icon: Truck, module: "compras" },
   { href: "/sistema-tgs/ctacte", label: "Cuenta corriente", desc: "Movimientos de clientes y proveedores", icon: Wallet, module: "ctacte" },
   { href: "/sistema-tgs/ordenes", label: "Órdenes de trabajo", desc: "Taller y seguimiento", icon: ClipboardList, module: "ordenes" },

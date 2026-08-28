@@ -7,11 +7,17 @@ const ENTREGA_KEYS = [
   "estado_item",
   "estado_despacho",
   "estado_producto",
+  "estado_envio",
+  "envio_estado",
 ];
 
 const ETIQUETA_KEYS = ["etiquetas", "tags", "labels", "etiqueta"];
 
 const PROVEEDOR_KEYS = ["proveedor", "proveedor_nombre", "proveedor_label"];
+
+/** Valores que AcuStock usa (o la UI) para la entrega del ítem. No el cobro. */
+export const ENTREGA_VALUE_RE =
+  /^(pendiente|listo|enviado|entregado|despachado|en camino|a entregar|por entregar|pending|ready|shipped|delivered)$/i;
 
 export function pickFirst(record: Record<string, unknown>, keys: string[]): { key: string; value: unknown } | null {
   for (const key of keys) {
@@ -25,6 +31,7 @@ export function pickFirst(record: Record<string, unknown>, keys: string[]): { ke
 
 export function asLabel(value: unknown): string | null {
   if (value == null || value === "") return null;
+  if (typeof value === "boolean") return value ? "Sí" : "No";
   if (typeof value === "string" || typeof value === "number") {
     const text = String(value).trim();
     return text || null;
@@ -35,7 +42,7 @@ export function asLabel(value: unknown): string | null {
   }
   if (typeof value === "object") {
     const row = value as Record<string, unknown>;
-    return asLabel(row.nombre ?? row.name ?? row.label ?? row.titulo ?? row.display_name);
+    return asLabel(row.nombre ?? row.name ?? row.label ?? row.titulo ?? row.display_name ?? row.estado);
   }
   return null;
 }
@@ -59,15 +66,71 @@ export function asId(value: unknown): number | null {
   return null;
 }
 
-export function lineExtras(item: TgsLinea) {
+function looksLikeEntrega(label: string): boolean {
+  return ENTREGA_VALUE_RE.test(label.trim());
+}
+
+function entregaFromBoolean(record: Record<string, unknown>): { key: string; value: string } | null {
+  for (const key of ["entregado", "fue_entregado", "item_entregado", "despachado"]) {
+    const value = record[key];
+    if (typeof value === "boolean") {
+      return { key, value: value ? "Entregado" : "Pendiente" };
+    }
+  }
+  return null;
+}
+
+/**
+ * Busca el estado de entrega REAL del ítem. No inventa "Pendiente" si no hay dato.
+ * En la línea, `estado` cuenta solo si el valor parece entrega (no el cobro de la venta).
+ */
+export function findEntrega(
+  record: Record<string, unknown>,
+  opts: { allowGenericEstado?: boolean } = {}
+): { key: string; value: string } | null {
+  const known = pickFirst(record, ENTREGA_KEYS);
+  if (known) {
+    const label = asLabel(known.value);
+    if (label) return { key: known.key, value: label };
+  }
+  const fromBool = entregaFromBoolean(record);
+  if (fromBool) return fromBool;
+
+  if (opts.allowGenericEstado !== false && "estado" in record) {
+    const label = asLabel(record.estado);
+    if (label && looksLikeEntrega(label)) return { key: "estado", value: label };
+  }
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "estado" || ENTREGA_KEYS.includes(key)) continue;
+    if (typeof value === "object" && value && !Array.isArray(value)) {
+      const nested = findEntrega(value as Record<string, unknown>, { allowGenericEstado: true });
+      if (nested) return { key: `${key}.${nested.key}`, value: nested.value };
+      continue;
+    }
+    const label = asLabel(value);
+    if (label && looksLikeEntrega(label) && /entreg|envio|despach/i.test(key)) {
+      return { key, value: label };
+    }
+  }
+  return null;
+}
+
+export function lineExtras(item: TgsLinea, venta?: TgsVenta) {
   const raw = item as Record<string, unknown>;
-  const entrega = pickFirst(raw, ENTREGA_KEYS);
+  const fromItem = findEntrega(raw, { allowGenericEstado: true });
+  const fromVenta = venta
+    ? findEntrega(venta as unknown as Record<string, unknown>, { allowGenericEstado: false })
+    : null;
   const tags = pickFirst(raw, ETIQUETA_KEYS);
   const proveedor = pickFirst(raw, PROVEEDOR_KEYS);
+  const etiquetas = asLabels(tags?.value ?? item.etiquetas);
+  const fromTag = etiquetas.find((tag) => looksLikeEntrega(tag));
+  const picked = fromItem ?? fromVenta ?? (fromTag ? { key: "etiquetas", value: fromTag } : null);
   return {
-    estado_entrega: asLabel(entrega?.value) ?? asLabel(item.estado_entrega) ?? asLabel(item.entrega),
-    entrega_key: entrega?.key ?? (item.estado_entrega != null ? "estado_entrega" : item.entrega != null ? "entrega" : null),
-    etiquetas: asLabels(tags?.value ?? item.etiquetas),
+    estado_entrega: picked?.value ?? null,
+    entrega_key: picked?.key ?? null,
+    etiquetas,
     proveedor: asLabel(proveedor?.value) ?? asLabel(item.proveedor) ?? asLabel(item.proveedor_nombre),
     proveedor_id: asId(raw.proveedor_id) ?? item.proveedor_id ?? null,
   };
@@ -77,7 +140,7 @@ export function flattenVentaItems(ventas: TgsVenta[]): TgsProductoVendido[] {
   const rows: TgsProductoVendido[] = [];
   for (const venta of ventas) {
     for (const item of venta.items ?? []) {
-      const extra = lineExtras(item);
+      const extra = lineExtras(item, venta);
       rows.push({
         venta_id: venta.id,
         venta_numero: venta.numero,
