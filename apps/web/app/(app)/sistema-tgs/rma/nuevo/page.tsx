@@ -26,7 +26,7 @@ function TgsNuevoRmaInner() {
   }
 
   return (
-    <TgsPage title="Nuevo RMA" subtitle="Todos los campos de AcuStock" wide>
+    <TgsPage title="Nuevo RMA" subtitle="Entra directo a recepción">
       <Link href="/sistema-tgs/rma" className="text-xs text-surface-500 hover:text-white w-fit">
         ← RMA
       </Link>

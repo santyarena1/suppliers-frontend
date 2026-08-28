@@ -7,12 +7,10 @@ import { TgsButton, TgsInput, TgsSelect } from "@/components/tgs/TgsUi";
 import { tgsErr } from "@/components/tgs/tgs-format";
 import {
   emptyLine,
-  extraFieldsFromRecord,
   LINE_FIELDS,
   linesFromItems,
   payloadFromLine,
   payloadFromValues,
-  recordForWrite,
   valuesFromRecord,
   type TgsDraftLine,
   type TgsField,
@@ -35,9 +33,8 @@ export default function TgsEntityForm({
   submitLabel: string;
   onSubmit: (body: Record<string, unknown>) => Promise<void>;
 }) {
-  const allFields = useMemo(() => [...fields, ...extraFieldsFromRecord(fields, initial)], [fields, initial]);
-  const sections = useMemo(() => groupFields(allFields), [allFields]);
-  const [values, setValues] = useState<Record<string, string | boolean>>(() => valuesFromRecord(allFields, initial));
+  const sections = useMemo(() => groupFields(fields), [fields]);
+  const [values, setValues] = useState<Record<string, string | boolean>>(() => valuesFromRecord(fields, initial));
   const [lines, setLines] = useState<TgsDraftLine[]>(() => linesFromItems(initial?.items));
   const [saving, setSaving] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -50,10 +47,10 @@ export default function TgsEntityForm({
     e.preventDefault();
     setSaving(true);
     setAviso(null);
-    const body = payloadFromValues(allFields, values, { ...recordForWrite(initial), ...extra });
+    const body = payloadFromValues(fields, values, extra);
     if (withLines) {
       const items = lines
-        .filter((line) => line.descripcion?.trim() || line.producto_id?.trim() || line.sku?.trim())
+        .filter((line) => line.descripcion?.trim() || line.producto_id?.trim())
         .map(payloadFromLine);
       if (!items.length) {
         setAviso("Agregá al menos un ítem");

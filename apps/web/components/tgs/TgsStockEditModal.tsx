@@ -29,7 +29,7 @@ export default function TgsStockEditModal({ item, onClose, onSaved }: Props) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="text-sm font-semibold text-white">Editar producto</h2>
-            <p className="text-[11px] text-surface-500 mt-0.5">SKU {item.sku} · se reenvían todos los campos a AcuStock</p>
+            <p className="text-[11px] text-surface-500 mt-0.5">SKU {item.sku}</p>
           </div>
           <button type="button" className="text-xs text-surface-400 hover:text-white" onClick={onClose}>
             Cerrar

@@ -30,17 +30,10 @@ export function TgsItemsTable({ items, moneda }: { items: TgsLinea[] | undefined
         <thead className="text-[11px] uppercase tracking-wide text-surface-500 bg-surface-900">
           <tr>
             <th className="text-left font-medium px-3 py-2">Producto</th>
-            <th className="text-left font-medium px-3 py-2">SKU</th>
             <th className="text-right font-medium px-3 py-2">Cant.</th>
-            <th className="text-right font-medium px-3 py-2">P. unit.</th>
-            <th className="text-right font-medium px-3 py-2">Desc%</th>
-            <th className="text-right font-medium px-3 py-2">IVA</th>
-            <th className="text-right font-medium px-3 py-2">Imp. int.</th>
+            <th className="text-right font-medium px-3 py-2">Unitario</th>
             <th className="text-left font-medium px-3 py-2">S/N</th>
-            <th className="text-left font-medium px-3 py-2">Origen</th>
             <th className="text-left font-medium px-3 py-2">Entrega</th>
-            <th className="text-left font-medium px-3 py-2">Etiquetas</th>
-            <th className="text-left font-medium px-3 py-2">Proveedor</th>
             <th className="text-right font-medium px-3 py-2">Subtotal</th>
           </tr>
         </thead>
@@ -49,23 +42,13 @@ export function TgsItemsTable({ items, moneda }: { items: TgsLinea[] | undefined
             <tr key={line.id ?? idx} className="text-surface-200">
               <td className="px-3 py-2">
                 <p className="text-white">{line.descripcion}</p>
-                {lineVal(line, "serializable") === "true" || line.serializable === true ? (
-                  <span className="text-[10px] text-amber-400">Serializable</span>
-                ) : null}
               </td>
-              <td className="px-3 py-2 text-surface-400 whitespace-nowrap">{dash(lineVal(line, "sku"))}</td>
               <td className="px-3 py-2 text-right tabular-nums">{line.cantidad}</td>
               <td className="px-3 py-2 text-right tabular-nums">{tgsMoney(line.precio_unitario, moneda)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{dash(lineVal(line, "descuento_pct", "descuento"))}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{dash(lineVal(line, "iva"))}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{dash(lineVal(line, "impuesto_interno"))}</td>
               <td className="px-3 py-2">{dash(lineVal(line, "serie", "sn", "nro_serie"))}</td>
-              <td className="px-3 py-2 text-surface-400 whitespace-nowrap">{dash(lineVal(line, "origen", "deposito", "deposito_nombre"))}</td>
               <td className="px-3 py-2">
                 <TgsBadge>{dash(lineVal(line, "estado_entrega", "entrega", "entrega_estado"))}</TgsBadge>
               </td>
-              <td className="px-3 py-2 text-surface-400">{dash(lineVal(line, "etiquetas", "tags"))}</td>
-              <td className="px-3 py-2">{dash(lineVal(line, "proveedor", "proveedor_nombre"))}</td>
               <td className="px-3 py-2 text-right tabular-nums text-white">{tgsMoney(line.subtotal, moneda)}</td>
             </tr>
           ))}
