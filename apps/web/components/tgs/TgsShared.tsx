@@ -7,6 +7,21 @@ import { TgsEmpty, TgsField } from "./TgsUi";
 import { dash, tgsFecha, tgsMoney } from "./tgs-format";
 import type { TgsCuentaCorriente, TgsLinea, TgsPageMeta } from "@/lib/tgs-api";
 
+function lineVal(line: TgsLinea, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = line[key];
+    if (value == null || value === "") continue;
+    if (Array.isArray(value)) {
+      const parts = value.map((part) => (part == null ? "" : String(part))).filter(Boolean);
+      if (parts.length) return parts.join(", ");
+      continue;
+    }
+    if (typeof value === "object") continue;
+    return String(value);
+  }
+  return null;
+}
+
 export function TgsItemsTable({ items, moneda }: { items: TgsLinea[] | undefined; moneda?: string | null }) {
   if (!items?.length) return <TgsEmpty text="Esta operación no trae ítems" />;
   return (
@@ -15,17 +30,42 @@ export function TgsItemsTable({ items, moneda }: { items: TgsLinea[] | undefined
         <thead className="text-[11px] uppercase tracking-wide text-surface-500 bg-surface-900">
           <tr>
             <th className="text-left font-medium px-3 py-2">Producto</th>
+            <th className="text-left font-medium px-3 py-2">SKU</th>
             <th className="text-right font-medium px-3 py-2">Cant.</th>
-            <th className="text-right font-medium px-3 py-2">Unitario</th>
+            <th className="text-right font-medium px-3 py-2">P. unit.</th>
+            <th className="text-right font-medium px-3 py-2">Desc%</th>
+            <th className="text-right font-medium px-3 py-2">IVA</th>
+            <th className="text-right font-medium px-3 py-2">Imp. int.</th>
+            <th className="text-left font-medium px-3 py-2">S/N</th>
+            <th className="text-left font-medium px-3 py-2">Origen</th>
+            <th className="text-left font-medium px-3 py-2">Entrega</th>
+            <th className="text-left font-medium px-3 py-2">Etiquetas</th>
+            <th className="text-left font-medium px-3 py-2">Proveedor</th>
             <th className="text-right font-medium px-3 py-2">Subtotal</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-surface-800">
-          {items.map((line) => (
-            <tr key={line.id} className="text-surface-200">
-              <td className="px-3 py-2">{line.descripcion}</td>
+          {items.map((line, idx) => (
+            <tr key={line.id ?? idx} className="text-surface-200">
+              <td className="px-3 py-2">
+                <p className="text-white">{line.descripcion}</p>
+                {lineVal(line, "serializable") === "true" || line.serializable === true ? (
+                  <span className="text-[10px] text-amber-400">Serializable</span>
+                ) : null}
+              </td>
+              <td className="px-3 py-2 text-surface-400 whitespace-nowrap">{dash(lineVal(line, "sku"))}</td>
               <td className="px-3 py-2 text-right tabular-nums">{line.cantidad}</td>
               <td className="px-3 py-2 text-right tabular-nums">{tgsMoney(line.precio_unitario, moneda)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{dash(lineVal(line, "descuento_pct", "descuento"))}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{dash(lineVal(line, "iva"))}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{dash(lineVal(line, "impuesto_interno"))}</td>
+              <td className="px-3 py-2">{dash(lineVal(line, "serie", "sn", "nro_serie"))}</td>
+              <td className="px-3 py-2 text-surface-400 whitespace-nowrap">{dash(lineVal(line, "origen", "deposito", "deposito_nombre"))}</td>
+              <td className="px-3 py-2">
+                <TgsBadge>{dash(lineVal(line, "estado_entrega", "entrega", "entrega_estado"))}</TgsBadge>
+              </td>
+              <td className="px-3 py-2 text-surface-400">{dash(lineVal(line, "etiquetas", "tags"))}</td>
+              <td className="px-3 py-2">{dash(lineVal(line, "proveedor", "proveedor_nombre"))}</td>
               <td className="px-3 py-2 text-right tabular-nums text-white">{tgsMoney(line.subtotal, moneda)}</td>
             </tr>
           ))}
@@ -33,6 +73,56 @@ export function TgsItemsTable({ items, moneda }: { items: TgsLinea[] | undefined
       </table>
     </div>
   );
+}
+
+const RECORD_SKIP = new Set(["items", "meta", "movimientos", "scopes", "modules"]);
+
+export function TgsRecordGrid({
+  record,
+  skip = [],
+}: {
+  record: Record<string, unknown>;
+  skip?: string[];
+}) {
+  const hide = new Set([...RECORD_SKIP, ...skip]);
+  const entries = Object.entries(record).filter(([key, value]) => {
+    if (hide.has(key)) return false;
+    if (value == null || value === "") return false;
+    if (Array.isArray(value)) return value.length > 0 && value.every((part) => typeof part !== "object");
+    return typeof value !== "object";
+  });
+  if (!entries.length) return null;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-900 border border-surface-800 rounded-xl p-4">
+      {entries.map(([key, value]) => (
+        <TgsField key={key} label={key.replace(/_/g, " ")}>
+          {key === "estado" || key === "entrega" || key === "estado_entrega" ? (
+            <TgsBadge>{formatScalar(value)}</TgsBadge>
+          ) : key === "cliente_id" ? (
+            <Link href={`/sistema-tgs/clientes/${value}`} className="text-brand-400 hover:text-brand-300">
+              {String(value)}
+            </Link>
+          ) : key === "venta_id" ? (
+            <Link href={`/sistema-tgs/ventas/${value}`} className="text-brand-400 hover:text-brand-300">
+              {String(value)}
+            </Link>
+          ) : key === "orden_trabajo_id" ? (
+            <Link href={`/sistema-tgs/ordenes/${value}`} className="text-brand-400 hover:text-brand-300">
+              {String(value)}
+            </Link>
+          ) : (
+            formatScalar(value)
+          )}
+        </TgsField>
+      ))}
+    </div>
+  );
+}
+
+function formatScalar(value: unknown): string {
+  if (Array.isArray(value)) return value.map(String).join(", ");
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  return String(value);
 }
 
 export function TgsCtaCteView({

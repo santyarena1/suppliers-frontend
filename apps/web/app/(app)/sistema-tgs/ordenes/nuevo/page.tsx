@@ -10,7 +10,7 @@ import { ORDEN_FIELDS } from "@/lib/tgs-forms";
 export default function TgsNuevaOrdenPage() {
   const router = useRouter();
   return (
-    <TgsPage title="Nueva orden" subtitle="Alta en AcuStock">
+    <TgsPage title="Nueva orden" subtitle="Todos los campos de AcuStock" wide>
       <Link href="/sistema-tgs/ordenes" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Órdenes
       </Link>

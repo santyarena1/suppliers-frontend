@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import TgsPage from "@/components/tgs/TgsPage";
-import TgsStockEditModal from "@/components/tgs/TgsStockEditModal";
-import { TgsButton, TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
-import { dash, tgsMoney } from "@/components/tgs/tgs-format";
+import TgsEntityForm from "@/components/tgs/TgsEntityForm";
+import { TgsRecordGrid } from "@/components/tgs/TgsShared";
+import { TgsButton, TgsError, TgsLoading } from "@/components/tgs/TgsUi";
 import { tgsApi, type TgsStockItem } from "@/lib/tgs-api";
+import { STOCK_FIELDS } from "@/lib/tgs-forms";
 
 export default function TgsStockDetailPage() {
   const params = useParams<{ id: string }>();
@@ -27,9 +28,10 @@ export default function TgsStockDetailPage() {
     <TgsPage
       title={item?.nombre ?? "Producto"}
       subtitle={item ? `SKU ${item.sku}` : undefined}
+      wide
       action={
         item && (
-          <TgsButton onClick={() => setEditing(true)}>Editar</TgsButton>
+          <TgsButton onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</TgsButton>
         )
       }
     >
@@ -38,28 +40,15 @@ export default function TgsStockDetailPage() {
       </Link>
       <TgsError err={error} fallback="Producto no encontrado" />
       {!error && !item && <TgsLoading />}
-      {item && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-900 border border-surface-800 rounded-xl p-4">
-          <TgsField label="SKU">{item.sku}</TgsField>
-          <TgsField label="Tipo">{dash(item.tipo)}</TgsField>
-          <TgsField label="Categoría">{dash(item.categoria)}</TgsField>
-          <TgsField label="Marca">{dash(item.marca)}</TgsField>
-          <TgsField label="Depósito">{item.stock_deposito}</TgsField>
-          <TgsField label="Catálogo">{item.stock_catalogo}</TgsField>
-          <TgsField label="Comprometido">{item.comprometido}</TgsField>
-          <TgsField label="Disponible">{item.disponible}</TgsField>
-          <TgsField label="Precio">
-            {tgsMoney(item.precio, item.moneda)}
-            {item.precio_manual ? " (manual)" : ""}
-          </TgsField>
-        </div>
-      )}
+      {item && <TgsRecordGrid record={item as unknown as Record<string, unknown>} />}
       {editing && item && (
-        <TgsStockEditModal
-          item={item}
-          onClose={() => setEditing(false)}
-          onSaved={(next) => {
-            setItem(next);
+        <TgsEntityForm
+          fields={STOCK_FIELDS}
+          initial={item as unknown as Record<string, unknown>}
+          submitLabel="Guardar producto"
+          onSubmit={async (body) => {
+            const res = await tgsApi.patchStock(item.id, body);
+            setItem(res.data);
             setEditing(false);
           }}
         />

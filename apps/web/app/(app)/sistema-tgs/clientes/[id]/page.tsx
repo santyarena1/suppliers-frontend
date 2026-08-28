@@ -4,11 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import TgsPage from "@/components/tgs/TgsPage";
-import { TgsCtaCteView } from "@/components/tgs/TgsShared";
-import TgsBadge from "@/components/tgs/TgsBadge";
+import { TgsCtaCteView, TgsRecordGrid } from "@/components/tgs/TgsShared";
 import TgsEntityForm from "@/components/tgs/TgsEntityForm";
-import { TgsButton, TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
-import { dash, tgsMoney } from "@/components/tgs/tgs-format";
+import { TgsButton, TgsError, TgsLoading } from "@/components/tgs/TgsUi";
 import { tgsApi, type TgsCliente, type TgsCuentaCorriente } from "@/lib/tgs-api";
 import { CLIENTE_FIELDS, CTACTE_FIELDS } from "@/lib/tgs-forms";
 
@@ -46,6 +44,7 @@ export default function TgsClienteDetailPage() {
     <TgsPage
       title={cliente?.display_name ?? "Cliente"}
       subtitle={cliente ? `Nº ${cliente.id}` : undefined}
+      wide
       action={
         cliente && (
           <TgsButton onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</TgsButton>
@@ -59,19 +58,7 @@ export default function TgsClienteDetailPage() {
       {!error && !cliente && <TgsLoading />}
       {cliente && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-900 border border-surface-800 rounded-xl p-4">
-            <TgsField label="Nombre">{dash(cliente.nombre)} {dash(cliente.apellido)}</TgsField>
-            <TgsField label="Razón social">{dash(cliente.razon_social)}</TgsField>
-            <TgsField label="CUIT / DNI">{dash(cliente.cuit_dni)}</TgsField>
-            <TgsField label="Email">{dash(cliente.email)}</TgsField>
-            <TgsField label="Teléfono">{dash(cliente.telefono)}</TgsField>
-            <TgsField label="IVA"><TgsBadge>{dash(cliente.tipo_iva)}</TgsBadge></TgsField>
-            <TgsField label="Ciudad">{dash(cliente.ciudad)}</TgsField>
-            <TgsField label="Provincia">{dash(cliente.provincia)}</TgsField>
-            <TgsField label="Activo">{cliente.activo ? "Sí" : "No"}</TgsField>
-            <TgsField label="Saldo">{tgsMoney(cliente.saldo_cuenta)}</TgsField>
-            <TgsField label="Lista de precio">{dash(cliente.lista_precio_id)}</TgsField>
-          </div>
+          <TgsRecordGrid record={cliente as unknown as Record<string, unknown>} />
           <h2 className="text-sm font-semibold text-white">Cuenta corriente</h2>
           {cta ? <TgsCtaCteView account={cta} onPage={setPage} /> : <p className="text-xs text-surface-500">Sin cuenta corriente</p>}
           <TgsButton tone="ghost" onClick={() => setMov((v) => !v)}>

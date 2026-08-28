@@ -65,6 +65,7 @@ export interface TgsCliente {
   lista_precio_id: number | null;
   ciudad: string | null;
   provincia: string | null;
+  [key: string]: unknown;
 }
 
 export interface TgsStockItem {
@@ -81,6 +82,7 @@ export interface TgsStockItem {
   precio: number;
   precio_manual?: boolean;
   moneda: string;
+  [key: string]: unknown;
 }
 
 export interface TgsLinea {
@@ -90,6 +92,7 @@ export interface TgsLinea {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  [key: string]: unknown;
 }
 
 export interface TgsVenta {
@@ -106,6 +109,7 @@ export interface TgsVenta {
   cliente: string | null;
   cae: string | null;
   items?: TgsLinea[];
+  [key: string]: unknown;
 }
 
 export interface TgsCompra {
@@ -120,6 +124,7 @@ export interface TgsCompra {
   proveedor_id: number | null;
   proveedor: string | null;
   items?: TgsLinea[];
+  [key: string]: unknown;
 }
 
 export interface TgsMovimiento {
@@ -168,6 +173,7 @@ export interface TgsOrden {
   fecha_entrega: string | null;
   tracking_token: string | null;
   tracking_url: string | null;
+  [key: string]: unknown;
 }
 
 export interface TgsRma {
@@ -192,6 +198,11 @@ export interface TgsProductoVendido {
   cliente_id: number | null;
   cliente: string | null;
   estado: string;
+  estado_entrega: string | null;
+  entrega_key: string | null;
+  etiquetas: string[];
+  proveedor: string | null;
+  proveedor_id: number | null;
   item_id: number;
   producto_id: number | null;
   producto: string;
@@ -234,7 +245,7 @@ export const tgsApi = {
     api.get<TgsList<TgsStockItem>>("/tgs/stock", { params }),
   stockOne: (id: string | number) => api.get<TgsStockItem>(`/tgs/stock/${encodeURIComponent(String(id))}`),
   createStock: (data: Record<string, unknown>) => api.post<TgsStockItem>("/tgs/stock", data),
-  patchStock: (id: string | number, data: { nombre?: string; precio?: number; stock?: number }) =>
+  patchStock: (id: string | number, data: Record<string, unknown>) =>
     api.patch<TgsStockItem>(`/tgs/stock/${encodeURIComponent(String(id))}`, data),
   ventas: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsVenta>>("/tgs/ventas", { params }),
@@ -265,6 +276,6 @@ export const tgsApi = {
   rma: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsRma>>("/tgs/rma", { params }),
   rmaOne: (id: string | number) => api.get<TgsRma>(`/tgs/rma/${id}`),
-  createRma: (data: TgsCreateRma) => api.post<TgsRma>("/tgs/rma", data),
+  createRma: (data: Record<string, unknown>) => api.post<TgsRma>("/tgs/rma", data),
   patchRma: (id: string | number, data: Record<string, unknown>) => api.patch<TgsRma>(`/tgs/rma/${id}`, data),
 };

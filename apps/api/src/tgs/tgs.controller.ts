@@ -19,10 +19,8 @@ import { TgsAccessService } from "./tgs.access";
 import {
   TgsClientesQueryDto,
   TgsComprasQueryDto,
-  TgsCreateRmaDto,
   TgsCtaCteQueryDto,
   TgsOrdenesQueryDto,
-  TgsPatchStockDto,
   TgsProductosVendidosQueryDto,
   TgsRmaQueryDto,
   TgsSaveKeysDto,
@@ -112,13 +110,8 @@ export class TgsController {
   }
 
   @Patch("stock/:id")
-  async patchStock(
-    @CurrentTenant() tenant: TenantContext,
-    @Param("id") id: string,
-    @Body() dto: TgsPatchStockDto
-  ) {
-    await this.access.assertAllowed(tenant);
-    return this.tgs.patch<TgsStockItem>(`/stock/${encodeURIComponent(id)}`, dto);
+  patchStock(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() body: unknown) {
+    return this.write<TgsStockItem>(tenant, "patch", `/stock/${encodeURIComponent(id)}`, body);
   }
 
   @Post("stock")
@@ -241,9 +234,8 @@ export class TgsController {
   }
 
   @Post("rma")
-  async createRma(@CurrentTenant() tenant: TenantContext, @Body() dto: TgsCreateRmaDto) {
-    await this.access.assertAllowed(tenant);
-    return this.tgs.post<TgsRma>("/rma", dto);
+  createRma(@CurrentTenant() tenant: TenantContext, @Body() body: unknown) {
+    return this.write<TgsRma>(tenant, "post", "/rma", body);
   }
 
   @Patch("rma/:id")

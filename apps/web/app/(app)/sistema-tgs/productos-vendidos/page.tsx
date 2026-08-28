@@ -11,14 +11,15 @@ import { tgsApi, type TgsPageMeta, type TgsProductoVendido } from "@/lib/tgs-api
 
 const month = currentMonthRange();
 
-type SortKey = "fecha" | "venta" | "cliente" | "producto" | "cantidad" | "precio" | "subtotal" | "estado";
+type SortKey = "fecha" | "venta" | "cliente" | "producto" | "cantidad" | "precio" | "subtotal" | "estado" | "entrega";
 
 export default function TgsProductosVendidosPage() {
   const [desde, setDesde] = useState(month.desde);
   const [hasta, setHasta] = useState(month.hasta);
   const [q, setQ] = useState("");
   const [estado, setEstado] = useState("");
-  const [applied, setApplied] = useState({ ...month, q: "", estado: "" });
+  const [entrega, setEntrega] = useState("");
+  const [applied, setApplied] = useState({ ...month, q: "", estado: "", entrega: "" });
   const [sort, setSort] = useState<SortKey>("fecha");
   const [dir, setDir] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -37,6 +38,7 @@ export default function TgsProductosVendidosPage() {
         desde: applied.desde,
         hasta: applied.hasta,
         estado: applied.estado || undefined,
+        entrega: applied.entrega || undefined,
         q: applied.q.trim() || undefined,
         sort,
         dir,
@@ -72,7 +74,7 @@ export default function TgsProductosVendidosPage() {
   return (
     <TgsPage
       title="Productos vendidos"
-      subtitle="Detalle por venta"
+      subtitle="Detalle por venta · estado de entrega del ítem"
       wide
       action={<span className="hidden sm:block text-xs text-surface-400 tabular-nums">{rangeLabel}</span>}
     >
@@ -80,7 +82,7 @@ export default function TgsProductosVendidosPage() {
         onSubmit={(e) => {
           e.preventDefault();
           setPage(1);
-          setApplied({ desde, hasta, q, estado });
+          setApplied({ desde, hasta, q, estado, entrega });
         }}
         className="flex flex-wrap gap-2 items-end"
       >
@@ -93,7 +95,17 @@ export default function TgsProductosVendidosPage() {
           <TgsInput type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 text-[11px] text-surface-500">
-          Estado
+          Entrega
+          <TgsSelect value={entrega} onChange={(e) => setEntrega(e.target.value)}>
+            <option value="">Todas</option>
+            <option value="Pendiente">Pendiente</option>
+            <option value="Listo">Listo</option>
+            <option value="Enviado">Enviado</option>
+            <option value="Entregado">Entregado</option>
+          </TgsSelect>
+        </label>
+        <label className="flex flex-col gap-1 text-[11px] text-surface-500">
+          Cobro
           <TgsSelect value={estado} onChange={(e) => setEstado(e.target.value)}>
             <option value="">Todos</option>
             <option value="pagada">pagada</option>
@@ -105,7 +117,7 @@ export default function TgsProductosVendidosPage() {
         <TgsInput
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Producto, cliente o venta"
+          placeholder="Producto, cliente, venta, proveedor o etiqueta"
           className="flex-1 min-w-[180px]"
         />
         <TgsButton type="submit">
@@ -139,10 +151,11 @@ export default function TgsProductosVendidosPage() {
                 <SortTh label="Cliente" k="cliente" sort={sort} dir={dir} onSort={toggleSort} />
                 <SortTh label="Producto" k="producto" sort={sort} dir={dir} onSort={toggleSort} />
                 <th className="text-left font-medium px-3 py-2">Proveedor</th>
+                <th className="text-left font-medium px-3 py-2">Etiquetas</th>
                 <SortTh label="Cant" k="cantidad" sort={sort} dir={dir} onSort={toggleSort} align="right" />
                 <SortTh label="Precio" k="precio" sort={sort} dir={dir} onSort={toggleSort} align="right" />
                 <SortTh label="Subtotal" k="subtotal" sort={sort} dir={dir} onSort={toggleSort} align="right" />
-                <SortTh label="Estado" k="estado" sort={sort} dir={dir} onSort={toggleSort} />
+                <SortTh label="Estado" k="entrega" sort={sort} dir={dir} onSort={toggleSort} />
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
@@ -187,9 +200,16 @@ export default function TgsProductosVendidosPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className="inline-flex items-center rounded-md border border-surface-700 bg-surface-900 px-2 py-0.5 text-[11px] text-surface-500 whitespace-nowrap">
-                      — Sin prov.
+                    <span className="inline-flex items-center rounded-md border border-surface-700 bg-surface-900 px-2 py-0.5 text-[11px] whitespace-nowrap text-surface-300">
+                      {row.proveedor || "— Sin prov."}
                     </span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {row.etiquetas?.length ? (
+                      <span className="text-[11px] text-surface-300">{row.etiquetas.join(", ")}</span>
+                    ) : (
+                      <span className="text-[11px] text-surface-600">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-surface-200">{row.cantidad}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-surface-200 whitespace-nowrap">
@@ -199,7 +219,7 @@ export default function TgsProductosVendidosPage() {
                     {tgsMoney2(row.subtotal)}
                   </td>
                   <td className="px-3 py-2.5">
-                    <EstadoChip estado={row.estado} />
+                    <EstadoChip estado={row.estado_entrega || "Pendiente"} />
                   </td>
                 </tr>
               ))}
@@ -220,11 +240,11 @@ export default function TgsProductosVendidosPage() {
 function EstadoChip({ estado }: { estado: string }) {
   const key = estado.toLowerCase();
   const Icon =
-    ["pagada", "completada", "entregado", "cerrado"].some((s) => key.includes(s))
+    ["entregado", "completada", "cerrado"].some((s) => key.includes(s))
       ? Check
       : ["anulado", "cancelad", "rechaz"].some((s) => key.includes(s))
         ? X
-        : ["listo", "despach", "envio"].some((s) => key.includes(s))
+        : ["listo", "despach", "envio", "enviado"].some((s) => key.includes(s))
           ? Truck
           : Clock;
   const tone =
@@ -232,7 +252,9 @@ function EstadoChip({ estado }: { estado: string }) {
       ? "bg-emerald-600 text-white"
       : Icon === X
         ? "bg-red-600 text-white"
-        : "bg-surface-700 text-surface-200";
+        : Icon === Truck
+          ? "bg-sky-600 text-white"
+          : "bg-surface-700 text-surface-200";
   return (
     <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium capitalize ${tone}`}>
       <Icon className="w-3 h-3" />

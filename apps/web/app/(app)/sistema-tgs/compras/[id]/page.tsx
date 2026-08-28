@@ -4,11 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import TgsPage from "@/components/tgs/TgsPage";
-import TgsBadge from "@/components/tgs/TgsBadge";
 import TgsEntityForm from "@/components/tgs/TgsEntityForm";
-import { TgsItemsTable } from "@/components/tgs/TgsShared";
-import { TgsButton, TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
-import { dash, tgsFecha, tgsMoney } from "@/components/tgs/tgs-format";
+import { TgsItemsTable, TgsRecordGrid } from "@/components/tgs/TgsShared";
+import { TgsButton, TgsError, TgsLoading } from "@/components/tgs/TgsUi";
+import { tgsFecha } from "@/components/tgs/tgs-format";
 import { tgsApi, type TgsCompra } from "@/lib/tgs-api";
 import { COMPRA_FIELDS } from "@/lib/tgs-forms";
 
@@ -30,6 +29,7 @@ export default function TgsCompraDetailPage() {
     <TgsPage
       title={compra?.numero ?? "Compra"}
       subtitle={compra ? tgsFecha(compra.fecha_emision) : undefined}
+      wide
       action={
         compra && (
           <TgsButton onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</TgsButton>
@@ -43,29 +43,14 @@ export default function TgsCompraDetailPage() {
       {!error && !compra && <TgsLoading />}
       {compra && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-900 border border-surface-800 rounded-xl p-4">
-            <TgsField label="Estado">
-              <TgsBadge>{compra.estado}</TgsBadge>
-            </TgsField>
-            <TgsField label="Proveedor">
-              {compra.proveedor_id ? (
-                <Link href={`/sistema-tgs/ctacte?tipo=proveedor&id=${compra.proveedor_id}`} className="text-brand-400 hover:text-brand-300">
-                  {dash(compra.proveedor)}
-                </Link>
-              ) : (
-                dash(compra.proveedor)
-              )}
-            </TgsField>
-            <TgsField label="Moneda">{dash(compra.moneda)}</TgsField>
-            <TgsField label="Total">{tgsMoney(compra.total, compra.moneda)}</TgsField>
-            <TgsField label="Total ARS">{tgsMoney(compra.total_ars)}</TgsField>
-          </div>
+          <TgsRecordGrid record={compra as unknown as Record<string, unknown>} />
           <h2 className="text-sm font-semibold text-white">Ítems</h2>
           <TgsItemsTable items={compra.items} moneda={compra.moneda} />
           {editing && (
             <TgsEntityForm
               fields={COMPRA_FIELDS}
               initial={compra as unknown as Record<string, unknown>}
+              withLines
               submitLabel="Guardar compra"
               onSubmit={async (body) => {
                 const res = await tgsApi.patchCompra(id, body);

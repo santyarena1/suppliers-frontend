@@ -10,7 +10,7 @@ import { STOCK_CREATE_FIELDS } from "@/lib/tgs-forms";
 export default function TgsNuevoStockPage() {
   const router = useRouter();
   return (
-    <TgsPage title="Nuevo producto" subtitle="Alta en AcuStock">
+    <TgsPage title="Nuevo producto" subtitle="Todos los campos de AcuStock" wide>
       <Link href="/sistema-tgs/stock" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Stock
       </Link>
