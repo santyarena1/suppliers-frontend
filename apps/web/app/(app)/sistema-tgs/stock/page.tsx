@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, Search } from "lucide-react";
+import { Pencil, Plus, Search } from "lucide-react";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsPager from "@/components/tgs/TgsPager";
 import TgsStockEditModal from "@/components/tgs/TgsStockEditModal";
@@ -55,7 +55,18 @@ export default function TgsStockPage() {
   }
 
   return (
-    <TgsPage title="Stock" subtitle="Disponible = depósito + catálogo − comprometido">
+    <TgsPage
+      title="Stock"
+      subtitle="Disponible = depósito + catálogo − comprometido"
+      action={
+        <Link href="/sistema-tgs/stock/nuevo">
+          <TgsButton>
+            <Plus className="w-3.5 h-3.5" />
+            Nuevo
+          </TgsButton>
+        </Link>
+      }
+    >
       <form onSubmit={search} className="flex flex-wrap gap-2">
         <TgsInput
           value={q}

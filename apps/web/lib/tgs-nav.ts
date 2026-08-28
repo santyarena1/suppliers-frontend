@@ -1,5 +1,6 @@
 import {
   ClipboardList,
+  KeyRound,
   LayoutDashboard,
   Package,
   RotateCcw,
@@ -13,6 +14,7 @@ import type { ContextNavItem } from "@/components/layout/ContextNav";
 
 export const TGS_NAV: ContextNavItem[] = [
   { href: "/sistema-tgs", label: "Resumen", icon: LayoutDashboard, exact: true },
+  { href: "/sistema-tgs/claves", label: "Claves", icon: KeyRound },
   { href: "/sistema-tgs/stock", label: "Stock", icon: Package },
   { href: "/sistema-tgs/clientes", label: "Clientes", icon: Users },
   { href: "/sistema-tgs/ventas", label: "Ventas", icon: ShoppingBag },

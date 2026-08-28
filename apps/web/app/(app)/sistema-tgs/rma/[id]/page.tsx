@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsBadge from "@/components/tgs/TgsBadge";
-import { TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
+import TgsEntityForm from "@/components/tgs/TgsEntityForm";
+import { TgsButton, TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
 import { dash } from "@/components/tgs/tgs-format";
 import { tgsApi, type TgsRma } from "@/lib/tgs-api";
+import { RMA_PATCH_FIELDS } from "@/lib/tgs-forms";
 
 const HIDDEN = new Set(["id"]);
 
@@ -16,6 +18,7 @@ export default function TgsRmaDetailPage() {
   const id = params.id;
   const [rma, setRma] = useState<TgsRma | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     tgsApi
@@ -34,7 +37,10 @@ export default function TgsRmaDetailPage() {
     : [];
 
   return (
-    <TgsPage title={rma ? dash(rma.numero) !== "—" ? String(rma.numero) : `RMA #${rma.id}` : "RMA"}>
+    <TgsPage
+      title={rma ? dash(rma.numero) !== "—" ? String(rma.numero) : `RMA #${rma.id}` : "RMA"}
+      action={rma && <TgsButton onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</TgsButton>}
+    >
       <Link href="/sistema-tgs/rma" className="text-xs text-surface-500 hover:text-white w-fit">
         ← RMA
       </Link>
@@ -64,6 +70,18 @@ export default function TgsRmaDetailPage() {
             </TgsField>
           ))}
         </div>
+      )}
+      {editing && rma && (
+        <TgsEntityForm
+          fields={RMA_PATCH_FIELDS}
+          initial={rma as unknown as Record<string, unknown>}
+          submitLabel="Guardar RMA"
+          onSubmit={async (body) => {
+            const res = await tgsApi.patchRma(id, body);
+            setRma(res.data);
+            setEditing(false);
+          }}
+        />
       )}
     </TgsPage>
   );

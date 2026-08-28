@@ -1,5 +1,5 @@
-import { Type } from "class-transformer";
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from "class-validator";
 
 export class TgsPageQueryDto {
   @IsOptional()
@@ -141,6 +141,25 @@ export class TgsPatchStockDto {
   @IsNumber()
   @Min(0)
   stock?: number;
+}
+
+export class TgsSaveKeysDto {
+  @IsString()
+  @MinLength(12)
+  @MaxLength(200)
+  apiKey!: string;
+
+  @IsString()
+  @MinLength(12)
+  @MaxLength(200)
+  apiSecret!: string;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === "string" && !value.trim() ? undefined : value))
+  @IsString()
+  @MaxLength(300)
+  @Matches(/^https:\/\/.+/i, { message: "La URL de AcuStock tiene que empezar con https://" })
+  baseUrl?: string;
 }
 
 export class TgsCreateRmaDto {

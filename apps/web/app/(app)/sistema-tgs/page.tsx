@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ClipboardList, Package, RotateCcw, ShoppingBag, ShoppingBasket, Truck, Users, Wallet } from "lucide-react";
+import { ClipboardList, KeyRound, Package, RotateCcw, ShoppingBag, ShoppingBasket, Truck, Users, Wallet } from "lucide-react";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsBadge from "@/components/tgs/TgsBadge";
+import TgsKeysForm from "@/components/tgs/TgsKeysForm";
 import { TgsEmpty, TgsError, TgsLoading } from "@/components/tgs/TgsUi";
 import { tgsScopeClass, tgsScopeLabel } from "@/components/tgs/tgs-format";
-import { TGS_MODULES, tgsApi, type TgsMe, type TgsModule } from "@/lib/tgs-api";
+import { TGS_MODULES, tgsApi, type TgsKeysStatus, type TgsMe, type TgsModule } from "@/lib/tgs-api";
 
-const CARDS: { href: string; label: string; desc: string; icon: typeof Package; module: TgsModule }[] = [
+const CARDS: { href: string; label: string; desc: string; icon: typeof Package; module: TgsModule | "keys" }[] = [
+  { href: "/sistema-tgs/claves", label: "Claves", desc: "API key y secret de AcuStock", icon: KeyRound, module: "keys" },
   { href: "/sistema-tgs/stock", label: "Stock", desc: "Depósito, catalogado y disponible", icon: Package, module: "stock" },
   { href: "/sistema-tgs/clientes", label: "Clientes", desc: "Agenda y saldo de cuenta", icon: Users, module: "clientes" },
   { href: "/sistema-tgs/ventas", label: "Ventas", desc: "Comprobantes e ítems", icon: ShoppingBag, module: "ventas" },
@@ -21,22 +23,53 @@ const CARDS: { href: string; label: string; desc: string; icon: typeof Package; 
 ];
 
 export default function SistemaTgsHomePage() {
+  const [keys, setKeys] = useState<TgsKeysStatus | null>(null);
   const [me, setMe] = useState<TgsMe | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    tgsApi
+      .keys()
+      .then(async (res) => {
+        setKeys(res.data);
+        if (!res.data.configured) return;
+        try {
+          const meRes = await tgsApi.me();
+          setMe(meRes.data);
+        } catch (err) {
+          setError(err);
+        }
+      })
+      .catch(setError)
+      .finally(() => setReady(true));
+  }, []);
+
+  function onKeysSaved(status: TgsKeysStatus) {
+    setKeys(status);
+    setError(null);
+    if (!status.verified) {
+      setMe(null);
+      return;
+    }
     tgsApi
       .me()
       .then((res) => setMe(res.data))
       .catch(setError);
-  }, []);
+  }
 
   return (
     <TgsPage title="SISTEMA TGS" subtitle="Gestión de The Gamer Shop vía AcuStock">
-      {error ? (
-        <TgsError err={error} fallback="No se pudo hablar con AcuStock" />
-      ) : !me ? (
+      {!ready || !keys ? (
         <TgsLoading />
+      ) : !keys.configured || !me ? (
+        <>
+          <p className="text-sm text-surface-400">
+            Para arrancar, cargá las claves de la API de sistema de AcuStock. Quedan cifradas en Nodo.
+          </p>
+          <TgsError err={error} fallback="No se pudo hablar con AcuStock" />
+          <TgsKeysForm initial={keys} onSaved={onKeysSaved} />
+        </>
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -54,8 +87,7 @@ export default function SistemaTgsHomePage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {CARDS.map((card) => {
               const Icon = card.icon;
-              const level = me.scopes[card.module];
-              const off = level === "off";
+              const off = card.module !== "keys" && me.scopes[card.module] === "off";
               return (
                 <Link
                   key={card.href}

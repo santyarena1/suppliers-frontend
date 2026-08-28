@@ -1,9 +1,9 @@
 import { BadGatewayException, Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import axios, { type AxiosInstance, type Method } from "axios";
 import { throwAcuStockError, unwrapAcuStock } from "./tgs.errors";
+import { TgsKeysService } from "./tgs.keys";
 
-export const DEFAULT_ACUSTOCK_BASE = "https://thegamershop.acustock.app/api/v1/sistema";
+export { DEFAULT_ACUSTOCK_BASE } from "./tgs.constants";
 
 export interface AcuStockResult<T> {
   data: T;
@@ -15,42 +15,35 @@ export interface AcuStockResult<T> {
 export class TgsClient {
   private readonly logger = new Logger(TgsClient.name);
   private readonly http: AxiosInstance;
-  private readonly configured: boolean;
 
-  constructor(config: ConfigService) {
-    const baseURL = (config.get<string>("ACUSTOCK_BASE_URL") || DEFAULT_ACUSTOCK_BASE).replace(/\/$/, "");
-    const key = (config.get<string>("ACUSTOCK_API_KEY") || "").trim();
-    const secret = (config.get<string>("ACUSTOCK_API_SECRET") || "").trim();
-    this.configured = Boolean(key && secret);
-    if (!this.configured) {
-      this.logger.warn(
-        "ACUSTOCK_API_KEY / ACUSTOCK_API_SECRET no están definidas; SISTEMA TGS no puede hablar con AcuStock."
-      );
-    }
+  constructor(private readonly keys: TgsKeysService) {
     this.http = axios.create({
-      baseURL,
       timeout: 30_000,
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
-        ...(key ? { "X-AcuStock-Key": key } : {}),
-        ...(secret ? { "X-AcuStock-Secret": secret } : {}),
       },
       validateStatus: (status) => status >= 200 && status < 300,
     });
   }
 
   async request<T>(method: Method, path: string, opts?: { params?: Record<string, unknown>; body?: unknown }): Promise<AcuStockResult<T>> {
-    if (!this.configured) {
-      throw new BadGatewayException("Faltan ACUSTOCK_API_KEY y ACUSTOCK_API_SECRET en el servidor.");
+    const creds = await this.keys.resolve();
+    if (!creds) {
+      throw new BadGatewayException("Faltan las claves de AcuStock. Cargalas en SISTEMA TGS → Claves.");
     }
     const params = cleanParams(opts?.params);
     try {
       const res = await this.http.request({
         method,
+        baseURL: creds.baseUrl,
         url: path.startsWith("/") ? path : `/${path}`,
         params,
         data: opts?.body,
+        headers: {
+          "X-AcuStock-Key": creds.key,
+          "X-AcuStock-Secret": creds.secret,
+        },
       });
       const unwrapped = unwrapAcuStock<T>(res.data);
       return {
@@ -76,6 +69,14 @@ export class TgsClient {
 
   post<T>(path: string, body: unknown) {
     return this.request<T>("POST", path, { body });
+  }
+
+  put<T>(path: string, body: unknown) {
+    return this.request<T>("PUT", path, { body });
+  }
+
+  delete<T>(path: string) {
+    return this.request<T>("DELETE", path);
   }
 }
 

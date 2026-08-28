@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsBadge from "@/components/tgs/TgsBadge";
+import TgsEntityForm from "@/components/tgs/TgsEntityForm";
 import { TgsButton, TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
 import { dash, tgsFecha, tgsMoney } from "@/components/tgs/tgs-format";
 import { tgsApi, type TgsOrden } from "@/lib/tgs-api";
+import { ORDEN_FIELDS } from "@/lib/tgs-forms";
 
 export default function TgsOrdenDetailPage() {
   const params = useParams<{ id: string }>();
@@ -15,6 +17,7 @@ export default function TgsOrdenDetailPage() {
   const id = params.id;
   const [orden, setOrden] = useState<TgsOrden | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     tgsApi
@@ -29,9 +32,14 @@ export default function TgsOrdenDetailPage() {
       subtitle={orden ? tgsFecha(orden.fecha_ingreso) : undefined}
       action={
         orden && (
-          <TgsButton onClick={() => router.push(`/sistema-tgs/rma/nuevo?orden_trabajo_id=${orden.id}`)}>
-            Crear RMA
-          </TgsButton>
+          <div className="flex gap-2">
+            <TgsButton tone="ghost" onClick={() => setEditing((v) => !v)}>
+              {editing ? "Cerrar" : "Editar"}
+            </TgsButton>
+            <TgsButton onClick={() => router.push(`/sistema-tgs/rma/nuevo?orden_trabajo_id=${orden.id}`)}>
+              Crear RMA
+            </TgsButton>
+          </div>
         )
       }
     >
@@ -80,6 +88,18 @@ export default function TgsOrdenDetailPage() {
             <Note title="Diagnóstico" text={orden.diagnostico} />
             <Note title="Solución" text={orden.solucion} />
           </div>
+          {editing && (
+            <TgsEntityForm
+              fields={ORDEN_FIELDS}
+              initial={orden as unknown as Record<string, unknown>}
+              submitLabel="Guardar orden"
+              onSubmit={async (body) => {
+                const res = await tgsApi.patchOrden(id, body);
+                setOrden(res.data);
+                setEditing(false);
+              }}
+            />
+          )}
         </>
       )}
     </TgsPage>

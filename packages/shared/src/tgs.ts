@@ -39,6 +39,21 @@ export interface TgsMe {
   local_id: number;
 }
 
+export type TgsKeysSource = "db" | "env" | "none";
+
+/** Estado de las claves AcuStock. El secret nunca se devuelve. */
+export interface TgsKeysStatus {
+  configured: boolean;
+  source: TgsKeysSource;
+  keyHint: string | null;
+  secretConfigured: boolean;
+  baseUrl: string;
+  verified?: boolean;
+  verifyError?: string | null;
+  tenant?: string;
+  key_name?: string;
+}
+
 export interface TgsCliente {
   id: number;
   nombre: string;

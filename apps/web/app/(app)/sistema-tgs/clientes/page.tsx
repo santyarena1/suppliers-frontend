@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsPager from "@/components/tgs/TgsPager";
 import TgsBadge from "@/components/tgs/TgsBadge";
@@ -38,7 +38,18 @@ export default function TgsClientesPage() {
   }, [load]);
 
   return (
-    <TgsPage title="Clientes" subtitle="Agenda de AcuStock">
+    <TgsPage
+      title="Clientes"
+      subtitle="Agenda de AcuStock"
+      action={
+        <Link href="/sistema-tgs/clientes/nuevo">
+          <TgsButton>
+            <Plus className="w-3.5 h-3.5" />
+            Nuevo
+          </TgsButton>
+        </Link>
+      }
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();
