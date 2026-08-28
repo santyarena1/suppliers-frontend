@@ -51,7 +51,8 @@ export type BrandHtmlPart = { type: "html"; html: string } | { type: "slot"; nam
 export function sanitizeBrandHtml(raw: string): string {
   if (!raw) return "";
   let html = raw.replace(/<!--[\s\S]*?-->/g, "");
-  html = html.replace(/<\/?(script|style|iframe|object|embed|form|link|meta|svg|math)[\s\S]*?>/gi, "");
+  html = html.replace(/<(script|style|iframe|object|embed|form)\b[\s\S]*?<\/\1>/gi, "");
+  html = html.replace(/<\/?(script|style|iframe|object|embed|form|link|meta|svg|math)[^>]*>/gi, "");
   html = html.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   html = html.replace(/\s(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*')/gi, "");
   html = html.replace(/<\/?([a-z0-9]+)([^>]*)>/gi, (full, tag: string, attrs: string) => {
