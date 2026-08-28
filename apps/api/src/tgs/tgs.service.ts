@@ -56,6 +56,7 @@ export class TgsService {
     estado?: string;
     local_id?: number;
     q?: string;
+    entrega?: string;
     sort?: TgsSoldSort;
     dir?: "asc" | "desc";
     page?: number;
@@ -67,7 +68,7 @@ export class TgsService {
       estado: query.estado,
       local_id: query.local_id,
     });
-    const filtered = filterSoldProducts(loaded.rows, query.q);
+    const filtered = filterSoldProducts(loaded.rows, query.q, query.entrega);
     const sorted = sortSoldProducts(filtered, query.sort ?? "fecha", query.dir ?? "desc");
     const page = paginateSoldProducts(sorted, query.page ?? 1, query.per_page ?? 50);
     return { ...page, ventas: loaded.ventas, truncated: loaded.truncated };

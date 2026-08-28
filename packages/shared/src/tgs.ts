@@ -69,6 +69,11 @@ export interface TgsCliente {
   lista_precio_id: number | null;
   ciudad: string | null;
   provincia: string | null;
+  direccion?: string | null;
+  codigo_postal?: string | null;
+  celular?: string | null;
+  observaciones?: string | null;
+  [key: string]: unknown;
 }
 
 export interface TgsStockItem {
@@ -85,6 +90,13 @@ export interface TgsStockItem {
   precio: number;
   precio_manual?: boolean;
   moneda: string;
+  codigo_barras?: string | null;
+  costo?: number | null;
+  iva?: number | string | null;
+  serializable?: boolean | null;
+  descripcion?: string | null;
+  proveedor_id?: number | null;
+  [key: string]: unknown;
 }
 
 export interface TgsLinea {
@@ -94,6 +106,25 @@ export interface TgsLinea {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
+  sku?: string | null;
+  costo_usd?: number | null;
+  cotizacion?: number | null;
+  costo_ars?: number | null;
+  rentabilidad_pct?: number | null;
+  descuento_pct?: number | null;
+  iva?: number | string | null;
+  impuesto_interno?: number | null;
+  serie?: string | null;
+  origen?: string | null;
+  deposito_id?: number | null;
+  /** Estado de entrega del ítem (pendiente, listo, enviado, entregado…). No es el cobro de la venta. */
+  estado_entrega?: string | null;
+  entrega?: string | null;
+  etiquetas?: unknown;
+  proveedor?: string | null;
+  proveedor_nombre?: string | null;
+  proveedor_id?: number | null;
+  [key: string]: unknown;
 }
 
 export interface TgsVenta {
@@ -109,7 +140,25 @@ export interface TgsVenta {
   cliente_id: number | null;
   cliente: string | null;
   cae: string | null;
+  tipo_operacion?: string | null;
+  tipo_comprobante?: string | null;
+  deposito_id?: number | null;
+  lleva_envio?: string | boolean | null;
+  etiquetas?: unknown;
+  estado_woo_ml?: string | null;
+  entrega?: string | null;
+  fecha_vencimiento?: string | null;
+  lista_precio?: string | null;
+  lista_precio_id?: number | null;
+  descuento_general?: number | null;
+  al_cambiar_iva?: string | null;
+  costo_envio?: number | null;
+  cargos_extras?: number | null;
+  percepcion_iva?: number | null;
+  moneda?: string | null;
+  observaciones?: string | null;
   items?: TgsLinea[];
+  [key: string]: unknown;
 }
 
 export const TGS_SOLD_SORTS = [
@@ -121,6 +170,7 @@ export const TGS_SOLD_SORTS = [
   "precio",
   "subtotal",
   "estado",
+  "entrega",
 ] as const;
 
 export type TgsSoldSort = (typeof TGS_SOLD_SORTS)[number];
@@ -133,7 +183,15 @@ export interface TgsProductoVendido {
   local_id: number | null;
   cliente_id: number | null;
   cliente: string | null;
+  /** Estado de cobro del comprobante (pagada, pendiente…). */
   estado: string;
+  /** Estado de entrega del producto. */
+  estado_entrega: string | null;
+  /** Clave real que mandó AcuStock para el estado de entrega (para el PATCH). */
+  entrega_key: string | null;
+  etiquetas: string[];
+  proveedor: string | null;
+  proveedor_id: number | null;
   item_id: number;
   producto_id: number | null;
   producto: string;
@@ -160,7 +218,12 @@ export interface TgsCompra {
   local_id: number | null;
   proveedor_id: number | null;
   proveedor: string | null;
+  tipo_comprobante?: string | null;
+  deposito_id?: number | null;
+  cotizacion?: number | null;
+  observaciones?: string | null;
   items?: TgsLinea[];
+  [key: string]: unknown;
 }
 
 export interface TgsMovimiento {
@@ -208,6 +271,9 @@ export interface TgsOrden {
   fecha_entrega: string | null;
   tracking_token: string | null;
   tracking_url: string | null;
+  accesorios?: string | null;
+  observaciones?: string | null;
+  [key: string]: unknown;
 }
 
 export interface TgsRma {
@@ -228,6 +294,7 @@ export interface TgsPatchStock {
   nombre?: string;
   precio?: number;
   stock?: number;
+  [key: string]: unknown;
 }
 
 export interface TgsCreateRma {
@@ -238,4 +305,5 @@ export interface TgsCreateRma {
   venta_id?: number;
   venta_numero?: string;
   orden_trabajo_id?: number;
+  [key: string]: unknown;
 }

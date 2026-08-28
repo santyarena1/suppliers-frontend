@@ -28,6 +28,35 @@ const venta = (over: Partial<TgsVenta> = {}): TgsVenta => ({
 });
 
 describe("flattenVentaItems", () => {
+  it("levanta entrega, etiquetas y proveedor del ítem (no el cobro de la venta)", () => {
+    const rows = flattenVentaItems([
+      venta({
+        items: [
+          {
+            id: 1,
+            producto_id: 9,
+            descripcion: "Mouse Gamer",
+            cantidad: 1,
+            precio_unitario: 0,
+            subtotal: 0,
+            estado_entrega: "Entregado",
+            etiquetas: ["web", "serial"],
+            proveedor: "Logitech",
+            proveedor_id: 44,
+          },
+        ],
+      }),
+    ]);
+    expect(rows[0]).toMatchObject({
+      estado: "pagada",
+      estado_entrega: "Entregado",
+      entrega_key: "estado_entrega",
+      etiquetas: ["web", "serial"],
+      proveedor: "Logitech",
+      proveedor_id: 44,
+    });
+  });
+
   it("arma una fila por ítem, no por comprobante", () => {
     const two = venta({
       id: 1,
@@ -57,6 +86,40 @@ describe("filter/sort/paginate", () => {
   it("filtra por producto o cliente", () => {
     expect(filterSoldProducts(rows, "jbl")).toHaveLength(1);
     expect(filterSoldProducts(rows, "ana")).toHaveLength(1);
+  });
+
+  it("filtra por estado de entrega del ítem", () => {
+    const withEntrega = flattenVentaItems([
+      venta({
+        items: [
+          {
+            id: 10,
+            producto_id: 1,
+            descripcion: "A",
+            cantidad: 1,
+            precio_unitario: 1,
+            subtotal: 1,
+            entrega: "Pendiente",
+          },
+        ],
+      }),
+      venta({
+        id: 9,
+        items: [
+          {
+            id: 11,
+            producto_id: 2,
+            descripcion: "B",
+            cantidad: 1,
+            precio_unitario: 1,
+            subtotal: 1,
+            estado_entrega: "Entregado",
+          },
+        ],
+      }),
+    ]);
+    expect(filterSoldProducts(withEntrega, undefined, "entregado")).toHaveLength(1);
+    expect(filterSoldProducts(withEntrega, undefined, "pendiente")[0].producto).toBe("A");
   });
 
   it("ordena por fecha descendente por defecto vía sort", () => {

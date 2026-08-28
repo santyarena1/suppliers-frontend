@@ -71,8 +71,13 @@ export class TgsProductosVendidosQueryDto extends TgsVentasQueryDto {
   q?: string;
 
   @IsOptional()
-  @IsIn(["fecha", "venta", "cliente", "producto", "cantidad", "precio", "subtotal", "estado"])
-  sort?: "fecha" | "venta" | "cliente" | "producto" | "cantidad" | "precio" | "subtotal" | "estado";
+  @IsString()
+  @MaxLength(40)
+  entrega?: string;
+
+  @IsOptional()
+  @IsIn(["fecha", "venta", "cliente", "producto", "cantidad", "precio", "subtotal", "estado", "entrega"])
+  sort?: "fecha" | "venta" | "cliente" | "producto" | "cantidad" | "precio" | "subtotal" | "estado" | "entrega";
 
   @IsOptional()
   @IsIn(["asc", "desc"])

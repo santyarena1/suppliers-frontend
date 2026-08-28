@@ -1,9 +1,83 @@
-import type { TgsProductoVendido, TgsSoldSort, TgsVenta } from "@nodo/shared";
+import type { TgsLinea, TgsProductoVendido, TgsSoldSort, TgsVenta } from "@nodo/shared";
+
+const ENTREGA_KEYS = [
+  "estado_entrega",
+  "entrega",
+  "entrega_estado",
+  "estado_item",
+  "estado_despacho",
+  "estado_producto",
+];
+
+const ETIQUETA_KEYS = ["etiquetas", "tags", "labels", "etiqueta"];
+
+const PROVEEDOR_KEYS = ["proveedor", "proveedor_nombre", "proveedor_label"];
+
+export function pickFirst(record: Record<string, unknown>, keys: string[]): { key: string; value: unknown } | null {
+  for (const key of keys) {
+    if (!(key in record)) continue;
+    const value = record[key];
+    if (value == null || value === "") continue;
+    return { key, value };
+  }
+  return null;
+}
+
+export function asLabel(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "string" || typeof value === "number") {
+    const text = String(value).trim();
+    return text || null;
+  }
+  if (Array.isArray(value)) {
+    const parts = value.map(asLabel).filter((part): part is string => Boolean(part));
+    return parts.length ? parts.join(", ") : null;
+  }
+  if (typeof value === "object") {
+    const row = value as Record<string, unknown>;
+    return asLabel(row.nombre ?? row.name ?? row.label ?? row.titulo ?? row.display_name);
+  }
+  return null;
+}
+
+export function asLabels(value: unknown): string[] {
+  if (value == null || value === "") return [];
+  if (Array.isArray(value)) {
+    return value.map(asLabel).filter((part): part is string => Boolean(part));
+  }
+  const one = asLabel(value);
+  if (!one) return [];
+  return one
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function asId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+export function lineExtras(item: TgsLinea) {
+  const raw = item as Record<string, unknown>;
+  const entrega = pickFirst(raw, ENTREGA_KEYS);
+  const tags = pickFirst(raw, ETIQUETA_KEYS);
+  const proveedor = pickFirst(raw, PROVEEDOR_KEYS);
+  return {
+    estado_entrega: asLabel(entrega?.value) ?? asLabel(item.estado_entrega) ?? asLabel(item.entrega),
+    entrega_key: entrega?.key ?? (item.estado_entrega != null ? "estado_entrega" : item.entrega != null ? "entrega" : null),
+    etiquetas: asLabels(tags?.value ?? item.etiquetas),
+    proveedor: asLabel(proveedor?.value) ?? asLabel(item.proveedor) ?? asLabel(item.proveedor_nombre),
+    proveedor_id: asId(raw.proveedor_id) ?? item.proveedor_id ?? null,
+  };
+}
 
 export function flattenVentaItems(ventas: TgsVenta[]): TgsProductoVendido[] {
   const rows: TgsProductoVendido[] = [];
   for (const venta of ventas) {
     for (const item of venta.items ?? []) {
+      const extra = lineExtras(item);
       rows.push({
         venta_id: venta.id,
         venta_numero: venta.numero,
@@ -12,6 +86,11 @@ export function flattenVentaItems(ventas: TgsVenta[]): TgsProductoVendido[] {
         cliente_id: venta.cliente_id,
         cliente: venta.cliente,
         estado: venta.estado,
+        estado_entrega: extra.estado_entrega,
+        entrega_key: extra.entrega_key,
+        etiquetas: extra.etiquetas,
+        proveedor: extra.proveedor,
+        proveedor_id: extra.proveedor_id,
         item_id: item.id,
         producto_id: item.producto_id,
         producto: item.descripcion,
@@ -24,11 +103,16 @@ export function flattenVentaItems(ventas: TgsVenta[]): TgsProductoVendido[] {
   return rows;
 }
 
-export function filterSoldProducts(rows: TgsProductoVendido[], q?: string): TgsProductoVendido[] {
+export function filterSoldProducts(rows: TgsProductoVendido[], q?: string, entrega?: string): TgsProductoVendido[] {
   const needle = q?.trim().toLowerCase();
-  if (!needle) return rows;
+  const want = entrega?.trim().toLowerCase();
   return rows.filter((row) => {
-    const blob = `${row.producto} ${row.cliente ?? ""} ${row.venta_numero}`.toLowerCase();
+    if (want) {
+      const hay = (row.estado_entrega ?? "").toLowerCase();
+      if (!hay.includes(want)) return false;
+    }
+    if (!needle) return true;
+    const blob = `${row.producto} ${row.cliente ?? ""} ${row.venta_numero} ${row.proveedor ?? ""} ${row.etiquetas.join(" ")}`.toLowerCase();
     return blob.includes(needle);
   });
 }
@@ -49,7 +133,8 @@ const SORT_VALUE: Record<TgsSoldSort, (row: TgsProductoVendido) => string | numb
   cantidad: (row) => row.cantidad,
   precio: (row) => row.precio_unitario,
   subtotal: (row) => row.subtotal,
-  estado: (row) => row.estado,
+  estado: (row) => row.estado_entrega ?? row.estado,
+  entrega: (row) => row.estado_entrega,
 };
 
 export function sortSoldProducts(

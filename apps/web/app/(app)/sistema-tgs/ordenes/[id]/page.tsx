@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import TgsPage from "@/components/tgs/TgsPage";
-import TgsBadge from "@/components/tgs/TgsBadge";
 import TgsEntityForm from "@/components/tgs/TgsEntityForm";
-import { TgsButton, TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
-import { dash, tgsFecha, tgsMoney } from "@/components/tgs/tgs-format";
+import { TgsRecordGrid } from "@/components/tgs/TgsShared";
+import { TgsButton, TgsError, TgsLoading } from "@/components/tgs/TgsUi";
+import { tgsFecha } from "@/components/tgs/tgs-format";
 import { tgsApi, type TgsOrden } from "@/lib/tgs-api";
 import { ORDEN_FIELDS } from "@/lib/tgs-forms";
 
@@ -30,6 +30,7 @@ export default function TgsOrdenDetailPage() {
     <TgsPage
       title={orden?.numero ?? "Orden"}
       subtitle={orden ? tgsFecha(orden.fecha_ingreso) : undefined}
+      wide
       action={
         orden && (
           <div className="flex gap-2">
@@ -50,39 +51,7 @@ export default function TgsOrdenDetailPage() {
       {!error && !orden && <TgsLoading />}
       {orden && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-surface-900 border border-surface-800 rounded-xl p-4">
-            <TgsField label="Estado">
-              <TgsBadge>{orden.estado}</TgsBadge>
-            </TgsField>
-            <TgsField label="Prioridad">{dash(orden.prioridad)}</TgsField>
-            <TgsField label="Cliente">
-              {orden.cliente_id ? (
-                <Link href={`/sistema-tgs/clientes/${orden.cliente_id}`} className="text-brand-400 hover:text-brand-300">
-                  {dash(orden.cliente)}
-                </Link>
-              ) : (
-                dash(orden.cliente)
-              )}
-            </TgsField>
-            <TgsField label="Equipo">
-              {[orden.equipo_tipo, orden.equipo_marca, orden.equipo_modelo].filter(Boolean).join(" ") || "—"}
-            </TgsField>
-            <TgsField label="Serie">{dash(orden.equipo_serie)}</TgsField>
-            <TgsField label="Garantía (días)">{dash(orden.garantia_dias)}</TgsField>
-            <TgsField label="Presupuesto">{tgsMoney(orden.presupuesto_monto)}</TgsField>
-            <TgsField label="Costo final">{tgsMoney(orden.costo_final)}</TgsField>
-            <TgsField label="Completado">{tgsFecha(orden.fecha_completado)}</TgsField>
-            <TgsField label="Entrega">{tgsFecha(orden.fecha_entrega)}</TgsField>
-            <TgsField label="Seguimiento">
-              {orden.tracking_url ? (
-                <a href={orden.tracking_url} target="_blank" rel="noreferrer" className="text-brand-400 hover:text-brand-300">
-                  Abrir
-                </a>
-              ) : (
-                "—"
-              )}
-            </TgsField>
-          </div>
+          <TgsRecordGrid record={orden as unknown as Record<string, unknown>} skip={["falla_reportada", "diagnostico", "solucion"]} />
           <div className="grid sm:grid-cols-3 gap-3">
             <Note title="Falla reportada" text={orden.falla_reportada} />
             <Note title="Diagnóstico" text={orden.diagnostico} />
