@@ -5,9 +5,33 @@ export function tgsErr(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
 }
 
+export function tgsFechaCorta(value: string | null | undefined) {
+  if (!value) return "—";
+  const day = value.slice(0, 10);
+  const [y, m, d] = day.split("-");
+  if (!y || !m || !d) return value;
+  return `${d}/${m}/${y}`;
+}
+
 export function tgsFecha(value: string | null | undefined) {
   if (!value) return "—";
   return value.replace(" ", " · ");
+}
+
+export function tgsMoney2(n: number | null | undefined) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+export function tgsLocalLabel(localId: number | null | undefined) {
+  if (localId == null) return "—";
+  if (localId === 1) return "Local Principal";
+  return `Local ${localId}`;
 }
 
 export function tgsMoney(n: number | null | undefined, moneda?: string | null) {

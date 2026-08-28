@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
 export class TgsPageQueryDto {
   @IsOptional()
@@ -62,6 +62,21 @@ export class TgsVentasQueryDto extends TgsPageQueryDto {
   @IsInt()
   @Min(1)
   local_id?: number;
+}
+
+export class TgsProductosVendidosQueryDto extends TgsVentasQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  q?: string;
+
+  @IsOptional()
+  @IsIn(["fecha", "venta", "cliente", "producto", "cantidad", "precio", "subtotal", "estado"])
+  sort?: "fecha" | "venta" | "cliente" | "producto" | "cantidad" | "precio" | "subtotal" | "estado";
+
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  dir?: "asc" | "desc";
 }
 
 export class TgsComprasQueryDto extends TgsPageQueryDto {

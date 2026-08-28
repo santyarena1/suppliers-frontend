@@ -170,6 +170,29 @@ export interface TgsRma {
   [key: string]: unknown;
 }
 
+export interface TgsProductoVendido {
+  venta_id: number;
+  venta_numero: string;
+  fecha_emision: string;
+  local_id: number | null;
+  cliente_id: number | null;
+  cliente: string | null;
+  estado: string;
+  item_id: number;
+  producto_id: number | null;
+  producto: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+export interface TgsProductosVendidos {
+  items: TgsProductoVendido[];
+  meta: TgsPageMeta;
+  ventas: number;
+  truncated: boolean;
+}
+
 export interface TgsCreateRma {
   falla_reportada: string;
   producto_nombre?: string;
@@ -193,6 +216,8 @@ export const tgsApi = {
     api.patch<TgsStockItem>(`/tgs/stock/${encodeURIComponent(String(id))}`, data),
   ventas: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsVenta>>("/tgs/ventas", { params }),
+  productosVendidos: (params?: Record<string, string | number | undefined>) =>
+    api.get<TgsProductosVendidos>("/tgs/productos-vendidos", { params }),
   venta: (id: string | number) => api.get<TgsVenta>(`/tgs/ventas/${id}`),
   compras: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsCompra>>("/tgs/compras", { params }),

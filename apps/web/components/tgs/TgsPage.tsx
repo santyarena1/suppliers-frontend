@@ -6,10 +6,11 @@ interface Props {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  wide?: boolean;
   children: React.ReactNode;
 }
 
-export default function TgsPage({ title, subtitle, action, children }: Props) {
+export default function TgsPage({ title, subtitle, action, wide, children }: Props) {
   return (
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
@@ -23,7 +24,9 @@ export default function TgsPage({ title, subtitle, action, children }: Props) {
         </div>
       </header>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-4">{children}</div>
+        <div className={`${wide ? "max-w-[1600px]" : "max-w-6xl"} mx-auto px-4 sm:px-6 py-5 flex flex-col gap-4`}>
+          {children}
+        </div>
       </div>
     </>
   );

@@ -21,6 +21,7 @@ import {
   TgsCtaCteQueryDto,
   TgsOrdenesQueryDto,
   TgsPatchStockDto,
+  TgsProductosVendidosQueryDto,
   TgsRmaQueryDto,
   TgsStockQueryDto,
   TgsVentasQueryDto,
@@ -85,6 +86,12 @@ export class TgsController {
   async ventas(@CurrentTenant() tenant: TenantContext, @Query() query: TgsVentasQueryDto) {
     await this.access.assertAllowed(tenant);
     return this.tgs.list<TgsVenta>("/ventas", { ...query });
+  }
+
+  @Get("productos-vendidos")
+  async productosVendidos(@CurrentTenant() tenant: TenantContext, @Query() query: TgsProductosVendidosQueryDto) {
+    await this.access.assertAllowed(tenant);
+    return this.tgs.productosVendidos({ ...query });
   }
 
   @Get("ventas/:id")

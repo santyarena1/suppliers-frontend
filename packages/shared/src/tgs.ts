@@ -97,6 +97,43 @@ export interface TgsVenta {
   items?: TgsLinea[];
 }
 
+export const TGS_SOLD_SORTS = [
+  "fecha",
+  "venta",
+  "cliente",
+  "producto",
+  "cantidad",
+  "precio",
+  "subtotal",
+  "estado",
+] as const;
+
+export type TgsSoldSort = (typeof TGS_SOLD_SORTS)[number];
+
+/** Una línea de venta, para el reporte Productos vendidos. */
+export interface TgsProductoVendido {
+  venta_id: number;
+  venta_numero: string;
+  fecha_emision: string;
+  local_id: number | null;
+  cliente_id: number | null;
+  cliente: string | null;
+  estado: string;
+  item_id: number;
+  producto_id: number | null;
+  producto: string;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+export interface TgsProductosVendidosResult {
+  items: TgsProductoVendido[];
+  meta: TgsPageMeta;
+  ventas: number;
+  truncated: boolean;
+}
+
 export interface TgsCompra {
   id: number;
   numero: string;
