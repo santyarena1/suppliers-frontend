@@ -23,6 +23,7 @@ import { AssetsModule } from "./assets/assets.module";
 import { ImagesModule } from "./images/images.module";
 import { AdsModule } from "./ads/ads.module";
 import { BrandsModule } from "./brands/brands.module";
+import { TgsModule } from "./tgs/tgs.module";
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { BrandsModule } from "./brands/brands.module";
     ImagesModule,
     AdsModule,
     BrandsModule,
+    TgsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
