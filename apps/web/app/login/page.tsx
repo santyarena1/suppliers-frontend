@@ -6,6 +6,7 @@ import Link from "next/link";
 import { authApi } from "@/lib/api";
 import { saveSession, sessionFromToken } from "@/lib/auth";
 import { invalidateMyModules } from "@/lib/permissions";
+import { invalidateTgsEnabled } from "@/lib/tgs";
 import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
@@ -31,6 +32,7 @@ export default function LoginPage() {
       const res = await authApi.login(username, password);
       const token = res.data.token;
       invalidateMyModules();
+      invalidateTgsEnabled();
       saveSession(token, sessionFromToken(token, username));
       router.push("/search");
     } catch (err: unknown) {

@@ -235,6 +235,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: El listado `GET /providers/NEW_BYTES/orders` suele ser solo encabezado. Ver más vuelve a consultar el detalle. No se inventan nombres ni alícuotas: si el portal no manda ítems, la UI lo dice.
 
+### [FEATURE] SISTEMA TGS (AcuStock)
+- **Método**: GET | PATCH | POST
+- **Ruta**: `/tgs/enabled` · `/tgs/me` · `/tgs/clientes` · `/tgs/clientes/:id` · `/tgs/stock` · `/tgs/stock/:id` · `PATCH /tgs/stock/:id` · `/tgs/ventas` · `/tgs/ventas/:id` · `/tgs/compras` · `/tgs/compras/:id` · `/tgs/ctacte/clientes/:id` · `/tgs/ctacte/proveedores/:id` · `/tgs/ordenes` · `/tgs/ordenes/:id` · `/tgs/rma` · `/tgs/rma/:id` · `POST /tgs/rma`
+- **Auth**: Bearer, organización de la sesión. Solo el tenant de `testuser1` (o `TGS_ALLOWED_USERNAME` / `TGS_ALLOWED_TENANT_ID`). El resto recibe 403. `/tgs/enabled` responde `{ enabled }` sin pegarle a AcuStock.
+- **Body / Params**: paginación `page`, `per_page` (máx. 100). Stock `q`, `sku`, `local_id`. PATCH stock `{ nombre?, precio?, stock? }`. Ventas `desde`, `hasta`, `estado`. Órdenes/RMA `estado`, `cliente_id`, `q`. Alta RMA `{ falla_reportada, producto_nombre?, producto_serie?, cliente_id?, venta_id?, venta_numero?, orden_trabajo_id? }`.
+- **Respuesta esperada**: listados `{ items, meta: { page, per_page, total, total_pages, local_id? } }`. Detalle = objeto AcuStock (`data` desempaquetado). Cta cte incluye `movimientos` y `meta`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Proxy HTTP a `https://thegamershop.acustock.app/api/v1/sistema` con headers `X-AcuStock-Key` / `X-AcuStock-Secret` leídos de `ACUSTOCK_API_KEY` y `ACUSTOCK_API_SECRET`. El frontend nunca ve las claves. Un 401 de AcuStock se traduce a 502 para no cerrar la sesión de Nodo. Escritura de ventas/compras la API remota responde 501. UI: `/sistema-tgs`. GET stock por id numérico no existe en AcuStock (404); el detalle usa SKU.
+
 ## Pendiente (futuro)
 
 
