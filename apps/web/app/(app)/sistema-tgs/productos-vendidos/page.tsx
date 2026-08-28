@@ -219,7 +219,7 @@ export default function TgsProductosVendidosPage() {
                     {tgsMoney2(row.subtotal)}
                   </td>
                   <td className="px-3 py-2.5">
-                    <EstadoChip estado={row.estado_entrega || "Pendiente"} />
+                    <EstadoChip estado={row.estado_entrega} />
                   </td>
                 </tr>
               ))}
@@ -237,7 +237,14 @@ export default function TgsProductosVendidosPage() {
   );
 }
 
-function EstadoChip({ estado }: { estado: string }) {
+function EstadoChip({ estado }: { estado: string | null }) {
+  if (!estado?.trim()) {
+    return (
+      <span className="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-medium bg-surface-800 text-surface-500">
+        Sin dato
+      </span>
+    );
+  }
   const key = estado.toLowerCase();
   const Icon =
     ["entregado", "completada", "cerrado"].some((s) => key.includes(s))

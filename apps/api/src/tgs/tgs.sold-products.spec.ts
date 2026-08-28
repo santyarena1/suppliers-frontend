@@ -69,6 +69,53 @@ describe("flattenVentaItems", () => {
     expect(flattenVentaItems([two, venta({ items: [] })])).toHaveLength(2);
     expect(flattenVentaItems([two])[1]).toMatchObject({ venta_numero: "V-1", producto: "B", cantidad: 1 });
   });
+
+  it("no inventa Pendiente si AcuStock no mandó entrega", () => {
+    const rows = flattenVentaItems([venta()]);
+    expect(rows[0].estado_entrega).toBeNull();
+    expect(rows[0].entrega_key).toBeNull();
+  });
+
+  it("no usa el cobro de la venta (pagada/pendiente) como entrega del ítem", () => {
+    const rows = flattenVentaItems([venta({ estado: "pendiente" })]);
+    expect(rows[0].estado).toBe("pendiente");
+    expect(rows[0].estado_entrega).toBeNull();
+  });
+
+  it("lee estado de entrega desde item.estado si el valor es de entrega", () => {
+    const rows = flattenVentaItems([
+      venta({
+        items: [
+          {
+            id: 1,
+            producto_id: 9,
+            descripcion: "Mouse",
+            cantidad: 1,
+            precio_unitario: 1,
+            subtotal: 1,
+            estado: "Pendiente",
+          },
+        ],
+      }),
+    ]);
+    expect(rows[0].estado_entrega).toBe("Pendiente");
+    expect(rows[0].entrega_key).toBe("estado");
+  });
+
+  it("traduce entregado:false a Pendiente y true a Entregado", () => {
+    const no = flattenVentaItems([
+      venta({
+        items: [{ id: 1, producto_id: 1, descripcion: "A", cantidad: 1, precio_unitario: 1, subtotal: 1, entregado: false }],
+      }),
+    ]);
+    const yes = flattenVentaItems([
+      venta({
+        items: [{ id: 2, producto_id: 2, descripcion: "B", cantidad: 1, precio_unitario: 1, subtotal: 1, entregado: true }],
+      }),
+    ]);
+    expect(no[0].estado_entrega).toBe("Pendiente");
+    expect(yes[0].estado_entrega).toBe("Entregado");
+  });
 });
 
 describe("filter/sort/paginate", () => {
