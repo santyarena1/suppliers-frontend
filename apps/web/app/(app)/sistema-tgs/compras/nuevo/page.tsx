@@ -10,7 +10,7 @@ import { COMPRA_FIELDS } from "@/lib/tgs-forms";
 export default function TgsNuevaCompraPage() {
   const router = useRouter();
   return (
-    <TgsPage title="Nueva compra" subtitle="Todos los campos de AcuStock" wide>
+    <TgsPage title="Nueva compra" subtitle="Alta en AcuStock">
       <Link href="/sistema-tgs/compras" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Compras
       </Link>

@@ -106,18 +106,7 @@ export interface TgsLinea {
   cantidad: number;
   precio_unitario: number;
   subtotal: number;
-  sku?: string | null;
-  costo_usd?: number | null;
-  cotizacion?: number | null;
-  costo_ars?: number | null;
-  rentabilidad_pct?: number | null;
-  descuento_pct?: number | null;
-  iva?: number | string | null;
-  impuesto_interno?: number | null;
   serie?: string | null;
-  origen?: string | null;
-  deposito_id?: number | null;
-  /** Estado de entrega del ítem (pendiente, listo, enviado, entregado…). No es el cobro de la venta. */
   estado_entrega?: string | null;
   entrega?: string | null;
   etiquetas?: unknown;
@@ -140,23 +129,6 @@ export interface TgsVenta {
   cliente_id: number | null;
   cliente: string | null;
   cae: string | null;
-  tipo_operacion?: string | null;
-  tipo_comprobante?: string | null;
-  deposito_id?: number | null;
-  lleva_envio?: string | boolean | null;
-  etiquetas?: unknown;
-  estado_woo_ml?: string | null;
-  entrega?: string | null;
-  fecha_vencimiento?: string | null;
-  lista_precio?: string | null;
-  lista_precio_id?: number | null;
-  descuento_general?: number | null;
-  al_cambiar_iva?: string | null;
-  costo_envio?: number | null;
-  cargos_extras?: number | null;
-  percepcion_iva?: number | null;
-  moneda?: string | null;
-  observaciones?: string | null;
   items?: TgsLinea[];
   [key: string]: unknown;
 }
