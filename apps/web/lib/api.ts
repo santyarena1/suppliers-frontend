@@ -2468,4 +2468,123 @@ export const tenantsApi = {
   revokeAccessCode: (codeId: string) => api.delete(`/admin/tenants/access-codes/${codeId}`),
 };
 
+export type BrandActionKind = "PURCHASE_QTY" | "PURCHASE_AMOUNT" | "REBATE";
+export type BrandActionStatus = "DRAFT" | "ACTIVE" | "ENDED" | "CANCELLED";
+export type BrandActionRewardKind = "NONE" | "FLAT" | "PER_UNIT";
+export type BrandActionScopeKind = "DISTRIBUTOR" | "RETAILER" | "PRODUCT";
+export type OrgNotificationKind = "BRAND_ACTION" | "BRAND_LANDING" | "DISTRIBUTOR_NOTE" | "SYSTEM";
+
+export interface BrandActionProgress {
+  current: number;
+  target: number | null;
+  ratio: number;
+  met: boolean;
+}
+
+export interface BrandActionScope {
+  kind: BrandActionScopeKind;
+  refId: string;
+}
+
+export interface BrandAction {
+  id: string;
+  kind: BrandActionKind;
+  status: BrandActionStatus;
+  title: string;
+  description: string | null;
+  startsAt: string;
+  endsAt: string;
+  targetQty: number | null;
+  targetAmountUsd: number | null;
+  rewardKind: BrandActionRewardKind;
+  rewardUsd: number | null;
+  notifyRetailers: boolean;
+  scopes: BrandActionScope[];
+  progress: BrandActionProgress;
+}
+
+export type UpsertBrandAction = Omit<BrandAction, "id" | "progress" | "status"> & {
+  status?: BrandActionStatus;
+};
+
+export interface BrandLanding {
+  name: string;
+  publicKey: string;
+  publicPath: string;
+  published: boolean;
+  headline: string | null;
+  about: string | null;
+  logoUrl: string | null;
+  heroUrl: string | null;
+  websiteUrl: string | null;
+  supportEmail: string | null;
+  supportPhone: string | null;
+  blocks: { type?: string; title?: string; body?: string; url?: string }[] | unknown;
+}
+
+export interface PublicBrandLanding {
+  publicKey: string;
+  name: string;
+  headline: string | null;
+  about: string | null;
+  logoUrl: string | null;
+  heroUrl: string | null;
+  websiteUrl: string | null;
+  supportEmail: string | null;
+  supportPhone: string | null;
+  blocks: { type?: string; title?: string; body?: string; url?: string }[] | unknown;
+}
+
+export interface BrandAccounts {
+  retailers: { linkId: string; tenantId: string; name: string; status: TenantLinkStatus }[];
+  linkedDistributors: { linkId: string; tenantId: string; name: string; status: TenantLinkStatus }[];
+  distributors: { id: string; name: string; providerKey: string | null }[];
+}
+
+export interface RetailerBrandView {
+  linkId: string;
+  tenantId: string;
+  name: string;
+  landing: { publicKey: string; published: boolean; headline: string | null; logoUrl: string | null } | null;
+  actions: BrandAction[];
+}
+
+export interface OrgNotice {
+  id: string;
+  kind: OrgNotificationKind;
+  title: string;
+  body: string;
+  actionId: string | null;
+  landingKey: string | null;
+  readAt: string | null;
+  createdAt: string;
+  fromTenant: { id: string; name: string; type: TenantType } | null;
+}
+
+export const brandApi = {
+  landing: () => api.get<BrandLanding>("/my/brand/landing"),
+  saveLanding: (data: Partial<BrandLanding>) => api.put<BrandLanding>("/my/brand/landing", data),
+  actions: () => api.get<{ canWrite: boolean; actions: BrandAction[] }>("/my/brand/actions"),
+  createAction: (data: UpsertBrandAction) => api.post<BrandAction>("/my/brand/actions", data),
+  updateAction: (id: string, data: UpsertBrandAction) => api.put<BrandAction>(`/my/brand/actions/${id}`, data),
+  setActionStatus: (id: string, status: Exclude<BrandActionStatus, "DRAFT">) =>
+    api.post<BrandAction>(`/my/brand/actions/${id}/status`, { status }),
+  accounts: () => api.get<BrandAccounts>("/my/brand/accounts"),
+  note: (data: { retailerTenantId: string; title: string; body: string }) =>
+    api.post<{ ok: true }>("/my/brand/notes", data),
+  linked: () => api.get<{ brands: RetailerBrandView[] }>("/my/brands"),
+  notifications: () => api.get<OrgNotice[]>("/my/notifications"),
+  markRead: (id: string) => api.post<{ ok: true }>(`/my/notifications/${id}/read`),
+  sendNotice: (data: { retailerTenantId: string; title: string; body: string }) =>
+    api.post<{ ok: true }>("/my/notifications/send", data),
+};
+
+export const publicBrandApi = {
+  get: (publicKey: string) => api.get<PublicBrandLanding>(`/public/brands/${publicKey}`),
+};
+
+export const adminBrandOrgsApi = {
+  sync: () => api.post<{ terms: number; created: number; linked: number; users: number }>("/admin/brands/sync"),
+};
+
 export default api;

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import DistributorHome from "@/components/org/DistributorHome";
+import BrandHome from "@/components/org/BrandHome";
 import { credentialsApi, Provider } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
@@ -66,6 +67,7 @@ const HERO_SLIDES = [
 export default function HomePage() {
   const tenant = getTenant();
   if (tenant?.type === "DISTRIBUTOR") return <DistributorHome />;
+  if (tenant?.type === "BRAND") return <BrandHome />;
   return <RetailerHome />;
 }
 

@@ -45,7 +45,7 @@ export default function ChatRealtime() {
     const token = getToken();
     const tenant = getTenant();
     if (!token) return;
-    if (tenant?.type !== "RETAILER" && tenant?.type !== "DISTRIBUTOR") return;
+    if (tenant?.type !== "RETAILER" && tenant?.type !== "DISTRIBUTOR" && tenant?.type !== "BRAND") return;
     let stopped = false;
     let source: EventSource | null = null;
     let retry = 1000;

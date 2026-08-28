@@ -75,6 +75,78 @@ describe("chatLinkVisibleTo", () => {
       })
     ).toBe(false);
   });
+
+  it("una marca habla con el comercio de su propio vínculo", () => {
+    const brandLink = { ...link, supplierTenantId: "marca" };
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "marca",
+        tenantType: "BRAND",
+        tenantRole: "OWNER",
+        userId: "u",
+      })
+    ).toBe(true);
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "marca",
+        tenantType: "BRAND",
+        tenantRole: "COMMERCIAL",
+        userId: "otro",
+      })
+    ).toBe(false);
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "comercio",
+        tenantType: "RETAILER",
+        tenantRole: "BUYER",
+        userId: "u",
+      })
+    ).toBe(true);
+  });
+
+  it("un distro cliente de una marca ve ese vínculo, no los de otro distro", () => {
+    const brandLink = {
+      clientTenantId: "distro",
+      supplierTenantId: "marca",
+      accountManagerId: null,
+      status: "ACTIVE",
+    };
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "OWNER",
+        userId: "owner-d",
+      })
+    ).toBe(true);
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "SELLER",
+        userId: "seller-otro",
+      })
+    ).toBe(true);
+    expect(
+      chatLinkVisibleTo(brandLink, {
+        tenantId: "otro-distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "OWNER",
+        userId: "owner-x",
+      })
+    ).toBe(false);
+  });
+
+  it("un distro no ve el vínculo de otro distro con un comercio", () => {
+    expect(
+      chatLinkVisibleTo(link, {
+        tenantId: "otro-distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "OWNER",
+        userId: "u",
+      })
+    ).toBe(false);
+  });
 });
 
 describe("canWriteChat", () => {
@@ -95,6 +167,13 @@ describe("canWriteChat", () => {
     expect(canWriteChat("PRODUCT_MANAGER", "DISTRIBUTOR")).toBe(true);
     expect(canWriteChat("OWNER", "DISTRIBUTOR")).toBe(true);
   });
+
+  it("en la marca escriben dueño, marketing y comercial", () => {
+    expect(canWriteChat("OWNER", "BRAND")).toBe(true);
+    expect(canWriteChat("MARKETING", "BRAND")).toBe(true);
+    expect(canWriteChat("COMMERCIAL", "BRAND")).toBe(true);
+    expect(canWriteChat("VIEWER", "BRAND")).toBe(false);
+  });
 });
 
 describe("isChatReactionEmoji", () => {
@@ -112,6 +191,17 @@ describe("chatPeerName", () => {
   it("cada lado ve el nombre del otro", () => {
     expect(chatPeerName(named, "RETAILER")).toBe("New Bytes");
     expect(chatPeerName(named, "DISTRIBUTOR")).toBe("Local Centro");
+  });
+
+  it("si el distro es cliente de la marca, ve el nombre de la marca", () => {
+    const brandLink = {
+      clientTenantId: "distro",
+      supplierTenantId: "marca",
+      clientTenant: { name: "Elit" },
+      supplierTenant: { name: "Logitech" },
+    };
+    expect(chatPeerName(brandLink, "DISTRIBUTOR", "distro")).toBe("Logitech");
+    expect(chatPeerName(brandLink, "BRAND", "marca")).toBe("Elit");
   });
 });
 
@@ -171,5 +261,47 @@ describe("chatThreadVisibleTo", () => {
         userId: "buyer-1",
       })
     ).toBe(true);
+  });
+
+  it("si el distro es cliente de la marca, el hilo mira storeUserId", () => {
+    const brandLink = {
+      clientTenantId: "distro",
+      supplierTenantId: "marca",
+      accountManagerId: "commercial-1",
+      status: "ACTIVE",
+    };
+    const brandThread = { distroUserId: "commercial-1", storeUserId: "owner-d", link: brandLink };
+    expect(
+      chatThreadVisibleTo(brandThread, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "OWNER",
+        userId: "owner-d",
+      })
+    ).toBe(true);
+    expect(
+      chatThreadVisibleTo(brandThread, {
+        tenantId: "distro",
+        tenantType: "DISTRIBUTOR",
+        tenantRole: "OWNER",
+        userId: "otro-owner",
+      })
+    ).toBe(false);
+    expect(
+      chatThreadVisibleTo(brandThread, {
+        tenantId: "marca",
+        tenantType: "BRAND",
+        tenantRole: "COMMERCIAL",
+        userId: "commercial-1",
+      })
+    ).toBe(true);
+    expect(
+      chatThreadVisibleTo(brandThread, {
+        tenantId: "marca",
+        tenantType: "BRAND",
+        tenantRole: "OWNER",
+        userId: "owner-marca",
+      })
+    ).toBe(false);
   });
 });

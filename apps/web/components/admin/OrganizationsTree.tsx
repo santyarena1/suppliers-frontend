@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   adminApi,
+  adminBrandOrgsApi,
   AdminUser,
   ALL_PROVIDERS,
   BrandDisplay,
@@ -30,6 +31,7 @@ import {
   Megaphone,
   Plus,
   QrCode,
+  RefreshCw,
   Search,
   Store,
   Tag,
@@ -89,6 +91,7 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
     { kind: "tenant"; id: string } | { kind: "user"; id: string; tenantId: string } | null
   >(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [syncingBrands, setSyncingBrands] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,6 +181,28 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
             {TYPE_GROUP_LABELS[type]} · {total}
           </span>
         ))}
+        <button
+          onClick={async () => {
+            setSyncingBrands(true);
+            try {
+              const res = await adminBrandOrgsApi.sync();
+              showToast(
+                `Marcas del catálogo: ${res.data.created} orgs nuevas, ${res.data.linked} vinculadas, ${res.data.users} dueños placeholder`,
+                true
+              );
+              await load();
+            } catch (err) {
+              showToast(errMsg(err, "No se pudieron asegurar las orgs de marca"), false);
+            } finally {
+              setSyncingBrands(false);
+            }
+          }}
+          disabled={syncingBrands}
+          className="flex items-center gap-1.5 bg-surface-800 hover:bg-surface-700 text-white text-xs font-semibold rounded-lg px-3 py-2 transition-all disabled:opacity-50"
+        >
+          {syncingBrands ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+          Orgs de marcas
+        </button>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg px-3 py-2 transition-all"

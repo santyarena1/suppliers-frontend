@@ -22,6 +22,7 @@ import { RetailModule } from "./retail/retail.module";
 import { AssetsModule } from "./assets/assets.module";
 import { ImagesModule } from "./images/images.module";
 import { AdsModule } from "./ads/ads.module";
+import { BrandsModule } from "./brands/brands.module";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { AdsModule } from "./ads/ads.module";
     AssetsModule,
     ImagesModule,
     AdsModule,
+    BrandsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

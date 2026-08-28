@@ -1,6 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
+  Bell, Globe, Target,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -36,6 +37,12 @@ export type NavItemId =
   | "team"
   | "brands-portal"
   | "brands-panel"
+  | "brand-actions"
+  | "brand-landing"
+  | "brand-accounts"
+  | "brand-codes"
+  | "brand-ads"
+  | "notices"
   | "brands-admin"
   | "settings"
   | "admin";
@@ -75,7 +82,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search", tenantTypes: ["RETAILER"] },
   { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"] },
-  { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR"] },
+  { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"] },
 
   {
     id: "orders",
@@ -125,7 +132,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     href: "/publicidad",
     label: "Publicidad",
     icon: Megaphone,
-    tenantTypes: ["DISTRIBUTOR", "BRAND"],
+    tenantTypes: ["DISTRIBUTOR"],
     tenantRoles: ["OWNER", "ADMIN"],
     section: "portfolio",
   },
@@ -133,27 +140,73 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brands-portal",
     href: "/marcas",
-    label: "Portal de Marcas",
+    label: "Marcas",
     icon: Building2,
-    module: "brands",
-    tenantTypes: ["RETAILER"],
-    roles: ["ROLE_USER", "ROLE_ADMIN"],
+    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
+    section: "brands",
+  },
+  {
+    id: "notices",
+    href: "/avisos",
+    label: "Avisos",
+    icon: Bell,
+    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
     section: "brands",
   },
   {
     id: "brands-panel",
     href: "/marca",
-    label: "Panel de Marca",
+    label: "Panel",
     icon: Building2,
-    module: "brands",
     tenantTypes: ["BRAND"],
-    roles: ["ROLE_BRAND"],
+    section: "brands",
+  },
+  {
+    id: "brand-actions",
+    href: "/marca/acciones",
+    label: "Acciones",
+    icon: Target,
+    tenantTypes: ["BRAND"],
+    section: "brands",
+  },
+  {
+    id: "brand-landing",
+    href: "/marca/landing",
+    label: "Landing",
+    icon: Globe,
+    tenantTypes: ["BRAND"],
+    section: "brands",
+  },
+  {
+    id: "brand-accounts",
+    href: "/marca/cuentas",
+    label: "Cuentas",
+    icon: Handshake,
+    tenantTypes: ["BRAND"],
+    section: "brands",
+  },
+  {
+    id: "brand-codes",
+    href: "/codigos",
+    label: "Códigos",
+    icon: QrCode,
+    tenantTypes: ["BRAND"],
+    tenantRoles: ["OWNER", "ADMIN"],
+    section: "brands",
+  },
+  {
+    id: "brand-ads",
+    href: "/publicidad",
+    label: "Publicidad",
+    icon: Megaphone,
+    tenantTypes: ["BRAND"],
+    tenantRoles: ["OWNER", "ADMIN"],
     section: "brands",
   },
   {
     id: "brands-admin",
     href: "/admin/marcas",
-    label: "Marcas (Admin)",
+    label: "Marcas (legado)",
     icon: Shield,
     module: "admin",
     roles: ["ROLE_ADMIN"],
@@ -166,7 +219,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     href: "/equipo",
     label: "Equipo",
     icon: UserCog,
-    tenantTypes: ["RETAILER", "DISTRIBUTOR"],
+    tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"],
     section: "system",
   },
   {

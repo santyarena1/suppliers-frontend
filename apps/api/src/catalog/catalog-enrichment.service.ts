@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException, OnModuleInit, forwardRef } from "@nestjs/common";
 import type { CatalogAliasKind, CatalogEnrichmentSource, CatalogMatchKind } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { BrandOrgsService } from "../brands/brand-orgs.service";
 import { CatalogAiService } from "./catalog-ai.service";
 import { CatalogSettingsService } from "./catalog-settings.service";
 import {
@@ -40,7 +41,9 @@ export class CatalogEnrichmentService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ai: CatalogAiService,
-    private readonly settings: CatalogSettingsService
+    private readonly settings: CatalogSettingsService,
+    @Inject(forwardRef(() => BrandOrgsService))
+    private readonly brandOrgs: BrandOrgsService
   ) {}
 
   async onModuleInit() {
@@ -302,7 +305,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
       }
       return existing;
     }
-    return this.prisma.platformCatalogTerm.create({
+    const created = await this.prisma.platformCatalogTerm.create({
       data: {
         kind: input.kind,
         label,
@@ -312,6 +315,16 @@ export class CatalogEnrichmentService implements OnModuleInit {
         source: input.source ?? "MANUAL",
       },
     });
+    if (created.kind === "BRAND") {
+      try {
+        await this.brandOrgs.ensureForTerm(created);
+      } catch (err) {
+        this.logger.warn(
+          `No se pudo crear la org de la marca ${created.label}: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
+    return created;
   }
 
   async createTerm(input: {

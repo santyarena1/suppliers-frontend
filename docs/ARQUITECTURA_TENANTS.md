@@ -96,23 +96,25 @@ competencia agregada y anonimizada como producto de datos.
 
 ### Tipo 3 — Marca (`TenantType.BRAND`)
 
-Administra una marca del sistema. Se enlaza con el módulo de Marcas vía `Tenant.brandId`.
+Administra una marca del catálogo. Cada término `BRAND` tiene una organización
+y un dueño (placeholder si nadie la tomó). Se identifica en pantalla por
+`Tenant.name`. La landing pública usa `publicKey`, no un slug.
 
 | Rol interno | Alcance |
 |---|---|
-| `OWNER` | Usuarios internos, publicidad, códigos de vinculación, acciones comerciales. |
-| `MARKETING` | Campañas, materiales, capacitaciones, objetivos por comercio. |
-| `COMMERCIAL` | Descuentos y acciones dirigidas a un distribuidor y comercio concretos. |
+| `OWNER` | Equipo, códigos, publicidad, acciones, landing. |
+| `ADMIN` | Igual que el dueño salvo tocar a otro `OWNER`. |
+| `MARKETING` | Landing y acciones (objetivos medibles). |
+| `COMMERCIAL` | Acciones dirigidas a un distro y un comercio. |
 | `VIEWER` | Solo lectura. |
 
 Capacidades:
 
-- Selecciona un distribuidor y un comercio y aplica un descuento o una acción de marketing.
-  Todo lo contabiliza Nodo.
-- El comercio ve estadísticas de cada marca; la marca ve reportes por comercio (por
-  ejemplo, objetivos de compra de un producto, de una categoría o de la marca completa).
-- Igual que el distribuidor: sin publicidad no es descubrible, y los códigos de
-  vinculación son anónimos hasta el canje.
+- Acciones medibles (unidades, USD, rebate) sobre pedidos reales de los
+  comercios vinculados. Si el ítem no trae marca, no se cuenta.
+- Landing pública de marketing. No abre catálogo B2B ni precios.
+- Avisos hacia el comercio vinculado. Códigos anónimos hasta el canje.
+- Sin publicidad no es descubrible en el B2B.
 
 ---
 
@@ -124,10 +126,13 @@ Tenant (RETAILER)  ──TenantLink──▶  Tenant (DISTRIBUTOR)
        │                                   └─ accountManagerId → User (SELLER del distribuidor)
        │
        └──TenantLink──▶  Tenant (BRAND)
+
+Tenant (DISTRIBUTOR) ──TenantLink──▶ Tenant (BRAND)
 ```
 
 - `TenantLink` es la única puerta de visibilidad entre organizaciones. Estados:
-  `PENDING`, `ACTIVE`, `SUSPENDED`, `REVOKED`.
+  `PENDING`, `ACTIVE`, `SUSPENDED`, `REVOKED`. El cliente es un comercio, o un
+  distribuidor cuando el proveedor es una marca.
 - `TenantAccessCode` crea un `TenantLink` al canjearse. Tiene `maxUses`, `expiresAt` y
   `revoked`, y registra cada canje en `TenantAccessCodeRedemption`.
 - `ProductManagerScope` acota qué marcas maneja un PM dentro de su distribuidor.
@@ -174,10 +179,10 @@ hecho. Esta tabla es el producto, no la migración.
 | 4 | Pedidos y aprobación en la interfaz del comercio. | Hecho |
 | 5 | Tipo 1 autónomo: el dueño arma su equipo, canjea códigos y carga el contacto, sin pasar por el superadmin. | Hecho |
 | 6 | Tipo 2: panel del distribuidor (cartera por vendedor, códigos, pedidos de clientes, inactivos, alcance del PM). | Hecho |
-| 7 | Tipo 3: reconstruir marcas sobre el mismo `Tenant` / `TenantLink`. | Pendiente — `docs/PLAN_TIPO3.md` |
+| 7 | Tipo 3: org+usuario por marca del catálogo, landing pública, acciones medibles, avisos y chat con comercio y distro vinculado. | Hecho — `docs/PLAN_TIPO3.md` |
 | 8 | Publicidad paga: espacios, precio, cupo, campañas, impresiones/clicks. El flag `advertisingEnabled` es “esta cuenta paga”. | Hecho |
 | 9 | Chat persona a persona (org + usuario + rol), no un buzón por vínculo. | Hecho — `/mensajes` |
 | — | Carrito de la organización en la API (un armado por local, visible al distro). | Hecho — `/cart/org` |
 
-Detalle del Tipo 2 y de lo que queda: `docs/PLAN_TIPO2.md`. Planteo de marcas: `docs/PLAN_TIPO3.md`.
+Detalle del Tipo 2: `docs/PLAN_TIPO2.md`. Tipo 3: `docs/PLAN_TIPO3.md`.
 
