@@ -1,0 +1,28 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import TgsPage from "@/components/tgs/TgsPage";
+import TgsEntityForm from "@/components/tgs/TgsEntityForm";
+import { tgsApi } from "@/lib/tgs-api";
+import { VENTA_FIELDS } from "@/lib/tgs-forms";
+
+export default function TgsNuevaVentaPage() {
+  const router = useRouter();
+  return (
+    <TgsPage title="Nueva venta" subtitle="Alta en AcuStock">
+      <Link href="/sistema-tgs/ventas" className="text-xs text-surface-500 hover:text-white w-fit">
+        ← Ventas
+      </Link>
+      <TgsEntityForm
+        fields={VENTA_FIELDS}
+        withLines
+        submitLabel="Crear venta"
+        onSubmit={async (body) => {
+          const res = await tgsApi.createVenta(body);
+          router.push(res.data?.id != null ? `/sistema-tgs/ventas/${res.data.id}` : "/sistema-tgs/ventas");
+        }}
+      />
+    </TgsPage>
+  );
+}

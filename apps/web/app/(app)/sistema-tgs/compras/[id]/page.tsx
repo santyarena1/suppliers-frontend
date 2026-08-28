@@ -5,16 +5,19 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsBadge from "@/components/tgs/TgsBadge";
+import TgsEntityForm from "@/components/tgs/TgsEntityForm";
 import { TgsItemsTable } from "@/components/tgs/TgsShared";
-import { TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
+import { TgsButton, TgsError, TgsField, TgsLoading } from "@/components/tgs/TgsUi";
 import { dash, tgsFecha, tgsMoney } from "@/components/tgs/tgs-format";
 import { tgsApi, type TgsCompra } from "@/lib/tgs-api";
+import { COMPRA_FIELDS } from "@/lib/tgs-forms";
 
 export default function TgsCompraDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const [compra, setCompra] = useState<TgsCompra | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     tgsApi
@@ -24,7 +27,15 @@ export default function TgsCompraDetailPage() {
   }, [id]);
 
   return (
-    <TgsPage title={compra?.numero ?? "Compra"} subtitle={compra ? tgsFecha(compra.fecha_emision) : undefined}>
+    <TgsPage
+      title={compra?.numero ?? "Compra"}
+      subtitle={compra ? tgsFecha(compra.fecha_emision) : undefined}
+      action={
+        compra && (
+          <TgsButton onClick={() => setEditing((v) => !v)}>{editing ? "Cerrar" : "Editar"}</TgsButton>
+        )
+      }
+    >
       <Link href="/sistema-tgs/compras" className="text-xs text-surface-500 hover:text-white w-fit">
         ← Compras
       </Link>
@@ -51,6 +62,18 @@ export default function TgsCompraDetailPage() {
           </div>
           <h2 className="text-sm font-semibold text-white">Ítems</h2>
           <TgsItemsTable items={compra.items} moneda={compra.moneda} />
+          {editing && (
+            <TgsEntityForm
+              fields={COMPRA_FIELDS}
+              initial={compra as unknown as Record<string, unknown>}
+              submitLabel="Guardar compra"
+              onSubmit={async (body) => {
+                const res = await tgsApi.patchCompra(id, body);
+                setCompra(res.data);
+                setEditing(false);
+              }}
+            />
+          )}
         </>
       )}
     </TgsPage>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsPager from "@/components/tgs/TgsPager";
 import TgsBadge from "@/components/tgs/TgsBadge";
@@ -44,7 +44,18 @@ export default function TgsOrdenesPage() {
   }, [load]);
 
   return (
-    <TgsPage title="Órdenes de trabajo" subtitle="Taller">
+    <TgsPage
+      title="Órdenes de trabajo"
+      subtitle="Taller"
+      action={
+        <Link href="/sistema-tgs/ordenes/nuevo">
+          <TgsButton>
+            <Plus className="w-3.5 h-3.5" />
+            Nueva
+          </TgsButton>
+        </Link>
+      }
+    >
       <form
         onSubmit={(e) => {
           e.preventDefault();

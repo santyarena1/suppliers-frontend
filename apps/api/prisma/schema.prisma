@@ -49,6 +49,7 @@ model User {
   chatReactions        ChatReaction[]
   chatThreadsAsDistro  ChatThread[]          @relation("ChatDistroParticipant")
   chatThreadsAsStore   ChatThread[]          @relation("ChatStoreParticipant")
+  tgsSettingsSaved     TgsSettings[]
 
   @@index([brandId])
 }
@@ -125,6 +126,7 @@ model Tenant {
   clientLinks   TenantLink[]          @relation("LinkSupplier")
   pmScopes      ProductManagerScope[]
   credentials   Credential[]
+  tgsSettings   TgsSettings?
   syncConfigs   ProviderSyncConfig[]
   offers        TenantProductOffer[]
   priceHistory  ProductPriceHistory[]
@@ -457,6 +459,20 @@ model Credential {
   updatedAt            DateTime @updatedAt
 
   @@unique([tenantId, providerName])
+}
+
+/// Claves de AcuStock del comercio TGS. Cifradas; el front nunca las vuelve a ver.
+model TgsSettings {
+  id                 String   @id @default(uuid())
+  tenantId           String   @unique
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  apiKeyEncrypted    String?
+  apiSecretEncrypted String?
+  baseUrl            String?
+  savedById          String?
+  savedBy            User?    @relation(fields: [savedById], references: [id], onDelete: SetNull)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 // Ficha del producto: lo que el producto *es*. Es igual para toda la plataforma —

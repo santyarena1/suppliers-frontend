@@ -36,6 +36,20 @@ export interface TgsMe {
   local_id: number;
 }
 
+export type TgsKeysSource = "db" | "env" | "none";
+
+export interface TgsKeysStatus {
+  configured: boolean;
+  source: TgsKeysSource;
+  keyHint: string | null;
+  secretConfigured: boolean;
+  baseUrl: string;
+  verified?: boolean;
+  verifyError?: string | null;
+  tenant?: string;
+  key_name?: string;
+}
+
 export interface TgsCliente {
   id: number;
   nombre: string;
@@ -205,13 +219,21 @@ export interface TgsCreateRma {
 
 export const tgsApi = {
   enabled: () => api.get<{ enabled: boolean }>("/tgs/enabled"),
+  keys: () => api.get<TgsKeysStatus>("/tgs/keys"),
+  saveKeys: (data: { apiKey: string; apiSecret: string; baseUrl?: string }) =>
+    api.put<TgsKeysStatus>("/tgs/keys", data),
+  clearKeys: () => api.delete<TgsKeysStatus>("/tgs/keys"),
   me: () => api.get<TgsMe>("/tgs/me"),
   clientes: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsCliente>>("/tgs/clientes", { params }),
   cliente: (id: string | number) => api.get<TgsCliente>(`/tgs/clientes/${id}`),
+  createCliente: (data: Record<string, unknown>) => api.post<TgsCliente>("/tgs/clientes", data),
+  patchCliente: (id: string | number, data: Record<string, unknown>) =>
+    api.patch<TgsCliente>(`/tgs/clientes/${id}`, data),
   stock: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsStockItem>>("/tgs/stock", { params }),
   stockOne: (id: string | number) => api.get<TgsStockItem>(`/tgs/stock/${encodeURIComponent(String(id))}`),
+  createStock: (data: Record<string, unknown>) => api.post<TgsStockItem>("/tgs/stock", data),
   patchStock: (id: string | number, data: { nombre?: string; precio?: number; stock?: number }) =>
     api.patch<TgsStockItem>(`/tgs/stock/${encodeURIComponent(String(id))}`, data),
   ventas: (params?: Record<string, string | number | undefined>) =>
@@ -219,18 +241,30 @@ export const tgsApi = {
   productosVendidos: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsProductosVendidos>("/tgs/productos-vendidos", { params }),
   venta: (id: string | number) => api.get<TgsVenta>(`/tgs/ventas/${id}`),
+  createVenta: (data: Record<string, unknown>) => api.post<TgsVenta>("/tgs/ventas", data),
+  patchVenta: (id: string | number, data: Record<string, unknown>) => api.patch<TgsVenta>(`/tgs/ventas/${id}`, data),
   compras: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsCompra>>("/tgs/compras", { params }),
   compra: (id: string | number) => api.get<TgsCompra>(`/tgs/compras/${id}`),
+  createCompra: (data: Record<string, unknown>) => api.post<TgsCompra>("/tgs/compras", data),
+  patchCompra: (id: string | number, data: Record<string, unknown>) =>
+    api.patch<TgsCompra>(`/tgs/compras/${id}`, data),
   ctacteCliente: (id: string | number, params?: Record<string, string | number | undefined>) =>
     api.get<TgsCuentaCorriente>(`/tgs/ctacte/clientes/${id}`, { params }),
   ctacteProveedor: (id: string | number, params?: Record<string, string | number | undefined>) =>
     api.get<TgsCuentaCorriente>(`/tgs/ctacte/proveedores/${id}`, { params }),
+  postCtaCliente: (id: string | number, data: Record<string, unknown>) =>
+    api.post<TgsCuentaCorriente>(`/tgs/ctacte/clientes/${id}`, data),
+  postCtaProveedor: (id: string | number, data: Record<string, unknown>) =>
+    api.post<TgsCuentaCorriente>(`/tgs/ctacte/proveedores/${id}`, data),
   ordenes: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsOrden>>("/tgs/ordenes", { params }),
   orden: (id: string | number) => api.get<TgsOrden>(`/tgs/ordenes/${id}`),
+  createOrden: (data: Record<string, unknown>) => api.post<TgsOrden>("/tgs/ordenes", data),
+  patchOrden: (id: string | number, data: Record<string, unknown>) => api.patch<TgsOrden>(`/tgs/ordenes/${id}`, data),
   rma: (params?: Record<string, string | number | undefined>) =>
     api.get<TgsList<TgsRma>>("/tgs/rma", { params }),
   rmaOne: (id: string | number) => api.get<TgsRma>(`/tgs/rma/${id}`),
   createRma: (data: TgsCreateRma) => api.post<TgsRma>("/tgs/rma", data),
+  patchRma: (id: string | number, data: Record<string, unknown>) => api.patch<TgsRma>(`/tgs/rma/${id}`, data),
 };

@@ -40,6 +40,16 @@ export class TgsService {
     return res.data;
   }
 
+  async put<T>(path: string, body: unknown): Promise<T> {
+    const res = await this.client.put<T>(path, body);
+    return res.data;
+  }
+
+  async remove<T>(path: string): Promise<T> {
+    const res = await this.client.delete<T>(path);
+    return res.data;
+  }
+
   async productosVendidos(query: {
     desde?: string;
     hasta?: string;

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import TgsPage from "@/components/tgs/TgsPage";
 import TgsPager from "@/components/tgs/TgsPager";
 import TgsBadge from "@/components/tgs/TgsBadge";
-import { TgsEmpty, TgsError, TgsLoading } from "@/components/tgs/TgsUi";
+import { TgsButton, TgsEmpty, TgsError, TgsLoading } from "@/components/tgs/TgsUi";
 import { tgsFecha, tgsMoney } from "@/components/tgs/tgs-format";
 import { tgsApi, type TgsCompra, type TgsPageMeta } from "@/lib/tgs-api";
 
@@ -35,7 +36,18 @@ export default function TgsComprasPage() {
   }, [load]);
 
   return (
-    <TgsPage title="Compras" subtitle="Ingresos de mercadería">
+    <TgsPage
+      title="Compras"
+      subtitle="Ingresos de mercadería"
+      action={
+        <Link href="/sistema-tgs/compras/nuevo">
+          <TgsButton>
+            <Plus className="w-3.5 h-3.5" />
+            Nueva
+          </TgsButton>
+        </Link>
+      }
+    >
       <TgsError err={error} fallback="No se pudieron cargar las compras" />
       {loading ? (
         <TgsLoading />
