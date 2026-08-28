@@ -23,7 +23,7 @@ import {
   UpsertLinkDto,
 } from "./dto/tenant.dto";
 import type { TenantContext } from "./tenant-context.service";
-import { tenantLinkRejection } from "./link-sides";
+import { tenantLinkAllowed, tenantLinkRejection } from "./link-sides";
 
 const MEMBERSHIP_INCLUDE = {
   user: {
@@ -454,7 +454,8 @@ export class TenantsService {
     if (code.usedCount >= code.maxUses) throw invalido;
     if (!code.tenant.active) throw invalido;
     if (code.tenantId === client.tenantId) throw invalido;
-    if (client.tenantType !== "RETAILER") throw invalido;
+    if (client.tenantType !== "RETAILER" && client.tenantType !== "DISTRIBUTOR") throw invalido;
+    if (!tenantLinkAllowed(client.tenantType, code.tenant.type as TenantType)) throw invalido;
 
     const [link] = await this.prisma.$transaction([
       this.prisma.tenantLink.upsert({

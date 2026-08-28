@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { newPublicKey } from "./brand-orgs";
+import { sanitizeBrandHtml } from "./brand-html";
 import { UpdateBrandLandingDto } from "./dto/brand.dto";
 
 const LANDING_WRITERS = ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL"] as const;
@@ -20,7 +21,7 @@ export class BrandLandingService {
   async updateMine(tenant: TenantContext, dto: UpdateBrandLandingDto) {
     this.assertBrand(tenant);
     if (!LANDING_WRITERS.includes(tenant.tenantRole as (typeof LANDING_WRITERS)[number])) {
-      throw new ForbiddenException("No podés editar la landing");
+      throw new ForbiddenException("No podés editar el espacio de la marca");
     }
     await this.ensureRow(tenant);
     const row = await this.prisma.brandLanding.update({
@@ -35,6 +36,11 @@ export class BrandLandingService {
         ...(dto.supportEmail !== undefined ? { supportEmail: dto.supportEmail?.trim() || null } : {}),
         ...(dto.supportPhone !== undefined ? { supportPhone: dto.supportPhone?.trim() || null } : {}),
         ...(dto.blocks !== undefined ? { blocks: dto.blocks as Prisma.InputJsonValue } : {}),
+        ...(dto.html !== undefined ? { html: dto.html?.trim() ? sanitizeBrandHtml(dto.html) : null } : {}),
+        ...(dto.primaryColor !== undefined ? { primaryColor: dto.primaryColor?.trim() || null } : {}),
+        ...(dto.backgroundColor !== undefined ? { backgroundColor: dto.backgroundColor?.trim() || null } : {}),
+        ...(dto.textColor !== undefined ? { textColor: dto.textColor?.trim() || null } : {}),
+        ...(dto.fontFamily !== undefined ? { fontFamily: dto.fontFamily?.trim() || null } : {}),
       },
     });
     return this.serialize(row, tenant.tenantName);
@@ -90,6 +96,11 @@ export class BrandLandingService {
       supportEmail: string | null;
       supportPhone: string | null;
       blocks: Prisma.JsonValue;
+      html: string | null;
+      primaryColor: string | null;
+      backgroundColor: string | null;
+      textColor: string | null;
+      fontFamily: string | null;
     },
     name: string
   ) {
@@ -106,6 +117,11 @@ export class BrandLandingService {
       supportEmail: landing.supportEmail,
       supportPhone: landing.supportPhone,
       blocks: landing.blocks,
+      html: landing.html,
+      primaryColor: landing.primaryColor,
+      backgroundColor: landing.backgroundColor,
+      textColor: landing.textColor,
+      fontFamily: landing.fontFamily,
     };
   }
 

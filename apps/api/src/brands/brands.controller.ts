@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -9,7 +19,18 @@ import { BrandLandingService } from "./brand-landing.service";
 import { BrandActionsService } from "./brand-actions.service";
 import { BrandOrgsService } from "./brand-orgs.service";
 import { BrandNotificationsService } from "./brand-notifications.service";
-import { CreateBrandActionStatusDto, PostBrandNoteDto, UpsertBrandActionDto, UpdateBrandLandingDto } from "./dto/brand.dto";
+import { BrandCatalogService } from "./brand-catalog.service";
+import { BrandResourcesService } from "./brand-resources.service";
+import { BrandHubService } from "./brand-hub.service";
+import {
+  CreateBrandActionStatusDto,
+  ImportBrandSignalsDto,
+  PostBrandNoteDto,
+  UpsertBrandActionDto,
+  UpsertBrandResourceDto,
+  UpsertBrandSignalDto,
+  UpdateBrandLandingDto,
+} from "./dto/brand.dto";
 
 @UseGuards(AuthGuard("jwt"), TenantGuard)
 @Controller("my/brand")
@@ -17,7 +38,9 @@ export class BrandPanelController {
   constructor(
     private readonly landing: BrandLandingService,
     private readonly actions: BrandActionsService,
-    private readonly notes: BrandNotificationsService
+    private readonly notes: BrandNotificationsService,
+    private readonly catalog: BrandCatalogService,
+    private readonly resources: BrandResourcesService
   ) {}
 
   @Get("landing")
@@ -28,6 +51,51 @@ export class BrandPanelController {
   @Put("landing")
   putLanding(@CurrentTenant() tenant: TenantContext, @Body() dto: UpdateBrandLandingDto) {
     return this.landing.updateMine(tenant, dto);
+  }
+
+  @Get("catalog")
+  catalogSearch(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("q") q = "",
+    @Query("provider") provider?: string,
+    @Query("take") take?: string
+  ) {
+    return this.catalog.searchCatalog(tenant, q, provider, take ? Number(take) : 40);
+  }
+
+  @Get("signals")
+  listSignals(@CurrentTenant() tenant: TenantContext) {
+    return this.catalog.listSignals(tenant);
+  }
+
+  @Put("signals")
+  upsertSignal(@CurrentTenant() tenant: TenantContext, @Body() dto: UpsertBrandSignalDto) {
+    return this.catalog.upsertSignal(tenant, dto);
+  }
+
+  @Delete("signals/:id")
+  removeSignal(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.catalog.removeSignal(tenant, id);
+  }
+
+  @Post("signals/import")
+  importSignals(@CurrentTenant() tenant: TenantContext, @Body() dto: ImportBrandSignalsDto) {
+    return this.catalog.importCsv(tenant, dto.csv);
+  }
+
+  @Get("resources")
+  listResources(@CurrentTenant() tenant: TenantContext, @Query("kind") kind?: "MATERIAL" | "TRAINING") {
+    return this.resources.list(tenant, kind);
+  }
+
+  @Post("resources")
+  createResource(@CurrentTenant() tenant: TenantContext, @Body() dto: UpsertBrandResourceDto) {
+    return this.resources.create(tenant, dto);
+  }
+
+  @Delete("resources/:id")
+  removeResource(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.resources.remove(tenant, id);
   }
 
   @Get("actions")
@@ -77,11 +145,19 @@ export class BrandPanelController {
 @UseGuards(AuthGuard("jwt"), TenantGuard)
 @Controller("my/brands")
 export class RetailerBrandsController {
-  constructor(private readonly actions: BrandActionsService) {}
+  constructor(
+    private readonly actions: BrandActionsService,
+    private readonly hub: BrandHubService
+  ) {}
 
   @Get()
   list(@CurrentTenant() tenant: TenantContext) {
     return this.actions.visibleToClient(tenant);
+  }
+
+  @Get(":linkId")
+  hubFor(@CurrentTenant() tenant: TenantContext, @Param("linkId") linkId: string) {
+    return this.hub.getForClient(tenant, linkId);
   }
 }
 

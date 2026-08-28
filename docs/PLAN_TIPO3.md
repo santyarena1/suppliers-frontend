@@ -1,8 +1,8 @@
 # Tipo 3 — Marcas sobre Tenant / TenantLink
 
-El módulo viejo (`BrandAccount`, slugs, `ROLE_BRAND` como brújula, Excel de
-disponibilidad) **no se porta**. Esta es la reconstrucción encima del mismo modelo
-que ya opera Tipo 1 y Tipo 2.
+El módulo viejo (`BrandAccount`, slugs, `ROLE_BRAND` como brújula, 16 estados
+de stock, catálogo paralelo `BrandProduct`) **no se porta**. Esta es la
+reconstrucción encima del mismo modelo que ya opera Tipo 1 y Tipo 2.
 
 ## Qué es una marca en NODO
 
@@ -12,14 +12,21 @@ Cada término canónico del catálogo (`PlatformCatalogTerm` kind=`BRAND`) tiene
 (`marca.{slug}` / `*@nodo.internal`, `User.managedByPlatform`) deja el modelo
 listo. El superadmin entra como esa persona, igual que con un distro.
 
-La URL pública de marketing usa una clave opaca (`BrandLanding.publicKey` →
-`/m/:publicKey`). Nunca un slug `/marca/acme`.
+La marca **no tiene catálogo propio**. Los productos viven en los distros
+(`ProviderSyncCache`). La marca los mira, los elige y les pone un overlay:
+semáforo + precio sugerido (`BrandSkuSignal`). Nunca ve el precio ni el stock
+live de un comercio.
+
+El trabajo real es el **espacio in-app** (`/marcas/:linkId` para quien está
+vinculado). La URL pública `/m/:publicKey` es marketing opcional. Nunca un
+slug `/marca/acme`.
 
 ## Descubrimiento
 
-Una marca **no es descubrible** en el B2B. Un comercio solo la ve con
-`TenantLink`, publicidad paga o canje de un `TenantAccessCode`. La landing
-pública es marketing (quiénes somos): **no abre catálogo ni precios**.
+Una marca **no es descubrible** en el B2B. Un comercio o un distro solo la ve
+con `TenantLink`, publicidad paga o canje de un `TenantAccessCode`. El canje
+está en `/marcas` (no en Proveedores). Un distro solo puede canjear códigos de
+`BRAND`.
 
 ```
 Tenant (RETAILER)  ──TenantLink──▶  Tenant (DISTRIBUTOR)
@@ -33,13 +40,46 @@ Tenant (DISTRIBUTOR) ──TenantLink──▶ Tenant (BRAND)
 
 | Rol | Alcance |
 |---|---|
-| `OWNER` / `ADMIN` | Equipo, códigos, publicidad, acciones, landing, avisos. |
-| `MARKETING` | Landing y acciones (objetivos, materiales a futuro). |
-| `COMMERCIAL` | Acciones dirigidas a distros/comercios concretos. |
+| `OWNER` / `ADMIN` | Equipo, códigos, publicidad, mapa, materiales, espacio, acciones, avisos. |
+| `MARKETING` | Espacio, mapa, materiales/capacitaciones y acciones. |
+| `COMMERCIAL` | Mapa, acciones dirigidas a distros/comercios concretos. |
 | `VIEWER` | Solo lectura. |
 
 La navegación sale de `tenantType === "BRAND"`, no de `User.role`. Quien entre
 como marca no ve búsqueda, carrito, comparador ni cartera de Tipo 2.
+
+## Espacio in-app
+
+El comercio (Tipo 1) y el distro (Tipo 2) vinculado abren `/marcas/:linkId`.
+Ahí vive la estética de la marca (logo, colores, tipografía, HTML propio
+sanitizado) y los bloques nativos de NODO:
+
+| Hueco | Qué inserta NODO |
+|---|---|
+| `{{productos}}` / `{{semaforos}}` | Mapa comercial (5 luces + precio sugerido) |
+| `{{acciones}}` | Acciones vigentes con progreso |
+| `{{materiales}}` | Archivos de venta |
+| `{{capacitaciones}}` | Cursos / videos / argumentarios |
+| `{{hablar}}` | Chat persona a persona |
+| `{{nombre}}` / `{{logo}}` | Identidad |
+
+Si la marca no pega HTML, los bloques se muestran igual. Un comercio puede
+saltar a `/search?marca=Nombre` (la búsqueda general, filtrada). El distro no
+tiene búsqueda: ve el mapa, no arma pedidos de marca.
+
+## Semáforos (5 luces)
+
+| Luz | Uso |
+|---|---|
+| `GREEN` | Hay / empujar |
+| `YELLOW` | Poco / consultar |
+| `RED` | Sin stock |
+| `BLUE` | Próximo ingreso |
+| `GRAY` | Discontinuado |
+
+Unique `(tenantId, provider, externalId)`. Solo SKUs de esa marca en la caché
+de distros. Import CSV (`provider`, `externalId`/`sku`, `light`/`semaforo`,
+`precio_sugerido`, `notes`).
 
 ## Recorte implementado
 
@@ -47,30 +87,30 @@ como marca no ve búsqueda, carrito, comparador ni cartera de Tipo 2.
    asegura Tenant + landing + dueño placeholder. Superadmin: botón “Orgs de
    marcas” en el árbol. `POST /admin/brands/sync`.
 2. **Vínculos.** Códigos de la marca (`/codigos`). Canje anónimo desde el
-   comercio. Distro↔marca lo arma el superadmin. Cliente del link: comercio o
-   (solo hacia marca) distribuidor.
-3. **Landing pública.** `GET /public/brands/:publicKey`, página `/m/:publicKey`
-   fuera del shell autenticado. El panel edita en `/marca/landing`.
-4. **Acciones medibles.** `BrandAction`: unidades, compra en USD o rebate, con
-   vigencia, alcance (distros / comercios / SKU `PROVIDER:externalId`) y
-   progreso sobre `ProviderOrder` `CREATED`/`OFFLINE`. Si el ítem no trae
-   `brand`/`displayBrand`, no se inventa. Sin comercios vinculados, progreso 0.
-5. **Avisos hacia Tipo 1 y Tipo 2.** Al activar una acción (si `notifyRetailers`)
-   y a mano desde Cuentas. Comercio y distro vinculado leen `/avisos`. Distro y
-   marca pueden `POST /my/notifications/send` a una cuenta cliente vinculada.
-6. **Chat persona a persona** con el comercio o el distro vinculado. Mismo
-   producto que Tipo 2 (`distroUserId` = persona del proveedor, `storeUserId` =
-   persona del cliente, sobre el `TenantLink`). Un distro puede estar de los dos
-   lados: proveedor frente al local, cliente frente a la marca. Un comercial de
-   marca no ve el hilo de otro. UI: `/mensajes`.
-7. **Nav.** `/` BrandHome · `/marca/acciones` · `/marca/landing` ·
-   `/marca/cuentas` · `/mensajes` · reusa `/equipo`, `/codigos`, `/publicidad`.
-   Comercio y distro: `/marcas` y `/avisos`.
+   comercio **o el distro** en `/marcas`. Distro↔marca también lo arma el
+   superadmin.
+3. **Espacio in-app.** `GET /my/brands/:linkId`. Tema + HTML sanitizado +
+   mapa + materiales + capacitaciones + acciones + Hablar. Landing pública
+   `/m/:publicKey` opcional.
+4. **Mapa de SKUs.** `GET /my/brand/catalog` (caché de distros, filtrada por
+   marca). `PUT /my/brand/signals` y `POST /my/brand/signals/import`. UI:
+   `/marca/productos`.
+5. **Materiales y capacitaciones.** `BrandResource` `MATERIAL` | `TRAINING`.
+   Upload PDF/Excel/imagen (`POST /assets/upload-file`) o link. UI:
+   `/marca/materiales`, `/marca/capacitaciones`.
+6. **Acciones medibles.** `BrandAction`: unidades, compra en USD o rebate, con
+   vigencia, alcance y progreso sobre `ProviderOrder` `CREATED`/`OFFLINE`.
+7. **Avisos y chat** con el comercio o el distro vinculado. Mismo producto que
+   Tipo 2. UI: `/avisos`, `/mensajes`.
+8. **Nav.** Panel · Productos · Materiales · Capacitaciones · Acciones ·
+   Espacio · Cuentas · Mensajes · reusa `/equipo`, `/codigos`, `/publicidad`.
+   Comercio y distro: `/marcas` (canje + hub) y `/avisos`.
 
 ## Qué no está en este recorte
 
-- Materiales, capacitaciones, Excel de disponibilidad del módulo viejo.
+- Catálogo paralelo `BrandProduct` del módulo viejo.
+- Mostrar precios/stock live de comercios a la marca.
+- 16 estados `StockStatus` del legado.
+- Cupos/metas de distro, facturación ads.
 - Borrar `ROLE_BRAND` del enum de plataforma (sigue existiendo por usuarios
   históricos; ya no manda la nav).
-
-Las rutas viejas `/marca/*` y `/marcas/*` redirigen al recorte nuevo.

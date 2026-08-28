@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function LegacyMarcaRedirect() {
-  redirect("/marca");
+export default function LegacyDisponibilidadRedirect() {
+  redirect("/marca/productos");
 }

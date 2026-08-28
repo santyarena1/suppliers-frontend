@@ -469,7 +469,7 @@ export class ProvidersService {
     tenantId: string,
     provider: Provider,
     name: string,
-    opts: { includeOutOfStock?: boolean } = {}
+    opts: { includeOutOfStock?: boolean; brand?: string } = {}
   ) {
     if (!(await this.isProviderVisible(provider))) return [];
     if (!(await this.visibility.isLinked(tenantId, provider))) return [];
@@ -479,6 +479,24 @@ export class ProvidersService {
       rules.minStockThreshold,
       rules.zeroStockAction
     );
+    const q = name.trim();
+    const brand = opts.brand?.trim();
+    if (!q && !brand) return [];
+    const productWhere = {
+      AND: [
+        ...(brand
+          ? [
+              {
+                OR: [
+                  { brand: { contains: brand, mode: "insensitive" as const } },
+                  { name: { contains: brand, mode: "insensitive" as const } },
+                ],
+              },
+            ]
+          : []),
+        ...(q ? [{ name: { contains: q, mode: "insensitive" as const } }] : []),
+      ],
+    };
     const [offers, enrichment] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
@@ -487,7 +505,7 @@ export class ProvidersService {
           active: true,
           AND: [
             ...(Object.keys(stockWhere).length ? [stockWhere] : []),
-            { product: { name: { contains: name, mode: "insensitive" } } },
+            { product: productWhere },
           ],
         },
         include: { product: true },

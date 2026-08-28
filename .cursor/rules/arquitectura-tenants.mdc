@@ -27,8 +27,9 @@ de proveedor y vínculos. No hace falta “entrar como” para probar el catálo
 
 Un comercio (`RETAILER`) arma su equipo en `/equipo`. Un distribuidor (`DISTRIBUTOR`)
 entra a cartera (`/clientes`, `/codigos`, `/pedidos`) y al chat (`/mensajes`), no al
-buscador. Detalle: `docs/PLAN_TIPO2.md`. Tipo 3 (marcas) se reconstruye aparte:
-`docs/PLAN_TIPO3.md`. El módulo `/marca` actual no aplica.
+buscador. Detalle: `docs/PLAN_TIPO2.md`. Tipo 3 (marcas): espacio in-app, mapa de
+SKUs de distros con semáforo/precio sugerido, materiales y acciones.
+`docs/PLAN_TIPO3.md`.
 
 ## Decisiones cerradas
 

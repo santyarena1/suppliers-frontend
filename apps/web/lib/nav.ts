@@ -1,7 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
-  Bell, Globe, Target,
+  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -38,6 +38,9 @@ export type NavItemId =
   | "brands-portal"
   | "brands-panel"
   | "brand-actions"
+  | "brand-products"
+  | "brand-materials"
+  | "brand-trainings"
   | "brand-landing"
   | "brand-accounts"
   | "brand-codes"
@@ -162,6 +165,30 @@ export const NAV_ITEMS: NavItemDef[] = [
     section: "brands",
   },
   {
+    id: "brand-products",
+    href: "/marca/productos",
+    label: "Productos",
+    icon: CircleDot,
+    tenantTypes: ["BRAND"],
+    section: "brands",
+  },
+  {
+    id: "brand-materials",
+    href: "/marca/materiales",
+    label: "Materiales",
+    icon: FolderOpen,
+    tenantTypes: ["BRAND"],
+    section: "brands",
+  },
+  {
+    id: "brand-trainings",
+    href: "/marca/capacitaciones",
+    label: "Capacitaciones",
+    icon: GraduationCap,
+    tenantTypes: ["BRAND"],
+    section: "brands",
+  },
+  {
     id: "brand-actions",
     href: "/marca/acciones",
     label: "Acciones",
@@ -172,8 +199,8 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brand-landing",
     href: "/marca/landing",
-    label: "Landing",
-    icon: Globe,
+    label: "Espacio",
+    icon: Palette,
     tenantTypes: ["BRAND"],
     section: "brands",
   },

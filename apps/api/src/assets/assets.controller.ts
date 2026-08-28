@@ -32,6 +32,21 @@ export class AssetsController {
     });
   }
 
+  /** PDF / Excel / imagen para materiales de marca. */
+  @Post("upload-file")
+  async uploadFile(@Req() req: FastifyRequest) {
+    const file = await req.file();
+    if (!file) {
+      throw new BadRequestException("No se recibió ningún archivo");
+    }
+    const buffer = await file.toBuffer();
+    return this.assetsService.saveChatFile({
+      filename: file.filename,
+      mimetype: file.mimetype,
+      buffer,
+    });
+  }
+
   /** Sirve el binario del asset. Público (img tags / img-proxy no envían JWT). */
   @Get(":id")
   @Public()
