@@ -2551,6 +2551,7 @@ export interface PublicBrandLanding {
   supportEmail: string | null;
   supportPhone: string | null;
   blocks: { type?: string; title?: string; body?: string; url?: string }[] | unknown;
+  htmlDocument?: string;
 }
 
 export type BrandSignalLight = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
@@ -2633,6 +2634,8 @@ export interface BrandHub {
     supportEmail: string | null;
     supportPhone: string | null;
   };
+  htmlDocument: string;
+  htmlSlots: string[];
   htmlParts: BrandHubHtmlPart[];
   actions: BrandAction[];
   signals: BrandSkuSignal[];

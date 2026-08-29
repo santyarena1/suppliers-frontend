@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PrefsPanel from "@/components/PrefsPanel";
 import ImageUploadField from "@/components/ImageUploadField";
+import BrandHtmlCanvas, { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
 import { brandApi, type BrandLanding } from "@/lib/api";
 import { Copy, Globe, Loader2 } from "lucide-react";
 
@@ -39,6 +40,7 @@ export default function BrandEspacioPage() {
   const [aviso, setAviso] = useState<{ ok: boolean; text: string } | null>(null);
   const [blockTitle, setBlockTitle] = useState("");
   const [blockBody, setBlockBody] = useState("");
+  const [previewHtml, setPreviewHtml] = useState("");
 
   const load = useCallback(async () => {
     const res = await brandApi.landing();
@@ -52,6 +54,12 @@ export default function BrandEspacioPage() {
       setLoading(false);
     });
   }, [load]);
+
+  useEffect(() => {
+    const html = landing?.html ?? "";
+    const t = window.setTimeout(() => setPreviewHtml(html), 350);
+    return () => window.clearTimeout(t);
+  }, [landing?.html]);
 
   const blocks = Array.isArray(landing?.blocks) ? (landing.blocks as { title?: string; body?: string }[]) : [];
 
@@ -100,8 +108,8 @@ export default function BrandEspacioPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Espacio</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Lo que ven el comercio y el distro vinculados, con la estética de la marca. El HTML es opcional: los huecos
-            los llena NODO.
+            Lo que ven el comercio y el distro vinculados. Si pegás HTML, va por encima de la identidad de Nodo: tu CSS
+            manda.
           </p>
         </div>
         <PrefsPanel />
@@ -207,9 +215,10 @@ export default function BrandEspacioPage() {
               <section className="border border-surface-800 rounded-xl p-4 bg-surface-900 flex flex-col gap-3">
                 <h2 className="text-sm font-semibold text-white">HTML propio</h2>
                 <p className="text-[11px] text-surface-500">
-                  Pegá el HTML de la marca. Sin scripts ni iframes: NODO lo limpia. Donde pongas un hueco, aparece el
-                  bloque nativo (mapa, acciones, archivos, hablar). Si dejás el HTML vacío, esos bloques se muestran
-                  igual.
+                  Pegá el HTML completo de la marca, con CSS en <code className="text-surface-300">&lt;style&gt;</code> o
+                  style inline. Se pinta por encima de la identidad de Nodo: tu CSS manda. Sin scripts ni iframes. Si
+                  ya lo habías guardado antes de este cambio, volvé a pegarlo y guardá: el guardado viejo se comía el
+                  CSS.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {SLOTS.map((slot) => (
@@ -225,8 +234,8 @@ export default function BrandEspacioPage() {
                   ))}
                 </div>
                 <textarea
-                  className={`${inputClass} min-h-[220px] font-mono text-xs`}
-                  placeholder={"<section>\n  <h1>{{nombre}}</h1>\n  {{semaforos}}\n  {{acciones}}\n</section>"}
+                  className={`${inputClass} min-h-[360px] font-mono text-xs`}
+                  placeholder={'<!doctype html>\n<html>\n<head>\n  <style>\n    body { background: #fff; color: #111; }\n    .hero { font-size: 42px; }\n  </style>\n</head>\n<body>\n  <section class="hero">{{nombre}}</section>\n  {{semaforos}}\n</body>\n</html>'}
                   value={landing.html ?? ""}
                   onChange={(e) => setLanding({ ...landing, html: e.target.value })}
                   onBlur={() => save({ html: landing.html })}
@@ -239,6 +248,32 @@ export default function BrandEspacioPage() {
                 >
                   Guardar HTML
                 </button>
+                {previewHtml.trim() ? (
+                  <div className="border border-surface-700 rounded-xl overflow-hidden bg-white">
+                    <p className="text-[11px] uppercase tracking-widest text-surface-400 px-3 py-2 bg-surface-950 border-b border-surface-800">
+                      Vista previa (así lo ven el comercio y el distro)
+                    </p>
+                    <BrandHtmlCanvas
+                      html={previewHtml}
+                      minHeight={280}
+                      slots={{
+                        productos: <BrandHtmlSlotHole label="Mapa / semáforos" />,
+                        semaforos: <BrandHtmlSlotHole label="Semáforos" />,
+                        acciones: <BrandHtmlSlotHole label="Acciones" />,
+                        materiales: <BrandHtmlSlotHole label="Materiales" />,
+                        capacitaciones: <BrandHtmlSlotHole label="Capacitaciones" />,
+                        hablar: <BrandHtmlSlotHole label="Hablar" />,
+                        nombre: <span style={{ fontWeight: 700 }}>{landing.name}</span>,
+                        logo: landing.logoUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={landing.logoUrl} alt="" style={{ height: 40 }} />
+                        ) : (
+                          <BrandHtmlSlotHole label="Logo" />
+                        ),
+                      }}
+                    />
+                  </div>
+                ) : null}
               </section>
 
               <section className="border border-surface-800 rounded-xl p-4 bg-surface-900 flex flex-col gap-3">

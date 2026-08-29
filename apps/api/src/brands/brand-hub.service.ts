@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import { PROVIDER_LABELS, type Provider } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
-import { splitBrandHtml } from "./brand-html";
+import { compileBrandHtml } from "./brand-html";
 import { BrandActionsService } from "./brand-actions.service";
 import { brandPresence, hasBrandContact, hasBrandSpace } from "./brand-presence";
 
@@ -63,6 +63,7 @@ export class BrandHubService {
     const withP = await Promise.all(visibleActions.map((row) => this.actions.progressForClient(row, tenant.tenantId)));
     const materials = resources.filter((r) => r.kind === "MATERIAL");
     const trainings = resources.filter((r) => r.kind === "TRAINING");
+    const compiled = compileBrandHtml(landing?.html ?? "");
     const presence = brandPresence({
       signalCount: signals.length,
       actionCount: withP.length,
@@ -93,7 +94,9 @@ export class BrandHubService {
         supportEmail: landing?.supportEmail ?? null,
         supportPhone: landing?.supportPhone ?? null,
       },
-      htmlParts: splitBrandHtml(landing?.html ?? ""),
+      htmlDocument: compiled.html,
+      htmlSlots: compiled.slots,
+      htmlParts: compiled.parts,
       actions: withP,
       signals: signals.map((row) => ({
         id: row.id,

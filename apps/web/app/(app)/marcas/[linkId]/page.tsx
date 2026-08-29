@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import PrefsPanel from "@/components/PrefsPanel";
+import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
 import { getTenant } from "@/lib/auth";
 import { assetUrl } from "@/lib/assets";
 import { formatUSD } from "@/lib/format";
@@ -32,7 +33,6 @@ import {
   Package,
   Phone,
   Search,
-  Sparkles,
   Target,
 } from "lucide-react";
 
@@ -88,14 +88,38 @@ export default function BrandHubPage() {
           <p className="text-sm text-red-400 px-6 py-10">{aviso ?? "No encontrado"}</p>
         ) : (
           <div>
-            <Hero hub={hub} accent={accent} />
+            {hub.htmlDocument ? (
+              <BrandHtmlCanvas
+                html={hub.htmlDocument}
+                minHeight={480}
+                slots={{
+                  productos: <SignalsBlock hub={hub} retailer={retailer} />,
+                  semaforos: <SignalsBlock hub={hub} retailer={retailer} />,
+                  acciones: <ActionsBlock hub={hub} />,
+                  materiales: <FilesBlock title="Materiales" items={hub.materials} />,
+                  capacitaciones: <FilesBlock title="Capacitaciones" items={hub.trainings} />,
+                  hablar: (
+                    <Link href={`/mensajes?linkId=${hub.linkId}`} className="text-sm underline">
+                      Hablar con {hub.name}
+                    </Link>
+                  ),
+                  nombre: <span>{hub.name}</span>,
+                  logo: hub.theme.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={assetUrl(hub.theme.logoUrl)} alt={hub.name} style={{ height: 48 }} />
+                  ) : null,
+                }}
+              />
+            ) : (
+              <Hero hub={hub} accent={accent} />
+            )}
             <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
               {hub.status === "SUSPENDED" && (
                 <p className="text-xs rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/30 text-amber-200">
                   El vínculo está en pausa. Podés mirar el espacio, pero las operaciones pueden estar limitadas.
                 </p>
               )}
-              {hub.presence.pending && (
+              {!hub.htmlDocument && hub.presence.pending && (
                 <p className="text-sm rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-100">
                   <span className="font-semibold">Pendiente de contenido.</span> Ya estás conectado con {hub.name}.
                   Todavía no publicó mapa, acciones ni materiales: cada bloque aparece abajo para que sepas qué
@@ -127,6 +151,7 @@ export default function BrandHubPage() {
                 </Link>
               </div>
 
+              {!hub.htmlDocument && (
               <nav className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 bg-surface-950/90 backdrop-blur border-b border-surface-800 flex gap-1 overflow-x-auto">
                 {SECTIONS.map((s) => {
                   const ready = hub.presence.modules[s.id].ready;
@@ -148,11 +173,13 @@ export default function BrandHubPage() {
                   );
                 })}
               </nav>
+              )}
 
-              {hub.htmlParts.some((p) => p.type === "html") && <Presentation hub={hub} />}
-
-              <ProductsSection hub={hub} retailer={retailer} searchHref={searchHref} />
-              <ActionsSection hub={hub} />
+              {(!hub.htmlSlots?.includes("productos") && !hub.htmlSlots?.includes("semaforos")) && (
+                <ProductsSection hub={hub} retailer={retailer} searchHref={searchHref} />
+              )}
+              {!hub.htmlSlots?.includes("acciones") && <ActionsSection hub={hub} />}
+              {!hub.htmlSlots?.includes("materiales") && (
               <FilesSection
                 id="materiales"
                 title="Materiales"
@@ -160,6 +187,8 @@ export default function BrandHubPage() {
                 items={hub.materials}
                 pendingText={`${hub.name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
               />
+              )}
+              {!hub.htmlSlots?.includes("capacitaciones") && (
               <FilesSection
                 id="capacitaciones"
                 title="Capacitaciones"
@@ -167,7 +196,8 @@ export default function BrandHubPage() {
                 items={hub.trainings}
                 pendingText={`${hub.name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
               />
-              <ContactSection hub={hub} />
+              )}
+              {!hub.htmlDocument && <ContactSection hub={hub} />}
             </div>
           </div>
         )}
@@ -228,20 +258,72 @@ function Hero({ hub, accent }: { hub: BrandHub; accent: string }) {
   );
 }
 
-function Presentation({ hub }: { hub: BrandHub }) {
-  const chunks = hub.htmlParts.filter((p) => p.type === "html" && p.html?.trim());
-  if (chunks.length === 0) return null;
-  return (
-    <section className="rounded-2xl border border-surface-800 bg-surface-900 p-5">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-surface-500 mb-3 flex items-center gap-1.5">
-        <Sparkles className="w-3.5 h-3.5" /> Presentación
-      </p>
-      <div className="brand-html prose prose-invert max-w-none text-surface-200">
-        {chunks.map((part, i) => (
-          <div key={i} dangerouslySetInnerHTML={{ __html: part.html || "" }} />
-        ))}
+function SignalsBlock({ hub, retailer }: { hub: BrandHub; retailer: boolean }) {
+  if (hub.signals.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-amber-500/25 bg-amber-500/5 px-4 py-4 text-sm text-surface-300">
+        Mapa pendiente
       </div>
-    </section>
+    );
+  }
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {hub.signals.map((row) => (
+        <SignalCard key={row.id} row={row} retailer={retailer} />
+      ))}
+    </div>
+  );
+}
+
+function ActionsBlock({ hub }: { hub: BrandHub }) {
+  if (hub.actions.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-amber-500/25 bg-amber-500/5 px-4 py-4 text-sm text-surface-300">
+        Acciones pendientes
+      </div>
+    );
+  }
+  return (
+    <ul className="flex flex-col gap-2">
+      {hub.actions.map((action) => (
+        <ActionRow key={action.id} action={action} />
+      ))}
+    </ul>
+  );
+}
+
+function FilesBlock({ title, items }: { title: string; items: BrandResource[] }) {
+  if (items.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-amber-500/25 bg-amber-500/5 px-4 py-4 text-sm text-surface-300">
+        {title} pendiente
+      </div>
+    );
+  }
+  return (
+    <ul className="grid sm:grid-cols-2 gap-2">
+      {items.map((item) => {
+        const href = item.fileUrl ? assetUrl(item.fileUrl) : item.contentUrl;
+        if (!href) return null;
+        return (
+          <li key={item.id}>
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-start gap-3 rounded-xl border border-surface-800 bg-surface-900 px-4 py-3 hover:border-surface-600"
+            >
+              <Download className="w-4 h-4 text-brand-400 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-sm text-white truncate">{item.title}</p>
+                {item.description && <p className="text-[11px] text-surface-400 line-clamp-2">{item.description}</p>}
+              </div>
+              <ExternalLink className="w-3.5 h-3.5 text-surface-600 ml-auto" />
+            </a>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
