@@ -26,7 +26,7 @@ export type DisplayAmount = {
   /** IIBB unitario incluido en el display (0 si el toggle está off). */
   iibbUnitUsd: number;
   iibbIncluded: boolean;
-  /** true si la alícuota no vino en el producto y se estimó por proveedor. */
+  /** true si la alícuota no vino en el producto y se usó la de este comercio. */
   estimatedIibb: boolean;
   iibbPercent: number | null;
 };
@@ -51,8 +51,8 @@ function resolveIibb(
  * IVA e IIBB son capas independientes. El precio de display es:
  *   neto
  * + (si withIva) IVA + internos
- * + (si withIibb) percepciones / IIBB del producto o alícuota del distribuidor
- *   (configurable en Configuración; sugerido New Bytes/Air 7%, Invid/Elit/GN 3%)
+ * + (si withIibb) percepciones / IIBB del producto o alícuota de ESTE comercio
+ *   (Configuración; la confirma el carrito o se carga a mano — no hay % fijo por proveedor)
  *
  * Offline no suma IIBB (eso lo decide el modo de compra, no este toggle).
  */

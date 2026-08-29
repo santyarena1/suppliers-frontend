@@ -2,6 +2,7 @@
 
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
+import { tenantSeesIibbPerceptions } from "@/lib/auth";
 import { DollarSign, RefreshCw, Receipt, Check, Percent } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
@@ -11,8 +12,12 @@ export default function PrefsPanel() {
     currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
     dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
   } = usePrefs();
+  const [seesIibb, setSeesIibb] = useState(false);
   useIibbRatesEpoch();
-  const iibbHint = knownIibbRatesHint();
+  useEffect(() => {
+    setSeesIibb(tenantSeesIibbPerceptions());
+  }, []);
+  const iibbHint = seesIibb ? knownIibbRatesHint() : "";
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -42,7 +47,7 @@ export default function PrefsPanel() {
         <span className="bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">
           {withIva ? "IVA" : "s/IVA"}
         </span>
-        {withIibb && (
+        {seesIibb && withIibb && (
           <span className="bg-amber-500/20 text-amber-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
             IIBB
           </span>
@@ -125,14 +130,11 @@ export default function PrefsPanel() {
                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${withIva ? "left-4" : "left-0.5"}`} />
                 </div>
               </button>
+              {seesIibb && (
               <button
                 type="button"
                 onClick={() => setWithIibb(!withIibb)}
-                className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 transition-all ${
-                  withIva
-                    ? "bg-surface-800 hover:bg-surface-700 border-surface-700"
-                    : "bg-surface-800 hover:bg-surface-700 border-surface-700"
-                }`}
+                className="w-full flex items-center justify-between border rounded-lg px-3 py-2 transition-all bg-surface-800 hover:bg-surface-700 border-surface-700"
                 title={iibbHint}
               >
                 <div className="flex items-center gap-2 min-w-0">
@@ -148,13 +150,16 @@ export default function PrefsPanel() {
                   <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${withIibb ? "left-4" : "left-0.5"}`} />
                 </div>
               </button>
+              )}
+              {seesIibb && (
               <Link
                 href="/configuracion"
                 className="text-[10px] text-brand-400 hover:text-brand-300 px-0.5"
                 onClick={() => setOpen(false)}
               >
-                Editar alícuotas por distribuidor
+                Editar alícuotas de este comercio
               </Link>
+              )}
             </div>
 
             {currentRate && (

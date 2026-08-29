@@ -6,7 +6,7 @@ import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import IibbRatesEditor from "@/components/IibbRatesEditor";
 import { useTheme, THEME_OPTIONS, type Theme } from "@/lib/theme";
-import { getUser, isAdmin } from "@/lib/auth";
+import { getUser, isAdmin, tenantSeesIibbPerceptions } from "@/lib/auth";
 import {
   AppearanceTab,
   BannersTab,
@@ -62,7 +62,12 @@ function ConfiguracionPageInner() {
     dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
   } = usePrefs();
   useIibbRatesEpoch();
-  const iibbHint = knownIibbRatesHint();
+  const [seesIibb, setSeesIibb] = useState(false);
+  const iibbHint = seesIibb ? knownIibbRatesHint() : "";
+
+  useEffect(() => {
+    setSeesIibb(tenantSeesIibbPerceptions());
+  }, []);
 
   useEffect(() => {
     if (!admin && tab !== "prefs") setTab("prefs");
@@ -253,18 +258,20 @@ function ConfiguracionPageInner() {
                           <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${withIva ? "left-4" : "left-0.5"}`} />
                         </div>
                       </button>
+                      {seesIibb && (
+                        <>
                       <button
                         type="button"
                         onClick={() => setWithIibb(!withIibb)}
                         className="w-full flex items-center justify-between bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-xl px-4 py-3 transition-all"
-                        title={iibbHint || "Suma solo la percepción/IIBB del distribuidor. Independiente del IVA."}
+                        title={iibbHint || "Suma la percepción/IIBB de este comercio. Independiente del IVA."}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Percent className="w-4 h-4 text-surface-400 flex-shrink-0" />
                           <div className="text-left min-w-0">
                             <span className="text-sm text-surface-200 block">Incluir percepciones / IIBB</span>
                             <span className="text-[11px] text-surface-500 leading-snug block mt-0.5">
-                              Independiente del IVA. {iibbHint || "Cargá la alícuota de cada distribuidor abajo."} Apagado por defecto.
+                              Independiente del IVA. {iibbHint || "Cargá la alícuota de cada proveedor abajo."} Apagado por defecto.
                             </span>
                           </div>
                         </div>
@@ -273,6 +280,8 @@ function ConfiguracionPageInner() {
                         </div>
                       </button>
                       <IibbRatesEditor />
+                        </>
+                      )}
                     </div>
                   </div>
 

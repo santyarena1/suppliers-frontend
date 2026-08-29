@@ -188,7 +188,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `{ items: CartItem[], schemes: CartScheme[] }`
 - **Respuesta esperada**: `{ tenantId, items, schemes, updatedByUserId, updatedAt }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un solo carrito por local, no por persona. El SSE `cart_updated` avisa al equipo del comercio y al vendedor/dueño del distro vinculado. `/cart/items` queda por compatibilidad y la web ya no lo usa.
+- **Notas**: Un solo carrito por local, no por persona. El SSE `cart_updated` avisa al equipo del comercio y al vendedor/dueño del distro vinculado. `/cart/items` queda por compatibilidad y la web ya no lo usa. Las percepciones/IIBB son **de ese comercio** (las confirma el carrito o las carga a mano): no hay alícuota global por proveedor. Marcas y distribuidores no ven ni aplican ese impuesto.
 
 ### [FEATURE] Publicidad paga (espacios, campañas, stats)
 - **Método**: GET | PUT | POST

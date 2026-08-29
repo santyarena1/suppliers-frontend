@@ -16,8 +16,9 @@ export default function IibbRatesEditor() {
   return (
     <div className="flex flex-col gap-2 pt-1">
       <p className="text-[11px] text-surface-500 leading-snug">
-        Alícuota sobre el neto. Si el carrito o el portal la confirman, se completa sola. Si no,
-        cargala a mano (como en la factura). 0 = no sumar en este distribuidor.
+        Cada comercio tiene su alícuota: no hay un % fijo por distribuidor. Si el carrito o el
+        portal la confirman, se completa sola. Si no, cargala a mano (como en la factura). 0 = no
+        sumar en este proveedor.
       </p>
       <div className="rounded-xl border border-surface-800 overflow-hidden">
         {rows.map((row) => (
@@ -34,9 +35,7 @@ export default function IibbRatesEditor() {
                   ? "text-emerald-400/90"
                   : row.source === "manual"
                     ? "text-brand-300"
-                    : row.source === "suggested"
-                      ? "text-surface-500"
-                      : "text-surface-600"
+                    : "text-surface-600"
               }`}
             >
               {IIBB_SOURCE_LABEL[row.source]}
@@ -49,7 +48,7 @@ export default function IibbRatesEditor() {
                 step="0.1"
                 inputMode="decimal"
                 value={row.percent ?? ""}
-                placeholder={row.suggested != null ? String(row.suggested) : "—"}
+                placeholder="—"
                 onChange={(e) => {
                   const raw = e.target.value.trim();
                   if (raw === "") {

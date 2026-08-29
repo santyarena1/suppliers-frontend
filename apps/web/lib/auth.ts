@@ -71,6 +71,21 @@ export function getTenant(): { id: string; name: string; type: TenantType; role:
   return { id: user.tenantId, name: user.tenantName, type: user.tenantType, role: user.tenantRole };
 }
 
+/** Solo el comercio paga percepción/IIBB. Marcas y distribuidores no lo ven. */
+export function tenantSeesIibbPerceptions(): boolean {
+  if (typeof window === "undefined") return false;
+  const user = getUser();
+  if (user?.role === "ROLE_BRAND") return false;
+  const type = getTenant()?.type ?? user?.tenantType;
+  if (type === "BRAND" || type === "DISTRIBUTOR") return false;
+  const token = getToken();
+  if (token) {
+    const fromToken = sessionFromToken(token).tenantType;
+    if (fromToken === "BRAND" || fromToken === "DISTRIBUTOR") return false;
+  }
+  return true;
+}
+
 export function getUser(): SessionUser | null {
   if (typeof window === "undefined") return null;
   const raw = localStorage.getItem("user");

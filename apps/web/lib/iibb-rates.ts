@@ -1,29 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getUser, tenantSeesIibbPerceptions } from "@/lib/auth";
 
 const STORAGE_KEY = "pref_iibb_rates";
 const EVENT = "nodo:iibb-rates";
 
-export type IibbRateSource = "suggested" | "cart" | "manual" | "none";
+/** Cada comercio (y, si no hay org, cada usuario) tiene su mapa. No se comparte. */
+function storageKey(): string {
+  const user = getUser();
+  if (user?.tenantId) return `${STORAGE_KEY}:t:${user.tenantId}`;
+  if (user?.id) return `${STORAGE_KEY}:u:${user.id}`;
+  return STORAGE_KEY;
+}
 
-/**
- * Alícuotas sugeridas sobre neto (puntos: 7 = 7%).
- *
- * New Bytes: carrito `perceptionsIIBB` ≈ 7%.
- * Invid: `percepcion` al validar stock ≈ 3%.
- * Elit: Percep. II.BB. C.A.B.A ≈ 3%.
- * Grupo Núcleo: línea típica `Percepción IIBB` 3% en `impuestos[]`.
- * Air: nota de venta 0047-00572620 — Percep. 95.24 / subtotal 1360.57 = 7%.
- * El resto se carga a mano o se aprende del carrito.
- */
-const SUGGESTED_RATES: Record<string, number> = {
-  NEW_BYTES: 7,
-  INVID: 3,
-  ELIT: 3,
-  GRUPO_NUCLEO: 3,
-  AIR: 7,
-};
+export type IibbRateSource = "cart" | "manual" | "none";
 
 const RATE_LABELS: Record<string, string> = {
   NEW_BYTES: "New Bytes",
@@ -48,7 +39,6 @@ const RATE_ORDER = [
 ];
 
 export const IIBB_SOURCE_LABEL: Record<IibbRateSource, string> = {
-  suggested: "sugerido",
   cart: "del carrito",
   manual: "manual",
   none: "cargar a mano",
@@ -83,7 +73,7 @@ function parseRateMap(raw: unknown): Record<string, number> {
 function readFile(): StoredFile {
   if (typeof window === "undefined") return { rates: {}, sources: {} };
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey());
     if (!raw) return { rates: {}, sources: {} };
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (parsed && typeof parsed === "object" && parsed.rates && typeof parsed.rates === "object") {
@@ -107,7 +97,7 @@ function readFile(): StoredFile {
 
 function writeFile(file: StoredFile): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(file));
+    localStorage.setItem(storageKey(), JSON.stringify(file));
   } catch {
     return;
   }
@@ -116,26 +106,20 @@ function writeFile(file: StoredFile): void {
   }
 }
 
-export function suggestedIibbRatePercent(provider: string | null | undefined): number | null {
-  if (!provider) return null;
-  return SUGGESTED_RATES[provider] ?? null;
-}
-
-/** Alícuota efectiva: manual/carrito pisa el sugerido. 0 es válido (no sumar). */
+/** Alícuota de ESTE comercio (carrito o manual). No hay % global por proveedor. */
 export function getIibbRatePercent(provider: string | null | undefined): number | null {
-  if (!provider) return null;
+  if (!provider || !tenantSeesIibbPerceptions()) return null;
   const stored = readFile().rates;
   if (Object.prototype.hasOwnProperty.call(stored, provider)) return stored[provider];
-  return SUGGESTED_RATES[provider] ?? null;
+  return null;
 }
 
 export function getIibbRateSource(provider: string | null | undefined): IibbRateSource {
-  if (!provider) return "none";
+  if (!provider || !tenantSeesIibbPerceptions()) return "none";
   const file = readFile();
   if (Object.prototype.hasOwnProperty.call(file.rates, provider)) {
     return file.sources[provider] ?? "manual";
   }
-  if (SUGGESTED_RATES[provider] != null) return "suggested";
   return "none";
 }
 
@@ -143,7 +127,6 @@ export type IibbRateRow = {
   provider: string;
   label: string;
   percent: number | null;
-  suggested: number | null;
   source: IibbRateSource;
 };
 
@@ -161,7 +144,6 @@ export function listIibbRateRows(providers: string[]): IibbRateRow[] {
       provider,
       label: RATE_LABELS[provider] ?? provider.replace(/_/g, " "),
       percent: getIibbRatePercent(provider),
-      suggested: suggestedIibbRatePercent(provider),
       source: getIibbRateSource(provider),
     });
   }
@@ -169,13 +151,13 @@ export function listIibbRateRows(providers: string[]): IibbRateRow[] {
 }
 
 export function knownIibbRatesHint(): string {
-  return listIibbRateRows(Object.keys(SUGGESTED_RATES))
+  return listIibbRateRows(RATE_ORDER)
     .filter((r) => r.percent != null && r.percent > 0)
     .map((r) => `${r.label} ${formatPct(r.percent!)}`)
     .join(" · ");
 }
 
-/** true si no hay alícuota para sumar (ni sugerida ni cargada, o está en 0). */
+/** true si este comercio no tiene alícuota cargada (o está en 0). */
 export function providerOmitsIibb(provider: string | null | undefined): boolean {
   const pct = getIibbRatePercent(provider);
   return pct == null || pct <= 0;
@@ -186,6 +168,7 @@ export function setIibbRate(
   percent: number,
   source: "cart" | "manual"
 ): void {
+  if (!tenantSeesIibbPerceptions()) return;
   const next = clampRate(percent);
   if (!provider || next == null) return;
   const prev = getIibbRatePercent(provider);
@@ -199,7 +182,7 @@ export function setIibbRate(
 }
 
 export function clearIibbRate(provider: string): void {
-  if (!provider) return;
+  if (!provider || !tenantSeesIibbPerceptions()) return;
   const file = readFile();
   if (!Object.prototype.hasOwnProperty.call(file.rates, provider)) return;
   delete file.rates[provider];
