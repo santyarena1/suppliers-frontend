@@ -8,6 +8,7 @@ import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
 import { useChatUnread } from "@/lib/chat-unread";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules } from "@/lib/permissions";
+import { invalidateTgsEnabled, useTgsEnabled } from "@/lib/tgs";
 import { useResults } from "@/lib/results";
 import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
@@ -67,6 +68,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const chatUnread = useChatUnread();
   const providerCount = Object.keys(byProvider).length;
   const myModules = useMyModules();
+  const sistemaTgs = useTgsEnabled();
   const { clearResults } = useResults();
   const { providers: myProviders } = useMyProviders();
   const { statuses, loading: statusesLoading } = useProviderStatuses();
@@ -105,8 +107,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         tenantType: tenant?.type ?? null,
         tenantRole: tenant?.role ?? null,
         isSuperadmin: user?.role === "ROLE_ADMIN",
+        sistemaTgs,
       }),
-    [user?.role, myModules, tenant?.type, tenant?.role],
+    [user?.role, myModules, tenant?.type, tenant?.role, sistemaTgs],
   );
 
   const pinned = items.filter((item) => !item.section);
@@ -148,6 +151,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
 
   function logout() {
     invalidateMyModules();
+    invalidateTgsEnabled();
     clearSession();
     router.push("/login");
   }

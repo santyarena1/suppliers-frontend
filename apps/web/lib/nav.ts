@@ -1,7 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
-  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap,
+  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -48,7 +48,8 @@ export type NavItemId =
   | "notices"
   | "brands-admin"
   | "settings"
-  | "admin";
+  | "admin"
+  | "sistema-tgs";
 
 export interface NavItemDef {
   id: NavItemId;
@@ -66,6 +67,8 @@ export interface NavItemDef {
   badge?: "cart" | "chat";
   sublabel?: "providers";
   section?: NavSectionId;
+  /** Solo el tenant de testuser1 (SISTEMA TGS). Fail-closed en el menú. */
+  requiresSistemaTgs?: boolean;
 }
 
 export interface NavSectionDef {
@@ -86,6 +89,13 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"] },
   { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"] },
+  {
+    id: "sistema-tgs",
+    href: "/sistema-tgs",
+    label: "SISTEMA TGS",
+    icon: Gamepad2,
+    requiresSistemaTgs: true,
+  },
 
   {
     id: "orders",
@@ -267,6 +277,7 @@ export interface NavContext {
   tenantType?: TenantType | null;
   tenantRole?: TenantRole | null;
   isSuperadmin?: boolean;
+  sistemaTgs?: boolean;
 }
 
 export function isNavItemActive(item: Pick<NavItemDef, "href" | "exact">, pathname: string): boolean {
@@ -282,6 +293,8 @@ export function findActiveNavId(items: NavItemDef[], pathname: string): NavItemI
 }
 
 export function canSeeNavItem(item: NavItemDef, ctx: NavContext): boolean {
+  if (item.requiresSistemaTgs && !ctx.sistemaTgs) return false;
+
   if (item.module && ctx.modules !== null && !ctx.modules.includes(item.module)) {
     return false;
   }
