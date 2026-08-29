@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { tenantSeesIibbPerceptions } from "@/lib/auth";
 
 export type Currency = "USD" | "ARS";
 export type DollarType = "blue" | "oficial" | "tarjeta" | "mep" | "cripto" | "mayorista";
@@ -124,5 +125,10 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
 export function usePrefs() {
   const ctx = useContext(PrefsContext);
   if (!ctx) throw new Error("usePrefs must be used inside PrefsProvider");
-  return ctx;
+  const seesIibb = tenantSeesIibbPerceptions();
+  return {
+    ...ctx,
+    withIibb: seesIibb ? ctx.withIibb : false,
+    setWithIibb: seesIibb ? ctx.setWithIibb : () => undefined,
+  };
 }
