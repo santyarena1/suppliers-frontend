@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { splitBrandHtml } from "./brand-html";
 import { BrandActionsService } from "./brand-actions.service";
+import { brandPresence, hasBrandContact, hasBrandSpace } from "./brand-presence";
 
 @Injectable()
 export class BrandHubService {
@@ -60,11 +61,23 @@ export class BrandHubService {
       this.actionVisible(row.scopes, tenant.tenantId, tenant.tenantType)
     );
     const withP = await Promise.all(visibleActions.map((row) => this.actions.progressForClient(row, tenant.tenantId)));
+    const materials = resources.filter((r) => r.kind === "MATERIAL");
+    const trainings = resources.filter((r) => r.kind === "TRAINING");
+    const presence = brandPresence({
+      signalCount: signals.length,
+      actionCount: withP.length,
+      materialCount: materials.length,
+      trainingCount: trainings.length,
+      hasContact: hasBrandContact(landing ?? {}),
+      hasSpace: hasBrandSpace(landing ?? {}),
+    });
     return {
       linkId: link.id,
       tenantId: brandId,
       name: link.supplierTenant.name,
       status: link.status,
+      connectedAt: link.createdAt.toISOString(),
+      presence,
       theme: {
         primaryColor: landing?.primaryColor ?? null,
         backgroundColor: landing?.backgroundColor ?? null,
@@ -74,6 +87,11 @@ export class BrandHubService {
         heroUrl: landing?.heroUrl ?? null,
         headline: landing?.headline ?? link.supplierTenant.name,
         about: landing?.about ?? null,
+      },
+      contact: {
+        websiteUrl: landing?.websiteUrl ?? null,
+        supportEmail: landing?.supportEmail ?? null,
+        supportPhone: landing?.supportPhone ?? null,
       },
       htmlParts: splitBrandHtml(landing?.html ?? ""),
       actions: withP,
@@ -91,8 +109,8 @@ export class BrandHubService {
         incomingAt: row.incomingAt?.toISOString() ?? null,
         notes: row.notes,
       })),
-      materials: resources.filter((r) => r.kind === "MATERIAL"),
-      trainings: resources.filter((r) => r.kind === "TRAINING"),
+      materials,
+      trainings,
     };
   }
 

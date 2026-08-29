@@ -10,6 +10,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { actionProgress, sumMatchingLines } from "./brand-measure";
 import { BrandNotificationsService } from "./brand-notifications.service";
+import { brandPresence, hasBrandContact, hasBrandSpace } from "./brand-presence";
 import type { UpsertBrandActionDto } from "./dto/brand.dto";
 
 const COUNTED = ["CREATED", "OFFLINE"];
@@ -170,8 +171,14 @@ export class BrandActionsService {
                 publicKey: true,
                 published: true,
                 headline: true,
+                about: true,
                 logoUrl: true,
+                heroUrl: true,
+                html: true,
                 primaryColor: true,
+                websiteUrl: true,
+                supportEmail: true,
+                supportPhone: true,
               },
             },
           },
@@ -180,14 +187,33 @@ export class BrandActionsService {
     });
     const brandIds = links.map((l) => l.supplierTenantId);
     const now = new Date();
-    const [signalCounts, actions] = await Promise.all([
-      brandIds.length
-        ? this.prisma.brandSkuSignal.groupBy({
+    const emptyIds = brandIds.length === 0;
+    const [signalCounts, resourceCounts, unreadCounts, actions] = await Promise.all([
+      emptyIds
+        ? Promise.resolve([] as { tenantId: string; _count: { _all: number } }[])
+        : this.prisma.brandSkuSignal.groupBy({
             by: ["tenantId"],
             where: { tenantId: { in: brandIds } },
             _count: { _all: true },
-          })
-        : Promise.resolve([] as { tenantId: string; _count: { _all: number } }[]),
+          }),
+      emptyIds
+        ? Promise.resolve([] as { tenantId: string; kind: string; _count: { _all: number } }[])
+        : this.prisma.brandResource.groupBy({
+            by: ["tenantId", "kind"],
+            where: { tenantId: { in: brandIds } },
+            _count: { _all: true },
+          }),
+      emptyIds
+        ? Promise.resolve([] as { fromTenantId: string | null; _count: { _all: number } }[])
+        : this.prisma.orgNotification.groupBy({
+            by: ["fromTenantId"],
+            where: {
+              toTenantId: tenant.tenantId,
+              fromTenantId: { in: brandIds },
+              readAt: null,
+            },
+            _count: { _all: true },
+          }),
       this.prisma.brandAction.findMany({
         where: {
           tenantId: { in: brandIds },
@@ -199,6 +225,16 @@ export class BrandActionsService {
       }),
     ]);
     const signalByBrand = new Map(signalCounts.map((row) => [row.tenantId, row._count._all]));
+    const materialsByBrand = new Map<string, number>();
+    const trainingsByBrand = new Map<string, number>();
+    for (const row of resourceCounts) {
+      const n = row._count._all;
+      if (row.kind === "MATERIAL") materialsByBrand.set(row.tenantId, n);
+      if (row.kind === "TRAINING") trainingsByBrand.set(row.tenantId, n);
+    }
+    const unreadByBrand = new Map(
+      unreadCounts.filter((row) => row.fromTenantId).map((row) => [row.fromTenantId as string, row._count._all])
+    );
     const byBrand = new Map<string, typeof actions>();
     for (const action of actions) {
       const list = byBrand.get(action.tenantId) ?? [];
@@ -208,16 +244,38 @@ export class BrandActionsService {
     const brands = [];
     for (const link of links) {
       const org = link.supplierTenant;
+      const landing = org.brandLanding;
       const mine = (byBrand.get(org.id) ?? []).filter((a) =>
         this.actionTargetsClient(a, tenant.tenantId, tenant.tenantType)
       );
       const withP = await Promise.all(mine.map((row) => this.withProgressForRetailer(row, tenant.tenantId)));
+      const presence = brandPresence({
+        signalCount: signalByBrand.get(org.id) ?? 0,
+        actionCount: withP.length,
+        materialCount: materialsByBrand.get(org.id) ?? 0,
+        trainingCount: trainingsByBrand.get(org.id) ?? 0,
+        hasContact: hasBrandContact(landing ?? {}),
+        hasSpace: hasBrandSpace(landing ?? {}),
+      });
       brands.push({
         linkId: link.id,
         tenantId: org.id,
         name: org.name,
-        landing: org.brandLanding,
-        signalCount: signalByBrand.get(org.id) ?? 0,
+        status: link.status,
+        connectedAt: link.createdAt.toISOString(),
+        landing: landing
+          ? {
+              publicKey: landing.publicKey,
+              published: landing.published,
+              headline: landing.headline,
+              about: landing.about,
+              logoUrl: landing.logoUrl,
+              primaryColor: landing.primaryColor,
+            }
+          : null,
+        signalCount: presence.modules.products.count,
+        unreadNotices: unreadByBrand.get(org.id) ?? 0,
+        presence,
         actions: withP,
       });
     }
