@@ -1,5 +1,7 @@
-import { redirect } from "next/navigation";
+"use client";
 
-export default function LegacyMarcaRedirect() {
-  redirect("/marca");
+import BrandResourcesEditor from "@/components/org/BrandResourcesEditor";
+
+export default function BrandCapacitacionesPage() {
+  return <BrandResourcesEditor kind="TRAINING" />;
 }

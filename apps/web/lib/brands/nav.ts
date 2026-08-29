@@ -1,4 +1,4 @@
-import { Home, Building2, Truck, Users, History, Settings, Bell, Newspaper, Megaphone } from "lucide-react";
+import { Home, Building2, Truck, Users, History, Settings, Bell, Palette, Megaphone, CircleDot, FolderOpen, GraduationCap } from "lucide-react";
 import type { ContextNavItem } from "@/components/layout/ContextNav";
 
 export const USER_BRANDS_NAV: ContextNavItem[] = [
@@ -8,8 +8,11 @@ export const USER_BRANDS_NAV: ContextNavItem[] = [
 
 export const BRAND_PANEL_NAV: ContextNavItem[] = [
   { href: "/marca", label: "Panel", icon: Home, exact: true },
+  { href: "/marca/productos", label: "Productos", icon: CircleDot },
+  { href: "/marca/materiales", label: "Materiales", icon: FolderOpen },
+  { href: "/marca/capacitaciones", label: "Capacitaciones", icon: GraduationCap },
   { href: "/marca/acciones", label: "Acciones", icon: Megaphone },
-  { href: "/marca/landing", label: "Landing", icon: Newspaper },
+  { href: "/marca/landing", label: "Espacio", icon: Palette },
   { href: "/marca/cuentas", label: "Cuentas", icon: Users },
 ];
 

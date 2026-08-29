@@ -65,7 +65,9 @@ function SearchPage() {
   } = useResults();
   const searchParams = useSearchParams();
   const initialQ = searchParams?.get("q") || "";
+  const initialMarca = searchParams?.get("marca") || "";
   const [query, setQuery] = useState(initialQ);
+  const [brandFilter, setBrandFilter] = useState(initialMarca);
   const [activeQuery, setActiveQuery] = useState("");
   // Solo se puede buscar en los proveedores con los que el comercio está vinculado:
   // del resto no hay catálogo, y ni siquiera tiene por qué saber que existen.
@@ -90,16 +92,24 @@ function SearchPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const scrollRef = useRef<HTMLDivElement>(null);
   const restoredRef = useRef(false);
-  const lastUrlQRef = useRef<string | null>(null);
+  const lastUrlKeyRef = useRef<string | null>(null);
   const lastSearchKind = useRef<"search" | "category">("search");
 
-  function syncSearchUrl(q: string) {
+  function searchUrlKey(q: string, marca: string) {
+    return `${q.trim()}||${marca.trim()}`;
+  }
+
+  function syncSearchUrl(q: string, marca = brandFilter) {
     const trimmed = q.trim();
-    const next = trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : "/search";
+    const marcaTrim = marca.trim();
+    const params = new URLSearchParams();
+    if (trimmed) params.set("q", trimmed);
+    if (marcaTrim) params.set("marca", marcaTrim);
+    const next = params.toString() ? `/search?${params.toString()}` : "/search";
     const current = typeof window !== "undefined"
       ? `${window.location.pathname}${window.location.search}`
       : "";
-    lastUrlQRef.current = trimmed;
+    lastUrlKeyRef.current = searchUrlKey(trimmed, marcaTrim);
     if (current !== next) {
       router.replace(next, { scroll: false });
     }
@@ -155,16 +165,18 @@ function SearchPage() {
     });
   }, []);
 
-  async function runSearch(term: string, opts?: { track?: boolean; includeOutOfStock?: boolean }) {
+  async function runSearch(term: string, opts?: { track?: boolean; includeOutOfStock?: boolean; brand?: string }) {
     const q = term.trim();
-    if (!q) return;
+    const brand = (opts?.brand ?? brandFilter).trim();
+    if (!q && !brand) return;
     const withZero = opts?.includeOutOfStock ?? includeOutOfStock;
     lastSearchKind.current = "search";
     setError("");
     setLoading(true);
     setSearched(true);
-    setQuery(q);
-    setActiveQuery(q);
+    setQuery(q || brand);
+    setActiveQuery(q || brand);
+    setBrandFilter(brand);
     setRefineText("");
     setMinPrice("");
     setMaxPrice("");
@@ -172,13 +184,14 @@ function SearchPage() {
       const res = await searchApi.all(q, {
         providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
         includeOutOfStock: withZero,
+        brand: brand || undefined,
       });
       const data = res.data;
       setResults(data);
-      persistResults(q, data);
+      persistResults(q || `marca:${brand}`, data);
       setUiState({ refineText: "", minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
-      if (opts?.track !== false) trackSearch(q);
-      syncSearchUrl(q);
+      if (opts?.track !== false) trackSearch(q || brand);
+      syncSearchUrl(q, brand);
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || "Error al consultar la API");
@@ -205,6 +218,7 @@ function SearchPage() {
     clearResults();
     setQuery("");
     setActiveQuery("");
+    setBrandFilter("");
     setResults([]);
     setSearched(false);
     setError("");
@@ -213,7 +227,7 @@ function SearchPage() {
     setMaxPrice("");
     setHideNoImage(false);
     setLoading(false);
-    syncSearchUrl("");
+    syncSearchUrl("", "");
   }
 
   function restoreFromStore(q: string, r: ProductDTO[]) {
@@ -317,21 +331,24 @@ function SearchPage() {
     restoredRef.current = true;
 
     const urlQ = initialQ.trim();
+    const urlMarca = initialMarca.trim();
     const cachedQ = storedQuery.trim();
     const sameAsCache =
+      !urlMarca &&
       !!urlQ &&
       !!cachedQ &&
       urlQ.toLowerCase() === cachedQ.toLowerCase() &&
       storedResults.length > 0;
 
-    if (sameAsCache || (!urlQ && cachedQ && storedResults.length > 0)) {
+    if (sameAsCache || (!urlQ && !urlMarca && cachedQ && storedResults.length > 0)) {
       restoreFromStore(urlQ || cachedQ, storedResults);
       return;
     }
 
-    lastUrlQRef.current = urlQ;
-    if (urlQ) {
-      void runSearch(urlQ, { track: false });
+    lastUrlKeyRef.current = searchUrlKey(urlQ, urlMarca);
+    if (urlMarca) setBrandFilter(urlMarca);
+    if (urlQ || urlMarca) {
+      void runSearch(urlQ, { track: false, brand: urlMarca || undefined });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
@@ -341,9 +358,12 @@ function SearchPage() {
   useEffect(() => {
     if (!hydrated || !restoredRef.current) return;
     const urlQ = initialQ.trim();
-    if (urlQ === (lastUrlQRef.current ?? "")) return;
-    lastUrlQRef.current = urlQ;
-    if (!urlQ) {
+    const urlMarca = initialMarca.trim();
+    const key = searchUrlKey(urlQ, urlMarca);
+    if (key === (lastUrlKeyRef.current ?? "")) return;
+    lastUrlKeyRef.current = key;
+    setBrandFilter(urlMarca);
+    if (!urlQ && !urlMarca) {
       setQuery("");
       setActiveQuery("");
       setResults([]);
@@ -355,10 +375,14 @@ function SearchPage() {
       setHideNoImage(false);
       return;
     }
-    if (urlQ.toLowerCase() === activeQuery.trim().toLowerCase() && results.length > 0) return;
-    void runSearch(urlQ, { track: false });
+    if (
+      !urlMarca &&
+      urlQ.toLowerCase() === activeQuery.trim().toLowerCase() &&
+      results.length > 0
+    ) return;
+    void runSearch(urlQ, { track: false, brand: urlMarca || undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQ]);
+  }, [initialQ, initialMarca]);
 
   // Si el sidebar limpia el store estando en /search, salir a landing.
   useEffect(() => {
@@ -366,7 +390,8 @@ function SearchPage() {
     if (storedQuery || storedResults.length > 0) return;
     if (!searched && results.length === 0) return;
     const urlQ = initialQ.trim();
-    if (urlQ) return;
+    const urlMarca = initialMarca.trim();
+    if (urlQ || urlMarca) return;
     setQuery("");
     setActiveQuery("");
     setResults([]);
@@ -376,7 +401,7 @@ function SearchPage() {
     setMinPrice("");
     setMaxPrice("");
     setHideNoImage(false);
-    lastUrlQRef.current = "";
+    lastUrlKeyRef.current = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, storedQuery, storedResults.length]);
 
@@ -424,7 +449,7 @@ function SearchPage() {
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder='Buscar producto...'
+                  placeholder={brandFilter ? `Productos de ${brandFilter}…` : "Buscar producto..."}
                   className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-8 py-2 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
                 />
                 {query && (
@@ -443,7 +468,7 @@ function SearchPage() {
               </div>
               <button
                 type="submit"
-                disabled={loading || !query.trim()}
+                disabled={loading || (!query.trim() && !brandFilter.trim())}
                 className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg px-4 py-2 transition-all flex-shrink-0"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
@@ -528,6 +553,26 @@ function SearchPage() {
           </header>
 
           {/* Provider filters bar */}
+          {brandFilter && (
+            <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-2 flex items-center gap-2">
+              <span className="text-xs text-surface-400">Marca</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-brand-600/15 text-brand-300 border border-brand-500/30 rounded-full pl-2.5 pr-1 py-0.5">
+                {brandFilter}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBrandFilter("");
+                    if (activeQuery.trim() && searched) void runSearch(activeQuery, { track: false, brand: "" });
+                    else syncSearchUrl(query, "");
+                  }}
+                  className="w-4 h-4 rounded-full hover:bg-white/10 flex items-center justify-center"
+                  title="Quitar filtro de marca"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            </div>
+          )}
           {showFilters && (
             <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3">
               <div className="flex items-center gap-3">

@@ -165,22 +165,40 @@ export class BrandActionsService {
           select: {
             id: true,
             name: true,
-            brandLanding: { select: { publicKey: true, published: true, headline: true, logoUrl: true } },
+            brandLanding: {
+              select: {
+                publicKey: true,
+                published: true,
+                headline: true,
+                logoUrl: true,
+                primaryColor: true,
+              },
+            },
           },
         },
       },
     });
     const brandIds = links.map((l) => l.supplierTenantId);
     const now = new Date();
-    const actions = await this.prisma.brandAction.findMany({
-      where: {
-        tenantId: { in: brandIds },
-        status: "ACTIVE",
-        startsAt: { lte: now },
-        endsAt: { gte: now },
-      },
-      include: { scopes: true },
-    });
+    const [signalCounts, actions] = await Promise.all([
+      brandIds.length
+        ? this.prisma.brandSkuSignal.groupBy({
+            by: ["tenantId"],
+            where: { tenantId: { in: brandIds } },
+            _count: { _all: true },
+          })
+        : Promise.resolve([] as { tenantId: string; _count: { _all: number } }[]),
+      this.prisma.brandAction.findMany({
+        where: {
+          tenantId: { in: brandIds },
+          status: "ACTIVE",
+          startsAt: { lte: now },
+          endsAt: { gte: now },
+        },
+        include: { scopes: true },
+      }),
+    ]);
+    const signalByBrand = new Map(signalCounts.map((row) => [row.tenantId, row._count._all]));
     const byBrand = new Map<string, typeof actions>();
     for (const action of actions) {
       const list = byBrand.get(action.tenantId) ?? [];
@@ -199,6 +217,7 @@ export class BrandActionsService {
         tenantId: org.id,
         name: org.name,
         landing: org.brandLanding,
+        signalCount: signalByBrand.get(org.id) ?? 0,
         actions: withP,
       });
     }
@@ -267,6 +286,13 @@ export class BrandActionsService {
     const retailerIds = await this.retailerIdsFor(tenant.tenantId, row);
     const progress = await this.measure(row, retailerIds);
     return { ...this.serialize(row), progress };
+  }
+
+  async progressForClient(
+    row: Awaited<ReturnType<BrandActionsService["requireAction"]>>,
+    retailerId: string
+  ) {
+    return this.withProgressForRetailer(row, retailerId);
   }
 
   private async withProgressForRetailer(

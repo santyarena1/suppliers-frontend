@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import RedeemAccessCode from "@/components/RedeemAccessCode";
 import { getTenant } from "@/lib/auth";
 import { brandApi, type RetailerBrandView } from "@/lib/api";
-import { Building2, ChevronRight, Loader2 } from "lucide-react";
+import { Building2, ChevronRight, CircleDot, Loader2 } from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
@@ -18,13 +19,16 @@ export default function MarcasHomePage() {
   const tenant = getTenant();
   const distro = tenant?.type === "DISTRIBUTOR";
 
-  useEffect(() => {
-    brandApi
+  const load = useCallback(() => {
+    return brandApi
       .linked()
       .then((res) => setBrands(res.data.brands))
-      .catch((err) => setAviso(errMsg(err, "No se pudieron cargar las marcas")))
-      .finally(() => setLoading(false));
+      .catch((err) => setAviso(errMsg(err, "No se pudieron cargar las marcas")));
   }, []);
+
+  useEffect(() => {
+    load().finally(() => setLoading(false));
+  }, [load]);
 
   return (
     <>
@@ -33,8 +37,8 @@ export default function MarcasHomePage() {
           <h1 className="text-base font-semibold text-white">Marcas</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
             {distro
-              ? "Solo las marcas con las que este distribuidor está vinculado. El resto no aparecen."
-              : "Solo las marcas con las que tu comercio está vinculado. El resto no aparecen."}
+              ? "Espacio de cada marca vinculada con este distribuidor. Canjeá un código para sumar otra."
+              : "Espacio de cada marca con la que trabaja este local. Canjeá el código acá, no en Proveedores."}
           </p>
         </div>
         <PrefsPanel />
@@ -42,35 +46,29 @@ export default function MarcasHomePage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-5">
           {aviso && <p className="text-xs rounded-md px-3 py-2 bg-red-500/10 text-red-400">{aviso}</p>}
+          <RedeemAccessCode onRedeemed={() => void load()} />
           {loading ? (
             <div className="flex justify-center py-16">
               <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
             </div>
           ) : brands.length === 0 ? (
-            <div className="text-center py-16 max-w-md mx-auto">
+            <div className="text-center py-10 max-w-md mx-auto">
               <Building2 className="w-10 h-10 text-surface-600 mx-auto mb-3" />
-              <h2 className="text-sm font-semibold text-white mb-1">Sin marcas vinculadas</h2>
-              {distro ? (
-                <p className="text-xs text-surface-400">
-                  El vínculo con una marca lo arma NODO. Hasta entonces esa organización no existe para este
-                  distribuidor.
-                </p>
-              ) : (
-                <>
-                  <p className="text-xs text-surface-400">
-                    Canjeá el código que te dio la marca en Proveedores. Hasta entonces esa organización no existe para
-                    este local.
-                  </p>
-                  <Link href="/proveedores" className="inline-block mt-4 text-sm text-brand-400">
-                    Ir a Proveedores →
-                  </Link>
-                </>
-              )}
+              <h2 className="text-sm font-semibold text-white mb-1">Todavía no hay marcas acá</h2>
+              <p className="text-xs text-surface-400">
+                Pedile el código a la marca (o a NODO) y canjealo arriba. Hasta entonces esa organización no existe
+                para {distro ? "este distribuidor" : "este local"}.
+              </p>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {brands.map((brand) => (
-                <article key={brand.linkId} className="border border-surface-800 rounded-xl p-4 bg-surface-900 flex flex-col gap-3">
+                <Link
+                  key={brand.linkId}
+                  href={`/marcas/${brand.linkId}`}
+                  className="border border-surface-800 hover:border-surface-600 rounded-xl p-4 bg-surface-900 flex flex-col gap-3 transition-colors"
+                  style={brand.landing?.primaryColor ? { borderColor: `${brand.landing.primaryColor}55` } : undefined}
+                >
                   <div className="flex items-center gap-3">
                     {brand.landing?.logoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -84,40 +82,15 @@ export default function MarcasHomePage() {
                       <p className="text-sm font-semibold text-white truncate">{brand.name}</p>
                       <p className="text-[11px] text-surface-500 truncate">{brand.landing?.headline || "Marca vinculada"}</p>
                     </div>
-                    {brand.landing?.published && (
-                      <a href={`/m/${brand.landing.publicKey}`} target="_blank" rel="noreferrer" className="text-[11px] text-brand-400">
-                        Landing
-                      </a>
-                    )}
-                    <Link href={`/mensajes?linkId=${brand.linkId}`} className="text-[11px] text-brand-400">
-                      Hablar
-                    </Link>
+                    <ChevronRight className="w-4 h-4 text-surface-600" />
                   </div>
-                  {brand.actions.length === 0 ? (
-                    <p className="text-xs text-surface-500">
-                      {distro ? "Sin acciones vigentes para este distribuidor." : "Sin acciones vigentes para este local."}
-                    </p>
-                  ) : (
-                    <ul className="flex flex-col gap-2">
-                      {brand.actions.map((action) => (
-                        <li key={action.id}>
-                          <p className="text-xs text-surface-200">{action.title}</p>
-                          <div className="h-1 rounded-full bg-surface-800 overflow-hidden mt-1">
-                            <div
-                              className={`h-full ${action.progress.met ? "bg-emerald-500" : "bg-brand-500"}`}
-                              style={{ width: `${Math.round(action.progress.ratio * 100)}%` }}
-                            />
-                          </div>
-                          <p className="text-[10px] text-surface-500 mt-0.5 tabular-nums">
-                            {action.kind === "PURCHASE_AMOUNT"
-                              ? `${action.progress.current.toFixed(0)} / ${action.progress.target ?? "—"} USD`
-                              : `${action.progress.current} / ${action.progress.target ?? "—"} u.`}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </article>
+                  <div className="flex items-center gap-3 text-[11px] text-surface-500">
+                    <span className="inline-flex items-center gap-1">
+                      <CircleDot className="w-3 h-3" /> {brand.signalCount} en el mapa
+                    </span>
+                    <span>{brand.actions.length} acciones</span>
+                  </div>
+                </Link>
               ))}
             </div>
           )}

@@ -137,6 +137,8 @@ model Tenant {
   adCampaigns   AdCampaign[]
   brandLanding  BrandLanding?
   brandActions  BrandAction[]
+  brandResources BrandResource[]
+  brandSignals   BrandSkuSignal[]
   notificationsFrom OrgNotification[] @relation("NotifFrom")
   notificationsTo   OrgNotification[] @relation("NotifTo")
 
@@ -816,8 +818,67 @@ model BrandLanding {
   supportPhone String?
   /// Bloques [{ type: "text"|"image"|"faq", title?, body?, url? }]
   blocks      Json     @default("[]")
+  /// HTML del espacio in-app. Placeholders {{productos}} {{acciones}} {{materiales}} {{capacitaciones}} {{semaforos}} {{hablar}}.
+  html             String? @db.Text
+  primaryColor     String?
+  backgroundColor  String?
+  textColor        String?
+  fontFamily       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+enum BrandResourceKind {
+  MATERIAL
+  TRAINING
+}
+
+/// Archivo o link que la marca comparte con las cuentas vinculadas. No es un catálogo.
+model BrandResource {
+  id          String            @id @default(uuid())
+  tenantId    String
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  kind        BrandResourceKind
+  type        String
+  title       String
+  description String?
+  fileUrl     String?
+  contentUrl  String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([tenantId, kind])
+}
+
+enum BrandSignalLight {
+  GREEN
+  YELLOW
+  RED
+  BLUE
+  GRAY
+}
+
+/// SKU real de un distro que la marca eligió para semáforo / precio sugerido. No crea producto.
+model BrandSkuSignal {
+  id             String           @id @default(uuid())
+  tenantId       String
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider       String
+  externalId     String
+  name           String
+  sku            String?
+  imageUrl       String?
+  light          BrandSignalLight @default(YELLOW)
+  suggestedPrice Decimal?         @db.Decimal(14, 4)
+  qtyEstimate    Int?
+  incomingAt     DateTime?
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([tenantId, provider, externalId])
+  @@index([tenantId, light])
+  @@index([provider, externalId])
 }
 
 /// Acción comercial medible: comprar X en Y distribuidores para Z comercios, con vigencia y rebate.

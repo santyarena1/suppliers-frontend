@@ -579,11 +579,13 @@ export class ProvidersController {
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Param("provider") provider: string,
     @Query("name") name = "",
+    @Query("brand") brand = "",
     @Query("includeOutOfStock") includeOutOfStock?: string
   ) {
     if (!tenant) return [];
     return this.providersService.search(commercialId(tenant), assertProvider(provider), name, {
       includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock),
+      brand: brand.trim() || undefined,
     });
   }
 

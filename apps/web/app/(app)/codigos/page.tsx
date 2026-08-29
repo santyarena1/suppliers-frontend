@@ -69,8 +69,8 @@ export default function CodigosPage() {
           <h1 className="text-base font-semibold text-white">Códigos de vinculación</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
             {getTenant()?.type === "BRAND"
-              ? "Entregalos por WhatsApp o en papel. El comercio los canjea sin saber de quién son hasta que salen bien."
-              : "Entregalos por WhatsApp o en papel. El comercio los canjea en Proveedores."}
+              ? "Entregalos por WhatsApp o en papel. El comercio o el distro los canjea en Marcas, sin saber de quién son hasta que salen bien."
+              : "Entregalos por WhatsApp o en papel. El comercio los canjea en Proveedores; si es de una marca, en Marcas."}
           </p>
         </div>
         <PrefsPanel />

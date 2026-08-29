@@ -8,7 +8,11 @@ Monorepo pnpm de NODO, con dos apps:
 
 ## Alcance actual
 
-El módulo B2B de "Marcas" (`apps/web/app/marca`, `apps/web/app/marcas`, `apps/web/lib/brands`) está **fuera de alcance del backend nuevo por ahora** — se va a reconstruir aparte más adelante. El foco actual del backend es: auth, búsqueda agregada por proveedor, credenciales por proveedor, y administración de usuarios.
+El backend cubre auth, búsqueda agregada por proveedor, credenciales por
+organización, y los tres tipos de cliente. Tipo 3 (marcas) es espacio in-app,
+mapa de SKUs de distros con semáforo/precio sugerido, materiales y acciones:
+`docs/PLAN_TIPO3.md`. No hay catálogo propio de marca ni landing pública como
+producto.
 
 ## Contrato de API
 

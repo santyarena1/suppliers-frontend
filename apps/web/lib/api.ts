@@ -122,6 +122,14 @@ export async function uploadAuthedFiles(
 export const assetsApi = {
   upload: (file: File) =>
     uploadAuthedFile("/assets/upload", file) as Promise<{ url: string }>,
+  uploadFile: (file: File) =>
+    uploadAuthedFile("/assets/upload-file", file) as Promise<{
+      url: string;
+      filename: string;
+      mimeType: string;
+      byteSize: number;
+      kind: "IMAGE" | "FILE";
+    }>,
 };
 
 // --- Types ---
@@ -232,12 +240,17 @@ export const authApi = {
 export interface SearchAllOptions {
   providers?: Provider[];
   includeOutOfStock?: boolean;
+  brand?: string;
   onProviderResult?: (provider: Provider, products: ProductDTO[]) => void;
   onProviderError?: (provider: Provider, error: unknown) => void;
 }
 
-function searchParams(name: string, includeOutOfStock?: boolean) {
-  return includeOutOfStock ? { name, includeOutOfStock: true } : { name };
+function searchParams(name: string, opts: { includeOutOfStock?: boolean; brand?: string } = {}) {
+  const params: Record<string, string | boolean> = {};
+  if (name) params.name = name;
+  if (opts.brand) params.brand = opts.brand;
+  if (opts.includeOutOfStock) params.includeOutOfStock = true;
+  return params;
 }
 
 export const searchApi = {
@@ -249,7 +262,7 @@ export const searchApi = {
       providers.map(async (p) => {
         try {
           const r = await api.get<ProductDTO[]>(`/search/provider/${p}`, {
-            params: searchParams(name, opts.includeOutOfStock),
+            params: searchParams(name, { includeOutOfStock: opts.includeOutOfStock, brand: opts.brand }),
           });
           const data = Array.isArray(r.data) ? r.data : [];
           opts.onProviderResult?.(p, data);
@@ -268,7 +281,7 @@ export const searchApi = {
   },
   byProvider: (provider: Provider, name: string, opts: { includeOutOfStock?: boolean } = {}) =>
     api.get<ProductDTO[]>(`/search/provider/${provider}`, {
-      params: searchParams(name, opts.includeOutOfStock),
+      params: searchParams(name, opts),
     }),
   filtered: async (name: string, filters: Record<string, boolean>, opts: SearchAllOptions = {}) => {
     const providers = (await loadLinkedProviders()).filter((p) => filters[p]);
@@ -2520,6 +2533,11 @@ export interface BrandLanding {
   supportEmail: string | null;
   supportPhone: string | null;
   blocks: { type?: string; title?: string; body?: string; url?: string }[] | unknown;
+  html: string | null;
+  primaryColor: string | null;
+  backgroundColor: string | null;
+  textColor: string | null;
+  fontFamily: string | null;
 }
 
 export interface PublicBrandLanding {
@@ -2535,6 +2553,72 @@ export interface PublicBrandLanding {
   blocks: { type?: string; title?: string; body?: string; url?: string }[] | unknown;
 }
 
+export type BrandSignalLight = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
+
+export interface BrandSkuSignal {
+  id: string;
+  provider: string;
+  providerName: string;
+  externalId: string;
+  name: string;
+  sku: string | null;
+  imageUrl: string | null;
+  light: BrandSignalLight;
+  suggestedPrice: number | null;
+  qtyEstimate: number | null;
+  incomingAt: string | null;
+  notes: string | null;
+}
+
+export interface BrandCatalogProduct {
+  provider: string;
+  providerName: string;
+  externalId: string;
+  name: string;
+  sku: string | null;
+  imageUrl: string | null;
+  selected: boolean;
+}
+
+export interface BrandResource {
+  id: string;
+  kind: "MATERIAL" | "TRAINING";
+  type: string;
+  title: string;
+  description: string | null;
+  fileUrl: string | null;
+  contentUrl: string | null;
+  createdAt: string;
+}
+
+export interface BrandHubHtmlPart {
+  type: "html" | "slot";
+  html?: string;
+  name?: string;
+}
+
+export interface BrandHub {
+  linkId: string;
+  tenantId: string;
+  name: string;
+  status: TenantLinkStatus;
+  theme: {
+    primaryColor: string | null;
+    backgroundColor: string | null;
+    textColor: string | null;
+    fontFamily: string | null;
+    logoUrl: string | null;
+    heroUrl: string | null;
+    headline: string | null;
+    about: string | null;
+  };
+  htmlParts: BrandHubHtmlPart[];
+  actions: BrandAction[];
+  signals: BrandSkuSignal[];
+  materials: BrandResource[];
+  trainings: BrandResource[];
+}
+
 export interface BrandAccounts {
   retailers: { linkId: string; tenantId: string; name: string; status: TenantLinkStatus }[];
   linkedDistributors: { linkId: string; tenantId: string; name: string; status: TenantLinkStatus }[];
@@ -2545,7 +2629,14 @@ export interface RetailerBrandView {
   linkId: string;
   tenantId: string;
   name: string;
-  landing: { publicKey: string; published: boolean; headline: string | null; logoUrl: string | null } | null;
+  landing: {
+    publicKey: string;
+    published: boolean;
+    headline: string | null;
+    logoUrl: string | null;
+    primaryColor?: string | null;
+  } | null;
+  signalCount: number;
   actions: BrandAction[];
 }
 
@@ -2564,6 +2655,31 @@ export interface OrgNotice {
 export const brandApi = {
   landing: () => api.get<BrandLanding>("/my/brand/landing"),
   saveLanding: (data: Partial<BrandLanding>) => api.put<BrandLanding>("/my/brand/landing", data),
+  catalog: (params?: { q?: string; provider?: string; take?: number }) =>
+    api.get<{ canWrite: boolean; products: BrandCatalogProduct[] }>("/my/brand/catalog", { params }),
+  signals: () => api.get<{ canWrite: boolean; signals: BrandSkuSignal[] }>("/my/brand/signals"),
+  upsertSignal: (data: {
+    provider: string;
+    externalId: string;
+    light?: BrandSignalLight;
+    suggestedPrice?: number | null;
+    qtyEstimate?: number | null;
+    incomingAt?: string | null;
+    notes?: string | null;
+  }) => api.put<BrandSkuSignal>("/my/brand/signals", data),
+  removeSignal: (id: string) => api.delete<{ ok: true }>(`/my/brand/signals/${id}`),
+  importSignals: (csv: string) => api.post<{ upserted: number; skipped: number }>("/my/brand/signals/import", { csv }),
+  resources: (kind?: "MATERIAL" | "TRAINING") =>
+    api.get<{ canWrite: boolean; resources: BrandResource[] }>("/my/brand/resources", { params: { kind } }),
+  createResource: (data: {
+    kind: "MATERIAL" | "TRAINING";
+    type: string;
+    title: string;
+    description?: string | null;
+    fileUrl?: string | null;
+    contentUrl?: string | null;
+  }) => api.post<BrandResource>("/my/brand/resources", data),
+  removeResource: (id: string) => api.delete<{ ok: true }>(`/my/brand/resources/${id}`),
   actions: () => api.get<{ canWrite: boolean; actions: BrandAction[] }>("/my/brand/actions"),
   createAction: (data: UpsertBrandAction) => api.post<BrandAction>("/my/brand/actions", data),
   updateAction: (id: string, data: UpsertBrandAction) => api.put<BrandAction>(`/my/brand/actions/${id}`, data),
@@ -2573,6 +2689,7 @@ export const brandApi = {
   note: (data: { retailerTenantId: string; title: string; body: string }) =>
     api.post<{ ok: true }>("/my/brand/notes", data),
   linked: () => api.get<{ brands: RetailerBrandView[] }>("/my/brands"),
+  hub: (linkId: string) => api.get<BrandHub>(`/my/brands/${linkId}`),
   notifications: () => api.get<OrgNotice[]>("/my/notifications"),
   markRead: (id: string) => api.post<{ ok: true }>(`/my/notifications/${id}/read`),
   sendNotice: (data: { retailerTenantId: string; title: string; body: string }) =>

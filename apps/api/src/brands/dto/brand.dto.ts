@@ -136,6 +136,104 @@ export class UpdateBrandLandingDto {
   @IsOptional()
   @IsArray()
   blocks?: unknown;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80000)
+  html?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  primaryColor?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  backgroundColor?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  textColor?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  fontFamily?: string | null;
+}
+
+export class UpsertBrandSignalDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(40)
+  provider!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  externalId!: string;
+
+  @IsOptional()
+  @IsIn(["GREEN", "YELLOW", "RED", "BLUE", "GRAY"])
+  light?: "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  suggestedPrice?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  qtyEstimate?: number | null;
+
+  @IsOptional()
+  @IsDateString()
+  incomingAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string | null;
+}
+
+export class ImportBrandSignalsDto {
+  @IsString()
+  @MinLength(10)
+  csv!: string;
+}
+
+export class UpsertBrandResourceDto {
+  @IsIn(["MATERIAL", "TRAINING"])
+  kind!: "MATERIAL" | "TRAINING";
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(40)
+  type!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  fileUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  contentUrl?: string | null;
 }
 
 export class PostBrandNoteDto {
