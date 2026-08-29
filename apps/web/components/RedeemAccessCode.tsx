@@ -10,7 +10,13 @@ import { myApi } from "@/lib/api";
  * Es la única forma de conectarse con un distribuidor o una marca que todavía no
  * aparece: te lo dan por fuera de NODO y no dice de quién es hasta que lo canjeás.
  */
-export default function RedeemAccessCode({ onRedeemed }: { onRedeemed?: () => void }) {
+export default function RedeemAccessCode({
+  onRedeemed,
+  purpose = "any",
+}: {
+  onRedeemed?: () => void;
+  purpose?: "any" | "brand";
+}) {
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -36,8 +42,9 @@ export default function RedeemAccessCode({ onRedeemed }: { onRedeemed?: () => vo
   return (
     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-3">
       <p className="text-xs text-surface-500">
-        Si ya trabajás con un distribuidor o una marca que no aparece en la lista, pediles el
-        código de acceso de NODO y canjealo acá.
+        {purpose === "brand"
+          ? "Si ya trabajás con una marca que no aparece, pediles el código de NODO y canjealo acá. Hasta canjearlo no se revela de quién es."
+          : "Si ya trabajás con un distribuidor o una marca que no aparece en la lista, pediles el código de acceso de NODO y canjealo acá."}
       </p>
       <form onSubmit={submit} className="flex flex-col sm:flex-row gap-2">
         <div className="relative flex-1">

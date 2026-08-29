@@ -2551,6 +2551,7 @@ export interface PublicBrandLanding {
   supportEmail: string | null;
   supportPhone: string | null;
   blocks: { type?: string; title?: string; body?: string; url?: string }[] | unknown;
+  htmlDocument?: string;
 }
 
 export type BrandSignalLight = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";
@@ -2591,6 +2592,20 @@ export interface BrandResource {
   createdAt: string;
 }
 
+export interface BrandModuleState {
+  ready: boolean;
+  count: number;
+}
+
+export type BrandModuleId = "space" | "products" | "actions" | "materials" | "trainings" | "contact";
+
+export interface BrandPresence {
+  pending: boolean;
+  readyCount: number;
+  total: number;
+  modules: Record<BrandModuleId, BrandModuleState>;
+}
+
 export interface BrandHubHtmlPart {
   type: "html" | "slot";
   html?: string;
@@ -2602,6 +2617,8 @@ export interface BrandHub {
   tenantId: string;
   name: string;
   status: TenantLinkStatus;
+  connectedAt: string;
+  presence: BrandPresence;
   theme: {
     primaryColor: string | null;
     backgroundColor: string | null;
@@ -2612,6 +2629,13 @@ export interface BrandHub {
     headline: string | null;
     about: string | null;
   };
+  contact: {
+    websiteUrl: string | null;
+    supportEmail: string | null;
+    supportPhone: string | null;
+  };
+  htmlDocument: string;
+  htmlSlots: string[];
   htmlParts: BrandHubHtmlPart[];
   actions: BrandAction[];
   signals: BrandSkuSignal[];
@@ -2629,14 +2653,19 @@ export interface RetailerBrandView {
   linkId: string;
   tenantId: string;
   name: string;
+  status: TenantLinkStatus;
+  connectedAt: string;
   landing: {
     publicKey: string;
     published: boolean;
     headline: string | null;
+    about: string | null;
     logoUrl: string | null;
     primaryColor?: string | null;
   } | null;
   signalCount: number;
+  unreadNotices: number;
+  presence: BrandPresence;
   actions: BrandAction[];
 }
 

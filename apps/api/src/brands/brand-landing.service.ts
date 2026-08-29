@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { newPublicKey } from "./brand-orgs";
-import { sanitizeBrandHtml } from "./brand-html";
+import { compileBrandHtml, sanitizeBrandHtml } from "./brand-html";
 import { UpdateBrandLandingDto } from "./dto/brand.dto";
 
 const LANDING_WRITERS = ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL"] as const;
@@ -54,6 +54,7 @@ export class BrandLandingService {
     if (!landing?.published || !landing.tenant.active || landing.tenant.type !== "BRAND") {
       throw new NotFoundException("Landing no encontrada");
     }
+    const compiled = compileBrandHtml(landing.html ?? "");
     return {
       publicKey: landing.publicKey,
       name: landing.tenant.name,
@@ -65,6 +66,7 @@ export class BrandLandingService {
       supportEmail: landing.supportEmail,
       supportPhone: landing.supportPhone,
       blocks: landing.blocks,
+      htmlDocument: compiled.html,
     };
   }
 

@@ -139,7 +139,7 @@ export class UpdateBrandLandingDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(80000)
+  @MaxLength(200000)
   html?: string | null;
 
   @IsOptional()
