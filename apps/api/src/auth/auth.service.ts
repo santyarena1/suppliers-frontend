@@ -62,6 +62,32 @@ export class AuthService {
   }
 
   /**
+   * Emite un JWT nuevo para la misma persona (y la misma suplantación, si hay).
+   * El token de entrada tiene que seguir siendo válido: esto alarga la sesión
+   * mientras la pestaña está abierta, no revive una ya vencida.
+   */
+  async refresh(session: JwtPayload) {
+    const user = await this.prisma.user.findUnique({ where: { id: session.userId } });
+    if (!user) throw new UnauthorizedException("Usuario no encontrado");
+    if (!user.active) throw new UnauthorizedException("La cuenta está desactivada");
+    if (user.endDate && user.endDate.getTime() < Date.now()) {
+      throw new UnauthorizedException("La cuenta venció");
+    }
+
+    const extra: Partial<JwtPayload> = session.impersonatedBy
+      ? {
+          impersonatedBy: session.impersonatedBy,
+          impersonatedByUsername: session.impersonatedByUsername,
+        }
+      : {};
+    const payload = await this.payloadFor(user, extra);
+    const token = session.impersonatedBy
+      ? await this.jwt.signAsync(payload, { expiresIn: IMPERSONATION_EXPIRES_IN })
+      : await this.jwt.signAsync(payload);
+    return { token };
+  }
+
+  /**
    * Arma el contenido del token. La organización se resuelve acá, en el momento de
    * emitirlo, para que el resto de la plataforma no tenga que buscarla en cada pedido.
    */

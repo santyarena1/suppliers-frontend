@@ -9,6 +9,7 @@ import Sidebar from "./Sidebar";
 import TenantRouteGate from "../org/TenantRouteGate";
 import ChatRealtime from "../chat/ChatRealtime";
 import CartFloat from "../CartFloat";
+import SessionKeepAlive from "../SessionKeepAlive";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -20,6 +21,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthGuard>
+      <SessionKeepAlive />
       <ChatRealtime />
       <div className="flex h-screen flex-col overflow-hidden">
         <ImpersonationBanner />

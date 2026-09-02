@@ -4,6 +4,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ## Implementado
 
+### [FEATURE] Renovar sesión (JWT)
+- **Método**: POST
+- **Ruta**: `/auth/refresh`
+- **Auth**: Bearer token requerido (el actual tiene que seguir siendo válido)
+- **Body / Params**: `{}` (Fastify rechaza un JSON vacío)
+- **Respuesta esperada**: `{ token }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Alarga la sesión mientras la pestaña está abierta. No revive un JWT ya vencido. Si hay suplantación, reemite con el mismo `impersonatedBy` y TTL de 1h. El default de `JWT_EXPIRES_IN` es `12h` (antes `15m`): con 15 minutos, el primer toque al carrito (varias APIs de checkout) disparaba 401 y el front echaba al usuario. La cookie `tgs_auth` del middleware se alinea al `exp` del token.
+
 ### [FEATURE] Banners con slot de grid
 - **Método**: GET | POST | PUT | DELETE (admin) · GET público `/banners`
 - **Ruta**: `/banners`, `/admin/banners`, `/admin/banners/:id`

@@ -2,11 +2,58 @@
 
 const COOKIE = "tgs_auth";
 const ONE_DAY = 60 * 60 * 24;
+/** Un rato más que el JWT para que el middleware no te eche un segundo antes de que venza el token. */
+const COOKIE_BUFFER_SEC = 5 * 60;
 
 function writeCookie(name: string, value: string, maxAgeSec: number) {
   if (typeof document === "undefined") return;
   const secure = location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${name}=${value}; Path=/; Max-Age=${maxAgeSec}; SameSite=Lax${secure}`;
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/** `exp` del JWT en ms, o null si no se puede leer. */
+export function tokenExpiresAt(token?: string | null): number | null {
+  const raw = token === undefined ? getToken() : token;
+  if (!raw) return null;
+  const payload = decodeJwtPayload(raw);
+  const exp = payload?.exp;
+  return typeof exp === "number" ? exp * 1000 : null;
+}
+
+/** true si no hay token o ya venció (con `skewMs` de margen). */
+export function isTokenExpired(token?: string | null, skewMs = 0): boolean {
+  const raw = token === undefined ? getToken() : token;
+  if (!raw) return true;
+  const exp = tokenExpiresAt(raw);
+  if (exp == null) return false;
+  return Date.now() >= exp - skewMs;
+}
+
+/**
+ * La cookie `tgs_auth` es lo único que ve el middleware de Next. Tiene que
+ * vivir junto al JWT: si se cae y el token sigue en localStorage, el primer
+ * Link (a menudo el carrito) parece un cierre de sesión.
+ */
+export function persistAuthCookie(token?: string | null): void {
+  const raw = token === undefined ? getToken() : token;
+  if (!raw) return;
+  const exp = tokenExpiresAt(raw);
+  const maxAge = exp != null
+    ? Math.max(60, Math.ceil((exp - Date.now()) / 1000) + COOKIE_BUFFER_SEC)
+    : ONE_DAY;
+  writeCookie(COOKIE, "1", maxAge);
 }
 
 function deleteCookie(name: string) {
@@ -42,13 +89,7 @@ export interface SessionUser {
  * dos entradas a la plataforma produzcan exactamente la misma sesión.
  */
 export function sessionFromToken(token: string, fallbackUsername = ""): SessionUser {
-  let payload: Record<string, unknown> = {};
-  try {
-    payload = JSON.parse(atob(token.split(".")[1]));
-  } catch {
-    // Un token ilegible igual deja una sesión mínima; la API va a rechazarlo y el
-    // interceptor de 401 se encarga de mandar a login.
-  }
+  const payload = decodeJwtPayload(token) ?? {};
   const str = (key: string) => (typeof payload[key] === "string" ? (payload[key] as string) : undefined);
 
   return {
@@ -96,7 +137,7 @@ export function getUser(): SessionUser | null {
 export function saveSession(token: string, user: SessionUser) {
   localStorage.setItem("token", token);
   localStorage.setItem("user", JSON.stringify(user));
-  writeCookie(COOKIE, "1", ONE_DAY);
+  persistAuthCookie(token);
 }
 
 export function clearSession() {
@@ -142,7 +183,7 @@ export function stopImpersonation(): boolean {
   localStorage.removeItem(ADMIN_USER_KEY);
   localStorage.setItem("token", token);
   localStorage.setItem("user", user);
-  writeCookie(COOKIE, "1", ONE_DAY);
+  persistAuthCookie(token);
   return true;
 }
 

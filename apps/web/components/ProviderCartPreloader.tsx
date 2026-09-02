@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useCart } from "@/lib/cart";
-import { getToken } from "@/lib/auth";
+import { getToken, isTokenExpired } from "@/lib/auth";
 import {
   WARM_PROVIDERS,
   cartLinesFromItems,
@@ -14,7 +14,7 @@ export default function ProviderCartPreloader() {
   const { onlineByProvider, hydrated } = useCart();
 
   useEffect(() => {
-    if (!hydrated || !getToken()) return;
+    if (!hydrated || !getToken() || isTokenExpired()) return;
     for (const provider of WARM_PROVIDERS) {
       const items = onlineByProvider[provider] ?? [];
       if (items.length === 0) {
