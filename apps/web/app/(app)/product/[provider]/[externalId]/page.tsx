@@ -210,13 +210,27 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <ProviderBadge provider={providerName} variant="inline" size="md" chip />
                   {productDisplayBrand(product) && (
-                    <span className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200">
+                    <Link
+                      href={`/search?marca=${encodeURIComponent(productDisplayBrand(product)!)}`}
+                      className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200 hover:border-brand-500/50 hover:text-brand-300 hover:bg-brand-600/10 transition-colors"
+                      title={`Buscar marca ${productDisplayBrand(product)}`}
+                    >
                       {productDisplayBrand(product)}
-                    </span>
+                    </Link>
                   )}
-                  {(productDisplayCategory(product) || productDisplaySubcategory(product)) && (
+                  {productDisplayCategory(product) && (
+                    <Link
+                      href={`/search?categoria=${encodeURIComponent(productDisplayCategory(product)!)}`}
+                      className="text-xs text-surface-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline"
+                      title={`Filtrar por categoría ${productDisplayCategory(product)}`}
+                    >
+                      {productDisplayCategory(product)}
+                    </Link>
+                  )}
+                  {productDisplaySubcategory(product) && (
                     <span className="text-xs text-surface-500">
-                      {[productDisplayCategory(product), productDisplaySubcategory(product)].filter(Boolean).join(" · ")}
+                      {productDisplayCategory(product) ? "· " : ""}
+                      {productDisplaySubcategory(product)}
                     </span>
                   )}
                   <span className="font-mono text-xs text-surface-500">#{extId}</span>
@@ -457,9 +471,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   Evolución de precio
                 </h2>
                 {priceHistory.length >= 2 ? (
-                  <div className="h-56 sm:h-64">
-                    <PriceHistoryChart points={priceHistory} fillHeight />
-                  </div>
+                  <PriceHistoryChart points={priceHistory} />
                 ) : priceHistory.length === 1 ? (
                   <p className="text-xs text-surface-500 leading-relaxed">
                     Hay un único precio registrado ({formatUSD(Number(priceHistory[0].price) || 0)}).

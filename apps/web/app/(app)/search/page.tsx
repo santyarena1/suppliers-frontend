@@ -1073,29 +1073,47 @@ function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: PriceM
         <span className="w-10" />
         <span>Producto</span>
         <span className="text-right w-28">Proveedor</span>
-        <span className="text-right w-28">Precio</span>
+        <span className="text-right w-36">Precio</span>
         <span className="w-[7.5rem] text-right">Acciones</span>
       </div>
       {items.map((p, i) => {
         const brand = productDisplayBrand(p);
         const category = productDisplayCategory(p);
-        const metaLine = [brand, category].filter(Boolean).join(" · ");
         return (
-          <Link
+          <div
             key={`${p.provider}-${p.externalId}-${i}`}
-            href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
             className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 items-center px-4 py-3 bg-surface-950 hover:bg-surface-900 transition-colors"
           >
-            <div className="w-10 h-10 relative flex-shrink-0 bg-surface-800 rounded overflow-hidden">
+            <Link
+              href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
+              className="w-10 h-10 relative flex-shrink-0 bg-surface-800 rounded overflow-hidden"
+            >
               {p.imageUrl
                 ? <Image src={proxyImg(p.imageUrl)} alt="" fill className="object-contain" unoptimized />
                 : <Package className="w-4 h-4 text-surface-600 absolute inset-0 m-auto" />
               }
-            </div>
+            </Link>
             <div className="min-w-0">
-              <p className="text-sm text-surface-100 font-medium truncate">{p.name}</p>
-              {metaLine ? (
-                <p className="text-[11px] text-surface-500 truncate">{metaLine}</p>
+              <Link
+                href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
+                className="text-sm text-surface-100 font-medium truncate block hover:text-white"
+              >
+                {p.name}
+              </Link>
+              {(brand || category) ? (
+                <p className="text-[11px] text-surface-500 truncate">
+                  {brand && (
+                    <Link href={`/search?marca=${encodeURIComponent(brand)}`} className="hover:text-brand-300">
+                      {brand}
+                    </Link>
+                  )}
+                  {brand && category ? " · " : null}
+                  {category && (
+                    <Link href={`/search?categoria=${encodeURIComponent(category)}`} className="hover:text-brand-300">
+                      {category}
+                    </Link>
+                  )}
+                </p>
               ) : p.externalId ? (
                 <p className="text-[11px] text-surface-500 font-mono">#{p.externalId}</p>
               ) : null}
@@ -1103,13 +1121,13 @@ function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: PriceM
             <div className="w-28 text-right flex justify-end">
               <ProviderBadge provider={p.provider} variant="inline" size="sm" />
             </div>
-            <div className="w-28 text-right">
+            <div className="w-36 text-right">
               <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
             </div>
             <div className="w-[7.5rem]">
               <ListRowActions product={p} priceMode={priceMode} />
             </div>
-          </Link>
+          </div>
         );
       })}
     </div>

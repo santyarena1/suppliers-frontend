@@ -1870,7 +1870,13 @@ export const catalogApi = {
   priceHistory: (provider: Provider, externalId: string) =>
     api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`),
   categories: () => api.get<CategoryCount[]>("/catalog/categories"),
-  featured: (take = 24) => api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
+  featured: (take = 24, opts: { mixed?: boolean } = {}) =>
+    api.get<ProductDTO[]>("/catalog/featured", {
+      params: { take, ...(opts.mixed ? { mixed: true } : {}) },
+    }),
+  /** Alias semántico: solo bajadas de precio (default del endpoint featured). */
+  priceDrops: (take = 24) =>
+    api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
   byCategory: (category: string, take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
     api.get<ProductDTO[]>("/catalog/by-category", {
       params: {

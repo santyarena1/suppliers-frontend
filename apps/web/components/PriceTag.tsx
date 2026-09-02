@@ -58,10 +58,37 @@ export default function PriceTag({
     ? formatARS(convert(displayUsd).amount)
     : formatUSD(displayUsd);
 
+  const modeBadge =
+    pricing.mode === "offline"
+      ? { label: "Offline", className: "text-amber-300" }
+      : pricing.mode === "scheme"
+        ? { label: "Esquema", className: "text-violet-300" }
+        : null;
+
+  const canScheme = Boolean(policy?.acceptsScheme && policy.schemeIvaAdjustment);
+  const schemeHint =
+    product && priceMode === "list" && canScheme
+      ? (() => {
+          const sp = purchaseLinePricing(product, policy, "scheme", qty);
+          const sd = displayAmountFromPricing(
+            sp,
+            { withIva, withIibb: withIibb && sp.mode !== "offline", provider: provider || undefined },
+            qty
+          );
+          const usd = sd.displayUsd;
+          return currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
+        })()
+      : null;
+
   return (
     <div className={className}>
-      <div className="flex items-baseline gap-1.5">
+      <div className="flex items-baseline gap-1.5 flex-wrap justify-end">
         <span className={`font-bold text-white tabular-nums ${SIZES[size]}`}>{primary}</span>
+        {modeBadge && (
+          <span className={`text-[10px] font-semibold uppercase tracking-wider ${modeBadge.className}`}>
+            {modeBadge.label}
+          </span>
+        )}
         {!withIva && (
           <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">s/IVA</span>
         )}
@@ -76,6 +103,14 @@ export default function PriceTag({
       )}
       {showSecondary && currency === "USD" && (
         <p className="text-xs text-surface-500 tabular-nums">{secondary}</p>
+      )}
+      {schemeHint && (
+        <p className="text-[11px] font-medium text-violet-300 tabular-nums mt-0.5">
+          Esquema {schemeHint}
+          {policy.schemeDiscountPercent != null && policy.schemeDiscountPercent > 0
+            ? ` (−${policy.schemeDiscountPercent}%)`
+            : ""}
+        </p>
       )}
     </div>
   );
