@@ -282,6 +282,7 @@ export default function PlatformAccountPanel({
           <EnterAsButton
             userId={user.id}
             role={user.role}
+            variant="primary"
             onError={(message) => showToast(message, false)}
             className="px-3 py-2"
           />
