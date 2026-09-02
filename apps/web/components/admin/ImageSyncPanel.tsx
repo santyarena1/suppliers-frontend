@@ -214,7 +214,9 @@ export default function ImageSyncPanel({
         <h2 className="text-sm font-semibold text-white">Sincronización de imágenes</h2>
         <p className="text-xs text-surface-500 mt-1">
           Solo productos sin foto. Primera foto busca en Serper, prueba que la imagen cargue y la guarda
-          en Nodo (no se deja una URL rota). El automático corre dos veces al día (~{status?.cronLimit ?? 200} por corrida).
+          en Nodo. Si falla la API o no hay créditos, el producto queda pendiente (no se marca como listo).
+          También reintenta los que salieron “sin resultado” o con error. El automático corre dos veces al
+          día (~{status?.cronLimit ?? 200} por corrida).
         </p>
       </div>
 

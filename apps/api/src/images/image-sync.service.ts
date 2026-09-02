@@ -10,10 +10,10 @@ import { Prisma } from "@prisma/client";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { AssetsService } from "../assets/assets.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { candidateWhere, missingWhere, resolveRunPriority } from "./image-sync-candidates";
+import { candidateWhere, missingWhere, PERMANENT_SKIP_ERROR, resolveRunPriority } from "./image-sync-candidates";
 import { firstLiveImage, isStoredAssetPath, probeLiveImage } from "./live-image";
 import { buildImageSearchQuery, hasProductImage } from "./product-image";
-import { SerperImagesClient } from "./serper-images.client";
+import { isSerperBlockingError, SerperImagesClient } from "./serper-images.client";
 
 const SETTINGS_ID = "default";
 const DEFAULT_BATCH = 50;
@@ -24,6 +24,23 @@ const STALE_MS = 15 * 60_000;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function errText(err: unknown): string {
+  if (err && typeof err === "object" && "getResponse" in err) {
+    const getResponse = (err as { getResponse?: () => unknown }).getResponse;
+    if (typeof getResponse === "function") {
+      const r = getResponse.call(err);
+      if (typeof r === "string" && r.trim()) return r.trim();
+      if (r && typeof r === "object") {
+        const msg = (r as { message?: unknown }).message;
+        if (typeof msg === "string" && msg.trim()) return msg.trim();
+        if (Array.isArray(msg)) return msg.map(String).join(" · ");
+      }
+    }
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return String(err);
 }
 
 function assertProvider(value: string | undefined): Provider | undefined {
@@ -403,7 +420,7 @@ export class ImageSyncService implements OnModuleInit {
               imageUrl: product.imageUrl,
               source: "serper",
               status: "skipped",
-              error: query ? "Ya tenía foto" : "Sin texto para buscar",
+              error: query ? "Ya tenía foto" : PERMANENT_SKIP_ERROR,
             });
             continue;
           }
@@ -449,8 +466,10 @@ export class ImageSyncService implements OnModuleInit {
               }
             }
           } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes("API key de Serper no es válida")) {
+            const msg = errText(err);
+            // Sin créditos / key inválida / 429: abortar y NO marcar el producto como
+            // failed/skipped — sigue pendiente para la próxima corrida.
+            if (isSerperBlockingError(msg)) {
               errorMessage = msg;
               status = "ERROR";
               throw err;
@@ -482,7 +501,7 @@ export class ImageSyncService implements OnModuleInit {
       if (this.cancelRequested) status = "CANCELLED";
     } catch (err) {
       status = "ERROR";
-      errorMessage = err instanceof Error ? err.message : String(err);
+      errorMessage = errText(err);
     } finally {
       await this.prisma.imageSyncRun.update({
         where: { id: run.id },
