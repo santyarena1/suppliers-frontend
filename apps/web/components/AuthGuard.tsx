@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getToken } from "@/lib/auth";
+import { getToken, persistAuthCookie } from "@/lib/auth";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [authed, setAuthed] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (getToken()) {
+    const token = getToken();
+    if (token) {
+      persistAuthCookie(token);
       setAuthed(true);
     } else {
       setAuthed(false);

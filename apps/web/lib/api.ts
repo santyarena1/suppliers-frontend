@@ -1,5 +1,5 @@
 import axios from "axios";
-import { stopImpersonation } from "./auth";
+import { getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -25,18 +25,20 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Sesión vencida o inválida: en vez de dejar cada pantalla mostrando
-    // "vacío" en silencio (confunde mucho — parece que se borró todo),
-    // se limpia la sesión y se manda a login una sola vez. Importante: hay
-    // que borrar también la cookie "tgs_auth" (no solo localStorage) — el
-    // middleware decide con esa cookie si mandarte a "/" o a "/login", y si
-    // queda viva mientras el token del cliente ya no sirve, arma un rebote
-    // infinito entre las dos rutas.
+    // Un 401 no siempre es "tu sesión de NODO murió". El carrito calienta
+    // checkout de varios portales: si alguno contesta 401 y el JWT nuestro
+    // sigue vivo, echar al usuario parece un cierre de sesión al tocar el
+    // carrito. Solo limpiamos cuando el token falta o ya venció.
     if (typeof window !== "undefined" && error?.response?.status === 401 && window.location.pathname !== "/login") {
-      // Si el que venció es un token de suplantación, el administrador sigue
-      // teniendo su propia sesión guardada: se lo devuelve a su cuenta en vez
-      // de echarlo de la plataforma.
+      const url = String(error?.config?.url ?? "");
+      if (url.includes("/auth/login") || url.includes("/auth/register")) {
+        return Promise.reject(error);
+      }
+      if (!isTokenExpired(getToken(), 0)) {
+        return Promise.reject(error);
+      }
       if (stopImpersonation()) {
+        persistAuthCookie();
         window.location.href = "/admin?impersonacion=vencida";
         return Promise.reject(error);
       }
@@ -234,6 +236,7 @@ export const authApi = {
     api.post<{ token: string }>("/auth/login", { username, password }),
   register: (username: string, email: string, password: string) =>
     api.post<RegisterResponse>("/auth/register", { username, email, password }),
+  refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
 };
 
 // --- Search ---

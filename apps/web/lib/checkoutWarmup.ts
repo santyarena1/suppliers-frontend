@@ -18,7 +18,7 @@ import {
   type NewBytesPaymentOption,
   type ProviderOption,
 } from "@/lib/api";
-import { getToken } from "@/lib/auth";
+import { getToken, isTokenExpired } from "@/lib/auth";
 
 export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR"] as const;
 export type WarmProvider = (typeof WARM_PROVIDERS)[number];
@@ -232,7 +232,7 @@ export function ensureCheckoutWarmup(
   debounceMs = 0
 ) {
   if (typeof window === "undefined") return;
-  if (!getToken()) return;
+  if (!getToken() || isTokenExpired()) return;
   if (items.length === 0) {
     forgetCheckoutWarmup(provider);
     return;
