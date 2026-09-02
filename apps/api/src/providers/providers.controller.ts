@@ -506,6 +506,36 @@ export class ProvidersController {
     return this.providersService.sync(commercialId(tenant), assertProvider(provider));
   }
 
+  @Get("providers/:provider/sync/current")
+  getCurrentSync(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string
+  ) {
+    return this.providersService.getCurrentSyncRun(commercialId(tenant), assertProvider(provider));
+  }
+
+  @Get("providers/:provider/sync/runs")
+  listSyncRuns(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Query("take") take?: string
+  ) {
+    return this.providersService.listSyncRuns(
+      commercialId(tenant),
+      assertProvider(provider),
+      take ? Number(take) : 20
+    );
+  }
+
+  @Get("providers/:provider/sync/runs/:id")
+  getSyncRun(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Param("id") id: string
+  ) {
+    return this.providersService.getSyncRun(commercialId(tenant), assertProvider(provider), id);
+  }
+
   /**
    * Alternativa a la sync por API cuando el proveedor limita muy fuerte
    * (ej. AIR a 1 req/5min): el usuario exporta el catálogo a Excel/CSV

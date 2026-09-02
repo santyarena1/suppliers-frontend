@@ -957,6 +957,60 @@ export const credentialsApi = {
 export interface ProviderSyncResult {
   provider: Provider;
   synced: number;
+  created?: number;
+  updated?: number;
+  unchanged?: number;
+  missingAffected?: number;
+  zeroStockAffected?: number;
+  runId?: string;
+}
+
+export type CatalogSyncSource = "manual" | "cron" | "import";
+
+export interface CatalogSyncRun {
+  id: string;
+  provider: string;
+  status: "RUNNING" | "OK" | "ERROR" | string;
+  source: CatalogSyncSource | string;
+  processed: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  missingAffected: number;
+  zeroStockAffected: number;
+  expectedTotal: number;
+  changesStored: number;
+  changesTruncated: boolean;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  heartbeatAt: string;
+}
+
+export interface CatalogSyncChange {
+  id: string;
+  externalId: string;
+  name: string;
+  action: "created" | "updated" | string;
+  changedFields: string[];
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+}
+
+export interface CatalogSyncRunDetail extends CatalogSyncRun {
+  changes: CatalogSyncChange[];
+}
+
+export function isLiveSyncRun(run?: CatalogSyncRun | null): boolean {
+  return run?.status === "RUNNING";
+}
+
+export function summarizeSyncRun(run: Pick<CatalogSyncRun, "processed" | "created" | "updated" | "unchanged">): string {
+  const parts = [`${run.processed.toLocaleString("es-AR")} productos`];
+  parts.push(`${run.created.toLocaleString("es-AR")} nuevos`);
+  parts.push(`${run.updated.toLocaleString("es-AR")} actualizados`);
+  if (run.unchanged > 0) parts.push(`${run.unchanged.toLocaleString("es-AR")} sin cambios`);
+  return parts.join(" · ");
 }
 
 export interface ProviderStatus {
@@ -967,6 +1021,7 @@ export interface ProviderStatus {
   total: number;
   withStock: number;
   lastSyncedAt: string | null;
+  currentRun?: CatalogSyncRun | null;
 }
 
 export function canSyncProvider(status?: ProviderStatus | null): boolean {
@@ -1000,6 +1055,12 @@ export const providersApi = {
     api.post<ProviderSyncResult>(`/providers/${providerName}/sync`),
   status: (providerName: Provider) =>
     api.get<ProviderStatus>(`/providers/${providerName}/status`),
+  currentSync: (providerName: Provider) =>
+    api.get<CatalogSyncRun | null>(`/providers/${providerName}/sync/current`),
+  syncRuns: (providerName: Provider, take = 20) =>
+    api.get<CatalogSyncRun[]>(`/providers/${providerName}/sync/runs`, { params: { take } }),
+  syncRun: (providerName: Provider, runId: string) =>
+    api.get<CatalogSyncRunDetail>(`/providers/${providerName}/sync/runs/${runId}`),
   getConfig: (providerName: Provider) =>
     api.get<ProviderConfig>(`/providers/${providerName}/config`),
   updateConfig: (providerName: Provider, config: Partial<ProviderConfig>) =>

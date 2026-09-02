@@ -21,8 +21,12 @@ export class SyncSchedulerService {
       const due = await this.providersService.findDueConfigs();
       for (const config of due) {
         try {
-          const result = await this.providersService.sync(config.tenantId, config.provider as Provider);
-          this.logger.log(`Auto-sync ${config.provider}: ${result.synced} productos`);
+          const result = await this.providersService.sync(config.tenantId, config.provider as Provider, {
+            source: "cron",
+          });
+          this.logger.log(
+            `Auto-sync ${config.provider}: ${result.synced} productos (creados: ${result.created}, actualizados: ${result.updated})`
+          );
         } catch (err) {
           this.logger.warn(
             `Auto-sync ${config.provider} falló: ${err instanceof Error ? err.message : String(err)}`

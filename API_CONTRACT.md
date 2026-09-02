@@ -157,6 +157,20 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Por defecto, si en ese distribuidor la config de stock 0 no es «Mostrar igual», no se listan productos con stock 0 (ni debajo del umbral). `includeOutOfStock=true` los incluye igual. La ficha individual (`GET /providers/:provider/products/:externalId`) sí los devuelve si se entra por link. Qué hacer en la sync con faltantes o stock 0 lo define cada proveedor (`missingProductAction`, `zeroStockAction`), no un comportamiento especial por marca.
 
+### [FEATURE] Progreso e historial de sincronización de catálogo
+- **Método**: POST | GET
+- **Ruta**: `POST /providers/:provider/sync` · `POST /providers/:provider/import` · `GET /providers/:provider/status` · `GET /providers/:provider/sync/current` · `GET /providers/:provider/sync/runs` · `GET /providers/:provider/sync/runs/:id`
+- **Auth**: Bearer, organización de la sesión (el catálogo se lee/escribe de la org comercial)
+- **Body / Params**: sync sin body · import `multipart` con `file` · runs `?take=` (default 20, máx. 50)
+- **Respuesta esperada**:
+  - POST sync/import: `{ provider, synced, created, updated, unchanged, missingAffected, zeroStockAffected, runId }`
+  - `status.currentRun`: última corrida (`RUNNING` | `OK` | `ERROR`) con contadores en vivo
+  - `sync/current`: igual, o `null` si nunca se sincronizó
+  - `sync/runs`: lista de corridas (sin el detalle de productos)
+  - `sync/runs/:id`: corrida + `changes[]` (`created` | `updated`, `changedFields`, `before`, `after`)
+- **Estado**: IMPLEMENTADO
+- **Notas**: Vale para **todos** los proveedores con sync (API, cron o Excel). `created` es oferta nueva de esa org; `updated` es cambio de nombre, marca, categoría, SKU, precio, stock o estado; el resto es `unchanged`. El POST sigue bloqueante: el front pollea `status` / `current` en paralelo. Se guardan hasta 500 cambios por corrida. UI: `/proveedores` (barra + contadores) y pestaña Sincronización de cada proveedor (historial y qué cambió).
+
 ### [FEATURE] Módulo Catálogo (admin)
 - **Método**: GET | POST | PATCH | PUT | DELETE
 - **Ruta**: `/admin/catalog-enrichment/board` · `/terms` · `/link` · `/move` · `/visibility` · `/incomplete` · `/products/assign` · `/preview` · `/ai/suggest-merges` · `/ai/product-hint` · `/openai` · `POST /admin/catalog-enrichment/purge-air-codes`

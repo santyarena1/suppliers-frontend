@@ -7,7 +7,8 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
-  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders
+  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders,
+  isLiveSyncRun, summarizeSyncRun,
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import { isRetailerSession } from "@/lib/purchase";
@@ -17,6 +18,7 @@ import { SKU_PREFIX } from "@/lib/providerMeta";
 import ProviderBadge from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
+import CatalogSyncHistory from "@/components/CatalogSyncHistory";
 import NewBytesAccountPanel from "@/components/NewBytesAccountPanel";
 import InvidAccountPanel from "@/components/InvidAccountPanel";
 import ElitAccountPanel from "@/components/ElitAccountPanel";
@@ -71,6 +73,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [chatLinkId, setChatLinkId] = useState<string | null>(null);
   const [chatSeller, setChatSeller] = useState<string | null>(null);
 
+  const [historyKey, setHistoryKey] = useState(0);
   const tabFromQuery = useRef(false);
   const autoTabDone = useRef(false);
 
@@ -205,20 +208,28 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     }
   }
 
-  async function loadStatus() {
+  async function loadStatus(opts?: { silent?: boolean }) {
     if (!implemented) return;
-    setLoadingStatus(true);
+    if (!opts?.silent) setLoadingStatus(true);
     try {
       const res = await providersApi.status(provider);
       setStatus(res.data);
     } catch {
-      setStatus(null);
+      if (!opts?.silent) setStatus(null);
     } finally {
-      setLoadingStatus(false);
+      if (!opts?.silent) setLoadingStatus(false);
     }
   }
 
   useEffect(() => { loadStatus(); loadConfig(); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const liveSync = isLiveSyncRun(status?.currentRun) || syncing || importing;
+
+  useEffect(() => {
+    if (!liveSync) return;
+    const id = setInterval(() => void loadStatus({ silent: true }), 1200);
+    return () => clearInterval(id);
+  }, [liveSync, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (autoTabDone.current || loadingStatus || !status) return;
@@ -233,8 +244,18 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     setSyncResult(null);
     try {
       const res = await providersApi.sync(provider);
-      setSyncResult({ ok: true, msg: `Sincronización completa: ${res.data.synced.toLocaleString("es-AR")} productos` });
-      await loadStatus();
+      const d = res.data;
+      setSyncResult({
+        ok: true,
+        msg: `Sincronización completa: ${summarizeSyncRun({
+          processed: d.synced,
+          created: d.created ?? 0,
+          updated: d.updated ?? 0,
+          unchanged: d.unchanged ?? 0,
+        })}`,
+      });
+      await loadStatus({ silent: true });
+      setHistoryKey((n) => n + 1);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSyncResult({ ok: false, msg: msg || "Error al sincronizar" });
@@ -251,11 +272,19 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     setSyncResult(null);
     try {
       const res = await providersApi.importFile(provider, file);
-      const parts = [`${res.data.synced.toLocaleString("es-AR")} productos importados`];
+      const parts = [
+        summarizeSyncRun({
+          processed: res.data.synced,
+          created: res.data.created ?? 0,
+          updated: res.data.updated ?? 0,
+          unchanged: res.data.unchanged ?? 0,
+        }),
+      ];
       if (res.data.rowsSkipped > 0) parts.push(`${res.data.rowsSkipped} filas omitidas (sin código o nombre)`);
       if (res.data.unmappedColumns.length > 0) parts.push(`columnas no reconocidas: ${res.data.unmappedColumns.join(", ")}`);
       setSyncResult({ ok: true, msg: parts.join(" · ") });
-      await loadStatus();
+      await loadStatus({ silent: true });
+      setHistoryKey((n) => n + 1);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSyncResult({ ok: false, msg: msg || "Error al importar el archivo" });
@@ -420,13 +449,15 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       )}
                       <button
                         onClick={handleSync}
-                        disabled={syncing || loadingStatus || !canSyncProvider(status)}
+                        disabled={syncing || importing || isLiveSyncRun(status?.currentRun) || loadingStatus || !canSyncProvider(status)}
                         className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                       >
-                        {syncing ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
-                        {syncing ? "Sincronizando..." : "Sincronizar ahora"}
+                        {syncing || isLiveSyncRun(status?.currentRun) ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+                        {syncing || isLiveSyncRun(status?.currentRun) ? "Sincronizando..." : "Sincronizar ahora"}
                       </button>
-                      {syncing && <SyncProgressBar />}
+                      {(syncing || isLiveSyncRun(status?.currentRun)) && (
+                        <SyncProgressBar run={status?.currentRun} />
+                      )}
                       {syncResult && (
                         <div className={`flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 ${
                           syncResult.ok
@@ -454,8 +485,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         {importing ? "Importando..." : "Elegir archivo (.xlsx, .csv)"}
                         <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} disabled={importing} />
                       </label>
-                      {importing && <SyncProgressBar />}
+                      {importing && <SyncProgressBar run={status?.currentRun} />}
                     </div>
+
+                    <CatalogSyncHistory provider={provider} refreshKey={historyKey} live={liveSync} />
                   </div>
                 )}
 

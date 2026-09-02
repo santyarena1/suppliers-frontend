@@ -9,7 +9,7 @@ import RedeemAccessCode from "@/components/RedeemAccessCode";
 import LocalPurchaseDashboard from "@/components/insights/LocalPurchaseDashboard";
 import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
-  canSyncProvider, type VisibleProvider
+  canSyncProvider, isLiveSyncRun, summarizeSyncRun, type VisibleProvider
 } from "@/lib/api";
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
@@ -26,22 +26,38 @@ export default function ProveedoresPage() {
   const [syncing, setSyncing] = useState<Provider | null>(null);
   const [syncResult, setSyncResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
 
+  const loadStatuses = useCallback(async (linkedProviders: Provider[]) => {
+    const results = await Promise.allSettled(linkedProviders.map((p) => providersApi.status(p)));
+    const map: StatusMap = {};
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled") map[linkedProviders[i]] = r.value.data;
+    });
+    setStatuses(map);
+  }, []);
+
   const load = useCallback(async (force = false) => {
     if (force) invalidateMyProviders();
     const mine = await loadMyProviders(force);
     setVisible(mine);
-
     const linked = mine.filter((p) => p.linked).map((p) => p.provider);
-    const results = await Promise.allSettled(linked.map((p) => providersApi.status(p)));
-    const map: StatusMap = {};
-    results.forEach((r, i) => {
-      if (r.status === "fulfilled") map[linked[i]] = r.value.data;
-    });
-    setStatuses(map);
+    await loadStatuses(linked);
     setLoading(false);
-  }, []);
+  }, [loadStatuses]);
 
   useEffect(() => { load(); }, [load]);
+
+  const anyLive =
+    Boolean(syncing) ||
+    Object.values(statuses).some((s) => isLiveSyncRun(s?.currentRun));
+
+  useEffect(() => {
+    if (!anyLive) return;
+    const linked = visible.filter((p) => p.linked).map((p) => p.provider);
+    const id = setInterval(() => {
+      void loadStatuses(linked);
+    }, 1200);
+    return () => clearInterval(id);
+  }, [anyLive, visible, loadStatuses]);
 
   async function handleSync(provider: Provider, e: React.MouseEvent) {
     e.preventDefault();
@@ -50,7 +66,12 @@ export default function ProveedoresPage() {
     setSyncResult((prev) => ({ ...prev, [provider]: undefined as unknown as { ok: boolean; msg: string } }));
     try {
       const res = await providersApi.sync(provider);
-      setSyncResult((prev) => ({ ...prev, [provider]: { ok: true, msg: `${res.data.synced.toLocaleString("es-AR")} productos` } }));
+      const d = res.data;
+      const msg =
+        d.created != null
+          ? `${d.synced.toLocaleString("es-AR")} productos · ${d.created.toLocaleString("es-AR")} nuevos · ${(d.updated ?? 0).toLocaleString("es-AR")} actualizados`
+          : `${d.synced.toLocaleString("es-AR")} productos`;
+      setSyncResult((prev) => ({ ...prev, [provider]: { ok: true, msg } }));
       await load();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -106,7 +127,8 @@ export default function ProveedoresPage() {
                     {linked.map(({ provider, name, accountManager, linkId }) => {
                       const s = statuses[provider];
                       const result = syncResult[provider];
-                      const isSyncing = syncing === provider;
+                      const live = isLiveSyncRun(s?.currentRun);
+                      const isSyncing = syncing === provider || live;
                       return (
                         <div
                           key={provider}
@@ -184,17 +206,35 @@ export default function ProveedoresPage() {
                             </button>
                           </div>
 
-                          {isSyncing && <SyncProgressBar />}
+                          {isSyncing && <SyncProgressBar run={s?.currentRun} />}
 
                           {result && !isSyncing && (
-                            <div className={`flex items-center gap-1.5 text-[11px] rounded-md px-2.5 py-1.5 ${
+                            <div className={`flex flex-col gap-1 text-[11px] rounded-md px-2.5 py-1.5 ${
                               result.ok
                                 ? "bg-emerald-500/8 text-emerald-700 dark:text-emerald-400"
                                 : "bg-red-500/8 text-red-400"
                             }`}>
-                              {result.ok ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : <XCircle className="w-3 h-3 flex-shrink-0" />}
-                              {result.msg}
+                              <div className="flex items-center gap-1.5">
+                                {result.ok ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : <XCircle className="w-3 h-3 flex-shrink-0" />}
+                                {result.msg}
+                              </div>
+                              {result.ok && (
+                                <Link
+                                  href={`/proveedores/${provider}?tab=sync`}
+                                  className="text-[10px] underline text-emerald-600/80 dark:text-emerald-400/80 pl-4"
+                                >
+                                  Ver qué cambió
+                                </Link>
+                              )}
                             </div>
+                          )}
+                          {!result && !isSyncing && s?.currentRun?.status === "OK" && (
+                            <p className="text-[10px] text-surface-500">
+                              Última: {summarizeSyncRun(s.currentRun)}{" "}
+                              <Link href={`/proveedores/${provider}?tab=sync`} className="underline">
+                                ver cambios
+                              </Link>
+                            </p>
                           )}
                         </div>
                       );

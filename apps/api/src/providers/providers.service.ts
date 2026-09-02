@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { providerHasIvaRate, type Provider } from "@nodo/shared";
 import type { IvaAdjustment } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -11,6 +11,16 @@ import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct } from "./types";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
+import { diffCatalogItem, type CatalogSyncDiff } from "./catalog-sync-diff";
+import {
+  CatalogSyncAlreadyRunningError,
+  interruptRunningCatalogSyncRuns,
+  interruptStaleCatalogSyncRuns,
+  serializeCatalogSyncRun,
+  startCatalogSyncRun,
+  type CatalogSyncProgress,
+  type CatalogSyncSource,
+} from "./catalog-sync-progress";
 
 /** Lo que pertenece a la oferta de una organización y no a la ficha del producto. */
 const OFFER_FIELDS = new Set([
@@ -23,7 +33,7 @@ const OFFER_FIELDS = new Set([
 ]);
 
 @Injectable()
-export class ProvidersService {
+export class ProvidersService implements OnModuleInit {
   private readonly logger = new Logger(ProvidersService.name);
   private readonly enrichRunning = new Set<string>();
 
@@ -34,6 +44,10 @@ export class ProvidersService {
     private readonly visibility: TenantVisibilityService,
     private readonly catalogEnrichment: CatalogEnrichmentService
   ) {}
+
+  async onModuleInit() {
+    await interruptRunningCatalogSyncRuns(this.prisma);
+  }
 
   async getConfig(tenantId: string, provider: Provider) {
     const config = await this.prisma.providerSyncConfig.findUnique({
@@ -108,7 +122,7 @@ export class ProvidersService {
     return serializeSyncConfig(saved);
   }
 
-  async sync(tenantId: string, provider: Provider) {
+  async sync(tenantId: string, provider: Provider, opts: { source?: CatalogSyncSource } = {}) {
     await this.visibility.assertLinked(tenantId, provider);
     const adapter = this.registry.get(provider);
     if (!adapter) {
@@ -130,7 +144,7 @@ export class ProvidersService {
         syncedExternalIds.push(...items.map((i) => i.externalId));
         await onPage(items);
       });
-    });
+    }, opts.source ?? "manual");
 
     // Enriquecimiento lento (ej. scrapear ficha por producto) — no bloquea
     // la respuesta de este sync ni el próximo, corre solo en background y
@@ -203,28 +217,42 @@ export class ProvidersService {
     await this.visibility.assertLinked(tenantId, provider);
     return this.runSync(tenantId, provider, async (onPage) => {
       await onPage(items);
-    });
+    }, "import");
   }
 
   private async runSync(
     tenantId: string,
     provider: Provider,
-    run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>
+    run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>,
+    source: CatalogSyncSource = "manual"
   ) {
     const config = await this.getConfig(tenantId, provider);
     const minStock = config.minStockThreshold || 0;
+    const expectedTotal = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
 
-    const totalBefore = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
+    let progress: CatalogSyncProgress;
+    try {
+      progress = await startCatalogSyncRun(this.prisma, {
+        tenantId,
+        provider,
+        source,
+        expectedTotal,
+      });
+    } catch (err) {
+      if (err instanceof CatalogSyncAlreadyRunningError) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    }
 
     const syncStartedAt = new Date();
-    let count = 0;
 
     try {
       await run(async (items) => {
-        count += items.length;
-        await this.upsertPage(tenantId, provider, items);
+        await this.upsertPage(tenantId, provider, items, progress);
       });
     } catch (err) {
+      await progress.fail(errorMessage(err));
       await this.prisma.providerSyncConfig.upsert({
         where: { tenantId_provider: { tenantId, provider } },
         create: { tenantId, provider, lastSyncError: errorMessage(err) },
@@ -247,9 +275,13 @@ export class ProvidersService {
       minStock
     );
 
-    const totalAfter = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
-    const created = Math.max(0, totalAfter - totalBefore);
-    const updated = Math.max(0, count - created);
+    const finished = await progress.succeed({
+      missingAffected: missingCount,
+      zeroStockAffected: zeroStockCount,
+    });
+    const created = finished.created;
+    const updated = finished.updated;
+    const count = finished.processed;
 
     await this.prisma.providerSyncConfig.upsert({
       where: { tenantId_provider: { tenantId, provider } },
@@ -259,7 +291,7 @@ export class ProvidersService {
 
     this.logger.log(
       `Sync de ${provider}: ${count} productos (creados: ${created}, actualizados: ${updated}, ` +
-        `faltantes afectados: ${missingCount}, stock cero afectados: ${zeroStockCount})`
+        `sin cambios: ${finished.unchanged}, faltantes afectados: ${missingCount}, stock cero afectados: ${zeroStockCount})`
     );
 
     if (provider === "AIR") {
@@ -270,7 +302,16 @@ export class ProvidersService {
       });
     }
 
-    return { provider, synced: count, created, updated, missingAffected: missingCount, zeroStockAffected: zeroStockCount };
+    return {
+      provider,
+      synced: count,
+      created,
+      updated,
+      unchanged: finished.unchanged,
+      missingAffected: missingCount,
+      zeroStockAffected: zeroStockCount,
+      runId: finished.id,
+    };
   }
 
   /**
@@ -335,16 +376,30 @@ export class ProvidersService {
    * y el umbral de stock se aplican al leer, así cambiarlos no obliga a
    * resincronizar y la configuración de un comercio no puede alterar la de otro.
    */
-  private async upsertPage(tenantId: string, provider: Provider, items: NormalizedProduct[]) {
+  private async upsertPage(
+    tenantId: string,
+    provider: Provider,
+    items: NormalizedProduct[],
+    progress?: CatalogSyncProgress
+  ): Promise<CatalogSyncDiff[]> {
     // Historial de precio: se compara contra el precio guardado antes de
     // pisarlo, y solo se graba una fila nueva si realmente cambió (o es un
     // producto nuevo) — evita llenar la tabla con una fila idéntica cada vez
     // que corre el cron sin que haya habido ninguna variación real.
     const existing = await this.prisma.tenantProductOffer.findMany({
       where: { tenantId, provider, externalId: { in: items.map((i) => i.externalId) } },
-      select: { externalId: true, price: true, finalPrice: true },
+      select: {
+        externalId: true,
+        price: true,
+        finalPrice: true,
+        currency: true,
+        ivaPercent: true,
+        stock: true,
+        stockStatus: true,
+      },
     });
     const previousByExternalId = new Map(existing.map((e) => [e.externalId, e]));
+    const diffs: CatalogSyncDiff[] = [];
     const historyRows: {
       tenantId: string;
       provider: string;
@@ -363,10 +418,18 @@ export class ProvidersService {
       const chunk = items.slice(i, i + CHUNK_SIZE);
       const previousFichas = await this.prisma.providerSyncCache.findMany({
         where: { provider, externalId: { in: chunk.map((it) => it.externalId) } },
-        select: { externalId: true, imageUrl: true },
+        select: {
+          externalId: true,
+          imageUrl: true,
+          name: true,
+          brand: true,
+          category: true,
+          subcategory: true,
+          sku: true,
+        },
       });
-      const previousImageById = new Map(previousFichas.map((f) => [f.externalId, f.imageUrl]));
-      await Promise.all(
+      const previousFichaById = new Map(previousFichas.map((f) => [f.externalId, f]));
+      const chunkDiffs = await Promise.all(
         chunk.map(async (item) => {
           const ficha = {
             sku: item.sku,
@@ -378,7 +441,7 @@ export class ProvidersService {
             subcategory: item.subcategory,
             description: item.description,
             longDescription: item.longDescription,
-            imageUrl: mergeProductImage(item.imageUrl, previousImageById.get(item.externalId)),
+            imageUrl: mergeProductImage(item.imageUrl, previousFichaById.get(item.externalId)?.imageUrl),
             productUrl: item.productUrl,
             locationAir: item.locationAir,
             warranty: item.warranty,
@@ -405,6 +468,7 @@ export class ProvidersService {
           };
 
           const previous = previousByExternalId.get(item.externalId);
+          const previousFicha = previousFichaById.get(item.externalId);
           const priceChanged =
             !previous ||
             numberOrNull(previous.price) !== numberOrNull(oferta.price) ||
@@ -420,6 +484,25 @@ export class ProvidersService {
             });
           }
 
+          const diff = diffCatalogItem(
+            item,
+            previous
+              ? {
+                  name: previousFicha?.name,
+                  brand: previousFicha?.brand,
+                  category: previousFicha?.category,
+                  subcategory: previousFicha?.subcategory,
+                  sku: previousFicha?.sku,
+                  price: previous.price,
+                  finalPrice: previous.finalPrice,
+                  currency: previous.currency,
+                  ivaPercent: previous.ivaPercent,
+                  stock: previous.stock,
+                  stockStatus: previous.stockStatus,
+                }
+              : null
+          );
+
           // La ficha tiene que existir antes que la oferta: la oferta la referencia.
           await this.prisma.providerSyncCache.upsert({
             where: { provider_externalId: { provider, externalId: item.externalId } },
@@ -434,18 +517,27 @@ export class ProvidersService {
             create: { tenantId, provider, externalId: item.externalId, ...oferta },
             update: { ...oferta, syncedAt: new Date() },
           });
+
+          return diff;
         })
       );
+      diffs.push(...chunkDiffs);
+      if (progress) {
+        progress.record(chunkDiffs);
+        await progress.flush();
+      }
     }
 
     if (historyRows.length) {
       await this.prisma.productPriceHistory.createMany({ data: historyRows });
     }
+    return diffs;
   }
 
   async status(tenantId: string, provider: Provider) {
     await this.visibility.assertVisible(tenantId, provider);
-    const [credential, total, withStock, last] = await Promise.all([
+    await interruptStaleCatalogSyncRuns(this.prisma, { tenantId, provider });
+    const [credential, total, withStock, last, currentRun] = await Promise.all([
       this.credentials.findByProvider(tenantId, provider),
       this.prisma.tenantProductOffer.count({ where: { tenantId, provider, active: true } }),
       this.prisma.tenantProductOffer.count({
@@ -455,6 +547,10 @@ export class ProvidersService {
         where: { tenantId, provider },
         orderBy: { syncedAt: "desc" },
         select: { syncedAt: true },
+      }),
+      this.prisma.catalogSyncRun.findFirst({
+        where: { tenantId, provider },
+        orderBy: { startedAt: "desc" },
       }),
     ]);
 
@@ -466,6 +562,52 @@ export class ProvidersService {
       total,
       withStock,
       lastSyncedAt: last?.syncedAt ?? null,
+      currentRun: currentRun ? serializeCatalogSyncRun(currentRun) : null,
+    };
+  }
+
+  async getCurrentSyncRun(tenantId: string, provider: Provider) {
+    await this.visibility.assertVisible(tenantId, provider);
+    await interruptStaleCatalogSyncRuns(this.prisma, { tenantId, provider });
+    const run = await this.prisma.catalogSyncRun.findFirst({
+      where: { tenantId, provider },
+      orderBy: { startedAt: "desc" },
+    });
+    return run ? serializeCatalogSyncRun(run) : null;
+  }
+
+  async listSyncRuns(tenantId: string, provider: Provider, take = 20) {
+    await this.visibility.assertVisible(tenantId, provider);
+    const runs = await this.prisma.catalogSyncRun.findMany({
+      where: { tenantId, provider },
+      orderBy: { startedAt: "desc" },
+      take: Math.min(Math.max(take, 1), 50),
+    });
+    return runs.map(serializeCatalogSyncRun);
+  }
+
+  async getSyncRun(tenantId: string, provider: Provider, runId: string) {
+    await this.visibility.assertVisible(tenantId, provider);
+    const run = await this.prisma.catalogSyncRun.findFirst({
+      where: { id: runId, tenantId, provider },
+      include: {
+        changes: { orderBy: [{ action: "asc" }, { createdAt: "asc" }] },
+      },
+    });
+    if (!run) throw new NotFoundException("Corrida no encontrada");
+    return {
+      ...serializeCatalogSyncRun(run),
+      changes: run.changes.map((change) => ({
+        id: change.id,
+        externalId: change.externalId,
+        name: change.name,
+        action: change.action,
+        changedFields: Array.isArray(change.changedFields)
+          ? change.changedFields.filter((field): field is string => typeof field === "string")
+          : [],
+        before: change.before,
+        after: change.after,
+      })),
     };
   }
 
