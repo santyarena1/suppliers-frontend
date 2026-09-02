@@ -1975,6 +1975,8 @@ export interface AdminUser {
   endDate: string | null;
   createdAt: string;
   updatedAt?: string;
+  tenantId?: string | null;
+  tenantName?: string | null;
   brandId?: string | null;
   brand?: { id: string; name: string; slug: string } | null;
   providers?: string[];
@@ -2531,8 +2533,8 @@ export const tenantsApi = {
     api.post<TenantMember>(`/admin/tenants/${tenantId}/members`, data),
   createMemberUser: (
     tenantId: string,
-    data: { username: string; email: string; password: string; role: TenantRole; title?: string }
-  ) => api.post<TenantMember>(`/admin/tenants/${tenantId}/members/new-user`, data),
+    data: { username: string; email: string; password?: string; role: TenantRole; title?: string }
+  ) => api.post<TenantMember & { generatedPassword?: string }>(`/admin/tenants/${tenantId}/members/new-user`, data),
   updateMember: (membershipId: string, data: Partial<{ role: TenantRole; title: string | null; active: boolean }>) =>
     api.put<TenantMember>(`/admin/tenants/members/${membershipId}`, data),
   removeMember: (membershipId: string) => api.delete(`/admin/tenants/members/${membershipId}`),

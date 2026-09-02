@@ -21,7 +21,8 @@ import {
   TenantUserRelations,
   tenantsApi,
 } from "@/lib/api";
-import EnterAsButton from "./EnterAsButton";
+import GeneratedPassword from "./GeneratedPassword";
+import PlatformAccountPanel, { PLATFORM_ROLE_LABELS } from "./PlatformAccountPanel";
 import {
   Building2,
   ChevronRight,
@@ -29,6 +30,7 @@ import {
   Link2,
   Loader2,
   Megaphone,
+  Network,
   Plus,
   QrCode,
   RefreshCw,
@@ -37,10 +39,28 @@ import {
   Tag,
   Trash2,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 
 type ToastFn = (msg: string, ok?: boolean) => void;
+type BrowseMode = "orgs" | "people";
+type TypeFilter = TenantType | "all";
+type Selection =
+  | { kind: "tenant"; id: string }
+  | { kind: "user"; id: string; tenantId: string | null };
+
+type PersonRow = {
+  userId: string;
+  username: string;
+  email: string;
+  tenantId: string | null;
+  tenantName: string | null;
+  tenantType: TenantType | null;
+  tenantRole: TenantRole | null;
+  platformRole: AdminUser["role"];
+  active: boolean;
+};
 
 const TYPE_ORDER: TenantType[] = ["RETAILER", "DISTRIBUTOR", "BRAND"];
 
@@ -87,10 +107,11 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [selection, setSelection] = useState<
-    { kind: "tenant"; id: string } | { kind: "user"; id: string; tenantId: string } | null
-  >(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [browse, setBrowse] = useState<BrowseMode>("orgs");
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [showCreate, setShowCreate] = useState(false);
+  const [showCreatePerson, setShowCreatePerson] = useState(false);
   const [syncingBrands, setSyncingBrands] = useState(false);
 
   const load = useCallback(async () => {
@@ -118,8 +139,9 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
   const filtered = useMemo(() => {
     if (!tree) return [];
     const term = query.trim().toLowerCase();
-    if (!term) return tree.tenants;
     return tree.tenants.filter((tenant) => {
+      if (typeFilter !== "all" && tenant.type !== typeFilter) return false;
+      if (!term) return true;
       const haystack = [
         tenant.name,
         tenant.brand?.name ?? "",
@@ -130,7 +152,62 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [tree, query]);
+  }, [tree, query, typeFilter]);
+
+  const people = useMemo((): PersonRow[] => {
+    if (!tree) return [];
+    const rows: PersonRow[] = [];
+    for (const tenant of tree.tenants) {
+      if (typeFilter !== "all" && tenant.type !== typeFilter) continue;
+      for (const member of tenant.members) {
+        rows.push({
+          userId: member.userId,
+          username: member.username,
+          email: member.email,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
+          tenantType: tenant.type,
+          tenantRole: member.tenantRole,
+          platformRole: member.platformRole,
+          active: member.active && member.membershipActive && tenant.active,
+        });
+      }
+    }
+    if (typeFilter === "all") {
+      for (const user of tree.unassignedUsers) {
+        rows.push({
+          userId: user.id,
+          username: user.username,
+          email: user.email,
+          tenantId: null,
+          tenantName: null,
+          tenantType: null,
+          tenantRole: null,
+          platformRole: user.role,
+          active: user.active,
+        });
+      }
+    }
+    const term = query.trim().toLowerCase();
+    const matched = term
+      ? rows.filter((row) =>
+          [row.username, row.email, row.tenantName ?? "sin organización", PLATFORM_ROLE_LABELS[row.platformRole]]
+            .join(" ")
+            .toLowerCase()
+            .includes(term)
+        )
+      : rows;
+    return matched.sort((a, b) => a.username.localeCompare(b.username, "es"));
+  }, [tree, query, typeFilter]);
+
+  const unassignedFiltered = useMemo(() => {
+    if (!tree || typeFilter !== "all") return [];
+    const term = query.trim().toLowerCase();
+    if (!term) return tree.unassignedUsers;
+    return tree.unassignedUsers.filter((user) =>
+      [user.username, user.email].join(" ").toLowerCase().includes(term)
+    );
+  }, [tree, query, typeFilter]);
 
   const selectedTenant = useMemo(() => {
     if (!tree || !selection) return null;
@@ -159,27 +236,68 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
     type,
     total: tree?.tenants.filter((tenant) => tenant.type === type).length ?? 0,
   }));
+  const personCount = tree
+    ? tree.tenants.reduce((sum, tenant) => sum + tenant.members.length, 0) + tree.unassignedUsers.length
+    : 0;
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex rounded-lg border border-surface-800 overflow-hidden">
+          {(
+            [
+              { key: "orgs" as const, label: "Organizaciones", icon: <Network className="w-3.5 h-3.5" /> },
+              { key: "people" as const, label: "Personas", icon: <Users className="w-3.5 h-3.5" /> },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setBrowse(opt.key)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
+                browse === opt.key ? "bg-brand-600 text-white" : "text-surface-400 hover:text-white hover:bg-surface-800"
+              }`}
+            >
+              {opt.icon}
+              {opt.label}
+              <span className="text-[10px] opacity-80">
+                {opt.key === "orgs" ? tree?.tenants.length ?? 0 : personCount}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-surface-500" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por organización, marca, proveedor o persona"
+            placeholder="Buscar organización, persona, email, marca o proveedor"
             className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setTypeFilter("all")}
+          className={`text-[11px] font-medium px-2.5 py-1.5 rounded-md border ${
+            typeFilter === "all"
+              ? "border-brand-500/40 bg-brand-600/15 text-brand-300"
+              : "border-surface-700 text-surface-400 hover:text-surface-200"
+          }`}
+        >
+          Todas
+        </button>
         {counts.map(({ type, total }) => (
-          <span
+          <button
             key={type}
-            className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-md border ${TYPE_ACCENTS[type]}`}
+            type="button"
+            onClick={() => setTypeFilter((prev) => (prev === type ? "all" : type))}
+            className={`flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-md border ${
+              typeFilter === type ? TYPE_ACCENTS[type] : "border-surface-700 text-surface-400 hover:text-surface-200"
+            }`}
           >
             {TYPE_ICONS[type]}
             {TYPE_GROUP_LABELS[type]} · {total}
-          </span>
+          </button>
         ))}
         <button
           onClick={async () => {
@@ -204,6 +322,12 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
           Orgs de marcas
         </button>
         <button
+          onClick={() => setShowCreatePerson(true)}
+          className="flex items-center gap-1.5 bg-surface-800 hover:bg-surface-700 text-white text-xs font-semibold rounded-lg px-3 py-2 transition-all"
+        >
+          <Plus className="w-3.5 h-3.5" /> Nueva persona
+        </button>
+        <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg px-3 py-2 transition-all"
         >
@@ -213,6 +337,43 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-4 items-start">
         <div className="flex flex-col gap-4">
+          {browse === "people" ? (
+            <div className="border border-surface-800 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-900/60 border-b border-surface-800">
+                <Users className="w-3.5 h-3.5 text-surface-400" />
+                <span className="text-xs font-semibold text-surface-200">Personas</span>
+                <span className="text-[11px] text-surface-500">{people.length}</span>
+              </div>
+              {people.length === 0 ? (
+                <p className="text-xs text-surface-500 px-4 py-6 text-center">Nadie coincide con la búsqueda.</p>
+              ) : (
+                <div className="divide-y divide-surface-800 max-h-[70vh] overflow-y-auto">
+                  {people.map((row) => {
+                    const selected = selection?.kind === "user" && selection.id === row.userId;
+                    return (
+                      <button
+                        key={`${row.userId}-${row.tenantId ?? "none"}`}
+                        type="button"
+                        onClick={() => setSelection({ kind: "user", id: row.userId, tenantId: row.tenantId })}
+                        className={`w-full text-left px-3.5 py-2.5 ${selected ? "bg-brand-600/10" : "hover:bg-surface-900/50"}`}
+                      >
+                        <p className={`text-sm truncate ${selected ? "text-white font-medium" : "text-surface-200"}`}>
+                          {row.username}
+                        </p>
+                        <p className="text-[11px] text-surface-500 truncate">
+                          {row.tenantName
+                            ? `${row.tenantName} · ${row.tenantRole ? TENANT_ROLE_LABELS[row.tenantRole] : ""}`
+                            : "Sin organización"}
+                          {row.active ? "" : " · inactivo"}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
           {TYPE_ORDER.map((type) => {
             const group = filtered.filter((tenant) => tenant.type === type);
             if (group.length === 0) return null;
@@ -242,42 +403,62 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
             );
           })}
 
-          {tree && tree.unassignedUsers.length > 0 && (
+          {unassignedFiltered.length > 0 && (
             <div className="border border-surface-800 rounded-xl overflow-hidden">
               <div className="flex items-center gap-2 px-3.5 py-2.5 bg-surface-900/60 border-b border-surface-800">
                 <UserRound className="w-3.5 h-3.5 text-surface-400" />
                 <span className="text-xs font-semibold text-surface-200">Sin organización</span>
-                <span className="text-[11px] text-surface-500">{tree.unassignedUsers.length}</span>
+                <span className="text-[11px] text-surface-500">{unassignedFiltered.length}</span>
               </div>
               <div className="divide-y divide-surface-800">
-                {tree.unassignedUsers.map((user) => (
-                  <div key={user.id} className="px-3.5 py-2.5">
-                    <p className="text-sm text-surface-200">{user.username}</p>
-                    <p className="text-[11px] text-surface-500">{user.email}</p>
-                  </div>
-                ))}
+                {unassignedFiltered.map((user) => {
+                  const selected = selection?.kind === "user" && selection.id === user.id;
+                  return (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => setSelection({ kind: "user", id: user.id, tenantId: null })}
+                      className={`w-full text-left px-3.5 py-2.5 ${selected ? "bg-brand-600/10" : "hover:bg-surface-900/50"}`}
+                    >
+                      <p className={`text-sm ${selected ? "text-white font-medium" : "text-surface-200"}`}>{user.username}</p>
+                      <p className="text-[11px] text-surface-500">{user.email}</p>
+                    </button>
+                  );
+                })}
               </div>
               <p className="text-[11px] text-surface-500 px-3.5 py-2.5 border-t border-surface-800 leading-relaxed">
-                Estos usuarios todavía no pertenecen a ninguna organización, así que no tienen alcance
-                comercial. Asignalos desde el panel de la organización que corresponda.
+                Sin organización no hay alcance comercial. Abrilos y asignalos desde acá.
               </p>
             </div>
           )}
 
-          {filtered.length === 0 && (
+          {filtered.length === 0 && unassignedFiltered.length === 0 && (
             <p className="text-xs text-surface-500 border border-surface-800 rounded-xl px-4 py-6 text-center">
-              No hay organizaciones que coincidan con la búsqueda.
+              No hay organizaciones ni personas que coincidan con la búsqueda.
             </p>
+          )}
+            </>
           )}
         </div>
 
         <div className="min-w-0">
-          {selection?.kind === "user" && selectedTenant ? (
+          {selection?.kind === "user" ? (
             <UserRelationsPanel
               userId={selection.id}
               tenant={selectedTenant}
-              onBack={() => setSelection({ kind: "tenant", id: selectedTenant.id })}
+              users={users}
+              brands={brands}
+              tree={tree!}
+              onBack={() =>
+                selectedTenant
+                  ? setSelection({ kind: "tenant", id: selectedTenant.id })
+                  : setSelection(null)
+              }
               onChanged={load}
+              onDeleted={() => {
+                setSelection(null);
+                load();
+              }}
               showToast={showToast}
             />
           ) : selectedTenant ? (
@@ -295,8 +476,8 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
               <Building2 className="w-6 h-6 text-surface-600 mx-auto mb-3" />
               <p className="text-sm text-surface-300">Elegí una organización o una persona</p>
               <p className="text-xs text-surface-500 mt-1.5 leading-relaxed max-w-sm mx-auto">
-                Desde acá se administran los usuarios de cada organización, sus roles internos y los
-                vínculos comerciales que definen qué puede ver cada uno.
+                Acá se administra todo: organizaciones, gente, roles internos, cuenta de Nodo, módulos, vínculos y
+                “Entrar como”.
               </p>
             </div>
           )}
@@ -311,6 +492,18 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false);
+            load();
+          }}
+          showToast={showToast}
+        />
+      )}
+      {showCreatePerson && tree && (
+        <CreatePersonModal
+          tree={tree}
+          users={users}
+          onClose={() => setShowCreatePerson(false)}
+          onDone={() => {
+            setShowCreatePerson(false);
             load();
           }}
           showToast={showToast}
@@ -332,7 +525,7 @@ function TenantBranch({
 }: {
   tenant: TenantNode;
   open: boolean;
-  selection: { kind: "tenant"; id: string } | { kind: "user"; id: string; tenantId: string } | null;
+  selection: Selection | null;
   onToggle: () => void;
   onSelectTenant: () => void;
   onSelectUser: (userId: string) => void;
@@ -1076,19 +1269,55 @@ function AccessCodesSection({
 function UserRelationsPanel({
   userId,
   tenant,
+  users,
+  brands,
+  tree,
   onBack,
   onChanged,
+  onDeleted,
   showToast,
 }: {
   userId: string;
-  tenant: TenantNode;
+  tenant: TenantNode | null;
+  users: AdminUser[];
+  brands: BrandDisplay[];
+  tree: TenantTree;
   onBack: () => void;
   onChanged: () => void;
+  onDeleted: () => void;
   showToast: ToastFn;
 }) {
   const [relations, setRelations] = useState<TenantUserRelations | null>(null);
   const [loading, setLoading] = useState(true);
-  const member = tenant.members.find((candidate) => candidate.userId === userId);
+  const member = tenant?.members.find((candidate) => candidate.userId === userId);
+  const unassigned = tree.unassignedUsers.find((candidate) => candidate.id === userId);
+  const account =
+    users.find((candidate) => candidate.id === userId) ??
+    (member
+      ? {
+          id: member.userId,
+          username: member.username,
+          email: member.email,
+          role: member.platformRole,
+          active: member.active,
+          endDate: member.endDate,
+          createdAt: "",
+          tenantId: tenant?.id ?? null,
+          tenantName: tenant?.name ?? null,
+        }
+      : unassigned
+        ? {
+            id: unassigned.id,
+            username: unassigned.username,
+            email: unassigned.email,
+            role: unassigned.role,
+            active: unassigned.active,
+            endDate: unassigned.endDate,
+            createdAt: "",
+            tenantId: null,
+            tenantName: null,
+          }
+        : null);
 
   useEffect(() => {
     setLoading(true);
@@ -1102,35 +1331,49 @@ function UserRelationsPanel({
   return (
     <div className="flex flex-col gap-4">
       <section className="border border-surface-800 rounded-xl p-4">
-        <button onClick={onBack} className="text-[11px] text-brand-400 hover:text-brand-300 mb-3">
-          ← Volver a {tenant.name}
-        </button>
+        {tenant ? (
+          <button onClick={onBack} className="text-[11px] text-brand-400 hover:text-brand-300 mb-3">
+            ← Volver a {tenant.name}
+          </button>
+        ) : (
+          <p className="text-[11px] text-amber-300 mb-3">Esta persona todavía no está en ninguna organización.</p>
+        )}
         <div className="flex items-center gap-2.5">
           <span className="w-7 h-7 rounded-md bg-surface-800 flex items-center justify-center">
             <UserRound className="w-3.5 h-3.5 text-surface-300" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold text-white truncate">{member?.username ?? "Persona"}</h2>
+            <h2 className="text-sm font-semibold text-white truncate">
+              {account?.username ?? member?.username ?? "Persona"}
+            </h2>
             <p className="text-[11px] text-surface-500 truncate">
-              {member?.email}
-              {member ? ` · ${TENANT_ROLE_LABELS[member.tenantRole]} en ${tenant.name}` : ""}
+              {account?.email ?? member?.email}
+              {member && tenant ? ` · ${TENANT_ROLE_LABELS[member.tenantRole]} en ${tenant.name}` : ""}
+              {account ? ` · ${PLATFORM_ROLE_LABELS[account.role]}` : ""}
             </p>
           </div>
-          {member && (
-            <EnterAsButton
-              userId={member.userId}
-              role={member.platformRole}
-              onError={(message) => showToast(message, false)}
-              className="shrink-0 px-2.5 py-1.5"
-            />
-          )}
         </div>
-        {member?.managedBrands && member.managedBrands.length > 0 && (
+        {member?.managedBrands && member.managedBrands.length > 0 && tenant && (
           <p className="text-[11px] text-surface-400 mt-3">
             Administra las marcas {member.managedBrands.join(", ")} dentro de {tenant.name}.
           </p>
         )}
       </section>
+
+      {account && (
+        <PlatformAccountPanel
+          key={account.id}
+          user={account}
+          brands={brands}
+          onReload={onChanged}
+          onDeleted={onDeleted}
+          showToast={showToast}
+        />
+      )}
+
+      {!tenant && account && (
+        <AssignOrgSection userId={account.id} tree={tree} onChanged={onChanged} showToast={showToast} />
+      )}
 
       {loading ? (
         <div className="flex justify-center py-10">
@@ -1201,7 +1444,7 @@ function UserRelationsPanel({
               />
             </section>
 
-            {member && (
+            {member && tenant && (
               <section className="border border-surface-800 rounded-xl p-4">
                 <h3 className="text-xs font-semibold text-white mb-3">Acciones</h3>
                 <button
@@ -1389,12 +1632,14 @@ function AddMemberModal({
   onClose,
   onDone,
   showToast,
+  orgPicker,
 }: {
   tenant: TenantNode;
   users: AdminUser[];
   onClose: () => void;
   onDone: () => void;
   showToast: ToastFn;
+  orgPicker?: { tenants: TenantNode[]; value: string; onChange: (id: string) => void };
 }) {
   const roles = TENANT_ROLES_BY_TYPE[tenant.type];
   const [mode, setMode] = useState<"new" | "existing">("new");
@@ -1403,6 +1648,7 @@ function AddMemberModal({
   const [form, setForm] = useState({ username: "", email: "", password: "" });
   const [existingId, setExistingId] = useState("");
   const [saving, setSaving] = useState(false);
+  const [generated, setGenerated] = useState<{ username: string; password: string } | null>(null);
 
   const memberIds = new Set(tenant.members.map((member) => member.userId));
   const candidates = users.filter((user) => !memberIds.has(user.id));
@@ -1412,18 +1658,24 @@ function AddMemberModal({
     setSaving(true);
     try {
       if (mode === "new") {
-        await tenantsApi.createMemberUser(tenant.id, {
+        const { data } = await tenantsApi.createMemberUser(tenant.id, {
           username: form.username.trim(),
           email: form.email.trim(),
-          password: form.password,
+          password: form.password.trim() || undefined,
           role,
           title: title.trim() || undefined,
         });
+        showToast("Persona agregada a la organización");
+        if (data.generatedPassword) {
+          setGenerated({ username: form.username.trim(), password: data.generatedPassword });
+        } else {
+          onDone();
+        }
       } else {
         await tenantsApi.addMember(tenant.id, { userId: existingId, role, title: title.trim() || undefined });
+        showToast("Persona agregada a la organización");
+        onDone();
       }
-      showToast("Persona agregada a la organización");
-      onDone();
     } catch (err) {
       showToast(errMsg(err, "No se pudo agregar la persona"), false);
     } finally {
@@ -1431,15 +1683,52 @@ function AddMemberModal({
     }
   }
 
+  if (generated) {
+    return (
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm flex flex-col gap-4">
+          <h3 className="text-sm font-semibold text-white">
+            Contraseña de <span className="text-brand-400">{generated.username}</span>
+          </h3>
+          <GeneratedPassword password={generated.password} onDismiss={onDone} />
+          <button
+            type="button"
+            onClick={onDone}
+            className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
+          >
+            Listo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-white">Agregar a {tenant.name}</h3>
+          <h3 className="text-sm font-semibold text-white">{orgPicker ? "Nueva persona" : `Agregar a ${tenant.name}`}</h3>
           <button onClick={onClose} className="text-surface-500 hover:text-white">
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {orgPicker && (
+          <div className="mb-4">
+            <label className={labelClass}>Organización</label>
+            <select
+              value={orgPicker.value}
+              onChange={(e) => orgPicker.onChange(e.target.value)}
+              className={inputClass}
+            >
+              {orgPicker.tenants.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} · {TENANT_TYPE_LABELS[item.type]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="flex gap-1 mb-4">
           {(["new", "existing"] as const).map((value) => (
@@ -1470,8 +1759,8 @@ function AddMemberModal({
                 <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inputClass} />
               </div>
               <div>
-                <label className={labelClass}>Contraseña</label>
-                <input required minLength={8} type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputClass} />
+                <label className={labelClass}>Contraseña (vacío = generar una)</label>
+                <input minLength={8} type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={inputClass} />
               </div>
             </>
           ) : (
@@ -1514,5 +1803,114 @@ function AddMemberModal({
         </form>
       </div>
     </div>
+  );
+}
+
+function AssignOrgSection({
+  userId,
+  tree,
+  onChanged,
+  showToast,
+}: {
+  userId: string;
+  tree: TenantTree;
+  onChanged: () => void;
+  showToast: ToastFn;
+}) {
+  const [tenantId, setTenantId] = useState(tree.tenants[0]?.id ?? "");
+  const tenant = tree.tenants.find((item) => item.id === tenantId) ?? null;
+  const roles = tenant ? TENANT_ROLES_BY_TYPE[tenant.type] : [];
+  const [role, setRole] = useState<TenantRole>(roles[0] ?? "ADMIN");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const current = tree.tenants.find((item) => item.id === tenantId);
+    if (!current) return;
+    const next = TENANT_ROLES_BY_TYPE[current.type];
+    setRole(next.includes("OWNER") ? "OWNER" : next[0]);
+  }, [tenantId, tree.tenants]);
+
+  async function assign() {
+    if (!tenant) return;
+    setSaving(true);
+    try {
+      await tenantsApi.addMember(tenant.id, { userId, role });
+      showToast(`Asignado a ${tenant.name}`);
+      onChanged();
+    } catch (err) {
+      showToast(errMsg(err, "No se pudo asignar"), false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="border border-surface-800 rounded-xl p-4 flex flex-col gap-3">
+      <h3 className="text-xs font-semibold text-white">Asignar a una organización</h3>
+      <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} className={inputClass}>
+        {tree.tenants.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name} · {TENANT_TYPE_LABELS[item.type]}
+          </option>
+        ))}
+      </select>
+      {tenant && (
+        <select value={role} onChange={(e) => setRole(e.target.value as TenantRole)} className={inputClass}>
+          {roles.map((option) => (
+            <option key={option} value={option}>
+              {TENANT_ROLE_LABELS[option]}
+            </option>
+          ))}
+        </select>
+      )}
+      <button
+        type="button"
+        onClick={assign}
+        disabled={saving || !tenant}
+        className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-xs font-semibold rounded-lg py-2 transition-all"
+      >
+        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Asignar"}
+      </button>
+    </section>
+  );
+}
+
+function CreatePersonModal({
+  tree,
+  users,
+  onClose,
+  onDone,
+  showToast,
+}: {
+  tree: TenantTree;
+  users: AdminUser[];
+  onClose: () => void;
+  onDone: () => void;
+  showToast: ToastFn;
+}) {
+  const [tenantId, setTenantId] = useState(tree.tenants[0]?.id ?? "");
+  const tenant = tree.tenants.find((item) => item.id === tenantId);
+  if (!tenant) {
+    return (
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm">
+          <p className="text-sm text-surface-300">Primero creá una organización.</p>
+          <button type="button" onClick={onClose} className="mt-4 text-xs text-brand-400">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <AddMemberModal
+      key={tenant.id}
+      tenant={tenant}
+      users={users}
+      onClose={onClose}
+      onDone={onDone}
+      showToast={showToast}
+      orgPicker={{ tenants: tree.tenants, value: tenantId, onChange: setTenantId }}
+    />
   );
 }

@@ -156,6 +156,8 @@ Tenant (DISTRIBUTOR) ──TenantLink──▶ Tenant (BRAND)
 Vista de árbol: **Organización → usuarios (por rol interno) → relaciones**. Al seleccionar
 cualquier usuario debe verse su organización, sus pares internos, y las organizaciones
 relacionadas directa (vínculo propio) o indirectamente (vínculo de su organización).
+La cuenta de Nodo (clave, nivel de plataforma, módulos, “Entrar como”) se administra
+en la misma ficha, no en una pantalla aparte.
 
 En pantalla, siempre nombres normalizados. Nunca slugs ni claves internas.
 

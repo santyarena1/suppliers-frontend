@@ -38,7 +38,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: crear `{ username, email, password?, role, brandId?, active?, endDate? }` · editar `{ username?, email?, brandId? }` · password `{ password? }` (mín. 8)
 - **Respuesta esperada**: lista enriquecida con `brand`, `providers` (nombres, sin secretos), `brandAccesses`
 - **Estado**: IMPLEMENTADO
-- **Notas**: `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse.
+- **Notas**: `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse. En la UI de superadmin esto vive en el **Directorio** (`/admin`): ficha de la persona (cuenta Nodo, módulos, “Entrar como”), no en una tab aparte.
 
 ### [FEATURE] Entrar como otro usuario (suplantación)
 - **Método**: POST
@@ -56,7 +56,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: organización `{ name, type: "RETAILER" | "DISTRIBUTOR" | "BRAND", providerKey?, brandId?, contactEmail?, contactPhone?, notes?, advertisingEnabled?, active?, mirrorsCommercialFromId? }` · membresía `{ userId | (username, email, password), role, title? }` · vínculo `{ clientTenantId, supplierTenantId, accountManagerId?, status?, discountPercent?, notes? }` · código `{ label?, maxUses?, expiresInDays? }`
 - **Respuesta esperada**: `GET /admin/tenants` devuelve `{ tenants: TenantNode[], unassignedUsers: [] }`, cada `TenantNode` con `members`, `suppliers`, `clients` y `accessCodes`
 - **Estado**: IMPLEMENTADO
-- **Notas**: `tenantRole` es el alcance dentro de la organización y `platformRole` el nivel de acceso a Nodo. El lado cliente del vínculo es un comercio, o un distribuidor cuando el proveedor es una marca. `mirrorsCommercialFromId` hace que credenciales, vínculos y catálogo se lean de otra organización; carrito y pedidos siguen siendo propios. Ver `docs/ARQUITECTURA_TENANTS.md`.
+- **Notas**: `tenantRole` es el alcance dentro de la organización y `platformRole` el nivel de acceso a Nodo. El lado cliente del vínculo es un comercio, o un distribuidor cuando el proveedor es una marca. `mirrorsCommercialFromId` hace que credenciales, vínculos y catálogo se lean de otra organización; carrito y pedidos siguen siendo propios. Superadmin: una sola herramienta **Directorio** (organizaciones y personas). Ver `docs/ARQUITECTURA_TENANTS.md`.
 
 ### [FEATURE] Proveedores visibles y canje de código de vinculación
 - **Método**: GET | POST
