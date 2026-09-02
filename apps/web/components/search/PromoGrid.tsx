@@ -5,8 +5,10 @@ import Link from "next/link";
 import { adsApi, type AdCreative, type Banner } from "@/lib/api";
 import {
   BANNER_BENTO_CONTAINER,
+  BANNER_BENTO_SECONDARY_CONTAINER,
   BANNER_SLOT_BENTO,
-  BANNER_SLOT_ORDER,
+  BANNER_SLOT_ORDER_PRIMARY,
+  BANNER_SLOT_ORDER_SECONDARY,
   type BannerSlot,
 } from "@/lib/brand-presets";
 import { assetUrl } from "@/lib/assets";
@@ -139,7 +141,7 @@ export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProp
       .catch(() => setPaid([]));
   }, []);
 
-  const bySlot = BANNER_SLOT_ORDER.map((slot) => {
+  function resolveSlot(slot: BannerSlot) {
     const paidMatch = paid.find((creative) => creative.slot === slot);
     if (paidMatch) {
       return { slot, banner: paidAsBanner(paidMatch, slot), isDemo: false, campaignId: paidMatch.campaignId };
@@ -148,15 +150,23 @@ export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProp
     if (real) return { slot, banner: real, isDemo: false, campaignId: undefined };
     if (useDemoFill) return { slot, banner: demoBannerForSlot(slot), isDemo: true, campaignId: undefined };
     return { slot, banner: undefined, isDemo: false, campaignId: undefined };
-  });
+  }
 
-  const anyVisible = bySlot.some((s) => !!s.banner);
+  const primary = BANNER_SLOT_ORDER_PRIMARY.map(resolveSlot);
+  const secondary = BANNER_SLOT_ORDER_SECONDARY.map(resolveSlot);
+  const anyVisible = [...primary, ...secondary].some((s) => !!s.banner);
   if (!anyVisible) return null;
 
-  return (
-    <section className="mb-8">
-      <div className={BANNER_BENTO_CONTAINER}>
-        {bySlot.map(({ slot, banner, isDemo, campaignId }) =>
+  function renderModule(
+    items: ReturnType<typeof resolveSlot>[],
+    containerClass: string,
+    keyPrefix: string,
+  ) {
+    const visible = items.filter((s) => !!s.banner);
+    if (visible.length === 0) return null;
+    return (
+      <div key={keyPrefix} className={containerClass}>
+        {items.map(({ slot, banner, isDemo, campaignId }) =>
           banner ? (
             <SlotShell key={slot} slot={slot}>
               <FilledBanner banner={banner} isDemo={isDemo} campaignId={campaignId} />
@@ -164,6 +174,13 @@ export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProp
           ) : null,
         )}
       </div>
+    );
+  }
+
+  return (
+    <section className="mb-6 space-y-4">
+      {renderModule(primary, BANNER_BENTO_CONTAINER, "primary")}
+      {renderModule(secondary, BANNER_BENTO_SECONDARY_CONTAINER, "secondary")}
     </section>
   );
 }

@@ -15,8 +15,10 @@ import {
 import {
   BANNER_SLOTS,
   BANNER_BENTO_CONTAINER,
+  BANNER_BENTO_SECONDARY_CONTAINER,
   BANNER_SLOT_BENTO,
-  BANNER_SLOT_ORDER,
+  BANNER_SLOT_ORDER_PRIMARY,
+  BANNER_SLOT_ORDER_SECONDARY,
   BANNER_SLOT_RECOMMENDED,
   BRAND_PRESET_LABELS,
   BRAND_PRESETS,
@@ -311,49 +313,57 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
         <p className="text-[10px] uppercase tracking-wider text-surface-500 font-semibold mb-3">
           Maquetado · {form.position === "search" ? "Buscador" : "Home"} · tocá un espacio
         </p>
-        <div className={BANNER_BENTO_CONTAINER}>
-          {BANNER_SLOT_ORDER.map((slot) => {
-            const meta = BANNER_SLOT_RECOMMENDED[slot];
-            const occupied = occupiedBySlot.get(slot);
-            const selected = showCreate && form.slot === slot;
-            return (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => openCreate(slot)}
-                className={`${BANNER_SLOT_BENTO[slot]} relative overflow-hidden rounded-2xl border text-left transition-all ${
-                  selected
-                    ? "border-brand-500 ring-1 ring-brand-500/40 bg-brand-600/10"
-                    : occupied
-                      ? "border-surface-700 bg-surface-900 hover:border-brand-500/50"
-                      : "border-dashed border-surface-700 bg-surface-950/80 hover:border-brand-500/60 hover:bg-brand-600/5"
-                }`}
-              >
-                {occupied?.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={assetUrl(occupied.imageUrl)}
-                    alt=""
-                    className="absolute inset-0 w-full h-full object-cover opacity-75"
-                  />
-                ) : null}
-                <div className={`relative z-10 p-2.5 sm:p-3 flex flex-col justify-between h-full min-h-[100px] md:min-h-0 md:h-full ${occupied?.imageUrl ? "bg-gradient-to-t from-black/80 via-black/25 to-transparent" : ""}`}>
-                  <div>
-                    <p className={`text-xs font-semibold ${occupied ? "text-white" : "text-surface-300"}`}>
-                      {slotLabel(slot)}
-                    </p>
-                    <p className={`text-[10px] mt-0.5 ${occupied ? "text-white/70" : "text-surface-500"}`}>
-                      {meta.width}×{meta.height}px
-                    </p>
-                  </div>
-                  <p className={`text-[10px] mt-2 leading-snug ${occupied ? "text-white/60" : "text-surface-600"}`}>
-                    {occupied ? (occupied.active ? "Cargado" : "Inactivo") : "Vacío · cargar"}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        {([
+          { label: "Módulo 1 · principal", slots: BANNER_SLOT_ORDER_PRIMARY, container: BANNER_BENTO_CONTAINER },
+          { label: "Módulo 2 · publicidad", slots: BANNER_SLOT_ORDER_SECONDARY, container: BANNER_BENTO_SECONDARY_CONTAINER },
+        ] as const).map((mod) => (
+          <div key={mod.label} className="mb-4 last:mb-0">
+            <p className="text-[10px] text-surface-500 font-medium mb-2">{mod.label}</p>
+            <div className={mod.container}>
+              {mod.slots.map((slot) => {
+                const meta = BANNER_SLOT_RECOMMENDED[slot];
+                const occupied = occupiedBySlot.get(slot);
+                const selected = showCreate && form.slot === slot;
+                return (
+                  <button
+                    key={slot}
+                    type="button"
+                    onClick={() => openCreate(slot)}
+                    className={`${BANNER_SLOT_BENTO[slot]} relative overflow-hidden rounded-2xl border text-left transition-all ${
+                      selected
+                        ? "border-brand-500 ring-1 ring-brand-500/40 bg-brand-600/10"
+                        : occupied
+                          ? "border-surface-700 bg-surface-900 hover:border-brand-500/50"
+                          : "border-dashed border-surface-700 bg-surface-950/80 hover:border-brand-500/60 hover:bg-brand-600/5"
+                    }`}
+                  >
+                    {occupied?.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={assetUrl(occupied.imageUrl)}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover opacity-75"
+                      />
+                    ) : null}
+                    <div className={`relative z-10 p-2.5 sm:p-3 flex flex-col justify-between h-full min-h-[100px] md:min-h-0 md:h-full ${occupied?.imageUrl ? "bg-gradient-to-t from-black/80 via-black/25 to-transparent" : ""}`}>
+                      <div>
+                        <p className={`text-xs font-semibold ${occupied ? "text-white" : "text-surface-300"}`}>
+                          {slotLabel(slot)}
+                        </p>
+                        <p className={`text-[10px] mt-0.5 ${occupied ? "text-white/70" : "text-surface-500"}`}>
+                          {meta.width}×{meta.height}px
+                        </p>
+                      </div>
+                      <p className={`text-[10px] mt-2 leading-snug ${occupied ? "text-white/60" : "text-surface-600"}`}>
+                        {occupied ? (occupied.active ? "Cargado" : "Inactivo") : "Vacío · cargar"}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {loading ? (

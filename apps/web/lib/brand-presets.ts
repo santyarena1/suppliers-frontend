@@ -142,6 +142,13 @@ export const BANNER_SLOTS = [
   { value: "tile_3", label: "Tile 3" },
   { value: "tile_4", label: "Tile 4" },
   { value: "strip", label: "Banda ancha" },
+  // Segundo módulo de publicidad (debajo del bento principal)
+  { value: "mid_wide", label: "Módulo 2 · ancho" },
+  { value: "mid_tall", label: "Módulo 2 · columna" },
+  { value: "mid_a", label: "Módulo 2 · tile A" },
+  { value: "mid_b", label: "Módulo 2 · tile B" },
+  { value: "mid_c", label: "Módulo 2 · tile C" },
+  { value: "mid_strip", label: "Módulo 2 · banda" },
 ] as const;
 
 export type BannerSlot = (typeof BANNER_SLOTS)[number]["value"];
@@ -158,10 +165,16 @@ export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
   tile_3: "md:col-span-3 md:row-span-2 min-h-[120px]",
   tile_4: "md:col-span-3 md:row-span-3 min-h-[140px]",
   strip: "md:col-span-12 min-h-[96px]",
+  mid_wide: "md:col-span-6 md:row-span-2 min-h-[160px]",
+  mid_tall: "md:col-span-3 md:row-span-2 min-h-[160px]",
+  mid_a: "md:col-span-3 min-h-[120px]",
+  mid_b: "md:col-span-3 min-h-[120px]",
+  mid_c: "md:col-span-6 min-h-[120px]",
+  mid_strip: "md:col-span-12 min-h-[88px]",
 };
 
 /**
- * Bento grid (estilo HardGamers): tamaños distintos, gaps uniformes, sin solapes.
+ * Bento principal: tamaños distintos, gaps uniformes, sin solapes.
  *
  * Desktop (12 columnas × 4 filas):
  * ┌──────────────┬────────┬────┐
@@ -189,13 +202,30 @@ export const BANNER_SLOT_BENTO: Record<BannerSlot, string> = {
     "col-span-2 min-h-[140px] md:col-span-3 md:row-span-2 md:min-h-0 md:col-start-7 md:row-start-2",
   strip:
     "col-span-2 min-h-[88px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-4",
+
+  mid_wide:
+    "col-span-2 min-h-[160px] md:col-span-6 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
+  mid_a:
+    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-7 md:row-start-1",
+  mid_tall:
+    "col-span-1 min-h-[160px] md:col-span-3 md:row-span-2 md:min-h-0 md:col-start-10 md:row-start-1",
+  mid_b:
+    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-7 md:row-start-2",
+  mid_c:
+    "col-span-2 min-h-[120px] md:col-span-6 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
+  mid_strip:
+    "col-span-2 min-h-[80px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-4",
 };
 
-/** Contenedor del bento (buscador + maquetado admin). */
+/** Contenedor del bento principal. */
 export const BANNER_BENTO_CONTAINER =
   "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(3,minmax(118px,1fr))_minmax(96px,auto)] md:gap-4";
 
-/** Medidas recomendadas (px) para que el recorte se vea nítido en el bento. */
+/** Segundo módulo de publicidad (debajo del principal). */
+export const BANNER_BENTO_SECONDARY_CONTAINER =
+  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(110px,1fr))_minmax(100px,auto)_minmax(84px,auto)] md:gap-4";
+
+/** Medidas recomendadas (px) para que el recorte se vea nítido. */
 export const BANNER_SLOT_RECOMMENDED: Record<
   BannerSlot,
   { width: number; height: number; hint: string }
@@ -233,10 +263,50 @@ export const BANNER_SLOT_RECOMMENDED: Record<
   strip: {
     width: 1920,
     height: 280,
-    hint: "Banda ancha debajo de todo el bento.",
+    hint: "Banda ancha debajo del bento principal.",
+  },
+  mid_wide: {
+    width: 1200,
+    height: 560,
+    hint: "Módulo 2 · bloque ancho izquierdo (2 filas).",
+  },
+  mid_tall: {
+    width: 480,
+    height: 640,
+    hint: "Módulo 2 · columna alta derecha.",
+  },
+  mid_a: {
+    width: 560,
+    height: 320,
+    hint: "Módulo 2 · tile superior centro.",
+  },
+  mid_b: {
+    width: 560,
+    height: 320,
+    hint: "Módulo 2 · tile inferior centro.",
+  },
+  mid_c: {
+    width: 1200,
+    height: 320,
+    hint: "Módulo 2 · banda media bajo el bloque ancho.",
+  },
+  mid_strip: {
+    width: 1920,
+    height: 240,
+    hint: "Módulo 2 · franja full width inferior.",
   },
 };
 
-export const BANNER_SLOT_ORDER: BannerSlot[] = [
+export const BANNER_SLOT_ORDER_PRIMARY: BannerSlot[] = [
   "hero_main", "hero_side", "tile_4", "tile_1", "tile_2", "tile_3", "strip",
+];
+
+export const BANNER_SLOT_ORDER_SECONDARY: BannerSlot[] = [
+  "mid_wide", "mid_a", "mid_tall", "mid_b", "mid_c", "mid_strip",
+];
+
+/** Orden completo (admin / demos). */
+export const BANNER_SLOT_ORDER: BannerSlot[] = [
+  ...BANNER_SLOT_ORDER_PRIMARY,
+  ...BANNER_SLOT_ORDER_SECONDARY,
 ];
