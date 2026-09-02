@@ -644,7 +644,7 @@ export default function UnifyBoard({
           <div className="px-4 py-8 text-center space-y-2">
             <p className="text-sm text-surface-400">No hay sugerencias pendientes.</p>
             <p className="text-xs text-surface-500">
-              En Sin unificar, marcá las que son lo mismo y usá Unificar.
+              En Sin unificar, marcá las que son lo mismo y usá Unificar. O pedí otras sugerencias.
             </p>
           </div>
         ) : (
