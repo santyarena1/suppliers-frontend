@@ -52,7 +52,7 @@ const SECTIONS = [
 ] as const;
 
 export default function ElitAccountPanel() {
-  const history = useAccountHistoryState("cta");
+  const history = useAccountHistoryState("cta", "all");
   const [account, setAccount] = useState<ElitAccount | null>(null);
   const [drafts, setDrafts] = useState<NodoProviderDraft[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -310,6 +310,18 @@ function elitMovementDocs(m: ElitMovement): AccountDetailDoc[] {
   }];
 }
 
+function fmtDate(raw: string | undefined): string {
+  if (!raw) return "—";
+  const iso = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  return raw;
+}
+
+function fmtStatus(raw: string | undefined): string {
+  if (!raw || /^(true|false)$/i.test(raw)) return "—";
+  return raw;
+}
+
 function fmt(n: number | null | undefined, currency?: string) {
   if (n == null) return "—";
   const code = currency === "ARS" ? "ARS" : "USD";
@@ -323,7 +335,7 @@ function statusClass(status: string) {
 }
 
 function moneyCell(n: number | null | undefined, currency: string, tone?: "debit" | "credit") {
-  if (n == null) return "—";
+  if (n == null || n === 0) return "—";
   const cls =
     tone === "debit" ? "text-red-400" : tone === "credit" ? "text-emerald-400" : "text-surface-200";
   return <span className={cls}>{fmt(n, currency)}</span>;
@@ -366,7 +378,8 @@ function UsdVouchersTable({ rows }: { rows: ElitUsdVoucher[] }) {
   if (rows.length === 0) return null;
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Comprobantes en dólares</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-1">Comprobantes en dólares</p>
+      <p className="text-[11px] text-surface-500 mb-2">Se cancelan a la cotización del día de pago.</p>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -383,13 +396,13 @@ function UsdVouchersTable({ rows }: { rows: ElitUsdVoucher[] }) {
           <tbody className="divide-y divide-surface-800">
             {rows.map((r, i) => (
               <tr key={`${r.number}-${i}`}>
-                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{r.date || "—"}</td>
-                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{r.dueDate || "—"}</td>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtDate(r.date)}</td>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtDate(r.dueDate)}</td>
                 <td className="px-2 py-2 text-surface-200">{r.form || "—"}</td>
                 <td className="px-2 py-2 text-surface-400 font-mono text-xs">{r.number || "—"}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{moneyCell(r.debit, "USD", "debit")}</td>
                 <td className="px-2 py-2 text-right tabular-nums">{moneyCell(r.credit, "USD", "credit")}</td>
-                <td className="px-2 py-2 text-surface-400">{r.status || "—"}</td>
+                <td className="px-2 py-2 text-surface-400">{fmtStatus(r.status)}</td>
               </tr>
             ))}
           </tbody>
@@ -428,7 +441,7 @@ function MovementsTable({
           <tbody className="divide-y divide-surface-800">
             {rows.map((m, i) => (
               <tr key={`${m.number}-${i}`}>
-                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date || "—"}</td>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{fmtDate(m.date)}</td>
                 <td className="px-2 py-2 text-surface-200 whitespace-nowrap">{m.form || "—"}</td>
                 <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.number || "—"}</td>
                 <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.remito || "—"}</td>

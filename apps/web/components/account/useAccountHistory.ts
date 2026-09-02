@@ -11,9 +11,9 @@ import {
 /**
  * Estado compartido de sección + mes + página. Al cambiar mes/sección vuelve a pág. 1.
  */
-export function useAccountHistoryState(defaultSection: string) {
+export function useAccountHistoryState(defaultSection: string, defaultMonth?: MonthFilter) {
   const [section, setSection] = useState(defaultSection);
-  const [month, setMonth] = useState<MonthFilter>(currentMonthKey());
+  const [month, setMonth] = useState<MonthFilter>(defaultMonth ?? currentMonthKey());
   const [page, setPage] = useState(1);
 
   function changeSection(id: string) {

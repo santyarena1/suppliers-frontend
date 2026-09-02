@@ -217,6 +217,27 @@ describe("elit-rsc.parser", () => {
     });
     expect(s.movements[1]).toMatchObject({ form: "RECIBO A", credit: 5212174.5, currency: "ARS" });
   });
+
+  it("no toma currency:2 como saldo ni pone pesos en la tabla de dólares", () => {
+    const rsc = [
+      `Cuenta corriente aprobada`,
+      `0:{"invoiceCode":"A","form":"FACTURA A","number":"0027-00411682","date":"2026-08-31T00:00:00.000Z","currency":2,"exchangeRate":1530,"amount":773.62,"debit":1183638.6,"credit":0,"balance":1187506.7,"status":false}`,
+      `1:{"invoiceCode":"A","form":"FACTURA A","number":"0027-00410001","date":"2026-08-20T00:00:00.000Z","currency":2,"exchangeRate":1515,"debit":4082437.8,"credit":0,"balance":900000}`,
+      `2:{"invoiceCode":"A","form":"RECIBO A","number":"0001-1","date":"2026-08-01T00:00:00.000Z","currency":1,"credit":5212174.5,"debit":null,"balance":38668.1}`,
+    ].join(" ");
+    const s = parseElitCtaRsc(rsc);
+    expect(s.summary.currentAccount).not.toBe(2);
+    expect(s.summary.currentAccount).toBe(1187506.7);
+    expect(s.movements[0]).toMatchObject({ date: "31/08/2026", amount: 773.62, debit: 1183638.6, pending: true });
+    expect(s.usdVouchers).toHaveLength(1);
+    expect(s.usdVouchers[0]).toMatchObject({
+      number: "0027-00411682",
+      debit: 773.62,
+      date: "31/08/2026",
+      status: "Pendiente",
+    });
+    expect(s.usdVouchers[0].debit).toBeLessThan(10_000);
+  });
 });
 
 describe("html-table", () => {

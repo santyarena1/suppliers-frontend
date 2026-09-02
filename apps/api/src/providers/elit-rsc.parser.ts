@@ -67,6 +67,8 @@ export interface ElitRscMovement {
   currency: string;
   exchangeRate: number | null;
   status?: string;
+  /** Elit manda `status: false` en facturas USD pendientes de cancelar. */
+  pending?: boolean;
   pdfUrl?: string;
 }
 
@@ -506,13 +508,17 @@ function firstNum(rec: Record<string, unknown>, keys: string[]): number | null {
 
 function firstStr(rec: Record<string, unknown>, keys: string[]): string | undefined {
   for (const key of keys) {
-    const nested = asRecord(rec[key]);
+    const raw = rec[key];
+    if (typeof raw === "boolean") continue;
+    const nested = asRecord(raw);
     if (nested) {
-      const label = asString(nested.label) || asString(nested.name) || asString(nested.status);
-      if (label) return label;
+      const label = asString(nested.label) || asString(nested.name);
+      if (label && !/^(true|false)$/i.test(label)) return label;
     }
-    const s = asString(rec[key]);
-    if (s) return s;
+    if (typeof raw === "string" || typeof raw === "number") {
+      const s = asString(raw);
+      if (s && !/^(true|false)$/i.test(s)) return s;
+    }
   }
   return undefined;
 }
@@ -525,11 +531,24 @@ function parseArMoney(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** En el RSC a veces el cupo va como texto "Cupo de crédito" + "4.610.000,00". */
+/** Solo importes tipo 4.610.000,00 — no el `2` de `currency: 2`. */
 function labeledAmount(rsc: string, label: RegExp): number | null {
-  const m = rsc.match(new RegExp(label.source + "[^0-9\\-]{0,80}(-?[\\d.]+,\\d{2}|-?\\d+(?:\\.\\d+)?)", "i"));
+  const m = rsc.match(new RegExp(label.source + "[^0-9\\-]{0,80}(-?[\\d.]+,\\d{2})", "i"));
   if (!m) return null;
-  return parseArMoney(m[1]);
+  const n = parseArMoney(m[1]);
+  if (n == null || Math.abs(n) < 10) return null;
+  return n;
+}
+
+function formatElitDate(raw: string | undefined): string {
+  if (!raw) return "";
+  const iso = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  return raw.trim();
+}
+
+function looksLikeArsBalance(n: number | null | undefined): boolean {
+  return n != null && Number.isFinite(n) && Math.abs(n) >= 10;
 }
 
 function emptyCtaSummary(): ElitCtaSummary {
@@ -544,28 +563,40 @@ function emptyCtaSummary(): ElitCtaSummary {
   };
 }
 
+function summarySource(rec: Record<string, unknown>): Record<string, unknown> {
+  const inner =
+    asRecord(rec.currentAccount) ??
+    asRecord(rec.checkingAccount) ??
+    asRecord(rec.account) ??
+    asRecord(rec.credit) ??
+    asRecord(rec.ctaCte);
+  return inner ? { ...rec, ...inner } : rec;
+}
+
 function mapCtaSummary(rec: Record<string, unknown>): ElitCtaSummary {
-  const status = firstStr(rec, ["status", "currentAccountStatus", "accountStatus", "label"]) || "";
-  const creditLimit = firstNum(rec, ["creditLimit", "cupo", "cupoCredito", "creditQuota", "limit"]);
-  const currentAccount = firstNum(rec, [
+  const src = summarySource(rec);
+  const status = firstStr(src, ["status", "currentAccountStatus", "accountStatus", "label"]) || "";
+  const creditLimit = firstNum(src, ["creditLimit", "cupo", "cupoCredito", "creditQuota", "quota", "grantedCredit"]);
+  const currentAccount = firstNum(src, [
     "currentAccount",
     "cuentaCorriente",
     "accountBalance",
     "balanceARS",
-    "checkingAccount",
     "currentBalance",
+    "usedCredit",
+    "balance",
   ]);
-  const checks = firstNum(rec, ["checksInPortfolio", "chequesEnCartera", "checks", "cheques"]);
-  const pendingOrders = firstNum(rec, ["pendingOrders", "pedidosPendientes", "pendingSales", "pending"]);
-  const availableCredit = firstNum(rec, ["availableCredit", "creditoDisponible", "creditAvailable"]);
+  const checks = firstNum(src, ["checksInPortfolio", "chequesEnCartera", "checks", "cheques"]);
+  const pendingOrders = firstNum(src, ["pendingOrders", "pedidosPendientes", "pendingSales"]);
+  const availableCredit = firstNum(src, ["availableCredit", "creditoDisponible", "creditAvailable"]);
   return {
     status,
-    approved: rec.approved === true || /aprobad/i.test(status),
-    creditLimit,
-    currentAccount,
+    approved: src.approved === true || rec.approved === true || /aprobad/i.test(status),
+    creditLimit: looksLikeArsBalance(creditLimit) ? creditLimit : creditLimit === 0 ? 0 : null,
+    currentAccount: looksLikeArsBalance(currentAccount) ? currentAccount : currentAccount === 0 ? 0 : null,
     checks,
     pendingOrders,
-    availableCredit,
+    availableCredit: looksLikeArsBalance(availableCredit) ? availableCredit : availableCredit === 0 ? 0 : null,
   };
 }
 
@@ -585,12 +616,20 @@ function mergeSummary(base: ElitCtaSummary, extra: ElitCtaSummary): ElitCtaSumma
   };
 }
 
+function isPendingFlag(rec: Record<string, unknown>): boolean {
+  if (rec.paid === false || rec.settled === false || rec.status === false || rec.paidStatus === false) return true;
+  const status = firstStr(rec, ["status", "state", "invoiceStatus"]);
+  return /pendiente|open|unpaid/i.test(status || "");
+}
+
 function mapCtaMovement(rec: Record<string, unknown>): ElitRscMovement {
-  const amount = firstNum(rec, ["amount", "importe", "originalAmount", "totalCurrency"]);
-  const exchangeRate = firstNum(rec, ["exchangeRate", "quotation", "quote", "cotizacion", "currencyQuote", "rate"]);
+  const amount = firstNum(rec, ["amount", "importe", "originalAmount", "totalCurrency", "amountUSD", "totalUSD"]);
+  const exchangeRate = firstNum(rec, ["exchangeRate", "quotation", "quote", "cotizacion", "currencyQuote", "rate", "tc"]);
+  const pending = isPendingFlag(rec);
+  const status = firstStr(rec, ["status", "state", "invoiceStatus"]);
   return {
-    date: firstStr(rec, ["date", "fecha"]) || "",
-    dueDate: firstStr(rec, ["dueDate", "expiration", "vencimiento", "expiry"]),
+    date: formatElitDate(firstStr(rec, ["date", "fecha"])),
+    dueDate: formatElitDate(firstStr(rec, ["dueDate", "expiration", "expirationDate", "vencimiento", "expiry", "due"])) || undefined,
     form: firstStr(rec, ["form", "comprobante", "type", "kind"]) || "",
     number: firstStr(rec, ["number", "numero"]) || "",
     remito: firstStr(rec, ["remito", "dispatchNote", "deliveryNote"]),
@@ -602,24 +641,48 @@ function mapCtaMovement(rec: Record<string, unknown>): ElitRscMovement {
     balanceUsd: asNumber(rec.balanceUSD) ?? asNumber(rec.balanceUsd) ?? null,
     currency: currencyLabel(rec.currency ?? rec.moneda),
     exchangeRate,
-    status: firstStr(rec, ["status", "state", "invoiceStatus"]),
+    status: pending && !status ? "Pendiente" : status,
+    pending,
     pdfUrl: asString(rec.pdfUrl),
   };
 }
 
 function mapUsdVoucher(rec: Record<string, unknown>): ElitUsdVoucher {
+  const movement = mapCtaMovement(rec);
   return {
-    date: firstStr(rec, ["date", "fecha"]) || "",
-    dueDate: firstStr(rec, ["dueDate", "expiration", "vencimiento", "expiry"]),
-    form: firstStr(rec, ["form", "comprobante", "type"]) || "",
-    number: firstStr(rec, ["number", "numero"]) || "",
-    debit: firstNum(rec, ["debit", "debe", "debitUSD", "amount"]),
-    credit: firstNum(rec, ["credit", "haber", "creditUSD"]),
-    status: firstStr(rec, ["status", "state"]),
+    date: movement.date,
+    dueDate: movement.dueDate,
+    form: movement.form,
+    number: movement.number,
+    debit: usdAmountOf(movement),
+    credit: usdCreditOf(movement),
+    status: movement.status,
   };
 }
 
-function collectUsdVouchers(rsc: string, recs: Record<string, unknown>[], movements: ElitRscMovement[]): ElitUsdVoucher[] {
+/** Debe en USD: nunca el debe en pesos (773,62 × 1530 = 1.183.638,60). */
+function usdAmountOf(m: ElitRscMovement): number | null {
+  const amount = m.amount;
+  const debit = m.debit;
+  const rate = m.exchangeRate;
+  if (amount != null && rate != null && rate > 1 && debit != null && debit > amount * 2) return amount;
+  if (amount != null && m.currency === "USD" && (debit == null || amount <= debit / 5 || debit === 0)) return amount;
+  if (rate != null && rate > 1 && debit != null && debit / rate < debit / 2) {
+    return Math.round((debit / rate) * 100) / 100;
+  }
+  if (m.currency === "USD" && amount != null && amount < 50_000) return amount;
+  return null;
+}
+
+function usdCreditOf(m: ElitRscMovement): number | null {
+  if (m.credit == null || m.credit === 0) return null;
+  const rate = m.exchangeRate;
+  if (rate != null && rate > 1 && m.credit > 1000) return Math.round((m.credit / rate) * 100) / 100;
+  if (m.currency === "USD") return m.credit;
+  return null;
+}
+
+function collectUsdVouchers(recs: Record<string, unknown>[], movements: ElitRscMovement[]): ElitUsdVoucher[] {
   const fromArrays: ElitUsdVoucher[] = [];
   for (const rec of recs) {
     for (const key of ["dollarInvoices", "usdInvoices", "invoicesUSD", "documentsUSD", "dollarDocuments", "comprobantesDolares"]) {
@@ -631,18 +694,20 @@ function collectUsdVouchers(rsc: string, recs: Record<string, unknown>[], moveme
       }
     }
   }
-  if (fromArrays.length > 0) return fromArrays;
+  if (fromArrays.length > 0) return fromArrays.filter((v) => v.debit != null || v.credit != null);
+
   return movements
-    .filter((m) => m.currency === "USD" && /factura|nota de d/i.test(m.form))
+    .filter((m) => m.currency === "USD" && /factura|nota de d/i.test(m.form) && m.pending)
     .map((m) => ({
       date: m.date,
       dueDate: m.dueDate,
       form: m.form,
       number: m.number,
-      debit: m.amount ?? m.debit,
-      credit: m.credit != null && (m.amount == null || Math.abs((m.credit ?? 0) - (m.amount ?? 0)) < 0.05) ? m.credit : null,
-      status: m.status,
-    }));
+      debit: usdAmountOf(m),
+      credit: usdCreditOf(m),
+      status: m.status || "Pendiente",
+    }))
+    .filter((v) => v.debit != null || v.credit != null);
 }
 
 export function parseElitCtaRsc(rsc: string): ElitCtaStatement {
@@ -650,19 +715,23 @@ export function parseElitCtaRsc(rsc: string): ElitCtaStatement {
   const movements = rows.map(mapCtaMovement);
 
   let summary = emptyCtaSummary();
-  for (const key of ['"creditLimit":', '"availableCredit":', '"cupo":', '"currentAccount":', '"checksInPortfolio":', '"cuentaCorriente":']) {
+  for (const key of [
+    '"creditLimit":',
+    '"availableCredit":',
+    '"cupo":',
+    '"currentAccount":',
+    '"checksInPortfolio":',
+    '"cuentaCorriente":',
+    '"grantedCredit":',
+    '"quota":',
+  ]) {
     for (const rec of extractObjectsWithKey(rsc, key)) {
-      const mapped = mapCtaSummary(rec);
-      if (summaryScore(mapped) > summaryScore(summary) || (summaryScore(mapped) === summaryScore(summary) && mapped.status && !summary.status)) {
-        summary = mergeSummary(summary, mapped);
-      } else {
-        summary = mergeSummary(summary, mapped);
-      }
+      summary = mergeSummary(summary, mapCtaSummary(rec));
     }
   }
 
   if (summary.creditLimit == null) summary.creditLimit = labeledAmount(rsc, /cupo de cr[eé]dito/i);
-  if (summary.currentAccount == null) summary.currentAccount = labeledAmount(rsc, /cuenta corriente/i);
+  if (summary.currentAccount == null) summary.currentAccount = labeledAmount(rsc, /cuenta corriente(?!\s+aprobada)/i);
   if (summary.checks == null) summary.checks = labeledAmount(rsc, /cheques en cartera/i);
   if (summary.pendingOrders == null) summary.pendingOrders = labeledAmount(rsc, /pedidos pendientes/i);
   if (summary.availableCredit == null) summary.availableCredit = labeledAmount(rsc, /cr[eé]dito disponible/i);
@@ -674,20 +743,29 @@ export function parseElitCtaRsc(rsc: string): ElitCtaStatement {
     }
   }
 
-  const first = movements[0];
   const saldo = movements.find((m) => /saldo/i.test(m.form));
   if (summary.currentAccount == null) {
-    summary.currentAccount = first?.balance ?? saldo?.balance ?? saldo?.total ?? null;
+    const newest = movements[0]?.balance;
+    const fromSaldo = saldo?.balance ?? saldo?.total ?? null;
+    summary.currentAccount = looksLikeArsBalance(newest)
+      ? newest
+      : looksLikeArsBalance(fromSaldo)
+        ? fromSaldo
+        : null;
   }
   if (summary.availableCredit == null && summary.creditLimit != null && summary.currentAccount != null) {
     summary.availableCredit = Math.round((summary.creditLimit - summary.currentAccount) * 100) / 100;
   }
 
-  const usdVouchers = collectUsdVouchers(rsc, extractObjectsWithKey(rsc, '"invoiceCode":').concat(
-    extractObjectsWithKey(rsc, '"dollarInvoices":'),
-    extractObjectsWithKey(rsc, '"usdInvoices":'),
-  ), movements);
+  const usdVouchers = collectUsdVouchers(
+    extractObjectsWithKey(rsc, '"invoiceCode":').concat(
+      extractObjectsWithKey(rsc, '"dollarInvoices":'),
+      extractObjectsWithKey(rsc, '"usdInvoices":'),
+    ),
+    movements,
+  );
 
+  const first = movements[0];
   return {
     balance: summary.currentAccount,
     balanceUsd: first?.balanceUsd ?? saldo?.balanceUsd ?? null,
