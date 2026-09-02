@@ -14,6 +14,7 @@ import {
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
+import AssignedSellerCard from "@/components/org/AssignedSellerCard";
 import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, MessageSquare, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
@@ -103,7 +104,7 @@ export default function ProveedoresPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {linked.map(({ provider, name, accountManager, linkId }) => {
+                    {linked.map(({ provider, name, accountManager, linkId, supplierContact }) => {
                       const s = statuses[provider];
                       const result = syncResult[provider];
                       const isSyncing = syncing === provider;
@@ -140,11 +141,12 @@ export default function ProveedoresPage() {
                             </span>
                           </Link>
 
-                          {accountManager && (
-                            <p className="text-[11px] text-surface-500 -mt-1">
-                              Tu vendedor: {accountManager.name} · {accountManager.email}
-                            </p>
-                          )}
+                          <AssignedSellerCard
+                            seller={accountManager}
+                            contact={supplierContact}
+                            linkId={linkId}
+                            compact
+                          />
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
                             {linkId && (
