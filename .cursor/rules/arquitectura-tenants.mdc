@@ -57,6 +57,10 @@ SKUs de distros con semáforo/precio sugerido, materiales y acciones.
 6. **Nada de slugs en la interfaz.** En pantalla siempre nombre normalizado
    (`Tenant.name`, `BrandAccount.name`). Los slugs y las claves de proveedor
    (`NEW_BYTES`) son identificadores internos.
+7. **Noticias.** Un distro no ve artículos de otro distro; una marca no ve los de
+   otra marca. El comercio ve los de sus vinculados y, en hero/feed, los de quien
+   paga publicidad. Los adjuntos comerciales no viajan con la publicidad: solo con
+   `TenantLink`. Plan: `docs/PLAN_NOTICIAS.md`.
 
 ## Al agregar features
 

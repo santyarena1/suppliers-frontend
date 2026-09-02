@@ -74,9 +74,9 @@ integración por API.
 
 | Rol interno | Alcance |
 |---|---|
-| `OWNER` | Gerente. Usuarios internos, publicidad contratada, códigos de vinculación, política de precios y descuentos, asignación de vendedores a clientes. |
+| `OWNER` | Gerente. Usuarios internos, publicidad contratada, códigos de vinculación, política de precios y descuentos, asignación de vendedores a clientes, noticias. |
 | `SELLER` | Ve solo sus clientes asignados: resumen de órdenes, descuentos puntuales, sus datos de contacto visibles para el cliente. |
-| `PRODUCT_MANAGER` | Controla una o varias marcas **dentro de su distribuidor** (`ProductManagerScope`): descuentos, combos y publicidad limitados a esas marcas. |
+| `PRODUCT_MANAGER` | Controla una o varias marcas **dentro de su distribuidor** (`ProductManagerScope`): descuentos, combos, publicidad y noticias limitados a esas marcas. |
 | `VIEWER` | Solo lectura. |
 
 Capacidades:
@@ -87,6 +87,8 @@ Capacidades:
 - **Códigos de vinculación.** Genera QR y códigos escritos (`TenantAccessCode`) para
   entregar por fuera de Nodo. El canje no revela a qué distribuidor pertenece el código
   hasta completarse.
+- **Noticias.** Publica novedades y listas hacia su red. No ve el blog de otro
+  distro. Detalle: `docs/PLAN_NOTICIAS.md`.
 - **Marcas sin API.** Las marcas que no son distribuidoras y trabajan con Excel suben su
   propia lista de precios; si un comercio ya las tiene conectadas, quedan habilitadas.
 
@@ -102,9 +104,9 @@ y un dueño (placeholder si nadie la tomó). Se identifica en pantalla por
 
 | Rol interno | Alcance |
 |---|---|
-| `OWNER` | Equipo, códigos, publicidad, acciones, landing. |
+| `OWNER` | Equipo, códigos, publicidad, acciones, landing, noticias. |
 | `ADMIN` | Igual que el dueño salvo tocar a otro `OWNER`. |
-| `MARKETING` | Landing y acciones (objetivos medibles). |
+| `MARKETING` | Landing, noticias y acciones (objetivos medibles). |
 | `COMMERCIAL` | Acciones dirigidas a un distro y un comercio. |
 | `VIEWER` | Solo lectura. |
 
@@ -115,6 +117,7 @@ Capacidades:
 - Landing pública de marketing. No abre catálogo B2B ni precios.
 - Avisos hacia el comercio vinculado. Códigos anónimos hasta el canje.
 - Sin publicidad no es descubrible en el B2B.
+- Noticias (blog B2B) propias y de los distros vinculados. Detalle: `docs/PLAN_NOTICIAS.md`.
 
 ---
 
@@ -184,7 +187,9 @@ hecho. Esta tabla es el producto, no la migración.
 | 7 | Tipo 3: org por marca, espacio in-app, mapa de SKUs (semáforo + precio sugerido), materiales, acciones, avisos y chat. | Hecho — `docs/PLAN_TIPO3.md` |
 | 8 | Publicidad paga: espacios, precio, cupo, campañas, impresiones/clicks. El flag `advertisingEnabled` es “esta cuenta paga”. | Hecho |
 | 9 | Chat persona a persona (org + usuario + rol), no un buzón por vínculo. | Hecho — `/mensajes` |
+| 10 | Noticias: blog B2B de marcas y distros, hero pago, feed por red, enlace público. | Plan — `docs/PLAN_NOTICIAS.md` |
 | — | Carrito de la organización en la API (un armado por local, visible al distro). | Hecho — `/cart/org` |
 
 Detalle del Tipo 2: `docs/PLAN_TIPO2.md`. Tipo 3: `docs/PLAN_TIPO3.md`.
+Noticias: `docs/PLAN_NOTICIAS.md`.
 

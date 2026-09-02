@@ -119,3 +119,5 @@ de distros. Import CSV (`provider`, `externalId`/`sku`, `light`/`semaforo`,
 - Cupos/metas de distro, facturación ads.
 - Borrar `ROLE_BRAND` del enum de plataforma (sigue existiendo por usuarios
   históricos; ya no manda la nav).
+- Blog de novedades de plataforma (`BrandNews` del módulo viejo no se porta).
+  Es un módulo fijo aparte: `docs/PLAN_NOTICIAS.md`.

@@ -40,6 +40,7 @@ comercio: no hay búsqueda ni carrito. Hay cartera. Una URL de comercio redirige
 | Equipo (vendedores, PM) y contacto | `OWNER` / `ADMIN` | Hecho |
 | Flag de publicidad (quién puede contratar) | superadmin en la org | Hecho |
 | Publicidad: espacios, precio, cupo, campañas, stats | `OWNER` / `ADMIN` del distro, si `advertisingEnabled` | Hecho · `/publicidad` |
+| Noticias hacia la red (propias + marcas vinculadas; nunca otro distro) | `OWNER` / `ADMIN` / PM acotado | Plan · `docs/PLAN_NOTICIAS.md` |
 | Product Manager: pedidos de sus marcas por defecto, opción ver todo | `PRODUCT_MANAGER` | Hecho |
 | Alertas de clientes sin pedido en 30 días | todos los que ven la cuenta | Hecho |
 | Chat con cada comercio de la cartera | todos los que ven la cuenta; en el comercio escriben OWNER/ADMIN/BUYER | Hecho |
