@@ -19,7 +19,7 @@ import {
 } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
 import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
-import { purchaseLinePricing } from "@/lib/purchase-price";
+import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { usePrefs } from "@/lib/prefs";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
@@ -41,8 +41,9 @@ import {
   ChevronDown, ChevronRight, GitCompare, Check,
 } from "lucide-react";
 
-type SortKey = "default" | "price_asc" | "price_desc" | "name_asc";
+type SortKey = "default" | "price_asc" | "price_desc" | "name_asc" | "name_desc";
 type ViewMode = "grid" | "list" | "grouped";
+type PriceView = "list" | "offline" | "scheme";
 
 export default function SearchPageWrapper() {
   return (
@@ -66,6 +67,7 @@ function SearchPage() {
   const searchParams = useSearchParams();
   const initialQ = searchParams?.get("q") || "";
   const initialMarca = searchParams?.get("marca") || "";
+  const initialCategoria = searchParams?.get("categoria") || "";
   const [query, setQuery] = useState(initialQ);
   const [brandFilter, setBrandFilter] = useState(initialMarca);
   const [activeQuery, setActiveQuery] = useState("");
@@ -78,9 +80,12 @@ function SearchPage() {
   const iibbEpoch = useIibbRatesEpoch();
   const searchable = myProviders.filter((p) => p.linked);
   const anyOffline = searchable.some((p) => purchasePolicies[p.provider]?.acceptsOffline);
-  const [showOfflinePrices, setShowOfflinePrices] = useState(false);
-  const priceMode = retailer && showOfflinePrices ? "offline" as const : "list" as const;
+  const anyScheme = searchable.some((p) => purchasePolicies[p.provider]?.acceptsScheme);
+  const [priceView, setPriceView] = useState<PriceView>("list");
+  const priceMode: PriceMode = retailer && priceView !== "list" ? priceView : "list";
   const [selectedProviders, setSelectedProviders] = useState<Set<Provider>>(new Set());
+  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set());
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [touchedFilters, setTouchedFilters] = useState(false);
   const [results, setResults] = useState<ProductDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -95,21 +100,28 @@ function SearchPage() {
   const lastUrlKeyRef = useRef<string | null>(null);
   const lastSearchKind = useRef<"search" | "category">("search");
 
-  function searchUrlKey(q: string, marca: string) {
-    return `${q.trim()}||${marca.trim()}`;
+  function searchUrlKey(q: string, marca: string, categoria = "") {
+    return `${q.trim()}||${marca.trim()}||${categoria.trim()}`;
   }
 
-  function syncSearchUrl(q: string, marca = brandFilter) {
+  function syncSearchUrl(q: string, marca = brandFilter, opts?: { categoria?: string }) {
     const trimmed = q.trim();
     const marcaTrim = marca.trim();
+    const categoriaTrim =
+      opts?.categoria !== undefined
+        ? opts.categoria.trim()
+        : lastSearchKind.current === "category"
+          ? trimmed
+          : "";
     const params = new URLSearchParams();
     if (trimmed) params.set("q", trimmed);
     if (marcaTrim) params.set("marca", marcaTrim);
+    if (categoriaTrim) params.set("categoria", categoriaTrim);
     const next = params.toString() ? `/search?${params.toString()}` : "/search";
     const current = typeof window !== "undefined"
       ? `${window.location.pathname}${window.location.search}`
       : "";
-    lastUrlKeyRef.current = searchUrlKey(trimmed, marcaTrim);
+    lastUrlKeyRef.current = searchUrlKey(trimmed, marcaTrim, categoriaTrim);
     if (current !== next) {
       router.replace(next, { scroll: false });
     }
@@ -124,6 +136,8 @@ function SearchPage() {
     setRefineText("");
     setMinPrice("");
     setMaxPrice("");
+    setSelectedBrands(new Set());
+    setSelectedCategories(new Set());
     lastSearchKind.current = "category";
     try {
       const res = await catalogApi.byCategory(category, 60, { includeOutOfStock: withZero });
@@ -131,7 +145,7 @@ function SearchPage() {
       setResults(data);
       persistResults(category, data);
       setUiState({ refineText: "", minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
-      syncSearchUrl(category);
+      syncSearchUrl(category, "", { categoria: category });
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || "Error al consultar la categoría");
@@ -180,6 +194,8 @@ function SearchPage() {
     setRefineText("");
     setMinPrice("");
     setMaxPrice("");
+    setSelectedBrands(new Set());
+    setSelectedCategories(new Set());
     try {
       const res = await searchApi.all(q, {
         providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
@@ -191,7 +207,7 @@ function SearchPage() {
       persistResults(q || `marca:${brand}`, data);
       setUiState({ refineText: "", minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
       if (opts?.track !== false) trackSearch(q || brand);
-      syncSearchUrl(q, brand);
+      syncSearchUrl(q, brand, { categoria: "" });
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || "Error al consultar la API");
@@ -226,8 +242,11 @@ function SearchPage() {
     setMinPrice("");
     setMaxPrice("");
     setHideNoImage(false);
+    setSelectedBrands(new Set());
+    setSelectedCategories(new Set());
+    setPriceView("list");
     setLoading(false);
-    syncSearchUrl("", "");
+    syncSearchUrl("", "", { categoria: "" });
   }
 
   function restoreFromStore(q: string, r: ProductDTO[]) {
@@ -283,14 +302,63 @@ function SearchPage() {
       const m = parseFloat(maxPrice);
       if (!isNaN(m)) arr = arr.filter((p) => parsePrice(p.price) <= m);
     }
+    if (selectedBrands.size > 0) {
+      arr = arr.filter((p) => {
+        const b = productDisplayBrand(p);
+        return !!b && selectedBrands.has(b);
+      });
+    }
+    if (selectedCategories.size > 0) {
+      arr = arr.filter((p) => {
+        const c = productDisplayCategory(p);
+        return !!c && selectedCategories.has(c);
+      });
+    }
     if (sortBy === "price_asc") arr = [...arr].sort((a, b) => sortPrice(a) - sortPrice(b));
     if (sortBy === "price_desc") arr = [...arr].sort((a, b) => sortPrice(b) - sortPrice(a));
     if (sortBy === "name_asc") arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    if (sortBy === "name_desc") arr = [...arr].sort((a, b) => (b.name || "").localeCompare(a.name || ""));
     return arr;
   }, [
     results, refineText, hideNoImage, minPrice, maxPrice, sortBy, priceMode,
-    purchasePolicies, withIva, withIibb, iibbEpoch,
+    purchasePolicies, withIva, withIibb, iibbEpoch, selectedBrands, selectedCategories,
   ]);
+
+  const brandFacets = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of results) {
+      const b = productDisplayBrand(p);
+      if (!b) continue;
+      counts.set(b, (counts.get(b) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [results]);
+
+  const categoryFacets = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of results) {
+      const c = productDisplayCategory(p);
+      if (!c) continue;
+      counts.set(c, (counts.get(c) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [results]);
+
+  const toggleBrand = useCallback((brand: string) => {
+    setSelectedBrands((prev) => {
+      const next = new Set(prev);
+      next.has(brand) ? next.delete(brand) : next.add(brand);
+      return next;
+    });
+  }, []);
+
+  const toggleCategory = useCallback((category: string) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      next.has(category) ? next.delete(category) : next.add(category);
+      return next;
+    });
+  }, []);
 
   const providerCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -332,13 +400,21 @@ function SearchPage() {
 
     const urlQ = initialQ.trim();
     const urlMarca = initialMarca.trim();
+    const urlCategoria = initialCategoria.trim();
     const cachedQ = storedQuery.trim();
     const sameAsCache =
       !urlMarca &&
+      !urlCategoria &&
       !!urlQ &&
       !!cachedQ &&
       urlQ.toLowerCase() === cachedQ.toLowerCase() &&
       storedResults.length > 0;
+
+    if (urlCategoria) {
+      lastUrlKeyRef.current = searchUrlKey(urlQ || urlCategoria, urlMarca, urlCategoria);
+      void handleCategoryClick(urlCategoria);
+      return;
+    }
 
     if (sameAsCache || (!urlQ && !urlMarca && cachedQ && storedResults.length > 0)) {
       restoreFromStore(urlQ || cachedQ, storedResults);
@@ -359,11 +435,12 @@ function SearchPage() {
     if (!hydrated || !restoredRef.current) return;
     const urlQ = initialQ.trim();
     const urlMarca = initialMarca.trim();
-    const key = searchUrlKey(urlQ, urlMarca);
+    const urlCategoria = initialCategoria.trim();
+    const key = searchUrlKey(urlQ, urlMarca, urlCategoria);
     if (key === (lastUrlKeyRef.current ?? "")) return;
     lastUrlKeyRef.current = key;
     setBrandFilter(urlMarca);
-    if (!urlQ && !urlMarca) {
+    if (!urlQ && !urlMarca && !urlCategoria) {
       setQuery("");
       setActiveQuery("");
       setResults([]);
@@ -373,6 +450,12 @@ function SearchPage() {
       setMinPrice("");
       setMaxPrice("");
       setHideNoImage(false);
+      setSelectedBrands(new Set());
+      setSelectedCategories(new Set());
+      return;
+    }
+    if (urlCategoria) {
+      void handleCategoryClick(urlCategoria);
       return;
     }
     if (
@@ -382,7 +465,7 @@ function SearchPage() {
     ) return;
     void runSearch(urlQ, { track: false, brand: urlMarca || undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQ, initialMarca]);
+  }, [initialQ, initialMarca, initialCategoria]);
 
   // Si el sidebar limpia el store estando en /search, salir a landing.
   useEffect(() => {
@@ -391,7 +474,8 @@ function SearchPage() {
     if (!searched && results.length === 0) return;
     const urlQ = initialQ.trim();
     const urlMarca = initialMarca.trim();
-    if (urlQ || urlMarca) return;
+    const urlCategoria = initialCategoria.trim();
+    if (urlQ || urlMarca || urlCategoria) return;
     setQuery("");
     setActiveQuery("");
     setResults([]);
@@ -401,6 +485,8 @@ function SearchPage() {
     setMinPrice("");
     setMaxPrice("");
     setHideNoImage(false);
+    setSelectedBrands(new Set());
+    setSelectedCategories(new Set());
     lastUrlKeyRef.current = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, storedQuery, storedResults.length]);
@@ -436,7 +522,8 @@ function SearchPage() {
   }, [searched, setUiState]);
 
   const unselectedCount = searchable.length - selectedProviders.size;
-  const hasInResultsFilter = refineText || minPrice || maxPrice || hideNoImage;
+  const hasFacetFilters = selectedBrands.size > 0 || selectedCategories.size > 0;
+  const hasInResultsFilter = refineText || minPrice || maxPrice || hideNoImage || hasFacetFilters;
 
   return (
     <>
@@ -482,9 +569,9 @@ function SearchPage() {
                   {anyOffline ? (
                     <button
                       type="button"
-                      onClick={() => setShowOfflinePrices((v) => !v)}
+                      onClick={() => setPriceView((v) => (v === "offline" ? "list" : "offline"))}
                       className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
-                        showOfflinePrices
+                        priceView === "offline"
                           ? "border-amber-500 text-amber-300 bg-amber-500/10"
                           : "border-surface-700 text-surface-400 hover:text-surface-200"
                       }`}
@@ -499,6 +586,19 @@ function SearchPage() {
                     >
                       Pedido offline
                     </Link>
+                  )}
+                  {anyScheme && (
+                    <button
+                      type="button"
+                      onClick={() => setPriceView((v) => (v === "scheme" ? "list" : "scheme"))}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
+                        priceView === "scheme"
+                          ? "border-violet-500 text-violet-300 bg-violet-500/10"
+                          : "border-surface-700 text-surface-400 hover:text-surface-200"
+                      }`}
+                    >
+                      Precios esquema
+                    </button>
                   )}
                   <OfflinePricesHelpButton />
                 </span>
@@ -521,15 +621,15 @@ function SearchPage() {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
-                  showFilters || unselectedCount > 0
+                  showFilters || unselectedCount > 0 || hasFacetFilters
                     ? "border-brand-500 text-brand-400 bg-brand-600/10"
                     : "border-surface-700 text-surface-400 hover:text-surface-200"
                 }`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
-                {unselectedCount > 0 && (
-                  <span className="bg-brand-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] leading-none">
-                    {selectedProviders.size}
+                {(unselectedCount > 0 || hasFacetFilters) && (
+                  <span className="bg-brand-600 text-white rounded-full min-w-4 h-4 px-1 flex items-center justify-center text-[10px] leading-none">
+                    {(unselectedCount > 0 ? selectedProviders.size : 0) + selectedBrands.size + selectedCategories.size}
                   </span>
                 )}
               </button>
@@ -574,7 +674,7 @@ function SearchPage() {
             </div>
           )}
           {showFilters && (
-            <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3">
+            <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3 space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 flex-wrap flex-1">
                   {searchable.length === 0 && (
@@ -606,6 +706,74 @@ function SearchPage() {
                   <span className="text-surface-700">·</span>
                   <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set()); }} className="text-xs text-surface-400 hover:text-white">Ninguno</button>
                 </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="text-[11px] font-medium text-surface-500 uppercase tracking-wider pt-1.5 w-20 flex-shrink-0">Marcas</span>
+                <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                  {brandFacets.length === 0 ? (
+                    <span className="text-xs text-surface-600">Sin marcas en resultados</span>
+                  ) : (
+                    brandFacets.map(([brand, count]) => (
+                      <button
+                        key={brand}
+                        type="button"
+                        onClick={() => toggleBrand(brand)}
+                        className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition-all ${
+                          selectedBrands.has(brand)
+                            ? "border-brand-500 bg-brand-600/15 text-brand-300"
+                            : "border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500"
+                        }`}
+                      >
+                        {brand}
+                        <span className="ml-1 tabular-nums text-surface-500">{count}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+                {selectedBrands.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBrands(new Set())}
+                    className="text-xs text-surface-400 hover:text-white flex-shrink-0"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="text-[11px] font-medium text-surface-500 uppercase tracking-wider pt-1.5 w-20 flex-shrink-0">Categorías</span>
+                <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                  {categoryFacets.length === 0 ? (
+                    <span className="text-xs text-surface-600">Sin categorías en resultados</span>
+                  ) : (
+                    categoryFacets.map(([category, count]) => (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => toggleCategory(category)}
+                        className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition-all ${
+                          selectedCategories.has(category)
+                            ? "border-brand-500 bg-brand-600/15 text-brand-300"
+                            : "border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500"
+                        }`}
+                      >
+                        {category}
+                        <span className="ml-1 tabular-nums text-surface-500">{count}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+                {selectedCategories.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategories(new Set())}
+                    className="text-xs text-surface-400 hover:text-white flex-shrink-0"
+                  >
+                    Limpiar
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -675,9 +843,9 @@ function SearchPage() {
                       {anyOffline ? (
                         <button
                           type="button"
-                          onClick={() => setShowOfflinePrices((v) => !v)}
+                          onClick={() => setPriceView((v) => (v === "offline" ? "list" : "offline"))}
                           className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
-                            showOfflinePrices
+                            priceView === "offline"
                               ? "border-amber-500 bg-amber-500/15 text-amber-300"
                               : "border-surface-700 text-surface-500 hover:text-surface-300"
                           }`}
@@ -692,13 +860,33 @@ function SearchPage() {
                           Pedido offline
                         </Link>
                       )}
+                      {anyScheme && (
+                        <button
+                          type="button"
+                          onClick={() => setPriceView((v) => (v === "scheme" ? "list" : "scheme"))}
+                          className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                            priceView === "scheme"
+                              ? "border-violet-500 bg-violet-500/15 text-violet-300"
+                              : "border-surface-700 text-surface-500 hover:text-surface-300"
+                          }`}
+                        >
+                          Precios esquema
+                        </button>
+                      )}
                       <OfflinePricesHelpButton />
                     </span>
                   )}
 
                   {hasInResultsFilter && (
                     <button
-                      onClick={() => { setRefineText(""); setMinPrice(""); setMaxPrice(""); setHideNoImage(false); }}
+                      onClick={() => {
+                        setRefineText("");
+                        setMinPrice("");
+                        setMaxPrice("");
+                        setHideNoImage(false);
+                        setSelectedBrands(new Set());
+                        setSelectedCategories(new Set());
+                      }}
                       className="text-[11px] text-surface-500 hover:text-white flex items-center gap-1"
                     >
                       <X className="w-3 h-3" />Limpiar
@@ -725,6 +913,7 @@ function SearchPage() {
                       <option value="price_asc">Precio ↑</option>
                       <option value="price_desc">Precio ↓</option>
                       <option value="name_asc">Nombre A-Z</option>
+                      <option value="name_desc">Nombre Z-A</option>
                     </select>
                   </div>
                 </div>
@@ -824,7 +1013,7 @@ function SearchPage() {
   );
 }
 
-function ListRowActions({ product, priceMode }: { product: ProductDTO; priceMode: "list" | "offline" }) {
+function ListRowActions({ product, priceMode }: { product: ProductDTO; priceMode: PriceMode }) {
   const [compareFlash, setCompareFlash] = useState(false);
   const policy = usePurchasePolicy(product.provider);
   const pricing = purchaseLinePricing(product, policy, priceMode);
@@ -877,7 +1066,7 @@ function ListRowActions({ product, priceMode }: { product: ProductDTO; priceMode
   );
 }
 
-function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: "list" | "offline" }) {
+function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: PriceMode }) {
   return (
     <div className="flex flex-col divide-y divide-surface-800 border border-surface-800 rounded-xl overflow-hidden">
       <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 bg-surface-900 text-[10px] font-semibold text-surface-500 uppercase tracking-wider items-center">

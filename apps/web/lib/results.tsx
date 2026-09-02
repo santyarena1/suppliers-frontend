@@ -7,7 +7,7 @@ const RESULTS_KEY = "tgs_last_results";
 const UI_KEY = "tgs_search_ui_v1";
 
 export interface SearchUiState {
-  sortBy?: "default" | "price_asc" | "price_desc" | "name_asc";
+  sortBy?: "default" | "price_asc" | "price_desc" | "name_asc" | "name_desc";
   viewMode?: "grid" | "list" | "grouped";
   refineText?: string;
   minPrice?: string;
