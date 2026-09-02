@@ -48,6 +48,8 @@ export default function AccountRowDetail({
   note,
   upload,
   extra,
+  alert,
+  showIvaColumn,
   onClose,
 }: {
   open: boolean;
@@ -58,6 +60,10 @@ export default function AccountRowDetail({
   documents?: AccountDetailDoc[];
   note?: string;
   extra?: ReactNode;
+  /** Aviso de solo lectura (p. ej. la suma de líneas no cierra con el pie). */
+  alert?: { title: string; detail?: string } | null;
+  /** Forzar columna IVA aunque algún ítem no traiga alícuota. */
+  showIvaColumn?: boolean;
   upload?: {
     label: string;
     accept?: string;
@@ -82,7 +88,7 @@ export default function AccountRowDetail({
 
   if (!open) return null;
 
-  const showIva = (items ?? []).some((it) => it.iva != null);
+  const showIva = showIvaColumn || (items ?? []).some((it) => Boolean(it.iva));
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -143,7 +149,7 @@ export default function AccountRowDetail({
                       <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{formatQty(it.qty)}</td>
                       <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{formatMoneyCell(it.price)}</td>
                       {showIva ? (
-                        <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{it.iva || ""}</td>
+                        <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{it.iva || "—"}</td>
                       ) : null}
                       <td className={`py-1.5 text-right tabular-nums whitespace-nowrap pl-2 ${it.indent ? "text-surface-500" : "text-surface-200"}`}>{formatMoneyCell(it.total)}</td>
                     </tr>
@@ -153,6 +159,13 @@ export default function AccountRowDetail({
               </table>
             </div>
           )}
+
+          {alert ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2.5 text-xs text-amber-200/90">
+              <p className="font-semibold text-amber-100">{alert.title}</p>
+              {alert.detail ? <p className="mt-1 text-amber-200/80 leading-snug">{alert.detail}</p> : null}
+            </div>
+          ) : null}
 
           {(totals ?? []).length > 0 && (
             <div>

@@ -258,6 +258,62 @@ function vatPoints(n: number): number {
   return p;
 }
 
+/** "21%", "10,5", 10.5 — no usa asNumber porque el % lo deja en NaN. */
+function asVatNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const s = value.trim().replace(/%/g, "").replace(/\s/g, "").replace(",", ".");
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+const VAT_RATE_KEYS = [
+  "vatPercent",
+  "ivaPercent",
+  "alicuotaIva",
+  "alicuota",
+  "alicuota_iva",
+  "vatAliquot",
+  "ivaAliquot",
+  "porcentajeIva",
+  "ivaPorcentaje",
+  "taxPercent",
+  "taxRate",
+  "vatRate",
+  "ivaRate",
+  "iva",
+];
+
+function vatRateFromRecord(rec: Record<string, unknown>): number | null {
+  for (const key of VAT_RATE_KEYS) {
+    const n = asVatNumber(rec[key]);
+    if (n == null || !looksLikeVatRate(n)) continue;
+    return vatPoints(n);
+  }
+  const nested = asRecord(rec.product) ?? asRecord(rec.article) ?? asRecord(rec.price);
+  if (nested) {
+    for (const key of ["iva", "ivaPercent", "alicuota", "vatPercent", "taxRate"]) {
+      const n = asVatNumber(nested[key]);
+      if (n != null && looksLikeVatRate(n)) return vatPoints(n);
+    }
+  }
+  for (const key of ["taxes", "impuestos", "taxList"]) {
+    const list = rec[key];
+    if (!Array.isArray(list)) continue;
+    for (const row of list) {
+      const t = asRecord(row);
+      if (!t) continue;
+      const desc = fold(asString(t.desc) || asString(t.name) || asString(t.type) || asString(t.label) || "");
+      if (desc && !/iva|i\.v\.a/.test(desc)) continue;
+      const n = asVatNumber(t.percent ?? t.alicuota ?? t.rate ?? t.porcentaje ?? t.iva ?? t.vatPercent);
+      if (n != null && looksLikeVatRate(n)) return vatPoints(n);
+    }
+  }
+  return null;
+}
+
 function inferVatPercentFromAmount(net: number, vat: number): number | null {
   if (!(net > EPS) || !(vat > EPS)) return null;
   const r = vat / net;
@@ -271,20 +327,14 @@ function interpretVat(
   unitNet: number | null,
   qty: number | null,
 ): { vat: number | null; vatPercent: number | null } {
-  let percent: number | null = null;
-  for (const key of ["vatPercent", "ivaPercent", "alicuotaIva", "vatAliquot", "ivaAliquot", "porcentajeIva", "taxPercent", "iva"]) {
-    const n = asNumber(rec[key]);
-    if (n == null || !looksLikeVatRate(n)) continue;
-    percent = vatPoints(n);
-    break;
-  }
+  let percent = vatRateFromRecord(rec);
   const rawVat = asNumber(rec.vat) ?? asNumber(rec.ivaAmount) ?? asNumber(rec.vatAmount);
   let amount: number | null = null;
   if (rawVat != null) {
     if (percent == null && looksLikeVatRate(rawVat)) percent = vatPoints(rawVat);
     else if (!looksLikeVatRate(rawVat)) amount = rawVat;
   }
-  const ivaRaw = asNumber(rec.iva);
+  const ivaRaw = asVatNumber(rec.iva);
   if (percent == null && amount == null && ivaRaw != null && !looksLikeVatRate(ivaRaw)) {
     amount = ivaRaw;
   }
@@ -433,10 +483,37 @@ function inferMissingVatPercents(items: ElitRscOrderItem[]): void {
       it.vatPercent = inferVatPercentFromAmount(lineListNet(it), it.vat ?? 0);
     }
     if (it.vatPercent == null && it.children && it.children.length > 0) {
-      const rates = it.children.map((c) => c.vatPercent).filter((p): p is number => p != null);
-      if (rates.length > 0 && rates.every((p) => p === rates[0])) it.vatPercent = rates[0];
+      const childRates = it.children.map((c) => c.vatPercent).filter((p): p is number => p != null);
+      if (childRates.length > 0 && childRates.every((p) => p === childRates[0])) it.vatPercent = childRates[0];
     }
   }
+}
+
+/** Completa `vatPercent` con la alícuota del catálogo (no inventa 10,5/21). */
+export function applyCatalogVatPercents(
+  items: ElitRscOrderItem[] | undefined,
+  rates: Record<string, number>,
+): void {
+  if (!items) return;
+  const lookup = (it: ElitRscOrderItem): number | null => {
+    for (const key of [it.code, it.alfaCode, it.productCode]) {
+      if (!key) continue;
+      const n = rates[key] ?? rates[key.toUpperCase()];
+      if (n != null && Number.isFinite(n)) return vatPoints(n);
+    }
+    return null;
+  };
+  const fill = (list: ElitRscOrderItem[]) => {
+    for (const it of list) {
+      if (it.vatPercent == null) {
+        const p = lookup(it);
+        if (p != null) it.vatPercent = p;
+      }
+      if (it.children) fill(it.children);
+    }
+  };
+  fill(items);
+  inferMissingVatPercents(items);
 }
 
 function mapItems(raw: unknown, summaryNet?: number | null): ElitRscOrderItem[] | undefined {

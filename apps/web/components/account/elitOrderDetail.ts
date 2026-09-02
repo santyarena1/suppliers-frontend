@@ -89,9 +89,12 @@ function kitUnit(it: ElitItem): number | null {
   return round2(line / q);
 }
 
-function vatPoints(raw: number | null | undefined): number | null {
-  if (raw == null || !Number.isFinite(raw) || raw === 0) return raw === 0 ? 0 : null;
-  const p = raw > 0 && raw <= 1 ? raw * 100 : raw;
+function vatPoints(raw: number | string | null | undefined): number | null {
+  if (raw == null || raw === "") return null;
+  const n = typeof raw === "number" ? raw : Number(String(raw).replace("%", "").replace(",", "."));
+  if (!Number.isFinite(n)) return null;
+  if (n === 0) return 0;
+  const p = n > 0 && n <= 1 ? n * 100 : n;
   if (Math.abs(p - 10.5) <= 0.15) return 10.5;
   if (Math.abs(p - 21) <= 0.15) return 21;
   if (p > 0 && p <= 27) return p;
@@ -182,12 +185,14 @@ export function elitSaleNoteItems(o: ElitSaleNote): AccountDetailItem[] {
     });
     for (const child of it.children ?? []) {
       const childNet = elitLineNet(child);
+      const childQty = child.quantity != null && child.quantity > 0 ? child.quantity : 1;
+      const childUnit = child.price != null && child.price > EPS ? child.price : round2(childNet / childQty);
       rows.push({
         code: child.code,
         name: child.name || child.code || "Componente",
         qty: qty(child.quantity ?? null),
-        price: "",
-        total: "",
+        price: childUnit > EPS ? money(childUnit, o.currency) : money(childNet > EPS ? childNet : null, o.currency),
+        total: money(childNet > EPS ? childNet : null, o.currency),
         iva: formatIvaPercent(lineVatPercent(child, childNet)),
         indent: true,
       });
@@ -198,7 +203,20 @@ export function elitSaleNoteItems(o: ElitSaleNote): AccountDetailItem[] {
 
 export function elitSaleNoteNote(o: ElitSaleNote): string | undefined {
   if (!groupedElitItems(o).some(looksLikeKitLine)) return undefined;
-  return "El esquema se cobra como un kit: esa línea es el precio final sin impuestos. Las piezas van debajo, sin importe, para no sumarlas dos veces.";
+  return "El esquema se cobra en la línea del kit (precio final sin impuestos). Las piezas de abajo muestran el precio de lista; no se suman al total de la nota.";
+}
+
+/** Suma de la columna Total (líneas padre, sin piezas del esquema). */
+export function elitSaleNoteDisplayedNet(o: ElitSaleNote): number {
+  return round2(groupedElitItems(o).reduce((sum, it) => sum + elitLineNet(it), 0));
+}
+
+export function elitSaleNoteNetMismatch(o: ElitSaleNote): { lineSum: number; expected: number } | null {
+  const expected = o.summary?.net ?? o.summary?.subtotal;
+  if (expected == null || !Number.isFinite(expected)) return null;
+  const lineSum = elitSaleNoteDisplayedNet(o);
+  if (Math.abs(lineSum - expected) <= 0.05) return null;
+  return { lineSum, expected };
 }
 
 export function elitSaleNoteTotals(o: ElitSaleNote): AccountDetailLine[] {

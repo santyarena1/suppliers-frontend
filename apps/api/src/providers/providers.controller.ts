@@ -435,7 +435,7 @@ export class ProvidersController {
 
   @Get("providers/ELIT/salenotes/:number")
   async elitSaleNote(@CurrentTenant() tenant: TenantContext, @Param("number") number: string) {
-    return this.elitAccountService.getSaleNote(await this.credentialsOf(tenant, "ELIT"), number);
+    return this.elitAccountService.getSaleNote(tenant.tenantId, await this.credentialsOf(tenant, "ELIT"), number);
   }
 
   @Get("providers/ELIT/documents")
