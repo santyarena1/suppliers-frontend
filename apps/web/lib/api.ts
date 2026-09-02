@@ -1663,7 +1663,10 @@ export interface ElitSaleNote {
   }[];
   summary?: {
     subtotal?: number | null;
+    net?: number | null;
     vat?: number | null;
+    internalTaxes?: number | null;
+    perceptions?: number | null;
     total?: number | null;
     shipping?: number | null;
   };

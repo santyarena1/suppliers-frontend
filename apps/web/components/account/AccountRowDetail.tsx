@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import NodoSpinner from "@/components/NodoSpinner";
 import { CheckoutGhostButton } from "@/components/checkout/CheckoutForm";
 
-export type AccountDetailLine = { label: string; value: string };
+export type AccountDetailLine = { label: string; value: string; tone?: "warn" };
 export type AccountDetailItem = {
   code?: string;
   name: string;
@@ -13,7 +13,26 @@ export type AccountDetailItem = {
   price?: string | number;
   total?: string | number;
 };
-export type AccountDetailDoc = { label: string; href: string; filename?: string };
+export type AccountDetailDoc = { label: string; href?: string; filename?: string; pending?: boolean };
+
+function formatQty(value: string | number | undefined): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    if (Number.isInteger(value)) return String(value);
+    return value.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  return String(value);
+}
+
+function formatMoneyCell(value: string | number | undefined): string {
+  if (value == null || value === "") return "";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    return value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return String(value);
+}
 
 export default function AccountRowDetail({
   open,
@@ -66,7 +85,7 @@ export default function AccountRowDetail({
         role="dialog"
         aria-modal="true"
         aria-labelledby="account-row-title"
-        className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
       >
         <div className="px-5 py-4 border-b border-surface-800 flex items-start justify-between gap-3 sticky top-0 bg-surface-950">
           <h2 id="account-row-title" className="text-base font-semibold text-white tracking-tight">{title}</h2>
@@ -80,7 +99,7 @@ export default function AccountRowDetail({
               {lines.filter((l) => l.value).map((l) => (
                 <div key={l.label} className="contents">
                   <dt className="text-[10px] uppercase tracking-wider text-surface-500 pt-0.5">{l.label}</dt>
-                  <dd className="text-surface-200 break-words">{l.value}</dd>
+                  <dd className={`break-words tabular-nums ${l.tone === "warn" ? "text-amber-300" : "text-surface-200"}`}>{l.value}</dd>
                 </div>
               ))}
             </dl>
@@ -89,27 +108,32 @@ export default function AccountRowDetail({
           {(items ?? []).length > 0 && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Ítems</p>
-              <table className="w-full text-xs">
+              <table className="w-full text-xs table-fixed">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                    <th className="text-left font-semibold pb-1.5 pr-2">Producto</th>
-                    <th className="text-right font-semibold pb-1.5">Cant.</th>
-                    <th className="text-right font-semibold pb-1.5 pl-2">P. unit.</th>
-                    <th className="text-right font-semibold pb-1.5 pl-2">Total</th>
+                    <th className="text-left font-semibold pb-1.5 pr-2 w-[52%]">Producto</th>
+                    <th className="text-right font-semibold pb-1.5 w-[12%]">Cant.</th>
+                    <th className="text-right font-semibold pb-1.5 pl-2 w-[18%]">P. unit.</th>
+                    <th className="text-right font-semibold pb-1.5 pl-2 w-[18%]">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-800">
-                  {items!.map((it, i) => (
+                  {items!.map((it, i) => {
+                    const product = it.name || "Ítem";
+                    return (
                     <tr key={i}>
-                      <td className="py-1.5 pr-2 text-surface-200">
-                        {it.code ? <span className="font-mono text-surface-500 mr-1.5">{it.code}</span> : null}
-                        {it.name}
+                      <td className="py-1.5 pr-2 min-w-0">
+                        <p className="flex items-baseline gap-1.5 min-w-0" title={it.code ? `${it.code} ${product}` : product}>
+                          {it.code ? <span className="font-mono text-surface-500 flex-shrink-0">{it.code}</span> : null}
+                          <span className="truncate text-surface-200">{product}</span>
+                        </p>
                       </td>
-                      <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{it.qty ?? ""}</td>
-                      <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{it.price ?? ""}</td>
-                      <td className="py-1.5 text-right tabular-nums text-surface-200 whitespace-nowrap pl-2">{it.total ?? ""}</td>
+                      <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{formatQty(it.qty)}</td>
+                      <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{formatMoneyCell(it.price)}</td>
+                      <td className="py-1.5 text-right tabular-nums text-surface-200 whitespace-nowrap pl-2">{formatMoneyCell(it.total)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -133,17 +157,25 @@ export default function AccountRowDetail({
 
           {(documents ?? []).length > 0 && (
             <div className="flex flex-wrap gap-2">
-              {documents!.map((doc) => (
+              {documents!.map((doc) =>
+                doc.pending || !doc.href ? (
+                  <span
+                    key={doc.label}
+                    className="h-10 px-3 inline-flex items-center rounded-sm text-[13px] font-medium border border-amber-500/30 text-amber-200/90 bg-amber-500/5"
+                  >
+                    {doc.label}
+                  </span>
+                ) : (
                 <CheckoutGhostButton
                   key={doc.href + doc.label}
                   type="button"
                   disabled={busy === doc.href}
                   onClick={async () => {
                     setDlError(null);
-                    setBusy(doc.href);
+                    setBusy(doc.href!);
                     try {
                       const { downloadAuthedFile } = await import("@/lib/api");
-                      await downloadAuthedFile(doc.href, doc.filename || "documento");
+                      await downloadAuthedFile(doc.href!, doc.filename || "documento");
                     } catch (err) {
                       setDlError(err instanceof Error ? err.message : "No se pudo descargar");
                     } finally {
@@ -154,7 +186,8 @@ export default function AccountRowDetail({
                   {busy === doc.href ? <NodoSpinner className="w-3.5 h-3.5" /> : null}
                   {doc.label}
                 </CheckoutGhostButton>
-              ))}
+                )
+              )}
             </div>
           )}
 

@@ -133,8 +133,9 @@ export function formatAccountSum(
     return n.toLocaleString("es-AR", {
       style: "currency",
       currency: code,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
   }
-  return n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+  return n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

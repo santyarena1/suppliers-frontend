@@ -15,6 +15,12 @@ import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines } from "@/components/account/draftDetail";
+import {
+  elitSaleNoteDocs,
+  elitSaleNoteHeaderLines,
+  elitSaleNoteItems,
+  elitSaleNoteTotals,
+} from "@/components/account/elitOrderDetail";
 import ElitPaymentModal from "@/components/account/ElitPaymentModal";
 import { CheckoutGhostButton } from "@/components/checkout/CheckoutForm";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
@@ -242,25 +248,10 @@ export default function ElitAccountPanel() {
         <AccountRowDetail
           open
           title={`Nota de venta ${openOrder.orderNumber}`}
-          lines={[
-            { label: "Estado", value: openOrder.status },
-            { label: "Detalle", value: openOrder.statusDescription || "" },
-            { label: "Factura", value: openOrder.invoiceNumber },
-            { label: "Fecha", value: openOrder.date },
-            { label: "Depósito", value: openOrder.warehouseName || "" },
-            { label: "Condición", value: openOrder.saleCondition || "" },
-            { label: "Envío", value: openOrder.shippingMethod || "" },
-            { label: "Tracking", value: [openOrder.trackingSupplier, openOrder.tracking, openOrder.trackingStatus].filter(Boolean).join(" · ") },
-            { label: "Importe", value: fmt(openOrder.amount, openOrder.currency) },
-          ]}
-          items={(openOrder.items ?? []).map((it) => ({
-            code: it.code,
-            name: it.name || it.code || "Ítem",
-            qty: it.quantity ?? undefined,
-            price: it.price ?? undefined,
-            total: it.total ?? undefined,
-          }))}
-          documents={elitOrderDocs(openOrder)}
+          lines={elitSaleNoteHeaderLines(openOrder)}
+          items={elitSaleNoteItems(openOrder)}
+          totals={elitSaleNoteTotals(openOrder)}
+          documents={elitSaleNoteDocs(openOrder)}
           onClose={() => setDetail(null)}
         />
       )}
@@ -308,32 +299,6 @@ export default function ElitAccountPanel() {
   );
 }
 
-function elitOrderDocs(o: ElitSaleNote): AccountDetailDoc[] {
-  const docs: AccountDetailDoc[] = [];
-  if (o.pdfUrl || o.orderNumber) {
-    docs.push({
-      label: "Descargar nota de venta",
-      href: `/providers/ELIT/documents?form=${encodeURIComponent(o.form || "NOTA DE VENTA")}&number=${encodeURIComponent(o.orderNumber)}&kind=salenote`,
-      filename: `nv-${o.orderNumber}.pdf`,
-    });
-  }
-  if (o.dispatchNotePdfUrl) {
-    docs.push({
-      label: "Descargar remito",
-      href: `/providers/ELIT/documents?form=${encodeURIComponent(o.form || "NOTA DE VENTA")}&number=${encodeURIComponent(o.orderNumber)}&kind=dispatch`,
-      filename: `remito-${o.orderNumber}.pdf`,
-    });
-  }
-  if (o.invoiceNumber) {
-    docs.push({
-      label: "Descargar factura",
-      href: `/providers/ELIT/documents?form=${encodeURIComponent("FACTURA A")}&number=${encodeURIComponent(o.invoiceNumber)}`,
-      filename: `factura-${o.invoiceNumber}.pdf`,
-    });
-  }
-  return docs;
-}
-
 function elitMovementDocs(m: ElitMovement): AccountDetailDoc[] {
   if (!m.number || /saldo/i.test(m.form)) return [];
   return [{
@@ -346,7 +311,7 @@ function elitMovementDocs(m: ElitMovement): AccountDetailDoc[] {
 function fmt(n: number | null | undefined, currency?: string) {
   if (n == null) return "—";
   const code = currency === "ARS" ? "ARS" : "USD";
-  return n.toLocaleString("es-AR", { style: "currency", currency: code, maximumFractionDigits: 2 });
+  return n.toLocaleString("es-AR", { style: "currency", currency: code, minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function statusClass(status: string) {
@@ -422,7 +387,9 @@ function OrdersTable({
           {rows.map((o, i) => (
             <tr key={`${o.orderNumber}-${i}`}>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.orderNumber || "—"}</td>
-              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.invoiceNumber || "—"}</td>
+              <td className={`px-2 py-2 font-mono text-xs ${o.invoiceNumber?.trim() ? "text-surface-400" : "text-amber-400"}`}>
+                {o.invoiceNumber?.trim() || "Pendiente"}
+              </td>
               <td className="px-2 py-2">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass(o.status)}`}>{o.status || "—"}</span>
               </td>
