@@ -8,6 +8,27 @@ export function currentMonthKey(d = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+/**
+ * Mes calendario YYYY-MM a partir del texto (DD/MM/YYYY o ISO).
+ * Usa el día del comprobante, no la zona horaria del browser: un
+ * `2026-09-01T00:00:00.000Z` es septiembre, no el 31/08 en Argentina.
+ */
+export function accountMonthKey(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  const s = raw.trim();
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}`;
+  const dmy = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
+  if (dmy) {
+    let y = Number(dmy[3]);
+    if (y < 100) y += 2000;
+    const month = Number(dmy[2]);
+    if (!Number.isFinite(y) || month < 1 || month > 12) return null;
+    return `${y}-${String(month).padStart(2, "0")}`;
+  }
+  return null;
+}
+
 export function shiftMonth(ym: string, delta: number): string {
   const [y, m] = ym.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
@@ -37,8 +58,11 @@ export function parseAccountDate(raw: string | null | undefined): Date | null {
   }
 
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? null : d;
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
   }
 
   const ms = Date.parse(s);
@@ -53,13 +77,44 @@ export function inMonth(date: Date | null, ym: MonthFilter): boolean {
   return currentMonthKey(date) === ym;
 }
 
+export function matchesMonth(
+  ym: MonthFilter,
+  dates: Array<string | null | undefined>
+): boolean {
+  if (ym === "all") return true;
+  const keys = dates.map(accountMonthKey).filter((k): k is string => Boolean(k));
+  if (keys.length === 0) return true;
+  return keys.includes(ym);
+}
+
+export function latestMonthKey<T>(
+  rows: T[],
+  getDate: (row: T) => string | null | undefined
+): string | null {
+  let best: string | null = null;
+  for (const row of rows) {
+    const key = accountMonthKey(getDate(row));
+    if (key && (best == null || key > best)) best = key;
+  }
+  return best;
+}
+
+export type MonthFilterOpts<T> = {
+  extraDates?: (row: T) => Array<string | null | undefined>;
+  keep?: (row: T) => boolean;
+};
+
 export function filterByMonth<T>(
   rows: T[],
   getDate: (row: T) => string | null | undefined,
-  ym: MonthFilter
+  ym: MonthFilter,
+  opts?: MonthFilterOpts<T>
 ): T[] {
   if (ym === "all") return rows;
-  return rows.filter((row) => inMonth(parseAccountDate(getDate(row)), ym));
+  return rows.filter((row) => {
+    if (opts?.keep?.(row)) return true;
+    return matchesMonth(ym, [getDate(row), ...(opts?.extraDates?.(row) ?? [])]);
+  });
 }
 
 export function paginateRows<T>(

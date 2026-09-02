@@ -628,6 +628,36 @@ function looksLikeArsBalance(n: number | null | undefined): boolean {
   return n != null && Number.isFinite(n) && Math.abs(n) >= 10;
 }
 
+function elitDateSortable(raw: string | undefined): string {
+  if (!raw) return "";
+  const iso = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = raw.trim().match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
+  if (!dmy) return "";
+  let y = Number(dmy[3]);
+  if (y < 100) y += 2000;
+  return `${y}-${String(Number(dmy[2])).padStart(2, "0")}-${String(Number(dmy[1])).padStart(2, "0")}`;
+}
+
+/** Saldo vivo: running balance del comprobante más reciente, no el primero del RSC. */
+function closingBalance(movements: ElitRscMovement[]): number | null {
+  const rows = movements
+    .map((m, index) => ({ m, index, key: elitDateSortable(m.date) }))
+    .filter((x) => x.m.balance != null && Number.isFinite(x.m.balance));
+  if (rows.length === 0) return null;
+  const firstKey = rows[0].key;
+  const lastKey = rows[rows.length - 1].key;
+  const newestFirst = firstKey >= lastKey;
+  const best = rows.reduce((acc, cur) => {
+    if (cur.key > acc.key) return cur;
+    if (cur.key < acc.key) return acc;
+    if (newestFirst) return cur.index < acc.index ? cur : acc;
+    return cur.index > acc.index ? cur : acc;
+  });
+  const n = best.m.balance;
+  return looksLikeArsBalance(n) || n === 0 ? n : null;
+}
+
 function emptyCtaSummary(): ElitCtaSummary {
   return {
     status: "",
@@ -654,15 +684,12 @@ function mapCtaSummary(rec: Record<string, unknown>): ElitCtaSummary {
   const src = summarySource(rec);
   const status = firstStr(src, ["status", "currentAccountStatus", "accountStatus", "label"]) || "";
   const creditLimit = firstNum(src, ["creditLimit", "cupo", "cupoCredito", "creditQuota", "quota", "grantedCredit"]);
-  const currentAccount = firstNum(src, [
-    "currentAccount",
-    "cuentaCorriente",
-    "accountBalance",
-    "balanceARS",
-    "currentBalance",
-    "usedCredit",
-    "balance",
-  ]);
+  const currentAccount = firstNum(
+    src,
+    rec.invoiceCode || rec.form
+      ? ["currentAccount", "cuentaCorriente", "accountBalance"]
+      : ["currentAccount", "cuentaCorriente", "accountBalance", "balanceARS", "currentBalance", "usedCredit", "balance"],
+  );
   const checks = firstNum(src, ["checksInPortfolio", "chequesEnCartera", "checks", "cheques"]);
   const pendingOrders = firstNum(src, ["pendingOrders", "pedidosPendientes", "pendingSales"]);
   const availableCredit = firstNum(src, ["availableCredit", "creditoDisponible", "creditAvailable"]);
@@ -822,10 +849,10 @@ export function parseElitCtaRsc(rsc: string): ElitCtaStatement {
 
   const saldo = movements.find((m) => /saldo/i.test(m.form));
   if (summary.currentAccount == null) {
-    const newest = movements[0]?.balance;
+    const closed = closingBalance(movements);
     const fromSaldo = saldo?.balance ?? saldo?.total ?? null;
-    summary.currentAccount = looksLikeArsBalance(newest)
-      ? newest
+    summary.currentAccount = looksLikeArsBalance(closed)
+      ? closed
       : looksLikeArsBalance(fromSaldo)
         ? fromSaldo
         : null;

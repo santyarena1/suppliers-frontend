@@ -242,7 +242,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `refresh=1` opcional
 - **Respuesta esperada**: además de `movements[]`, `summary` (`status`, `approved`, `creditLimit`, `currentAccount`, `checks`, `pendingOrders`, `availableCredit` en ARS), `usdVouchers[]` (comprobantes en USD: fecha, vencimiento, debe/haber, estado) y `balance` = saldo de cuenta corriente en **pesos**. Cada movimiento puede traer `remito`, `amount` (importe en la moneda del comprobante), `exchangeRate`, `dueDate`, `status`. `debit`/`credit` del historial van en ARS.
 - **Estado**: IMPLEMENTADO
-- **Notas**: Sale del RSC de `/mi-cuenta/cuenta-corriente`. No se inventa el cupo: si Elit no lo manda, la tarjeta queda en —. La UI replica cupo / cuenta corriente / cheques / pedidos pendientes / crédito disponible, la tabla de dólares y el historial con moneda y cotización.
+- **Notas**: Sale del RSC de `/mi-cuenta/cuenta-corriente`. No se inventa el cupo: si Elit no lo manda, la tarjeta queda en —. El saldo de cuenta corriente es el del JSON/resumen de Elit; si no viene, el running `balance` del comprobante **más reciente** (no el primero del payload). La UI replica cupo / cuenta corriente / cheques / pedidos pendientes / crédito disponible, la tabla de dólares y el historial con moneda y cotización. El filtro de mes usa la fecha (o vencimiento) del comprobante en calendario, sin corrimiento UTC.
 
 ### [FEATURE] Detalle de pedidos New Bytes (productos e importes)
 - **Método**: GET

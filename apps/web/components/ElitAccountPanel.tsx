@@ -32,7 +32,7 @@ import {
   useClampPage,
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
-import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
+import { formatAccountSum, parseAccountAmount, sumAccountAmounts, currentMonthKey, latestMonthKey, formatMonthLabel, filterByMonth } from "@/lib/account-history";
 
 type ElitAccount = Awaited<ReturnType<typeof elitAccountApi.account>>["data"];
 type Detail =
@@ -126,11 +126,16 @@ export default function ElitAccountPanel() {
           ? (d: NodoProviderDraft) => d.createdAt
           : (o: ElitSaleNote) => o.date;
 
+  const ctaLastMonth = section === "cta" ? latestMonthKey(account?.movements ?? [], (m) => m.date) : null;
+
   const paged = usePagedMonthRows(
     rowsForSection as never[],
     getDate as never,
     history.month,
-    history.page
+    history.page,
+    (section === "cta"
+      ? { extraDates: (m: ElitMovement) => [m.dueDate] }
+      : undefined) as never
   );
   useClampPage(history.page, paged.pages, history.setPage);
 
@@ -208,7 +213,18 @@ export default function ElitAccountPanel() {
         section={section}
         onSection={(id) => history.setSection(id)}
         month={history.month}
-        onMonth={history.setMonth}
+        onMonth={(m) => {
+          if (section === "cta" && m === currentMonthKey()) {
+            const rows = account?.movements ?? [];
+            const hits = filterByMonth(rows, (r) => r.date, m, { extraDates: (r) => [r.dueDate] });
+            if (hits.length === 0) {
+              const last = latestMonthKey(rows, (r) => r.date) ?? latestMonthKey(rows, (r) => r.dueDate);
+              history.setMonth(last ?? m);
+              return;
+            }
+          }
+          history.setMonth(m);
+        }}
         page={paged.page}
         pages={paged.pages}
         total={paged.total}
@@ -242,6 +258,11 @@ export default function ElitAccountPanel() {
             <MovementsTable
               rows={paged.items as ElitMovement[]}
               onOpen={(m) => setDetail({ kind: "movement", row: m })}
+              emptyHint={
+                history.month !== "all" && ctaLastMonth && ctaLastMonth !== history.month
+                  ? `Sin movimientos en ${formatMonthLabel(history.month)}. El último está en ${formatMonthLabel(ctaLastMonth)}.`
+                  : undefined
+              }
             />
           </div>
         ) : section === "payments" ? (
@@ -456,9 +477,11 @@ function UsdVouchersTable({ rows }: { rows: ElitUsdVoucher[] }) {
 function MovementsTable({
   rows,
   onOpen,
+  emptyHint,
 }: {
   rows: ElitMovement[];
   onOpen: (m: ElitMovement) => void;
+  emptyHint?: string;
 }) {
   return (
     <div>
@@ -504,7 +527,7 @@ function MovementsTable({
         </table>
       </div>
       {rows.length === 0 && (
-        <p className="text-center text-xs text-surface-500 py-6">Sin movimientos en este período.</p>
+        <p className="text-center text-xs text-surface-500 py-6">{emptyHint || "Sin movimientos en este período."}</p>
       )}
     </div>
   );

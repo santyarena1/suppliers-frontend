@@ -275,6 +275,64 @@ describe("elit-rsc.parser", () => {
     });
     expect(s.usdVouchers[0].debit).toBeLessThan(10_000);
   });
+
+  it("el saldo de cuenta es el del movimiento más reciente, no el primero del RSC", () => {
+    const oldInv = {
+      invoiceCode: "A",
+      form: "FACTURA A",
+      number: "1",
+      date: "20/08/2026",
+      debit: 1_187_506.7,
+      balance: 1_187_506.7,
+    };
+    const newer = {
+      invoiceCode: "A",
+      form: "RECIBO A",
+      number: "2",
+      date: "01/09/2026",
+      credit: 1_183_306.2,
+      balance: 4_200.5,
+    };
+    const s = parseElitCtaRsc(`0:${JSON.stringify(oldInv)} 1:${JSON.stringify(newer)}`);
+    expect(s.summary.currentAccount).toBe(4200.5);
+    expect(s.balance).toBe(4200.5);
+  });
+
+  it("si el RSC viene del más nuevo al más viejo, igual toma el saldo del último día", () => {
+    const newer = {
+      invoiceCode: "A",
+      form: "RECIBO A",
+      number: "2",
+      date: "01/09/2026",
+      credit: 50,
+      balance: 4_200.5,
+    };
+    const oldInv = {
+      invoiceCode: "A",
+      form: "FACTURA A",
+      number: "1",
+      date: "20/08/2026",
+      debit: 100,
+      balance: 1_187_506.7,
+    };
+    const s = parseElitCtaRsc(`0:${JSON.stringify(newer)} 1:${JSON.stringify(oldInv)}`);
+    expect(s.summary.currentAccount).toBe(4200.5);
+  });
+
+  it("una fecha ISO del 1 de septiembre queda 01/09, no 31/08", () => {
+    const s = parseElitCtaRsc(
+      `0:${JSON.stringify({
+        invoiceCode: "A",
+        form: "FACTURA A",
+        number: "9",
+        date: "2026-09-01T00:00:00.000Z",
+        dueDate: "2026-09-15T00:00:00.000Z",
+        debit: 100,
+        balance: 100,
+      })}`,
+    );
+    expect(s.movements[0]).toMatchObject({ date: "01/09/2026", dueDate: "15/09/2026" });
+  });
 });
 
 describe("html-table", () => {

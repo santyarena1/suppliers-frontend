@@ -6,6 +6,7 @@ import {
   filterByMonth,
   paginateRows,
   type MonthFilter,
+  type MonthFilterOpts,
 } from "@/lib/account-history";
 
 /**
@@ -40,9 +41,10 @@ export function usePagedMonthRows<T>(
   rows: T[] | null | undefined,
   getDate: (row: T) => string | null | undefined,
   month: MonthFilter,
-  page: number
+  page: number,
+  opts?: MonthFilterOpts<T>
 ) {
-  const filtered = filterByMonth(rows ?? [], getDate, month);
+  const filtered = filterByMonth(rows ?? [], getDate, month, opts);
   return { ...paginateRows(filtered, page), filtered };
 }
 
