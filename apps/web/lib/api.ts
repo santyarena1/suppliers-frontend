@@ -2003,7 +2003,8 @@ export const permissionsApi = {
 
 // --- Banners (home / buscador) ---
 export type BannerSlot =
-  | "hero_main" | "hero_side" | "tile_1" | "tile_2" | "tile_3" | "tile_4" | "strip";
+  | "hero_main" | "hero_side" | "tile_1" | "tile_2" | "tile_3" | "tile_4" | "strip"
+  | "mid_wide" | "mid_tall" | "mid_a" | "mid_b" | "mid_c" | "mid_strip";
 
 export interface Banner {
   id: string;
