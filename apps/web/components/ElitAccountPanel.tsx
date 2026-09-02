@@ -135,17 +135,42 @@ export default function ElitAccountPanel() {
   );
   useClampPage(history.page, paged.pages, history.setPage);
 
+  const ctaBreakdown = (() => {
+    if (section !== "cta") return undefined;
+    const moves = paged.filtered as ElitMovement[];
+    if (!moves.length) return undefined;
+    const billed = sumAccountAmounts(moves.map((m) => m.debit));
+    const paid = sumAccountAmounts(moves.map((m) => m.credit));
+    if (billed == null && paid == null) return undefined;
+    const billedN = billed ?? 0;
+    const paidN = paid ?? 0;
+    const diff = billedN - paidN;
+    return [
+      {
+        label: "Facturado",
+        hint: "Lo que Elit cargó a tu cuenta",
+        value: formatAccountSum(billedN, "ARS"),
+        tone: "debit" as const,
+      },
+      {
+        label: "Pagos y recibos",
+        hint: "Lo que se descontó: recibos y saldo a favor",
+        value: formatAccountSum(paidN, "ARS"),
+        tone: "credit" as const,
+      },
+      {
+        label: "Diferencia",
+        hint: "Facturado menos pagos, en este recorte",
+        value: formatAccountSum(diff, "ARS"),
+        tone: diff > 0 ? ("debit" as const) : diff < 0 ? ("credit" as const) : ("neutral" as const),
+      },
+    ];
+  })();
+
   const amountTotal = (() => {
     const rows = paged.filtered as unknown[];
     if (!rows.length) return null;
-    if (section === "cta") {
-      const moves = rows as ElitMovement[];
-      const debit = sumAccountAmounts(moves.map((m) => m.debit));
-      const credit = sumAccountAmounts(moves.map((m) => m.credit));
-      if (debit == null && credit == null) return null;
-      const net = (debit ?? 0) - (credit ?? 0);
-      return `Débito ${formatAccountSum(debit ?? 0, "ARS")} · Crédito ${formatAccountSum(credit ?? 0, "ARS")} · Neto ${formatAccountSum(net, "ARS")}`;
-    }
+    if (section === "cta") return null;
     if (section === "payments") {
       const s = sumAccountAmounts((rows as ElitPayment[]).map((p) => p.total));
       return s != null ? formatAccountSum(s, "USD") : null;
@@ -193,6 +218,8 @@ export default function ElitAccountPanel() {
         refreshing={loading}
         fromCache={fromCache}
         amountTotal={amountTotal}
+        amountTotalLabel={section === "cta" ? "En este período" : "Total período"}
+        amountBreakdown={ctaBreakdown}
         hint="Pedidos y comprobantes de elit.com.ar. Informes de pago: Adjuntar abre el formulario de Elit (banco, tipo, fecha, importe y un archivo)."
         wide={section === "cta"}
         header={section === "cta" ? <CtaOverview account={account} /> : undefined}
@@ -263,8 +290,8 @@ export default function ElitAccountPanel() {
             { label: "Moneda", value: detail.row.currency || "" },
             { label: "Cotización", value: detail.row.exchangeRate != null ? detail.row.exchangeRate.toLocaleString("es-AR", { minimumFractionDigits: 2 }) : "" },
             { label: "Importe", value: fmt(detail.row.amount ?? detail.row.total, detail.row.currency) },
-            { label: "Débito", value: fmt(detail.row.debit, "ARS") },
-            { label: "Crédito", value: fmt(detail.row.credit, "ARS") },
+            { label: "Cargado a la cuenta", value: fmt(detail.row.debit, "ARS") },
+            { label: "Pagado / descontado", value: fmt(detail.row.credit, "ARS") },
             { label: "Saldo", value: fmt(detail.row.balance, "ARS") },
             { label: "Estado", value: detail.row.status || "" },
           ]}
@@ -344,15 +371,16 @@ function moneyCell(n: number | null | undefined, currency: string, tone?: "debit
 function CtaOverview({ account }: { account: ElitAccount | null }) {
   if (!account) return null;
   const s = account.summary;
-  const cards: { label: string; value: number | null | undefined }[] = [
-    { label: "Cupo de crédito", value: s?.creditLimit },
-    { label: "Cuenta corriente", value: s?.currentAccount ?? account.balance },
-    { label: "Cheques en cartera", value: s?.checks },
-    { label: "Pedidos pendientes", value: s?.pendingOrders },
-    { label: "Crédito disponible", value: s?.availableCredit },
-  ];
-  const hasCards = cards.some((c) => c.value != null);
-  if (!hasCards && !s?.status) return null;
+  const cards = (
+    [
+      { label: "Cupo asignado", hint: "Tope que te dio Elit", value: s?.creditLimit },
+      { label: "Cuenta corriente", hint: "Saldo actual en pesos", value: s?.currentAccount ?? account.balance },
+      { label: "Cheques en cartera", hint: "Cheques todavía no cobrados", value: s?.checks },
+      { label: "Pedidos pendientes", hint: "Pedidos abiertos, aún sin facturar", value: s?.pendingOrders },
+      { label: "Disponible", hint: "Lo que te queda para comprar", value: s?.availableCredit },
+    ] as const
+  ).filter((c) => c.value != null);
+  if (cards.length === 0 && !s?.status) return null;
   return (
     <div className="flex flex-col gap-3">
       {s?.status ? (
@@ -360,12 +388,16 @@ function CtaOverview({ account }: { account: ElitAccount | null }) {
           {s.status}
         </p>
       ) : null}
-      {hasCards ? (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+      {cards.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
           {cards.map((c) => (
-            <div key={c.label} className="rounded-xl border border-surface-800 bg-surface-900/50 px-3 py-2.5">
+            <div
+              key={c.label}
+              className="min-w-[11rem] flex-1 max-w-[16rem] rounded-xl border border-surface-800 bg-surface-900/50 px-3 py-2.5"
+            >
               <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 leading-tight">{c.label}</p>
-              <p className="text-sm font-bold tabular-nums text-white mt-1.5">{c.value == null ? "—" : fmt(c.value, "ARS")}</p>
+              <p className="text-[11px] text-surface-500 mt-0.5 leading-snug">{c.hint}</p>
+              <p className="text-sm font-bold tabular-nums text-white mt-1.5">{fmt(c.value, "ARS")}</p>
             </div>
           ))}
         </div>

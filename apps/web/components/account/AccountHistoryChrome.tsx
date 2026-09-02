@@ -26,6 +26,13 @@ type Props = {
   /** Suma de importes del filtro actual (mes / todos), no solo la página. */
   amountTotal?: string | null;
   amountTotalLabel?: string;
+  /** Tres cifras con etiqueta propia (cta cte Elit). Si hay, reemplaza `amountTotal`. */
+  amountBreakdown?: {
+    label: string;
+    hint?: string;
+    value: string;
+    tone?: "debit" | "credit" | "neutral";
+  }[];
   /** Contenido de la sección activa (tabla, etc.). */
   children: React.ReactNode;
   /** Bloque fijo arriba del listado (saldo, formularios…). */
@@ -50,6 +57,7 @@ export default function AccountHistoryChrome({
   fromCache,
   amountTotal,
   amountTotalLabel = "Total período",
+  amountBreakdown,
   children,
   header,
   hint,
@@ -130,7 +138,37 @@ export default function AccountHistoryChrome({
 
       {header}
 
-      {amountTotal ? (
+      {amountBreakdown && amountBreakdown.length > 0 ? (
+        <div className="rounded-xl border border-surface-800 bg-surface-900/50 px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-3">
+            {amountTotalLabel}
+            {month !== "all" ? ` · ${monthLabel}` : ""}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {amountBreakdown.map((item) => (
+              <div key={item.label}>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-400">
+                  {item.label}
+                </p>
+                {item.hint ? (
+                  <p className="text-[11px] text-surface-500 mt-0.5 leading-snug">{item.hint}</p>
+                ) : null}
+                <p
+                  className={`text-lg font-bold tabular-nums mt-1 ${
+                    item.tone === "debit"
+                      ? "text-red-400"
+                      : item.tone === "credit"
+                        ? "text-emerald-400"
+                        : "text-white"
+                  }`}
+                >
+                  {item.value}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : amountTotal ? (
         <div className="flex items-baseline justify-between gap-3 rounded-xl border border-surface-800 bg-surface-900/50 px-4 py-3">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">
             {amountTotalLabel}
