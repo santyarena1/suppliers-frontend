@@ -67,12 +67,22 @@ export default function CatalogEnrichmentPanel({
     let cancelled = false;
     void (async () => {
       try {
-        const purged = await catalogEnrichmentApi.purgeAirCodes();
+        const [purged, invid] = await Promise.all([
+          catalogEnrichmentApi.purgeAirCodes(),
+          catalogEnrichmentApi.repairInvidEncoding(),
+        ]);
         if (cancelled) return;
         const n = purged.data.productsCleared + purged.data.aliasesDeleted + purged.data.termsDeleted;
         if (n > 0) {
           showToast(
             `Se sacaron códigos viejos de Air (${purged.data.productsCleared} productos, ${purged.data.aliasesDeleted} vínculos)`
+          );
+        }
+        const invidN =
+          invid.data.productsUpdated + invid.data.aliasesUpdated + invid.data.termsUpdated;
+        if (invidN > 0) {
+          showToast(
+            `Se corrigieron tildes de Invid (${invid.data.productsUpdated} productos)`
           );
         }
       } catch {

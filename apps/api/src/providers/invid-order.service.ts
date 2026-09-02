@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import axios, { type AxiosResponse } from "axios";
 import { PrismaService } from "../prisma/prisma.service";
+import { decodeHttpText } from "./http-text";
 import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
 import {
   decodeEntities,
@@ -175,7 +176,7 @@ export class InvidOrderService {
     url: string,
     opts: { params?: Record<string, string | number>; body?: string; timeout?: number } = {}
   ): Promise<{ cookie: string; data: string; status: number; location?: string }> {
-    const res: AxiosResponse<string> = await axios.request({
+    const res: AxiosResponse<ArrayBuffer> = await axios.request({
       method,
       url,
       params: opts.params,
@@ -190,13 +191,13 @@ export class InvidOrderService {
         "Accept-Language": "es-AR,es;q=0.9",
       },
       timeout: opts.timeout ?? 20_000,
-      responseType: "text",
+      responseType: "arraybuffer",
       maxRedirects: 0,
       validateStatus: (s) => s < 400 || s === 302,
     });
     return {
       cookie: this.mergeCookies(cookie, res.headers["set-cookie"]),
-      data: typeof res.data === "string" ? res.data : JSON.stringify(res.data ?? ""),
+      data: decodeHttpText(res.data, res.headers["content-type"]),
       status: res.status,
       location: typeof res.headers.location === "string" ? res.headers.location : undefined,
     };

@@ -4,6 +4,7 @@ import { applyInvidOrderRates, INVID_PAYMENT_NOTICE, parseAccountStatement, pars
 import { parseFileUploadForms } from "./html-table";
 import { documentFile } from "./document-file";
 import { assertHttpsHost } from "./safe-url";
+import { decodeHttpText } from "./http-text";
 
 const SITE_BASE = "https://www.invidcomputers.com";
 const LOGIN_URL = `${SITE_BASE}/login.php`;
@@ -45,17 +46,18 @@ export class InvidAccountService {
     const { username, password } = this.creds(credentials);
     const cookie = await this.login(username, password);
     const [res, currentRate] = await Promise.all([
-      axios.get<string>(`${SITE_BASE}/lista_pedidos_invid.php`, {
+      axios.get<ArrayBuffer>(`${SITE_BASE}/lista_pedidos_invid.php`, {
         headers: { Cookie: cookie },
         timeout: 20_000,
-        responseType: "text",
+        responseType: "arraybuffer",
       }),
       this.fetchCurrentRate(cookie),
     ]);
-    const parsed = parseOrdersTable(res.data);
-    const paymentForm = parseInvidPaymentForm(res.data);
+    const html = decodeHttpText(res.data, res.headers["content-type"]);
+    const parsed = parseOrdersTable(html);
+    const paymentForm = parseInvidPaymentForm(html);
     if (paymentForm && !paymentForm.notice) paymentForm.notice = INVID_PAYMENT_NOTICE;
-    const paymentUploads = parseFileUploadForms(res.data);
+    const paymentUploads = parseFileUploadForms(html);
     return {
       orders: applyInvidOrderRates(parsed.orders, currentRate),
       currentExchangeRate: currentRate > 0 ? currentRate : undefined,
@@ -94,12 +96,12 @@ export class InvidAccountService {
   async getAccountStatement(credentials: Record<string, string>) {
     const { username, password } = this.creds(credentials);
     const cookie = await this.login(username, password);
-    const res = await axios.get<string>(`${SITE_BASE}/lista_ctacte_invid.php`, {
+    const res = await axios.get<ArrayBuffer>(`${SITE_BASE}/lista_ctacte_invid.php`, {
       headers: { Cookie: cookie },
       timeout: 20_000,
-      responseType: "text",
+      responseType: "arraybuffer",
     });
-    return parseAccountStatement(res.data);
+    return parseAccountStatement(decodeHttpText(res.data, res.headers["content-type"]));
   }
 
   async getDocument(credentials: Record<string, string>, href: string) {
@@ -130,30 +132,31 @@ export class InvidAccountService {
     const { username, password } = this.creds(credentials);
     if (files.length === 0) throw new BadRequestException("Adjuntá al menos un comprobante");
     const cookie = await this.login(username, password);
-    const page = await axios.get<string>(`${SITE_BASE}/lista_pedidos_invid.php`, {
+    const page = await axios.get<ArrayBuffer>(`${SITE_BASE}/lista_pedidos_invid.php`, {
       headers: { Cookie: cookie },
       timeout: 20_000,
-      responseType: "text",
+      responseType: "arraybuffer",
     });
-    let html = page.data;
+    const pageHtml = decodeHttpText(page.data, page.headers["content-type"]);
+    let html = pageHtml;
     const paymentHref = extraFields?.paymentHref?.trim();
     if (paymentHref) {
       try {
         const url = assertHttpsHost(paymentHref, `${SITE_BASE}/`, INVID_HOSTS);
-        const popup = await axios.get<string>(url.toString(), {
+        const popup = await axios.get<ArrayBuffer>(url.toString(), {
           headers: { Cookie: cookie },
           timeout: 20_000,
-          responseType: "text",
+          responseType: "arraybuffer",
         });
-        html = popup.data || html;
+        html = decodeHttpText(popup.data, popup.headers["content-type"]) || html;
       } catch (err) {
         this.logger.warn(
           `No se pudo abrir el popup de comprobantes: ${err instanceof Error ? err.message : String(err)}`
         );
       }
     }
-    const form = parseInvidPaymentForm(html) ?? parseInvidPaymentForm(page.data);
-    const generic = parseFileUploadForms(page.data)[0];
+    const form = parseInvidPaymentForm(html) ?? parseInvidPaymentForm(pageHtml);
+    const generic = parseFileUploadForms(pageHtml)[0];
     if (!form && !generic) {
       throw new NotFoundException(
         "Invid no mostró un formulario para adjuntar comprobante en esta sesión. Hay que hacerlo desde su portal."

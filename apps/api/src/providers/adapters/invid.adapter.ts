@@ -2,6 +2,8 @@ import { Injectable, BadGatewayException } from "@nestjs/common";
 import axios from "axios";
 import * as XLSX from "xlsx";
 import type { NormalizedProduct, ProviderAdapter } from "../types";
+import { decodeHttpText } from "../http-text";
+import { decodeInvidEntities, repairInvidMojibake } from "./invid-encoding";
 
 // La API JSON documentada (www.invidcomputers.com/api/v1, GET /articulo.php)
 // tiene un límite real de 50 requests/hora, verificado en vivo — el
@@ -205,12 +207,12 @@ export class InvidAdapter implements ProviderAdapter {
       const code = normalizeCode(rawCode);
       let html: string;
       try {
-        const res = await axios.get<string>(`${SITE_BASE}/x---det--${code}`, {
+        const res = await axios.get<ArrayBuffer>(`${SITE_BASE}/x---det--${code}`, {
           headers: { Cookie: sessionCookie },
           timeout: 15_000,
-          responseType: "text",
+          responseType: "arraybuffer",
         });
-        html = res.data;
+        html = decodeHttpText(res.data, res.headers["content-type"]);
       } catch {
         continue; // producto puntual no disponible, seguimos con el próximo
       }
@@ -231,14 +233,7 @@ function sleep(ms: number): Promise<void> {
 
 /** Decodifica las entidades HTML numéricas/nombradas más comunes que aparecen en este sitio. */
 function decodeEntities(s: string): string {
-  return s
-    .replace(/&aacute;/gi, "á").replace(/&eacute;/gi, "é").replace(/&iacute;/gi, "í")
-    .replace(/&oacute;/gi, "ó").replace(/&uacute;/gi, "ú").replace(/&ntilde;/gi, "ñ")
-    .replace(/&Aacute;/g, "Á").replace(/&Eacute;/g, "É").replace(/&Iacute;/g, "Í")
-    .replace(/&Oacute;/g, "Ó").replace(/&Uacute;/g, "Ú").replace(/&Ntilde;/g, "Ñ")
-    .replace(/&reg;/gi, "®").replace(/&trade;/gi, "™").replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&").replace(/&quot;/gi, '"').replace(/&#39;/g, "'")
-    .replace(/&deg;/gi, "°");
+  return decodeInvidEntities(s);
 }
 
 /** Extrae categoría/subcategoría (breadcrumb), disponibilidad y ficha técnica de una página de producto ya descargada. */
@@ -250,7 +245,10 @@ export function extractDetailPatch(html: string): Partial<NormalizedProduct> {
   if (breadcrumbIdx !== -1) {
     const liIdx = html.indexOf("<li", breadcrumbIdx);
     const segment = html.slice(breadcrumbIdx, liIdx > -1 ? liIdx : breadcrumbIdx + 500);
-    const crumbs = [...segment.matchAll(/<a[^>]*>([^<]+)<\/a>/g)].map((m) => decodeEntities(m[1]).trim());
+    const crumbs = [...segment.matchAll(/<a[^>]*>([^<]+)<\/a>/g)]
+      .map((m) => repairInvidMojibake(decodeEntities(m[1])) ?? "")
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (crumbs[0]) patch.category = crumbs[0];
     if (crumbs[1]) patch.subcategory = crumbs[1];
   }
@@ -313,12 +311,12 @@ async function crawlCategoryImages(sessionCookie: string): Promise<Map<string, s
       const offset = page * 20;
       let html: string;
       try {
-        const res = await axios.get<string>(`${SITE_BASE}/${slug}--view--grilla-${offset}`, {
+        const res = await axios.get<ArrayBuffer>(`${SITE_BASE}/${slug}--view--grilla-${offset}`, {
           headers: { Cookie: sessionCookie },
           timeout: 20_000,
-          responseType: "text",
+          responseType: "arraybuffer",
         });
-        html = res.data;
+        html = decodeHttpText(res.data, res.headers["content-type"]);
       } catch {
         break; // categoría/página no disponible, seguimos con la próxima categoría
       }

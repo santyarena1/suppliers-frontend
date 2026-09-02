@@ -25,6 +25,7 @@ import {
   type CatalogEnrichmentContext,
   type RawValueStat,
 } from "./catalog-enrichment";
+import { repairInvidMojibake } from "../providers/adapters/invid-encoding";
 
 @Injectable()
 export class CatalogEnrichmentService implements OnModuleInit {
@@ -38,6 +39,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
   };
   private cacheLoadedAt = 0;
   private readonly cacheTtlMs = 30_000;
+  private invidEncodingRepair: Promise<void> | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -50,7 +52,9 @@ export class CatalogEnrichmentService implements OnModuleInit {
   async onModuleInit() {
     // No bloquear el listen: si Postgres está saturado en el rolling deploy, el
     // /health tiene que responder igual. El cache se calienta en background.
-    void this.refreshCache(true).catch((err) => {
+    void this.refreshCache(true)
+      .then(() => this.ensureInvidEncodingRepaired())
+      .catch((err) => {
       this.logger.warn(
         `Cache de catálogo no cargó al arrancar: ${err instanceof Error ? err.message : String(err)}`
       );
@@ -58,10 +62,29 @@ export class CatalogEnrichmentService implements OnModuleInit {
   }
 
   async getContext(force = false): Promise<CatalogEnrichmentContext> {
+    await this.ensureInvidEncodingRepaired();
     if (force || Date.now() - this.cacheLoadedAt > this.cacheTtlMs) {
       await this.refreshCache(true);
     }
     return this.cache;
+  }
+
+  private ensureInvidEncodingRepaired() {
+    if (!this.invidEncodingRepair) {
+      this.invidEncodingRepair = this.repairInvidEncoding()
+        .then((res) => {
+          if (res.productsUpdated + res.aliasesUpdated + res.termsUpdated > 0) {
+            return this.refreshCache(true);
+          }
+        })
+        .catch((err) => {
+          this.invidEncodingRepair = null;
+          this.logger.warn(
+            `No se pudieron reparar categorías de Invid: ${err instanceof Error ? err.message : String(err)}`
+          );
+        });
+    }
+    return this.invidEncodingRepair;
   }
 
   async refreshCache(force = false) {
@@ -164,6 +187,118 @@ export class CatalogEnrichmentService implements OnModuleInit {
       aliasesDeleted: staleAliases.length,
       termsDeleted,
     };
+  }
+
+  /**
+   * Invid sirve HTML en ISO-8859-1. Si una corrida vieja lo leyó como UTF-8,
+   * las categorías quedaron con � (Electrodom�sticos). Reconstruye las del menú.
+   */
+  async repairInvidEncoding() {
+    const broken = "\uFFFD";
+    const products = await this.prisma.providerSyncCache.findMany({
+      where: {
+        provider: "INVID",
+        OR: [
+          { category: { contains: broken } },
+          { subcategory: { contains: broken } },
+        ],
+      },
+      select: { category: true, subcategory: true },
+      distinct: ["category", "subcategory"],
+    });
+    let productsUpdated = 0;
+    const seenCat = new Set<string>();
+    const seenSub = new Set<string>();
+    for (const row of products) {
+      if (row.category?.includes(broken) && !seenCat.has(row.category)) {
+        seenCat.add(row.category);
+        const next = repairInvidMojibake(row.category);
+        if (next && next !== row.category) {
+          const res = await this.prisma.providerSyncCache.updateMany({
+            where: { provider: "INVID", category: row.category },
+            data: { category: next },
+          });
+          productsUpdated += res.count;
+        }
+      }
+      if (row.subcategory?.includes(broken) && !seenSub.has(row.subcategory)) {
+        seenSub.add(row.subcategory);
+        const next = repairInvidMojibake(row.subcategory);
+        if (next && next !== row.subcategory) {
+          const res = await this.prisma.providerSyncCache.updateMany({
+            where: { provider: "INVID", subcategory: row.subcategory },
+            data: { subcategory: next },
+          });
+          productsUpdated += res.count;
+        }
+      }
+    }
+
+    const aliases = await this.prisma.platformCatalogAlias.findMany({
+      where: { provider: "INVID", rawKey: { contains: broken } },
+      select: { id: true, kind: true, provider: true, rawKey: true, label: true, termId: true },
+    });
+    let aliasesUpdated = 0;
+    let aliasesDeleted = 0;
+    for (const alias of aliases) {
+      const nextKey = repairInvidMojibake(alias.rawKey);
+      if (!nextKey || nextKey === alias.rawKey) continue;
+      const clash = await this.prisma.platformCatalogAlias.findUnique({
+        where: { kind_provider_rawKey: { kind: alias.kind, provider: alias.provider, rawKey: nextKey } },
+        select: { id: true },
+      });
+      if (clash) {
+        await this.prisma.platformCatalogAlias.delete({ where: { id: alias.id } });
+        aliasesDeleted++;
+        continue;
+      }
+      const nextLabel = repairInvidMojibake(alias.label) ?? alias.label;
+      await this.prisma.platformCatalogAlias.update({
+        where: { id: alias.id },
+        data: { rawKey: nextKey, label: nextLabel },
+      });
+      aliasesUpdated++;
+    }
+
+    const terms = await this.prisma.platformCatalogTerm.findMany({
+      where: { label: { contains: broken } },
+      select: { id: true, kind: true, label: true, brandTenant: { select: { id: true } } },
+    });
+    let termsUpdated = 0;
+    for (const term of terms) {
+      const nextLabel = repairInvidMojibake(term.label);
+      if (!nextLabel || nextLabel === term.label) continue;
+      const clash = await this.prisma.platformCatalogTerm.findUnique({
+        where: { kind_label: { kind: term.kind, label: nextLabel } },
+        select: { id: true },
+      });
+      if (clash) {
+        await this.prisma.platformCatalogAlias.updateMany({
+          where: { termId: term.id },
+          data: { termId: clash.id, label: nextLabel },
+        });
+        if (!term.brandTenant) {
+          try {
+            await this.deleteTerm(term.id, true);
+          } catch (err) {
+            this.logger.warn(
+              `No se pudo fusionar término Invid ${term.label}: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+        continue;
+      }
+      await this.prisma.platformCatalogTerm.update({
+        where: { id: term.id },
+        data: { label: nextLabel },
+      });
+      termsUpdated++;
+    }
+
+    if (productsUpdated + aliasesUpdated + aliasesDeleted + termsUpdated > 0) {
+      await this.refreshCache(true);
+    }
+    return { productsUpdated, aliasesUpdated, aliasesDeleted, termsUpdated };
   }
 
   saveOpenAiKey(apiKey: string) {

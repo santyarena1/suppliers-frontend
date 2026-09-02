@@ -16,4 +16,20 @@ describe("extractDetailPatch", () => {
     expect(patch.stockStatus).toBe("Disponible (tienda)");
     expect(patch.stock).toBeUndefined();
   });
+
+  it("saca categoría/subcategoría del breadcrumb con tildes", () => {
+    const patch = extractDetailPatch(
+      `breadcrumb"><a href="/electrodomesticos--prod--10">Electrodomésticos</a> / <a href="/heladeras">Heladeras</a> / <li>LG`
+    );
+    expect(patch.category).toBe("Electrodomésticos");
+    expect(patch.subcategory).toBe("Heladeras");
+  });
+
+  it("reconstruye la categoría si vino con �", () => {
+    const patch = extractDetailPatch(
+      `breadcrumb"><a href="/x">Electrodom\uFFFDsticos</a> / <a>Micr\uFFFDfonos</a> / <li>X`
+    );
+    expect(patch.category).toBe("Electrodomésticos");
+    expect(patch.subcategory).toBe("Micrófonos");
+  });
 });

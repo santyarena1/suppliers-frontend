@@ -57,6 +57,11 @@ export class CatalogEnrichmentController {
     return this.catalog.purgeAirImportCodes();
   }
 
+  @Post("repair-invid-encoding")
+  repairInvidEncoding() {
+    return this.catalog.repairInvidEncoding();
+  }
+
   @Get("board")
   board(@Query("kind") kind: string) {
     const k = (CATALOG_ALIAS_KINDS as readonly string[]).includes(kind) ? kind : "CATEGORY";

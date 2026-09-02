@@ -2246,6 +2246,13 @@ export const catalogEnrichmentApi = {
     api.post<{ productsCleared: number; aliasesDeleted: number; termsDeleted: number }>(
       "/admin/catalog-enrichment/purge-air-codes"
     ),
+  repairInvidEncoding: () =>
+    api.post<{
+      productsUpdated: number;
+      aliasesUpdated: number;
+      aliasesDeleted: number;
+      termsUpdated: number;
+    }>("/admin/catalog-enrichment/repair-invid-encoding"),
   terms: (kind?: CatalogAliasKind) =>
     api.get<CatalogTerm[]>("/admin/catalog-enrichment/terms", { params: kind ? { kind } : {} }),
   createTerm: (data: {

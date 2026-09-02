@@ -301,6 +301,13 @@ export class ProvidersService implements OnModuleInit {
         );
       });
     }
+    if (provider === "INVID") {
+      this.catalogEnrichment.repairInvidEncoding().catch((err) => {
+        this.logger.warn(
+          `No se pudieron reparar categorías de Invid: ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
+    }
 
     return {
       provider,
