@@ -1,10 +1,7 @@
 import type { AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import { mergeSplit, taxBreakdownLines } from "@/components/account/accountTaxBreakdown";
 import type { InvidOrder } from "@/lib/api";
 import { formatAccountSum, parseAccountAmount } from "@/lib/account-history";
-
-function formatUsd(n: number): string {
-  return n.toLocaleString("es-AR", { style: "currency", currency: "USD" });
-}
 
 export function invidOrderHeaderLines(row: InvidOrder): AccountDetailLine[] {
   return [
@@ -43,14 +40,22 @@ export function invidOrderAmountLines(
   else if (row.exchangeRateSource === "current" || (invidRate && !row.exchangeRateSource)) tcLabel = "TC actual Invid";
   else if (!invidRate && fallback) tcLabel = fallback.label;
 
-  const lines: AccountDetailLine[] = [];
-  if (t?.net != null) lines.push({ label: "Neto (s/IVA)", value: formatUsd(t.net) });
-  if (t?.iva != null) lines.push({ label: "IVA", value: formatUsd(t.iva) });
-  if (t?.internos != null) lines.push({ label: "Imp. internos", value: formatUsd(t.internos) });
-  if (t?.percepciones != null) lines.push({ label: "Percepciones / IIBB", value: formatUsd(t.percepciones) });
-  if (t?.shipping != null) lines.push({ label: "Envío", value: formatUsd(t.shipping) });
-  if (t?.taxes != null) lines.push({ label: "Impuestos", value: formatUsd(t.taxes) });
-  if (row.amount) lines.push({ label: "Importe USD", value: row.amount });
+  const net = t?.net ?? 0;
+  const split = t?.iva105 != null || t?.iva21 != null
+    ? { iva105: t.iva105 ?? 0, iva21: t.iva21 ?? 0, ivaOther: 0 }
+    : mergeSplit({ iva105: 0, iva21: 0, ivaOther: 0 }, net, t?.iva ?? t?.taxes ?? null);
+
+  const lines: AccountDetailLine[] = [
+    ...taxBreakdownLines({
+      net,
+      ...split,
+      perceptions: t?.percepciones ?? 0,
+      internalTaxes: t?.internos,
+      shipping: t?.shipping,
+      total: t?.total ?? usd,
+      currency: "USD",
+    }),
+  ];
   if (rate) {
     lines.push({
       label: tcLabel,
@@ -65,7 +70,7 @@ export function invidOrderAmountLines(
   } else if (!invidRate && fallback && ars != null) {
     notes.push(`Invid no informó cotización. Se usó ${fallback.label} de Nodo para pasar a pesos.`);
   }
-  if (t?.taxes != null && t.iva == null) {
+  if (t?.taxes != null && t.iva == null && t.iva105 == null && t.iva21 == null) {
     notes.push("Invid no discriminó IVA, internos ni percepciones en este pedido. Impuestos es el resto entre el neto de las líneas y el total.");
   }
 

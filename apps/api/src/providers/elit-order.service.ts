@@ -230,7 +230,14 @@ export class ElitOrderService {
         total: preview.total,
         errorMessage: message.slice(0, 500),
         items: snapshotJson(preview.items),
-        addressSnapshot: snapshotJson({ warehouse: input.warehouse, shippingAddress: preview.shippingAddress }),
+        addressSnapshot: snapshotJson({
+          warehouse: input.warehouse,
+          shippingAddress: preview.shippingAddress,
+          vat: preview.vat,
+          internalTax: preview.internalTax,
+          perceptions: preview.perceptions,
+          shippingCost: preview.shippingCost,
+        }),
       };
       const record = existingId
         ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
@@ -253,10 +260,19 @@ export class ElitOrderService {
       deliveryLabel: preview.shippingLabel,
       subtotal: preview.subtotal,
       impuestos: preview.vat + preview.internalTax + preview.perceptions,
+      percepciones: preview.perceptions,
       total: preview.total,
       errorMessage: orderNumber ? null : "Elit no devolvió número de pedido",
       items: snapshotJson(preview.items),
-      addressSnapshot: snapshotJson({ warehouse: input.warehouse, shippingAddress: preview.shippingAddress, raw: first }),
+      addressSnapshot: snapshotJson({
+        warehouse: input.warehouse,
+        shippingAddress: preview.shippingAddress,
+        raw: first,
+        vat: preview.vat,
+        internalTax: preview.internalTax,
+        perceptions: preview.perceptions,
+        shippingCost: preview.shippingCost,
+      }),
     };
     const record = existingId
       ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })

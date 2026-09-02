@@ -219,7 +219,17 @@ export class AirOrderService {
         total: cart.total,
         errorMessage: message.slice(0, 500),
         items: snapshotJson(publicCart(cart).items),
-        addressSnapshot: snapshotJson({ sucursal: input.sucursal, vendedor: input.vendedor, raw: null }),
+        addressSnapshot: snapshotJson({
+          sucursal: input.sucursal,
+          vendedor: input.vendedor,
+          raw: null,
+          iva21: cart.iva21,
+          iva105: cart.iva105,
+          ii: cart.ii,
+          perceptions: airPerceptionsFromCart(cart),
+          subtotal: cart.subtotal,
+          total: cart.total,
+        }),
       };
       const record = existingId
         ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
@@ -240,6 +250,7 @@ export class AirOrderService {
       notes: input.notes,
       subtotal: cart.subtotal,
       impuestos: cart.iva21 + cart.iva105 + cart.ii,
+      percepciones: airPerceptionsFromCart(cart),
       total: cart.total,
       items: snapshotJson(publicCart(cart).items),
       addressSnapshot: snapshotJson({
@@ -247,6 +258,12 @@ export class AirOrderService {
         vendedor: input.vendedor,
         transporte: input.transporte ?? cart.transporte,
         send: sendRaw,
+        iva21: cart.iva21,
+        iva105: cart.iva105,
+        ii: cart.ii,
+        perceptions: airPerceptionsFromCart(cart),
+        subtotal: cart.subtotal,
+        total: cart.total,
       }),
     };
     const record = existingId

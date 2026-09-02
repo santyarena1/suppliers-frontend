@@ -1028,6 +1028,8 @@ export interface InvidOrderItem {
 export interface InvidOrderTotals {
   net?: number;
   iva?: number;
+  iva105?: number;
+  iva21?: number;
   internos?: number;
   percepciones?: number;
   shipping?: number;
@@ -1163,9 +1165,13 @@ export interface InvidNodoDraft {
   paymentLabel: string | null;
   deliveryLabel: string | null;
   notes?: string | null;
+  subtotal?: number | null;
+  impuestos?: number | null;
+  percepciones?: number | null;
   total: string | number | null;
   createdAt: string;
   errorMessage: string | null;
+  addressSnapshot?: unknown;
   items?: NewBytesNodoDraft["items"];
 }
 
@@ -1219,6 +1225,9 @@ export interface NewBytesOrder {
     qty?: number;
     price?: number;
     total?: number;
+    iva?: number;
+    ivaPercent?: number;
+    perception?: number;
   }[];
   subtotalUsd?: number;
   iva?: number;
@@ -1335,9 +1344,13 @@ export interface NewBytesNodoDraft {
   paymentLabel: string | null;
   deliveryLabel: string | null;
   notes?: string | null;
+  subtotal?: number | null;
+  impuestos?: number | null;
+  percepciones?: number | null;
   total: string | number | null;
   createdAt: string;
   errorMessage: string | null;
+  addressSnapshot?: unknown;
   items?: {
     code?: string;
     name?: string;
@@ -1347,6 +1360,12 @@ export interface NewBytesNodoDraft {
     priceUsd?: number;
     subtotal?: number;
     total?: number;
+    iva?: number;
+    vat?: number;
+    ivaPercent?: number;
+    percepciones?: number;
+    internos?: number;
+    taxes?: { desc?: string; percent?: number }[];
   }[];
 }
 
@@ -1659,6 +1678,10 @@ export interface ElitSaleNote {
     name?: string;
     quantity?: number | null;
     price?: number | null;
+    net?: number | null;
+    vat?: number | null;
+    internalTax?: number | null;
+    perceptions?: number | null;
     total?: number | null;
   }[];
   summary?: {

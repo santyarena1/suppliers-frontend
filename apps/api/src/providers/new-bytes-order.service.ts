@@ -55,7 +55,7 @@ interface NbAddress {
 
 interface PreparedCart {
   api: NewBytesApiClient;
-  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  items: { code: string; qty: number; name: string; price: number; subtotal: number; ivaPercent?: number }[];
   payments: NbPaymentOption[];
   addresses: NbAddress[];
   subtotales: NbSubtotales;
@@ -109,7 +109,15 @@ function cartItemsFromBody(
     const priceObj = asRecord(product.price) ?? asRecord(rec.price);
     const price = asNumber(priceObj?.value) ?? asNumber(rec.price) ?? 0;
     const line = asNumber(rec.subtotal) ?? price * qty;
-    return { code, qty, name, price, subtotal: line };
+    const ivaPercent = asNumber(priceObj?.iva);
+    return {
+      code,
+      qty,
+      name,
+      price,
+      subtotal: line,
+      ...(ivaPercent != null ? { ivaPercent } : {}),
+    };
   });
 }
 
@@ -483,13 +491,17 @@ export class NewBytesOrderService {
         total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
         errorMessage: message.slice(0, 500),
         items: prepared.items,
-        addressSnapshot: snapshotJson(
-          input.delivery === "pickup"
+        addressSnapshot: snapshotJson({
+          ...(input.delivery === "pickup"
             ? { pickup: true, ...NB_PICKUP_BRANCH }
             : address
               ? { id: address.id, ...address.raw, quote: selectedQuote ?? null, datosBultos: datosBultos ?? null }
-              : { shipping: true }
-        ),
+              : { shipping: true }),
+          vat: prepared.subtotales.iva,
+          perceptions: prepared.subtotales.perceptions,
+          subtotal: prepared.subtotales.subtotalUsd,
+          total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
+        }),
       };
       const record = existingId
         ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: failed })
@@ -513,11 +525,13 @@ export class NewBytesOrderService {
       deliveryLabel,
       notes: input.notes,
       subtotal: prepared.subtotales.subtotalUsd,
+      impuestos: prepared.subtotales.iva,
+      percepciones: prepared.subtotales.perceptions,
       total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
       errorMessage: created ? null : "NewBytes no devolvió número de pedido",
       items: prepared.items,
-      addressSnapshot: snapshotJson(
-        input.delivery === "pickup"
+      addressSnapshot: snapshotJson({
+        ...(input.delivery === "pickup"
           ? { pickup: true, ...NB_PICKUP_BRANCH }
           : address
             ? {
@@ -527,8 +541,12 @@ export class NewBytesOrderService {
                 datosBultos: datosBultos ?? null,
                 dropShipping: input.dropShipping ?? false,
               }
-            : { shipping: true }
-      ),
+            : { shipping: true }),
+        vat: prepared.subtotales.iva,
+        perceptions: prepared.subtotales.perceptions,
+        subtotal: prepared.subtotales.subtotalUsd,
+        total: prepared.subtotales.totalUsd ?? prepared.subtotales.subtotalUsd,
+      }),
     };
     const record = existingId
       ? await this.prisma.providerOrder.update({ where: { id: existingId }, data: saved })

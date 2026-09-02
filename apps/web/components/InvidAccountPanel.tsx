@@ -15,7 +15,7 @@ import NodoSpinner from "@/components/NodoSpinner";
 import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
-import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
 import { invidOrderAmountLines, invidOrderHeaderLines, invidOrderItems } from "@/components/account/invidOrderDetail";
 import InvidPaymentModal from "@/components/account/InvidPaymentModal";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
@@ -307,6 +307,7 @@ export default function InvidAccountPanel() {
           title="Borrador desde Nodo"
           lines={draftLines(detail.row)}
           items={draftItems(detail.row)}
+          totals={draftTotals(detail.row)}
           onClose={() => setDetail(null)}
         />
       )}

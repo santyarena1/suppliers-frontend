@@ -11,7 +11,7 @@ import NodoSpinner from "@/components/NodoSpinner";
 import { XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
-import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import {
   useAccountHistoryState,
@@ -146,6 +146,7 @@ export default function GrupoNucleoAccountPanel() {
           title="Pedido Grupo Núcleo"
           lines={draftLines(open)}
           items={draftItems(open)}
+          totals={draftTotals(open)}
           note="Grupo Núcleo no descarga facturas ni admite adjuntar pagos desde Nodo. Solo se puede informar el link de etiqueta de transporte."
           onClose={() => setOpen(null)}
         />

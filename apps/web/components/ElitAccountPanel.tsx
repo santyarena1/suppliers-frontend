@@ -14,7 +14,7 @@ import NodoSpinner from "@/components/NodoSpinner";
 import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
-import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
 import {
   elitSaleNoteDocs,
   elitSaleNoteHeaderLines,
@@ -278,6 +278,7 @@ export default function ElitAccountPanel() {
           title="Pedido desde Nodo"
           lines={draftLines(detail.row)}
           items={draftItems(detail.row)}
+          totals={draftTotals(detail.row)}
           onClose={() => setDetail(null)}
         />
       )}

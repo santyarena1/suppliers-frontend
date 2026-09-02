@@ -242,7 +242,16 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `id` = `albNumber` (Mis pedidos) u `orderNumber` (órdenes de compra). Query `kind=orders|purchase` para probar primero `miCuenta/pedidos/:id` o `miCuenta/ordenesDeCompra/:id`.
 - **Respuesta esperada**: `{ found, orderNumber, albNumber, status, date, items[], notes?, payment?, delivery?, address?, trackingNumber?, invoice?, subtotalUsd?, iva?, perceptions?, perceptionLabel?, totalUsd?, totalArs?, exchangeRate? }`. `found: false` si New Bytes no tiene ese id. Los ítems usan los mismos campos del carrito (`productId`, `product.title`, `amount`, `price.value`, `subtotal`).
 - **Estado**: IMPLEMENTADO
-- **Notas**: El listado `GET /providers/NEW_BYTES/orders` suele ser solo encabezado. Ver más vuelve a consultar el detalle. No se inventan nombres ni alícuotas: si el portal no manda ítems, la UI lo dice.
+- **Notas**: El listado `GET /providers/NEW_BYTES/orders` suele ser solo encabezado. Ver más vuelve a consultar el detalle. No se inventan nombres ni alícuotas: si el portal no manda ítems, la UI lo dice. Ítems pueden traer `ivaPercent` / `iva` (desde `product.price.iva`) para discriminar IVA 10,5 vs 21 en la ficha.
+
+### [FEATURE] Desglose fiscal en fichas de cuenta (sin imp. / IIBB / IVA 10,5 / IVA 21)
+- **Método**: GET (campos extra en respuestas ya existentes)
+- **Ruta**: `/providers/ELIT/account` · `/providers/ELIT/salenotes/:number` · `/providers/INVID/account` · `/providers/NEW_BYTES/orders/:id` · `/providers/*/drafts` · `/providers/AIR/account`
+- **Auth**: Bearer, organización comercio con la cuenta del proveedor
+- **Body / Params**: sin cambios
+- **Respuesta esperada**: Elit NV: ítems con `net`, `vat`, `internalTax`, `perceptions`; `summary.net/vat/perceptions`. Invid pedidos: `totals.iva105` / `totals.iva21` cuando el HTML los discrimina. NB ítems: `ivaPercent`, `iva`. Drafts: `subtotal`, `impuestos`, `percepciones` y `addressSnapshot` con `vat` / `iva21` / `iva105` / `perceptions` / `internalTax` (no pisa el snapshot de dirección).
+- **Estado**: IMPLEMENTADO
+- **Notas**: La UI siempre muestra Total sin imp., IIBB/percepciones, IVA 10,5% e IVA 21% (0,00 si no hay dato). No inventa alícuota: si el IVA lump no calza 10,5 ni 21, va a "IVA (sin discriminar)".
 
 ### [FEATURE] SISTEMA TGS (AcuStock)
 - **Método**: GET | PATCH | POST | PUT | DELETE

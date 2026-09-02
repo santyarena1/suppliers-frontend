@@ -204,6 +204,9 @@ export interface NbOrderItem {
   qty?: number;
   price?: number;
   total?: number;
+  iva?: number;
+  ivaPercent?: number;
+  perception?: number;
 }
 
 export interface NbOrderRow {
@@ -343,7 +346,23 @@ export function parseNbOrderItems(raw: unknown): NbOrderItem[] {
     const price = parseNbItemPrice(item, product);
     const total = asNumber(item.subtotal) ?? asNumber(item.total) ?? asNumber(item.lineTotal)
       ?? (price != null && qty != null ? price * qty : undefined);
-    return { code, name, qty, price, total };
+    const priceObj = asRecord(product.price) ?? asRecord(item.price);
+    const ivaPercent = asNumber(priceObj?.iva) ?? asNumber(item.ivaPercent);
+    const perception = asNumber(priceObj?.percepcion) ?? asNumber(item.percepcion) ?? asNumber(item.perception);
+    const lineNet = total ?? ((price != null && qty != null) ? price * qty : undefined);
+    const iva = lineNet != null && ivaPercent != null
+      ? Math.round(lineNet * ((ivaPercent > 1 ? ivaPercent : ivaPercent * 100) / 100) * 100) / 100
+      : undefined;
+    return {
+      code,
+      name,
+      qty,
+      price,
+      total,
+      ...(ivaPercent != null ? { ivaPercent } : {}),
+      ...(iva != null ? { iva } : {}),
+      ...(perception != null ? { perception } : {}),
+    };
   }).filter((it) => it.name);
 }
 

@@ -13,8 +13,9 @@ import NodoSpinner from "@/components/NodoSpinner";
 import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
-import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
 import { mergeNbOrder, nbOrderAmountLines, nbOrderHeaderLines, nbOrderItems } from "@/components/account/nbOrderDetail";
+import { splitLumpVat, taxBreakdownLines } from "@/components/account/accountTaxBreakdown";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import {
   useAccountHistoryState,
@@ -282,10 +283,8 @@ export default function NewBytesAccountPanel() {
             { label: "Número", value: detail.row.invoiceNumber || "" },
             { label: "Detalle", value: detail.row.invoiceLabel || "" },
             { label: "Sucursal", value: detail.row.branch != null ? String(detail.row.branch) : "" },
-            { label: "Subtotal USD", value: detail.row.subtotalUsd != null ? String(detail.row.subtotalUsd) : "" },
-            { label: "Total USD", value: detail.row.totalUsd != null ? String(detail.row.totalUsd) : "" },
-            { label: "Percepciones", value: detail.row.perceptions != null ? String(detail.row.perceptions) : "" },
           ]}
+          totals={nbComprobanteTotals(detail.row)}
           documents={nbVoucherDocs(detail.row)}
           note={
             !detail.row.voucherUrl
@@ -318,6 +317,7 @@ export default function NewBytesAccountPanel() {
           title="Pedido desde Nodo"
           lines={draftLines(detail.row)}
           items={draftItems(detail.row)}
+          totals={draftTotals(detail.row)}
           onClose={() => setDetail(null)}
         />
       )}
@@ -332,6 +332,20 @@ function nbVoucherDocs(m: NewBytesComprobante): AccountDetailDoc[] {
     href: `/providers/NEW_BYTES/documents?voucherId=${encodeURIComponent(String(m.voucherId))}`,
     filename: `nb-${m.invoiceNumber || m.voucherId}.pdf`,
   }];
+}
+
+function nbComprobanteTotals(m: NewBytesComprobante) {
+  const net = m.subtotalUsd ?? 0;
+  const perc = m.perceptions ?? 0;
+  const total = m.totalUsd;
+  const vat = total != null ? Math.max(0, total - net - perc) : 0;
+  return taxBreakdownLines({
+    net,
+    ...splitLumpVat(net, vat),
+    perceptions: perc,
+    total,
+    currency: "USD",
+  });
 }
 
 function MovementsTable({

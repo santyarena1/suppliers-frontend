@@ -858,7 +858,15 @@ export class InvidOrderService {
       total,
       errorMessage: created ? null : (parsed.errorMessage ?? "Invid no devolvió número de pedido web"),
       items: prepared.items,
-      addressSnapshot: { id: prepared.addressId, ...prepared.address },
+      addressSnapshot: {
+        id: prepared.addressId,
+        ...prepared.address,
+        vat: prepared.iva,
+        perceptions: totals.percepciones,
+        internalTax: prepared.impuestos,
+        subtotal: prepared.subtotal,
+        total,
+      },
     };
 
     const record = existingId

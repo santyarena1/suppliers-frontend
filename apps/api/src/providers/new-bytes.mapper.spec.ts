@@ -177,6 +177,18 @@ describe("new-bytes.mapper", () => {
     expect(parseNbOrderItems({ items: [] })).toEqual([]);
   });
 
+  it("lee alícuota de IVA 10,5 o 21 de price.iva en ítems de pedido", () => {
+    expect(parseNbOrderItems({
+      items: [
+        { productId: 1, amount: 2, product: { title: "SSD", price: { value: 50, iva: 10.5 } } },
+        { productId: 2, amount: 1, product: { title: "Mouse", price: { value: 24, iva: 21, percepcion: 0.72 } } },
+      ],
+    })).toEqual([
+      { code: "1", name: "SSD", qty: 2, price: 50, total: 100, ivaPercent: 10.5, iva: 10.5 },
+      { code: "2", name: "Mouse", qty: 1, price: 24, total: 24, ivaPercent: 21, iva: 5.04, perception: 0.72 },
+    ]);
+  });
+
   it("excluye medios de pago que redirigen a tarjeta / MercadoPago", () => {
     expect(mapPaymentOption({ payMethodId: 5, description: "Efectivo Caja", interest: 0 })).toMatchObject({
       value: "5",

@@ -175,6 +175,42 @@ describe("invid-order.parser", () => {
     expect(order.delivery).toBe("RETIRA");
   });
 
+  it("separa IVA 10,5 e IVA 21 cuando el HTML los trae discriminados", () => {
+    const html = `
+      <tr class="CartProduct" id="tr1">
+        <td><img onclick="showhide('menu1outline','imgm1','tr1')" /></td>
+        <td class="valorizar">616099</td>
+        <td class="valorizar">208022</td>
+        <td class="text-center">Abierto</td>
+        <td class="text-center">02-09-2026</td>
+        <td class="text-right">US$ 135.78</td>
+        <td>Adjuntar</td>
+      </tr>
+      <tr id="menu1outline" style="display:none">
+        <td colspan="7">
+          <table class="tablaped">
+            <tr><td><b>Producto</b></td><td><b>Precio (s/IVA)</b></td><td><b>Cant.</b></td></tr>
+            <tr><td><a href="x---det--0419001">(0419001) Notebook</a></td><td>US$ 100.00</td><td>1</td></tr>
+            <tr><td>Subtotal</td><td></td><td>US$ 100.00</td></tr>
+            <tr><td>IVA 10,5%</td><td></td><td>US$ 10.50</td></tr>
+            <tr><td>IVA 21%</td><td></td><td>US$ 21.00</td></tr>
+            <tr><td>Percepción IIBB</td><td></td><td>US$ 3.00</td></tr>
+            <tr><td>Total:</td><td></td><td>US$ 134.50</td></tr>
+          </table>
+        </td>
+      </tr>
+    `;
+    const order = parseOrdersTable(html).orders[0];
+    expect(order.totals).toMatchObject({
+      net: 100,
+      iva105: 10.5,
+      iva21: 21,
+      iva: 31.5,
+      percepciones: 3,
+      total: 134.5,
+    });
+  });
+
   it("toma el código del href si la celda no trae el nombre", () => {
     const html = `
       <tr class="CartProduct" id="tr1">

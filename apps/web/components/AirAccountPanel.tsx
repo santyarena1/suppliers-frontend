@@ -11,7 +11,8 @@ import NodoSpinner from "@/components/NodoSpinner";
 import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc, type AccountDetailLine } from "@/components/account/AccountRowDetail";
-import { draftItems, draftLines } from "@/components/account/draftDetail";
+import { taxBreakdownLines, taxFromLabeledRecord } from "@/components/account/accountTaxBreakdown";
+import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import {
   useAccountHistoryState,
@@ -231,6 +232,7 @@ export default function AirAccountPanel() {
           open
           title={detail.title}
           lines={airLines(detail.row)}
+          totals={airTaxTotals(detail.row)}
           documents={airDocs(detail.row)}
           note={
             airDocs(detail.row).length === 0
@@ -246,6 +248,7 @@ export default function AirAccountPanel() {
           title="Canasto enviado desde Nodo"
           lines={draftLines(detail.row)}
           items={draftItems(detail.row)}
+          totals={draftTotals(detail.row)}
           note="El canasto de Air no cobra. No hay factura para descargar desde la API."
           onClose={() => setDetail(null)}
         />
@@ -258,6 +261,11 @@ function airLines(row: AirRow): AccountDetailLine[] {
   return Object.entries(row)
     .filter(([k]) => k !== "_links" && k !== "_href")
     .map(([label, value]) => ({ label, value: value == null ? "" : String(value) }));
+}
+
+function airTaxTotals(row: AirRow): AccountDetailLine[] {
+  const parsed = taxFromLabeledRecord(row);
+  return parsed ? taxBreakdownLines(parsed) : [];
 }
 
 function airDocs(row: AirRow): AccountDetailDoc[] {

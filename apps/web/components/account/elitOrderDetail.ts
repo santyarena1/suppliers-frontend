@@ -1,4 +1,11 @@
 import type { AccountDetailDoc, AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import {
+  addIva,
+  emptyIvaAcc,
+  lineVatAmount,
+  mergeSplit,
+  taxBreakdownLines,
+} from "@/components/account/accountTaxBreakdown";
 import type { ElitSaleNote } from "@/lib/api";
 
 function money(n: number | null | undefined, currency?: string): string {
@@ -51,17 +58,29 @@ export function elitSaleNoteItems(o: ElitSaleNote): AccountDetailItem[] {
 
 export function elitSaleNoteTotals(o: ElitSaleNote): AccountDetailLine[] {
   const s = o.summary;
-  const cur = o.currency;
-  const lines: AccountDetailLine[] = [];
-  const net = s?.net ?? s?.subtotal;
-  if (net != null) lines.push({ label: "Neto", value: money(net, cur) });
-  if (s?.vat != null) lines.push({ label: "IVA", value: money(s.vat, cur) });
-  if (s?.internalTaxes != null) lines.push({ label: "Imp. internos", value: money(s.internalTaxes, cur) });
-  if (s?.perceptions != null) lines.push({ label: "Percepciones", value: money(s.perceptions, cur) });
-  if (s?.shipping != null) lines.push({ label: "Envío", value: money(s.shipping, cur) });
-  const total = s?.total ?? o.amount;
-  if (total != null) lines.push({ label: "Total", value: money(total, cur) });
-  return lines;
+  const acc = emptyIvaAcc();
+  let itemNet = 0;
+  let itemPerc = 0;
+  let itemIntern = 0;
+  for (const it of o.items ?? []) {
+    const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+    const unitNet = it.net ?? it.price ?? 0;
+    const lineNet = unitNet * q;
+    itemNet += lineNet;
+    addIva(acc, lineNet, lineVatAmount(it.vat ?? 0, q, lineNet));
+    itemPerc += (it.perceptions ?? 0) * q;
+    itemIntern += (it.internalTax ?? 0) * q;
+  }
+  const net = s?.net ?? s?.subtotal ?? itemNet;
+  return taxBreakdownLines({
+    net,
+    ...mergeSplit(acc, net, s?.vat ?? null),
+    perceptions: s?.perceptions ?? itemPerc,
+    internalTaxes: s?.internalTaxes ?? itemIntern,
+    shipping: s?.shipping,
+    total: s?.total ?? o.amount,
+    currency: o.currency === "ARS" ? "ARS" : "USD",
+  });
 }
 
 export function elitSaleNoteDocs(o: ElitSaleNote): AccountDetailDoc[] {

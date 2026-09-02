@@ -1,4 +1,5 @@
 import type { AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import { taxBreakdownLines, taxFromDraft } from "@/components/account/accountTaxBreakdown";
 import type { NodoProviderDraft } from "@/lib/api";
 
 export function draftLines(d: NodoProviderDraft): AccountDetailLine[] {
@@ -9,10 +10,13 @@ export function draftLines(d: NodoProviderDraft): AccountDetailLine[] {
     { label: "Pago", value: d.paymentLabel || "" },
     { label: "Entrega", value: d.deliveryLabel || "" },
     { label: "Notas", value: d.notes || "" },
-    { label: "Total", value: d.total != null ? String(d.total) : "" },
     { label: "Fecha", value: d.createdAt ? new Date(d.createdAt).toLocaleString("es-AR") : "" },
     { label: "Error", value: d.errorMessage || "" },
   ];
+}
+
+export function draftTotals(d: NodoProviderDraft): AccountDetailLine[] {
+  return taxBreakdownLines(taxFromDraft(d));
 }
 
 export function draftItems(d: NodoProviderDraft): AccountDetailItem[] {

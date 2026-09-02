@@ -246,6 +246,8 @@ export interface InvidOrderItem {
 export interface InvidOrderTotals {
   net?: number;
   iva?: number;
+  iva105?: number;
+  iva21?: number;
   internos?: number;
   percepciones?: number;
   shipping?: number;
@@ -425,6 +427,14 @@ function assignTotalLabel(label: string, value: string, totals: InvidOrderTotals
     return;
   }
   if (/\biva\b|i\.v\.a/.test(l)) {
+    if (/10\s*[.,]?\s*5/.test(l)) {
+      totals.iva105 = n;
+      return;
+    }
+    if (/\b21\b/.test(l)) {
+      totals.iva21 = n;
+      return;
+    }
     totals.iva = n;
     return;
   }
@@ -461,7 +471,7 @@ function parseOutlineTotals(html: string): { totals: InvidOrderTotals; exchangeR
     const label = texts[0];
     const value = texts.length >= 2 ? texts[texts.length - 1] : texts[0];
     assignTotalLabel(label, value, totals);
-    assignTotalLabel(joined, joined, totals);
+    assignTotalLabel(joined, value, totals);
     if (/cotizaci[oó]n|tipo\s+de\s+cambio|\btc\b/.test(joined.toLowerCase())) {
       const rate = parseExchangeRateValue(value) ?? parseExchangeRateValue(joined);
       if (rate) exchangeRate = rate;
@@ -469,7 +479,7 @@ function parseOutlineTotals(html: string): { totals: InvidOrderTotals; exchangeR
   }
 
   const text = stripTags(html);
-  if (totals.iva == null) {
+  if (totals.iva == null && totals.iva105 == null && totals.iva21 == null) {
     totals.iva = pickLabeledMoney(text, /\bI\.?V\.?A\.?(?:\s*\(?\d+(?:[.,]\d+)?\s*%\)?)?\s*[:.]?\s*(US\$\s*[\d.,]+)/i);
   }
   if (totals.internos == null) {
@@ -509,19 +519,25 @@ function finalizeTotals(orderAmount: string, items: InvidOrderItem[], parsed: In
   const total = (totals.total && totals.total > 0) ? totals.total : parseInvidMoney(orderAmount);
   if (total > 0) totals.total = total;
 
+  const ivaSplit = (totals.iva105 ?? 0) + (totals.iva21 ?? 0);
+  if (ivaSplit > 0) totals.iva = round2(ivaSplit);
+
+  const iva = ivaSplit > 0 ? ivaSplit : (totals.iva ?? 0);
   const accounted = round2(
     (totals.net ?? 0)
-    + (totals.iva ?? 0)
+    + iva
     + (totals.internos ?? 0)
     + (totals.percepciones ?? 0)
     + (totals.shipping ?? 0)
   );
-  const hasSplit = totals.iva != null || totals.internos != null || totals.percepciones != null;
+  const hasSplit = totals.iva != null || totals.iva105 != null || totals.iva21 != null
+    || totals.internos != null || totals.percepciones != null;
   if (totals.net != null && totals.total != null && totals.total - accounted > 0.05 && !hasSplit) {
     totals.taxes = round2(totals.total - accounted);
   }
 
-  const hasBreakdown = totals.net != null || totals.iva != null || totals.internos != null
+  const hasBreakdown = totals.net != null || totals.iva != null || totals.iva105 != null || totals.iva21 != null
+    || totals.internos != null
     || totals.percepciones != null || totals.shipping != null || totals.taxes != null;
   return hasBreakdown ? totals : undefined;
 }

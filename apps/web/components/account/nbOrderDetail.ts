@@ -1,15 +1,20 @@
 import type { AccountDetailItem, AccountDetailLine } from "@/components/account/AccountRowDetail";
+import {
+  addIva,
+  emptyIvaAcc,
+  mergeSplit,
+  taxBreakdownLines,
+} from "@/components/account/accountTaxBreakdown";
 import type { NewBytesOrder } from "@/lib/api";
 import { formatAccountSum, parseAccountAmount } from "@/lib/account-history";
 
 function fmtUsd(n: number): string {
-  return n.toLocaleString("es-AR", { style: "currency", currency: "USD" });
-}
-
-function money(value: string | number | undefined): string {
-  if (value == null || value === "") return "";
-  const n = typeof value === "number" ? value : parseAccountAmount(String(value));
-  return n != null ? fmtUsd(n) : String(value);
+  return n.toLocaleString("es-AR", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 export function nbOrderHeaderLines(row: NewBytesOrder): AccountDetailLine[] {
@@ -41,15 +46,38 @@ export function nbOrderItems(row: NewBytesOrder): AccountDetailItem[] {
   }));
 }
 
-export function nbOrderAmountLines(row: NewBytesOrder): { lines: AccountDetailLine[]; notes: string[] } {
-  const lines: AccountDetailLine[] = [];
-  if (row.subtotalUsd != null) lines.push({ label: "Neto", value: fmtUsd(row.subtotalUsd) });
-  if (row.iva != null) lines.push({ label: "IVA", value: fmtUsd(row.iva) });
-  if (row.perceptions != null) {
-    lines.push({ label: row.perceptionLabel || "Percepciones", value: fmtUsd(row.perceptions) });
+function ivaFromNbItems(row: NewBytesOrder) {
+  const acc = emptyIvaAcc();
+  let perc = 0;
+  for (const it of row.items ?? []) {
+    const qty = it.qty != null && it.qty > 0 ? it.qty : 1;
+    const lineNet = it.total ?? (it.price != null ? it.price * qty : 0);
+    const vat = it.iva != null
+      ? it.iva
+      : it.ivaPercent != null && lineNet > 0
+        ? lineNet * ((it.ivaPercent > 1 ? it.ivaPercent : it.ivaPercent * 100) / 100)
+        : 0;
+    addIva(acc, lineNet, vat, it.ivaPercent);
+    perc += it.perception ?? 0;
   }
-  if (row.totalUsd != null) lines.push({ label: "Total USD", value: fmtUsd(row.totalUsd) });
-  else if (row.amount != null) lines.push({ label: "Importe USD", value: money(row.amount) });
+  return { acc, perc };
+}
+
+export function nbOrderAmountLines(row: NewBytesOrder): { lines: AccountDetailLine[]; notes: string[] } {
+  const fromItems = ivaFromNbItems(row);
+  const net = row.subtotalUsd ?? 0;
+  const split = mergeSplit(fromItems.acc, net, row.iva ?? null);
+
+  const lines: AccountDetailLine[] = [
+    ...taxBreakdownLines({
+      net,
+      ...split,
+      perceptions: row.perceptions ?? fromItems.perc,
+      perceptionLabel: row.perceptionLabel,
+      total: row.totalUsd ?? parseAccountAmount(row.amount),
+      currency: "USD",
+    }),
+  ];
   if (row.exchangeRate != null) {
     lines.push({
       label: "Tipo de cambio",
