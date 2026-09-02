@@ -69,7 +69,6 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
 
   const brand = productDisplayBrand(product);
   const category = productDisplayCategory(product);
-  const metaLine = [brand, category].filter(Boolean).join(" · ");
 
   const pricing = purchaseLinePricing(product, policy, priceMode);
   const includeIibb = withIibb && pricing.mode !== "offline";
@@ -82,8 +81,31 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
   const ars = convert(displayUsd).amount;
   const listed = linePricing(product);
   const showingOffline = pricing.adjusted && pricing.mode === "offline";
+  const showingScheme = pricing.adjusted && pricing.mode === "scheme";
   const wantsOffline = priceMode === "offline";
+  const wantsScheme = priceMode === "scheme";
   const offlineUnavailable = wantsOffline && !showingOffline;
+  const schemeUnavailable = wantsScheme && !showingScheme;
+
+  const canScheme = Boolean(policy?.acceptsScheme && policy.schemeIvaAdjustment);
+  const schemeHint =
+    priceMode === "list" && canScheme
+      ? (() => {
+          const sp = purchaseLinePricing(product, policy, "scheme");
+          const sd = displayAmountFromPricing(sp, {
+            withIva,
+            withIibb: withIibb && sp.mode !== "offline",
+            provider: product.provider,
+          });
+          const usd = sd.displayUsd;
+          const label = currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
+          const disc =
+            policy.schemeDiscountPercent != null && policy.schemeDiscountPercent > 0
+              ? ` (−${policy.schemeDiscountPercent}%)`
+              : "";
+          return { label, disc };
+        })()
+      : null;
 
   const primary = currency === "USD" ? formatUSD(displayUsd) : formatARS(ars);
   const secondary = currency === "USD"
@@ -165,6 +187,17 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
                 {showingOffline ? "Offline" : "Sin offline"}
               </span>
             )}
+            {(showingScheme || schemeUnavailable) && (
+              <span
+                className={`inline-flex h-7 items-center rounded-full px-2.5 text-[11px] font-bold shadow-sm ${
+                  showingScheme
+                    ? "bg-violet-500 text-white ring-1 ring-violet-300/50"
+                    : "bg-black/70 text-violet-200 ring-1 ring-violet-500/30"
+                }`}
+              >
+                {showingScheme ? "Esquema" : "Sin esquema"}
+              </span>
+            )}
           </div>
 
           {product.locationAir && (
@@ -185,12 +218,30 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
           <p className="product-card-title text-[13px] leading-snug line-clamp-2 font-semibold tracking-tight transition-colors">
             {product.name}
           </p>
-          {metaLine && (
-            <p className="mt-1 text-[11px] leading-snug text-slate-400 dark:text-surface-500 line-clamp-1">
-              {metaLine}
-            </p>
-          )}
         </Link>
+        {(brand || category) && (
+          <p className="text-[11px] leading-snug text-slate-400 dark:text-surface-500 line-clamp-1 -mt-2">
+            {brand && (
+              <Link
+                href={`/search?marca=${encodeURIComponent(brand)}`}
+                className="hover:text-brand-400 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {brand}
+              </Link>
+            )}
+            {brand && category ? <span className="text-slate-500"> · </span> : null}
+            {category && (
+              <Link
+                href={`/search?categoria=${encodeURIComponent(category)}`}
+                className="hover:text-brand-400 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {category}
+              </Link>
+            )}
+          </p>
+        )}
 
         <div className="mt-auto flex flex-col gap-2.5">
           <div className="flex flex-col gap-1">
@@ -221,11 +272,24 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
               </span>
             </div>
 
-            {pricing.missingIva && showingOffline && (
+            {pricing.missingIva && (showingOffline || showingScheme) && (
               <p className="text-[10px] text-amber-600 leading-none">Sin alícuota de IVA</p>
             )}
 
-            {!showingOffline && (
+            {schemeHint && (
+              <p className="text-[11px] font-medium tabular-nums leading-none pt-0.5 text-violet-600 dark:text-violet-300">
+                Esquema {schemeHint.label}
+                {schemeHint.disc}
+              </p>
+            )}
+
+            {showingScheme && policy.schemeDiscountPercent != null && policy.schemeDiscountPercent > 0 && (
+              <p className="text-[10px] text-violet-600/90 dark:text-violet-300/80 leading-none">
+                Descuento esquema {policy.schemeDiscountPercent}%
+              </p>
+            )}
+
+            {!showingOffline && !showingScheme && (
               <p className="product-card-meta text-[10px] tabular-nums leading-none pt-0.5">
                 Base {formatUSD(listed.net)}
                 {withIva ? " · s/imp" : ""}

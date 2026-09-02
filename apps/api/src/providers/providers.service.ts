@@ -798,8 +798,11 @@ export class ProvidersService implements OnModuleInit {
       .slice(0, 60);
   }
 
-  /** Muestra mixta para la landing: productos con stock de todos los proveedores + bajadas de precio. */
-  async getFeatured(tenantId: string, take: number) {
+  /**
+   * Landing del buscador: por defecto solo productos que bajaron de precio.
+   * `mixed=true` conserva el muestreo viejo (bajadas + stock mixto).
+   */
+  async getFeatured(tenantId: string, take: number, opts: { mixed?: boolean } = {}) {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
     const limit = Math.min(Math.max(take, 1), 60);
@@ -808,15 +811,7 @@ export class ProvidersService implements OnModuleInit {
       this.catalogEnrichment.getContext(),
     ]);
 
-    const priceDropSlots = Math.max(4, Math.ceil(limit * 0.4));
-    const drops = await this.findRecentPriceDrops(tenantId, providers, priceDropSlots);
-
-    const dropKeys = new Set(drops.map((d) => `${d.provider}::${d.externalId}`));
-    const remaining = Math.max(limit - drops.length, 0);
-
-    const stockOffers = remaining > 0
-      ? await this.sampleOffersAcrossProviders(tenantId, providers, remaining, dropKeys)
-      : [];
+    const drops = await this.findRecentPriceDrops(tenantId, providers, limit);
 
     const dropViews = drops.map((d) => {
       const view = toProductView(d.offer.product, d.offer, rules.get(d.offer.provider) ?? NO_RULES, enrichment);
@@ -837,11 +832,19 @@ export class ProvidersService implements OnModuleInit {
       };
     });
 
+    if (!opts.mixed) {
+      return this.withImageAiFlags(dropViews.slice(0, limit));
+    }
+
+    const dropKeys = new Set(drops.map((d) => `${d.provider}::${d.externalId}`));
+    const remaining = Math.max(limit - drops.length, 0);
+    const stockOffers = remaining > 0
+      ? await this.sampleOffersAcrossProviders(tenantId, providers, remaining, dropKeys)
+      : [];
     const stockViews = stockOffers.map((offer) =>
       toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment),
     );
 
-    // Bajadas primero; después el resto mezclado por proveedor.
     return this.withImageAiFlags([...dropViews, ...stockViews].slice(0, limit));
   }
 
