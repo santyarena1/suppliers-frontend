@@ -131,4 +131,12 @@ export const DEFAULT_AD_SLOTS: Array<{
     monthlyPriceUsd: 60,
     maxConcurrent: 1,
   },
+  {
+    key: "news_hero",
+    name: "Hero de Noticias",
+    description: "Carrusel grande arriba del medio. La creatividad es una nota publicada, no un banner suelto.",
+    placement: "news",
+    monthlyPriceUsd: 180,
+    maxConcurrent: 5,
+  },
 ];

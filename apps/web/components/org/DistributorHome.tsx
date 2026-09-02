@@ -5,7 +5,7 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import { myApi, type OwnClient, type OwnOrg } from "@/lib/api";
 import { formatUSD } from "@/lib/format";
-import { ArrowRight, Bell, Building2, ClipboardList, Handshake, Loader2, Megaphone, MessageSquare, QrCode, Users } from "lucide-react";
+import { ArrowRight, Bell, Building2, ClipboardList, Handshake, Loader2, Megaphone, MessageSquare, Newspaper, QrCode, Users } from "lucide-react";
 
 export default function DistributorHome() {
   const [org, setOrg] = useState<OwnOrg | null>(null);
@@ -55,6 +55,7 @@ export default function DistributorHome() {
                 <HomeLink href="/mensajes" icon={MessageSquare} title="Mensajes" subtitle="El hilo de cada cuenta" />
                 <HomeLink href="/marcas" icon={Building2} title="Marcas" subtitle="Las marcas con las que estás vinculado" />
                 <HomeLink href="/avisos" icon={Bell} title="Avisos" subtitle="Lo que te mandan las marcas" />
+                <HomeLink href="/noticias" icon={Newspaper} title="Noticias" subtitle="Novedades de tu red y las tuyas" />
                 {org?.canManagePortfolio && (
                   <HomeLink href="/codigos" icon={QrCode} title="Códigos" subtitle="Vincular un comercio nuevo" />
                 )}

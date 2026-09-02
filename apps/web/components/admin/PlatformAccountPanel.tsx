@@ -24,6 +24,7 @@ const MODULE_LABELS: Record<ModuleKey, string> = {
   credentials: "Credenciales (en Proveedores)",
   providers: "Proveedores",
   brands: "Portal de Marcas",
+  news: "Noticias",
   diagnostics: "Diagnóstico",
   admin: "Administración",
 };

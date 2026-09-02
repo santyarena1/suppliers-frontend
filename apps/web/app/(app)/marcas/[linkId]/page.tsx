@@ -108,6 +108,7 @@ export default function BrandHubPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={assetUrl(hub.theme.logoUrl)} alt={hub.name} style={{ height: 48 }} />
                   ) : null,
+                  noticias: <HubNews items={hub.news ?? []} />,
                 }}
               />
             ) : (
@@ -196,6 +197,12 @@ export default function BrandHubPage() {
                 items={hub.trainings}
                 pendingText={`${hub.name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
               />
+              )}
+              {!hub.htmlSlots?.includes("noticias") && (hub.news?.length ?? 0) > 0 && (
+                <section>
+                  <h2 className="text-sm font-semibold text-white mb-3">Noticias</h2>
+                  <HubNews items={hub.news ?? []} />
+                </section>
               )}
               {!hub.htmlDocument && <ContactSection hub={hub} />}
             </div>
@@ -582,6 +589,25 @@ function Pending({ text, children }: { text: string; children?: React.ReactNode 
     <div className="rounded-2xl border border-dashed border-amber-500/25 bg-amber-500/5 px-4 py-5">
       <p className="text-sm text-surface-300">{text}</p>
       {children && <div className="mt-2">{children}</div>}
+    </div>
+  );
+}
+
+function HubNews({ items }: { items: BrandHub["news"] }) {
+  if (!items?.length) return <p className="text-sm text-surface-400">Todavía no hay notas.</p>;
+  return (
+    <div className="grid sm:grid-cols-3 gap-3">
+      {items.map((item) => (
+        <Link key={item.id} href={`/noticias/${item.id}`} className="block group">
+          {item.coverUrl && (
+            <div className="aspect-[16/10] overflow-hidden mb-2 bg-black/20">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={assetUrl(item.coverUrl)} alt="" className="w-full h-full object-cover" />
+            </div>
+          )}
+          <p className="text-sm text-white leading-snug group-hover:opacity-80">{item.title}</p>
+        </Link>
+      ))}
     </div>
   );
 }

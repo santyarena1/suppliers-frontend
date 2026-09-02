@@ -14,5 +14,7 @@ describe("DEFAULT_AD_SLOTS", () => {
     expect(byKey.search_sponsored.placement).toBe("search");
     expect(byKey.hero_main.placement).toBe("search");
     expect(byKey.strip.placement).toBe("search");
+    expect(byKey.news_hero.placement).toBe("news");
+    expect(byKey.news_hero.maxConcurrent).toBe(5);
   });
 });

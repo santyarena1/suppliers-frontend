@@ -95,6 +95,14 @@ export class AdsService {
       }
     }
 
+    if (dto.articleId?.trim()) {
+      const article = await this.prisma.newsArticle.findFirst({
+        where: { id: dto.articleId.trim(), tenantId: tenant.tenantId },
+        select: { id: true },
+      });
+      if (!article) throw new BadRequestException("Esa nota no es de tu organización");
+    }
+
     const data = {
       tenantId: tenant.tenantId,
       slotId: slot.id,
@@ -103,6 +111,7 @@ export class AdsService {
       imageUrl: dto.imageUrl ?? null,
       linkUrl: dto.linkUrl ?? null,
       status: dto.status ?? "DRAFT",
+      ...(dto.articleId !== undefined ? { articleId: dto.articleId?.trim() || null } : {}),
     };
 
     const row = campaignId
@@ -210,6 +219,7 @@ export class AdsService {
     subtitle: string;
     imageUrl: string | null;
     linkUrl: string | null;
+    articleId?: string | null;
     startsAt: Date;
     endsAt: Date | null;
     slot: { id: string; key: string; name: string; monthlyPriceUsd: Prisma.Decimal | number; placement: string };
@@ -224,6 +234,7 @@ export class AdsService {
       subtitle: row.subtitle,
       imageUrl: row.imageUrl,
       linkUrl: row.linkUrl,
+      articleId: row.articleId ?? null,
       startsAt: row.startsAt.toISOString(),
       endsAt: row.endsAt?.toISOString() ?? null,
       slot: {

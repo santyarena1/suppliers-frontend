@@ -187,7 +187,7 @@ hecho. Esta tabla es el producto, no la migración.
 | 7 | Tipo 3: org por marca, espacio in-app, mapa de SKUs (semáforo + precio sugerido), materiales, acciones, avisos y chat. | Hecho — `docs/PLAN_TIPO3.md` |
 | 8 | Publicidad paga: espacios, precio, cupo, campañas, impresiones/clicks. El flag `advertisingEnabled` es “esta cuenta paga”. | Hecho |
 | 9 | Chat persona a persona (org + usuario + rol), no un buzón por vínculo. | Hecho — `/mensajes` |
-| 10 | Noticias: blog B2B de marcas y distros, hero pago, feed por red, enlace público. | Plan — `docs/PLAN_NOTICIAS.md` |
+| 10 | Noticias: blog B2B de marcas y distros, hero pago, feed por red, enlace público. | Hecho — `docs/PLAN_NOTICIAS.md` |
 | — | Carrito de la organización en la API (un armado por local, visible al distro). | Hecho — `/cart/org` |
 
 Detalle del Tipo 2: `docs/PLAN_TIPO2.md`. Tipo 3: `docs/PLAN_TIPO3.md`.

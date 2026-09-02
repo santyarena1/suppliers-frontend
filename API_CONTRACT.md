@@ -293,8 +293,8 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Auth**: Bearer, organización. Pública: sin auth. Publicar: `OWNER`/`ADMIN`/`PRODUCT_MANAGER` de `DISTRIBUTOR`, o `OWNER`/`ADMIN`/`MARKETING` de `BRAND`. Hero: comercio.
 - **Body / Params**: `{ title, excerpt, bodyHtml, coverUrl, kind, public, publishedAt?, expiresAt?, attachments[], imageUrls[] }` · feed `kind`, `authorType`, `q`, `cursor` · track `{ kind: view | attachment_click }`
 - **Respuesta esperada**: feed `{ items: NewsCard[], nextCursor? }` · hero `{ slides[] }` · ficha `{ article, author: { name, type, logoUrl, linked, advertised }, attachments[], canDownloadCommercial }` · pública sin adjuntos `IN_APP`
-- **Estado**: PENDIENTE
-- **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes del slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. No reusar `/brand/news` ni `BrandNews` del legado. UI: `/noticias`, `/n/:publicKey`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes (cualquier campaña ACTIVE). El hero usa el slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. Cuerpo HTML sanitizado (`sanitizeBrandHtml`). UI: `/noticias`, `/n/:publicKey`.
 
 ### [FEATURE] Upload de imágenes (assets)
 - **Método**: POST

@@ -7,6 +7,7 @@ export const BRAND_HUB_SLOTS = [
   "hablar",
   "nombre",
   "logo",
+  "noticias",
 ] as const;
 
 export type BrandHubSlot = (typeof BRAND_HUB_SLOTS)[number];

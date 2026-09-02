@@ -504,6 +504,7 @@ export interface AdCampaign {
   subtitle: string;
   imageUrl: string | null;
   linkUrl: string | null;
+  articleId?: string | null;
   startsAt: string;
   endsAt: string | null;
   slot: { id: string; key: string; name: string; placement: string; monthlyPriceUsd: number };
@@ -531,6 +532,7 @@ export const adsApi = {
     subtitle?: string;
     imageUrl?: string;
     linkUrl?: string;
+    articleId?: string | null;
     status?: AdCampaign["status"];
   }) => api.post<AdCampaign>("/my/ads/campaigns", data),
   updateCampaign: (
@@ -541,6 +543,7 @@ export const adsApi = {
       subtitle?: string;
       imageUrl?: string;
       linkUrl?: string;
+      articleId?: string | null;
       status?: AdCampaign["status"];
     }
   ) => api.put<AdCampaign>(`/my/ads/campaigns/${id}`, data),
@@ -1995,7 +1998,7 @@ export const retailApi = {
 };
 
 // --- Permisos por módulo del usuario actual ---
-export type ModuleKey = "search" | "cart" | "credentials" | "providers" | "brands" | "diagnostics" | "admin";
+export type ModuleKey = "search" | "cart" | "credentials" | "providers" | "brands" | "news" | "diagnostics" | "admin";
 
 export const permissionsApi = {
   mine: () => api.get<ModuleKey[]>("/me/permissions"),
@@ -2643,7 +2646,7 @@ export type BrandActionKind = "PURCHASE_QTY" | "PURCHASE_AMOUNT" | "REBATE";
 export type BrandActionStatus = "DRAFT" | "ACTIVE" | "ENDED" | "CANCELLED";
 export type BrandActionRewardKind = "NONE" | "FLAT" | "PER_UNIT";
 export type BrandActionScopeKind = "DISTRIBUTOR" | "RETAILER" | "PRODUCT";
-export type OrgNotificationKind = "BRAND_ACTION" | "BRAND_LANDING" | "DISTRIBUTOR_NOTE" | "SYSTEM";
+export type OrgNotificationKind = "BRAND_ACTION" | "BRAND_LANDING" | "DISTRIBUTOR_NOTE" | "SYSTEM" | "NEWS";
 
 export interface BrandActionProgress {
   current: number;
@@ -2799,6 +2802,7 @@ export interface BrandHub {
   signals: BrandSkuSignal[];
   materials: BrandResource[];
   trainings: BrandResource[];
+  news: { id: string; publicKey: string; title: string; excerpt: string; kind: string; coverUrl: string | null; isPublic: boolean; publishedAt: string | null }[];
 }
 
 export interface BrandAccounts {
@@ -2885,6 +2889,114 @@ export const brandApi = {
 
 export const publicBrandApi = {
   get: (publicKey: string) => api.get<PublicBrandLanding>(`/public/brands/${publicKey}`),
+};
+
+export type NewsKind = "LAUNCH" | "INCOMING" | "PRICE_LIST" | "PROMO" | "CATALOG" | "NOTICE" | "OTHER";
+export type NewsStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export interface NewsAuthor {
+  tenantId: string;
+  name: string;
+  type: TenantType;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  linked?: boolean;
+  advertised?: boolean;
+}
+
+export interface NewsCard {
+  id: string;
+  publicKey: string;
+  title: string;
+  excerpt: string;
+  kind: NewsKind;
+  coverUrl: string | null;
+  isPublic: boolean;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  author: NewsAuthor;
+  linked: boolean;
+  status?: NewsStatus;
+  stats?: { views: number; attachmentClicks: number };
+}
+
+export interface NewsHeroSlide extends NewsCard {
+  campaignId: string;
+  advertised: boolean;
+  campaignTitle: string;
+}
+
+export interface NewsAttachmentView {
+  id: string;
+  kind: "PRICE_LIST" | "FILE" | "LINK" | "RESOURCE";
+  title: string;
+  fileUrl: string | null;
+  contentUrl: string | null;
+  visibility: "IN_APP" | "PUBLIC";
+}
+
+export interface NewsDetail {
+  id: string;
+  publicKey: string;
+  status: NewsStatus;
+  kind: NewsKind;
+  title: string;
+  excerpt: string;
+  bodyHtml: string;
+  bodyRaw: string;
+  coverUrl: string | null;
+  isPublic: boolean;
+  notifyOnPublish: boolean;
+  scopeBrandName: string | null;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  author: NewsAuthor;
+  images: { id: string; url: string; caption: string | null }[];
+  attachments: NewsAttachmentView[];
+  canDownloadCommercial: boolean;
+  relatedSkus: { provider: string; externalId: string; name: string }[];
+  publicPath: string | null;
+}
+
+export interface UpsertNewsPayload {
+  title?: string;
+  excerpt?: string;
+  bodyHtml?: string;
+  coverUrl?: string | null;
+  kind?: NewsKind;
+  status?: NewsStatus;
+  isPublic?: boolean;
+  notifyOnPublish?: boolean;
+  scopeBrandName?: string | null;
+  publishedAt?: string | null;
+  expiresAt?: string | null;
+  relatedSkus?: { provider: string; externalId: string; name: string }[];
+  attachments?: {
+    kind: NewsAttachmentView["kind"];
+    title: string;
+    fileUrl?: string | null;
+    contentUrl?: string | null;
+    visibility?: "IN_APP" | "PUBLIC";
+  }[];
+  images?: { url: string; caption?: string | null }[];
+}
+
+export const newsApi = {
+  feed: (params?: { kind?: string; authorType?: string; q?: string; cursor?: string; take?: number }) =>
+    api.get<{ items: NewsCard[]; nextCursor: string | null }>("/news", { params }),
+  hero: () => api.get<{ slides: NewsHeroSlide[] }>("/news/hero"),
+  get: (id: string) => api.get<NewsDetail>(`/news/${id}`),
+  track: (id: string, kind: "view" | "attachment_click") => api.post<{ ok: boolean }>(`/news/${id}/track`, { kind }),
+  mine: () => api.get<{ canWrite: boolean; items: NewsCard[] }>("/my/news"),
+  getMine: (id: string) => api.get<NewsDetail>(`/my/news/${id}`),
+  create: (data: UpsertNewsPayload) => api.post<NewsDetail>("/my/news", data),
+  update: (id: string, data: UpsertNewsPayload) => api.put<NewsDetail>(`/my/news/${id}`, data),
+  remove: (id: string) => api.delete<{ ok: true }>(`/my/news/${id}`),
+};
+
+export const publicNewsApi = {
+  get: (publicKey: string) => api.get<NewsDetail>(`/public/news/${publicKey}`),
 };
 
 export const adminBrandOrgsApi = {

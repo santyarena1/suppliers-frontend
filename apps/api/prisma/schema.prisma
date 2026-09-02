@@ -50,6 +50,7 @@ model User {
   chatThreadsAsDistro  ChatThread[]          @relation("ChatDistroParticipant")
   chatThreadsAsStore   ChatThread[]          @relation("ChatStoreParticipant")
   tgsSettingsSaved     TgsSettings[]
+  newsCreated          NewsArticle[]
 
   @@index([brandId])
 }
@@ -142,6 +143,7 @@ model Tenant {
   brandSignals   BrandSkuSignal[]
   notificationsFrom OrgNotification[] @relation("NotifFrom")
   notificationsTo   OrgNotification[] @relation("NotifTo")
+  newsArticles      NewsArticle[]
 
   @@index([type, active])
   @@index([mirrorsCommercialFromId])
@@ -854,6 +856,7 @@ enum OrgNotificationKind {
   BRAND_LANDING
   DISTRIBUTOR_NOTE
   SYSTEM
+  NEWS
 }
 
 /// Landing pública de una marca. La URL usa publicKey opaca; en el panel B2B se ve el nombre.
@@ -988,6 +991,103 @@ model OrgNotification {
 
   @@index([toTenantId, createdAt])
   @@index([toTenantId, readAt])
+}
+
+enum NewsKind {
+  LAUNCH
+  INCOMING
+  PRICE_LIST
+  PROMO
+  CATALOG
+  NOTICE
+  OTHER
+}
+
+enum NewsStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum NewsAttachmentKind {
+  PRICE_LIST
+  FILE
+  LINK
+  RESOURCE
+}
+
+enum NewsAttachmentVisibility {
+  IN_APP
+  PUBLIC
+}
+
+/// Nota del medio B2B. La escribe una marca o un distro; la lee su red.
+model NewsArticle {
+  id              String     @id @default(uuid())
+  tenantId        String
+  tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publicKey       String     @unique
+  status          NewsStatus @default(DRAFT)
+  kind            NewsKind   @default(OTHER)
+  title           String
+  excerpt         String     @default("")
+  bodyHtml        String     @default("") @db.Text
+  coverUrl        String?
+  isPublic        Boolean    @default(false)
+  notifyOnPublish Boolean    @default(false)
+  scopeBrandName  String?
+  publishedAt     DateTime?
+  expiresAt       DateTime?
+  relatedSkus     Json       @default("[]")
+  createdByUserId String?
+  createdBy       User?      @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  attachments NewsAttachment[]
+  images      NewsImage[]
+  events      NewsEvent[]
+  campaigns   AdCampaign[]
+
+  @@index([tenantId, status, publishedAt])
+  @@index([status, publishedAt])
+}
+
+model NewsAttachment {
+  id         String                    @id @default(uuid())
+  articleId  String
+  article    NewsArticle               @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  kind       NewsAttachmentKind
+  title      String
+  fileUrl    String?
+  contentUrl String?
+  resourceId String?
+  visibility NewsAttachmentVisibility  @default(IN_APP)
+  sortOrder  Int                       @default(0)
+
+  @@index([articleId, sortOrder])
+}
+
+model NewsImage {
+  id        String      @id @default(uuid())
+  articleId String
+  article   NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  url       String
+  caption   String?
+  sortOrder Int         @default(0)
+
+  @@index([articleId, sortOrder])
+}
+
+model NewsEvent {
+  id        String      @id @default(uuid())
+  articleId String
+  article   NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  /// view | attachment_click
+  kind      String
+  createdAt DateTime    @default(now())
+
+  @@index([articleId, kind])
 }
 
 // ---------- Marcas (módulo viejo, no es fuente de verdad de Tipo 3) ----------
@@ -1588,6 +1688,8 @@ model AdCampaign {
   subtitle  String           @default("")
   imageUrl  String?
   linkUrl   String?
+  articleId String?
+  article   NewsArticle?     @relation(fields: [articleId], references: [id], onDelete: SetNull)
   startsAt  DateTime         @default(now())
   endsAt    DateTime?
   createdAt DateTime         @default(now())
@@ -1596,6 +1698,7 @@ model AdCampaign {
 
   @@index([tenantId, status])
   @@index([slotId, status])
+  @@index([articleId])
 }
 
 model AdEvent {

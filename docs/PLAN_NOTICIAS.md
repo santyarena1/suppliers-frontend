@@ -344,14 +344,15 @@ B2B. Ordenado por valor / costo.
 ## 10. Recorte de implementación
 
 1. **Contrato y tipos.** `ModuleKey "news"`, nav, `NewsKind`, DTOs en
-   `packages/shared`. Entrada pendiente en `API_CONTRACT.md`.
-2. **Schema + `NewsVisibilityService` + tests de aislamiento.** Antes de UI.
-3. **CRUD de autor** (`/my/news`) con roles. Upload cover / adjuntos.
-4. **Feed + ficha in-app** (`/noticias`). Hero vacío todavía.
-5. **Página pública** `/n/:publicKey`.
-6. **Slot `news_hero`**, campaña atada a artículo, tracking, carrusel.
-7. **Aviso opcional + stats + CTA.**
-8. Fase 2: programar, `{{noticias}}`, SKUs, pin.
+   `packages/shared`. Contrato en `API_CONTRACT.md`. **Hecho.**
+2. **Schema + `NewsVisibilityService` + tests de aislamiento.** **Hecho.**
+3. **CRUD de autor** (`/my/news`) con roles. Upload cover / adjuntos. **Hecho.**
+4. **Feed + ficha in-app** (`/noticias`). **Hecho.**
+5. **Página pública** `/n/:publicKey`. **Hecho.**
+6. **Slot `news_hero`**, campaña atada a artículo, tracking, carrusel. **Hecho.**
+7. **Aviso opcional + stats + CTA.** **Hecho.**
+8. Hueco `{{noticias}}` en el espacio de marca. **Hecho.**
+9. Programar (`publishedAt` futuro) y vigencia. **Hecho.**
 
 Verificación: un script `scripts/check-news-visibility.mjs` con tres orgs
 (comercio, distro A, distro B, marca vinculada a A). Distro B no ve nada de A.

@@ -9,6 +9,7 @@ export const MODULE_KEYS = [
   "credentials",
   "providers",
   "brands",
+  "news",
   "diagnostics",
   "admin",
 ] as const;
@@ -17,7 +18,7 @@ export type ModuleKey = (typeof MODULE_KEYS)[number];
 
 /** Módulos que un ROLE_USER/ROLE_BRAND tiene habilitados por defecto (sin excepciones). */
 export const DEFAULT_MODULES_BY_ROLE: Record<string, ModuleKey[]> = {
-  ROLE_USER: ["search", "cart", "credentials", "providers", "brands", "diagnostics"],
-  ROLE_BRAND: ["search", "cart", "brands", "diagnostics"],
+  ROLE_USER: ["search", "cart", "credentials", "providers", "brands", "news", "diagnostics"],
+  ROLE_BRAND: ["search", "cart", "brands", "news", "diagnostics"],
   ROLE_ADMIN: [...MODULE_KEYS],
 };

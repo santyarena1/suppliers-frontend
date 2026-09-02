@@ -6,3 +6,4 @@ export * from "./tenants";
 export * from "./purchase-pricing";
 export * from "./seller-order-text";
 export * from "./tgs";
+export * from "./news";

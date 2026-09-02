@@ -23,6 +23,7 @@ const SLOTS: { name: string; label: string }[] = [
   { name: "hablar", label: "Hablar" },
   { name: "nombre", label: "Nombre" },
   { name: "logo", label: "Logo" },
+  { name: "noticias", label: "Noticias" },
 ];
 
 const FONTS = [
@@ -270,6 +271,7 @@ export default function BrandEspacioPage() {
                         ) : (
                           <BrandHtmlSlotHole label="Logo" />
                         ),
+                        noticias: <BrandHtmlSlotHole label="Noticias" />,
                       }}
                     />
                   </div>

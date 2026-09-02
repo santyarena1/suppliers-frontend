@@ -24,6 +24,7 @@ import { ImagesModule } from "./images/images.module";
 import { AdsModule } from "./ads/ads.module";
 import { BrandsModule } from "./brands/brands.module";
 import { TgsModule } from "./tgs/tgs.module";
+import { NewsModule } from "./news/news.module";
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { TgsModule } from "./tgs/tgs.module";
     AdsModule,
     BrandsModule,
     TgsModule,
+    NewsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

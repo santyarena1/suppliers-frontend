@@ -38,7 +38,7 @@ export class BrandHubService {
     const brandId = link.supplierTenant.id;
     const landing = link.supplierTenant.brandLanding;
     const now = new Date();
-    const [actionRows, signals, resources] = await Promise.all([
+    const [actionRows, signals, resources, news] = await Promise.all([
       this.prisma.brandAction.findMany({
         where: {
           tenantId: brandId,
@@ -55,6 +55,26 @@ export class BrandHubService {
       this.prisma.brandResource.findMany({
         where: { tenantId: brandId },
         orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.newsArticle.findMany({
+        where: {
+          tenantId: brandId,
+          status: "PUBLISHED",
+          publishedAt: { lte: now },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        select: {
+          id: true,
+          publicKey: true,
+          title: true,
+          excerpt: true,
+          kind: true,
+          coverUrl: true,
+          isPublic: true,
+          publishedAt: true,
+        },
+        orderBy: { publishedAt: "desc" },
+        take: 3,
       }),
     ]);
     const visibleActions = actionRows.filter((row) =>
@@ -114,6 +134,16 @@ export class BrandHubService {
       })),
       materials,
       trainings,
+      news: news.map((row) => ({
+        id: row.id,
+        publicKey: row.publicKey,
+        title: row.title,
+        excerpt: row.excerpt,
+        kind: row.kind,
+        coverUrl: row.coverUrl,
+        isPublic: row.isPublic,
+        publishedAt: row.publishedAt?.toISOString() ?? null,
+      })),
     };
   }
 

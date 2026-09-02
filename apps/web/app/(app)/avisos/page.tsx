@@ -76,7 +76,17 @@ export default function AvisosPage() {
                   )}
                 </div>
                 <p className="text-xs text-surface-300 mt-2 whitespace-pre-wrap">{n.body}</p>
-                {n.landingKey && (
+                {n.kind === "NEWS" && n.landingKey && (
+                  <a href={`/n/${n.landingKey}`} target="_blank" rel="noreferrer" className="inline-block mt-2 text-[11px] text-brand-400">
+                    Leer la nota
+                  </a>
+                )}
+                {n.kind === "NEWS" && !n.landingKey && (
+                  <Link href="/noticias" className="inline-block mt-2 text-[11px] text-brand-400">
+                    Ir a Noticias
+                  </Link>
+                )}
+                {n.kind !== "NEWS" && n.landingKey && (
                   <a href={`/m/${n.landingKey}`} target="_blank" rel="noreferrer" className="inline-block mt-2 text-[11px] text-brand-400">
                     Ver landing
                   </a>

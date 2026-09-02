@@ -56,6 +56,10 @@ export class UpsertAdCampaignDto {
   @IsOptional()
   @IsIn(["DRAFT", "ACTIVE", "PAUSED", "ENDED"])
   status?: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
+
+  @IsOptional()
+  @IsString()
+  articleId?: string | null;
 }
 
 export class AdTrackDto {

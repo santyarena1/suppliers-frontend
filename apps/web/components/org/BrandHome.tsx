@@ -20,6 +20,7 @@ import {
   Loader2,
   Megaphone,
   MessageSquare,
+  Newspaper,
   Palette,
   QrCode,
   Sparkles,
@@ -126,6 +127,7 @@ export default function BrandHome() {
                 <HomeLink href="/marca/acciones" icon={ClipboardList} title="Acciones" subtitle="Unidades, USD o rebate con vigencia" />
                 <HomeLink href="/marca/cuentas" icon={Handshake} title="Cuentas" subtitle="Comercios y distribuidores en alcance" />
                 <HomeLink href="/mensajes" icon={MessageSquare} title="Mensajes" subtitle="Hablá con cada cuenta vinculada" />
+                <HomeLink href="/noticias" icon={Newspaper} title="Noticias" subtitle="Novedades con foto y HTML propio" />
                 <HomeLink href="/marca/landing" icon={Palette} title="Espacio" subtitle="Estética, HTML y huecos nativos" />
                 {org?.canManagePortfolio && (
                   <HomeLink href="/codigos" icon={QrCode} title="Códigos" subtitle="El comercio o el distro canjea en /marcas" />

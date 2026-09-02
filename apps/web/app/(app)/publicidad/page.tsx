@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PrefsPanel from "@/components/PrefsPanel";
-import { adsApi, type AdCampaign, type AdSlot } from "@/lib/api";
+import { adsApi, newsApi, type AdCampaign, type AdSlot, type NewsCard } from "@/lib/api";
 import { Loader2, Megaphone } from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
@@ -30,14 +30,17 @@ export default function PublicidadPage() {
   const [subtitle, setSubtitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [articleId, setArticleId] = useState("");
+  const [notes, setNotes] = useState<NewsCard[]>([]);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const res = await adsApi.mine();
+    const [res, own] = await Promise.all([adsApi.mine(), newsApi.mine().catch(() => ({ data: { items: [] as NewsCard[] } }))]);
     setAllowed(res.data.allowed);
     setMonthlyDue(res.data.monthlyDue);
     setSlots(res.data.slots);
     setCampaigns(res.data.campaigns);
+    setNotes(own.data.items.filter((n) => n.status === "PUBLISHED"));
     setSlotId((current) => current || res.data.slots.find((s) => s.enabled)?.id || res.data.slots[0]?.id || "");
     setLoading(false);
   }, []);
@@ -59,12 +62,14 @@ export default function PublicidadPage() {
         subtitle: subtitle.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
         linkUrl: linkUrl.trim() || undefined,
+        articleId: articleId || undefined,
         status: "DRAFT",
       });
       setTitle("");
       setSubtitle("");
       setLinkUrl("");
       setImageUrl("");
+      setArticleId("");
       setAviso({ ok: true, text: "Campaña creada en borrador. Activarla suma el costo mensual." });
       await load();
     } catch (err) {
@@ -90,6 +95,8 @@ export default function PublicidadPage() {
     }
   }
 
+  const selectedSlot = slots.find((s) => s.id === slotId);
+  const newsSlot = selectedSlot?.key === "news_hero";
   const enabledSlots = slots.filter((slot) => slot.enabled);
   const totals = useMemo(() => {
     return campaigns.reduce(
@@ -159,7 +166,18 @@ export default function PublicidadPage() {
                 <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Título" className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white" />
                 <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Subtítulo" className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white" />
                 <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="URL de imagen o /assets/…" className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white" />
-                <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://… o /search?q=…" className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white" />
+                {newsSlot ? (
+                  <select value={articleId} onChange={(e) => setArticleId(e.target.value)} className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white">
+                    <option value="">Elegí la nota que va al hero</option>
+                    {notes.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.title}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://… o /search?q=…" className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white" />
+                )}
                 <button type="button" disabled={saving || !title.trim() || !slotId} onClick={() => void create()} className="self-start bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-xs rounded-lg px-3 py-2">
                   {saving ? "Guardando…" : "Crear borrador"}
                 </button>

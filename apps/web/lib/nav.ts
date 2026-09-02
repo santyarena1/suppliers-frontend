@@ -1,7 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
-  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2,
+  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -46,6 +46,7 @@ export type NavItemId =
   | "brand-codes"
   | "brand-ads"
   | "notices"
+  | "news"
   | "brands-admin"
   | "settings"
   | "admin"
@@ -89,6 +90,14 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"] },
   { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"] },
+  {
+    id: "news",
+    href: "/noticias",
+    label: "Noticias",
+    icon: Newspaper,
+    module: "news",
+    tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"],
+  },
   {
     id: "sistema-tgs",
     href: "/sistema-tgs",
