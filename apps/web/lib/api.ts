@@ -1675,21 +1675,29 @@ export interface ElitSaleNote {
   trackingStatus?: string;
   items?: {
     code?: string;
+    alfaCode?: string;
     name?: string;
     quantity?: number | null;
     price?: number | null;
     net?: number | null;
     vat?: number | null;
+    vatPercent?: number | null;
     internalTax?: number | null;
     perceptions?: number | null;
     total?: number | null;
+    parentCode?: string;
     kit?: boolean;
     children?: {
       code?: string;
+      alfaCode?: string;
       name?: string;
       quantity?: number | null;
       price?: number | null;
+      net?: number | null;
+      vat?: number | null;
+      vatPercent?: number | null;
       total?: number | null;
+      parentCode?: string;
     }[];
   }[];
   summary?: {

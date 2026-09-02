@@ -56,8 +56,8 @@ export function ivaBucket(net: number, vat: number, vatPercent?: number | null):
   }
   if (net > EPS && vat > EPS) {
     const r = vat / net;
-    if (Math.abs(r - 0.105) <= 0.02) return "105";
-    if (Math.abs(r - 0.21) <= 0.03) return "21";
+    if (Math.abs(r - 0.105) <= 0.008) return "105";
+    if (Math.abs(r - 0.21) <= 0.015) return "21";
   }
   return "other";
 }

@@ -12,6 +12,9 @@ export interface ElitRscOrderItem {
   internalTax?: number | null;
   perceptions?: number | null;
   total?: number | null;
+  /** Alícuota de IVA en puntos (10.5 / 21). `vat` es el monto. */
+  vatPercent?: number | null;
+  parentCode?: string;
   /** Kit / fabricación / esquema: Elit pone el importe en el total, no en el unitario. */
   kit?: boolean;
   children?: ElitRscOrderItem[];
@@ -170,20 +173,112 @@ function nestedItemList(rec: Record<string, unknown>): unknown[] {
   return [];
 }
 
+const EPS = 0.005;
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function fold(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function itemBlob(item: { code?: string; alfaCode?: string; name?: string }): string {
+  return fold(`${item.name || ""} ${item.code || ""} ${item.alfaCode || ""}`);
+}
+
+function isElitKitCode(code: string | undefined): boolean {
+  return /ESFABRIC|^ES[A-Z]+_/.test((code || "").toUpperCase());
+}
+
+function isShippingLine(item: { name?: string; code?: string; alfaCode?: string }): boolean {
+  return /transporte|flete|\benvio\b/.test(itemBlob(item));
+}
+
 function looksLikeElitKit(rec: Record<string, unknown>, code: string | undefined): boolean {
-  const rawCode = (code || "").toUpperCase();
-  if (/ESFABRIC|^ES[A-Z]*_/.test(rawCode)) return true;
+  if (isElitKitCode(code) || isElitKitCode(asString(rec.alfaCode)) || isElitKitCode(asString(rec.codigoAlfa))) {
+    return true;
+  }
   if (rec.kit === true || rec.isKit === true || rec.isFabrication === true) return true;
   const type = (asString(rec.type) || asString(rec.kind) || "").toLowerCase();
   if (/kit|fabric|esquema|bundle/.test(type)) return true;
+  const name = fold(asString(rec.name) || asString(rec.description) || asString(rec.detalle) || "");
+  if (/pc elit|esquema de armado|kit de fabric/.test(name)) return true;
   return nestedItemList(rec).length > 0;
 }
 
+/** Alícuota argentina típica: 0 / 10,5 / 21 (a veces 0.105 / 0.21). El resto es monto. */
+function looksLikeVatRate(n: number): boolean {
+  if (!Number.isFinite(n) || n < 0 || n > 27) return false;
+  const p = n > 0 && n <= 1 ? n * 100 : n;
+  return Math.abs(p) <= 0.05 || Math.abs(p - 10.5) <= 0.15 || Math.abs(p - 21) <= 0.15;
+}
+
+function vatPoints(n: number): number {
+  const p = n > 0 && n <= 1 ? n * 100 : n;
+  if (Math.abs(p) <= 0.05) return 0;
+  if (Math.abs(p - 10.5) <= 0.15) return 10.5;
+  if (Math.abs(p - 21) <= 0.15) return 21;
+  return p;
+}
+
+function inferVatPercentFromAmount(net: number, vat: number): number | null {
+  if (!(net > EPS) || !(vat > EPS)) return null;
+  const r = vat / net;
+  if (Math.abs(r - 0.105) <= 0.008) return 10.5;
+  if (Math.abs(r - 0.21) <= 0.015) return 21;
+  return null;
+}
+
+function interpretVat(
+  rec: Record<string, unknown>,
+  unitNet: number | null,
+  qty: number | null,
+): { vat: number | null; vatPercent: number | null } {
+  let percent: number | null = null;
+  for (const key of ["vatPercent", "ivaPercent", "alicuotaIva", "vatAliquot", "ivaAliquot", "porcentajeIva", "taxPercent", "iva"]) {
+    const n = asNumber(rec[key]);
+    if (n == null || !looksLikeVatRate(n)) continue;
+    percent = vatPoints(n);
+    break;
+  }
+  const rawVat = asNumber(rec.vat) ?? asNumber(rec.ivaAmount) ?? asNumber(rec.vatAmount);
+  let amount: number | null = null;
+  if (rawVat != null) {
+    if (percent == null && looksLikeVatRate(rawVat)) percent = vatPoints(rawVat);
+    else if (!looksLikeVatRate(rawVat)) amount = rawVat;
+  }
+  const ivaRaw = asNumber(rec.iva);
+  if (percent == null && amount == null && ivaRaw != null && !looksLikeVatRate(ivaRaw)) {
+    amount = ivaRaw;
+  }
+  const q = qty != null && qty > 0 ? qty : 1;
+  const lineNet = (unitNet ?? 0) * q;
+  if (percent != null && amount == null && lineNet > EPS) amount = round2(lineNet * (percent / 100));
+  if (percent == null && amount != null) percent = inferVatPercentFromAmount(lineNet, amount);
+  return { vat: amount, vatPercent: percent };
+}
+
 function isBareComponent(item: ElitRscOrderItem): boolean {
-  if (item.kit) return false;
+  if (item.kit || isShippingLine(item)) return false;
   const price = item.price ?? 0;
   const total = item.total ?? item.net ?? 0;
-  return price <= 0.005 && total <= 0.005 && Boolean(item.name || item.code);
+  return price <= EPS && total <= EPS && Boolean(item.name || item.code);
+}
+
+/**
+ * Piezas del esquema que Elit manda como líneas sueltas CON precio de lista.
+ * CPU / fuente / gabinete / video en cantidad 1: si las sumáramos, el neto
+ * no cierra con el total sin imp. de la nota.
+ */
+function looksLikeElitKitInternal(item: ElitRscOrderItem): boolean {
+  if (item.kit || isShippingLine(item)) return false;
+  if (item.parentCode) return true;
+  const q = item.quantity != null && item.quantity > 0 ? item.quantity : 1;
+  if (q > 1.001) return false;
+  return /procesador|\bryzen\b|intel\s*core|\bcpu\b|fuente|power supply|\bpsu\b|gabinete|placa de video|geforce|radeon/.test(
+    itemBlob(item),
+  );
 }
 
 function mapItem(row: unknown): ElitRscOrderItem {
@@ -191,21 +286,36 @@ function mapItem(row: unknown): ElitRscOrderItem {
   const code = asString(rec.code) || asString(rec.productCode) || asString(rec.alfaCode);
   const nested = nestedItemList(rec).map(mapItem);
   const kit = looksLikeElitKit(rec, code) || nested.length > 0;
+  const quantity = asNumber(rec.quantity) ?? asNumber(rec.qty) ?? null;
+  const price = asNumber(rec.price) ?? null;
+  const { vat, vatPercent } = interpretVat(rec, price, quantity);
   return {
     code,
-    alfaCode: asString(rec.alfaCode),
+    alfaCode: asString(rec.alfaCode) || asString(rec.codigoAlfa),
     productCode: asString(rec.productCode),
     name: asString(rec.name) || asString(rec.description) || asString(rec.detalle),
-    quantity: asNumber(rec.quantity) ?? asNumber(rec.qty) ?? null,
-    price: asNumber(rec.price) ?? null,
+    quantity,
+    price,
     net: asNumber(rec.net) ?? null,
-    vat: asNumber(rec.vat) ?? null,
+    vat,
+    vatPercent,
     internalTax: asNumber(rec.internalTax) ?? null,
     perceptions: asNumber(rec.perceptions) ?? null,
     total: asNumber(rec.total) ?? null,
+    parentCode:
+      asString(rec.parentCode) ||
+      asString(rec.codigoPadre) ||
+      asString(rec.kitCode) ||
+      asString(rec.parent),
     kit: kit || undefined,
     children: nested.length > 0 ? nested : undefined,
   };
+}
+
+function appendChild(kit: ElitRscOrderItem, child: ElitRscOrderItem): void {
+  const kids = kit.children ?? [];
+  if (child.code && kids.some((c) => c.code && c.code === child.code)) return;
+  kit.children = [...kids, { ...child, kit: undefined }];
 }
 
 function groupKitFollowers(items: ElitRscOrderItem[]): ElitRscOrderItem[] {
@@ -213,21 +323,93 @@ function groupKitFollowers(items: ElitRscOrderItem[]): ElitRscOrderItem[] {
   for (const it of items) {
     const prev = out[out.length - 1];
     if (prev?.kit && isBareComponent(it)) {
-      const kids = prev.children ?? [];
-      if (!it.code || !kids.some((c) => c.code && c.code === it.code)) {
-        prev.children = [...kids, { ...it, kit: undefined }];
-        continue;
-      }
+      appendChild(prev, it);
+      continue;
     }
     out.push({ ...it, children: it.children ? [...it.children] : it.children });
   }
   return out;
 }
 
-function mapItems(raw: unknown): ElitRscOrderItem[] | undefined {
+function resolveParentKit(item: ElitRscOrderItem, kits: ElitRscOrderItem[]): ElitRscOrderItem | undefined {
+  if (item.parentCode) {
+    const parent = kits.find(
+      (k) =>
+        k.code === item.parentCode ||
+        k.alfaCode === item.parentCode ||
+        k.productCode === item.parentCode,
+    );
+    if (parent) return parent;
+  }
+  if (kits.length === 1 && looksLikeElitKitInternal(item)) return kits[0];
+  return undefined;
+}
+
+/** CPU/fuente con precio de lista que Elit dejó sueltos: van debajo del kit, sin sumar. */
+function attachKitInternals(items: ElitRscOrderItem[]): ElitRscOrderItem[] {
+  const kits = items.filter((i) => i.kit);
+  if (kits.length === 0) return items;
+  const used = new Set<ElitRscOrderItem>();
+  for (const it of items) {
+    if (it.kit) continue;
+    const kit = resolveParentKit(it, kits);
+    if (!kit) continue;
+    appendChild(kit, it);
+    used.add(it);
+  }
+  if (used.size === 0) return items;
+  return items.filter((it) => it.kit || !used.has(it));
+}
+
+/** Neto de lista (cant × unitario). Nunca `total`: en Elit suele ir con IVA/IIBB. */
+function lineListNet(item: ElitRscOrderItem): number {
+  if (item.kit) {
+    if ((item.net ?? 0) > EPS) return item.net as number;
+    if ((item.price ?? 0) <= EPS && (item.total ?? 0) > EPS) return item.total as number;
+    return 0;
+  }
+  const q = item.quantity != null && item.quantity > 0 ? item.quantity : 1;
+  const unit = item.price ?? 0;
+  if (unit > EPS) return round2(unit * q);
+  if ((item.net ?? 0) > EPS) return item.net as number;
+  return 0;
+}
+
+function fillKitNetFromSummary(items: ElitRscOrderItem[], summaryNet: number | null | undefined): void {
+  const kits = items.filter((i) => i.kit);
+  if (kits.length !== 1) return;
+  const kit = kits[0];
+  const already = lineListNet(kit);
+  if (already > EPS) return;
+  if (summaryNet == null || !(summaryNet > EPS)) return;
+  const paid = items.reduce((sum, it) => (it === kit ? sum : sum + lineListNet(it)), 0);
+  const remaining = round2(summaryNet - paid);
+  if (remaining > EPS) {
+    kit.net = remaining;
+    if ((kit.total ?? 0) <= EPS) kit.total = remaining;
+  }
+}
+
+function inferMissingVatPercents(items: ElitRscOrderItem[]): void {
+  for (const it of items) {
+    if (it.children) inferMissingVatPercents(it.children);
+    if (it.vatPercent == null) {
+      it.vatPercent = inferVatPercentFromAmount(lineListNet(it), it.vat ?? 0);
+    }
+    if (it.vatPercent == null && it.children && it.children.length > 0) {
+      const rates = it.children.map((c) => c.vatPercent).filter((p): p is number => p != null);
+      if (rates.length > 0 && rates.every((p) => p === rates[0])) it.vatPercent = rates[0];
+    }
+  }
+}
+
+function mapItems(raw: unknown, summaryNet?: number | null): ElitRscOrderItem[] | undefined {
   const list = unwrapList(raw);
   if (list.length === 0) return undefined;
-  return groupKitFollowers(list.map(mapItem));
+  const grouped = attachKitInternals(groupKitFollowers(list.map(mapItem)));
+  fillKitNetFromSummary(grouped, summaryNet);
+  inferMissingVatPercents(grouped);
+  return grouped;
 }
 
 export function mapElitSaleNote(rec: Record<string, unknown>): ElitRscOrder {
@@ -265,7 +447,7 @@ export function mapElitSaleNote(rec: Record<string, unknown>): ElitRscOrder {
     trackingSupplier: asString(rec.trackingSupplier),
     trackingStatus: asString(rec.trackingStatus),
     trackingStatusDate: asString(rec.trackingStatusDate),
-    items: mapItems(rec.items),
+    items: mapItems(rec.items, summary?.net ?? summary?.subtotal),
     summary,
   };
 }

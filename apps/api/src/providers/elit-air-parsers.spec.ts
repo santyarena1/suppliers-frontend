@@ -77,6 +77,53 @@ describe("elit-rsc.parser", () => {
       expect.objectContaining({ code: "CMFUEMPX8505AWO", quantity: 1 }),
       expect.objectContaining({ code: "AMDPRO5700G8COR", quantity: 1 }),
     ]);
+    expect(kit?.vatPercent).toBe(10.5);
+  });
+
+  it("anida piezas del esquema con precio de lista y deja el neto del kit para que las líneas cierren", () => {
+    const payload = {
+      form: "NOTA DE VENTA",
+      number: "9900748655",
+      date: "02/09/2026",
+      currency: 2,
+      summary: { net: 751.09, vat: 91.41, perceptions: 22.53, total: 865.04 },
+      items: [
+        { code: "7078", name: "Transporte OTI", quantity: 1, price: 0, total: 0 },
+        { code: "14877", name: "Procesador AMD Ryzen 7 5700G 3.80GHz", quantity: 1, price: 185.56, total: 209.99, iva: 10.5 },
+        { code: "15017", name: "Pen Drive KINGSTON DataTraveler 70 64GB", quantity: 2, price: 8.42, total: 18.86, iva: 10.5 },
+        { code: "16012", name: "Pen Drive KINGSTON Exodia M 128GB", quantity: 1, price: 13.32, total: 16.52, iva: 21 },
+        { code: "16713", name: "Motherboard GIGABYTE A520M K V2 AM4", quantity: 5, price: 40.9, total: 210.02, iva: 10.5 },
+        { code: "17778", name: "Tarjeta microSDXC Lexar 633x 64GB", quantity: 4, price: 13.44, total: 55.57, iva: 10.5 },
+        { code: "800420", alfaCode: "ESFABRIC_20", name: "PC ELIT ATENEA", quantity: 1, price: 0, total: 0 },
+        { code: "18331", name: "Tarjeta microSDXC Lexar 633x 32GB", quantity: 5, price: 9.03, total: 46.37, iva: 10.5 },
+        { code: "19104", name: "Pen Drive KINGSTON Exodia M 128GB", quantity: 2, price: 13.95, total: 31.25, iva: 10.5 },
+        { code: "19972", name: "Fuente Cooler Master Elite Gold 850W", quantity: 1, price: 73.59, total: 83.27, iva: 10.5 },
+        { code: "20351", name: "Pen Drive ADATA UV240 32GB USB 2.0 WHITE", quantity: 3, price: 7.07, total: 22.9, iva: 21 },
+        { code: "20352", name: "Pen Drive ADATA UV240 32GB USB 2.0 RED", quantity: 3, price: 7.07, total: 22.9, iva: 21 },
+        { code: "20537", name: "Pen Drive BIWIN UD30 16GB USB 2.0", quantity: 3, price: 6.32, total: 20.48, iva: 21 },
+        { code: "18215", name: "Fuente GIGABYTE P550S 550W 80 PLUS Silver", quantity: 1, price: 36.99, total: 41.86, iva: 10.5 },
+      ],
+    };
+    const order = parseElitPedidosRsc(`0:${JSON.stringify(payload)}`)[0];
+    const kit = order.items?.find((it) => it.kit);
+    expect(kit).toMatchObject({
+      code: "800420",
+      alfaCode: "ESFABRIC_20",
+      name: "PC ELIT ATENEA",
+      kit: true,
+    });
+    expect(kit?.net).toBeCloseTo(328.24, 2);
+    expect(kit?.children?.map((c) => c.code)).toEqual(["14877", "19972", "18215"]);
+    expect(order.items?.some((it) => it.code === "14877")).toBe(false);
+    expect(order.items?.find((it) => it.code === "16713")?.quantity).toBe(5);
+    const displayedNet = (order.items ?? []).reduce((sum, it) => {
+      if (it.kit) return sum + (it.net ?? 0);
+      const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+      return sum + Math.round((it.price ?? 0) * q * 100) / 100;
+    }, 0);
+    expect(displayedNet).toBeCloseTo(751.09, 2);
+    expect(kit?.vatPercent).toBe(10.5);
+    expect(order.items?.find((it) => it.code === "16012")?.vatPercent).toBe(21);
   });
 
   it("mapea informes de pago y opciones sin inventar campos", () => {

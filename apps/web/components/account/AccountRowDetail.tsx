@@ -12,6 +12,8 @@ export type AccountDetailItem = {
   qty?: string | number;
   price?: string | number;
   total?: string | number;
+  /** Alícuota informada, p. ej. "10,5%" / "21%". Si algún ítem la trae, se muestra la columna. */
+  iva?: string;
   indent?: boolean;
   badge?: string;
 };
@@ -80,6 +82,8 @@ export default function AccountRowDetail({
 
   if (!open) return null;
 
+  const showIva = (items ?? []).some((it) => it.iva != null);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <button type="button" aria-label="Cerrar" className="absolute inset-0 bg-black/70" onClick={onClose} />
@@ -87,7 +91,7 @@ export default function AccountRowDetail({
         role="dialog"
         aria-modal="true"
         aria-labelledby="account-row-title"
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        className={`relative w-full ${showIva ? "max-w-3xl" : "max-w-2xl"} max-h-[90vh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]`}
       >
         <div className="px-5 py-4 border-b border-surface-800 flex items-start justify-between gap-3 sticky top-0 bg-surface-950">
           <h2 id="account-row-title" className="text-base font-semibold text-white tracking-tight">{title}</h2>
@@ -113,9 +117,10 @@ export default function AccountRowDetail({
               <table className="w-full text-xs table-fixed">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                    <th className="text-left font-semibold pb-1.5 pr-2 w-[52%]">Producto</th>
-                    <th className="text-right font-semibold pb-1.5 w-[12%]">Cant.</th>
-                    <th className="text-right font-semibold pb-1.5 pl-2 w-[18%]">P. unit.</th>
+                    <th className={`text-left font-semibold pb-1.5 pr-2 ${showIva ? "w-[44%]" : "w-[52%]"}`}>Producto</th>
+                    <th className="text-right font-semibold pb-1.5 w-[10%]">Cant.</th>
+                    <th className="text-right font-semibold pb-1.5 pl-2 w-[16%]">P. unit.</th>
+                    {showIva ? <th className="text-right font-semibold pb-1.5 pl-2 w-[12%]">IVA</th> : null}
                     <th className="text-right font-semibold pb-1.5 pl-2 w-[18%]">Total</th>
                   </tr>
                 </thead>
@@ -137,6 +142,9 @@ export default function AccountRowDetail({
                       </td>
                       <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{formatQty(it.qty)}</td>
                       <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{formatMoneyCell(it.price)}</td>
+                      {showIva ? (
+                        <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{it.iva || ""}</td>
+                      ) : null}
                       <td className={`py-1.5 text-right tabular-nums whitespace-nowrap pl-2 ${it.indent ? "text-surface-500" : "text-surface-200"}`}>{formatMoneyCell(it.total)}</td>
                     </tr>
                     );

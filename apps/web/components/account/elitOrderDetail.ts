@@ -4,9 +4,14 @@ import {
   emptyIvaAcc,
   lineVatAmount,
   mergeSplit,
+  round2,
   taxBreakdownLines,
 } from "@/components/account/accountTaxBreakdown";
 import type { ElitSaleNote } from "@/lib/api";
+
+type ElitItem = NonNullable<ElitSaleNote["items"]>[number];
+
+const EPS = 0.005;
 
 function money(n: number | null | undefined, currency?: string): string {
   if (n == null || !Number.isFinite(n)) return "";
@@ -25,8 +30,121 @@ function qty(n: number | null | undefined): string {
   return n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+function fold(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function blob(it: ElitItem): string {
+  return fold(`${it.name || ""} ${it.code || ""} ${it.alfaCode || ""}`);
+}
+
 function hasInvoice(o: ElitSaleNote): boolean {
   return Boolean(o.invoiceNumber?.trim());
+}
+
+function isElitKitCode(code: string | undefined): boolean {
+  return /ESFABRIC|^ES[A-Z]+_/.test((code || "").toUpperCase());
+}
+
+function isShippingLine(it: ElitItem): boolean {
+  return /transporte|flete|\benvio\b/.test(blob(it));
+}
+
+function looksLikeKitLine(it: ElitItem): boolean {
+  if (it.kit) return true;
+  if (isElitKitCode(it.code) || isElitKitCode(it.alfaCode)) return true;
+  return /pc elit|esquema de armado|kit de fabric/.test(blob(it));
+}
+
+function looksLikeKitInternal(it: ElitItem): boolean {
+  if (looksLikeKitLine(it) || isShippingLine(it)) return false;
+  if (it.parentCode) return true;
+  const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+  if (q > 1.001) return false;
+  return /procesador|\bryzen\b|intel\s*core|\bcpu\b|fuente|power supply|\bpsu\b|gabinete|placa de video|geforce|radeon/.test(
+    blob(it),
+  );
+}
+
+/** Neto sin impuestos de la línea. Nunca `total`: en Elit trae IVA/IIBB y no cierra con el pie. */
+function elitLineNet(it: ElitItem): number {
+  if (looksLikeKitLine(it)) {
+    if ((it.net ?? 0) > EPS) return it.net as number;
+    const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+    if ((it.price ?? 0) > EPS) return round2((it.price as number) * q);
+    return 0;
+  }
+  const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+  const unit = it.price ?? it.net ?? 0;
+  if (unit > EPS) return round2(unit * q);
+  return 0;
+}
+
+function kitUnit(it: ElitItem): number | null {
+  const line = elitLineNet(it);
+  const priced = it.price ?? 0;
+  if (line <= EPS) return priced > EPS ? priced : 0;
+  if (priced > EPS) return priced;
+  const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+  return round2(line / q);
+}
+
+function vatPoints(raw: number | null | undefined): number | null {
+  if (raw == null || !Number.isFinite(raw) || raw === 0) return raw === 0 ? 0 : null;
+  const p = raw > 0 && raw <= 1 ? raw * 100 : raw;
+  if (Math.abs(p - 10.5) <= 0.15) return 10.5;
+  if (Math.abs(p - 21) <= 0.15) return 21;
+  if (p > 0 && p <= 27) return p;
+  return null;
+}
+
+function lineVatPercent(it: ElitItem, lineNet: number): number | null {
+  const fromField = vatPoints(it.vatPercent);
+  if (fromField != null) return fromField;
+  const vat = it.vat ?? 0;
+  if (!(vat > EPS) || !(lineNet > EPS)) return null;
+  const r = vat / lineNet;
+  if (Math.abs(r - 0.105) <= 0.008) return 10.5;
+  if (Math.abs(r - 0.21) <= 0.015) return 21;
+  return null;
+}
+
+function formatIvaPercent(p: number | null): string {
+  if (p == null) return "";
+  if (Math.abs(p) < 0.05) return "0%";
+  return `${p.toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`;
+}
+
+function lineVat(it: ElitItem, lineNet: number, q: number): number {
+  const pct = lineVatPercent(it, lineNet);
+  if (pct != null) return round2(lineNet * (pct / 100));
+  return lineVatAmount(it.vat ?? 0, q, lineNet);
+}
+
+/**
+ * Si Elit mandó el esquema como SKU numérico (800420) y las piezas con precio
+ * de lista, las anidamos y le asignamos al kit el resto del neto de la nota.
+ */
+function groupedElitItems(o: ElitSaleNote): ElitItem[] {
+  const src = [...(o.items ?? [])];
+  const kitIdx = src.findIndex(looksLikeKitLine);
+  if (kitIdx < 0) return src;
+  let items = src.map((it) => ({ ...it, children: it.children ? [...it.children] : it.children }));
+  const kit = items[kitIdx];
+  const internals = items.filter((it, i) => i !== kitIdx && looksLikeKitInternal(it) && !(kit.children ?? []).some((c) => c.code && c.code === it.code));
+  if (internals.length > 0) {
+    kit.children = [...(kit.children ?? []), ...internals.map((it) => ({ ...it, kit: undefined }))];
+    items = items.filter((it, i) => i === kitIdx || !looksLikeKitInternal(it));
+  }
+  if (elitLineNet(kit) <= EPS) {
+    const summaryNet = o.summary?.net ?? o.summary?.subtotal;
+    if (summaryNet != null && summaryNet > EPS) {
+      const paid = items.reduce((sum, it) => (it === kit ? sum : sum + elitLineNet(it)), 0);
+      const remaining = round2(summaryNet - paid);
+      if (remaining > EPS) kit.net = remaining;
+    }
+  }
+  return items;
 }
 
 export function elitSaleNoteHeaderLines(o: ElitSaleNote): AccountDetailLine[] {
@@ -48,25 +166,29 @@ export function elitSaleNoteHeaderLines(o: ElitSaleNote): AccountDetailLine[] {
 
 export function elitSaleNoteItems(o: ElitSaleNote): AccountDetailItem[] {
   const rows: AccountDetailItem[] = [];
-  for (const it of o.items ?? []) {
-    const kit = Boolean(it.kit) || looksLikeKitLine(it);
-    const lineTotal = it.total ?? it.net ?? 0;
-    const unit = schemeDisplayUnit(it);
+  for (const it of groupedElitItems(o)) {
+    const kit = looksLikeKitLine(it);
+    const lineNet = elitLineNet(it);
+    const unit = kit ? kitUnit(it) : (it.price ?? it.net ?? null);
+    const iva = formatIvaPercent(lineVatPercent(it, lineNet));
     rows.push({
       code: it.code,
       name: it.name || it.code || "Ítem",
       qty: kit && (it.quantity == null || it.quantity <= 0) ? "" : qty(it.quantity ?? null),
-      price: unit != null ? money(unit, o.currency) : "",
-      total: lineTotal > 0.005 ? money(lineTotal, o.currency) : money(it.total, o.currency),
+      price: unit != null && unit > EPS ? money(unit, o.currency) : money(unit === 0 ? 0 : null, o.currency),
+      total: money(lineNet, o.currency),
+      iva,
       badge: kit ? "Esquema" : undefined,
     });
     for (const child of it.children ?? []) {
+      const childNet = elitLineNet(child);
       rows.push({
         code: child.code,
         name: child.name || child.code || "Componente",
         qty: qty(child.quantity ?? null),
         price: "",
         total: "",
+        iva: formatIvaPercent(lineVatPercent(child, childNet)),
         indent: true,
       });
     }
@@ -74,33 +196,9 @@ export function elitSaleNoteItems(o: ElitSaleNote): AccountDetailItem[] {
   return rows;
 }
 
-function looksLikeKitLine(it: NonNullable<ElitSaleNote["items"]>[number]): boolean {
-  const code = (it.code || "").toUpperCase();
-  if (/ESFABRIC|^ES[A-Z]*_/.test(code)) return true;
-  return (it.price ?? 0) <= 0.005 && (it.total ?? it.net ?? 0) > 0.005;
-}
-
-/** Si Elit manda unitario 0 y el total del kit, el total es el precio final del esquema. */
-function schemeDisplayUnit(it: NonNullable<ElitSaleNote["items"]>[number]): number | null {
-  if ((it.price ?? 0) > 0.005) return it.price ?? null;
-  const total = it.total ?? it.net ?? 0;
-  if (total <= 0.005) return it.price ?? null;
-  const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
-  return total / q;
-}
-
-function elitLineNet(it: NonNullable<ElitSaleNote["items"]>[number]): number {
-  const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
-  const fromUnit = (it.net ?? it.price ?? 0) * q;
-  const total = it.total ?? 0;
-  if (fromUnit < 0.005 && total > 0.005) return total;
-  if (looksLikeKitLine(it) && total > 0.005) return total;
-  return fromUnit;
-}
-
 export function elitSaleNoteNote(o: ElitSaleNote): string | undefined {
-  if (!(o.items ?? []).some((it) => it.kit || looksLikeKitLine(it))) return undefined;
-  return "Elit armó el esquema como un kit: el importe de esa línea es el precio final real, no el de lista. Las piezas van debajo, sin precio.";
+  if (!groupedElitItems(o).some(looksLikeKitLine)) return undefined;
+  return "El esquema se cobra como un kit: esa línea es el precio final sin impuestos. Las piezas van debajo, sin importe, para no sumarlas dos veces.";
 }
 
 export function elitSaleNoteTotals(o: ElitSaleNote): AccountDetailLine[] {
@@ -109,18 +207,23 @@ export function elitSaleNoteTotals(o: ElitSaleNote): AccountDetailLine[] {
   let itemNet = 0;
   let itemPerc = 0;
   let itemIntern = 0;
-  for (const it of o.items ?? []) {
+  for (const it of groupedElitItems(o)) {
     const lineNet = elitLineNet(it);
     const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
     itemNet += lineNet;
-    addIva(acc, lineNet, lineVatAmount(it.vat ?? 0, q, lineNet));
-    itemPerc += (it.perceptions ?? 0) * (looksLikeKitLine(it) ? 1 : q);
-    itemIntern += (it.internalTax ?? 0) * (looksLikeKitLine(it) ? 1 : q);
+    addIva(acc, lineNet, lineVat(it, lineNet, q), lineVatPercent(it, lineNet));
+    itemPerc += it.perceptions ?? 0;
+    itemIntern += it.internalTax ?? 0;
   }
   const net = s?.net ?? s?.subtotal ?? itemNet;
+  const split = mergeSplit(acc, net, s?.vat ?? null);
+  const got = split.iva105 + split.iva21 + split.ivaOther;
+  if (s?.vat != null && s.vat > got + 0.05) {
+    split.ivaOther += s.vat - got;
+  }
   return taxBreakdownLines({
     net,
-    ...mergeSplit(acc, net, s?.vat ?? null),
+    ...split,
     perceptions: s?.perceptions ?? itemPerc,
     internalTaxes: s?.internalTaxes ?? itemIntern,
     shipping: s?.shipping,
