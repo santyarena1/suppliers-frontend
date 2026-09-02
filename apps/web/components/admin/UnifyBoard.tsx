@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultUnifyName, selectableUnifyNames, uniquePreserve } from "@/lib/unify-names";
 import {
   catalogEnrichmentApi,
@@ -43,8 +43,15 @@ function rowKey(r: { provider: string; rawKey: string }) {
   return `${r.provider}:${r.rawKey}`;
 }
 
-function clusterFingerprint(c: CatalogMergeCluster) {
+type ClusterMember = CatalogMergeCluster["members"][number];
+type EditableCluster = CatalogMergeCluster & { id: string };
+
+function clusterFingerprint(c: { members: ClusterMember[] }) {
   return `cluster:${c.members.map((m) => rowKey(m)).sort().join("|")}`;
+}
+
+function withClusterId(c: CatalogMergeCluster): EditableCluster {
+  return { ...c, id: clusterFingerprint(c) };
 }
 
 function clusterNameOptions(c: CatalogMergeCluster) {
@@ -85,7 +92,7 @@ export default function UnifyBoard({
   const [expanded, setExpanded] = useState<string | null>(null);
   const [products, setProducts] = useState<Record<string, CatalogPreviewProduct[]>>({});
   const [visibleCount, setVisibleCount] = useState(PAGE);
-  const [clusters, setClusters] = useState<CatalogMergeCluster[]>([]);
+  const [clusters, setClusters] = useState<EditableCluster[]>([]);
   const [clusterPicks, setClusterPicks] = useState<Record<string, string>>({});
   const [aiMeta, setAiMeta] = useState<{ usedAi: boolean; total: number; hasMore: boolean; offset: number } | null>(
     null
@@ -197,8 +204,13 @@ export default function UnifyBoard({
           ...c,
           members: c.members.filter((m) => unlinkedKeys.has(rowKey(m))),
         }))
-        .filter((c) => c.members.length >= 2),
+        .filter((c) => c.members.length >= 1),
     [clusters, unlinkedKeys]
+  );
+
+  const addCandidates = useMemo(
+    () => (board?.rows ?? []).filter((r) => !r.termId),
+    [board]
   );
 
   const existingGroups = useMemo(
@@ -223,13 +235,13 @@ export default function UnifyBoard({
         excludeKeys,
         offset,
       });
-      const nextClusters = nextPage ? [...clusters, ...res.data.clusters] : res.data.clusters;
+      const incoming = res.data.clusters.map(withClusterId);
+      const nextClusters = nextPage ? [...clusters, ...incoming] : incoming;
       setClusters(nextClusters);
       setClusterPicks((prev) => {
         const next = nextPage ? { ...prev } : {};
-        for (const c of res.data.clusters) {
-          const fp = clusterFingerprint(c);
-          if (!next[fp]) next[fp] = defaultClusterName(c);
+        for (const c of incoming) {
+          if (!next[c.id]) next[c.id] = defaultClusterName(c);
         }
         return next;
       });
@@ -288,11 +300,11 @@ export default function UnifyBoard({
       .catch(() => setProducts((p) => ({ ...p, [`term:${termId}`]: [] })));
   }
 
-  async function applyCluster(c: CatalogMergeCluster) {
-    const fp = clusterFingerprint(c);
-    const label = (clusterPicks[fp] || defaultClusterName(c)).trim();
+  async function applyCluster(c: EditableCluster) {
+    if (c.members.length < 2) return showToast(`Elegí al menos dos ${nounPlural} para unificar`);
+    const label = (clusterPicks[c.id] || defaultClusterName(c)).trim();
     if (!label) return showToast("Elegí el nombre que queda", false);
-    setBusy(fp);
+    setBusy(c.id);
     try {
       const res = await catalogEnrichmentApi.link({
         kind,
@@ -301,7 +313,7 @@ export default function UnifyBoard({
         source: "AI",
       });
       showToast(`Quedó «${label}» con ${c.members.length} nombres`);
-      setClusters((prev) => prev.filter((x) => clusterFingerprint(x) !== fp));
+      setClusters((prev) => prev.filter((x) => x.id !== c.id));
       await onReload();
       goToUnified(res.data.term.id);
     } catch {
@@ -312,15 +324,14 @@ export default function UnifyBoard({
   }
 
   async function applyAllHighConfidence() {
-    const batch = liveClusters.filter((c) => c.confidence === "alta");
+    const batch = liveClusters.filter((c) => c.confidence === "alta" && c.members.length >= 2);
     if (batch.length === 0) return showToast("No hay sugerencias de alta confianza");
     setBusy("ai-batch");
     let ok = 0;
     let lastTermId: string | null = null;
     try {
       for (const c of batch) {
-        const fp = clusterFingerprint(c);
-        const label = (clusterPicks[fp] || defaultClusterName(c)).trim();
+        const label = (clusterPicks[c.id] || defaultClusterName(c)).trim();
         const res = await catalogEnrichmentApi.link({
           kind,
           items: c.members.map((m) => ({ provider: m.provider, rawKey: m.rawKey })),
@@ -342,9 +353,39 @@ export default function UnifyBoard({
     }
   }
 
-  function dismissCluster(c: CatalogMergeCluster) {
-    setDismissed((d) => [...d, clusterFingerprint(c)]);
-    setClusters((prev) => prev.filter((x) => clusterFingerprint(x) !== clusterFingerprint(c)));
+  function dismissCluster(c: EditableCluster) {
+    setDismissed((d) => [...d, c.id]);
+    setClusters((prev) => prev.filter((x) => x.id !== c.id));
+  }
+
+  function dropClusterMember(c: EditableCluster, key: string) {
+    setClusters((prev) =>
+      prev
+        .map((x) =>
+          x.id === c.id ? { ...x, members: x.members.filter((m) => rowKey(m) !== key) } : x
+        )
+        .filter((x) => x.members.length > 0)
+    );
+    setClusterPicks((prev) => {
+      const current = prev[c.id];
+      const remaining = c.members.filter((m) => rowKey(m) !== key);
+      if (!current || remaining.some((m) => m.rawKey === current)) return prev;
+      return { ...prev, [c.id]: defaultClusterName({ ...c, members: remaining, label: c.label }) };
+    });
+  }
+
+  function addClusterMember(c: EditableCluster, row: CatalogBoardRow) {
+    const key = rowKey(row);
+    if (c.members.some((m) => rowKey(m) === key)) return;
+    const member: ClusterMember = { provider: row.provider, rawKey: row.rawKey, count: row.count };
+    setClusters((prev) =>
+      prev
+        .map((x) => {
+          if (x.id === c.id) return { ...x, members: [...x.members, member] };
+          return { ...x, members: x.members.filter((m) => rowKey(m) !== key) };
+        })
+        .filter((x) => x.members.length > 0)
+    );
   }
 
   function toggleSelect(r: CatalogBoardRow) {
@@ -545,6 +586,8 @@ export default function UnifyBoard({
               {aiMeta
                 ? `${aiMeta.total} grupo(s) · ${aiMeta.usedAi ? "con IA" : "detección automática"} · ${unlinkedCount} sin unificar`
                 : "Buscando parecidos…"}
+              {" · "}
+              Tocá un nombre para sacarlo si no va. Con la lupa buscás otra {noun} para sumar.
             </p>
           </div>
           <div className="flex gap-2">
@@ -577,7 +620,7 @@ export default function UnifyBoard({
               type="button"
               disabled={busy === `ai-${kind}`}
               onClick={() => {
-                const extra = clusters.map(clusterFingerprint);
+                const extra = clusters.map((c) => c.id);
                 setDismissed((d) => [...d, ...extra]);
                 void loadSuggestions(false, extra);
               }}
@@ -605,39 +648,50 @@ export default function UnifyBoard({
             </p>
           </div>
         ) : (
-          <ul className="divide-y divide-surface-800/80 max-h-[380px] overflow-y-auto">
+          <ul className="divide-y divide-surface-800/80 max-h-[480px] overflow-y-auto">
             {liveClusters.map((c) => {
-              const fp = clusterFingerprint(c);
               const total = c.members.reduce((s, m) => s + m.count, 0);
               const options = clusterNameOptions(c);
-              const pick = clusterPicks[fp] ?? defaultClusterName(c);
+              const pick = clusterPicks[c.id] ?? defaultClusterName(c);
+              const inGroup = new Set(c.members.map((m) => rowKey(m)));
+              const searchPool = addCandidates.filter((r) => !inGroup.has(rowKey(r)));
               return (
-                <li key={fp} className="px-4 py-3 flex flex-wrap gap-3 items-start justify-between hover:bg-surface-900/40">
+                <li key={c.id} className="px-4 py-3 flex flex-wrap gap-3 items-start justify-between hover:bg-surface-900/40">
                   <div className="min-w-0 flex-1 space-y-1.5">
                     <p className="text-sm text-white">
                       Parecen la misma {noun}
                       <span className="text-surface-500 text-xs ml-2 tabular-nums">
-                        {c.members.length} nombres · {total} prod.
+                        {c.members.length} nombre{c.members.length === 1 ? "" : "s"} · {total} prod.
                         {c.confidence ? ` · ${c.confidence}` : ""}
                       </span>
                     </p>
                     {c.reason && <p className="text-[11px] text-surface-500">{c.reason}</p>}
                     <div className="flex flex-wrap gap-1.5">
                       {c.members.map((m) => (
-                        <span
+                        <button
                           key={rowKey(m)}
-                          className="text-[11px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-300"
+                          type="button"
+                          onClick={() => dropClusterMember(c, rowKey(m))}
+                          title="Sacar: no va con este grupo"
+                          className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-300 hover:bg-red-500/20 hover:text-red-200"
                         >
                           {m.rawKey}
                           <span className="text-surface-500"> · {providerName(m.provider)}</span>
-                        </span>
+                          <X className="w-3 h-3 text-surface-500" />
+                        </button>
                       ))}
                     </div>
+                    <ClusterAddSearch
+                      noun={noun}
+                      nounPlural={nounPlural}
+                      candidates={searchPool}
+                      onAdd={(row) => addClusterMember(c, row)}
+                    />
                     <label className="flex flex-wrap items-center gap-2 text-xs text-surface-400">
                       Nombre que queda
                       <select
-                        value={pick}
-                        onChange={(e) => setClusterPicks((prev) => ({ ...prev, [fp]: e.target.value }))}
+                        value={options.includes(pick) ? pick : options[0] ?? ""}
+                        onChange={(e) => setClusterPicks((prev) => ({ ...prev, [c.id]: e.target.value }))}
                         className="rounded-lg border border-surface-700 bg-surface-900 px-2 py-1 text-xs text-white"
                       >
                         {options.map((name) => (
@@ -658,11 +712,12 @@ export default function UnifyBoard({
                     </button>
                     <button
                       type="button"
-                      disabled={busy === fp}
+                      disabled={busy === c.id || c.members.length < 2}
                       onClick={() => void applyCluster(c)}
+                      title={c.members.length < 2 ? `Sumá al menos otra ${noun} con la lupa` : undefined}
                       className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
                     >
-                      {busy === fp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      {busy === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                       Unificar
                     </button>
                   </div>
@@ -1014,6 +1069,90 @@ export default function UnifyBoard({
           onClose={() => setMenuTarget(null)}
           onConfirm={confirmSendToMenu}
         />
+      )}
+    </div>
+  );
+}
+
+function ClusterAddSearch({
+  noun,
+  nounPlural,
+  candidates,
+  onAdd,
+}: {
+  noun: string;
+  nounPlural: string;
+  candidates: CatalogBoardRow[];
+  onAdd: (row: CatalogBoardRow) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const query = q.trim().toLowerCase();
+  const hits = useMemo(() => {
+    if (!query) return [];
+    return candidates
+      .filter(
+        (r) =>
+          r.rawKey.toLowerCase().includes(query) ||
+          providerName(r.provider).toLowerCase().includes(query)
+      )
+      .sort((a, b) => {
+        const aStart = a.rawKey.toLowerCase().startsWith(query) ? 0 : 1;
+        const bStart = b.rawKey.toLowerCase().startsWith(query) ? 0 : 1;
+        return aStart - bStart || b.count - a.count || a.rawKey.localeCompare(b.rawKey, "es");
+      })
+      .slice(0, 15);
+  }, [candidates, query]);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  return (
+    <div ref={wrapRef} className="relative max-w-sm">
+      <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-surface-500 pointer-events-none" />
+      <input
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder={`Buscar otra ${noun} para sumar…`}
+        className="w-full rounded-lg border border-surface-700 bg-surface-900 pl-8 pr-3 py-1.5 text-xs text-white"
+      />
+      {open && query.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-56 overflow-y-auto rounded-lg border border-surface-700 bg-surface-950 shadow-xl">
+          {hits.length === 0 ? (
+            <p className="px-2.5 py-2 text-[11px] text-surface-500">
+              No hay {nounPlural} sin unificar que coincidan.
+            </p>
+          ) : (
+            hits.map((r) => (
+              <button
+                key={rowKey(r)}
+                type="button"
+                onClick={() => {
+                  onAdd(r);
+                  setQ("");
+                  setOpen(false);
+                }}
+                className="flex w-full items-baseline justify-between gap-2 text-left px-2.5 py-1.5 text-xs hover:bg-surface-800"
+              >
+                <span className="text-surface-100 truncate">
+                  {r.rawKey}
+                  <span className="text-surface-500"> · {providerName(r.provider)}</span>
+                </span>
+                <span className="text-surface-500 tabular-nums flex-shrink-0">{r.count} prod.</span>
+              </button>
+            ))
+          )}
+        </div>
       )}
     </div>
   );
