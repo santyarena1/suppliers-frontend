@@ -20,6 +20,7 @@ import {
   elitSaleNoteDocs,
   elitSaleNoteHeaderLines,
   elitSaleNoteItems,
+  elitSaleNoteNetMismatch,
   elitSaleNoteNote,
   elitSaleNoteTotals,
 } from "@/components/account/elitOrderDetail";
@@ -101,10 +102,8 @@ export default function ElitAccountPanel() {
       return;
     }
     const number = detail.row.orderNumber;
-    if (!number || (detail.row.items && detail.row.items.length > 0)) {
-      setDetailNote(detail.row);
-      return;
-    }
+    setDetailNote(detail.row);
+    if (!number) return;
     void elitAccountApi.saleNote(number).then((res) => setDetailNote(res.data)).catch(() => setDetailNote(detail.row));
   }, [detail]);
 
@@ -274,6 +273,16 @@ export default function ElitAccountPanel() {
           totals={elitSaleNoteTotals(openOrder)}
           documents={elitSaleNoteDocs(openOrder)}
           note={elitSaleNoteNote(openOrder)}
+          showIvaColumn
+          alert={(() => {
+            const mismatch = elitSaleNoteNetMismatch(openOrder);
+            if (!mismatch) return null;
+            const cur = openOrder.currency === "ARS" ? "ARS" : "USD";
+            return {
+              title: "La suma de la columna Total no cierra con el total sin imp.",
+              detail: `Líneas ${formatAccountSum(mismatch.lineSum, cur)} · Total sin imp. ${formatAccountSum(mismatch.expected, cur)}. Es solo un aviso: no se corrige nada.`,
+            };
+          })()}
           onClose={() => setDetail(null)}
         />
       )}

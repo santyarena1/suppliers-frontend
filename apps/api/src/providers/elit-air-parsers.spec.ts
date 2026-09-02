@@ -1,5 +1,5 @@
 import { elitLoginBody, mapElitCartDetails } from "./elit-web-client";
-import { parseElitCtaRsc, parseElitPaymentOptions, parseElitPaymentsPayload, parseElitPedidosRsc } from "./elit-rsc.parser";
+import { applyCatalogVatPercents, parseElitCtaRsc, parseElitPaymentOptions, parseElitPaymentsPayload, parseElitPedidosRsc } from "./elit-rsc.parser";
 import { parseHtmlTables, parseFileUploadForms, parseSelectOptions, pickBalance } from "./html-table";
 
 describe("elitLoginBody", () => {
@@ -124,6 +124,43 @@ describe("elit-rsc.parser", () => {
     expect(displayedNet).toBeCloseTo(751.09, 2);
     expect(kit?.vatPercent).toBe(10.5);
     expect(order.items?.find((it) => it.code === "16012")?.vatPercent).toBe(21);
+    expect(kit?.children?.find((c) => c.code === "14877")).toMatchObject({
+      price: 185.56,
+      vatPercent: 10.5,
+    });
+  });
+
+  it("lee alícuota de product.iva, alicuota y 21%", () => {
+    const payload = {
+      form: "NOTA DE VENTA",
+      number: "1",
+      summary: { net: 30, total: 36 },
+      items: [
+        { code: "A", name: "Pen 21", quantity: 1, price: 10, product: { iva: 21 } },
+        { code: "B", name: "Pen 10.5", quantity: 1, price: 10, alicuota: "10,5%" },
+        { code: "C", name: "Pen pct", quantity: 1, price: 10, iva: "21%" },
+      ],
+    };
+    const order = parseElitPedidosRsc(`0:${JSON.stringify(payload)}`)[0];
+    expect(order.items?.find((i) => i.code === "A")?.vatPercent).toBe(21);
+    expect(order.items?.find((i) => i.code === "B")?.vatPercent).toBe(10.5);
+    expect(order.items?.find((i) => i.code === "C")?.vatPercent).toBe(21);
+  });
+
+  it("completa vatPercent del catálogo sin pisar el que mandó Elit", () => {
+    const payload = {
+      form: "NOTA DE VENTA",
+      number: "1",
+      summary: { net: 20, total: 24 },
+      items: [
+        { code: "14877", name: "Ryzen", quantity: 1, price: 10 },
+        { code: "16012", name: "Pen", quantity: 1, price: 10, iva: 21 },
+      ],
+    };
+    const order = parseElitPedidosRsc(`0:${JSON.stringify(payload)}`)[0];
+    applyCatalogVatPercents(order.items, { "14877": 10.5, "16012": 10.5 });
+    expect(order.items?.find((i) => i.code === "14877")?.vatPercent).toBe(10.5);
+    expect(order.items?.find((i) => i.code === "16012")?.vatPercent).toBe(21);
   });
 
   it("mapea informes de pago y opciones sin inventar campos", () => {

@@ -2,6 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable, NotFoundException
 import { PrismaService } from "../prisma/prisma.service";
 import { ElitWebClient } from "./elit-web-client";
 import {
+  applyCatalogVatPercents,
   mapElitSaleNote,
   parseElitCtaRsc,
   parseElitPaymentOptions,
@@ -9,6 +10,7 @@ import {
   parseElitPedidosRsc,
   parseElitSaleNotesPayload,
   type ElitRscOrder,
+  type ElitRscOrderItem,
 } from "./elit-rsc.parser";
 import { mapProviderDraft } from "./provider-draft";
 import { documentFile } from "./document-file";
@@ -47,6 +49,7 @@ export class ElitAccountService {
     const fromRsc = pedidosRsc ? parseElitPedidosRsc(pedidosRsc) : [];
     const fromApi = saleNotesApi ? parseElitSaleNotesPayload(saleNotesApi) : [];
     const orders = mergeSaleNotes(fromApi, fromRsc);
+    await this.fillVatFromCatalog(tenantId, orders);
     const statement = cta ? parseElitCtaRsc(cta) : {
       balance: null,
       balanceUsd: null,
@@ -82,13 +85,14 @@ export class ElitAccountService {
     };
   }
 
-  async getSaleNote(credentials: Record<string, string>, number: string) {
+  async getSaleNote(tenantId: string, credentials: Record<string, string>, number: string) {
     const api = await ElitWebClient.login(credentials);
     const body = await api.proxyGet(`/account/salenotes/${encodeURIComponent(number)}`);
     const rec = asRecord(body);
     const data = asRecord(rec?.data) ?? rec ?? {};
     const note = mapElitSaleNote(data);
     if (!note.orderNumber) throw new NotFoundException("Nota de venta no encontrada");
+    await this.fillVatFromCatalog(tenantId, [note]);
     return note;
   }
 
@@ -167,6 +171,51 @@ export class ElitAccountService {
   async finishPayment(credentials: Record<string, string>) {
     const api = await ElitWebClient.login(credentials);
     return api.proxyPostJson("/account/payments/finish", {});
+  }
+
+  private async fillVatFromCatalog(tenantId: string, orders: ElitRscOrder[]) {
+    const codes = new Set<string>();
+    const collect = (items: ElitRscOrderItem[] | undefined) => {
+      for (const it of items ?? []) {
+        if (it.code) codes.add(it.code);
+        if (it.alfaCode) codes.add(it.alfaCode);
+        if (it.productCode) codes.add(it.productCode);
+        if (it.children) collect(it.children);
+      }
+    };
+    for (const o of orders) collect(o.items);
+    if (codes.size === 0) return;
+    const list = [...codes];
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: {
+        tenantId,
+        provider: "ELIT",
+        ivaPercent: { not: null },
+        OR: [
+          { externalId: { in: list } },
+          { product: { is: { provider: "ELIT", sku: { in: list } } } },
+          { product: { is: { provider: "ELIT", partNumber: { in: list } } } },
+        ],
+      },
+      select: {
+        externalId: true,
+        ivaPercent: true,
+        product: { select: { sku: true, partNumber: true } },
+      },
+    });
+    if (offers.length === 0) return;
+    const rates: Record<string, number> = {};
+    for (const o of offers) {
+      const pct = o.ivaPercent != null ? Number(o.ivaPercent) : NaN;
+      if (!Number.isFinite(pct)) continue;
+      rates[o.externalId] = pct;
+      if (o.product.sku) rates[o.product.sku] = pct;
+      if (o.product.partNumber) {
+        rates[o.product.partNumber] = pct;
+        rates[o.product.partNumber.toUpperCase()] = pct;
+      }
+    }
+    for (const o of orders) applyCatalogVatPercents(o.items, rates);
   }
 
   private async lookupSaleNote(api: ElitWebClient, number: string): Promise<ElitRscOrder> {
