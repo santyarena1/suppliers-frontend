@@ -3,29 +3,24 @@
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  adminApi, retailApi, AdminUser,
-  ModulePermission, ModuleKey,
+  retailApi,
 } from "@/lib/api";
 import { isAdmin, getUser } from "@/lib/auth";
-import UsersManagement from "@/components/admin/UsersManagement";
 import OrganizationsTree from "@/components/admin/OrganizationsTree";
 import CatalogEnrichmentPanel from "@/components/admin/CatalogEnrichmentPanel";
 import DiagnosticsPanel from "@/components/DiagnosticsPanel";
 import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
 import AdminAdsPanel from "@/components/admin/AdminAdsPanel";
 import {
-  Users, ShieldCheck,
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
   ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone,
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "organizations" | "users" | "permissions" | "retail" | "catalog" | "images" | "ads" | "diagnostics";
+type Tab = "organizations" | "retail" | "catalog" | "images" | "ads" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-  { key: "organizations", label: "Organizaciones", icon: <Network className="w-3.5 h-3.5" /> },
-  { key: "users", label: "Usuarios", icon: <Users className="w-3.5 h-3.5" /> },
-  { key: "permissions", label: "Permisos", icon: <ShieldCheck className="w-3.5 h-3.5" /> },
+  { key: "organizations", label: "Directorio", icon: <Network className="w-3.5 h-3.5" /> },
   { key: "retail", label: "Locales / precios", icon: <DollarSign className="w-3.5 h-3.5" /> },
   { key: "catalog", label: "Catálogo", icon: <Tags className="w-3.5 h-3.5" /> },
   { key: "images", label: "Imágenes", icon: <ImageIcon className="w-3.5 h-3.5" /> },
@@ -33,17 +28,8 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
-const MODULE_LABELS: Record<ModuleKey, string> = {
-  search: "Búsqueda",
-  cart: "Carrito",
-  credentials: "Credenciales (en Proveedores)",
-  providers: "Proveedores",
-  brands: "Portal de Marcas",
-  diagnostics: "Diagnóstico",
-  admin: "Administración",
-};
-
-const TAB_KEYS: Tab[] = ["organizations", "users", "permissions", "retail", "catalog", "images", "ads", "diagnostics"];
+const TAB_KEYS: Tab[] = ["organizations", "retail", "catalog", "images", "ads", "diagnostics"];
+const LEGACY_TABS = new Set(["users", "permissions"]);
 
 export default function AdminPage() {
   return (
@@ -56,8 +42,10 @@ export default function AdminPage() {
 function AdminPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initial = searchParams.get("tab") as Tab | null;
-  const [tab, setTab] = useState<Tab>(initial && TAB_KEYS.includes(initial) ? initial : "organizations");
+  const raw = searchParams.get("tab");
+  const initial: Tab =
+    raw && TAB_KEYS.includes(raw as Tab) ? (raw as Tab) : "organizations";
+  const [tab, setTab] = useState<Tab>(initial);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   useEffect(() => {
@@ -65,9 +53,14 @@ function AdminPageInner() {
   }, [router]);
 
   useEffect(() => {
-    const q = searchParams.get("tab") as Tab | null;
-    if (q && TAB_KEYS.includes(q)) setTab(q);
-  }, [searchParams]);
+    const q = searchParams.get("tab");
+    if (q && LEGACY_TABS.has(q)) {
+      router.replace("/admin", { scroll: false });
+      setTab("organizations");
+      return;
+    }
+    if (q && TAB_KEYS.includes(q as Tab)) setTab(q as Tab);
+  }, [searchParams, router]);
 
   function selectTab(next: Tab) {
     setTab(next);
@@ -92,7 +85,8 @@ function AdminPageInner() {
               <div>
                 <h1 className="text-base font-semibold text-white">Administración</h1>
                 <p className="text-xs text-surface-500">
-                  Sesión como <span className="text-yellow-400 font-medium">{currentUser?.username}</span>
+                  Directorio de organizaciones y personas · sesión como{" "}
+                  <span className="text-yellow-400 font-medium">{currentUser?.username}</span>
                 </p>
               </div>
             </div>
@@ -114,8 +108,6 @@ function AdminPageInner() {
 
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {tab === "organizations" && <OrganizationsTree showToast={showToast} />}
-            {tab === "users" && <UsersManagement showToast={showToast} />}
-            {tab === "permissions" && <PermissionsTab showToast={showToast} />}
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
             {tab === "images" && <ImageSyncPanel showToast={showToast} />}
@@ -139,91 +131,6 @@ function AdminPageInner() {
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
-}
-
-// ---------- Permisos ----------
-
-function PermissionsTab({ showToast }: { showToast: (m: string, ok?: boolean) => void }) {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [selected, setSelected] = useState<string>("");
-  const [perms, setPerms] = useState<ModulePermission[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => { adminApi.listUsers().then((r) => setUsers(r.data)).catch(() => setUsers([])); }, []);
-
-  useEffect(() => {
-    if (!selected) { setPerms([]); return; }
-    setLoading(true);
-    adminApi.getPermissions(selected).then((r) => setPerms(r.data)).catch(() => setPerms([])).finally(() => setLoading(false));
-  }, [selected]);
-
-  function toggle(module: ModuleKey) {
-    setPerms((prev) => prev.map((p) => (p.module === module ? { ...p, allowed: !p.allowed } : p)));
-  }
-
-  async function save() {
-    setSaving(true);
-    try {
-      await adminApi.updatePermissions(selected, perms);
-      showToast("Permisos actualizados");
-    } catch (err) {
-      showToast(errMsg(err, "Error al guardar permisos"), false);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="max-w-lg flex flex-col gap-4">
-      <div>
-        <label className="block text-xs font-medium text-surface-400 mb-1.5">Usuario</label>
-        <select
-          value={selected}
-          onChange={(e) => setSelected(e.target.value)}
-          className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500"
-        >
-          <option value="">Elegí un usuario...</option>
-          {users.map((u) => <option key={u.id} value={u.id}>{u.username} ({u.role})</option>)}
-        </select>
-      </div>
-
-      {loading && <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-brand-500" /></div>}
-
-      {!loading && selected && perms.length > 0 && (
-        <div className="border border-surface-800 rounded-xl divide-y divide-surface-800">
-          {perms.map((p) => (
-            <div key={p.module} className="flex items-center justify-between px-4 py-3">
-              <div>
-                <span className="text-sm text-surface-200">{MODULE_LABELS[p.module]}</span>
-                {p.module === "credentials" && (
-                  <p className="text-[11px] text-surface-500 mt-0.5">Ya no tiene ítem propio en el menú: vive en cada proveedor.</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => toggle(p.module)}
-                className={`w-10 rounded-full relative transition-colors ${p.allowed ? "bg-brand-600" : "bg-surface-600"}`}
-                style={{ height: 22 }}
-              >
-                <span className={`absolute top-0.5 bg-white rounded-full transition-all ${p.allowed ? "left-[22px]" : "left-0.5"}`} style={{ width: 18, height: 18 }} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {selected && perms.length > 0 && (
-        <button
-          onClick={save}
-          disabled={saving}
-          className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Guardar permisos"}
-        </button>
-      )}
-    </div>
-  );
 }
 
 // ---------- Precios de venta (referencia de mercado) ----------
