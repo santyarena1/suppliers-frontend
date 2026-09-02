@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server";
 
 const PUBLIC_PATHS = new Set(["/login", "/register"]);
-const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m"];
+const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
 
 function isPrefetch(req: NextRequest): boolean {
   return (
