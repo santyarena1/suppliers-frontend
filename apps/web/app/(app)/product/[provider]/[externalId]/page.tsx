@@ -13,6 +13,7 @@ import { ProductDTO, Provider, searchApi, catalogApi, PricePoint, productDisplay
 import { proxyImg, formatARS, formatUSD } from "@/lib/format";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import ProductSyncedAt from "@/components/ProductSyncedAt";
+import AiImageDisclaimer from "@/components/AiImageDisclaimer";
 import {
   linePricing,
   taxLabel,
@@ -248,7 +249,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
-                <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm">
+                <div className="flex flex-col gap-2">
+                  <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm">
                   {product.imageUrl && !imgErr ? (
                     <>
                       <Image
@@ -274,6 +276,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       {imgErr ? <ImageOff className="w-14 h-14" /> : <Package className="w-14 h-14" />}
                       <span className="text-sm">Sin imagen disponible</span>
                     </div>
+                  )}
+                  </div>
+                  {product.imageAiSelected && product.imageUrl && !imgErr && (
+                    <AiImageDisclaimer className="text-surface-500 px-0.5" />
                   )}
                 </div>
 

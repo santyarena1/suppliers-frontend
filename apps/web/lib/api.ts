@@ -186,6 +186,8 @@ export interface ProductDTO {
   /** Payload crudo del proveedor. No persistir en el carrito. */
   raw?: unknown;
   imageUrl: string | null;
+  /** True cuando la foto actual vino de Serper / Primera foto (no del proveedor). */
+  imageAiSelected?: boolean;
   productUrl?: string | null;
   externalId: string;
   sku?: string | null;
@@ -2307,6 +2309,8 @@ export interface ImageSyncStatus {
   pendingVisible: number;
   pendingDeferred: number;
   filled: number;
+  /** Fallidos + sin resultado reintentables. */
+  problems: number;
   running: boolean;
   byProvider: { provider: string; missing: number; total: number }[];
   lastRun: ImageSyncRun | null;

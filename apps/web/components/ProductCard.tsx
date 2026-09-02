@@ -28,6 +28,7 @@ import {
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
 import ProductSyncedAt from "./ProductSyncedAt";
+import AiImageDisclaimer from "./AiImageDisclaimer";
 
 function CardProviderPill({ provider }: { provider: string }) {
   const display = useProviderDisplay();
@@ -174,6 +175,10 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
           )}
         </div>
       </Link>
+
+      {product.imageAiSelected && product.imageUrl && !imgErr && (
+        <AiImageDisclaimer className="px-3.5 pt-2 pb-0 text-slate-500" />
+      )}
 
       <div className="p-3.5 flex flex-col gap-3 flex-1">
         <Link href={href} className="block min-h-[2.5rem]">

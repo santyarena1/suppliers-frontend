@@ -514,7 +514,9 @@ export class ProvidersService {
       }),
       this.catalogEnrichment.getContext(),
     ]);
-    return offers.map((offer) => toProductView(offer.product, offer, rules, enrichment));
+    return this.withImageAiFlags(
+      offers.map((offer) => toProductView(offer.product, offer, rules, enrichment)),
+    );
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
@@ -530,7 +532,10 @@ export class ProvidersService {
       this.rulesFor(tenantId, provider),
       this.catalogEnrichment.getContext(),
     ]);
-    return toProductView(offer.product, offer, rules, enrichment);
+    const [view] = await this.withImageAiFlags([
+      toProductView(offer.product, offer, rules, enrichment),
+    ]);
+    return view;
   }
 
   /**
@@ -679,7 +684,7 @@ export class ProvidersService {
     );
 
     // Bajadas primero; después el resto mezclado por proveedor.
-    return [...dropViews, ...stockViews].slice(0, limit);
+    return this.withImageAiFlags([...dropViews, ...stockViews].slice(0, limit));
   }
 
   /**
@@ -871,7 +876,7 @@ export class ProvidersService {
       take: limit * 3,
     });
 
-    return offers
+    const views = offers
       .filter((offer) => this.catalogEnrichment.productMatchesCategory(offer.product, category, enrichment))
       .map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment))
       .filter((product) => {
@@ -881,6 +886,34 @@ export class ProvidersService {
         return isDisplayedInStock(product.stock, 0);
       })
       .slice(0, limit);
+    return this.withImageAiFlags(views);
+  }
+
+  /**
+   * Marca productos cuya foto actual vino de Serper / Primera foto (no del proveedor).
+   * Sirve para la leyenda de “imagen sugerida por IA” en búsqueda y ficha.
+   */
+  private async withImageAiFlags<T extends { provider: string; externalId: string; imageUrl?: string | null }>(
+    products: T[],
+  ): Promise<(T & { imageAiSelected: boolean })[]> {
+    if (products.length === 0) return [];
+    const withImg = products.filter((p) => Boolean(p.imageUrl?.trim()));
+    if (withImg.length === 0) {
+      return products.map((p) => ({ ...p, imageAiSelected: false }));
+    }
+    const fills = await this.prisma.imageSyncFill.findMany({
+      where: {
+        status: "filled",
+        source: { in: ["serper", "serper_pick"] },
+        OR: withImg.map((p) => ({ provider: p.provider, externalId: p.externalId })),
+      },
+      select: { provider: true, externalId: true },
+    });
+    const flagged = new Set(fills.map((f) => `${f.provider}::${f.externalId}`));
+    return products.map((p) => ({
+      ...p,
+      imageAiSelected: Boolean(p.imageUrl?.trim()) && flagged.has(`${p.provider}::${p.externalId}`),
+    }));
   }
 
   /**

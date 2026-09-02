@@ -71,6 +71,8 @@ export default function ImageSyncPanel({
 }) {
   const [status, setStatus] = useState<ImageSyncStatus | null>(null);
   const [missing, setMissing] = useState<ImageSyncMissingItem[]>([]);
+  const [problems, setProblems] = useState<ImageSyncFill[]>([]);
+  const [problemsTotal, setProblemsTotal] = useState(0);
   const [history, setHistory] = useState<ImageSyncFill[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -90,9 +92,15 @@ export default function ImageSyncPanel({
 
   const load = useCallback(async () => {
     try {
-      const [st, miss, hist] = await Promise.all([
+      const [st, miss, probs, hist] = await Promise.all([
         imageSyncApi.status(),
         imageSyncApi.missing({ take: 8, provider: provider || undefined }),
+        imageSyncApi.history({
+          page: 1,
+          take: 40,
+          provider: provider || undefined,
+          status: "problems",
+        }),
         imageSyncApi.history({
           page,
           take,
@@ -103,6 +111,8 @@ export default function ImageSyncPanel({
       ]);
       setStatus(st.data);
       setMissing(miss.data.items);
+      setProblems(probs.data.items);
+      setProblemsTotal(probs.data.total);
       setHistory(hist.data.items);
       setHistoryTotal(hist.data.total);
     } catch {
@@ -254,6 +264,10 @@ export default function ImageSyncPanel({
               <p className="text-2xl font-semibold text-white tabular-nums">{status?.filled ?? "—"}</p>
               <p className="text-xs text-surface-500">completadas</p>
             </div>
+            <div>
+              <p className="text-2xl font-semibold text-amber-300 tabular-nums">{status?.problems ?? "—"}</p>
+              <p className="text-xs text-surface-500">con error / sin foto</p>
+            </div>
           </div>
           <label className="text-xs text-surface-500">
             Distribuidor
@@ -342,6 +356,45 @@ export default function ImageSyncPanel({
         </div>
       </div>
 
+      <section className="border border-amber-500/25 bg-amber-500/[0.04] rounded-xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+          <h3 className="text-sm font-semibold text-amber-100">
+            Con error / sin resultado
+            <span className="ml-2 text-xs font-normal text-amber-200/70 tabular-nums">
+              {status?.problems ?? problemsTotal}
+            </span>
+          </h3>
+        </div>
+        <p className="text-xs text-surface-500 mb-3">
+          Productos donde Serper falló o no devolvió una foto usable. Quedan pendientes para reintentar;
+          también podés elegir otra imagen o subirla.
+        </p>
+        {problems.length === 0 ? (
+          <p className="text-sm text-surface-500">No hay productos con error por ahora.</p>
+        ) : (
+          <>
+            <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+              {problems.map((row) => (
+                <FillRow
+                  key={`prob-${row.id}`}
+                  row={row}
+                  onPick={() => setPicker(row)}
+                  onUpload={() => {
+                    setUploadFor(row.productId);
+                    fileRef.current?.click();
+                  }}
+                />
+              ))}
+            </ul>
+            {problemsTotal > problems.length && (
+              <p className="text-xs text-surface-500 mt-3">
+                Mostrando {problems.length} de {problemsTotal}. Filtrá el historial por “Sin resultado” o “Error” para ver el resto.
+              </p>
+            )}
+          </>
+        )}
+      </section>
+
       <section>
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h3 className="text-sm font-semibold text-white">Historial</h3>
@@ -364,6 +417,7 @@ export default function ImageSyncPanel({
               className="bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-1.5 text-sm text-white"
             >
               <option value="">Todos</option>
+              <option value="problems">Con error / sin resultado</option>
               <option value="filled">Con foto</option>
               <option value="skipped">Sin resultado</option>
               <option value="failed">Error</option>
@@ -376,55 +430,15 @@ export default function ImageSyncPanel({
         ) : (
           <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {history.map((row) => (
-              <li key={row.id} className="border border-surface-800 rounded-xl p-3 flex gap-3 items-start">
-                <div className="w-16 h-16 rounded-md bg-white overflow-hidden flex-shrink-0 relative border border-surface-800">
-                  {row.imageUrl ? (
-                    <SafeThumb url={row.imageUrl} />
-                  ) : (
-                    <ImageIcon className="w-5 h-5 text-surface-400 absolute inset-0 m-auto" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-surface-100 line-clamp-2">{row.name}</p>
-                  <p className="text-[11px] text-surface-500 mt-0.5">
-                    {PROVIDER_LABELS[row.provider as Provider] ?? row.provider} · {STATUS_LABEL[row.status] ?? row.status}
-                    {row.source ? ` · ${SOURCE_LABEL[row.source] ?? row.source}` : ""} · {fmtWhen(row.updatedAt)}
-                  </p>
-                  {row.error && row.status !== "filled" && (
-                    <p className="text-[11px] text-amber-400/90 mt-0.5">{row.error}</p>
-                  )}
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setPicker(row)}
-                      className="inline-flex items-center gap-1 text-[11px] text-brand-300 hover:text-white border border-brand-500/30 rounded px-1.5 py-0.5"
-                    >
-                      <Search className="w-3 h-3" />
-                      Otra en Serper
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUploadFor(row.productId);
-                        fileRef.current?.click();
-                      }}
-                      className="inline-flex items-center gap-1 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
-                    >
-                      <Upload className="w-3 h-3" />
-                      Subir de la PC
-                    </button>
-                    <a
-                      href={productHref(row.provider, row.externalId)}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      Ver ficha
-                    </a>
-                  </div>
-                </div>
-              </li>
+              <FillRow
+                key={row.id}
+                row={row}
+                onPick={() => setPicker(row)}
+                onUpload={() => {
+                  setUploadFor(row.productId);
+                  fileRef.current?.click();
+                }}
+              />
             ))}
           </ul>
         )}
@@ -650,6 +664,65 @@ function SerperPicker({
         </button>
       </div>
     </div>
+  );
+}
+
+function FillRow({
+  row,
+  onPick,
+  onUpload,
+}: {
+  row: ImageSyncFill;
+  onPick: () => void;
+  onUpload: () => void;
+}) {
+  return (
+    <li className="border border-surface-800 rounded-xl p-3 flex gap-3 items-start bg-surface-950/40">
+      <div className="w-16 h-16 rounded-md bg-white overflow-hidden flex-shrink-0 relative border border-surface-800">
+        {row.imageUrl ? (
+          <SafeThumb url={row.imageUrl} />
+        ) : (
+          <ImageIcon className="w-5 h-5 text-surface-400 absolute inset-0 m-auto" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-surface-100 line-clamp-2">{row.name}</p>
+        <p className="text-[11px] text-surface-500 mt-0.5">
+          {PROVIDER_LABELS[row.provider as Provider] ?? row.provider} · {STATUS_LABEL[row.status] ?? row.status}
+          {row.source ? ` · ${SOURCE_LABEL[row.source] ?? row.source}` : ""} · {fmtWhen(row.updatedAt)}
+        </p>
+        {row.error && row.status !== "filled" && (
+          <p className="text-[11px] text-amber-400/90 mt-0.5">{row.error}</p>
+        )}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <button
+            type="button"
+            onClick={onPick}
+            className="inline-flex items-center gap-1 text-[11px] text-brand-300 hover:text-white border border-brand-500/30 rounded px-1.5 py-0.5"
+          >
+            <Search className="w-3 h-3" />
+            Otra en Serper
+          </button>
+          <button
+            type="button"
+            onClick={onUpload}
+            className="inline-flex items-center gap-1 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+          >
+            <Upload className="w-3 h-3" />
+            Subir de la PC
+          </button>
+          <a
+            href={productHref(row.provider, row.externalId)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-surface-300 hover:text-white border border-surface-700 rounded px-1.5 py-0.5"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Ver ficha
+          </a>
+        </div>
+      </div>
+    </li>
   );
 }
 

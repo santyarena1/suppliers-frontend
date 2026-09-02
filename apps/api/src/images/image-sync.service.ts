@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { AssetsService } from "../assets/assets.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { candidateWhere, missingWhere, PERMANENT_SKIP_ERROR, resolveRunPriority } from "./image-sync-candidates";
+import { PERMANENT_SKIP_ERROR, candidateWhere, missingWhere, resolveRunPriority } from "./image-sync-candidates";
 import { firstLiveImage, isStoredAssetPath, probeLiveImage } from "./live-image";
 import { buildImageSearchQuery, hasProductImage } from "./product-image";
 import { isSerperBlockingError, SerperImagesClient } from "./serper-images.client";
@@ -144,21 +144,31 @@ export class ImageSyncService implements OnModuleInit {
 
   async status() {
     await this.markStaleRuns();
-    const [hasSerperKey, cronEnabled, missing, pendingVisible, pendingDeferred, filled, lastRun, byProvider] =
-      await Promise.all([
-        this.hasSerperKey(),
-        this.isCronEnabled(),
-        this.prisma.providerSyncCache.count({ where: missingWhere() }),
-        this.prisma.providerSyncCache.count({ where: candidateWhere(undefined, "visible") }),
-        this.prisma.providerSyncCache.count({ where: candidateWhere(undefined, "deferred") }),
-        this.prisma.imageSyncFill.count({ where: { status: "filled" } }),
-        this.prisma.imageSyncRun.findFirst({ orderBy: { startedAt: "desc" } }),
-        this.prisma.providerSyncCache.groupBy({
-          by: ["provider"],
-          where: missingWhere(),
-          _count: { _all: true },
-        }),
-      ]);
+    const [
+      hasSerperKey,
+      cronEnabled,
+      missing,
+      pendingVisible,
+      pendingDeferred,
+      filled,
+      problemCount,
+      lastRun,
+      byProvider,
+    ] = await Promise.all([
+      this.hasSerperKey(),
+      this.isCronEnabled(),
+      this.prisma.providerSyncCache.count({ where: missingWhere() }),
+      this.prisma.providerSyncCache.count({ where: candidateWhere(undefined, "visible") }),
+      this.prisma.providerSyncCache.count({ where: candidateWhere(undefined, "deferred") }),
+      this.prisma.imageSyncFill.count({ where: { status: "filled" } }),
+      this.prisma.imageSyncFill.count({ where: this.problemWhere() }),
+      this.prisma.imageSyncRun.findFirst({ orderBy: { startedAt: "desc" } }),
+      this.prisma.providerSyncCache.groupBy({
+        by: ["provider"],
+        where: missingWhere(),
+        _count: { _all: true },
+      }),
+    ]);
     const pending = pendingVisible + pendingDeferred;
     const totals = await this.prisma.providerSyncCache.groupBy({
       by: ["provider"],
@@ -175,6 +185,7 @@ export class ImageSyncService implements OnModuleInit {
       pendingVisible,
       pendingDeferred,
       filled,
+      problems: problemCount,
       running: this.running,
       byProvider: byProvider
         .map((r) => ({
@@ -233,7 +244,9 @@ export class ImageSyncService implements OnModuleInit {
     const take = Math.min(Math.max(opts.take ?? 30, 1), 80);
     const page = Math.max(opts.page ?? 1, 1);
     const where: Prisma.ImageSyncFillWhereInput = {};
-    if (opts.status === "filled" || opts.status === "skipped" || opts.status === "failed") {
+    if (opts.status === "problems" || opts.status === "errors") {
+      Object.assign(where, this.problemWhere());
+    } else if (opts.status === "filled" || opts.status === "skipped" || opts.status === "failed") {
       where.status = opts.status;
     }
     const provider = assertProvider(opts.provider);
@@ -256,6 +269,14 @@ export class ImageSyncService implements OnModuleInit {
       }),
     ]);
     return { total, page, take, items };
+  }
+
+  /** Fallidos + sin resultado usable (reintentables). */
+  private problemWhere(): Prisma.ImageSyncFillWhereInput {
+    return {
+      status: { in: ["failed", "skipped"] },
+      NOT: { error: PERMANENT_SKIP_ERROR },
+    };
   }
 
   async searchProductImages(productId: string, queryOverride?: string) {
