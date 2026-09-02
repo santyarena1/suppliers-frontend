@@ -60,6 +60,25 @@ describe("elit-rsc.parser", () => {
     expect(orders[0].amount).toBe(12.1);
   });
 
+  it("agrupa un kit ESFABRIC y deja el total del esquema como importe", () => {
+    const rsc = `0:{"form":"NOTA DE VENTA","number":"9900748655","date":"02/09/2026","currency":2,"summary":{"net":751.1,"total":865.04},"items":[{"code":"LEXMSD633X64","name":"microSD 64GB","quantity":4,"price":13.44,"total":53.76},{"code":"ESFABRIC_20","name":"PC ELIT ATENEA","quantity":null,"price":0,"net":328.25,"total":328.25,"vat":34.47},{"code":"CMFUEMPX8505AWO","name":"Fuente Cooler Master Elite Gold 850W","quantity":1,"price":0,"total":0},{"code":"AMDPRO5700G8COR","name":"Ryzen 7 5700G","quantity":1,"price":0,"total":0}]}`;
+    const order = parseElitPedidosRsc(rsc)[0];
+    expect(order.items).toHaveLength(2);
+    expect(order.items?.[0]).toMatchObject({ code: "LEXMSD633X64", price: 13.44, total: 53.76 });
+    const kit = order.items?.[1];
+    expect(kit).toMatchObject({
+      code: "ESFABRIC_20",
+      name: "PC ELIT ATENEA",
+      kit: true,
+      price: 0,
+      total: 328.25,
+    });
+    expect(kit?.children).toEqual([
+      expect.objectContaining({ code: "CMFUEMPX8505AWO", quantity: 1 }),
+      expect.objectContaining({ code: "AMDPRO5700G8COR", quantity: 1 }),
+    ]);
+  });
+
   it("mapea informes de pago y opciones sin inventar campos", () => {
     const payments = parseElitPaymentsPayload({
       canCreateReport: true,

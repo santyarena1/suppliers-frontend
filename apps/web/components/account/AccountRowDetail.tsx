@@ -12,6 +12,8 @@ export type AccountDetailItem = {
   qty?: string | number;
   price?: string | number;
   total?: string | number;
+  indent?: boolean;
+  badge?: string;
 };
 export type AccountDetailDoc = { label: string; href?: string; filename?: string; pending?: boolean };
 
@@ -122,15 +124,20 @@ export default function AccountRowDetail({
                     const product = it.name || "Ítem";
                     return (
                     <tr key={i}>
-                      <td className="py-1.5 pr-2 min-w-0">
+                      <td className={`py-1.5 pr-2 min-w-0 ${it.indent ? "pl-3" : ""}`}>
                         <p className="flex items-baseline gap-1.5 min-w-0" title={it.code ? `${it.code} ${product}` : product}>
-                          {it.code ? <span className="font-mono text-surface-500 flex-shrink-0">{it.code}</span> : null}
-                          <span className="truncate text-surface-200">{product}</span>
+                          {it.code ? <span className={`font-mono flex-shrink-0 ${it.indent ? "text-surface-600" : "text-surface-500"}`}>{it.code}</span> : null}
+                          <span className={`truncate ${it.indent ? "text-surface-400" : "text-surface-200"}`}>{product}</span>
+                          {it.badge ? (
+                            <span className="flex-shrink-0 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-violet-500/15 text-violet-200">
+                              {it.badge}
+                            </span>
+                          ) : null}
                         </p>
                       </td>
                       <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{formatQty(it.qty)}</td>
                       <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{formatMoneyCell(it.price)}</td>
-                      <td className="py-1.5 text-right tabular-nums text-surface-200 whitespace-nowrap pl-2">{formatMoneyCell(it.total)}</td>
+                      <td className={`py-1.5 text-right tabular-nums whitespace-nowrap pl-2 ${it.indent ? "text-surface-500" : "text-surface-200"}`}>{formatMoneyCell(it.total)}</td>
                     </tr>
                     );
                   })}

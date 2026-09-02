@@ -251,7 +251,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: sin cambios
 - **Respuesta esperada**: Elit NV: ítems con `net`, `vat`, `internalTax`, `perceptions`; `summary.net/vat/perceptions`. Invid pedidos: `totals.iva105` / `totals.iva21` cuando el HTML los discrimina. NB ítems: `ivaPercent`, `iva`. Drafts: `subtotal`, `impuestos`, `percepciones` y `addressSnapshot` con `vat` / `iva21` / `iva105` / `perceptions` / `internalTax` (no pisa el snapshot de dirección).
 - **Estado**: IMPLEMENTADO
-- **Notas**: La UI siempre muestra Total sin imp., IIBB/percepciones, IVA 10,5% e IVA 21% (0,00 si no hay dato). No inventa alícuota: si el IVA lump no calza 10,5 ni 21, va a "IVA (sin discriminar)".
+- **Notas**: La UI siempre muestra Total sin imp., IIBB/percepciones, IVA 10,5% e IVA 21% (0,00 si no hay dato). No inventa alícuota: si el IVA lump no calza 10,5 ni 21, va a "IVA (sin discriminar)". Ítems kit/esquema Elit (`ESFABRIC_*`, unitario 0 y total > 0) traen `kit` y `children`; la ficha muestra el **total de la línea** como precio final del esquema, no $0,00.
 
 ### [FEATURE] SISTEMA TGS (AcuStock)
 - **Método**: GET | PATCH | POST | PUT | DELETE

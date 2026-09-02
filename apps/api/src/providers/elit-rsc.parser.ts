@@ -12,6 +12,9 @@ export interface ElitRscOrderItem {
   internalTax?: number | null;
   perceptions?: number | null;
   total?: number | null;
+  /** Kit / fabricación / esquema: Elit pone el importe en el total, no en el unitario. */
+  kit?: boolean;
+  children?: ElitRscOrderItem[];
 }
 
 export interface ElitRscOrder {
@@ -143,25 +146,88 @@ function currencyLabel(code: unknown): string {
   return asString(code) || "";
 }
 
+function nestedItemList(rec: Record<string, unknown>): unknown[] {
+  for (const key of [
+    "children",
+    "components",
+    "componentes",
+    "kitItems",
+    "subItems",
+    "parts",
+    "composition",
+    "articulos",
+    "fabricationItems",
+  ]) {
+    const value = rec[key];
+    if (Array.isArray(value) && value.length > 0) return value;
+  }
+  if (Array.isArray(rec.details) && rec.details.length > 0 && asRecord(rec.details[0])) {
+    return rec.details;
+  }
+  if (Array.isArray(rec.items) && rec.items.length > 0 && (rec.code || rec.productCode || rec.alfaCode)) {
+    return rec.items;
+  }
+  return [];
+}
+
+function looksLikeElitKit(rec: Record<string, unknown>, code: string | undefined): boolean {
+  const rawCode = (code || "").toUpperCase();
+  if (/ESFABRIC|^ES[A-Z]*_/.test(rawCode)) return true;
+  if (rec.kit === true || rec.isKit === true || rec.isFabrication === true) return true;
+  const type = (asString(rec.type) || asString(rec.kind) || "").toLowerCase();
+  if (/kit|fabric|esquema|bundle/.test(type)) return true;
+  return nestedItemList(rec).length > 0;
+}
+
+function isBareComponent(item: ElitRscOrderItem): boolean {
+  if (item.kit) return false;
+  const price = item.price ?? 0;
+  const total = item.total ?? item.net ?? 0;
+  return price <= 0.005 && total <= 0.005 && Boolean(item.name || item.code);
+}
+
+function mapItem(row: unknown): ElitRscOrderItem {
+  const rec = asRecord(row) ?? {};
+  const code = asString(rec.code) || asString(rec.productCode) || asString(rec.alfaCode);
+  const nested = nestedItemList(rec).map(mapItem);
+  const kit = looksLikeElitKit(rec, code) || nested.length > 0;
+  return {
+    code,
+    alfaCode: asString(rec.alfaCode),
+    productCode: asString(rec.productCode),
+    name: asString(rec.name) || asString(rec.description) || asString(rec.detalle),
+    quantity: asNumber(rec.quantity) ?? asNumber(rec.qty) ?? null,
+    price: asNumber(rec.price) ?? null,
+    net: asNumber(rec.net) ?? null,
+    vat: asNumber(rec.vat) ?? null,
+    internalTax: asNumber(rec.internalTax) ?? null,
+    perceptions: asNumber(rec.perceptions) ?? null,
+    total: asNumber(rec.total) ?? null,
+    kit: kit || undefined,
+    children: nested.length > 0 ? nested : undefined,
+  };
+}
+
+function groupKitFollowers(items: ElitRscOrderItem[]): ElitRscOrderItem[] {
+  const out: ElitRscOrderItem[] = [];
+  for (const it of items) {
+    const prev = out[out.length - 1];
+    if (prev?.kit && isBareComponent(it)) {
+      const kids = prev.children ?? [];
+      if (!it.code || !kids.some((c) => c.code && c.code === it.code)) {
+        prev.children = [...kids, { ...it, kit: undefined }];
+        continue;
+      }
+    }
+    out.push({ ...it, children: it.children ? [...it.children] : it.children });
+  }
+  return out;
+}
+
 function mapItems(raw: unknown): ElitRscOrderItem[] | undefined {
   const list = unwrapList(raw);
   if (list.length === 0) return undefined;
-  return list.map((row) => {
-    const rec = asRecord(row) ?? {};
-    return {
-      code: asString(rec.code) || asString(rec.productCode) || asString(rec.alfaCode),
-      alfaCode: asString(rec.alfaCode),
-      productCode: asString(rec.productCode),
-      name: asString(rec.name),
-      quantity: asNumber(rec.quantity) ?? null,
-      price: asNumber(rec.price) ?? null,
-      net: asNumber(rec.net) ?? null,
-      vat: asNumber(rec.vat) ?? null,
-      internalTax: asNumber(rec.internalTax) ?? null,
-      perceptions: asNumber(rec.perceptions) ?? null,
-      total: asNumber(rec.total) ?? null,
-    };
-  });
+  return groupKitFollowers(list.map(mapItem));
 }
 
 export function mapElitSaleNote(rec: Record<string, unknown>): ElitRscOrder {

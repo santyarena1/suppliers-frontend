@@ -47,13 +47,60 @@ export function elitSaleNoteHeaderLines(o: ElitSaleNote): AccountDetailLine[] {
 }
 
 export function elitSaleNoteItems(o: ElitSaleNote): AccountDetailItem[] {
-  return (o.items ?? []).map((it) => ({
-    code: it.code,
-    name: it.name || it.code || "Ítem",
-    qty: qty(it.quantity ?? null),
-    price: money(it.price, o.currency),
-    total: money(it.total, o.currency),
-  }));
+  const rows: AccountDetailItem[] = [];
+  for (const it of o.items ?? []) {
+    const kit = Boolean(it.kit) || looksLikeKitLine(it);
+    const lineTotal = it.total ?? it.net ?? 0;
+    const unit = schemeDisplayUnit(it);
+    rows.push({
+      code: it.code,
+      name: it.name || it.code || "Ítem",
+      qty: kit && (it.quantity == null || it.quantity <= 0) ? "" : qty(it.quantity ?? null),
+      price: unit != null ? money(unit, o.currency) : "",
+      total: lineTotal > 0.005 ? money(lineTotal, o.currency) : money(it.total, o.currency),
+      badge: kit ? "Esquema" : undefined,
+    });
+    for (const child of it.children ?? []) {
+      rows.push({
+        code: child.code,
+        name: child.name || child.code || "Componente",
+        qty: qty(child.quantity ?? null),
+        price: "",
+        total: "",
+        indent: true,
+      });
+    }
+  }
+  return rows;
+}
+
+function looksLikeKitLine(it: NonNullable<ElitSaleNote["items"]>[number]): boolean {
+  const code = (it.code || "").toUpperCase();
+  if (/ESFABRIC|^ES[A-Z]*_/.test(code)) return true;
+  return (it.price ?? 0) <= 0.005 && (it.total ?? it.net ?? 0) > 0.005;
+}
+
+/** Si Elit manda unitario 0 y el total del kit, el total es el precio final del esquema. */
+function schemeDisplayUnit(it: NonNullable<ElitSaleNote["items"]>[number]): number | null {
+  if ((it.price ?? 0) > 0.005) return it.price ?? null;
+  const total = it.total ?? it.net ?? 0;
+  if (total <= 0.005) return it.price ?? null;
+  const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+  return total / q;
+}
+
+function elitLineNet(it: NonNullable<ElitSaleNote["items"]>[number]): number {
+  const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
+  const fromUnit = (it.net ?? it.price ?? 0) * q;
+  const total = it.total ?? 0;
+  if (fromUnit < 0.005 && total > 0.005) return total;
+  if (looksLikeKitLine(it) && total > 0.005) return total;
+  return fromUnit;
+}
+
+export function elitSaleNoteNote(o: ElitSaleNote): string | undefined {
+  if (!(o.items ?? []).some((it) => it.kit || looksLikeKitLine(it))) return undefined;
+  return "Elit armó el esquema como un kit: el importe de esa línea es el precio final real, no el de lista. Las piezas van debajo, sin precio.";
 }
 
 export function elitSaleNoteTotals(o: ElitSaleNote): AccountDetailLine[] {
@@ -63,13 +110,12 @@ export function elitSaleNoteTotals(o: ElitSaleNote): AccountDetailLine[] {
   let itemPerc = 0;
   let itemIntern = 0;
   for (const it of o.items ?? []) {
+    const lineNet = elitLineNet(it);
     const q = it.quantity != null && it.quantity > 0 ? it.quantity : 1;
-    const unitNet = it.net ?? it.price ?? 0;
-    const lineNet = unitNet * q;
     itemNet += lineNet;
     addIva(acc, lineNet, lineVatAmount(it.vat ?? 0, q, lineNet));
-    itemPerc += (it.perceptions ?? 0) * q;
-    itemIntern += (it.internalTax ?? 0) * q;
+    itemPerc += (it.perceptions ?? 0) * (looksLikeKitLine(it) ? 1 : q);
+    itemIntern += (it.internalTax ?? 0) * (looksLikeKitLine(it) ? 1 : q);
   }
   const net = s?.net ?? s?.subtotal ?? itemNet;
   return taxBreakdownLines({

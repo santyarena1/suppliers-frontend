@@ -19,6 +19,7 @@ import {
   elitSaleNoteDocs,
   elitSaleNoteHeaderLines,
   elitSaleNoteItems,
+  elitSaleNoteNote,
   elitSaleNoteTotals,
 } from "@/components/account/elitOrderDetail";
 import ElitPaymentModal from "@/components/account/ElitPaymentModal";
@@ -252,6 +253,7 @@ export default function ElitAccountPanel() {
           items={elitSaleNoteItems(openOrder)}
           totals={elitSaleNoteTotals(openOrder)}
           documents={elitSaleNoteDocs(openOrder)}
+          note={elitSaleNoteNote(openOrder)}
           onClose={() => setDetail(null)}
         />
       )}

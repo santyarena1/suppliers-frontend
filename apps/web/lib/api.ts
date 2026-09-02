@@ -1683,6 +1683,14 @@ export interface ElitSaleNote {
     internalTax?: number | null;
     perceptions?: number | null;
     total?: number | null;
+    kit?: boolean;
+    children?: {
+      code?: string;
+      name?: string;
+      quantity?: number | null;
+      price?: number | null;
+      total?: number | null;
+    }[];
   }[];
   summary?: {
     subtotal?: number | null;
