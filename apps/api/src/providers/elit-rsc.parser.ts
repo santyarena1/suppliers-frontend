@@ -53,15 +53,49 @@ export interface ElitRscOrder {
 
 export interface ElitRscMovement {
   date: string;
+  dueDate?: string;
   form: string;
   number: string;
+  remito?: string;
   debit: number | null;
   credit: number | null;
+  /** Importe en la moneda del comprobante (antes de pasar a pesos). */
+  amount: number | null;
   total: number | null;
   balance: number | null;
   balanceUsd: number | null;
   currency: string;
+  exchangeRate: number | null;
+  status?: string;
   pdfUrl?: string;
+}
+
+export interface ElitCtaSummary {
+  status: string;
+  approved: boolean;
+  creditLimit: number | null;
+  currentAccount: number | null;
+  checks: number | null;
+  pendingOrders: number | null;
+  availableCredit: number | null;
+}
+
+export interface ElitUsdVoucher {
+  date: string;
+  dueDate?: string;
+  form: string;
+  number: string;
+  debit: number | null;
+  credit: number | null;
+  status?: string;
+}
+
+export interface ElitCtaStatement {
+  balance: number | null;
+  balanceUsd: number | null;
+  summary: ElitCtaSummary;
+  usdVouchers: ElitUsdVoucher[];
+  movements: ElitRscMovement[];
 }
 
 export interface ElitPaymentRow {
@@ -462,24 +496,203 @@ export function parseElitPedidosRsc(rsc: string): ElitRscOrder[] {
   return extractObjectsWithKey(rsc, '"form":"NOTA DE VENTA"').map(mapElitSaleNote);
 }
 
-export function parseElitCtaRsc(rsc: string): { balance: number | null; movements: ElitRscMovement[] } {
-  const rows = extractObjectsWithKey(rsc, '"invoiceCode":').filter((rec) => asString(rec.form));
-  const movements = rows.map((rec) => ({
-    date: asString(rec.date) || "",
-    form: asString(rec.form) || "",
-    number: asString(rec.number) || "",
-    debit: asNumber(rec.debit) ?? null,
-    credit: asNumber(rec.credit) ?? null,
-    total: asNumber(rec.total) ?? null,
-    balance: asNumber(rec.balance) ?? null,
-    balanceUsd: asNumber(rec.balanceUSD) ?? null,
-    currency: currencyLabel(rec.currency),
-    pdfUrl: asString(rec.pdfUrl),
-  }));
-  const saldo = movements.find((m) => /saldo/i.test(m.form));
-  const first = movements[0];
+function firstNum(rec: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const n = asNumber(rec[key]);
+    if (n != null) return n;
+  }
+  return null;
+}
+
+function firstStr(rec: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const nested = asRecord(rec[key]);
+    if (nested) {
+      const label = asString(nested.label) || asString(nested.name) || asString(nested.status);
+      if (label) return label;
+    }
+    const s = asString(rec[key]);
+    if (s) return s;
+  }
+  return undefined;
+}
+
+function parseArMoney(raw: string): number | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const normalized = t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** En el RSC a veces el cupo va como texto "Cupo de crédito" + "4.610.000,00". */
+function labeledAmount(rsc: string, label: RegExp): number | null {
+  const m = rsc.match(new RegExp(label.source + "[^0-9\\-]{0,80}(-?[\\d.]+,\\d{2}|-?\\d+(?:\\.\\d+)?)", "i"));
+  if (!m) return null;
+  return parseArMoney(m[1]);
+}
+
+function emptyCtaSummary(): ElitCtaSummary {
   return {
-    balance: first?.balanceUsd ?? first?.balance ?? saldo?.total ?? null,
+    status: "",
+    approved: false,
+    creditLimit: null,
+    currentAccount: null,
+    checks: null,
+    pendingOrders: null,
+    availableCredit: null,
+  };
+}
+
+function mapCtaSummary(rec: Record<string, unknown>): ElitCtaSummary {
+  const status = firstStr(rec, ["status", "currentAccountStatus", "accountStatus", "label"]) || "";
+  const creditLimit = firstNum(rec, ["creditLimit", "cupo", "cupoCredito", "creditQuota", "limit"]);
+  const currentAccount = firstNum(rec, [
+    "currentAccount",
+    "cuentaCorriente",
+    "accountBalance",
+    "balanceARS",
+    "checkingAccount",
+    "currentBalance",
+  ]);
+  const checks = firstNum(rec, ["checksInPortfolio", "chequesEnCartera", "checks", "cheques"]);
+  const pendingOrders = firstNum(rec, ["pendingOrders", "pedidosPendientes", "pendingSales", "pending"]);
+  const availableCredit = firstNum(rec, ["availableCredit", "creditoDisponible", "creditAvailable"]);
+  return {
+    status,
+    approved: rec.approved === true || /aprobad/i.test(status),
+    creditLimit,
+    currentAccount,
+    checks,
+    pendingOrders,
+    availableCredit,
+  };
+}
+
+function summaryScore(s: ElitCtaSummary): number {
+  return [s.creditLimit, s.currentAccount, s.checks, s.pendingOrders, s.availableCredit].filter((n) => n != null).length;
+}
+
+function mergeSummary(base: ElitCtaSummary, extra: ElitCtaSummary): ElitCtaSummary {
+  return {
+    status: extra.status || base.status,
+    approved: extra.approved || base.approved,
+    creditLimit: extra.creditLimit ?? base.creditLimit,
+    currentAccount: extra.currentAccount ?? base.currentAccount,
+    checks: extra.checks ?? base.checks,
+    pendingOrders: extra.pendingOrders ?? base.pendingOrders,
+    availableCredit: extra.availableCredit ?? base.availableCredit,
+  };
+}
+
+function mapCtaMovement(rec: Record<string, unknown>): ElitRscMovement {
+  const amount = firstNum(rec, ["amount", "importe", "originalAmount", "totalCurrency"]);
+  const exchangeRate = firstNum(rec, ["exchangeRate", "quotation", "quote", "cotizacion", "currencyQuote", "rate"]);
+  return {
+    date: firstStr(rec, ["date", "fecha"]) || "",
+    dueDate: firstStr(rec, ["dueDate", "expiration", "vencimiento", "expiry"]),
+    form: firstStr(rec, ["form", "comprobante", "type", "kind"]) || "",
+    number: firstStr(rec, ["number", "numero"]) || "",
+    remito: firstStr(rec, ["remito", "dispatchNote", "deliveryNote"]),
+    debit: firstNum(rec, ["debit", "debe", "debitARS"]),
+    credit: firstNum(rec, ["credit", "haber", "creditARS"]),
+    amount,
+    total: asNumber(rec.total) ?? amount,
+    balance: asNumber(rec.balance) ?? null,
+    balanceUsd: asNumber(rec.balanceUSD) ?? asNumber(rec.balanceUsd) ?? null,
+    currency: currencyLabel(rec.currency ?? rec.moneda),
+    exchangeRate,
+    status: firstStr(rec, ["status", "state", "invoiceStatus"]),
+    pdfUrl: asString(rec.pdfUrl),
+  };
+}
+
+function mapUsdVoucher(rec: Record<string, unknown>): ElitUsdVoucher {
+  return {
+    date: firstStr(rec, ["date", "fecha"]) || "",
+    dueDate: firstStr(rec, ["dueDate", "expiration", "vencimiento", "expiry"]),
+    form: firstStr(rec, ["form", "comprobante", "type"]) || "",
+    number: firstStr(rec, ["number", "numero"]) || "",
+    debit: firstNum(rec, ["debit", "debe", "debitUSD", "amount"]),
+    credit: firstNum(rec, ["credit", "haber", "creditUSD"]),
+    status: firstStr(rec, ["status", "state"]),
+  };
+}
+
+function collectUsdVouchers(rsc: string, recs: Record<string, unknown>[], movements: ElitRscMovement[]): ElitUsdVoucher[] {
+  const fromArrays: ElitUsdVoucher[] = [];
+  for (const rec of recs) {
+    for (const key of ["dollarInvoices", "usdInvoices", "invoicesUSD", "documentsUSD", "dollarDocuments", "comprobantesDolares"]) {
+      for (const row of unwrapList(rec[key])) {
+        const item = asRecord(row);
+        if (!item) continue;
+        const mapped = mapUsdVoucher(item);
+        if (mapped.number || mapped.form) fromArrays.push(mapped);
+      }
+    }
+  }
+  if (fromArrays.length > 0) return fromArrays;
+  return movements
+    .filter((m) => m.currency === "USD" && /factura|nota de d/i.test(m.form))
+    .map((m) => ({
+      date: m.date,
+      dueDate: m.dueDate,
+      form: m.form,
+      number: m.number,
+      debit: m.amount ?? m.debit,
+      credit: m.credit != null && (m.amount == null || Math.abs((m.credit ?? 0) - (m.amount ?? 0)) < 0.05) ? m.credit : null,
+      status: m.status,
+    }));
+}
+
+export function parseElitCtaRsc(rsc: string): ElitCtaStatement {
+  const rows = extractObjectsWithKey(rsc, '"invoiceCode":').filter((rec) => asString(rec.form) || asString(rec.number));
+  const movements = rows.map(mapCtaMovement);
+
+  let summary = emptyCtaSummary();
+  for (const key of ['"creditLimit":', '"availableCredit":', '"cupo":', '"currentAccount":', '"checksInPortfolio":', '"cuentaCorriente":']) {
+    for (const rec of extractObjectsWithKey(rsc, key)) {
+      const mapped = mapCtaSummary(rec);
+      if (summaryScore(mapped) > summaryScore(summary) || (summaryScore(mapped) === summaryScore(summary) && mapped.status && !summary.status)) {
+        summary = mergeSummary(summary, mapped);
+      } else {
+        summary = mergeSummary(summary, mapped);
+      }
+    }
+  }
+
+  if (summary.creditLimit == null) summary.creditLimit = labeledAmount(rsc, /cupo de cr[eé]dito/i);
+  if (summary.currentAccount == null) summary.currentAccount = labeledAmount(rsc, /cuenta corriente/i);
+  if (summary.checks == null) summary.checks = labeledAmount(rsc, /cheques en cartera/i);
+  if (summary.pendingOrders == null) summary.pendingOrders = labeledAmount(rsc, /pedidos pendientes/i);
+  if (summary.availableCredit == null) summary.availableCredit = labeledAmount(rsc, /cr[eé]dito disponible/i);
+  if (!summary.status) {
+    const st = rsc.match(/cuenta corriente (aprobada|rechazada|pendiente|suspendida)/i);
+    if (st) {
+      summary.status = `Cuenta corriente ${st[1].toLowerCase()}`;
+      summary.approved = /aprobada/i.test(st[1]);
+    }
+  }
+
+  const first = movements[0];
+  const saldo = movements.find((m) => /saldo/i.test(m.form));
+  if (summary.currentAccount == null) {
+    summary.currentAccount = first?.balance ?? saldo?.balance ?? saldo?.total ?? null;
+  }
+  if (summary.availableCredit == null && summary.creditLimit != null && summary.currentAccount != null) {
+    summary.availableCredit = Math.round((summary.creditLimit - summary.currentAccount) * 100) / 100;
+  }
+
+  const usdVouchers = collectUsdVouchers(rsc, extractObjectsWithKey(rsc, '"invoiceCode":').concat(
+    extractObjectsWithKey(rsc, '"dollarInvoices":'),
+    extractObjectsWithKey(rsc, '"usdInvoices":'),
+  ), movements);
+
+  return {
+    balance: summary.currentAccount,
+    balanceUsd: first?.balanceUsd ?? saldo?.balanceUsd ?? null,
+    summary,
+    usdVouchers,
     movements,
   };
 }

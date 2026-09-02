@@ -1629,6 +1629,9 @@ export const elitAccountApi = {
     api.get<{
       profile: { id?: string; name?: string; exchange?: number | null };
       balance: number | null;
+      balanceUsd?: number | null;
+      summary?: ElitCtaSummary;
+      usdVouchers?: ElitUsdVoucher[];
       orders: ElitSaleNote[];
       movements: ElitMovement[];
       payments?: ElitPayment[];
@@ -1713,14 +1716,39 @@ export interface ElitSaleNote {
 
 export interface ElitMovement {
   date: string;
+  dueDate?: string;
   form: string;
   number: string;
+  remito?: string;
   debit: number | null;
   credit: number | null;
+  amount?: number | null;
   total: number | null;
   balance: number | null;
   balanceUsd: number | null;
   currency: string;
+  exchangeRate?: number | null;
+  status?: string;
+}
+
+export interface ElitCtaSummary {
+  status: string;
+  approved: boolean;
+  creditLimit: number | null;
+  currentAccount: number | null;
+  checks: number | null;
+  pendingOrders: number | null;
+  availableCredit: number | null;
+}
+
+export interface ElitUsdVoucher {
+  date: string;
+  dueDate?: string;
+  form: string;
+  number: string;
+  debit: number | null;
+  credit: number | null;
+  status?: string;
 }
 
 export interface ElitPayment {

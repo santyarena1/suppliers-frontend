@@ -148,10 +148,74 @@ describe("elit-rsc.parser", () => {
 
   it("extrae movimientos de cta cte por invoiceCode", () => {
     const rsc = `1:{"invoiceCode":"A","form":"SALDO","number":"","date":"01/01/2026","debit":null,"credit":null,"total":0,"balance":100,"balanceUSD":50.5,"currency":2}`;
-    const { balance, movements } = parseElitCtaRsc(rsc);
+    const { balance, balanceUsd, movements } = parseElitCtaRsc(rsc);
     expect(movements).toHaveLength(1);
     expect(movements[0].form).toBe("SALDO");
-    expect(balance).toBe(50.5);
+    expect(balance).toBe(100);
+    expect(balanceUsd).toBe(50.5);
+  });
+
+  it("arma cupo, crédito disponible y comprobantes en dólares de la cta cte", () => {
+    const payload = {
+      creditLimit: 4610000,
+      currentAccount: 1187506.7,
+      checksInPortfolio: 0,
+      pendingOrders: 0,
+      availableCredit: 3422493.3,
+      status: { label: "Cuenta corriente aprobada", approved: true },
+    };
+    const factura = {
+      invoiceCode: "A",
+      form: "FACTURA A",
+      number: "0027-00411682",
+      date: "31/08/2026",
+      dueDate: "31/08/2026",
+      remito: "R-8891",
+      currency: 2,
+      exchangeRate: 1530,
+      amount: 773.62,
+      debit: 1183638.6,
+      credit: null,
+      balance: 1187506.7,
+      balanceUSD: 773.62,
+      status: "Pendiente",
+    };
+    const recibo = {
+      invoiceCode: "A",
+      form: "RECIBO A",
+      number: "0001-000099",
+      date: "01/09/2026",
+      currency: 1,
+      exchangeRate: 1,
+      amount: 5212174.5,
+      debit: null,
+      credit: 5212174.5,
+      balance: 38668.1,
+    };
+    const rsc = `0:${JSON.stringify(payload)} 1:${JSON.stringify(factura)} 2:${JSON.stringify(recibo)}`;
+    const s = parseElitCtaRsc(rsc);
+    expect(s.summary).toMatchObject({
+      status: "Cuenta corriente aprobada",
+      approved: true,
+      creditLimit: 4610000,
+      currentAccount: 1187506.7,
+      checks: 0,
+      pendingOrders: 0,
+      availableCredit: 3422493.3,
+    });
+    expect(s.balance).toBe(1187506.7);
+    expect(s.usdVouchers).toEqual([
+      expect.objectContaining({ number: "0027-00411682", debit: 773.62, dueDate: "31/08/2026" }),
+    ]);
+    expect(s.movements[0]).toMatchObject({
+      form: "FACTURA A",
+      remito: "R-8891",
+      amount: 773.62,
+      exchangeRate: 1530,
+      debit: 1183638.6,
+      currency: "USD",
+    });
+    expect(s.movements[1]).toMatchObject({ form: "RECIBO A", credit: 5212174.5, currency: "ARS" });
   });
 });
 

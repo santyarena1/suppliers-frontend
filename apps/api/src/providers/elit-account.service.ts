@@ -47,7 +47,21 @@ export class ElitAccountService {
     const fromRsc = pedidosRsc ? parseElitPedidosRsc(pedidosRsc) : [];
     const fromApi = saleNotesApi ? parseElitSaleNotesPayload(saleNotesApi) : [];
     const orders = mergeSaleNotes(fromApi, fromRsc);
-    const statement = cta ? parseElitCtaRsc(cta) : { balance: null, movements: [] };
+    const statement = cta ? parseElitCtaRsc(cta) : {
+      balance: null,
+      balanceUsd: null,
+      summary: {
+        status: "",
+        approved: false,
+        creditLimit: null,
+        currentAccount: null,
+        checks: null,
+        pendingOrders: null,
+        availableCredit: null,
+      },
+      usdVouchers: [],
+      movements: [],
+    };
     const payments = paymentsApi ? parseElitPaymentsPayload(paymentsApi) : { canCreateReport: false, active: null, payments: [] };
     return {
       profile: {
@@ -56,6 +70,9 @@ export class ElitAccountService {
         exchange: api.session.currentExchange,
       },
       balance: statement.balance,
+      balanceUsd: statement.balanceUsd,
+      summary: statement.summary,
+      usdVouchers: statement.usdVouchers,
       orders,
       movements: statement.movements,
       payments: payments.payments,
