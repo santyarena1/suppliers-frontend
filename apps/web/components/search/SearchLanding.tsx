@@ -32,7 +32,13 @@ export default function SearchLanding({ onCategoryClick }: SearchLandingProps) {
         if (!alive) return;
         setBanners(Array.isArray(bRes.data) ? bRes.data : []);
         setCategories(Array.isArray(cats.data) ? cats.data : []);
-        setPriceDrops(Array.isArray(drops.data) ? drops.data : []);
+        const list = Array.isArray(drops.data) ? drops.data : [];
+        // Mayor baja % primero por si el API o cache no vienen ordenados.
+        setPriceDrops(
+          [...list].sort(
+            (a, b) => (b.priceDropPercent ?? 0) - (a.priceDropPercent ?? 0),
+          ),
+        );
       })
       .catch(() => {})
       .finally(() => alive && setLoading(false));

@@ -813,24 +813,27 @@ export class ProvidersService implements OnModuleInit {
 
     const drops = await this.findRecentPriceDrops(tenantId, providers, limit);
 
-    const dropViews = drops.map((d) => {
-      const view = toProductView(d.offer.product, d.offer, rules.get(d.offer.provider) ?? NO_RULES, enrichment);
-      const markup = rules.get(d.offer.provider)?.markupPercent ?? 0;
-      const prevPrice = withMarkup(d.previousPrice, markup);
-      const prevFinal = withMarkup(d.previousFinalPrice, markup);
-      const current = view.finalPrice ?? view.price;
-      const previous = prevFinal ?? prevPrice;
-      const priceDropPercent =
-        current != null && previous != null && previous > 0 && current < previous
-          ? Math.round(((previous - current) / previous) * 1000) / 10
-          : null;
-      return {
-        ...view,
-        previousPrice: prevPrice,
-        previousFinalPrice: prevFinal,
-        priceDropPercent,
-      };
-    });
+    const dropViews = drops
+      .map((d) => {
+        const view = toProductView(d.offer.product, d.offer, rules.get(d.offer.provider) ?? NO_RULES, enrichment);
+        const markup = rules.get(d.offer.provider)?.markupPercent ?? 0;
+        const prevPrice = withMarkup(d.previousPrice, markup);
+        const prevFinal = withMarkup(d.previousFinalPrice, markup);
+        const current = view.finalPrice ?? view.price;
+        const previous = prevFinal ?? prevPrice;
+        const priceDropPercent =
+          current != null && previous != null && previous > 0 && current < previous
+            ? Math.round(((previous - current) / previous) * 1000) / 10
+            : null;
+        return {
+          ...view,
+          previousPrice: prevPrice,
+          previousFinalPrice: prevFinal,
+          priceDropPercent,
+        };
+      })
+      // Mayor baja % primero (lo que más bajó → lo que menos).
+      .sort((a, b) => (b.priceDropPercent ?? 0) - (a.priceDropPercent ?? 0));
 
     if (!opts.mixed) {
       return this.withImageAiFlags(dropViews.slice(0, limit));
@@ -906,7 +909,15 @@ export class ProvidersService implements OnModuleInit {
             AND r.price < r.prev_price
           )
         )
-      ORDER BY r."capturedAt" DESC
+      ORDER BY
+        CASE
+          WHEN r.prev_final IS NOT NULL AND r."finalPrice" IS NOT NULL AND r.prev_final > 0
+            THEN (r.prev_final - r."finalPrice") / r.prev_final
+          WHEN r.prev_price IS NOT NULL AND r.price IS NOT NULL AND r.prev_price > 0
+            THEN (r.prev_price - r.price) / r.prev_price
+          ELSE 0
+        END DESC,
+        r."capturedAt" DESC
       LIMIT ${take}
     `;
 
