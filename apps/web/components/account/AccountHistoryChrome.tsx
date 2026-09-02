@@ -31,6 +31,8 @@ type Props = {
   /** Bloque fijo arriba del listado (saldo, formularios…). */
   header?: React.ReactNode;
   hint?: string;
+  /** Tablas anchas (cta cte Elit: cupo + historial). */
+  wide?: boolean;
 };
 
 export default function AccountHistoryChrome({
@@ -51,11 +53,12 @@ export default function AccountHistoryChrome({
   children,
   header,
   hint,
+  wide,
 }: Props) {
   const monthLabel = month === "all" ? "Todos" : formatMonthLabel(month);
 
   return (
-    <div className="flex flex-col gap-4 max-w-3xl">
+    <div className={`flex flex-col gap-4 ${wide ? "max-w-6xl" : "max-w-3xl"}`}>
       {hint && <p className="text-xs text-surface-500">{hint}</p>}
 
       <div className="flex flex-wrap items-center gap-2 border-b border-surface-800 pb-px">

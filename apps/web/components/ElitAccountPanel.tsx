@@ -8,10 +8,11 @@ import {
   ElitSaleNote,
   ElitMovement,
   ElitPayment,
+  ElitUsdVoucher,
 } from "@/lib/api";
 import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
-import { Wallet, XCircle } from "lucide-react";
+import { XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
@@ -143,7 +144,7 @@ export default function ElitAccountPanel() {
       const credit = sumAccountAmounts(moves.map((m) => m.credit));
       if (debit == null && credit == null) return null;
       const net = (debit ?? 0) - (credit ?? 0);
-      return `Débito ${formatAccountSum(debit ?? 0, "USD")} · Crédito ${formatAccountSum(credit ?? 0, "USD")} · Neto ${formatAccountSum(net, "USD")}`;
+      return `Débito ${formatAccountSum(debit ?? 0, "ARS")} · Crédito ${formatAccountSum(credit ?? 0, "ARS")} · Neto ${formatAccountSum(net, "ARS")}`;
     }
     if (section === "payments") {
       const s = sumAccountAmounts((rows as ElitPayment[]).map((p) => p.total));
@@ -171,7 +172,7 @@ export default function ElitAccountPanel() {
   return (
     <>
       {account?.profile?.name && (
-        <p className="text-xs text-surface-400 mb-3 max-w-3xl">
+        <p className="text-xs text-surface-400 mb-3 max-w-6xl">
           {account.profile.name}
           {account.profile.id ? ` · cliente ${account.profile.id}` : ""}
           {account.profile.exchange != null ? ` · USD ${account.profile.exchange}` : ""}
@@ -193,19 +194,8 @@ export default function ElitAccountPanel() {
         fromCache={fromCache}
         amountTotal={amountTotal}
         hint="Pedidos y comprobantes de elit.com.ar. Informes de pago: Adjuntar abre el formulario de Elit (banco, tipo, fecha, importe y un archivo)."
-        header={
-          section === "cta" && account?.balance != null ? (
-            <div className="flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-sky-400" />
-              <div>
-                <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
-                <p className={`text-xl font-bold tabular-nums ${account.balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
-                  {account.balance.toLocaleString("es-AR", { style: "currency", currency: "USD" })}
-                </p>
-              </div>
-            </div>
-          ) : undefined
-        }
+        wide={section === "cta"}
+        header={section === "cta" ? <CtaOverview account={account} /> : undefined}
       >
         {loading && !ready ? (
           <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -221,10 +211,13 @@ export default function ElitAccountPanel() {
             <button type="button" onClick={() => void load(true)} className="underline flex-shrink-0">Reintentar</button>
           </div>
         ) : section === "cta" ? (
-          <MovementsTable
-            rows={paged.items as ElitMovement[]}
-            onOpen={(m) => setDetail({ kind: "movement", row: m })}
-          />
+          <div className="flex flex-col gap-5">
+            <UsdVouchersTable rows={account?.usdVouchers ?? []} />
+            <MovementsTable
+              rows={paged.items as ElitMovement[]}
+              onOpen={(m) => setDetail({ kind: "movement", row: m })}
+            />
+          </div>
         ) : section === "payments" ? (
           <ElitPaymentSection
             payments={paged.items as ElitPayment[]}
@@ -265,9 +258,15 @@ export default function ElitAccountPanel() {
             { label: "Tipo", value: detail.row.form },
             { label: "Número", value: detail.row.number },
             { label: "Fecha", value: detail.row.date },
-            { label: "Débito", value: fmt(detail.row.debit, detail.row.currency) },
-            { label: "Crédito", value: fmt(detail.row.credit, detail.row.currency) },
-            { label: "Saldo", value: fmt(detail.row.balanceUsd ?? detail.row.balance, detail.row.currency) },
+            { label: "Vencimiento", value: detail.row.dueDate || "" },
+            { label: "Remito", value: detail.row.remito || "" },
+            { label: "Moneda", value: detail.row.currency || "" },
+            { label: "Cotización", value: detail.row.exchangeRate != null ? detail.row.exchangeRate.toLocaleString("es-AR", { minimumFractionDigits: 2 }) : "" },
+            { label: "Importe", value: fmt(detail.row.amount ?? detail.row.total, detail.row.currency) },
+            { label: "Débito", value: fmt(detail.row.debit, "ARS") },
+            { label: "Crédito", value: fmt(detail.row.credit, "ARS") },
+            { label: "Saldo", value: fmt(detail.row.balance, "ARS") },
+            { label: "Estado", value: detail.row.status || "" },
           ]}
           documents={elitMovementDocs(detail.row)}
           note={/saldo/i.test(detail.row.form) ? "El saldo no es un comprobante descargable." : undefined}
@@ -323,6 +322,83 @@ function statusClass(status: string) {
   return "bg-amber-500/10 text-amber-700 dark:text-amber-400";
 }
 
+function moneyCell(n: number | null | undefined, currency: string, tone?: "debit" | "credit") {
+  if (n == null) return "—";
+  const cls =
+    tone === "debit" ? "text-red-400" : tone === "credit" ? "text-emerald-400" : "text-surface-200";
+  return <span className={cls}>{fmt(n, currency)}</span>;
+}
+
+function CtaOverview({ account }: { account: ElitAccount | null }) {
+  if (!account) return null;
+  const s = account.summary;
+  const cards: { label: string; value: number | null | undefined }[] = [
+    { label: "Cupo de crédito", value: s?.creditLimit },
+    { label: "Cuenta corriente", value: s?.currentAccount ?? account.balance },
+    { label: "Cheques en cartera", value: s?.checks },
+    { label: "Pedidos pendientes", value: s?.pendingOrders },
+    { label: "Crédito disponible", value: s?.availableCredit },
+  ];
+  const hasCards = cards.some((c) => c.value != null);
+  if (!hasCards && !s?.status) return null;
+  return (
+    <div className="flex flex-col gap-3">
+      {s?.status ? (
+        <p className={`text-xs font-semibold ${s.approved ? "text-emerald-400" : "text-amber-300"}`}>
+          {s.status}
+        </p>
+      ) : null}
+      {hasCards ? (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+          {cards.map((c) => (
+            <div key={c.label} className="rounded-xl border border-surface-800 bg-surface-900/50 px-3 py-2.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 leading-tight">{c.label}</p>
+              <p className="text-sm font-bold tabular-nums text-white mt-1.5">{c.value == null ? "—" : fmt(c.value, "ARS")}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function UsdVouchersTable({ rows }: { rows: ElitUsdVoucher[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Comprobantes en dólares</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+              <th className="text-left font-semibold px-2 py-2">Fecha</th>
+              <th className="text-left font-semibold px-2 py-2">Vencimiento</th>
+              <th className="text-left font-semibold px-2 py-2">Comprobante</th>
+              <th className="text-left font-semibold px-2 py-2">Número</th>
+              <th className="text-right font-semibold px-2 py-2">Debe (USD)</th>
+              <th className="text-right font-semibold px-2 py-2">Haber (USD)</th>
+              <th className="text-left font-semibold px-2 py-2">Estado</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-surface-800">
+            {rows.map((r, i) => (
+              <tr key={`${r.number}-${i}`}>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{r.date || "—"}</td>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{r.dueDate || "—"}</td>
+                <td className="px-2 py-2 text-surface-200">{r.form || "—"}</td>
+                <td className="px-2 py-2 text-surface-400 font-mono text-xs">{r.number || "—"}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{moneyCell(r.debit, "USD", "debit")}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{moneyCell(r.credit, "USD", "credit")}</td>
+                <td className="px-2 py-2 text-surface-400">{r.status || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function MovementsTable({
   rows,
   onOpen,
@@ -331,33 +407,48 @@ function MovementsTable({
   onOpen: (m: ElitMovement) => void;
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-            <th className="text-left font-semibold px-2 py-2">Fecha</th>
-            <th className="text-left font-semibold px-2 py-2">Tipo</th>
-            <th className="text-left font-semibold px-2 py-2">Número</th>
-            <th className="text-right font-semibold px-2 py-2">Débito</th>
-            <th className="text-right font-semibold px-2 py-2">Crédito</th>
-            <th className="text-right font-semibold px-2 py-2">Saldo</th>
-            <th className="text-right font-semibold px-2 py-2"></th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-surface-800">
-          {rows.map((m, i) => (
-            <tr key={`${m.number}-${i}`}>
-              <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date || "—"}</td>
-              <td className="px-2 py-2 text-surface-200">{m.form || "—"}</td>
-              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.number || "—"}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.debit, m.currency)}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.credit, m.currency)}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.balanceUsd ?? m.balance, m.currency)}</td>
-              <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(m)} /></td>
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Historial de cuenta corriente</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+              <th className="text-left font-semibold px-2 py-2">Fecha</th>
+              <th className="text-left font-semibold px-2 py-2">Comprobante</th>
+              <th className="text-left font-semibold px-2 py-2">Número</th>
+              <th className="text-left font-semibold px-2 py-2">Remito</th>
+              <th className="text-left font-semibold px-2 py-2">Moneda</th>
+              <th className="text-right font-semibold px-2 py-2">Cotización</th>
+              <th className="text-right font-semibold px-2 py-2">Importe</th>
+              <th className="text-right font-semibold px-2 py-2">Debe</th>
+              <th className="text-right font-semibold px-2 py-2">Haber</th>
+              <th className="text-right font-semibold px-2 py-2"></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-surface-800">
+            {rows.map((m, i) => (
+              <tr key={`${m.number}-${i}`}>
+                <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{m.date || "—"}</td>
+                <td className="px-2 py-2 text-surface-200 whitespace-nowrap">{m.form || "—"}</td>
+                <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.number || "—"}</td>
+                <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.remito || "—"}</td>
+                <td className="px-2 py-2 text-surface-400">{m.currency || "—"}</td>
+                <td className="px-2 py-2 text-right tabular-nums text-surface-400">
+                  {m.exchangeRate != null
+                    ? m.exchangeRate.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : m.currency === "ARS"
+                      ? "1,00"
+                      : "—"}
+                </td>
+                <td className="px-2 py-2 text-right tabular-nums text-surface-200">{fmt(m.amount ?? m.total, m.currency || "USD")}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{moneyCell(m.debit, "ARS", "debit")}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{moneyCell(m.credit, "ARS", "credit")}</td>
+                <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(m)} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {rows.length === 0 && (
         <p className="text-center text-xs text-surface-500 py-6">Sin movimientos en este período.</p>
       )}

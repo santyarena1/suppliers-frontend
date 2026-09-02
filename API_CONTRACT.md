@@ -235,6 +235,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: No es por pedido: es un informe de cuenta. La UI es un modal **Enviar** (crear + adjuntar + cerrar). **No** usar `GET /account/payments?include=options` — Elit crea un informe vacío. New Bytes, Air y Grupo Núcleo no tienen upload de comprobantes: solo ver/descargar (GN ni eso).
 
+### [FEATURE] Cuenta corriente Elit (cupo, dólares, historial)
+- **Método**: GET
+- **Ruta**: `/providers/ELIT/account`
+- **Auth**: Bearer, organización comercio con cuenta Elit cargada
+- **Body / Params**: `refresh=1` opcional
+- **Respuesta esperada**: además de `movements[]`, `summary` (`status`, `approved`, `creditLimit`, `currentAccount`, `checks`, `pendingOrders`, `availableCredit` en ARS), `usdVouchers[]` (comprobantes en USD: fecha, vencimiento, debe/haber, estado) y `balance` = saldo de cuenta corriente en **pesos**. Cada movimiento puede traer `remito`, `amount` (importe en la moneda del comprobante), `exchangeRate`, `dueDate`, `status`. `debit`/`credit` del historial van en ARS.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Sale del RSC de `/mi-cuenta/cuenta-corriente`. No se inventa el cupo: si Elit no lo manda, la tarjeta queda en —. La UI replica cupo / cuenta corriente / cheques / pedidos pendientes / crédito disponible, la tabla de dólares y el historial con moneda y cotización.
+
 ### [FEATURE] Detalle de pedidos New Bytes (productos e importes)
 - **Método**: GET
 - **Ruta**: `/providers/NEW_BYTES/orders/:id`
