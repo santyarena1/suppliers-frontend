@@ -22,6 +22,7 @@ import {
   tenantsApi,
 } from "@/lib/api";
 import GeneratedPassword from "./GeneratedPassword";
+import EnterAsButton from "./EnterAsButton";
 import PlatformAccountPanel, { PLATFORM_ROLE_LABELS } from "./PlatformAccountPanel";
 import {
   Building2,
@@ -351,22 +352,33 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
                   {people.map((row) => {
                     const selected = selection?.kind === "user" && selection.id === row.userId;
                     return (
-                      <button
+                      <div
                         key={`${row.userId}-${row.tenantId ?? "none"}`}
-                        type="button"
-                        onClick={() => setSelection({ kind: "user", id: row.userId, tenantId: row.tenantId })}
-                        className={`w-full text-left px-3.5 py-2.5 ${selected ? "bg-brand-600/10" : "hover:bg-surface-900/50"}`}
+                        className={`flex items-center gap-2 px-2 py-1.5 ${selected ? "bg-brand-600/10" : "hover:bg-surface-900/50"}`}
                       >
-                        <p className={`text-sm truncate ${selected ? "text-white font-medium" : "text-surface-200"}`}>
-                          {row.username}
-                        </p>
-                        <p className="text-[11px] text-surface-500 truncate">
-                          {row.tenantName
-                            ? `${row.tenantName} · ${row.tenantRole ? TENANT_ROLE_LABELS[row.tenantRole] : ""}`
-                            : "Sin organización"}
-                          {row.active ? "" : " · inactivo"}
-                        </p>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelection({ kind: "user", id: row.userId, tenantId: row.tenantId })}
+                          className="min-w-0 flex-1 text-left px-1.5 py-1"
+                        >
+                          <p className={`text-sm truncate ${selected ? "text-white font-medium" : "text-surface-200"}`}>
+                            {row.username}
+                          </p>
+                          <p className="text-[11px] text-surface-500 truncate">
+                            {row.tenantName
+                              ? `${row.tenantName} · ${row.tenantRole ? TENANT_ROLE_LABELS[row.tenantRole] : ""}`
+                              : "Sin organización"}
+                            {row.active ? "" : " · inactivo"}
+                          </p>
+                        </button>
+                        <EnterAsButton
+                          userId={row.userId}
+                          role={row.platformRole}
+                          showLabel={false}
+                          onError={(message) => showToast(message, false)}
+                          className="shrink-0 w-8 h-8"
+                        />
+                      </div>
                     );
                   })}
                 </div>
@@ -396,6 +408,7 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
                       onToggle={() => toggle(tenant.id)}
                       onSelectTenant={() => setSelection({ kind: "tenant", id: tenant.id })}
                       onSelectUser={(userId) => setSelection({ kind: "user", id: userId, tenantId: tenant.id })}
+                      showToast={showToast}
                     />
                   ))}
                 </div>
@@ -414,15 +427,26 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
                 {unassignedFiltered.map((user) => {
                   const selected = selection?.kind === "user" && selection.id === user.id;
                   return (
-                    <button
+                    <div
                       key={user.id}
-                      type="button"
-                      onClick={() => setSelection({ kind: "user", id: user.id, tenantId: null })}
-                      className={`w-full text-left px-3.5 py-2.5 ${selected ? "bg-brand-600/10" : "hover:bg-surface-900/50"}`}
+                      className={`flex items-center gap-2 px-2 py-1.5 ${selected ? "bg-brand-600/10" : "hover:bg-surface-900/50"}`}
                     >
-                      <p className={`text-sm ${selected ? "text-white font-medium" : "text-surface-200"}`}>{user.username}</p>
-                      <p className="text-[11px] text-surface-500">{user.email}</p>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelection({ kind: "user", id: user.id, tenantId: null })}
+                        className="min-w-0 flex-1 text-left px-1.5 py-1"
+                      >
+                        <p className={`text-sm ${selected ? "text-white font-medium" : "text-surface-200"}`}>{user.username}</p>
+                        <p className="text-[11px] text-surface-500">{user.email}</p>
+                      </button>
+                      <EnterAsButton
+                        userId={user.id}
+                        role={user.role}
+                        showLabel={false}
+                        onError={(message) => showToast(message, false)}
+                        className="shrink-0 w-8 h-8"
+                      />
+                    </div>
                   );
                 })}
               </div>
@@ -522,6 +546,7 @@ function TenantBranch({
   onToggle,
   onSelectTenant,
   onSelectUser,
+  showToast,
 }: {
   tenant: TenantNode;
   open: boolean;
@@ -529,6 +554,7 @@ function TenantBranch({
   onToggle: () => void;
   onSelectTenant: () => void;
   onSelectUser: (userId: string) => void;
+  showToast: ToastFn;
 }) {
   const isSelected = selection?.kind === "tenant" && selection.id === tenant.id;
   const roleGroups = TENANT_ROLES_BY_TYPE[tenant.type]
@@ -584,20 +610,33 @@ function TenantBranch({
                 {members.map((member) => {
                   const active = selection?.kind === "user" && selection.id === member.userId;
                   return (
-                    <button
+                    <div
                       key={member.membershipId}
-                      onClick={() => onSelectUser(member.userId)}
-                      className={`flex items-center gap-2 text-left rounded-md px-2 py-1.5 transition-colors ${
-                        active ? "bg-brand-600/20 text-white" : "text-surface-300 hover:bg-surface-800/60"
+                      className={`flex items-center gap-1 rounded-md ${
+                        active ? "bg-brand-600/20" : "hover:bg-surface-800/60"
                       }`}
                     >
-                      <UserRound className="w-3 h-3 text-surface-500 flex-shrink-0" />
-                      <span className="text-xs truncate">{member.username}</span>
-                      {member.title && <span className="text-[10px] text-surface-500 truncate">{member.title}</span>}
-                      {(!member.active || !member.membershipActive) && (
-                        <span className="text-[10px] text-red-400 flex-shrink-0">inactivo</span>
-                      )}
-                    </button>
+                      <button
+                        onClick={() => onSelectUser(member.userId)}
+                        className={`flex min-w-0 flex-1 items-center gap-2 text-left px-2 py-1.5 ${
+                          active ? "text-white" : "text-surface-300"
+                        }`}
+                      >
+                        <UserRound className="w-3 h-3 text-surface-500 flex-shrink-0" />
+                        <span className="text-xs truncate">{member.username}</span>
+                        {member.title && <span className="text-[10px] text-surface-500 truncate">{member.title}</span>}
+                        {(!member.active || !member.membershipActive) && (
+                          <span className="text-[10px] text-red-400 flex-shrink-0">inactivo</span>
+                        )}
+                      </button>
+                      <EnterAsButton
+                        userId={member.userId}
+                        role={member.platformRole}
+                        showLabel={false}
+                        onError={(message) => showToast(message, false)}
+                        className="shrink-0 w-7 h-7 mr-1"
+                      />
+                    </div>
                   );
                 })}
               </div>
@@ -892,6 +931,13 @@ function MembersSection({
                 <p className="text-sm text-surface-200">{member.username}</p>
                 <p className="text-[11px] text-surface-500">{member.email}</p>
               </button>
+              <EnterAsButton
+                userId={member.userId}
+                role={member.platformRole}
+                showLabel={false}
+                onError={(message) => showToast(message, false)}
+                className="shrink-0 w-8 h-8"
+              />
 
               <input
                 defaultValue={member.title ?? ""}
@@ -1352,6 +1398,15 @@ function UserRelationsPanel({
               {account ? ` · ${PLATFORM_ROLE_LABELS[account.role]}` : ""}
             </p>
           </div>
+          {account && (
+            <EnterAsButton
+              userId={account.id}
+              role={account.role}
+              variant="primary"
+              onError={(message) => showToast(message, false)}
+              className="shrink-0 px-3 py-2"
+            />
+          )}
         </div>
         {member?.managedBrands && member.managedBrands.length > 0 && tenant && (
           <p className="text-[11px] text-surface-400 mt-3">
