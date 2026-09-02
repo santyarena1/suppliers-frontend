@@ -43,8 +43,8 @@ export default function CatalogEnrichmentPanel({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const [ov, cats, brands, allTerms] = await Promise.all([
         catalogEnrichmentApi.overview(),
@@ -59,13 +59,31 @@ export default function CatalogEnrichmentPanel({
     } catch {
       showToast("No se pudo cargar el catálogo", false);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const purged = await catalogEnrichmentApi.purgeAirCodes();
+        if (cancelled) return;
+        const n = purged.data.productsCleared + purged.data.aliasesDeleted + purged.data.termsDeleted;
+        if (n > 0) {
+          showToast(
+            `Se sacaron códigos viejos de Air (${purged.data.productsCleared} productos, ${purged.data.aliasesDeleted} vínculos)`
+          );
+        }
+      } catch {
+        // Si falla la limpieza, igual se carga el tablero.
+      }
+      if (!cancelled) await load();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [load, showToast]);
 
   if (loading && !catBoard) {
     return (
@@ -155,7 +173,7 @@ export default function CatalogEnrichmentPanel({
           )}
           busy={busy}
           setBusy={setBusy}
-          onReload={load}
+          onReload={() => load({ silent: true })}
           showToast={showToast}
         />
       )}

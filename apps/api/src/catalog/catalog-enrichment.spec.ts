@@ -7,6 +7,8 @@ import {
   normalizeCatalogLabel,
   normalizeEan,
   normalizePartNumber,
+  looksLikeAirCatalogCode,
+  looksLikeProviderCode,
   parentWouldCycle,
   resolveCatalogDisplay,
   suggestAliasMerges,
@@ -76,6 +78,18 @@ describe("catalog-enrichment", () => {
     const suggestions = suggestAliasMerges(stats);
     expect(suggestions.length).toBe(1);
     expect(suggestions[0].rawKeys).toEqual(expect.arrayContaining(["Memorias RAM", "Memorias Ram"]));
+  });
+
+  it("detecta ids viejos de Air y no marcas reales", () => {
+    expect(looksLikeAirCatalogCode("63")).toBe(true);
+    expect(looksLikeAirCatalogCode("001-0010")).toBe(true);
+    expect(looksLikeAirCatalogCode("002-1263")).toBe(true);
+    expect(looksLikeAirCatalogCode("HP")).toBe(false);
+    expect(looksLikeAirCatalogCode("LOGITECH")).toBe(false);
+    expect(looksLikeAirCatalogCode("TP-LINK")).toBe(false);
+    expect(looksLikeAirCatalogCode("ACCESORIOS")).toBe(false);
+    expect(looksLikeProviderCode("001-0010")).toBe(true);
+    expect(looksLikeProviderCode("12")).toBe(true);
   });
 
   it("normaliza EAN y part number", () => {

@@ -400,8 +400,21 @@ export function pickCanonicalBrandLabel(spellings: string[]): string {
 export function looksLikeProviderCode(raw: string): boolean {
   const t = raw.trim();
   if (!t) return false;
-  if (/^\d+$/.test(t)) return true;
+  if (looksLikeAirCatalogCode(t)) return true;
   if (/^[A-Z0-9]{1,4}$/i.test(t) && !/[aeiouáéíóú]/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Ids que Air metía en categoría/marca antes de resolver nombres:
+ * grupo numérico (`63`) o rubro tipo `001-0010`. No usa el detector
+ * corto (HP, IBM) para no borrar marcas reales.
+ */
+export function looksLikeAirCatalogCode(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) return false;
+  if (/^\d+$/.test(t)) return true;
+  if (/^\d{2,4}-\d{3,4}$/.test(t)) return true;
   return false;
 }
 

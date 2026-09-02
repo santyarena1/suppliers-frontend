@@ -52,6 +52,11 @@ export class CatalogEnrichmentController {
     return this.catalog.clearOpenAiKey();
   }
 
+  @Post("purge-air-codes")
+  purgeAirCodes() {
+    return this.catalog.purgeAirImportCodes();
+  }
+
   @Get("board")
   board(@Query("kind") kind: string) {
     const k = (CATALOG_ALIAS_KINDS as readonly string[]).includes(kind) ? kind : "CATEGORY";

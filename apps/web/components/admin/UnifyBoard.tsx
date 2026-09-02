@@ -182,6 +182,25 @@ export default function UnifyBoard({
   const visibleRows = filteredRows.slice(0, visibleCount);
   const visibleGroups = unifiedGroups.slice(0, visibleCount);
 
+  const unlinkedKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of board?.rows ?? []) {
+      if (!r.termId) set.add(rowKey(r));
+    }
+    return set;
+  }, [board]);
+
+  const liveClusters = useMemo(
+    () =>
+      clusters
+        .map((c) => ({
+          ...c,
+          members: c.members.filter((m) => unlinkedKeys.has(rowKey(m))),
+        }))
+        .filter((c) => c.members.length >= 2),
+    [clusters, unlinkedKeys]
+  );
+
   const existingGroups = useMemo(
     () => (board?.terms ?? []).filter((t) => t.members.length > 0),
     [board]
@@ -243,8 +262,10 @@ export default function UnifyBoard({
   useEffect(() => {
     if (!board) return;
     void loadSuggestions(false);
+    // Solo al cambiar de categorías/marcas. Reconsultar IA después de cada
+    // unificación rehacía el tablero y hacía reaparecer lo recién unificado.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kind, board?.stats.linkedCount]);
+  }, [kind]);
 
   function goToUnified(termId: string) {
     setListFilter("linked");
@@ -291,7 +312,7 @@ export default function UnifyBoard({
   }
 
   async function applyAllHighConfidence() {
-    const batch = clusters.filter((c) => c.confidence === "alta");
+    const batch = liveClusters.filter((c) => c.confidence === "alta");
     if (batch.length === 0) return showToast("No hay sugerencias de alta confianza");
     setBusy("ai-batch");
     let ok = 0;
@@ -527,7 +548,7 @@ export default function UnifyBoard({
             </p>
           </div>
           <div className="flex gap-2">
-            {clusters.some((c) => c.confidence === "alta") && (
+            {liveClusters.some((c) => c.confidence === "alta") && (
               <button
                 type="button"
                 disabled={busy === "ai-batch"}
@@ -572,11 +593,11 @@ export default function UnifyBoard({
           </div>
         </div>
 
-        {busy === `ai-${kind}` && clusters.length === 0 ? (
+        {busy === `ai-${kind}` && liveClusters.length === 0 && clusters.length === 0 ? (
           <p className="px-4 py-8 text-sm text-surface-500 text-center flex items-center justify-center gap-2">
             <Loader2 className="w-4 h-4 animate-spin" /> Analizando {nounPlural}…
           </p>
-        ) : clusters.length === 0 ? (
+        ) : liveClusters.length === 0 ? (
           <div className="px-4 py-8 text-center space-y-2">
             <p className="text-sm text-surface-400">No hay sugerencias pendientes.</p>
             <p className="text-xs text-surface-500">
@@ -585,7 +606,7 @@ export default function UnifyBoard({
           </div>
         ) : (
           <ul className="divide-y divide-surface-800/80 max-h-[380px] overflow-y-auto">
-            {clusters.map((c) => {
+            {liveClusters.map((c) => {
               const fp = clusterFingerprint(c);
               const total = c.members.reduce((s, m) => s + m.count, 0);
               const options = clusterNameOptions(c);

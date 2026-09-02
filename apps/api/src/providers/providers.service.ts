@@ -261,6 +261,15 @@ export class ProvidersService {
       `Sync de ${provider}: ${count} productos (creados: ${created}, actualizados: ${updated}, ` +
         `faltantes afectados: ${missingCount}, stock cero afectados: ${zeroStockCount})`
     );
+
+    if (provider === "AIR") {
+      this.catalogEnrichment.purgeAirImportCodes().catch((err) => {
+        this.logger.warn(
+          `No se pudieron limpiar códigos viejos de Air: ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
+    }
+
     return { provider, synced: count, created, updated, missingAffected: missingCount, zeroStockAffected: zeroStockCount };
   }
 

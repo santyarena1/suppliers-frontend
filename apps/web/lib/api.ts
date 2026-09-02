@@ -2181,6 +2181,10 @@ export const catalogEnrichmentApi = {
   overview: () => api.get<CatalogEnrichmentOverview>("/admin/catalog-enrichment/overview"),
   board: (kind: CatalogAliasKind) =>
     api.get<CatalogBoard>("/admin/catalog-enrichment/board", { params: { kind } }),
+  purgeAirCodes: () =>
+    api.post<{ productsCleared: number; aliasesDeleted: number; termsDeleted: number }>(
+      "/admin/catalog-enrichment/purge-air-codes"
+    ),
   terms: (kind?: CatalogAliasKind) =>
     api.get<CatalogTerm[]>("/admin/catalog-enrichment/terms", { params: kind ? { kind } : {} }),
   createTerm: (data: {

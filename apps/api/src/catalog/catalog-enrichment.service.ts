@@ -9,6 +9,7 @@ import {
   indexCatalogAliases,
   indexCatalogIdentities,
   indexCatalogOverrides,
+  looksLikeAirCatalogCode,
   looksLikeProviderCode,
   matchingRawCategories,
   matchesDisplayCategory,
@@ -109,6 +110,62 @@ export class CatalogEnrichmentService implements OnModuleInit {
     };
   }
 
+  /**
+   * Saca de Air los ids que se guardaron como categoría/marca (63, 001-0010)
+   * cuando el CSV no traía nombres. No toca HP/LOGITECH ni otros proveedores.
+   */
+  async purgeAirImportCodes() {
+    const codeSql = `(TRIM(x) ~ '^[0-9]+$' OR TRIM(x) ~ '^[0-9]{2,4}-[0-9]{3,4}$')`;
+    const [catRes, brandRes, subRes] = await Promise.all([
+      this.prisma.$executeRawUnsafe(
+        `UPDATE "ProviderSyncCache" SET category = NULL WHERE provider = 'AIR' AND category IS NOT NULL AND TRIM(category) <> '' AND (${codeSql.replace(/x/g, "category")})`
+      ),
+      this.prisma.$executeRawUnsafe(
+        `UPDATE "ProviderSyncCache" SET brand = NULL WHERE provider = 'AIR' AND brand IS NOT NULL AND TRIM(brand) <> '' AND (${codeSql.replace(/x/g, "brand")})`
+      ),
+      this.prisma.$executeRawUnsafe(
+        `UPDATE "ProviderSyncCache" SET subcategory = NULL WHERE provider = 'AIR' AND subcategory IS NOT NULL AND TRIM(subcategory) <> '' AND (${codeSql.replace(/x/g, "subcategory")})`
+      ),
+    ]);
+
+    const aliases = await this.prisma.platformCatalogAlias.findMany({
+      where: { provider: "AIR" },
+      select: { id: true, rawKey: true, termId: true },
+    });
+    const staleAliases = aliases.filter((a) => looksLikeAirCatalogCode(a.rawKey));
+    if (staleAliases.length > 0) {
+      await this.prisma.platformCatalogAlias.deleteMany({
+        where: { id: { in: staleAliases.map((a) => a.id) } },
+      });
+    }
+
+    const orphanTerms = await this.prisma.platformCatalogTerm.findMany({
+      where: { aliases: { none: {} } },
+      include: { brandTenant: { select: { id: true } } },
+    });
+    let termsDeleted = 0;
+    for (const term of orphanTerms) {
+      if (!looksLikeAirCatalogCode(term.label)) continue;
+      if (term.brandTenant) continue;
+      try {
+        await this.deleteTerm(term.id, true);
+        termsDeleted++;
+      } catch (err) {
+        this.logger.warn(
+          `No se pudo borrar término código Air ${term.label}: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
+
+    await this.refreshCache(true);
+    const productsCleared = Number(catRes) + Number(brandRes) + Number(subRes);
+    return {
+      productsCleared,
+      aliasesDeleted: staleAliases.length,
+      termsDeleted,
+    };
+  }
+
   saveOpenAiKey(apiKey: string) {
     return this.settings.saveOpenAiKey(apiKey);
   }
@@ -126,6 +183,7 @@ export class CatalogEnrichmentService implements OnModuleInit {
     provider?: string;
     codesOnly?: boolean;
     limit?: number;
+    includeSamples?: boolean;
   }) {
     const limit = Math.min(Math.max(params.limit ?? 80, 1), 500);
     const column = this.fieldForKind(params.kind);
@@ -156,24 +214,27 @@ export class CatalogEnrichmentService implements OnModuleInit {
     for (const row of rows) {
       const rawKey = row.raw_key?.trim();
       if (!rawKey) continue;
+      const provider = params.provider ?? row.provider;
+      if (provider === "AIR" && looksLikeAirCatalogCode(rawKey)) continue;
       const looksLikeCode = looksLikeProviderCode(rawKey);
       if (params.codesOnly && !looksLikeCode) continue;
 
-      const samples = await this.prisma.providerSyncCache.findMany({
-        where: {
-          provider: params.provider ?? row.provider,
-          [column]: rawKey,
-        },
-        select: { name: true },
-        take: 3,
-      });
+      let sampleNames: string[] = [];
+      if (params.includeSamples) {
+        const samples = await this.prisma.providerSyncCache.findMany({
+          where: { provider, [column]: rawKey },
+          select: { name: true },
+          take: 3,
+        });
+        sampleNames = samples.map((s) => s.name);
+      }
 
       stats.push({
         kind: params.kind,
-        provider: params.provider ?? row.provider,
+        provider,
         rawKey,
         count: Number(row.count),
-        sampleNames: samples.map((s) => s.name),
+        sampleNames,
         looksLikeCode,
       });
       if (stats.length >= limit) break;
@@ -795,9 +856,9 @@ export class CatalogEnrichmentService implements OnModuleInit {
   async getSuggestions(provider?: string) {
     const ctx = await this.getContext();
     const [brandStats, categoryStats, subStats, products] = await Promise.all([
-      this.listRawValues({ kind: "BRAND", provider, limit: 60 }),
-      this.listRawValues({ kind: "CATEGORY", provider, limit: 80 }),
-      this.listRawValues({ kind: "SUBCATEGORY", provider, limit: 80 }),
+      this.listRawValues({ kind: "BRAND", provider, limit: 60, includeSamples: true }),
+      this.listRawValues({ kind: "CATEGORY", provider, limit: 80, includeSamples: true }),
+      this.listRawValues({ kind: "SUBCATEGORY", provider, limit: 80, includeSamples: true }),
       this.prisma.providerSyncCache.findMany({
         where: provider ? { provider } : {},
         select: {
