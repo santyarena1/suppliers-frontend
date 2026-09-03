@@ -386,26 +386,33 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-surface-800">
+                <div className="flex border-b border-surface-800 overflow-x-auto scrollbar-none">
                   {[
                     { key: "credentials" as const, label: "Mi cuenta" },
-                    { key: "sync" as const, label: "Sincronización" },
-                    { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración" },
+                    { key: "sync" as const, label: "Sincronización", shortLabel: "Sync" },
+                    { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración", shortLabel: isRetailer ? "Offline" : "Config" },
                     { key: "catalog" as const, label: "Catálogo" },
-                    ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte." }] : []),
-                    ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte." }] : []),
-                    ...(provider === "ELIT" ? [{ key: "elit-account" as const, label: "Pedidos y Cta. Cte." }] : []),
-                    ...(provider === "GRUPO_NUCLEO" ? [{ key: "gn-account" as const, label: "Pedidos y Cta. Cte." }] : []),
-                    ...(provider === "AIR" ? [{ key: "air-account" as const, label: "Pedidos y Cta. Cte." }] : []),
-                  ].map(({ key, label }) => (
+                    ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
+                    ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
+                    ...(provider === "ELIT" ? [{ key: "elit-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
+                    ...(provider === "GRUPO_NUCLEO" ? [{ key: "gn-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
+                    ...(provider === "AIR" ? [{ key: "air-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
+                  ].map(({ key, label, shortLabel }) => (
                     <button
                       key={key}
                       onClick={() => setTab(key)}
-                      className={`text-sm font-medium px-4 py-2.5 border-b-2 -mb-px transition-all ${
+                      className={`text-sm font-medium px-4 py-2.5 border-b-2 -mb-px transition-all whitespace-nowrap flex-shrink-0 ${
                         tab === key ? "border-brand-500 text-brand-700 dark:text-brand-400" : "border-transparent text-surface-500 hover:text-surface-300"
                       }`}
                     >
-                      {label}
+                      {shortLabel ? (
+                        <>
+                          <span className="sm:hidden">{shortLabel}</span>
+                          <span className="hidden sm:inline">{label}</span>
+                        </>
+                      ) : (
+                        label
+                      )}
                     </button>
                   ))}
                 </div>

@@ -112,7 +112,7 @@ export default function AddToCartButton({
         type="button"
         disabled={qty <= 0}
         onClick={(e) => bump(-1, e)}
-        className={`flex items-center justify-center w-7 h-7 rounded-md disabled:opacity-35 disabled:hover:bg-transparent transition-colors ${minusBtn}`}
+        className={`flex items-center justify-center w-9 h-9 sm:w-7 sm:h-7 rounded-md disabled:opacity-35 disabled:hover:bg-transparent transition-colors ${minusBtn}`}
         aria-label="Quitar uno"
         title="Quitar uno"
       >
@@ -127,7 +127,7 @@ export default function AddToCartButton({
       <button
         type="button"
         onClick={(e) => bump(1, e)}
-        className={`flex items-center justify-center w-7 h-7 rounded-md transition-colors ${plusBtn}`}
+        className={`flex items-center justify-center w-9 h-9 sm:w-7 sm:h-7 rounded-md transition-colors ${plusBtn}`}
         aria-label="Agregar uno"
         title="Agregar uno"
       >

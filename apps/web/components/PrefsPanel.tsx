@@ -33,29 +33,30 @@ export default function PrefsPanel() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 text-xs font-medium text-surface-300 hover:text-white bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg px-3 py-1.5 transition-all"
+        className="flex items-center gap-2 min-h-10 sm:min-h-0 text-xs font-medium text-surface-300 hover:text-white bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg px-3 py-1.5 transition-all"
       >
         <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
         <span className="tabular-nums">
-          {currency} · {dollarLabel(dollarType)}
+          {currency}
+          <span className="hidden sm:inline"> · {dollarLabel(dollarType)}</span>
         </span>
         {currentRate && currency === "ARS" && (
-          <span className="text-surface-500 text-[10px]">
+          <span className="hidden sm:inline text-surface-500 text-[10px]">
             ${currentRate.venta.toLocaleString("es-AR")}
           </span>
         )}
-        <span className="bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+        <span className="hidden sm:inline bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">
           {withIva ? "IVA" : "s/IVA"}
         </span>
         {seesIibb && withIibb && (
-          <span className="bg-amber-500/20 text-amber-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+          <span className="hidden sm:inline bg-amber-500/20 text-amber-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
             IIBB
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-surface-900 border border-surface-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-2 w-[min(20rem,calc(100vw-1.5rem))] bg-surface-900 border border-surface-700 rounded-xl shadow-2xl z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-surface-800 flex items-center justify-between">
             <h3 className="text-xs font-semibold text-white uppercase tracking-wider">Preferencias</h3>
             <button

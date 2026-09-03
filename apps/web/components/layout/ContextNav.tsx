@@ -95,7 +95,7 @@ export default function ContextNav({ items, children }: Props) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`${itemClass(active)} px-2.5 py-1.5 text-xs whitespace-nowrap`}
+                  className={`${itemClass(active)} min-h-10 px-3 py-2 text-xs whitespace-nowrap`}
                 >
                   {item.dotClass && (
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${item.dotClass}`} />
