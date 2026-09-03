@@ -41,7 +41,7 @@ import Link from "next/link";
 import {
   Search, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight, GitCompare, Check,
+  ChevronDown, ChevronRight, GitCompare, Check, SlidersHorizontal,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc" | "name_desc";
@@ -100,6 +100,8 @@ function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
+  /** En mobile los filtros/controles viven en un panel que se abre/cierra. */
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -675,6 +677,15 @@ function SearchPage() {
   const canSearch =
     Boolean(query.trim() || brandFilter.trim() || selectedBrands.size > 0 || selectedCategories.size > 0);
 
+  const activeFilterCount =
+    selectedBrands.size +
+    selectedCategories.size +
+    (selectedProviders.size < searchable.length ? 1 : 0) +
+    (includeOutOfStock ? 1 : 0) +
+    (priceView !== "list" ? 1 : 0) +
+    (hideNoImage ? 1 : 0) +
+    (minPrice || maxPrice ? 1 : 0);
+
   const categoryOptions = useMemo(
     () =>
       catalogCategories.map((c) => ({
@@ -706,10 +717,10 @@ function SearchPage() {
 
   return (
     <>
-          {/* Top bar */}
-          <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-6 py-3.5 flex items-center gap-3">
-            <form onSubmit={handleSearch} className="flex-1 max-w-xl flex items-center gap-2">
-              <div className="relative flex-1">
+          {/* Top bar — búsqueda siempre visible; controles secundarios en md+ */}
+          <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-3 py-2.5 sm:px-6 sm:py-3.5 flex items-center gap-2 sm:gap-3">
+            <form onSubmit={handleSearch} className="flex-1 min-w-0 flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500 pointer-events-none" />
                 <input
                   type="text"
@@ -735,14 +746,34 @@ function SearchPage() {
               <button
                 type="submit"
                 disabled={loading || !canSearch}
-                className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg px-4 py-2 transition-all flex-shrink-0"
+                className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg px-3 sm:px-4 py-2 transition-all flex-shrink-0"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Buscar
+                <span className="hidden sm:inline">Buscar</span>
+              </button>
+              {/* Mobile: abrir panel de filtros */}
+              <button
+                type="button"
+                onClick={() => setFiltersOpen((v) => !v)}
+                className={`md:hidden relative flex items-center justify-center rounded-lg border px-3 py-2 transition-all flex-shrink-0 ${
+                  filtersOpen || activeFilterCount > 0
+                    ? "border-brand-500 text-brand-400 bg-brand-600/10"
+                    : "border-surface-700 text-surface-400 hover:text-surface-200"
+                }`}
+                aria-expanded={filtersOpen}
+                aria-label="Filtros"
+                title="Filtros"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-500 text-[10px] font-bold text-white flex items-center justify-center tabular-nums">
+                    {activeFilterCount > 9 ? "9+" : activeFilterCount}
+                  </span>
+                )}
               </button>
             </form>
 
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="hidden md:flex items-center gap-2 ml-auto flex-shrink-0">
               {retailer && (
                 <span className="flex items-center gap-1">
                   {anyOffline ? (
@@ -805,6 +836,7 @@ function SearchPage() {
                 ]).map(({ mode, Icon }) => (
                   <button
                     key={mode}
+                    type="button"
                     onClick={() => setViewMode(mode)}
                     className={`p-2 transition-colors ${viewMode === mode ? "bg-surface-700 text-white" : "text-surface-500 hover:text-surface-300"}`}
                   >
@@ -815,8 +847,10 @@ function SearchPage() {
             </div>
           </header>
 
-          {/* Filtros generales siempre visibles: Categoría · Marca · Distribuidor */}
-          <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900/80 px-4 sm:px-6 py-2.5">
+          {/* Filtros: colapsables en mobile, siempre visibles en md+ */}
+          <div
+            className={`${filtersOpen ? "block" : "hidden"} md:block flex-shrink-0 border-b border-surface-800 bg-surface-900/80 px-3 sm:px-6 py-2.5`}
+          >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <SearchFilterDropdown
                 label="Categoría"
@@ -877,14 +911,84 @@ function SearchPage() {
                 emptyText="Todavía no estás conectado con ningún distribuidor"
               />
             </div>
-          </div>
 
-          {/* Results area */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto">
-            {/* Sticky toolbar: sort / price / image — sin caja “Refinar” */}
-            {searched && !loading && hydrated && results.length > 0 && (
-              <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800 px-6 py-2.5 flex items-center gap-3 flex-wrap">
-                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            {/* Controles secundarios solo en mobile (en desktop viven en el header / sticky) */}
+            <div className="md:hidden mt-2.5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleOutOfStock}
+                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
+                  includeOutOfStock
+                    ? "border-brand-500 text-brand-400 bg-brand-600/10"
+                    : "border-surface-700 text-surface-400 hover:text-surface-200"
+                }`}
+                title="Por defecto no se listan productos con stock 0"
+              >
+                Incluir sin stock
+              </button>
+
+              {retailer && (
+                <span className="flex items-center gap-1 flex-wrap">
+                  {anyOffline ? (
+                    <button
+                      type="button"
+                      onClick={() => setPriceView((v) => (v === "offline" ? "list" : "offline"))}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
+                        priceView === "offline"
+                          ? "border-amber-500 text-amber-300 bg-amber-500/10"
+                          : "border-surface-700 text-surface-400 hover:text-surface-200"
+                      }`}
+                    >
+                      Precios offline
+                    </button>
+                  ) : (
+                    <Link
+                      href="/proveedores"
+                      className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-amber-500/30 text-amber-200/90"
+                      title="Se activa en Proveedores → el distribuidor → Configuración"
+                    >
+                      Pedido offline
+                    </Link>
+                  )}
+                  {anyScheme && (
+                    <button
+                      type="button"
+                      onClick={() => setPriceView((v) => (v === "scheme" ? "list" : "scheme"))}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
+                        priceView === "scheme"
+                          ? "border-violet-500 text-violet-300 bg-violet-500/10"
+                          : "border-surface-700 text-surface-400 hover:text-surface-200"
+                      }`}
+                    >
+                      Precios esquema
+                    </button>
+                  )}
+                  <OfflinePricesHelpButton />
+                </span>
+              )}
+
+              <div className="flex border border-surface-700 rounded-lg overflow-hidden">
+                {([
+                  { mode: "grid" as ViewMode, Icon: LayoutGrid },
+                  { mode: "list" as ViewMode, Icon: List },
+                  { mode: "grouped" as ViewMode, Icon: Filter },
+                ]).map(({ mode, Icon }) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={`p-2 transition-colors ${viewMode === mode ? "bg-surface-700 text-white" : "text-surface-500 hover:text-surface-300"}`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                  </button>
+                ))}
+              </div>
+
+              <PrefsPanel />
+
+              {/* Rango de precio / imagen en el panel mobile (sticky solo muestra count+sort) */}
+              {searched && results.length > 0 && (
+                <>
                   <div className="flex items-center gap-1 text-[11px] text-surface-500">
                     <span>USD</span>
                     <input
@@ -892,7 +996,7 @@ function SearchPage() {
                       value={minPrice}
                       onChange={(e) => setMinPrice(e.target.value)}
                       placeholder={priceBounds.min.toString()}
-                      className="w-16 bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 tabular-nums"
+                      className="w-14 bg-surface-800 border border-surface-700 rounded-md px-1.5 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 tabular-nums"
                     />
                     <span>—</span>
                     <input
@@ -900,11 +1004,11 @@ function SearchPage() {
                       value={maxPrice}
                       onChange={(e) => setMaxPrice(e.target.value)}
                       placeholder={priceBounds.max.toString()}
-                      className="w-16 bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 tabular-nums"
+                      className="w-14 bg-surface-800 border border-surface-700 rounded-md px-1.5 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 tabular-nums"
                     />
                   </div>
-
                   <button
+                    type="button"
                     onClick={() => setHideNoImage(!hideNoImage)}
                     className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
                       hideNoImage
@@ -914,100 +1018,193 @@ function SearchPage() {
                   >
                     Con imagen
                   </button>
+                </>
+              )}
 
-                  <button
-                    type="button"
-                    onClick={toggleOutOfStock}
-                    className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
-                      includeOutOfStock
-                        ? "border-brand-500 bg-brand-600/15 text-brand-400"
-                        : "border-surface-700 text-surface-500 hover:text-surface-300"
-                    }`}
-                    title="Por defecto el catálogo oculta los productos con stock 0"
-                  >
-                    Incluir sin stock
-                  </button>
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(false)}
+                className="ml-auto text-xs font-medium text-brand-400 hover:text-brand-300 px-2 py-1.5"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
 
-                  {retailer && (
-                    <span className="flex items-center gap-1">
-                      {anyOffline ? (
-                        <button
-                          type="button"
-                          onClick={() => setPriceView((v) => (v === "offline" ? "list" : "offline"))}
-                          className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
-                            priceView === "offline"
-                              ? "border-amber-500 bg-amber-500/15 text-amber-300"
-                              : "border-surface-700 text-surface-500 hover:text-surface-300"
-                          }`}
-                        >
-                          Precios offline
-                        </button>
-                      ) : (
-                        <Link
-                          href="/proveedores"
-                          className="text-[11px] font-medium px-2 py-1.5 rounded-md border border-amber-500/30 text-amber-200/90"
-                        >
-                          Pedido offline
-                        </Link>
-                      )}
-                      {anyScheme && (
-                        <button
-                          type="button"
-                          onClick={() => setPriceView((v) => (v === "scheme" ? "list" : "scheme"))}
-                          className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
-                            priceView === "scheme"
-                              ? "border-violet-500 bg-violet-500/15 text-violet-300"
-                              : "border-surface-700 text-surface-500 hover:text-surface-300"
-                          }`}
-                        >
-                          Precios esquema
-                        </button>
-                      )}
-                      <OfflinePricesHelpButton />
-                    </span>
-                  )}
-
-                  {hasInResultsFilter && (
-                    <button
-                      onClick={() => {
-                        setMinPrice("");
-                        setMaxPrice("");
-                        setHideNoImage(false);
-                      }}
-                      className="text-[11px] text-surface-500 hover:text-white flex items-center gap-1"
-                    >
-                      <X className="w-3 h-3" />Limpiar
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3 text-[11px]">
-                  <span className="text-surface-500">
+          {/* Results area */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto">
+            {/* Sticky toolbar: mobile compacto; desktop completo */}
+            {searched && !loading && hydrated && results.length > 0 && (
+              <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800 px-3 sm:px-6 py-2 sm:py-2.5">
+                {/* Mobile: count + sort (+ limpiar) */}
+                <div className="flex md:hidden items-center gap-2 justify-between text-[11px]">
+                  <span className="text-surface-500 min-w-0 truncate">
                     <span className="text-surface-200 font-semibold tabular-nums">{filtered.length}</span>
                     {filtered.length !== results.length && (
                       <span className="text-surface-600"> / {results.length}</span>
                     )}
-                    {" "}productos · <span className="text-surface-200 font-semibold">{Object.keys(providerCounts).length}</span> prov.
+                    {" "}prod.
                   </span>
-                  <div className="flex items-center gap-1">
-                    <ArrowUpDown className="w-3 h-3 text-surface-500" />
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as SortKey)}
-                      className="bg-transparent text-surface-300 focus:outline-none cursor-pointer"
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {hasInResultsFilter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMinPrice("");
+                          setMaxPrice("");
+                          setHideNoImage(false);
+                        }}
+                        className="text-surface-500 hover:text-white flex items-center gap-1"
+                      >
+                        <X className="w-3 h-3" />Limpiar
+                      </button>
+                    )}
+                    <div className="flex items-center gap-1">
+                      <ArrowUpDown className="w-3 h-3 text-surface-500" />
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as SortKey)}
+                        className="bg-transparent text-surface-300 focus:outline-none cursor-pointer max-w-[7.5rem]"
+                      >
+                        <option value="default">Defecto</option>
+                        <option value="price_asc">Precio ↑</option>
+                        <option value="price_desc">Precio ↓</option>
+                        <option value="name_asc">Nombre A-Z</option>
+                        <option value="name_desc">Nombre Z-A</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Desktop: toolbar completo */}
+                <div className="hidden md:flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                    <div className="flex items-center gap-1 text-[11px] text-surface-500">
+                      <span>USD</span>
+                      <input
+                        type="number"
+                        value={minPrice}
+                        onChange={(e) => setMinPrice(e.target.value)}
+                        placeholder={priceBounds.min.toString()}
+                        className="w-16 bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 tabular-nums"
+                      />
+                      <span>—</span>
+                      <input
+                        type="number"
+                        value={maxPrice}
+                        onChange={(e) => setMaxPrice(e.target.value)}
+                        placeholder={priceBounds.max.toString()}
+                        className="w-16 bg-surface-800 border border-surface-700 rounded-md px-2 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500 tabular-nums"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setHideNoImage(!hideNoImage)}
+                      className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                        hideNoImage
+                          ? "border-brand-500 bg-brand-600/15 text-brand-400"
+                          : "border-surface-700 text-surface-500 hover:text-surface-300"
+                      }`}
                     >
-                      <option value="default">Defecto</option>
-                      <option value="price_asc">Precio ↑</option>
-                      <option value="price_desc">Precio ↓</option>
-                      <option value="name_asc">Nombre A-Z</option>
-                      <option value="name_desc">Nombre Z-A</option>
-                    </select>
+                      Con imagen
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={toggleOutOfStock}
+                      className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                        includeOutOfStock
+                          ? "border-brand-500 bg-brand-600/15 text-brand-400"
+                          : "border-surface-700 text-surface-500 hover:text-surface-300"
+                      }`}
+                      title="Por defecto el catálogo oculta los productos con stock 0"
+                    >
+                      Incluir sin stock
+                    </button>
+
+                    {retailer && (
+                      <span className="flex items-center gap-1">
+                        {anyOffline ? (
+                          <button
+                            type="button"
+                            onClick={() => setPriceView((v) => (v === "offline" ? "list" : "offline"))}
+                            className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                              priceView === "offline"
+                                ? "border-amber-500 bg-amber-500/15 text-amber-300"
+                                : "border-surface-700 text-surface-500 hover:text-surface-300"
+                            }`}
+                          >
+                            Precios offline
+                          </button>
+                        ) : (
+                          <Link
+                            href="/proveedores"
+                            className="text-[11px] font-medium px-2 py-1.5 rounded-md border border-amber-500/30 text-amber-200/90"
+                          >
+                            Pedido offline
+                          </Link>
+                        )}
+                        {anyScheme && (
+                          <button
+                            type="button"
+                            onClick={() => setPriceView((v) => (v === "scheme" ? "list" : "scheme"))}
+                            className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                              priceView === "scheme"
+                                ? "border-violet-500 bg-violet-500/15 text-violet-300"
+                                : "border-surface-700 text-surface-500 hover:text-surface-300"
+                            }`}
+                          >
+                            Precios esquema
+                          </button>
+                        )}
+                        <OfflinePricesHelpButton />
+                      </span>
+                    )}
+
+                    {hasInResultsFilter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMinPrice("");
+                          setMaxPrice("");
+                          setHideNoImage(false);
+                        }}
+                        className="text-[11px] text-surface-500 hover:text-white flex items-center gap-1"
+                      >
+                        <X className="w-3 h-3" />Limpiar
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <span className="text-surface-500">
+                      <span className="text-surface-200 font-semibold tabular-nums">{filtered.length}</span>
+                      {filtered.length !== results.length && (
+                        <span className="text-surface-600"> / {results.length}</span>
+                      )}
+                      {" "}productos · <span className="text-surface-200 font-semibold">{Object.keys(providerCounts).length}</span> prov.
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <ArrowUpDown className="w-3 h-3 text-surface-500" />
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as SortKey)}
+                        className="bg-transparent text-surface-300 focus:outline-none cursor-pointer"
+                      >
+                        <option value="default">Defecto</option>
+                        <option value="price_asc">Precio ↑</option>
+                        <option value="price_desc">Precio ↓</option>
+                        <option value="name_asc">Nombre A-Z</option>
+                        <option value="name_desc">Nombre Z-A</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="px-6 py-5">
+            <div className="px-3 sm:px-6 py-3 sm:py-5">
               {(!hydrated || loading) && (
                 <div className="flex flex-col items-center justify-center py-32 gap-3">
                   <div className="w-10 h-10 rounded-full border-2 border-surface-700 border-t-brand-500 animate-spin" />
@@ -1054,7 +1251,7 @@ function SearchPage() {
 
               {/* Grid */}
               {hydrated && !loading && filtered.length > 0 && viewMode === "grid" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
                   {filtered.map((product, i) => (
                     <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} priceMode={priceMode} />
                   ))}
@@ -1074,6 +1271,7 @@ function SearchPage() {
                     return (
                       <section key={prov}>
                         <button
+                          type="button"
                           onClick={() => toggleProviderCollapse(prov)}
                           className="w-full flex items-center gap-2 mb-3 group"
                         >
@@ -1083,7 +1281,7 @@ function SearchPage() {
                           <div className="flex-1 border-b border-surface-800 ml-2" />
                         </button>
                         {!collapsed && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
                             {items.map((p, i) => (
                               <ProductCard key={`${p.provider}-${p.externalId}-${i}`} product={p} priceMode={priceMode} />
                             ))}
