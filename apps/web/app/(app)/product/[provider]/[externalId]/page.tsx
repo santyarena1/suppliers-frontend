@@ -410,7 +410,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           <button
                             type="button"
                             onClick={() => setQty((q) => Math.max(1, q - 1))}
-                            className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white"
+                            className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white"
                           >
                             <ChevronLeft className="w-4 h-4" />
                           </button>
@@ -424,7 +424,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           <button
                             type="button"
                             onClick={() => setQty((q) => q + 1)}
-                            className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white"
+                            className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white"
                           >
                             <ChevronRight className="w-4 h-4" />
                           </button>
