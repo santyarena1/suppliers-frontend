@@ -33,7 +33,7 @@ export default function PrefsPanel() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 text-xs font-medium text-surface-300 hover:text-white bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg px-3 py-1.5 transition-all"
+        className="flex items-center gap-2 min-h-10 sm:min-h-0 text-xs font-medium text-surface-300 hover:text-white bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg px-3 py-1.5 transition-all"
       >
         <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
         <span className="tabular-nums">
