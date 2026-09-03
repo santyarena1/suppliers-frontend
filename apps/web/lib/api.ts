@@ -3000,6 +3000,11 @@ export const publicNewsApi = {
   get: (publicKey: string) => api.get<NewsDetail>(`/public/news/${publicKey}`),
 };
 
+export const adminNewsApi = {
+  list: () => api.get<{ items: NewsCard[] }>("/admin/news"),
+  remove: (id: string) => api.delete<{ ok: true }>(`/admin/news/${id}`),
+};
+
 export const adminBrandOrgsApi = {
   sync: () => api.post<{ terms: number; created: number; linked: number; users: number }>("/admin/brands/sync"),
 };

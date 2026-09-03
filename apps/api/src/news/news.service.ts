@@ -276,6 +276,28 @@ export class NewsService {
     return { ok: true };
   }
 
+  async adminList() {
+    const rows = await this.prisma.newsArticle.findMany({
+      include: this.cardInclude(),
+      orderBy: [{ updatedAt: "desc" }],
+      take: 200,
+    });
+    return {
+      items: rows.map((row) => ({
+        ...this.serializeCard(row, true),
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  async adminRemove(id: string) {
+    const existing = await this.prisma.newsArticle.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("Nota no encontrada");
+    await this.prisma.newsArticle.delete({ where: { id } });
+    return { ok: true };
+  }
+
   async hubNews(brandTenantId: string, take = 3) {
     const rows = await this.prisma.newsArticle.findMany({
       where: { tenantId: brandTenantId, ...liveWhere() },

@@ -2,6 +2,8 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } fro
 import { AuthGuard } from "@nestjs/passport";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { Public } from "../common/decorators/public.decorator";
+import { Roles } from "../common/decorators/roles.decorator";
+import { RolesGuard } from "../common/guards/roles.guard";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { NewsTrackDto, UpsertNewsDto } from "./dto/news.dto";
@@ -68,6 +70,23 @@ export class MyNewsController {
   @Delete(":id")
   remove(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
     return this.news.remove(tenant, id);
+  }
+}
+
+@UseGuards(RolesGuard)
+@Roles("ROLE_ADMIN")
+@Controller("admin/news")
+export class AdminNewsController {
+  constructor(private readonly news: NewsService) {}
+
+  @Get()
+  list() {
+    return this.news.adminList();
+  }
+
+  @Delete(":id")
+  remove(@Param("id") id: string) {
+    return this.news.adminRemove(id);
   }
 }
 

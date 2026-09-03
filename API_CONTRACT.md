@@ -287,12 +287,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Noticias (feed, CRUD, pública, hero)
 - **Método**: GET | POST | PUT | DELETE
-- **Ruta**: `GET /news` · `GET /news/hero` · `GET /news/:id` · `GET /my/news` · `POST /my/news` · `PUT /my/news/:id` · `DELETE /my/news/:id` · `GET /public/news/:publicKey` · `POST /news/:id/track`
-- **Auth**: Bearer, organización. Pública: sin auth. Publicar: `OWNER`/`ADMIN`/`PRODUCT_MANAGER` de `DISTRIBUTOR`, o `OWNER`/`ADMIN`/`MARKETING` de `BRAND`. Hero: comercio.
+- **Ruta**: `GET /news` · `GET /news/hero` · `GET /news/:id` · `GET /my/news` · `POST /my/news` · `PUT /my/news/:id` · `DELETE /my/news/:id` · `GET /public/news/:publicKey` · `POST /news/:id/track` · `GET /admin/news` · `DELETE /admin/news/:id`
+- **Auth**: Bearer, organización. Pública: sin auth. Publicar: `OWNER`/`ADMIN`/`PRODUCT_MANAGER` de `DISTRIBUTOR`, o `OWNER`/`ADMIN`/`MARKETING` de `BRAND`. Hero: comercio. Moderación: `ROLE_ADMIN` lista y borra cualquier nota.
 - **Body / Params**: `{ title, excerpt, bodyHtml, coverUrl, kind, public, publishedAt?, expiresAt?, attachments[], relatedSkus[], imageUrls[] }` · feed `kind`, `authorType`, `q`, `cursor` · track `{ kind: view | attachment_click }`
 - **Respuesta esperada**: feed `{ items: NewsCard[], nextCursor? }` · hero `{ slides[] }` · ficha `{ article, author: { name, type, logoUrl, linked, advertised }, attachments[], canDownloadCommercial, stats? }` · pública sin adjuntos `IN_APP`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes (cualquier campaña ACTIVE). El hero usa el slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. Cuerpo HTML sanitizado (`sanitizeBrandHtml`). UI: `/noticias`, `/n/:publicKey`. Aislamiento: `scripts/check-news-visibility.mjs`.
+- **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes (cualquier campaña ACTIVE). El hero usa el slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. Cuerpo HTML sanitizado (`sanitizeBrandHtml`). UI: `/noticias`, `/n/:publicKey`. Admin: `/admin?tab=news`. Aislamiento: `scripts/check-news-visibility.mjs`. Muestra: `scripts/seed-demo-news.mjs`.
 
 ## Pendiente (futuro)
 
