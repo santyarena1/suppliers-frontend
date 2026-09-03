@@ -154,8 +154,6 @@ export function BrandSpaceLanding({
         </p>
       )}
 
-      {html ? <div className="border-b border-surface-800">{html}</div> : null}
-
       <nav className="sticky top-0 z-20 border-b border-surface-800 bg-surface-950/90 backdrop-blur">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex gap-1 overflow-x-auto">
           {SECTIONS.map((s) => {
@@ -183,6 +181,8 @@ export function BrandSpaceLanding({
           })}
         </div>
       </nav>
+
+      {html ? <div className="border-b border-surface-800">{html}</div> : null}
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-14">
         {showProducts && (
