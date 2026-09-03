@@ -143,7 +143,7 @@ function PreviewQty({ item }: { item: CartItem }) {
       <button
         type="button"
         onClick={dec}
-        className="flex h-6 w-6 items-center justify-center rounded text-surface-400 hover:bg-surface-800 hover:text-white transition-colors"
+        className="flex h-9 w-9 sm:h-6 sm:w-6 min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 items-center justify-center rounded text-surface-400 hover:bg-surface-800 hover:text-white transition-colors"
         aria-label="Quitar uno"
       >
         <Minus className="w-3 h-3" />
@@ -154,7 +154,7 @@ function PreviewQty({ item }: { item: CartItem }) {
       <button
         type="button"
         onClick={inc}
-        className="flex h-6 w-6 items-center justify-center rounded text-brand-400 hover:bg-brand-600 hover:text-white transition-colors"
+        className="flex h-9 w-9 sm:h-6 sm:w-6 min-h-9 min-w-9 sm:min-h-0 sm:min-w-0 items-center justify-center rounded text-brand-400 hover:bg-brand-600 hover:text-white transition-colors"
         aria-label="Agregar uno"
       >
         <Plus className="w-3 h-3" />

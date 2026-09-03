@@ -626,7 +626,7 @@ function CartPageInner() {
 
   return (
     <>
-          <header className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 py-3.5 flex items-center justify-between gap-4">
+          <header className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 py-3.5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h1 className="text-lg font-semibold tracking-tight text-white">
                 {channelTab === "offline" ? "Pedido offline" : "Cotización"}
@@ -667,15 +667,16 @@ function CartPageInner() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex flex-wrap items-center gap-1.5 justify-end">
               <PrefsPanel />
               <div className="relative" ref={pedidosRef}>
                 <button
                   onClick={() => setPedidosOpen((v) => !v)}
                   className="flex items-center gap-1.5 text-sm text-surface-300 hover:text-white border border-surface-700 hover:border-surface-500 rounded-sm px-3 py-1.5 transition-colors"
+                  aria-label="Pedidos"
                 >
                   <History className="w-3.5 h-3.5" />
-                  Pedidos
+                  <span className="hidden sm:inline">Pedidos</span>
                   <ChevronDown className="w-3 h-3 text-surface-500" />
                 </button>
                 {pedidosOpen && (
@@ -714,9 +715,10 @@ function CartPageInner() {
                     <button
                       onClick={() => setExportOpen((v) => !v)}
                       className="flex items-center gap-1.5 text-sm text-surface-300 hover:text-white border border-surface-700 hover:border-surface-500 rounded-md px-3 py-1.5 transition-colors"
+                      aria-label={copied ? "Copiado" : "Exportar"}
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
-                      {copied ? "Copiado" : "Exportar"}
+                      <span className="hidden sm:inline">{copied ? "Copiado" : "Exportar"}</span>
                       <ChevronDown className="w-3 h-3 text-surface-500" />
                     </button>
                     {exportOpen && (
@@ -742,9 +744,11 @@ function CartPageInner() {
                   </div>
                   <button
                     onClick={() => setConfirmClear("all")}
-                    className="text-sm text-surface-500 hover:text-red-400 border border-transparent hover:border-red-500/30 rounded-md px-3 py-1.5 transition-colors"
+                    className="flex items-center gap-1.5 text-sm text-surface-500 hover:text-red-400 border border-transparent hover:border-red-500/30 rounded-md px-3 py-1.5 transition-colors"
+                    aria-label="Vaciar"
                   >
-                    Vaciar
+                    <Trash2 className="w-3.5 h-3.5 sm:hidden" />
+                    <span className="hidden sm:inline">Vaciar</span>
                   </button>
                 </>
               )}
@@ -858,7 +862,7 @@ function CartPageInner() {
                 )}
               </div>
 
-              <footer className="flex-shrink-0 border-t border-white/5 bg-surface-950">
+              <footer className="flex-shrink-0 border-t border-white/5 bg-surface-950 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <div className="px-5 lg:px-8 py-4 flex flex-col gap-4">
                   <SummaryBar
                     title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
@@ -1563,8 +1567,8 @@ function QtyControl({
   onSet: (q: number) => void;
 }) {
   return (
-    <div className="inline-flex items-center border border-surface-700 rounded-md h-8">
-      <button onClick={onDec} className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Restar">
+    <div className="inline-flex items-center border border-surface-700 rounded-md h-9 sm:h-8">
+      <button onClick={onDec} className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Restar">
         <Minus className="w-3.5 h-3.5" />
       </button>
       <input
@@ -1574,7 +1578,7 @@ function QtyControl({
         onChange={(e) => onSet(Math.max(1, parseInt(e.target.value) || 1))}
         className="w-9 bg-transparent text-white text-sm font-medium text-center focus:outline-none tabular-nums"
       />
-      <button onClick={onInc} className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Sumar">
+      <button onClick={onInc} className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Sumar">
         <Plus className="w-3.5 h-3.5" />
       </button>
     </div>

@@ -120,43 +120,45 @@ export default function AccountRowDetail({
           {(items ?? []).length > 0 && (
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Ítems</p>
-              <table className="w-full text-xs table-fixed">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-wider text-surface-500">
-                    <th className={`text-left font-semibold pb-1.5 pr-2 ${showIva ? "w-[44%]" : "w-[52%]"}`}>Producto</th>
-                    <th className="text-right font-semibold pb-1.5 w-[10%]">Cant.</th>
-                    <th className="text-right font-semibold pb-1.5 pl-2 w-[16%]">P. unit.</th>
-                    {showIva ? <th className="text-right font-semibold pb-1.5 pl-2 w-[12%]">IVA</th> : null}
-                    <th className="text-right font-semibold pb-1.5 pl-2 w-[18%]">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-surface-800">
-                  {items!.map((it, i) => {
-                    const product = it.name || "Ítem";
-                    return (
-                    <tr key={i}>
-                      <td className={`py-1.5 pr-2 min-w-0 ${it.indent ? "pl-3" : ""}`}>
-                        <p className="flex items-baseline gap-1.5 min-w-0" title={it.code ? `${it.code} ${product}` : product}>
-                          {it.code ? <span className={`font-mono flex-shrink-0 ${it.indent ? "text-surface-600" : "text-surface-500"}`}>{it.code}</span> : null}
-                          <span className={`truncate ${it.indent ? "text-surface-400" : "text-surface-200"}`}>{product}</span>
-                          {it.badge ? (
-                            <span className="flex-shrink-0 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-violet-500/15 text-violet-200">
-                              {it.badge}
-                            </span>
-                          ) : null}
-                        </p>
-                      </td>
-                      <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{formatQty(it.qty)}</td>
-                      <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{formatMoneyCell(it.price)}</td>
-                      {showIva ? (
-                        <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{it.iva || "—"}</td>
-                      ) : null}
-                      <td className={`py-1.5 text-right tabular-nums whitespace-nowrap pl-2 ${it.indent ? "text-surface-500" : "text-surface-200"}`}>{formatMoneyCell(it.total)}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs table-fixed min-w-[28rem]">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-wider text-surface-500">
+                      <th className={`text-left font-semibold pb-1.5 pr-2 ${showIva ? "w-[44%]" : "w-[52%]"}`}>Producto</th>
+                      <th className="text-right font-semibold pb-1.5 w-[10%]">Cant.</th>
+                      <th className="text-right font-semibold pb-1.5 pl-2 w-[16%]">P. unit.</th>
+                      {showIva ? <th className="text-right font-semibold pb-1.5 pl-2 w-[12%]">IVA</th> : null}
+                      <th className="text-right font-semibold pb-1.5 pl-2 w-[18%]">Total</th>
                     </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-surface-800">
+                    {items!.map((it, i) => {
+                      const product = it.name || "Ítem";
+                      return (
+                      <tr key={i}>
+                        <td className={`py-1.5 pr-2 min-w-0 ${it.indent ? "pl-3" : ""}`}>
+                          <p className="flex items-baseline gap-1.5 min-w-0" title={it.code ? `${it.code} ${product}` : product}>
+                            {it.code ? <span className={`font-mono flex-shrink-0 ${it.indent ? "text-surface-600" : "text-surface-500"}`}>{it.code}</span> : null}
+                            <span className={`truncate ${it.indent ? "text-surface-400" : "text-surface-200"}`}>{product}</span>
+                            {it.badge ? (
+                              <span className="flex-shrink-0 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-sm bg-violet-500/15 text-violet-200">
+                                {it.badge}
+                              </span>
+                            ) : null}
+                          </p>
+                        </td>
+                        <td className="py-1.5 text-right text-surface-400 whitespace-nowrap">{formatQty(it.qty)}</td>
+                        <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{formatMoneyCell(it.price)}</td>
+                        {showIva ? (
+                          <td className="py-1.5 text-right tabular-nums text-surface-400 whitespace-nowrap pl-2">{it.iva || "—"}</td>
+                        ) : null}
+                        <td className={`py-1.5 text-right tabular-nums whitespace-nowrap pl-2 ${it.indent ? "text-surface-500" : "text-surface-200"}`}>{formatMoneyCell(it.total)}</td>
+                      </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

@@ -310,7 +310,7 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
                 title="Agregar al comparador"
                 aria-label="Agregar al comparador"
                 onClick={addToCompare}
-                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center transition-colors shadow-sm ${
+                className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg border flex items-center justify-center transition-colors shadow-sm ${
                   compareFlash
                     ? "border-violet-400 bg-violet-100 text-violet-700"
                     : "border-violet-200/90 bg-violet-50 text-violet-600 hover:bg-violet-100 hover:border-violet-300 hover:text-violet-700"
@@ -327,7 +327,7 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
                   e.stopPropagation();
                   setSaleOpen(true);
                 }}
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:border-emerald-500/40 flex items-center justify-center transition-colors"
+                className="w-9 h-9 sm:w-8 sm:h-8 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:border-emerald-500/40 flex items-center justify-center transition-colors"
               >
                 <DollarSign className="w-3.5 h-3.5" />
               </button>
