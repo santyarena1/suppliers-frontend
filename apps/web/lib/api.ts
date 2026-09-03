@@ -2903,6 +2903,7 @@ export interface NewsAuthor {
   providerKey?: string | null;
   linked?: boolean;
   advertised?: boolean;
+  hubPath?: string | null;
 }
 
 export interface NewsCard {

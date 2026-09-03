@@ -50,7 +50,6 @@ export default function PublicBrandLandingPage() {
           {landing.htmlDocument ? (
             <BrandHtmlCanvas
               html={landing.htmlDocument}
-              minHeight={560}
               slots={{
                 nombre: <span>{landing.name}</span>,
                 logo: landing.logoUrl ? (
@@ -84,7 +83,7 @@ export default function PublicBrandLandingPage() {
           </section>
           )}
 
-          {blocks.length > 0 && !landing.htmlDocument && (
+          {blocks.length > 0 && (
             <section className="max-w-3xl mx-auto px-4 sm:px-8 py-10 grid gap-4">
               {blocks.map((block, i) => (
                 <article key={i} className="border border-surface-800 rounded-xl p-5 bg-surface-900">
@@ -100,7 +99,6 @@ export default function PublicBrandLandingPage() {
             </section>
           )}
 
-          {!landing.htmlDocument && (
           <section className="max-w-3xl mx-auto px-4 sm:px-8 pb-16">
             <div className="border border-surface-800 rounded-xl p-5 bg-surface-900 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
               <p className="text-sm text-surface-300">¿Sos un comercio y querés trabajar con {landing.name}? Pedí un código de vinculación. En NODO la marca no se descubre sola.</p>
@@ -123,7 +121,6 @@ export default function PublicBrandLandingPage() {
               </div>
             </div>
           </section>
-          )}
         </main>
       )}
     </div>

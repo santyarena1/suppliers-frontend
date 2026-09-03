@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { inferBrandHubTarget, rewriteCssForBrandHost } from "@/lib/brand-html-nav";
 
-const HOST_CSS = `:host{all:initial;display:block;width:100%;min-height:inherit;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}`;
+const HOST_CSS = `:host{all:initial;display:block;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}`;
 
 function compileSlots(html: string): string {
   return html
@@ -18,14 +19,14 @@ function stripActiveHtml(html: string): string {
     .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
 }
 
-function rewriteCssForShadow(css: string): string {
-  return css
-    .replace(/:root\b/g, ":host")
-    .replace(/(^|[,+>~({\s])\s*(html|body)\b/gi, "$1:host");
+function rewriteStyleTags(html: string): string {
+  return html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => `<style>${rewriteCssForBrandHost(css)}</style>`);
 }
 
-function rewriteStyleTags(html: string): string {
-  return html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => `<style>${rewriteCssForShadow(css)}</style>`);
+function scrollToHub(hash: string) {
+  const id = hash.replace(/^#/, "");
+  const el = document.getElementById(id);
+  el?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /**
@@ -36,7 +37,7 @@ function rewriteStyleTags(html: string): string {
 export default function BrandHtmlCanvas({
   html,
   slots,
-  minHeight = 320,
+  minHeight = 0,
 }: {
   html: string;
   slots?: Partial<Record<string, ReactNode>>;
@@ -50,12 +51,28 @@ export default function BrandHtmlCanvas({
     if (!host) return;
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" });
     shadow.innerHTML = compiled.trim() ? `<style>${HOST_CSS}</style>${compiled}` : "";
+
+    function onClick(e: Event) {
+      const event = e as MouseEvent;
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const node = path.find((n): n is Element => n instanceof Element && (n.tagName === "A" || n.tagName === "BUTTON"));
+      if (!node) return;
+      const href = node.getAttribute("href");
+      const target = inferBrandHubTarget(node.textContent ?? "", href);
+      if (!target) return;
+      event.preventDefault();
+      event.stopPropagation();
+      scrollToHub(target);
+    }
+
+    shadow.addEventListener("click", onClick);
+    return () => shadow.removeEventListener("click", onClick);
   }, [compiled]);
 
   if (!compiled.trim()) return null;
 
   return (
-    <div ref={hostRef} className="brand-html-host w-full bg-white" style={{ minHeight }}>
+    <div ref={hostRef} className="brand-html-host w-full bg-white" style={minHeight ? { minHeight } : undefined}>
       {Object.entries(slots ?? {}).map(([name, node]) =>
         node ? (
           <div key={name} slot={name} className="brand-html-slot">

@@ -122,7 +122,13 @@ export class NewsService {
     const logos = await this.logoByTenant([row.tenant]);
     if (row.tenantId === tenant.tenantId) {
       return this.withStats(
-        this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType, logos })
+        this.serializeDetail(row, {
+          linked: true,
+          advertised: false,
+          viewerType: tenant.tenantType,
+          logos,
+          hubPath: row.tenant.type === "BRAND" ? "/marca" : null,
+        })
       );
     }
     const authorIds = await this.visibility.authorIdsFor(tenant);
@@ -130,11 +136,13 @@ export class NewsService {
       throw new NotFoundException("Nota no encontrada");
     }
     const linked = await this.visibility.linkedSupplierIds(commercialId(tenant));
+    const hubPath = linked.has(row.tenantId) ? await this.brandHubPath(tenant, row.tenantId, row.tenant.type) : null;
     return this.serializeDetail(row, {
       linked: linked.has(row.tenantId),
       advertised: !linked.has(row.tenantId),
       viewerType: tenant.tenantType,
       logos,
+      hubPath,
     });
   }
 
@@ -159,7 +167,13 @@ export class NewsService {
     if (!row || row.tenantId !== tenant.tenantId) throw new NotFoundException("Nota no encontrada");
     const logos = await this.logoByTenant([row.tenant]);
     return this.withStats(
-      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType, logos })
+      this.serializeDetail(row, {
+        linked: true,
+        advertised: false,
+        viewerType: tenant.tenantType,
+        logos,
+        hubPath: tenant.tenantType === "BRAND" ? "/marca" : null,
+      })
     );
   }
 
@@ -350,6 +364,20 @@ export class NewsService {
     if (!brandName?.trim() || !names.has(brandName.trim().toLowerCase())) {
       throw new ForbiddenException("El product manager solo publica notas de las marcas que tiene asignadas");
     }
+  }
+
+  private async brandHubPath(tenant: TenantContext, authorId: string, authorType: string) {
+    if (authorType !== "BRAND") return null;
+    if (tenant.tenantType !== "RETAILER" && tenant.tenantType !== "DISTRIBUTOR") return null;
+    const link = await this.prisma.tenantLink.findFirst({
+      where: {
+        clientTenantId: commercialId(tenant),
+        supplierTenantId: authorId,
+        status: { in: ["ACTIVE", "SUSPENDED"] },
+      },
+      select: { id: true },
+    });
+    return link ? `/marcas/${link.id}` : null;
   }
 
   private assertPublishable(dto: { title?: string | null; coverUrl?: string | null; bodyHtml?: string | null }) {
@@ -614,6 +642,7 @@ export class NewsService {
       viewerType: TenantType | null;
       publicView?: boolean;
       logos?: Map<string, string | null>;
+      hubPath?: string | null;
     }
   ) {
     const compiled = compileBrandHtml(row.bodyHtml ?? "");
@@ -646,7 +675,12 @@ export class NewsService {
       publishedAt: row.publishedAt?.toISOString() ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
-      author: { ...this.authorOf(row, opts.logos), linked: opts.linked, advertised: opts.advertised },
+      author: {
+        ...this.authorOf(row, opts.logos),
+        linked: opts.linked,
+        advertised: opts.advertised,
+        hubPath: opts.hubPath ?? null,
+      },
       images: row.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption })),
       attachments,
       canDownloadCommercial,

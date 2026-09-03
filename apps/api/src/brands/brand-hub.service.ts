@@ -74,7 +74,7 @@ export class BrandHubService {
           publishedAt: true,
         },
         orderBy: { publishedAt: "desc" },
-        take: 3,
+        take: 8,
       }),
     ]);
     const visibleActions = actionRows.filter((row) =>

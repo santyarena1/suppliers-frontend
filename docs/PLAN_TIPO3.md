@@ -58,17 +58,21 @@ sanitizado) y los bloques nativos de NODO:
 |---|---|
 | `{{productos}}` / `{{semaforos}}` | Mapa comercial (5 luces + precio sugerido) |
 | `{{acciones}}` | Acciones vigentes con progreso |
+| `{{novedades}}` / `{{noticias}}` | Notas publicadas de esa marca |
 | `{{materiales}}` | Archivos de venta |
 | `{{capacitaciones}}` | Cursos / videos / argumentarios |
 | `{{hablar}}` | Chat persona a persona |
 | `{{nombre}}` / `{{logo}}` | Identidad |
 
-Si la marca no pega HTML, los bloques se muestran igual. Un comercio puede
+Si la marca no pega HTML, los bloques se muestran igual. Si pega HTML, el diseño
+va arriba y **los módulos nativos se listan igual abajo** (productos, semáforo,
+acciones, novedades, materiales, capacitaciones, contacto): un botón muerto del
+HTML (`href="#"`, `<button>` sin destino) salta a ese bloque. Un comercio puede
 saltar a `/search?marca=Nombre` (la búsqueda general, filtrada). El distro no
 tiene búsqueda: ve el mapa, no arma pedidos de marca.
 
-En el comercio, **siempre se listan los seis módulos** (espacio, productos,
-acciones, materiales, capacitaciones, contacto). Si la marca no cargó uno,
+En el comercio, **siempre se listan los módulos** (espacio, productos, acciones,
+novedades, materiales, capacitaciones, contacto). Si la marca no cargó uno,
 el bloque queda **Pendiente**: el vínculo existe, el contenido todavía no.
 `presence.pending` en `GET /my/brands` marca una conectada sin nada publicado.
 

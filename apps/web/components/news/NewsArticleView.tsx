@@ -66,6 +66,9 @@ export default function NewsArticleView({
       </header>
 
       <div className={`max-w-3xl mx-auto px-4 sm:px-6 ${paper ? "py-2" : "pb-10"}`}>
+        {article.author.hubPath && (
+          <BrandSpaceLinks hubPath={article.author.hubPath} brandName={article.author.name} paper={paper} />
+        )}
         <NewsHtmlBody html={article.bodyHtml} paper={paper} />
 
         {article.images.length > 0 && (
@@ -127,5 +130,45 @@ export default function NewsArticleView({
         )}
       </div>
     </article>
+  );
+}
+
+function BrandSpaceLinks({
+  hubPath,
+  brandName,
+  paper,
+}: {
+  hubPath: string;
+  brandName: string;
+  paper?: boolean;
+}) {
+  const own = hubPath === "/marca";
+  const links = own
+    ? [
+        { href: "/marca/productos", label: "Semáforo y productos" },
+        { href: "/marca/acciones", label: "Acciones" },
+        { href: "/noticias", label: "Novedades" },
+        { href: "/marca/landing", label: "Espacio" },
+      ]
+    : [
+        { href: `${hubPath}#productos`, label: "Productos y semáforo" },
+        { href: `${hubPath}#acciones`, label: "Acciones" },
+        { href: `${hubPath}#novedades`, label: "Novedades" },
+        { href: hubPath, label: `Espacio de ${brandName}` },
+      ];
+  return (
+    <nav className={`flex flex-wrap gap-2 mb-8 ${paper ? "" : ""}`}>
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          className={`text-[12px] font-semibold rounded-full px-3 py-1.5 border ${
+            paper ? "border-[#ccc6b8] text-[#111] hover:bg-black/5" : "border-surface-700 text-white hover:bg-surface-800"
+          }`}
+        >
+          {link.label}
+        </Link>
+      ))}
+    </nav>
   );
 }

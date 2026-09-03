@@ -8,7 +8,7 @@ export default function NewsHtmlBody({ html, paper }: { html: string; paper?: bo
   if (looksLikeDocumentHtml(html)) {
     return (
       <div className={paper ? "bg-[#f4f1ea]" : "bg-white"}>
-        <BrandHtmlCanvas html={html} minHeight={240} />
+        <BrandHtmlCanvas html={html} />
       </div>
     );
   }

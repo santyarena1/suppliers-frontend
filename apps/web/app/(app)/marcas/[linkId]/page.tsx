@@ -17,7 +17,7 @@ import {
   type BrandSkuSignal,
 } from "@/lib/api";
 import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
-import { BRAND_MODULE_HINT, BRAND_MODULE_LABELS } from "@/lib/brand-presence";
+import { BRAND_MODULE_HINT } from "@/lib/brand-presence";
 import {
   Bell,
   Building2,
@@ -30,6 +30,7 @@ import {
   Loader2,
   Mail,
   MessageSquare,
+  Newspaper,
   Package,
   Phone,
   Search,
@@ -40,12 +41,13 @@ function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
 }
 
-const SECTIONS: { id: BrandModuleId; href: string; icon: typeof Package }[] = [
-  { id: "products", href: "#productos", icon: Package },
-  { id: "actions", href: "#acciones", icon: Target },
-  { id: "materials", href: "#materiales", icon: Download },
-  { id: "trainings", href: "#capacitaciones", icon: GraduationCap },
-  { id: "contact", href: "#contacto", icon: Mail },
+const SECTIONS: { href: string; icon: typeof Package; label: string; module?: BrandModuleId }[] = [
+  { href: "#productos", icon: Package, label: "Productos", module: "products" },
+  { href: "#acciones", icon: Target, label: "Acciones", module: "actions" },
+  { href: "#novedades", icon: Newspaper, label: "Novedades" },
+  { href: "#materiales", icon: Download, label: "Materiales", module: "materials" },
+  { href: "#capacitaciones", icon: GraduationCap, label: "Capacitaciones", module: "trainings" },
+  { href: "#contacto", icon: Mail, label: "Contacto", module: "contact" },
 ];
 
 export default function BrandHubPage() {
@@ -88,10 +90,10 @@ export default function BrandHubPage() {
           <p className="text-sm text-red-400 px-6 py-10">{aviso ?? "No encontrado"}</p>
         ) : (
           <div>
+            <Hero hub={hub} accent={accent} />
             {hub.htmlDocument ? (
               <BrandHtmlCanvas
                 html={hub.htmlDocument}
-                minHeight={480}
                 slots={{
                   productos: <SignalsBlock hub={hub} retailer={retailer} />,
                   semaforos: <SignalsBlock hub={hub} retailer={retailer} />,
@@ -109,18 +111,17 @@ export default function BrandHubPage() {
                     <img src={assetUrl(hub.theme.logoUrl)} alt={hub.name} style={{ height: 48 }} />
                   ) : null,
                   noticias: <HubNews items={hub.news ?? []} />,
+                  novedades: <HubNews items={hub.news ?? []} />,
                 }}
               />
-            ) : (
-              <Hero hub={hub} accent={accent} />
-            )}
+            ) : null}
             <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
               {hub.status === "SUSPENDED" && (
                 <p className="text-xs rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/30 text-amber-200">
                   El vínculo está en pausa. Podés mirar el espacio, pero las operaciones pueden estar limitadas.
                 </p>
               )}
-              {!hub.htmlDocument && hub.presence.pending && (
+              {hub.presence.pending && (
                 <p className="text-sm rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-100">
                   <span className="font-semibold">Pendiente de contenido.</span> Ya estás conectado con {hub.name}.
                   Todavía no publicó mapa, acciones ni materiales: cada bloque aparece abajo para que sepas qué
@@ -150,16 +151,21 @@ export default function BrandHubPage() {
                 >
                   <Bell className="w-4 h-4" /> Avisos
                 </Link>
+                <a
+                  href="#novedades"
+                  className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 border border-surface-700 text-white hover:bg-surface-800"
+                >
+                  <Newspaper className="w-4 h-4" /> Novedades
+                </a>
               </div>
 
-              {!hub.htmlDocument && (
               <nav className="sticky top-0 z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 bg-surface-950/90 backdrop-blur border-b border-surface-800 flex gap-1 overflow-x-auto">
                 {SECTIONS.map((s) => {
-                  const ready = hub.presence.modules[s.id].ready;
+                  const ready = s.module ? hub.presence.modules[s.module].ready : (hub.news?.length ?? 0) > 0;
                   const Icon = s.icon;
                   return (
                     <a
-                      key={s.id}
+                      key={s.href}
                       href={s.href}
                       className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap border ${
                         ready
@@ -168,19 +174,16 @@ export default function BrandHubPage() {
                       }`}
                     >
                       <Icon className="w-3 h-3" />
-                      {BRAND_MODULE_LABELS[s.id]}
+                      {s.label}
                       {!ready && <Clock className="w-3 h-3" />}
                     </a>
                   );
                 })}
               </nav>
-              )}
 
-              {(!hub.htmlSlots?.includes("productos") && !hub.htmlSlots?.includes("semaforos")) && (
-                <ProductsSection hub={hub} retailer={retailer} searchHref={searchHref} />
-              )}
-              {!hub.htmlSlots?.includes("acciones") && <ActionsSection hub={hub} />}
-              {!hub.htmlSlots?.includes("materiales") && (
+              <ProductsSection hub={hub} retailer={retailer} searchHref={searchHref} />
+              <ActionsSection hub={hub} />
+              <NewsSection hub={hub} />
               <FilesSection
                 id="materiales"
                 title="Materiales"
@@ -188,8 +191,6 @@ export default function BrandHubPage() {
                 items={hub.materials}
                 pendingText={`${hub.name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
               />
-              )}
-              {!hub.htmlSlots?.includes("capacitaciones") && (
               <FilesSection
                 id="capacitaciones"
                 title="Capacitaciones"
@@ -197,14 +198,7 @@ export default function BrandHubPage() {
                 items={hub.trainings}
                 pendingText={`${hub.name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
               />
-              )}
-              {!hub.htmlSlots?.includes("noticias") && (hub.news?.length ?? 0) > 0 && (
-                <section>
-                  <h2 className="text-sm font-semibold text-white mb-3">Noticias</h2>
-                  <HubNews items={hub.news ?? []} />
-                </section>
-              )}
-              {!hub.htmlDocument && <ContactSection hub={hub} />}
+              <ContactSection hub={hub} />
             </div>
           </div>
         )}
@@ -590,6 +584,26 @@ function Pending({ text, children }: { text: string; children?: React.ReactNode 
       <p className="text-sm text-surface-300">{text}</p>
       {children && <div className="mt-2">{children}</div>}
     </div>
+  );
+}
+
+function NewsSection({ hub }: { hub: BrandHub }) {
+  const items = hub.news ?? [];
+  const ready = items.length > 0;
+  return (
+    <section id="novedades" className="scroll-mt-16">
+      <SectionHead
+        title="Novedades"
+        hint="Notas que publica la marca para el canal"
+        ready={ready}
+        count={items.length}
+      />
+      {!ready ? (
+        <Pending text={`${hub.name} todavía no publicó notas. Cuando salga un lanzamiento o una promo, aparece acá.`} />
+      ) : (
+        <HubNews items={items} />
+      )}
+    </section>
   );
 }
 

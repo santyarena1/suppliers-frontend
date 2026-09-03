@@ -1,4 +1,4 @@
-import { compileBrandHtml, sanitizeBrandHtml, sanitizeCss, splitBrandHtml } from "./brand-html";
+import { compileBrandHtml, inferBrandHubTarget, sanitizeBrandHtml, sanitizeCss, splitBrandHtml } from "./brand-html";
 
 describe("sanitizeBrandHtml", () => {
   it("saca scripts y handlers", () => {
@@ -91,5 +91,32 @@ describe("splitBrandHtml / compileBrandHtml", () => {
   it("al compilar reescribe body/html del CSS a :host", () => {
     const { html } = compileBrandHtml(`<style>body{background:#0a0}</style><p>x</p>`);
     expect(html).toMatch(/<style>:host\{background:#0a0\}<\/style>/);
+  });
+
+  it("no deja huecos de 100vh en el host", () => {
+    const { html } = compileBrandHtml(`<style>body{min-height:100vh;height:100vh}</style><p>x</p>`);
+    expect(html).toMatch(/min-height:0/);
+    expect(html).toMatch(/height:auto/);
+    expect(html).not.toMatch(/100vh/);
+  });
+
+  it("reconoce el hueco de novedades", () => {
+    const { slots } = compileBrandHtml("{{novedades}}{{noticias}}");
+    expect(slots).toEqual(["novedades", "noticias"]);
+  });
+});
+
+describe("inferBrandHubTarget", () => {
+  it("saca del texto un botón muerto", () => {
+    expect(inferBrandHubTarget("Ver productos", "#")).toBe("#productos");
+    expect(inferBrandHubTarget("Semáforo", "")).toBe("#productos");
+    expect(inferBrandHubTarget("Nuestras acciones", null)).toBe("#acciones");
+    expect(inferBrandHubTarget("Novedades", "javascript:void(0)")).toBe("#novedades");
+    expect(inferBrandHubTarget("Hablar", "#")).toBe("#contacto");
+  });
+
+  it("no toca un link que ya va a algún lado", () => {
+    expect(inferBrandHubTarget("Sitio", "https://gigabyte.com")).toBeNull();
+    expect(inferBrandHubTarget("Buscar", "/search?marca=Gigabyte")).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import PrefsPanel from "@/components/PrefsPanel";
 import ImageUploadField from "@/components/ImageUploadField";
 import BrandHtmlCanvas, { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
-import { brandApi, type BrandLanding } from "@/lib/api";
+import { brandApi, newsApi, type BrandAction, type BrandLanding, type BrandResource, type BrandSkuSignal, type NewsCard } from "@/lib/api";
 import { Copy, Globe, Loader2 } from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
@@ -24,6 +24,7 @@ const SLOTS: { name: string; label: string }[] = [
   { name: "nombre", label: "Nombre" },
   { name: "logo", label: "Logo" },
   { name: "noticias", label: "Noticias" },
+  { name: "novedades", label: "Novedades (alias)" },
 ];
 
 const FONTS = [
@@ -43,9 +44,31 @@ export default function BrandEspacioPage() {
   const [blockBody, setBlockBody] = useState("");
   const [previewHtml, setPreviewHtml] = useState("");
 
+  const [preview, setPreview] = useState<{
+    signals: BrandSkuSignal[];
+    actions: BrandAction[];
+    materials: BrandResource[];
+    trainings: BrandResource[];
+    news: NewsCard[];
+  }>({ signals: [], actions: [], materials: [], trainings: [], news: [] });
+
   const load = useCallback(async () => {
-    const res = await brandApi.landing();
-    setLanding(res.data);
+    const [landingRes, signalsRes, actionsRes, resourcesRes, newsRes] = await Promise.all([
+      brandApi.landing(),
+      brandApi.signals().catch(() => ({ data: { signals: [] as BrandSkuSignal[] } })),
+      brandApi.actions().catch(() => ({ data: { actions: [] as BrandAction[] } })),
+      brandApi.resources().catch(() => ({ data: { resources: [] as BrandResource[] } })),
+      newsApi.mine().catch(() => ({ data: { items: [] as NewsCard[] } })),
+    ]);
+    setLanding(landingRes.data);
+    const resources = resourcesRes.data.resources ?? [];
+    setPreview({
+      signals: signalsRes.data.signals ?? [],
+      actions: (actionsRes.data.actions ?? []).filter((a) => a.status === "ACTIVE"),
+      materials: resources.filter((r) => r.kind === "MATERIAL"),
+      trainings: resources.filter((r) => r.kind === "TRAINING"),
+      news: (newsRes.data.items ?? []).filter((n) => n.status === "PUBLISHED"),
+    });
     setLoading(false);
   }, []);
 
@@ -256,14 +279,13 @@ export default function BrandEspacioPage() {
                     </p>
                     <BrandHtmlCanvas
                       html={previewHtml}
-                      minHeight={280}
                       slots={{
-                        productos: <BrandHtmlSlotHole label="Mapa / semáforos" />,
-                        semaforos: <BrandHtmlSlotHole label="Semáforos" />,
-                        acciones: <BrandHtmlSlotHole label="Acciones" />,
-                        materiales: <BrandHtmlSlotHole label="Materiales" />,
-                        capacitaciones: <BrandHtmlSlotHole label="Capacitaciones" />,
-                        hablar: <BrandHtmlSlotHole label="Hablar" />,
+                        productos: <PreviewFill label="Mapa / semáforos" count={preview.signals.length} sample={preview.signals[0]?.name} />,
+                        semaforos: <PreviewFill label="Semáforos" count={preview.signals.length} sample={preview.signals[0]?.name} />,
+                        acciones: <PreviewFill label="Acciones" count={preview.actions.length} sample={preview.actions[0]?.title} />,
+                        materiales: <PreviewFill label="Materiales" count={preview.materials.length} sample={preview.materials[0]?.title} />,
+                        capacitaciones: <PreviewFill label="Capacitaciones" count={preview.trainings.length} sample={preview.trainings[0]?.title} />,
+                        hablar: <PreviewFill label="Hablar" count={1} sample={`Chat con ${landing.name}`} />,
                         nombre: <span style={{ fontWeight: 700 }}>{landing.name}</span>,
                         logo: landing.logoUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
@@ -271,7 +293,8 @@ export default function BrandEspacioPage() {
                         ) : (
                           <BrandHtmlSlotHole label="Logo" />
                         ),
-                        noticias: <BrandHtmlSlotHole label="Noticias" />,
+                        noticias: <PreviewFill label="Novedades" count={preview.news.length} sample={preview.news[0]?.title} />,
+                        novedades: <PreviewFill label="Novedades" count={preview.news.length} sample={preview.news[0]?.title} />,
                       }}
                     />
                   </div>
@@ -422,5 +445,27 @@ function ColorField({
         />
       </span>
     </label>
+  );
+}
+
+function PreviewFill({ label, count, sample }: { label: string; count: number; sample?: string }) {
+  if (count <= 0) return <BrandHtmlSlotHole label={`${label} (todavía vacío)`} />;
+  return (
+    <div
+      style={{
+        border: "1px solid #cbd5e1",
+        background: "#0f172a",
+        color: "#e2e8f0",
+        borderRadius: 12,
+        padding: "12px 14px",
+        font: "12px/1.4 system-ui,sans-serif",
+      }}
+    >
+      <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>
+      <p style={{ margin: "4px 0 0", opacity: 0.8 }}>
+        {count} publicado{count === 1 ? "" : "s"}
+        {sample ? ` · ${sample}` : ""}
+      </p>
+    </div>
   );
 }
