@@ -211,6 +211,7 @@ function CartPageInner() {
         if (line.kind === "iva") ivaUSD += amt;
         else if (line.kind === "internos") internosUSD += amt;
         else if (line.kind === "iibb") {
+          if (quotedLump) continue;
           lineIibb += amt;
           iibbUSD += amt;
           if (amt > 0.0005 && !extra?.perceptionLines?.length) {
@@ -435,8 +436,9 @@ function CartPageInner() {
         const extra = extraFor(prov);
         const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
         const perc = cartPerception(it, its, extra);
-        const onProduct = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) > 0.0001;
-        const gross = pricing.gross + (!onProduct && perc ? perc.unitAmount * it.qty : 0);
+        const pricedIibb = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) * it.qty;
+        const quotedIibb = perc ? perc.unitAmount * it.qty : 0;
+        const gross = pricing.gross - pricedIibb + quotedIibb;
         const unit = withIva ? gross / it.qty : pricing.unitNet;
         const subtotal = withIva ? gross : pricing.net;
         const nameTrim = it.name.length > 70 ? it.name.slice(0, 67) + "..." : it.name;
@@ -1377,9 +1379,9 @@ function CartLine({
   const internos = taxByKind(taxLines, "internos");
   const iibb = cartPerception(item, siblings, extra);
   const others = taxLines.filter((l) => l.kind === "other" && l.unitAmount > 0);
-  const onProduct = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) > 0.0001;
-  const percExtra = !onProduct && iibb ? iibb.unitAmount * item.qty : 0;
-  const lineGross = pricing.gross + percExtra;
+  const pricedIibb = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) * item.qty;
+  const quotedIibb = iibb ? iibb.unitAmount * item.qty : 0;
+  const lineGross = pricing.gross - pricedIibb + quotedIibb;
   const href = `/product/${encodeURIComponent(item.provider)}/${encodeURIComponent(item.externalId)}`;
   const sku = item.sku || item.partNumber || item.externalId;
   const ref: CartRef = { provider: item.provider, externalId: item.externalId, channel: item.channel, schemeId: item.schemeId };

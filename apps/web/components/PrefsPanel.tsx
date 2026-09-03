@@ -143,7 +143,7 @@ export default function PrefsPanel() {
                   <div className="text-left min-w-0">
                     <span className="text-xs text-surface-200 block">Incluir percepciones / IIBB</span>
                     <span className="text-[10px] text-surface-500 leading-tight block">
-                      Independiente del IVA. {iibbHint || "Cargá las alícuotas en Configuración."}
+                      Independiente del IVA. En esquema se suma; en offline no. {iibbHint || "Cargá las alícuotas en Configuración."}
                     </span>
                   </div>
                 </div>

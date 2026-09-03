@@ -244,7 +244,7 @@ function PreviewLine({ item }: { item: CartItem }) {
 function PreviewTotals({ items }: { items: CartItem[] }) {
   const policies = usePurchasePolicies();
   const { withIva, withIibb } = usePrefs();
-  useIibbRatesEpoch();
+  const iibbEpoch = useIibbRatesEpoch();
   const fmt = useMoneyFmt();
 
   const summary = useMemo(() => {
@@ -275,7 +275,7 @@ function PreviewTotals({ items }: { items: CartItem[] }) {
     }
 
     return { rows, totalUsd };
-  }, [items, policies, withIva, withIibb]);
+  }, [items, policies, withIva, withIibb, iibbEpoch]);
 
   if (items.length === 0) return null;
 

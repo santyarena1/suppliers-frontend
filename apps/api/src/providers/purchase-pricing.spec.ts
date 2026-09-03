@@ -64,18 +64,45 @@ describe("computePurchaseUnit", () => {
     expect(r.missingIva).toBe(false);
   });
 
-  it("offline descarta percepciones y conserva internos", () => {
+  it("en esquema suma IIBB sobre el neto ya descontado", () => {
+    const r = computePurchaseUnit({
+      net: 100,
+      ivaPercent: 21,
+      iibbPercent: 3,
+      ivaAdjustment: "REMOVE",
+      schemeDiscountPercent: 10,
+    });
+    expect(r.net).toBe(90);
+    expect(r.iibbAmount).toBe(2.7);
+    expect(r.gross).toBe(92.7);
+  });
+
+  it("offline no suma IIBB aunque venga alícuota o monto", () => {
     const r = computePurchaseUnit({
       net: 100,
       ivaPercent: 21,
       internosAmount: 5,
       iibbAmount: 8,
+      iibbPercent: 3,
       ivaAdjustment: "REMOVE",
       dropPerceptions: true,
     });
     expect(r.internosAmount).toBe(5);
     expect(r.iibbAmount).toBe(0);
     expect(r.gross).toBe(105);
+  });
+
+  it("sin alícuota, el monto de IIBB se proporcionaliza al descuento de esquema", () => {
+    const r = computePurchaseUnit({
+      net: 100,
+      ivaPercent: 21,
+      iibbAmount: 3,
+      ivaAdjustment: "REMOVE",
+      schemeDiscountPercent: 10,
+    });
+    expect(r.net).toBe(90);
+    expect(r.iibbAmount).toBe(2.7);
+    expect(r.gross).toBe(92.7);
   });
 
   it("deja la mitad del IVA sobre el neto", () => {
