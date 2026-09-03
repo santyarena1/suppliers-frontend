@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import LatestNewsStrip from "@/components/news/LatestNewsStrip";
 import { myApi, type OwnClient, type OwnOrg } from "@/lib/api";
 import { formatUSD } from "@/lib/format";
 import { ArrowRight, Bell, Building2, ClipboardList, Handshake, Loader2, Megaphone, MessageSquare, Newspaper, QrCode, Users } from "lucide-react";
@@ -69,6 +70,7 @@ export default function DistributorHome() {
                   />
                 )}
               </div>
+              <LatestNewsStrip />
               {inactivos.length > 0 && (
                 <section className="border border-amber-500/20 bg-amber-500/5 rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-amber-500/15">

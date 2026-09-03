@@ -98,9 +98,14 @@ export class AdsService {
     if (dto.articleId?.trim()) {
       const article = await this.prisma.newsArticle.findFirst({
         where: { id: dto.articleId.trim(), tenantId: tenant.tenantId },
-        select: { id: true },
+        select: { id: true, status: true },
       });
       if (!article) throw new BadRequestException("Esa nota no es de tu organización");
+      if (slot.key === "news_hero" && article.status !== "PUBLISHED") {
+        throw new BadRequestException("El hero de noticias solo admite una nota publicada");
+      }
+    } else if (slot.key === "news_hero" && dto.status === "ACTIVE") {
+      throw new BadRequestException("El hero de noticias necesita una nota publicada");
     }
 
     const data = {

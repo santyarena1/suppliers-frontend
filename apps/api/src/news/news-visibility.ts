@@ -30,3 +30,16 @@ export function authorIdsForViewer(viewerType: TenantType, set: NewsAuthorSet): 
 export function canRetailerSeeCommercialFiles(linked: boolean): boolean {
   return linked;
 }
+
+/** Qué adjuntos viajan según audiencia. La lista de precios nunca sale sin vínculo. */
+export function visibleNewsAttachments<T extends { kind: string; visibility: string }>(
+  attachments: T[],
+  opts: { linked: boolean; publicView?: boolean }
+): T[] {
+  const canDownloadCommercial = opts.linked && !opts.publicView;
+  return attachments.filter((item) => {
+    if (opts.publicView) return item.visibility === "PUBLIC";
+    if (item.kind === "PRICE_LIST" || item.visibility === "IN_APP") return canDownloadCommercial;
+    return true;
+  });
+}

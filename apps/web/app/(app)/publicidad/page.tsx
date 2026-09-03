@@ -169,11 +169,13 @@ export default function PublicidadPage() {
                 {newsSlot ? (
                   <select value={articleId} onChange={(e) => setArticleId(e.target.value)} className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white">
                     <option value="">Elegí la nota que va al hero</option>
-                    {notes.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.title}
-                      </option>
-                    ))}
+                    {notes
+                      .filter((n) => n.status === "PUBLISHED")
+                      .map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.title}
+                        </option>
+                      ))}
                   </select>
                 ) : (
                   <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://… o /search?q=…" className="bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white" />

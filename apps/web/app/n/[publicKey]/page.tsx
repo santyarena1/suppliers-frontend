@@ -37,7 +37,23 @@ export default function PublicNewsPage() {
           <p className="text-sm text-[#6b665c] mt-2">El enlace no existe o todavía no se publicó.</p>
         </main>
       ) : article ? (
-        <NewsArticleView article={article} paper />
+        <>
+          <NewsArticleView article={article} paper />
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 pb-16 flex flex-wrap items-center gap-4">
+            <Link
+              href="/login"
+              className="text-[13px] underline underline-offset-4 text-[#111]"
+            >
+              Entrar a NODO
+            </Link>
+            <Link
+              href={`/noticias/${article.id}`}
+              className="text-[13px] text-[#6b665c] hover:text-[#111]"
+            >
+              Abrir en la red
+            </Link>
+          </div>
+        </>
       ) : (
         <p className="text-center text-sm text-[#6b665c] py-24">Cargando…</p>
       )}

@@ -354,10 +354,10 @@ B2B. Ordenado por valor / costo.
 8. Hueco `{{noticias}}` en el espacio de marca. **Hecho.**
 9. Programar (`publishedAt` futuro) y vigencia. **Hecho.**
 
-Verificación: un script `scripts/check-news-visibility.mjs` con tres orgs
-(comercio, distro A, distro B, marca vinculada a A). Distro B no ve nada de A.
-El comercio sin vínculo no ve a A salvo campaña activa. El adjunto `PRICE_LIST`
-no sale en la pública ni al comercio solo-publicitado.
+Verificación: `scripts/check-news-visibility.mjs` con tres orgs (comercio,
+distro A, distro B, marca vinculada a A). Distro B no ve nada de A. El comercio
+sin vínculo no ve a A salvo campaña activa. El adjunto `PRICE_LIST` no sale en
+la pública ni al comercio solo-publicitado. **Hecho.**
 
 ---
 
@@ -381,7 +381,7 @@ no sale en la pública ni al comercio solo-publicitado.
   - hero `{ slides: NewsHeroSlide[] }` (`advertiser`, `articleId`, `campaignId`)
   - ficha `{ article, author: { name, type, logoUrl, linked, advertised }, attachments[], canDownloadCommercial }`
   - pública: mismo recorte **sin** adjuntos `IN_APP` y sin `linked`
-- **Estado**: PENDIENTE
+- **Estado**: IMPLEMENTADO
 - **Notas**: 404 si no es audiencia. `canDownloadCommercial` es true solo con
   `TenantLink`. El hero solo incluye campañas `ACTIVE` del slot `news_hero`.
   Distro y marca reciben feed sin slides de pares. Módulo fijo: `news` en

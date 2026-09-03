@@ -1,4 +1,4 @@
-import { authorIdsForViewer } from "./news-visibility";
+import { authorIdsForViewer, visibleNewsAttachments } from "./news-visibility";
 
 const set = {
   ownId: "me",
@@ -23,5 +23,29 @@ describe("authorIdsForViewer", () => {
     const ids = authorIdsForViewer("BRAND", set);
     expect(ids).toEqual(["me", "distro-a"]);
     expect(ids).not.toContain("brand-b");
+  });
+});
+
+const files = [
+  { kind: "PRICE_LIST", visibility: "IN_APP", title: "lista" },
+  { kind: "FILE", visibility: "IN_APP", title: "interno" },
+  { kind: "FILE", visibility: "PUBLIC", title: "foto" },
+];
+
+describe("visibleNewsAttachments", () => {
+  it("en la pública solo viajan los PUBLIC", () => {
+    expect(visibleNewsAttachments(files, { linked: false, publicView: true }).map((f) => f.title)).toEqual(["foto"]);
+  });
+
+  it("un comercio solo-publicitado no baja la lista", () => {
+    expect(visibleNewsAttachments(files, { linked: false }).map((f) => f.title)).toEqual(["foto"]);
+  });
+
+  it("con vínculo ve la lista y los archivos internos", () => {
+    expect(visibleNewsAttachments(files, { linked: true }).map((f) => f.title)).toEqual([
+      "lista",
+      "interno",
+      "foto",
+    ]);
   });
 });

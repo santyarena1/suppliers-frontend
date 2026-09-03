@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
+import LatestNewsStrip from "@/components/news/LatestNewsStrip";
 import {
   brandApi,
   myApi,
@@ -143,6 +144,7 @@ export default function BrandHome() {
                 )}
               </div>
 
+              <LatestNewsStrip />
               {active.length > 0 && (
                 <section className="border border-surface-800 rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800">

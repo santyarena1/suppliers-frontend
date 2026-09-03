@@ -285,16 +285,16 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Proxy HTTP a `https://thegamershop.acustock.app/api/v1/sistema`. Claves: UI `/sistema-tgs/claves` (cifradas en DB) o fallback `ACUSTOCK_API_KEY` / `ACUSTOCK_API_SECRET`. El frontend nunca ve el secret. Un 401 de AcuStock se traduce a 502 para no cerrar la sesión de Nodo. La clave de AcuStock es **lectura y escritura** (`read_write`) en todos los módulos; Nodo reenvía POST/PATCH. UI: `/sistema-tgs`. GET stock por id numérico no existe en AcuStock (404); el detalle usa SKU. `GET /tgs/productos-vendidos` aplana `GET /ventas/:id`. El estado de la columna Productos vendidos es la **entrega del ítem** (`estado_entrega` / `entrega` / `item.estado` si el valor es de entrega / `entregado` boolean), no el cobro de la factura (`venta.estado`). Si AcuStock no manda el campo, `estado_entrega` queda `null` — la UI no inventa "Pendiente". Si AcuStock manda etiquetas o proveedor en la línea, se muestran. Tope 250 ventas por consulta. UI `/sistema-tgs/reposicion`: cola de pendientes + sugerencias reusando `GET /search/provider/:p` (sin endpoint nuevo); el armado se exporta al carrito de Nodo.
 
-## Pendiente (futuro)
-
 ### [FEATURE] Noticias (feed, CRUD, pública, hero)
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `GET /news` · `GET /news/hero` · `GET /news/:id` · `GET /my/news` · `POST /my/news` · `PUT /my/news/:id` · `DELETE /my/news/:id` · `GET /public/news/:publicKey` · `POST /news/:id/track`
 - **Auth**: Bearer, organización. Pública: sin auth. Publicar: `OWNER`/`ADMIN`/`PRODUCT_MANAGER` de `DISTRIBUTOR`, o `OWNER`/`ADMIN`/`MARKETING` de `BRAND`. Hero: comercio.
-- **Body / Params**: `{ title, excerpt, bodyHtml, coverUrl, kind, public, publishedAt?, expiresAt?, attachments[], imageUrls[] }` · feed `kind`, `authorType`, `q`, `cursor` · track `{ kind: view | attachment_click }`
-- **Respuesta esperada**: feed `{ items: NewsCard[], nextCursor? }` · hero `{ slides[] }` · ficha `{ article, author: { name, type, logoUrl, linked, advertised }, attachments[], canDownloadCommercial }` · pública sin adjuntos `IN_APP`
+- **Body / Params**: `{ title, excerpt, bodyHtml, coverUrl, kind, public, publishedAt?, expiresAt?, attachments[], relatedSkus[], imageUrls[] }` · feed `kind`, `authorType`, `q`, `cursor` · track `{ kind: view | attachment_click }`
+- **Respuesta esperada**: feed `{ items: NewsCard[], nextCursor? }` · hero `{ slides[] }` · ficha `{ article, author: { name, type, logoUrl, linked, advertised }, attachments[], canDownloadCommercial, stats? }` · pública sin adjuntos `IN_APP`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes (cualquier campaña ACTIVE). El hero usa el slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. Cuerpo HTML sanitizado (`sanitizeBrandHtml`). UI: `/noticias`, `/n/:publicKey`.
+- **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes (cualquier campaña ACTIVE). El hero usa el slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. Cuerpo HTML sanitizado (`sanitizeBrandHtml`). UI: `/noticias`, `/n/:publicKey`. Aislamiento: `scripts/check-news-visibility.mjs`.
+
+## Pendiente (futuro)
 
 ### [FEATURE] Upload de imágenes (assets)
 - **Método**: POST

@@ -4,11 +4,12 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import NewsEditor from "@/components/news/NewsEditor";
 import { getTenant } from "@/lib/auth";
+import { canWriteNews } from "@/lib/news";
 import "@/app/news.css";
 
 export default function NuevaNoticiaPage() {
   const tenant = getTenant();
-  const canWrite = tenant?.type === "DISTRIBUTOR" || tenant?.type === "BRAND";
+  const canWrite = canWriteNews(tenant);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-surface-950">

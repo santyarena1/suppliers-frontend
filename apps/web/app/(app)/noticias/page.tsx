@@ -9,7 +9,7 @@ import NewsKindMark from "@/components/news/NewsKindMark";
 import NewsPhoto from "@/components/news/NewsPhoto";
 import { getTenant } from "@/lib/auth";
 import { newsApi, type NewsCard, type NewsHeroSlide, type NewsKind } from "@/lib/api";
-import { NEWS_KIND_LABELS, NEWS_KIND_ORDER } from "@/lib/news";
+import { canWriteNews, NEWS_KIND_LABELS, NEWS_KIND_ORDER } from "@/lib/news";
 import "@/app/news.css";
 
 function errMsg(err: unknown, fallback: string) {
@@ -18,7 +18,8 @@ function errMsg(err: unknown, fallback: string) {
 
 export default function NoticiasPage() {
   const tenant = getTenant();
-  const canWrite = tenant?.type === "DISTRIBUTOR" || tenant?.type === "BRAND";
+  const canWrite = canWriteNews(tenant);
+  const isPublisher = tenant?.type === "DISTRIBUTOR" || tenant?.type === "BRAND";
   const [slides, setSlides] = useState<NewsHeroSlide[]>([]);
   const [items, setItems] = useState<NewsCard[]>([]);
   const [mine, setMine] = useState<NewsCard[]>([]);
@@ -34,7 +35,7 @@ export default function NoticiasPage() {
     Promise.all([
       newsApi.hero(),
       newsApi.feed({ kind: kind || undefined, authorType: authorType || undefined, q: q || undefined, take: 30 }),
-      canWrite ? newsApi.mine().catch(() => ({ data: { items: [] as NewsCard[] } })) : Promise.resolve({ data: { items: [] as NewsCard[] } }),
+      isPublisher ? newsApi.mine().catch(() => ({ data: { items: [] as NewsCard[] } })) : Promise.resolve({ data: { items: [] as NewsCard[] } }),
     ])
       .then(([hero, feed, own]) => {
         if (cancelled) return;
@@ -49,7 +50,7 @@ export default function NoticiasPage() {
     return () => {
       cancelled = true;
     };
-  }, [kind, authorType, q, canWrite]);
+  }, [kind, authorType, q, isPublisher]);
 
   const drafts = useMemo(() => mine.filter((n) => n.status && n.status !== "PUBLISHED"), [mine]);
   const lead = items[0];
@@ -112,7 +113,35 @@ export default function NoticiasPage() {
             />
           </div>
 
-          {drafts.length > 0 && (
+          {isPublisher && mine.length > 0 && (
+            <section className="mb-12">
+              <div className="flex items-end justify-between mb-4">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-surface-500">Tus notas</p>
+                {canWrite && (
+                  <Link href="/noticias/nueva" className="text-[12px] text-surface-400 hover:text-white">
+                    Nueva
+                  </Link>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                {mine.slice(0, 8).map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.status === "PUBLISHED" ? `/noticias/${item.id}` : `/noticias/${item.id}/editar`}
+                    className="flex items-baseline justify-between gap-4 py-1.5 border-b border-surface-800/80"
+                  >
+                    <span className="text-sm text-white truncate">{item.title || "Sin título"}</span>
+                    <span className="text-[11px] text-surface-500 whitespace-nowrap">
+                      {item.status === "PUBLISHED" ? "Publicada" : item.status === "ARCHIVED" ? "Archivada" : "Borrador"}
+                      {item.stats ? ` · ${item.stats.views} vistas` : ""}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {drafts.length > 0 && !isPublisher && (
             <p className="text-[13px] text-surface-400 mb-8">
               Tenés {drafts.length} {drafts.length === 1 ? "borrador" : "borradores"}.{" "}
               <Link href={`/noticias/${drafts[0].id}/editar`} className="underline underline-offset-4">

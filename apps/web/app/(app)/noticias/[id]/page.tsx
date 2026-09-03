@@ -56,6 +56,11 @@ export default function NoticiaPage() {
               <button type="button" onClick={shareWhatsapp} className="text-[12px] text-surface-400 hover:text-white">
                 WhatsApp
               </button>
+              {mine && article.stats && (
+                <span className="text-[12px] text-surface-500">
+                  {article.stats.views} vistas · {article.stats.attachmentClicks} descargas
+                </span>
+              )}
               {mine && article.author.linked !== false && (
                 <Link href={`/noticias/${article.id}/editar`} className="text-[12px] text-white">
                   Editar

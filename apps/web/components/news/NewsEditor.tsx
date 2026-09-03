@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ImageUploadField from "@/components/ImageUploadField";
+import { getTenant } from "@/lib/auth";
 import { assetsApi, newsApi, type NewsDetail, type NewsKind, type UpsertNewsPayload } from "@/lib/api";
 import { NEWS_HTML_STARTER, NEWS_KIND_LABELS, NEWS_KIND_ORDER } from "@/lib/news";
 import NewsHtmlBody from "./NewsHtmlBody";
@@ -22,8 +23,16 @@ type Draft = {
   notifyOnPublish: boolean;
   publishedAt: string;
   expiresAt: string;
+  scopeBrandName: string;
   images: { url: string; caption: string }[];
-  attachments: { kind: "PRICE_LIST" | "FILE" | "LINK"; title: string; fileUrl: string; contentUrl: string; visibility: "IN_APP" | "PUBLIC" }[];
+  attachments: {
+    kind: "PRICE_LIST" | "FILE" | "LINK";
+    title: string;
+    fileUrl: string;
+    contentUrl: string;
+    visibility: "IN_APP" | "PUBLIC";
+  }[];
+  relatedSkus: { provider: string; externalId: string; name: string }[];
 };
 
 function toLocalInput(iso?: string | null) {
@@ -45,6 +54,7 @@ function fromExisting(article?: NewsDetail | null): Draft {
     notifyOnPublish: article?.notifyOnPublish ?? false,
     publishedAt: toLocalInput(article?.publishedAt),
     expiresAt: toLocalInput(article?.expiresAt),
+    scopeBrandName: article?.scopeBrandName ?? "",
     images: (article?.images ?? []).map((img) => ({ url: img.url, caption: img.caption ?? "" })),
     attachments: (article?.attachments ?? []).map((a) => ({
       kind: a.kind === "LINK" ? "LINK" : a.kind === "PRICE_LIST" ? "PRICE_LIST" : "FILE",
@@ -53,6 +63,7 @@ function fromExisting(article?: NewsDetail | null): Draft {
       contentUrl: a.contentUrl ?? "",
       visibility: a.kind === "PRICE_LIST" ? "IN_APP" : a.visibility,
     })),
+    relatedSkus: article?.relatedSkus ?? [],
   };
 }
 
@@ -68,6 +79,7 @@ function payloadOf(draft: Draft, status: UpsertNewsPayload["status"]): UpsertNew
     notifyOnPublish: draft.notifyOnPublish,
     publishedAt: draft.publishedAt ? new Date(draft.publishedAt).toISOString() : null,
     expiresAt: draft.expiresAt ? new Date(draft.expiresAt).toISOString() : null,
+    scopeBrandName: draft.scopeBrandName.trim() || null,
     images: draft.images.filter((img) => img.url).map((img) => ({ url: img.url, caption: img.caption || null })),
     attachments: draft.attachments
       .filter((a) => a.title.trim() && (a.fileUrl || a.contentUrl))
@@ -78,6 +90,7 @@ function payloadOf(draft: Draft, status: UpsertNewsPayload["status"]): UpsertNew
         contentUrl: a.contentUrl || null,
         visibility: a.kind === "PRICE_LIST" ? "IN_APP" : a.visibility,
       })),
+    relatedSkus: draft.relatedSkus.filter((sku) => sku.name.trim() && sku.provider.trim() && sku.externalId.trim()),
   };
 }
 
@@ -86,10 +99,14 @@ const field =
 
 export default function NewsEditor({ article }: { article?: NewsDetail | null }) {
   const router = useRouter();
+  const tenant = getTenant();
+  const isPm = tenant?.role === "PRODUCT_MANAGER";
   const [draft, setDraft] = useState<Draft>(() => fromExisting(article));
   const [tab, setTab] = useState<"write" | "html">("html");
   const [saving, setSaving] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [linkTitle, setLinkTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -102,7 +119,13 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function save(status: "DRAFT" | "PUBLISHED") {
+  async function save(status: "DRAFT" | "PUBLISHED" | "ARCHIVED") {
+    if (status === "PUBLISHED" && draft.attachments.some((a) => a.kind === "PRICE_LIST")) {
+      const ok = window.confirm(
+        "Hay una lista de precios. Queda solo adentro de NODO, para cuentas vinculadas. ¿Publicamos?"
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     setAviso(null);
     try {
@@ -111,6 +134,20 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
       router.push(`/noticias/${res.data.id}`);
     } catch (err) {
       setAviso(errMsg(err, "No se pudo guardar"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (!article) return;
+    if (!window.confirm("¿Borrar esta nota? No se puede deshacer.")) return;
+    setSaving(true);
+    try {
+      await newsApi.remove(article.id);
+      router.push("/noticias");
+    } catch (err) {
+      setAviso(errMsg(err, "No se pudo borrar"));
     } finally {
       setSaving(false);
     }
@@ -262,6 +299,24 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
             </button>
           </div>
 
+          {article?.stats && (
+            <p className="text-[12px] text-surface-500">
+              {article.stats.views} vistas · {article.stats.attachmentClicks} descargas de adjuntos
+            </p>
+          )}
+
+          {isPm && (
+            <label className="text-[12px] text-surface-500">
+              Marca de esta nota
+              <input
+                className={`mt-1 ${field}`}
+                placeholder="La marca que tenés asignada"
+                value={draft.scopeBrandName}
+                onChange={(e) => set("scopeBrandName", e.target.value)}
+              />
+            </label>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <label className="text-[12px] text-surface-500">
               Tipo
@@ -314,14 +369,36 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
             <p className="text-[10px] uppercase tracking-[0.16em] text-surface-500 mb-2">Adjuntos</p>
             {draft.attachments.map((a, i) => (
               <div key={i} className="flex gap-2 items-center text-[13px] text-surface-300 py-1">
-                <span className="text-surface-500 w-24 flex-shrink-0">{a.kind === "PRICE_LIST" ? "Lista" : a.kind === "LINK" ? "Link" : "Archivo"}</span>
-                <span className="truncate">{a.title}</span>
-                <button type="button" className="text-surface-500" onClick={() => set("attachments", draft.attachments.filter((_, j) => j !== i))}>
+                <span className="text-surface-500 w-24 flex-shrink-0">
+                  {a.kind === "PRICE_LIST" ? "Lista" : a.kind === "LINK" ? "Link" : "Archivo"}
+                </span>
+                <span className="truncate flex-1">{a.title}</span>
+                {a.kind === "FILE" && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-surface-500"
+                    onClick={() => {
+                      const attachments = [...draft.attachments];
+                      attachments[i] = {
+                        ...attachments[i],
+                        visibility: a.visibility === "PUBLIC" ? "IN_APP" : "PUBLIC",
+                      };
+                      set("attachments", attachments);
+                    }}
+                  >
+                    {a.visibility === "PUBLIC" ? "Público" : "Solo red"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-surface-500"
+                  onClick={() => set("attachments", draft.attachments.filter((_, j) => j !== i))}
+                >
                   ×
                 </button>
               </div>
             ))}
-            <div className="flex gap-3 mt-2">
+            <div className="flex flex-wrap gap-3 mt-2">
               <label className="text-[13px] text-surface-300 cursor-pointer">
                 + Lista de precios
                 <input
@@ -348,11 +425,101 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
                 />
               </label>
             </div>
+            <div className="flex gap-2 mt-3">
+              <input
+                className={`${field} text-sm`}
+                placeholder="Título del link"
+                value={linkTitle}
+                onChange={(e) => setLinkTitle(e.target.value)}
+              />
+              <input
+                className={`${field} text-sm`}
+                placeholder="https://…"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+              />
+              <button
+                type="button"
+                className="text-[13px] text-surface-300 whitespace-nowrap"
+                onClick={() => {
+                  if (!linkTitle.trim() || !linkUrl.trim()) return;
+                  set("attachments", [
+                    ...draft.attachments,
+                    {
+                      kind: "LINK",
+                      title: linkTitle.trim(),
+                      fileUrl: "",
+                      contentUrl: linkUrl.trim(),
+                      visibility: "PUBLIC",
+                    },
+                  ]);
+                  setLinkTitle("");
+                  setLinkUrl("");
+                }}
+              >
+                + Link
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-surface-500 mb-2">SKUs del catálogo</p>
+            <p className="text-[12px] text-surface-500 mb-2">
+              Solo los ve un comercio vinculado. Si no hay vínculo, el chip no aparece.
+            </p>
+            {draft.relatedSkus.map((sku, i) => (
+              <div key={`${sku.provider}-${sku.externalId}-${i}`} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mb-2">
+                <input
+                  className={`${field} text-sm`}
+                  placeholder="Nombre"
+                  value={sku.name}
+                  onChange={(e) => {
+                    const relatedSkus = [...draft.relatedSkus];
+                    relatedSkus[i] = { ...relatedSkus[i], name: e.target.value };
+                    set("relatedSkus", relatedSkus);
+                  }}
+                />
+                <input
+                  className={`${field} text-sm`}
+                  placeholder="Proveedor"
+                  value={sku.provider}
+                  onChange={(e) => {
+                    const relatedSkus = [...draft.relatedSkus];
+                    relatedSkus[i] = { ...relatedSkus[i], provider: e.target.value };
+                    set("relatedSkus", relatedSkus);
+                  }}
+                />
+                <input
+                  className={`${field} text-sm`}
+                  placeholder="Código"
+                  value={sku.externalId}
+                  onChange={(e) => {
+                    const relatedSkus = [...draft.relatedSkus];
+                    relatedSkus[i] = { ...relatedSkus[i], externalId: e.target.value };
+                    set("relatedSkus", relatedSkus);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="text-surface-500"
+                  onClick={() => set("relatedSkus", draft.relatedSkus.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="text-[13px] text-surface-300 hover:text-white"
+              onClick={() => set("relatedSkus", [...draft.relatedSkus, { name: "", provider: "", externalId: "" }])}
+            >
+              + SKU
+            </button>
           </div>
 
           {aviso && <p className="text-sm text-red-400">{aviso}</p>}
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-wrap gap-3 pt-2">
             <button
               type="button"
               disabled={saving}
@@ -369,6 +536,26 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
             >
               Publicar
             </button>
+            {article && (
+              <>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void save("ARCHIVED")}
+                  className="px-4 py-2 text-sm text-surface-400 hover:text-white disabled:opacity-50"
+                >
+                  Archivar
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void remove()}
+                  className="px-4 py-2 text-sm text-red-400 hover:text-red-300 disabled:opacity-50"
+                >
+                  Borrar
+                </button>
+              </>
+            )}
           </div>
         </div>
 

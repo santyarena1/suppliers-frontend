@@ -2957,6 +2957,7 @@ export interface NewsDetail {
   canDownloadCommercial: boolean;
   relatedSkus: { provider: string; externalId: string; name: string }[];
   publicPath: string | null;
+  stats?: { views: number; attachmentClicks: number };
 }
 
 export interface UpsertNewsPayload {

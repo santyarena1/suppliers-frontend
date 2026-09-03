@@ -8,6 +8,7 @@ import { newPublicKey } from "../brands/brand-orgs";
 import { compileBrandHtml, sanitizeBrandHtml } from "../brands/brand-html";
 import { AdsService } from "../ads/ads.service";
 import { NewsVisibilityService } from "./news-visibility.service";
+import { visibleNewsAttachments } from "./news-visibility";
 import type { UpsertNewsDto } from "./dto/news.dto";
 
 function liveWhere(now = new Date()): Prisma.NewsArticleWhereInput {
@@ -113,7 +114,9 @@ export class NewsService {
     });
     if (!row) throw new NotFoundException("Nota no encontrada");
     if (row.tenantId === tenant.tenantId) {
-      return this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType });
+      return this.withStats(
+        this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+      );
     }
     const authorIds = await this.visibility.authorIdsFor(tenant);
     if (!authorIds.includes(row.tenantId) || !this.isLive(row)) {
@@ -145,7 +148,9 @@ export class NewsService {
       include: this.detailInclude(),
     });
     if (!row || row.tenantId !== tenant.tenantId) throw new NotFoundException("Nota no encontrada");
-    return this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType });
+    return this.withStats(
+      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+    );
   }
 
   async listMine(tenant: TenantContext) {
@@ -199,7 +204,9 @@ export class NewsService {
     if (status === "PUBLISHED" && dto.notifyOnPublish) {
       await this.notifyLinked(tenant, row);
     }
-    return this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType });
+    return this.withStats(
+      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+    );
   }
 
   async update(tenant: TenantContext, id: string, dto: UpsertNewsDto) {
@@ -248,7 +255,9 @@ export class NewsService {
     if (becomingPublic && (dto.notifyOnPublish ?? existing.notifyOnPublish)) {
       await this.notifyLinked(tenant, row);
     }
-    return this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType });
+    return this.withStats(
+      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+    );
   }
 
   async remove(tenant: TenantContext, id: string) {
@@ -389,6 +398,11 @@ export class NewsService {
     return map;
   }
 
+  private async withStats<T extends { id: string }>(detail: T) {
+    const stats = await this.statsFor([detail.id]);
+    return { ...detail, stats: stats.get(detail.id) ?? { views: 0, attachmentClicks: 0 } };
+  }
+
   private cardInclude() {
     return {
       tenant: { select: { id: true, name: true, type: true, brandLanding: { select: { logoUrl: true, primaryColor: true } } } },
@@ -488,17 +502,19 @@ export class NewsService {
         visibility: string;
       }[];
     },
-    opts: { linked: boolean; advertised: boolean; viewerType: TenantType | null; publicView?: boolean }
+    opts: {
+      linked: boolean;
+      advertised: boolean;
+      viewerType: TenantType | null;
+      publicView?: boolean;
+    }
   ) {
     const compiled = compileBrandHtml(row.bodyHtml ?? "");
     const canDownloadCommercial = opts.linked && !opts.publicView;
-    const attachments = row.attachments
-      .filter((a) => {
-        if (opts.publicView) return a.visibility === "PUBLIC";
-        if (a.kind === "PRICE_LIST" || a.visibility === "IN_APP") return canDownloadCommercial;
-        return true;
-      })
-      .map((a) => ({
+    const attachments = visibleNewsAttachments(row.attachments, {
+      linked: opts.linked,
+      publicView: opts.publicView,
+    }).map((a) => ({
         id: a.id,
         kind: a.kind,
         title: a.title,

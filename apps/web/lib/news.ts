@@ -20,6 +20,13 @@ export const NEWS_KIND_ORDER: NewsKind[] = [
   "OTHER",
 ];
 
+export function canWriteNews(tenant: { type: string; role: string } | null | undefined) {
+  if (!tenant) return false;
+  if (tenant.type === "DISTRIBUTOR") return ["OWNER", "ADMIN", "PRODUCT_MANAGER"].includes(tenant.role);
+  if (tenant.type === "BRAND") return ["OWNER", "ADMIN", "MARKETING"].includes(tenant.role);
+  return false;
+}
+
 export function authorTypeLabel(type: TenantType | string) {
   if (type === "BRAND") return "Marca";
   if (type === "DISTRIBUTOR") return "Distribuidor";
