@@ -58,7 +58,7 @@ const NOTES = [
     excerpt: "El 27 de agosto salió de Santos. Ayer cortamos precinto. 5070 y 5080 con stock real; el que pide en NODO antes de las 16 sale hoy.",
     kind: "INCOMING",
     isPublic: true,
-    publishedAt: "2026-09-03T11:20:00.000Z",
+    publishedAt: "2026-09-02T21:10:00.000Z",
     coverUrl: IMG.gpu,
     images: [
       { url: IMG.gpu2, caption: "El primer pallet, todavía con precinto de aduana." },
@@ -139,7 +139,7 @@ const NOTES = [
     excerpt: "El chat queda. El remito no se arma con un audio de las 23. Cómo usar NODO este mes, sin teatro.",
     kind: "NOTICE",
     isPublic: true,
-    publishedAt: "2026-09-03T09:00:00.000Z",
+    publishedAt: "2026-09-03T01:20:00.000Z",
     coverUrl: IMG.store,
     images: [{ url: IMG.laptop, caption: "El carrito de NODO es el que pica el depósito. El resto es conversación." }],
     bodyHtml: noteHtml({
@@ -283,7 +283,7 @@ const NOTES = [
     excerpt: "1 al 30 de septiembre. Unidades, no facturación. El rebate no se discute por WhatsApp: lo marca la acción en el espacio de la marca.",
     kind: "PROMO",
     isPublic: true,
-    publishedAt: "2026-09-03T12:40:00.000Z",
+    publishedAt: "2026-09-03T02:10:00.000Z",
     expiresAt: "2026-09-30T23:59:59.000Z",
     coverUrl: IMG.desk,
     bodyHtml: noteHtml({
