@@ -7,6 +7,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import PriceTag from "@/components/PriceTag";
 import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
+import SearchFilterDropdown from "@/components/search/SearchFilterDropdown";
 import SponsoredStrip from "@/components/ads/SponsoredStrip";
 import { OfflinePricesHelpButton } from "@/components/OfflinePricesHelp";
 import {
@@ -38,7 +39,7 @@ import ProviderBadge from "@/components/ProviderBadge";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Search, SlidersHorizontal, Loader2, X, LayoutGrid,
+  Search, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
   ChevronDown, ChevronRight, GitCompare, Check,
 } from "lucide-react";
@@ -99,7 +100,6 @@ function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -207,14 +207,25 @@ function SearchPage() {
     return { min: Math.floor(Math.min(...prices)), max: Math.ceil(Math.max(...prices)) };
   }, [results]);
 
-  const toggleProvider = useCallback((p: Provider) => {
+  function applyProviders(next: Set<Provider>) {
     setTouchedFilters(true);
-    setSelectedProviders((prev) => {
-      const next = new Set(prev);
-      next.has(p) ? next.delete(p) : next.add(p);
-      return next;
-    });
-  }, []);
+    setSelectedProviders(next);
+    if (!searched) return;
+    if (query.trim() || selectedBrands.size > 0 || selectedCategories.size > 0 || brandFilter.trim()) {
+      void runSearch(query, {
+        track: false,
+        brands: selectedBrands,
+        categories: selectedCategories,
+        brand: brandFilter,
+      });
+    }
+  }
+
+  function toggleProvider(p: Provider) {
+    const next = new Set(selectedProviders);
+    next.has(p) ? next.delete(p) : next.add(p);
+    applyProviders(next);
+  }
 
   async function runSearch(
     term: string,
@@ -660,11 +671,38 @@ function SearchPage() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [searched, setUiState]);
 
-  const unselectedCount = searchable.length - selectedProviders.size;
-  const hasFacetFilters = selectedBrands.size > 0 || selectedCategories.size > 0;
   const hasInResultsFilter = Boolean(minPrice || maxPrice || hideNoImage);
   const canSearch =
     Boolean(query.trim() || brandFilter.trim() || selectedBrands.size > 0 || selectedCategories.size > 0);
+
+  const categoryOptions = useMemo(
+    () =>
+      catalogCategories.map((c) => ({
+        value: c.category,
+        label: c.category,
+        count: c.count,
+      })),
+    [catalogCategories]
+  );
+
+  const brandOptions = useMemo(
+    () =>
+      catalogBrands.map((b) => ({
+        value: b.brand,
+        label: b.brand,
+        count: b.count,
+      })),
+    [catalogBrands]
+  );
+
+  const distributorOptions = useMemo(
+    () =>
+      searchable.map((p) => ({
+        value: p.provider,
+        label: p.name || p.provider,
+      })),
+    [searchable]
+  );
 
   return (
     <>
@@ -759,22 +797,6 @@ function SearchPage() {
                 Incluir sin stock
               </button>
 
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
-                  showFilters || unselectedCount > 0 || hasFacetFilters
-                    ? "border-brand-500 text-brand-400 bg-brand-600/10"
-                    : "border-surface-700 text-surface-400 hover:text-surface-200"
-                }`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                {(unselectedCount > 0 || hasFacetFilters) && (
-                  <span className="bg-brand-600 text-white rounded-full min-w-4 h-4 px-1 flex items-center justify-center text-[10px] leading-none">
-                    {(unselectedCount > 0 ? selectedProviders.size : 0) + selectedBrands.size + selectedCategories.size}
-                  </span>
-                )}
-              </button>
-
               <div className="flex border border-surface-700 rounded-lg overflow-hidden">
                 {([
                   { mode: "grid" as ViewMode, Icon: LayoutGrid },
@@ -793,167 +815,69 @@ function SearchPage() {
             </div>
           </header>
 
-          {/* Provider filters bar */}
-          {brandFilter && (
-            <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-2 flex items-center gap-2">
-              <span className="text-xs text-surface-400">Marca</span>
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-brand-600/15 text-brand-300 border border-brand-500/30 rounded-full pl-2.5 pr-1 py-0.5">
-                {brandFilter}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = new Set(selectedBrands);
-                    next.delete(brandFilter);
-                    setSelectedBrands(next);
-                    setBrandFilter(next.size > 0 ? [...next][0] : "");
-                    if (query.trim() || next.size > 0 || selectedCategories.size > 0) {
-                      void runSearch(query, {
-                        track: false,
-                        brands: next,
-                        categories: selectedCategories,
-                        brand: next.size > 0 ? [...next][0] : "",
-                      });
-                    } else {
-                      resetToHome();
-                    }
-                  }}
-                  className="w-4 h-4 rounded-full hover:bg-white/10 flex items-center justify-center"
-                  title="Quitar filtro de marca"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
+          {/* Filtros generales siempre visibles: Categoría · Marca · Distribuidor */}
+          <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900/80 px-4 sm:px-6 py-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <SearchFilterDropdown
+                label="Categoría"
+                options={categoryOptions}
+                selected={selectedCategories}
+                onToggle={toggleCategory}
+                onClear={() => {
+                  setSelectedCategories(new Set());
+                  if (query.trim() || selectedBrands.size > 0) {
+                    void runSearch(query, {
+                      track: false,
+                      brands: selectedBrands,
+                      categories: new Set(),
+                      brand: brandFilter,
+                    });
+                  } else if (searched) {
+                    resetToHome();
+                  }
+                }}
+                emptyText={
+                  searchable.length === 0
+                    ? "Conectá un distribuidor para ver categorías"
+                    : "Sin categorías en el catálogo"
+                }
+              />
+              <SearchFilterDropdown
+                label="Marca"
+                options={brandOptions}
+                selected={selectedBrands}
+                onToggle={toggleBrand}
+                onClear={() => {
+                  setSelectedBrands(new Set());
+                  setBrandFilter("");
+                  if (query.trim() || selectedCategories.size > 0) {
+                    void runSearch(query, {
+                      track: false,
+                      brands: new Set(),
+                      categories: selectedCategories,
+                      brand: "",
+                    });
+                  } else if (searched) {
+                    resetToHome();
+                  }
+                }}
+                emptyText={
+                  searchable.length === 0
+                    ? "Conectá un distribuidor para ver marcas"
+                    : "Sin marcas en el catálogo"
+                }
+              />
+              <SearchFilterDropdown
+                label="Distribuidor"
+                options={distributorOptions}
+                selected={new Set([...selectedProviders])}
+                onToggle={(value) => toggleProvider(value as Provider)}
+                onSelectAll={() => applyProviders(new Set(searchable.map((p) => p.provider)))}
+                onClear={() => applyProviders(new Set())}
+                emptyText="Todavía no estás conectado con ningún distribuidor"
+              />
             </div>
-          )}
-          {showFilters && (
-            <div className="flex-shrink-0 border-b border-surface-800 bg-surface-900 px-6 py-3 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 flex-wrap flex-1">
-                  {searchable.length === 0 && (
-                    <span className="text-xs text-surface-500">
-                      Todavía no estás conectado con ningún proveedor.
-                    </span>
-                  )}
-                  {searchable.map(({ provider, name }) => (
-                    <button
-                      key={provider}
-                      onClick={() => toggleProvider(provider)}
-                      className={`rounded border transition-all px-1.5 py-1 ${
-                        selectedProviders.has(provider)
-                          ? "border-brand-500/50 bg-brand-600/10"
-                          : "border-surface-800 bg-transparent hover:border-surface-600 opacity-70 hover:opacity-100"
-                      }`}
-                    >
-                      <ProviderBadge
-                        provider={provider}
-                        label={name}
-                        variant="inline"
-                        size="sm"
-                      />
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set(searchable.map((p) => p.provider))); }} className="text-xs text-surface-400 hover:text-white">Todos</button>
-                  <span className="text-surface-700">·</span>
-                  <button onClick={() => { setTouchedFilters(true); setSelectedProviders(new Set()); }} className="text-xs text-surface-400 hover:text-white">Ninguno</button>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <span className="text-[11px] font-medium text-surface-500 uppercase tracking-wider pt-1.5 w-20 flex-shrink-0">Marcas</span>
-                <div className="flex items-center gap-1.5 flex-wrap flex-1 max-h-28 overflow-y-auto">
-                  {catalogBrands.length === 0 ? (
-                    <span className="text-xs text-surface-600">Sin marcas en el catálogo</span>
-                  ) : (
-                    catalogBrands.map(({ brand, count }) => (
-                      <button
-                        key={brand}
-                        type="button"
-                        onClick={() => toggleBrand(brand)}
-                        className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition-all ${
-                          selectedBrands.has(brand)
-                            ? "border-brand-500 bg-brand-600/15 text-brand-300"
-                            : "border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500"
-                        }`}
-                      >
-                        {brand}
-                        <span className="ml-1 tabular-nums text-surface-500">{count}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-                {selectedBrands.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedBrands(new Set());
-                      setBrandFilter("");
-                      if (query.trim() || selectedCategories.size > 0) {
-                        void runSearch(query, {
-                          track: false,
-                          brands: new Set(),
-                          categories: selectedCategories,
-                          brand: "",
-                        });
-                      } else if (searched) {
-                        resetToHome();
-                      }
-                    }}
-                    className="text-xs text-surface-400 hover:text-white flex-shrink-0"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-start gap-3">
-                <span className="text-[11px] font-medium text-surface-500 uppercase tracking-wider pt-1.5 w-20 flex-shrink-0">Categorías</span>
-                <div className="flex items-center gap-1.5 flex-wrap flex-1 max-h-28 overflow-y-auto">
-                  {catalogCategories.length === 0 ? (
-                    <span className="text-xs text-surface-600">Sin categorías en el catálogo</span>
-                  ) : (
-                    catalogCategories.map(({ category, count }) => (
-                      <button
-                        key={category}
-                        type="button"
-                        onClick={() => toggleCategory(category)}
-                        className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition-all ${
-                          selectedCategories.has(category)
-                            ? "border-brand-500 bg-brand-600/15 text-brand-300"
-                            : "border-surface-700 text-surface-400 hover:text-surface-200 hover:border-surface-500"
-                        }`}
-                      >
-                        {category}
-                        <span className="ml-1 tabular-nums text-surface-500">{count}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-                {selectedCategories.size > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCategories(new Set());
-                      if (query.trim() || selectedBrands.size > 0) {
-                        void runSearch(query, {
-                          track: false,
-                          brands: selectedBrands,
-                          categories: new Set(),
-                          brand: brandFilter,
-                        });
-                      } else if (searched) {
-                        resetToHome();
-                      }
-                    }}
-                    className="text-xs text-surface-400 hover:text-white flex-shrink-0"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
+          </div>
 
           {/* Results area */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
