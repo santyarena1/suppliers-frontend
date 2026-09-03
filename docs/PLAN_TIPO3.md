@@ -69,11 +69,10 @@ completo (portada o mosaico con fotos de SKUs y novedades), navegación de
 módulos (el shell de NODO no scrollea con hash: los botones usan
 `scrollIntoView`), productos con imagen grande y semáforo, acciones,
 novedades con cover, materiales, capacitaciones y contacto. Si pega HTML,
-ese diseño va como **presentación** al final (acotado, sin `100vh` ni
-`position:fixed` que tape Nodo). Los huecos `{{productos}}` son chips que
-saltan al módulo nativo; **los módulos siempre se listan**, no se esconden
-aunque el HTML traiga huecos. Un botón muerto del HTML (`href="#"`,
-`<button>` sin destino) salta a ese bloque. Un comercio puede
+**ese HTML es el cuerpo de la misma landing**: los huecos reciben los
+módulos, y si falta un hueco Nodo lo agrega al final de ese documento.
+Nunca hay una segunda página “abajo de la landing”. Un botón muerto del HTML
+(`href="#"`, `<button>` sin destino) salta a ese bloque. Un comercio puede
 saltar a `/search?marca=Nombre` (la búsqueda general, filtrada). El distro no
 tiene búsqueda: ve el mapa, no arma pedidos de marca.
 

@@ -1,4 +1,4 @@
-import { compileBrandHtml, inferBrandHubTarget, sanitizeBrandHtml, sanitizeCss, splitBrandHtml } from "./brand-html";
+import { compileBrandHtml, inferBrandHubTarget, sanitizeBrandHtml, sanitizeCss, splitBrandHtml, appendMissingLandingSlots } from "./brand-html";
 
 describe("sanitizeBrandHtml", () => {
   it("saca scripts y handlers", () => {
@@ -129,5 +129,17 @@ describe("inferBrandHubTarget", () => {
   it("un botón muerto sin texto útil igual salta a productos", () => {
     expect(inferBrandHubTarget("Menú", "#")).toBe("#productos");
     expect(inferBrandHubTarget("  ", "")).toBe("#productos");
+  });
+});
+
+describe("appendMissingLandingSlots", () => {
+  it("mete los módulos que el HTML no declaró, en el mismo documento", () => {
+    const out = appendMissingLandingSlots("<h1>Gigabyte</h1>{{productos}}");
+    expect(out).toContain("<h1>Gigabyte</h1>");
+    expect(out).toContain("{{productos}}");
+    expect(out).toContain('name="acciones"');
+    expect(out).toContain('name="novedades"');
+    expect(out).not.toMatch(/<slot name="productos">/);
+    expect(out).toContain("nodo-landing-modules");
   });
 });

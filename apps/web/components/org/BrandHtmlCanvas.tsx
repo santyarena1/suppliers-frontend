@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { inferBrandHubTarget, rewriteCssForBrandHost, scrollToBrandSection } from "@/lib/brand-html-nav";
+import { inferBrandHubTarget, rewriteCssForBrandHost, scrollToBrandSection, appendMissingLandingSlots } from "@/lib/brand-html-nav";
 
-const HOST_CSS = `:host{all:initial;display:block;position:relative;isolation:isolate;overflow:visible;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}`;
+const HOST_CSS = `:host{all:initial;display:block;position:relative;isolation:isolate;overflow:visible;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}.nodo-landing-modules{background:#0b1220;color:#f8fafc;padding:28px 16px 64px;}.nodo-landing-modules>section{display:block;max-width:72rem;margin:0 auto 3.5rem;}`;
 
 function compileSlots(html: string): string {
   return html
@@ -31,8 +31,8 @@ function rewriteInlineStyles(html: string): string {
 }
 
 /**
- * El HTML de la marca va en un shadow root para que su CSS no pise Nodo.
- * Los huecos `{{productos}}` son `<slot>`: en light DOM un chip salta al módulo nativo.
+ * El HTML de la marca es el cuerpo de la landing: los módulos van en los huecos
+ * o se agregan al final del mismo documento (nunca una segunda página abajo).
  */
 export default function BrandHtmlCanvas({
   html,
@@ -44,7 +44,9 @@ export default function BrandHtmlCanvas({
   minHeight?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const compiled = rewriteInlineStyles(rewriteStyleTags(compileSlots(stripActiveHtml(html ?? ""))));
+  const compiled = appendMissingLandingSlots(
+    rewriteInlineStyles(rewriteStyleTags(compileSlots(stripActiveHtml(html ?? ""))))
+  );
 
   useEffect(() => {
     const host = hostRef.current;

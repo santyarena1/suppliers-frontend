@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import PrefsPanel from "@/components/PrefsPanel";
 import ImageUploadField from "@/components/ImageUploadField";
-import BrandHtmlCanvas, { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
-import { BrandSpaceLanding } from "@/components/org/BrandSpaceLanding";
+import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
+import { BrandSpaceLanding, landingModuleSlots } from "@/components/org/BrandSpaceLanding";
 import { brandApi, newsApi, type BrandAction, type BrandLanding, type BrandResource, type BrandSkuSignal, type NewsCard } from "@/lib/api";
 import { BRAND_LANDING_HTML_TEMPLATE } from "@/lib/brand-visuals";
 import { Copy, Globe, Loader2 } from "lucide-react";
@@ -455,23 +455,21 @@ function LandingEditorPreview({
         html.trim() ? (
           <BrandHtmlCanvas
             html={html}
-            slots={{
-              productos: <BrandHtmlSlotHole label="productos" />,
-              semaforos: <BrandHtmlSlotHole label="productos" />,
-              acciones: <BrandHtmlSlotHole label="acciones" />,
-              materiales: <BrandHtmlSlotHole label="materiales" />,
-              capacitaciones: <BrandHtmlSlotHole label="capacitaciones" />,
-              hablar: <BrandHtmlSlotHole label="contacto" />,
-              nombre: <span>{landing.name}</span>,
-              logo: landing.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={landing.logoUrl} alt="" style={{ height: 48 }} />
-              ) : (
-                <BrandHtmlSlotHole label="contacto" />
-              ),
-              noticias: <BrandHtmlSlotHole label="novedades" />,
-              novedades: <BrandHtmlSlotHole label="novedades" />,
-            }}
+            slots={landingModuleSlots({
+              name: landing.name,
+              products: preview.signals,
+              actions: preview.actions,
+              news,
+              materials: preview.materials,
+              trainings: preview.trainings,
+              contact: {
+                websiteUrl: landing.websiteUrl,
+                supportEmail: landing.supportEmail,
+                supportPhone: landing.supportPhone,
+              },
+              hub: true,
+              logoUrl: landing.logoUrl,
+            })}
           />
         ) : null
       }

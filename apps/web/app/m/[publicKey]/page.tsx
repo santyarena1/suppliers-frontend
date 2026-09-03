@@ -6,8 +6,8 @@ import { useParams } from "next/navigation";
 import { publicBrandApi, type PublicBrandLanding } from "@/lib/api";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
-import BrandHtmlCanvas, { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
-import { BrandSpaceLanding } from "@/components/org/BrandSpaceLanding";
+import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
+import { BrandSpaceLanding, landingModuleSlots } from "@/components/org/BrandSpaceLanding";
 import { Loader2 } from "lucide-react";
 
 export default function PublicBrandLandingPage() {
@@ -72,21 +72,21 @@ export default function PublicBrandLandingPage() {
             landing.htmlDocument ? (
               <BrandHtmlCanvas
                 html={landing.htmlDocument}
-                slots={{
-                  nombre: <span>{landing.name}</span>,
-                  logo: landing.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={landing.logoUrl} alt={landing.name} style={{ height: 48 }} />
-                  ) : null,
-                  productos: <BrandHtmlSlotHole label="productos" />,
-                  semaforos: <BrandHtmlSlotHole label="productos" />,
-                  acciones: <BrandHtmlSlotHole label="acciones" />,
-                  novedades: <BrandHtmlSlotHole label="novedades" />,
-                  noticias: <BrandHtmlSlotHole label="novedades" />,
-                  materiales: <BrandHtmlSlotHole label="materiales" />,
-                  capacitaciones: <BrandHtmlSlotHole label="capacitaciones" />,
-                  hablar: <BrandHtmlSlotHole label="contacto" />,
-                }}
+                slots={landingModuleSlots({
+                  name: landing.name,
+                  products: landing.products ?? [],
+                  actions: landing.actions ?? [],
+                  news: landing.news ?? [],
+                  materials: landing.materials ?? [],
+                  trainings: landing.trainings ?? [],
+                  contact: {
+                    websiteUrl: landing.websiteUrl,
+                    supportEmail: landing.supportEmail,
+                    supportPhone: landing.supportPhone,
+                  },
+                  hub: false,
+                  logoUrl: landing.logoUrl,
+                })}
               />
             ) : null
           }

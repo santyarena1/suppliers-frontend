@@ -475,3 +475,20 @@ export function compileBrandHtml(raw: string): { html: string; slots: BrandHubSl
     .join("");
   return { html: rewriteStyleTagsForShadow(html), slots, parts };
 }
+
+const LANDING_MODULE_SLOTS = ["productos", "acciones", "novedades", "materiales", "capacitaciones", "contacto"] as const;
+
+export function appendMissingLandingSlots(html: string): string {
+  const found = new Set<string>();
+  const re = /\{\{\s*([a-z]+)\s*\}\}|<slot\s+[^>]*name=["']([a-z]+)["']|data-nodo-slot=["']([a-z]+)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(html))) {
+    const name = (match[1] || match[2] || match[3] || "").toLowerCase();
+    if (name) found.add(name);
+  }
+  if (found.has("semaforos")) found.add("productos");
+  if (found.has("noticias")) found.add("novedades");
+  const missing = LANDING_MODULE_SLOTS.filter((name) => !found.has(name));
+  if (missing.length === 0) return html;
+  return `${html}<div class="nodo-landing-modules">${missing.map((name) => `<slot name="${name}"></slot>`).join("")}</div>`;
+}
