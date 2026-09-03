@@ -110,6 +110,12 @@ describe("splitBrandHtml / compileBrandHtml", () => {
     const { slots } = compileBrandHtml("{{novedades}}{{noticias}}");
     expect(slots).toEqual(["novedades", "noticias"]);
   });
+
+  it("reconoce el hueco de contacto", () => {
+    const { html, slots } = compileBrandHtml("{{contacto}}");
+    expect(slots).toEqual(["contacto"]);
+    expect(html).toMatch(/<slot name="contacto"><\/slot>/);
+  });
 });
 
 describe("inferBrandHubTarget", () => {

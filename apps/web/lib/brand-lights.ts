@@ -25,3 +25,12 @@ export const SIGNAL_LIGHT_CARD: Record<BrandSignalLight, string> = {
   BLUE: "border-sky-500/40 bg-sky-500/10",
   GRAY: "border-slate-500/40 bg-slate-500/10",
 };
+
+/** Cards de semáforo adentro del HTML de la marca (fondo claro). */
+export const SIGNAL_LIGHT_CARD_EMBED: Record<BrandSignalLight, string> = {
+  GREEN: "border-emerald-200 bg-white",
+  YELLOW: "border-amber-200 bg-white",
+  RED: "border-red-200 bg-white",
+  BLUE: "border-sky-200 bg-white",
+  GRAY: "border-slate-200 bg-white",
+};

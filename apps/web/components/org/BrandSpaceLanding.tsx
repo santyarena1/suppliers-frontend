@@ -12,7 +12,7 @@ import type {
   BrandResource,
   BrandSkuSignal,
 } from "@/lib/api";
-import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
+import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_CARD_EMBED, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
 import { BRAND_MODULE_HINT } from "@/lib/brand-presence";
 import { collectBrandVisuals, isVisualAsset } from "@/lib/brand-visuals";
 import { scrollToBrandSection } from "@/lib/brand-html-nav";
@@ -45,6 +45,12 @@ const SECTIONS: { href: string; icon: typeof Package; label: string; module?: Br
 
 function img(ref?: string | null) {
   return assetUrl(ref);
+}
+
+function sectionShell(embed: boolean, extra = "") {
+  return embed
+    ? `scroll-mt-6 w-full px-0 py-1 ${extra}`.trim()
+    : `scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full ${extra}`.trim();
 }
 
 type ExtraBlock = { title?: string; body?: string; url?: string };
@@ -114,6 +120,7 @@ export function BrandSpaceLanding({
   extraBlocks?: ExtraBlock[];
 }) {
   const hub = variant === "hub";
+  const customHtml = Boolean(html);
   const visuals = collectBrandVisuals({
     heroUrl: theme.heroUrl,
     products: products.map((p) => ({ imageUrl: p.imageUrl })),
@@ -131,84 +138,90 @@ export function BrandSpaceLanding({
   }
 
   return (
-    <div className="bg-surface-950 text-white" onClick={onLandingClick}>
-      <Hero
-        name={name}
-        accent={accent}
-        theme={theme}
-        visuals={visuals}
-        presence={presence}
-        connectedAt={connectedAt}
-        retailer={retailer}
-        searchHref={searchHref}
-        chatHref={chatHref}
-        noticesHref={noticesHref}
-        hub={hub}
-      />
-
+    <div className={customHtml ? "bg-white text-slate-900" : "bg-surface-950 text-white"} onClick={onLandingClick}>
       {status === "SUSPENDED" && (
-        <p className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 text-xs rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/30 text-amber-200">
+        <p
+          className={`max-w-6xl mx-auto px-4 sm:px-6 pt-6 text-xs rounded-xl py-3 border ${
+            customHtml
+              ? "bg-amber-50 border-amber-200 text-amber-900"
+              : "bg-amber-500/10 border-amber-500/30 text-amber-200"
+          }`}
+        >
           El vínculo está en pausa. Podés mirar el espacio, pero las operaciones pueden estar limitadas.
         </p>
       )}
-      {hub && presence?.pending && (
-        <p className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 text-sm rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-100">
-          <span className="font-semibold">Pendiente de contenido.</span> Ya estás conectado con {name}. Todavía no
-          publicó mapa, acciones ni materiales: cada bloque aparece abajo para que sepas qué va a haber.
-        </p>
-      )}
 
-      <nav className="sticky top-0 z-20 border-b border-surface-800 bg-surface-950/90 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex gap-1 overflow-x-auto">
-          {SECTIONS.map((s) => {
-            const ready = s.module
-              ? presence
-                ? presence.modules[s.module].ready
-                : sectionHasContent(s.module, products, actions, materials, trainings, contact)
-              : news.length > 0;
-            const Icon = s.icon;
-            return (
-              <a
-                key={s.href}
-                href={s.href}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  scrollToBrandSection(s.href);
-                }}
-                className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap border ${
-                  ready
-                    ? "border-surface-700 text-surface-200 hover:border-surface-500"
-                    : "border-dashed border-amber-500/30 text-amber-300/80"
-                }`}
-              >
-                <Icon className="w-3 h-3" />
-                {s.label}
-                {!ready && hub && <Clock className="w-3 h-3" />}
-              </a>
-            );
-          })}
-        </div>
-      </nav>
-
-      {html ? (
+      {customHtml ? (
         html
       ) : (
-        <LandingModules
-          name={name}
-          products={products}
-          actions={actions}
-          news={news}
-          materials={materials}
-          trainings={trainings}
-          extraBlocks={extraBlocks}
-          contact={contact}
-          chatHref={chatHref}
-          searchHref={searchHref}
-          retailer={retailer}
-          hub={hub}
-          presence={presence}
-        />
+        <>
+          <Hero
+            name={name}
+            accent={accent}
+            theme={theme}
+            visuals={visuals}
+            presence={presence}
+            connectedAt={connectedAt}
+            retailer={retailer}
+            searchHref={searchHref}
+            chatHref={chatHref}
+            noticesHref={noticesHref}
+            hub={hub}
+          />
+          {hub && presence?.pending && (
+            <p className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 text-sm rounded-xl py-3 bg-amber-500/10 border border-amber-500/20 text-amber-100">
+              <span className="font-semibold">Pendiente de contenido.</span> Ya estás conectado con {name}. Todavía no
+              publicó mapa, acciones ni materiales: cada bloque aparece abajo para que sepas qué va a haber.
+            </p>
+          )}
+          <nav className="sticky top-0 z-20 border-b border-surface-800 bg-surface-950/90 backdrop-blur">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex gap-1 overflow-x-auto">
+              {SECTIONS.map((s) => {
+                const ready = s.module
+                  ? presence
+                    ? presence.modules[s.module].ready
+                    : sectionHasContent(s.module, products, actions, materials, trainings, contact)
+                  : news.length > 0;
+                const Icon = s.icon;
+                return (
+                  <a
+                    key={s.href}
+                    href={s.href}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      scrollToBrandSection(s.href);
+                    }}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap border ${
+                      ready
+                        ? "border-surface-700 text-surface-200 hover:border-surface-500"
+                        : "border-dashed border-amber-500/30 text-amber-300/80"
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {s.label}
+                    {!ready && hub && <Clock className="w-3 h-3" />}
+                  </a>
+                );
+              })}
+            </div>
+          </nav>
+          <LandingModules
+            name={name}
+            products={products}
+            actions={actions}
+            news={news}
+            materials={materials}
+            trainings={trainings}
+            extraBlocks={extraBlocks}
+            contact={contact}
+            chatHref={chatHref}
+            searchHref={searchHref}
+            retailer={retailer}
+            hub={hub}
+            presence={presence}
+          />
+        </>
       )}
     </div>
   );
@@ -459,6 +472,7 @@ export function ProductsSection({
   searchHref,
   hub,
   ready,
+  embed = false,
 }: {
   name: string;
   products: BrandSkuSignal[] | PublicProduct[];
@@ -466,19 +480,22 @@ export function ProductsSection({
   searchHref?: string;
   hub: boolean;
   ready: boolean;
+  embed?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
   const list = showAll ? products : products.slice(0, 12);
   return (
-    <section id="productos" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
+    <section id="productos" className={sectionShell(embed)}>
       <SectionHead
         title={hub ? "Mapa comercial" : "Productos"}
         hint={hub ? BRAND_MODULE_HINT.products : "Nombre e imagen. El precio y el semáforo quedan para el espacio vinculado."}
         ready={ready}
         count={products.length}
+        embed={embed}
       />
       {!ready ? (
         <Pending
+          embed={embed}
           text={
             hub
               ? `${name} todavía no armó el mapa de SKUs. ${
@@ -490,20 +507,20 @@ export function ProductsSection({
           }
         >
           {retailer && searchHref && (
-            <Link href={searchHref} className="text-xs font-semibold text-brand-400">
+            <Link href={searchHref} className="text-xs font-semibold text-brand-600">
               Abrir búsqueda filtrada →
             </Link>
           )}
         </Pending>
       ) : (
         <>
-          {hub && isSignalList(products) && <LightLegend />}
+          {hub && isSignalList(products) && <LightLegend embed={embed} />}
           <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
             {list.map((row, i) =>
               isSignal(row) ? (
-                <SignalCard key={row.id} row={row} retailer={retailer} />
+                <SignalCard key={row.id} row={row} retailer={retailer} embed={embed} />
               ) : (
-                <PublicProductCard key={`${row.name}-${i}`} row={row} />
+                <PublicProductCard key={`${row.name}-${i}`} row={row} embed={embed} />
               )
             )}
           </div>
@@ -511,7 +528,7 @@ export function ProductsSection({
             <button
               type="button"
               onClick={() => setShowAll((v) => !v)}
-              className="mt-4 text-xs font-semibold text-brand-400"
+              className={`mt-4 text-xs font-semibold ${embed ? "text-brand-600" : "text-brand-400"}`}
             >
               {showAll ? "Ver menos" : `Ver los ${products.length} productos`}
             </button>
@@ -530,30 +547,32 @@ function isSignalList(rows: BrandSkuSignal[] | PublicProduct[]): rows is BrandSk
   return rows.length > 0 && isSignal(rows[0]);
 }
 
-function SignalCard({ row, retailer }: { row: BrandSkuSignal; retailer: boolean }) {
+function SignalCard({ row, retailer, embed = false }: { row: BrandSkuSignal; retailer: boolean; embed?: boolean }) {
   const inner = (
     <>
-      <div className="relative aspect-square bg-black/40 overflow-hidden">
+      <div className={`relative aspect-square overflow-hidden ${embed ? "bg-slate-50" : "bg-black/40"}`}>
         {row.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={img(row.imageUrl)} alt="" className="w-full h-full object-contain p-3" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Package className="w-8 h-8 text-white/25" />
+            <Package className={`w-8 h-8 ${embed ? "text-slate-300" : "text-white/25"}`} />
           </div>
         )}
-        <span className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-black/40 ${SIGNAL_LIGHT_DOT[row.light]}`} />
+        <span className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full ring-2 ${embed ? "ring-white" : "ring-black/40"} ${SIGNAL_LIGHT_DOT[row.light]}`} />
       </div>
       <div className="p-3">
-        <p className="text-sm font-medium text-white line-clamp-2 min-h-[2.5rem]">{row.name}</p>
-        <p className="text-[11px] text-surface-400 mt-1">{SIGNAL_LIGHT_LABELS[row.light]}</p>
-        <p className="text-[11px] text-surface-300 mt-0.5">
+        <p className={`text-sm font-medium line-clamp-2 min-h-[2.5rem] ${embed ? "text-slate-900" : "text-white"}`}>{row.name}</p>
+        <p className={`text-[11px] mt-1 ${embed ? "text-slate-500" : "text-surface-400"}`}>{SIGNAL_LIGHT_LABELS[row.light]}</p>
+        <p className={`text-[11px] mt-0.5 ${embed ? "text-slate-600" : "text-surface-300"}`}>
           {row.suggestedPrice != null ? `Sugerido ${formatUSD(row.suggestedPrice)}` : "Sin precio sugerido"}
         </p>
       </div>
     </>
   );
-  const cls = `block rounded-2xl overflow-hidden border ${SIGNAL_LIGHT_CARD[row.light]} hover:brightness-110`;
+  const cls = `block rounded-2xl overflow-hidden border ${
+    embed ? `${SIGNAL_LIGHT_CARD_EMBED[row.light]} shadow-sm hover:shadow-md` : `${SIGNAL_LIGHT_CARD[row.light]} hover:brightness-110`
+  }`;
   if (retailer) {
     return (
       <Link href={`/product/${row.provider}/${encodeURIComponent(row.externalId)}`} className={cls}>
@@ -564,27 +583,27 @@ function SignalCard({ row, retailer }: { row: BrandSkuSignal; retailer: boolean 
   return <div className={cls}>{inner}</div>;
 }
 
-function PublicProductCard({ row }: { row: PublicProduct }) {
+function PublicProductCard({ row, embed = false }: { row: PublicProduct; embed?: boolean }) {
   return (
-    <article className="rounded-2xl overflow-hidden border border-surface-800 bg-surface-900">
-      <div className="aspect-square bg-black/40">
+    <article className={`rounded-2xl overflow-hidden border ${embed ? "border-slate-200 bg-white shadow-sm" : "border-surface-800 bg-surface-900"}`}>
+      <div className={`aspect-square ${embed ? "bg-slate-50" : "bg-black/40"}`}>
         {row.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={img(row.imageUrl)} alt="" className="w-full h-full object-contain p-3" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Package className="w-8 h-8 text-white/25" />
+            <Package className={`w-8 h-8 ${embed ? "text-slate-300" : "text-white/25"}`} />
           </div>
         )}
       </div>
-      <p className="p-3 text-sm font-medium text-white line-clamp-2">{row.name}</p>
+      <p className={`p-3 text-sm font-medium line-clamp-2 ${embed ? "text-slate-900" : "text-white"}`}>{row.name}</p>
     </article>
   );
 }
 
-function LightLegend() {
+function LightLegend({ embed = false }: { embed?: boolean }) {
   return (
-    <div className="flex flex-wrap gap-3 mb-4 text-[11px] text-surface-400">
+    <div className={`flex flex-wrap gap-3 mb-4 text-[11px] ${embed ? "text-slate-500" : "text-surface-400"}`}>
       {(Object.keys(SIGNAL_LIGHT_LABELS) as Array<keyof typeof SIGNAL_LIGHT_LABELS>).map((k) => (
         <span key={k} className="inline-flex items-center gap-1.5">
           <span className={`w-2 h-2 rounded-full ${SIGNAL_LIGHT_DOT[k]}`} />
@@ -600,22 +619,32 @@ export function ActionsSection({
   actions,
   hub,
   ready,
+  embed = false,
 }: {
   name: string;
   actions: BrandAction[] | PublicAction[];
   hub: boolean;
   ready: boolean;
+  embed?: boolean;
 }) {
+  const card = embed
+    ? "rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-4"
+    : "rounded-2xl border border-surface-800 bg-surface-900 px-4 py-4";
+  const titleCls = embed ? "text-sm font-medium text-slate-900" : "text-sm font-medium text-white";
+  const muted = embed ? "text-xs text-slate-500 mt-1" : "text-xs text-surface-400 mt-1";
+  const meta = embed ? "text-[11px] text-slate-400 mt-2" : "text-[11px] text-surface-500 mt-2";
   return (
-    <section id="acciones" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
+    <section id="acciones" className={sectionShell(embed)}>
       <SectionHead
         title="Acciones vigentes"
         hint={hub ? BRAND_MODULE_HINT.actions : "Título y vigencia. El progreso se ve en el espacio vinculado."}
         ready={ready}
         count={actions.length}
+        embed={embed}
       />
       {!ready ? (
         <Pending
+          embed={embed}
           text={
             hub
               ? `${name} no tiene acciones vigentes. Cuando lance una (unidades, USD o rebate), se mide acá sobre tus pedidos.`
@@ -626,12 +655,12 @@ export function ActionsSection({
         <ul className="grid gap-3 sm:grid-cols-2">
           {actions.map((action, i) =>
             isHubAction(action) ? (
-              <ActionRow key={action.id} action={action} />
+              <ActionRow key={action.id} action={action} embed={embed} />
             ) : (
-              <li key={`${action.title}-${i}`} className="rounded-2xl border border-surface-800 bg-surface-900 px-4 py-4">
-                <p className="text-sm font-medium text-white">{action.title}</p>
-                {action.description && <p className="text-xs text-surface-400 mt-1">{action.description}</p>}
-                <p className="text-[11px] text-surface-500 mt-2">Hasta {new Date(action.endsAt).toLocaleDateString("es-AR")}</p>
+              <li key={`${action.title}-${i}`} className={card}>
+                <p className={titleCls}>{action.title}</p>
+                {action.description && <p className={muted}>{action.description}</p>}
+                <p className={meta}>Hasta {new Date(action.endsAt).toLocaleDateString("es-AR")}</p>
               </li>
             )
           )}
@@ -645,7 +674,7 @@ function isHubAction(action: BrandAction | PublicAction): action is BrandAction 
   return "progress" in action && "id" in action;
 }
 
-function ActionRow({ action }: { action: BrandAction }) {
+function ActionRow({ action, embed = false }: { action: BrandAction; embed?: boolean }) {
   const unit = action.kind === "PURCHASE_AMOUNT" ? "USD" : "u.";
   const current =
     action.kind === "PURCHASE_AMOUNT" ? formatUSD(action.progress.current) : String(action.progress.current);
@@ -657,18 +686,18 @@ function ActionRow({ action }: { action: BrandAction }) {
         : String(action.progress.target);
   const ends = new Date(action.endsAt).toLocaleDateString("es-AR");
   return (
-    <li className="rounded-2xl border border-surface-800 bg-surface-900 px-4 py-4">
+    <li className={embed ? "rounded-2xl border border-slate-200 bg-white shadow-sm px-4 py-4" : "rounded-2xl border border-surface-800 bg-surface-900 px-4 py-4"}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-white">{action.title}</p>
-          {action.description && <p className="text-xs text-surface-400 mt-0.5">{action.description}</p>}
-          <p className="text-[11px] text-surface-500 mt-1">Hasta {ends}</p>
+          <p className={`text-sm font-medium ${embed ? "text-slate-900" : "text-white"}`}>{action.title}</p>
+          {action.description && <p className={`text-xs mt-0.5 ${embed ? "text-slate-500" : "text-surface-400"}`}>{action.description}</p>}
+          <p className={`text-[11px] mt-1 ${embed ? "text-slate-400" : "text-surface-500"}`}>Hasta {ends}</p>
         </div>
-        <span className="text-[11px] tabular-nums text-surface-300">
+        <span className={`text-[11px] tabular-nums ${embed ? "text-slate-600" : "text-surface-300"}`}>
           {current} / {target} {action.kind === "PURCHASE_AMOUNT" ? "" : unit}
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden mt-2">
+      <div className={`h-1.5 rounded-full overflow-hidden mt-2 ${embed ? "bg-slate-100" : "bg-surface-800"}`}>
         <div
           className={`h-full ${action.progress.met ? "bg-emerald-500" : "bg-brand-500"}`}
           style={{ width: `${Math.round(Math.min(1, action.progress.ratio) * 100)}%` }}
@@ -682,26 +711,28 @@ export function NewsSection({
   name,
   items,
   hub,
+  embed = false,
 }: {
   name: string;
   items: BrandHub["news"] | PublicNews[];
   hub: boolean;
+  embed?: boolean;
 }) {
   const ready = items.length > 0;
   const featured = items[0];
   const rest = items.slice(1);
   return (
-    <section id="novedades" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead title="Novedades" hint="Notas que publica la marca para el canal" ready={ready} count={items.length} />
+    <section id="novedades" className={sectionShell(embed)}>
+      <SectionHead title="Novedades" hint="Notas que publica la marca para el canal" ready={ready} count={items.length} embed={embed} />
       {!ready ? (
-        <Pending text={`${name} todavía no publicó notas. Cuando salga un lanzamiento o una promo, aparece acá.`} />
+        <Pending embed={embed} text={`${name} todavía no publicó notas. Cuando salga un lanzamiento o una promo, aparece acá.`} />
       ) : (
         <div className="flex flex-col gap-4">
-          {featured && <NewsFeatured item={featured} hub={hub} />}
+          {featured && <NewsFeatured item={featured} hub={hub} embed={embed} />}
           {rest.length > 0 && (
             <div className="grid sm:grid-cols-3 gap-4">
               {rest.map((item) => (
-                <NewsCard key={item.id} item={item} hub={hub} />
+                <NewsCard key={item.id} item={item} hub={hub} embed={embed} />
               ))}
             </div>
           )}
@@ -717,24 +748,24 @@ function newsHref(item: PublicNews, hub: boolean) {
   return null;
 }
 
-function NewsFeatured({ item, hub }: { item: PublicNews; hub: boolean }) {
+function NewsFeatured({ item, hub, embed = false }: { item: PublicNews; hub: boolean; embed?: boolean }) {
   const href = newsHref(item, hub);
   const body = (
-    <article className="grid sm:grid-cols-2 gap-0 rounded-2xl overflow-hidden border border-surface-800 bg-surface-900 group">
-      <div className="aspect-[16/10] sm:aspect-auto sm:min-h-[220px] bg-black/40">
+    <article className={`grid sm:grid-cols-2 gap-0 rounded-2xl overflow-hidden border group ${embed ? "border-slate-200 bg-white shadow-sm" : "border-surface-800 bg-surface-900"}`}>
+      <div className={`aspect-[16/10] sm:aspect-auto sm:min-h-[220px] ${embed ? "bg-slate-100" : "bg-black/40"}`}>
         {item.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={img(item.coverUrl)} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" />
         ) : (
           <div className="w-full h-full min-h-[180px] flex items-center justify-center">
-            <Newspaper className="w-10 h-10 text-white/20" />
+            <Newspaper className={`w-10 h-10 ${embed ? "text-slate-300" : "text-white/20"}`} />
           </div>
         )}
       </div>
       <div className="p-5 sm:p-6 flex flex-col justify-center">
-        <p className="text-[11px] uppercase tracking-widest text-surface-500 mb-2">Destacada</p>
-        <h3 className="text-xl font-semibold text-white leading-snug group-hover:opacity-80">{item.title}</h3>
-        {item.excerpt && <p className="text-sm text-surface-400 mt-2 line-clamp-3">{item.excerpt}</p>}
+        <p className={`text-[11px] uppercase tracking-widest mb-2 ${embed ? "text-slate-400" : "text-surface-500"}`}>Destacada</p>
+        <h3 className={`text-xl font-semibold leading-snug group-hover:opacity-80 ${embed ? "text-slate-900" : "text-white"}`}>{item.title}</h3>
+        {item.excerpt && <p className={`text-sm mt-2 line-clamp-3 ${embed ? "text-slate-600" : "text-surface-400"}`}>{item.excerpt}</p>}
       </div>
     </article>
   );
@@ -742,21 +773,21 @@ function NewsFeatured({ item, hub }: { item: PublicNews; hub: boolean }) {
   return <Link href={href}>{body}</Link>;
 }
 
-function NewsCard({ item, hub }: { item: PublicNews; hub: boolean }) {
+function NewsCard({ item, hub, embed = false }: { item: PublicNews; hub: boolean; embed?: boolean }) {
   const href = newsHref(item, hub);
   const body = (
-    <article className="block group rounded-2xl overflow-hidden border border-surface-800 bg-surface-900">
-      <div className="aspect-[16/10] bg-black/40 overflow-hidden">
+    <article className={`block group rounded-2xl overflow-hidden border ${embed ? "border-slate-200 bg-white shadow-sm" : "border-surface-800 bg-surface-900"}`}>
+      <div className={`aspect-[16/10] overflow-hidden ${embed ? "bg-slate-100" : "bg-black/40"}`}>
         {item.coverUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={img(item.coverUrl)} alt="" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Newspaper className="w-7 h-7 text-white/20" />
+            <Newspaper className={`w-7 h-7 ${embed ? "text-slate-300" : "text-white/20"}`} />
           </div>
         )}
       </div>
-      <p className="p-3 text-sm text-white leading-snug group-hover:opacity-80 line-clamp-2">{item.title}</p>
+      <p className={`p-3 text-sm leading-snug group-hover:opacity-80 line-clamp-2 ${embed ? "text-slate-900" : "text-white"}`}>{item.title}</p>
     </article>
   );
   if (!href) return body;
@@ -770,6 +801,7 @@ export function FilesSection({
   items,
   pendingText,
   hub,
+  embed = false,
 }: {
   id: string;
   title: string;
@@ -777,12 +809,19 @@ export function FilesSection({
   items: BrandResource[] | PublicFile[];
   pendingText: string;
   hub: boolean;
+  embed?: boolean;
 }) {
+  const card = embed
+    ? "block rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden hover:border-slate-300"
+    : "block rounded-2xl border border-surface-800 bg-surface-900 overflow-hidden hover:border-surface-600";
+  const staticCard = embed
+    ? "rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+    : "rounded-2xl border border-surface-800 bg-surface-900 overflow-hidden";
   return (
-    <section id={id} className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead title={title} hint={BRAND_MODULE_HINT[module]} ready={items.length > 0} count={items.length} />
+    <section id={id} className={sectionShell(embed)}>
+      <SectionHead title={title} hint={BRAND_MODULE_HINT[module]} ready={items.length > 0} count={items.length} embed={embed} />
       {items.length === 0 ? (
-        <Pending text={pendingText} />
+        <Pending embed={embed} text={pendingText} />
       ) : (
         <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {items.map((item, i) => {
@@ -792,34 +831,31 @@ export function FilesSection({
             const inner = (
               <>
                 {visual ? (
-                  <div className="aspect-[16/10] bg-black/40 overflow-hidden">
+                  <div className={`aspect-[16/10] overflow-hidden ${embed ? "bg-slate-100" : "bg-black/40"}`}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={visual} alt="" className="w-full h-full object-cover" />
                   </div>
                 ) : null}
                 <div className="flex items-start gap-3 px-4 py-3">
-                  <Download className="w-4 h-4 text-brand-400 mt-0.5 flex-shrink-0" />
+                  <Download className={`w-4 h-4 mt-0.5 flex-shrink-0 ${embed ? "text-brand-600" : "text-brand-400"}`} />
                   <div className="min-w-0">
-                    <p className="text-sm text-white truncate">{item.title}</p>
-                    {item.description && <p className="text-[11px] text-surface-400 line-clamp-2">{item.description}</p>}
+                    <p className={`text-sm truncate ${embed ? "text-slate-900" : "text-white"}`}>{item.title}</p>
+                    {item.description && (
+                      <p className={`text-[11px] line-clamp-2 ${embed ? "text-slate-500" : "text-surface-400"}`}>{item.description}</p>
+                    )}
                   </div>
-                  {href && <ExternalLink className="w-3.5 h-3.5 text-surface-600 ml-auto flex-shrink-0" />}
+                  {href && <ExternalLink className={`w-3.5 h-3.5 ml-auto flex-shrink-0 ${embed ? "text-slate-400" : "text-surface-600"}`} />}
                 </div>
               </>
             );
             return (
               <li key={res?.id ?? `${item.title}-${i}`}>
                 {href ? (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-2xl border border-surface-800 bg-surface-900 overflow-hidden hover:border-surface-600"
-                  >
+                  <a href={href} target="_blank" rel="noreferrer" className={card}>
                     {inner}
                   </a>
                 ) : (
-                  <div className="rounded-2xl border border-surface-800 bg-surface-900 overflow-hidden">{inner}</div>
+                  <div className={staticCard}>{inner}</div>
                 )}
               </li>
             );
@@ -840,18 +876,24 @@ export function ContactSection({
   chatHref,
   hub,
   ready,
+  embed = false,
 }: {
   name: string;
   contact: { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
   chatHref?: string;
   hub: boolean;
   ready: boolean;
+  embed?: boolean;
 }) {
+  const row = embed
+    ? "flex items-center gap-3 px-4 py-3 text-sm text-slate-800 hover:bg-slate-50"
+    : "flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-surface-800/60";
   return (
-    <section id="contacto" className="scroll-mt-16 pb-8 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead title="Contacto" hint={BRAND_MODULE_HINT.contact} ready={ready} />
+    <section id="contacto" className={sectionShell(embed, embed ? "" : "pb-8")}>
+      <SectionHead title="Contacto" hint={BRAND_MODULE_HINT.contact} ready={ready} embed={embed} />
       {!ready ? (
         <Pending
+          embed={embed}
           text={
             hub
               ? `${name} no publicó mail, teléfono ni web. Mientras tanto, el canal es el chat de Nodo.`
@@ -859,26 +901,32 @@ export function ContactSection({
           }
         >
           {chatHref && (
-            <Link href={chatHref} className="text-xs font-semibold text-brand-400">
+            <Link href={chatHref} className={`text-xs font-semibold ${embed ? "text-brand-600" : "text-brand-400"}`}>
               Abrir chat →
             </Link>
           )}
         </Pending>
       ) : (
-        <div className="rounded-2xl border border-surface-800 bg-surface-900 divide-y divide-surface-800">
+        <div
+          className={
+            embed
+              ? "rounded-2xl border border-slate-200 bg-white shadow-sm divide-y divide-slate-100"
+              : "rounded-2xl border border-surface-800 bg-surface-900 divide-y divide-surface-800"
+          }
+        >
           {contact.supportEmail && (
-            <a href={`mailto:${contact.supportEmail}`} className="flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-surface-800/60">
-              <Mail className="w-4 h-4 text-brand-400" /> {contact.supportEmail}
+            <a href={`mailto:${contact.supportEmail}`} className={row}>
+              <Mail className={`w-4 h-4 ${embed ? "text-brand-600" : "text-brand-400"}`} /> {contact.supportEmail}
             </a>
           )}
           {contact.supportPhone && (
-            <a href={`tel:${contact.supportPhone}`} className="flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-surface-800/60">
-              <Phone className="w-4 h-4 text-brand-400" /> {contact.supportPhone}
+            <a href={`tel:${contact.supportPhone}`} className={row}>
+              <Phone className={`w-4 h-4 ${embed ? "text-brand-600" : "text-brand-400"}`} /> {contact.supportPhone}
             </a>
           )}
           {contact.websiteUrl && (
-            <a href={contact.websiteUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-surface-800/60">
-              <Globe className="w-4 h-4 text-brand-400" /> {contact.websiteUrl}
+            <a href={contact.websiteUrl} target="_blank" rel="noreferrer" className={row}>
+              <Globe className={`w-4 h-4 ${embed ? "text-brand-600" : "text-brand-400"}`} /> {contact.websiteUrl}
             </a>
           )}
         </div>
@@ -892,22 +940,30 @@ function SectionHead({
   hint,
   ready,
   count,
+  embed = false,
 }: {
   title: string;
   hint: string;
   ready: boolean;
   count?: number;
+  embed?: boolean;
 }) {
   return (
     <div className="flex items-end justify-between gap-3 mb-4">
       <div>
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <p className="text-[11px] text-surface-500">{hint}</p>
+        <h2 className={`text-lg font-semibold ${embed ? "text-slate-900" : "text-white"}`}>{title}</h2>
+        <p className={`text-[11px] ${embed ? "text-slate-500" : "text-surface-500"}`}>{hint}</p>
       </div>
       {ready ? (
-        <span className="text-[11px] text-emerald-400 tabular-nums">{count != null ? count : "Listo"}</span>
+        <span className={`text-[11px] tabular-nums ${embed ? "text-emerald-600" : "text-emerald-400"}`}>
+          {count != null ? count : "Listo"}
+        </span>
       ) : (
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+        <span
+          className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide ${
+            embed ? "text-amber-600" : "text-amber-300"
+          }`}
+        >
           <Clock className="w-3 h-3" /> Pendiente
         </span>
       )}
@@ -915,10 +971,16 @@ function SectionHead({
   );
 }
 
-function Pending({ text, children }: { text: string; children?: React.ReactNode }) {
+function Pending({ text, children, embed = false }: { text: string; children?: React.ReactNode; embed?: boolean }) {
   return (
-    <div className="rounded-2xl border border-dashed border-amber-500/25 bg-amber-500/5 px-4 py-5">
-      <p className="text-sm text-surface-300">{text}</p>
+    <div
+      className={
+        embed
+          ? "rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-4 py-5"
+          : "rounded-2xl border border-dashed border-amber-500/25 bg-amber-500/5 px-4 py-5"
+      }
+    >
+      <p className={`text-sm ${embed ? "text-slate-600" : "text-surface-300"}`}>{text}</p>
       {children && <div className="mt-2">{children}</div>}
     </div>
   );
@@ -967,6 +1029,7 @@ export function landingModuleSlots({
         searchHref={searchHref}
         hub={hub}
         ready={productsReady}
+        embed
       />
     ),
     semaforos: (
@@ -977,9 +1040,10 @@ export function landingModuleSlots({
         searchHref={searchHref}
         hub={hub}
         ready={productsReady}
+        embed
       />
     ),
-    acciones: <ActionsSection name={name} actions={actions} hub={hub} ready={actionsReady} />,
+    acciones: <ActionsSection name={name} actions={actions} hub={hub} ready={actionsReady} embed />,
     materiales: (
       <FilesSection
         id="materiales"
@@ -988,6 +1052,7 @@ export function landingModuleSlots({
         items={materials}
         pendingText={`${name} todavía no subió fichas ni catálogos.`}
         hub={hub}
+        embed
       />
     ),
     capacitaciones: (
@@ -998,19 +1063,20 @@ export function landingModuleSlots({
         items={trainings}
         pendingText={`${name} todavía no cargó cursos ni argumentarios.`}
         hub={hub}
+        embed
       />
     ),
-    novedades: <NewsSection name={name} items={news} hub={hub} />,
-    noticias: <NewsSection name={name} items={news} hub={hub} />,
+    novedades: <NewsSection name={name} items={news} hub={hub} embed />,
+    noticias: <NewsSection name={name} items={news} hub={hub} embed />,
     contacto: (
-      <ContactSection name={name} contact={contact} chatHref={chatHref} hub={hub} ready={contactReady} />
+      <ContactSection name={name} contact={contact} chatHref={chatHref} hub={hub} ready={contactReady} embed />
     ),
     hablar: chatHref ? (
-      <Link href={chatHref} className="text-sm underline text-white">
+      <Link href={chatHref} className="text-sm underline text-slate-800">
         Hablar con {name}
       </Link>
     ) : (
-      <ContactSection name={name} contact={contact} hub={hub} ready={contactReady} />
+      <ContactSection name={name} contact={contact} hub={hub} ready={contactReady} embed />
     ),
     nombre: <span>{name}</span>,
     logo: logoUrl ? (

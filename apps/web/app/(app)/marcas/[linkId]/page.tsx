@@ -32,10 +32,19 @@ export default function BrandHubPage() {
       .finally(() => setLoading(false));
   }, [linkId]);
 
+  const customHtml = Boolean(hub?.htmlDocument);
+
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-surface-950">
-      <header className="flex-shrink-0 border-b border-surface-800 px-4 sm:px-6 py-3 flex items-center justify-between">
-        <Link href="/marcas" className="text-xs text-surface-400 hover:text-white">
+    <div className={`flex-1 flex flex-col min-h-0 ${customHtml ? "bg-white" : "bg-surface-950"}`}>
+      <header
+        className={`flex-shrink-0 border-b px-4 sm:px-6 py-3 flex items-center justify-between ${
+          customHtml ? "border-slate-200 bg-white" : "border-surface-800"
+        }`}
+      >
+        <Link
+          href="/marcas"
+          className={`text-xs ${customHtml ? "text-slate-500 hover:text-slate-900" : "text-surface-400 hover:text-white"}`}
+        >
           ← Marcas conectadas
         </Link>
         <PrefsPanel />
