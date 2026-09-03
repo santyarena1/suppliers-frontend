@@ -71,7 +71,6 @@ function HubLanding({ hub, retailer }: { hub: BrandHub; retailer: boolean }) {
       news={hub.news ?? []}
       materials={hub.materials}
       trainings={hub.trainings}
-      htmlSlots={hub.htmlSlots}
       presence={hub.presence}
       connectedAt={hub.connectedAt}
       status={hub.status}

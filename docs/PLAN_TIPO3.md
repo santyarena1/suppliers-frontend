@@ -66,11 +66,14 @@ sanitizado) y los bloques nativos de NODO:
 
 Si la marca no pega HTML, **la landing nativa es la página**: hero a ancho
 completo (portada o mosaico con fotos de SKUs y novedades), navegación de
-módulos, productos con imagen grande y semáforo, acciones, novedades con
-cover, materiales, capacitaciones y contacto. Si pega HTML, ese diseño va
-como presentación; si además usa huecos `{{productos}}` etc., el módulo se
-pinta adentro del HTML y no se duplica abajo. Un botón muerto del HTML
-(`href="#"`, `<button>` sin destino) salta a ese bloque. Un comercio puede
+módulos (el shell de NODO no scrollea con hash: los botones usan
+`scrollIntoView`), productos con imagen grande y semáforo, acciones,
+novedades con cover, materiales, capacitaciones y contacto. Si pega HTML,
+ese diseño va como **presentación** al final (acotado, sin `100vh` ni
+`position:fixed` que tape Nodo). Los huecos `{{productos}}` son chips que
+saltan al módulo nativo; **los módulos siempre se listan**, no se esconden
+aunque el HTML traiga huecos. Un botón muerto del HTML (`href="#"`,
+`<button>` sin destino) salta a ese bloque. Un comercio puede
 saltar a `/search?marca=Nombre` (la búsqueda general, filtrada). El distro no
 tiene búsqueda: ve el mapa, no arma pedidos de marca.
 

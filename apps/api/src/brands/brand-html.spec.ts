@@ -95,9 +95,15 @@ describe("splitBrandHtml / compileBrandHtml", () => {
 
   it("no deja huecos de 100vh en el host", () => {
     const { html } = compileBrandHtml(`<style>body{min-height:100vh;height:100vh}</style><p>x</p>`);
-    expect(html).toMatch(/min-height:0/);
-    expect(html).toMatch(/height:auto/);
+    expect(html).toMatch(/min-height:\s*0/);
+    expect(html).toMatch(/height:\s*auto/);
     expect(html).not.toMatch(/100vh/);
+  });
+
+  it("baja position:fixed para que no tape la landing", () => {
+    const { html } = compileBrandHtml(`<style>.nav{position:fixed;inset:0}</style><p>x</p>`);
+    expect(html).toMatch(/position:absolute/);
+    expect(html).not.toMatch(/position:\s*fixed/);
   });
 
   it("reconoce el hueco de novedades", () => {
@@ -118,5 +124,10 @@ describe("inferBrandHubTarget", () => {
   it("no toca un link que ya va a algún lado", () => {
     expect(inferBrandHubTarget("Sitio", "https://gigabyte.com")).toBeNull();
     expect(inferBrandHubTarget("Buscar", "/search?marca=Gigabyte")).toBeNull();
+  });
+
+  it("un botón muerto sin texto útil igual salta a productos", () => {
+    expect(inferBrandHubTarget("Menú", "#")).toBe("#productos");
+    expect(inferBrandHubTarget("  ", "")).toBe("#productos");
   });
 });

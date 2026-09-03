@@ -14,7 +14,9 @@ import type {
 } from "@/lib/api";
 import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
 import { BRAND_MODULE_HINT } from "@/lib/brand-presence";
-import { brandHtmlCoversModule, collectBrandVisuals, isVisualAsset } from "@/lib/brand-visuals";
+import { collectBrandVisuals, isVisualAsset } from "@/lib/brand-visuals";
+import { scrollToBrandSection } from "@/lib/brand-html-nav";
+import { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
 import {
   Bell,
   Building2,
@@ -71,7 +73,7 @@ export function BrandSpaceLanding({
   materials = [],
   trainings = [],
   html,
-  htmlSlots,
+  htmlSlots: _htmlSlots,
   presence,
   connectedAt,
   status,
@@ -120,14 +122,17 @@ export function BrandSpaceLanding({
     materials: materials as Array<{ type?: string; fileUrl?: string | null; contentUrl?: string | null }>,
   }).map(img).filter(Boolean);
 
-  const showProducts = !brandHtmlCoversModule(htmlSlots, "products");
-  const showActions = !brandHtmlCoversModule(htmlSlots, "actions");
-  const showNews = !brandHtmlCoversModule(htmlSlots, "news");
-  const showMaterials = !brandHtmlCoversModule(htmlSlots, "materials");
-  const showTrainings = !brandHtmlCoversModule(htmlSlots, "trainings");
+  function onLandingClick(e: React.MouseEvent) {
+    const a = (e.target as HTMLElement).closest("a");
+    if (!a) return;
+    const href = a.getAttribute("href");
+    if (!href?.startsWith("#")) return;
+    e.preventDefault();
+    scrollToBrandSection(href);
+  }
 
   return (
-    <div className="bg-surface-950 text-white">
+    <div className="bg-surface-950 text-white" onClick={onLandingClick}>
       <Hero
         name={name}
         accent={accent}
@@ -167,6 +172,11 @@ export function BrandSpaceLanding({
               <a
                 key={s.href}
                 href={s.href}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  scrollToBrandSection(s.href);
+                }}
                 className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap border ${
                   ready
                     ? "border-surface-700 text-surface-200 hover:border-surface-500"
@@ -182,48 +192,38 @@ export function BrandSpaceLanding({
         </div>
       </nav>
 
-      {html ? <div className="border-b border-surface-800">{html}</div> : null}
-
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-14">
-        {showProducts && (
-          <ProductsSection
-            name={name}
-            products={products}
-            retailer={retailer}
-            searchHref={searchHref}
-            hub={hub}
-            ready={presence?.modules.products.ready ?? products.length > 0}
-          />
-        )}
-        {showActions && (
-          <ActionsSection
-            name={name}
-            actions={actions}
-            hub={hub}
-            ready={presence?.modules.actions.ready ?? actions.length > 0}
-          />
-        )}
-        {showNews && <NewsSection name={name} items={news} hub={hub} />}
-        {showMaterials && (
-          <FilesSection
-            id="materiales"
-            title="Materiales"
-            module="materials"
-            items={materials}
-            pendingText={`${name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
-            hub={hub}
-          />
-        )}
-        {showTrainings && (
-          <FilesSection
-            id="capacitaciones"
-            title="Capacitaciones"
-            module="trainings"
-            items={trainings}
-            pendingText={`${name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
-            hub={hub}
-          />
-        )}
+        <ProductsSection
+          name={name}
+          products={products}
+          retailer={retailer}
+          searchHref={searchHref}
+          hub={hub}
+          ready={presence?.modules.products.ready ?? products.length > 0}
+        />
+        <ActionsSection
+          name={name}
+          actions={actions}
+          hub={hub}
+          ready={presence?.modules.actions.ready ?? actions.length > 0}
+        />
+        <NewsSection name={name} items={news} hub={hub} />
+        <FilesSection
+          id="materiales"
+          title="Materiales"
+          module="materials"
+          items={materials}
+          pendingText={`${name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
+          hub={hub}
+        />
+        <FilesSection
+          id="capacitaciones"
+          title="Capacitaciones"
+          module="trainings"
+          items={trainings}
+          pendingText={`${name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
+          hub={hub}
+        />
         {extraBlocks.length > 0 && (
           <section className="grid gap-4 sm:grid-cols-2">
             {extraBlocks.map((block, i) => (
@@ -247,6 +247,16 @@ export function BrandSpaceLanding({
           ready={presence?.modules.contact.ready ?? Boolean(contact.supportEmail || contact.supportPhone || contact.websiteUrl)}
         />
       </div>
+
+      {html ? (
+        <section id="presentacion" className="border-t border-surface-800">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4">
+            <h2 className="text-sm font-semibold text-white">Presentación</h2>
+            <p className="text-[11px] text-surface-500 mb-3">Diseño propio de {name}. Los módulos de Nodo están arriba.</p>
+          </div>
+          <div className="max-h-[70vh] overflow-y-auto border-t border-surface-800">{html}</div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -873,59 +883,19 @@ function Pending({ text, children }: { text: string; children?: React.ReactNode 
   );
 }
 
-/** Rellenos compactos para huecos del HTML propio (Tailwind aplica: van en light DOM). */
+/** Chips en los huecos del HTML: saltan al módulo nativo (siempre visible). */
 export function brandHubSlotModules({
   hub,
-  retailer,
 }: {
   hub: BrandHub;
-  retailer: boolean;
+  retailer?: boolean;
 }) {
-  const searchHref = `/search?marca=${encodeURIComponent(hub.name)}`;
   return {
-    productos: (
-      <ProductsSection
-        name={hub.name}
-        products={hub.signals}
-        retailer={retailer}
-        searchHref={searchHref}
-        hub
-        ready={hub.presence.modules.products.ready}
-      />
-    ),
-    semaforos: (
-      <ProductsSection
-        name={hub.name}
-        products={hub.signals}
-        retailer={retailer}
-        searchHref={searchHref}
-        hub
-        ready={hub.presence.modules.products.ready}
-      />
-    ),
-    acciones: (
-      <ActionsSection name={hub.name} actions={hub.actions} hub ready={hub.presence.modules.actions.ready} />
-    ),
-    materiales: (
-      <FilesSection
-        id="materiales"
-        title="Materiales"
-        module="materials"
-        items={hub.materials}
-        pendingText={`${hub.name} todavía no subió fichas ni catálogos.`}
-        hub
-      />
-    ),
-    capacitaciones: (
-      <FilesSection
-        id="capacitaciones"
-        title="Capacitaciones"
-        module="trainings"
-        items={hub.trainings}
-        pendingText={`${hub.name} todavía no cargó cursos ni argumentarios.`}
-        hub
-      />
-    ),
+    productos: <BrandHtmlSlotHole label="productos" />,
+    semaforos: <BrandHtmlSlotHole label="productos" />,
+    acciones: <BrandHtmlSlotHole label="acciones" />,
+    materiales: <BrandHtmlSlotHole label="materiales" />,
+    capacitaciones: <BrandHtmlSlotHole label="capacitaciones" />,
     hablar: (
       <Link href={`/mensajes?linkId=${hub.linkId}`} className="text-sm underline text-white">
         Hablar con {hub.name}
@@ -936,7 +906,7 @@ export function brandHubSlotModules({
       // eslint-disable-next-line @next/next/no-img-element
       <img src={img(hub.theme.logoUrl)} alt={hub.name} style={{ height: 48 }} />
     ) : null,
-    noticias: <NewsSection name={hub.name} items={hub.news ?? []} hub />,
-    novedades: <NewsSection name={hub.name} items={hub.news ?? []} hub />,
+    noticias: <BrandHtmlSlotHole label="novedades" />,
+    novedades: <BrandHtmlSlotHole label="novedades" />,
   };
 }

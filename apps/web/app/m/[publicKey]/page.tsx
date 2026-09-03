@@ -6,15 +6,8 @@ import { useParams } from "next/navigation";
 import { publicBrandApi, type PublicBrandLanding } from "@/lib/api";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
-import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
-import {
-  ActionsSection,
-  BrandSpaceLanding,
-  ContactSection,
-  FilesSection,
-  NewsSection,
-  ProductsSection,
-} from "@/components/org/BrandSpaceLanding";
+import BrandHtmlCanvas, { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
+import { BrandSpaceLanding } from "@/components/org/BrandSpaceLanding";
 import { Loader2 } from "lucide-react";
 
 export default function PublicBrandLandingPage() {
@@ -75,7 +68,6 @@ export default function PublicBrandLandingPage() {
           materials={landing.materials ?? []}
           trainings={landing.trainings ?? []}
           extraBlocks={blocks}
-          htmlSlots={landing.htmlSlots}
           html={
             landing.htmlDocument ? (
               <BrandHtmlCanvas
@@ -86,66 +78,14 @@ export default function PublicBrandLandingPage() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={landing.logoUrl} alt={landing.name} style={{ height: 48 }} />
                   ) : null,
-                  productos: (
-                    <ProductsSection
-                      name={landing.name}
-                      products={landing.products ?? []}
-                      retailer={false}
-                      hub={false}
-                      ready={(landing.products ?? []).length > 0}
-                    />
-                  ),
-                  semaforos: (
-                    <ProductsSection
-                      name={landing.name}
-                      products={landing.products ?? []}
-                      retailer={false}
-                      hub={false}
-                      ready={(landing.products ?? []).length > 0}
-                    />
-                  ),
-                  acciones: (
-                    <ActionsSection
-                      name={landing.name}
-                      actions={landing.actions ?? []}
-                      hub={false}
-                      ready={(landing.actions ?? []).length > 0}
-                    />
-                  ),
-                  novedades: <NewsSection name={landing.name} items={landing.news ?? []} hub={false} />,
-                  noticias: <NewsSection name={landing.name} items={landing.news ?? []} hub={false} />,
-                  materiales: (
-                    <FilesSection
-                      id="materiales"
-                      title="Materiales"
-                      module="materials"
-                      items={landing.materials ?? []}
-                      pendingText={`${landing.name} todavía no publicó materiales.`}
-                      hub={false}
-                    />
-                  ),
-                  capacitaciones: (
-                    <FilesSection
-                      id="capacitaciones"
-                      title="Capacitaciones"
-                      module="trainings"
-                      items={landing.trainings ?? []}
-                      pendingText={`${landing.name} todavía no publicó capacitaciones.`}
-                      hub={false}
-                    />
-                  ),
-                  hablar: (
-                    <ContactSection
-                      name={landing.name}
-                      contact={{
-                        websiteUrl: landing.websiteUrl,
-                        supportEmail: landing.supportEmail,
-                        supportPhone: landing.supportPhone,
-                      }}
-                      hub={false}
-                      ready={Boolean(landing.supportEmail || landing.supportPhone || landing.websiteUrl)}
-                    />
-                  ),
+                  productos: <BrandHtmlSlotHole label="productos" />,
+                  semaforos: <BrandHtmlSlotHole label="productos" />,
+                  acciones: <BrandHtmlSlotHole label="acciones" />,
+                  novedades: <BrandHtmlSlotHole label="novedades" />,
+                  noticias: <BrandHtmlSlotHole label="novedades" />,
+                  materiales: <BrandHtmlSlotHole label="materiales" />,
+                  capacitaciones: <BrandHtmlSlotHole label="capacitaciones" />,
+                  hablar: <BrandHtmlSlotHole label="contacto" />,
                 }}
               />
             ) : null
