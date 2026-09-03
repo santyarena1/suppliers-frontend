@@ -9,6 +9,8 @@ import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
 import { formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
+import { displayAmountFromPricing } from "@/lib/display-price";
+import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { SchemePicker } from "@/components/SchemePicker";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 
@@ -34,6 +36,8 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
   const retailer = useIsRetailer();
   const policy = usePurchasePolicy(product.provider);
   const hasIva = providerHasIvaRate(product.provider);
+  const { withIva, withIibb } = usePrefs();
+  useIibbRatesEpoch();
   const [flash, setFlash] = useState<"cart" | "scheme" | "offline" | null>(null);
   const [pickOpen, setPickOpen] = useState(false);
 
@@ -53,6 +57,16 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
 
   const offlinePricing = purchaseLinePricing(product, policy, "offline", qty);
   const schemePricing = purchaseLinePricing(product, policy, "scheme", qty);
+  const schemeShown = displayAmountFromPricing(
+    schemePricing,
+    { withIva, withIibb: withIibb && schemePricing.mode !== "offline", provider: product.provider },
+    qty
+  );
+  const offlineShown = displayAmountFromPricing(
+    offlinePricing,
+    { withIva, withIibb: false, provider: product.provider },
+    qty
+  );
   const showScheme = retailer && hasIva && policy.acceptsScheme;
   const showOffline = retailer && hasIva && policy.acceptsOffline;
 
@@ -117,7 +131,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             {flash === "scheme" ? "Agregado al esquema" : "Agregar como esquema"}
           </button>
           {schemePricing.adjusted && (
-            <FinalPriceLine usd={schemePricing.gross} className="text-violet-200/90" />
+            <FinalPriceLine usd={schemeShown.displayUsd} className="text-violet-200/90" />
           )}
         </>
       )}
@@ -137,7 +151,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             {flash === "offline" ? "Agregado al pedido offline" : "Agregar a carrito offline"}
           </button>
           {offlinePricing.adjusted && (
-            <FinalPriceLine usd={offlinePricing.gross} className="text-amber-100/90" />
+            <FinalPriceLine usd={offlineShown.displayUsd} className="text-amber-100/90" />
           )}
           {offlineItem && (
             <p className="text-[11px] text-amber-400 text-center">Ya tenés {offlineItem.qty} en el pedido offline</p>

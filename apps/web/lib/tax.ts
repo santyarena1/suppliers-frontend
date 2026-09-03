@@ -9,6 +9,8 @@ export type TaxLine = {
   percent: number | null;
   /** Monto unitario, misma moneda que el precio de lista (USD). */
   unitAmount: number;
+  /** true si no vino en el producto y se usó la alícuota de este comercio. */
+  estimated?: boolean;
 };
 
 export type TaxableProduct = {

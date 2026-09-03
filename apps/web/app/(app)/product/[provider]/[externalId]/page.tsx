@@ -15,13 +15,13 @@ import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import ProductSyncedAt from "@/components/ProductSyncedAt";
 import AiImageDisclaimer from "@/components/AiImageDisclaimer";
 import {
-  linePricing,
   taxLabel,
-  extractTaxLines,
   formatAlicuota,
 } from "@/lib/tax";
 import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
 import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
+import { purchaseLinePricing } from "@/lib/purchase-price";
+import { usePurchasePolicy } from "@/lib/purchase";
 import {
   ArrowLeft,
   Package,
@@ -51,6 +51,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const dec = (s: string) => decodeURIComponent(s);
   const providerName = dec(provider);
   const extId = dec(externalId);
+  const policy = usePurchasePolicy(providerName);
 
   const [product, setProduct] = useState<ProductDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,8 +121,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     } catch { /**/ }
   }
 
-  const pricing = product ? linePricing(product, qty) : null;
-  const taxLines = product ? extractTaxLines(product) : [];
+  const pricing = product ? purchaseLinePricing(product, policy, "list", qty) : null;
+  const taxLines = pricing?.lines ?? [];
   const shown = pricing
     ? displayAmountFromPricing(
         pricing,
@@ -354,12 +355,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       {visibleTaxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
                         <BreakdownRow
                           key={`${line.kind}-${line.label}`}
-                          label={`${line.label}${line.percent != null ? ` ${formatAlicuota(line.percent)}` : ""}`}
+                          label={`${line.kind === "iibb" && line.estimated ? "IIBB (est.)" : line.label}${line.percent != null ? ` ${formatAlicuota(line.percent)}` : ""}`}
                           value={`+ ${money(line.unitAmount)}`}
                           muted
                         />
                       ))}
-                      {estimatedIibbLine && (
+                      {estimatedIibbLine &&
+                        !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) && (
                         <BreakdownRow
                           label={`${estimatedIibbLine.label}${estimatedIibbLine.percent != null ? ` ${formatAlicuota(estimatedIibbLine.percent)}` : ""}`}
                           value={`+ ${money(estimatedIibbLine.unitAmount)}`}
@@ -398,7 +400,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       <p className="text-[10px] text-surface-600 leading-relaxed pt-1">
                         El desglose usa tu cotización. IVA y percepciones se eligen por separado
                         {withIva ? "" : " · sin IVA"}
-                        {withIibb ? " · con percepciones si se conocen" : " · sin percepciones"}
+                        {withIibb ? " · con percepciones si se conocen (en esquema también; en offline no)" : " · sin percepciones"}
                         . El margen vs locales se calcula sobre el costo neto.
                       </p>
                     </div>
