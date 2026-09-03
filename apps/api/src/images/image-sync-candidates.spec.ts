@@ -1,4 +1,12 @@
-import { candidateWhere, PERMANENT_SKIP_ERROR, resolveRunPriority } from "./image-sync-candidates";
+import {
+  NO_USABLE_PHOTO_ERROR,
+  NO_USABLE_PHOTO_EXHAUSTED_ERROR,
+  NON_RETRYABLE_ERRORS,
+  PERMANENT_SKIP_ERROR,
+  candidateWhere,
+  nextNoUsablePhotoError,
+  resolveRunPriority,
+} from "./image-sync-candidates";
 import { isSerperBlockingError } from "./serper-images.client";
 
 describe("image-sync-candidates", () => {
@@ -20,7 +28,7 @@ describe("image-sync-candidates", () => {
                   imageFills: {
                     some: {
                       status: { in: ["failed", "skipped"] },
-                      NOT: { error: PERMANENT_SKIP_ERROR },
+                      NOT: { error: { in: NON_RETRYABLE_ERRORS } },
                     },
                   },
                 },
@@ -46,7 +54,7 @@ describe("image-sync-candidates", () => {
                   imageFills: {
                     some: {
                       status: { in: ["failed", "skipped"] },
-                      NOT: { error: PERMANENT_SKIP_ERROR },
+                      NOT: { error: { in: NON_RETRYABLE_ERRORS } },
                     },
                   },
                 },
@@ -57,6 +65,19 @@ describe("image-sync-candidates", () => {
         { offers: { none: { active: true, stock: { gt: 0 } } } },
       ],
     });
+  });
+
+  it("permite un solo reintento cuando Serper no devolvió foto usable", () => {
+    expect(nextNoUsablePhotoError(null)).toBe(NO_USABLE_PHOTO_ERROR);
+    expect(nextNoUsablePhotoError(undefined)).toBe(NO_USABLE_PHOTO_ERROR);
+    expect(nextNoUsablePhotoError("timeout")).toBe(NO_USABLE_PHOTO_ERROR);
+    expect(nextNoUsablePhotoError(NO_USABLE_PHOTO_ERROR)).toBe(NO_USABLE_PHOTO_EXHAUSTED_ERROR);
+    expect(nextNoUsablePhotoError(NO_USABLE_PHOTO_EXHAUSTED_ERROR)).toBe(
+      NO_USABLE_PHOTO_EXHAUSTED_ERROR
+    );
+    expect(NON_RETRYABLE_ERRORS).toContain(PERMANENT_SKIP_ERROR);
+    expect(NON_RETRYABLE_ERRORS).toContain(NO_USABLE_PHOTO_EXHAUSTED_ERROR);
+    expect(NON_RETRYABLE_ERRORS).not.toContain(NO_USABLE_PHOTO_ERROR);
   });
 });
 

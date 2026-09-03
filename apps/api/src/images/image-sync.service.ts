@@ -10,7 +10,13 @@ import { Prisma } from "@prisma/client";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { AssetsService } from "../assets/assets.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { PERMANENT_SKIP_ERROR, candidateWhere, missingWhere, resolveRunPriority } from "./image-sync-candidates";
+import {
+  PERMANENT_SKIP_ERROR,
+  candidateWhere,
+  missingWhere,
+  nextNoUsablePhotoError,
+  resolveRunPriority,
+} from "./image-sync-candidates";
 import { firstLiveImage, isStoredAssetPath, probeLiveImage } from "./live-image";
 import { buildImageSearchQuery, hasProductImage } from "./product-image";
 import { isSerperBlockingError, SerperImagesClient } from "./serper-images.client";
@@ -128,6 +134,28 @@ export class ImageSyncService implements OnModuleInit {
       update: { cronEnabled: enabled },
     });
     return { cronEnabled: enabled };
+  }
+
+  /** Pendientes reintentables (catálogo + diferidos). */
+  async countPendingCandidates(provider?: Provider) {
+    const [visible, deferred] = await Promise.all([
+      this.prisma.providerSyncCache.count({ where: candidateWhere(provider, "visible") }),
+      this.prisma.providerSyncCache.count({ where: candidateWhere(provider, "deferred") }),
+    ]);
+    return visible + deferred;
+  }
+
+  /**
+   * Si no queda nada por buscar, apaga el cron para no gastar ciclos en vacío.
+   * Devuelve true si lo desactivó.
+   */
+  async disableCronIfNoPending(): Promise<boolean> {
+    const pending = await this.countPendingCandidates();
+    if (pending > 0) return false;
+    if (!(await this.isCronEnabled())) return false;
+    await this.setCronEnabled(false);
+    this.logger.log("Cron imágenes desactivado: no hay fotos pendientes por buscar");
+    return true;
   }
 
   private async readApiKey(): Promise<string> {
@@ -271,7 +299,7 @@ export class ImageSyncService implements OnModuleInit {
     return { total, page, take, items };
   }
 
-  /** Fallidos + sin resultado usable (reintentables). */
+  /** Fallidos + sin resultado usable (incluye agotados para revisión manual). */
   private problemWhere(): Prisma.ImageSyncFillWhereInput {
     return {
       status: { in: ["failed", "skipped"] },
@@ -416,6 +444,7 @@ export class ImageSyncService implements OnModuleInit {
             ean: true,
             partNumber: true,
             imageUrl: true,
+            imageFills: { select: { error: true, status: true } },
           },
         });
         if (batch.length === 0) break;
@@ -426,6 +455,7 @@ export class ImageSyncService implements OnModuleInit {
           tried.add(product.id);
           const query = buildImageSearchQuery(product);
           lastQuery = query;
+          const previousError = product.imageFills[0]?.error ?? null;
 
           if (hasProductImage(product.imageUrl) || !query) {
             skipped += 1;
@@ -460,7 +490,7 @@ export class ImageSyncService implements OnModuleInit {
                 imageUrl: null,
                 source: "serper",
                 status: "skipped",
-                error: "Serper no devolvió una foto que cargue",
+                error: nextNoUsablePhotoError(previousError),
               });
             } else {
               const stillMissing = await this.prisma.providerSyncCache.updateMany({
@@ -541,6 +571,13 @@ export class ImageSyncService implements OnModuleInit {
       this.running = false;
       this.activeRunId = null;
       this.cancelRequested = false;
+      if (opts.source === "cron") {
+        await this.disableCronIfNoPending().catch((err) => {
+          this.logger.warn(
+            `No se pudo desactivar el cron tras la corrida: ${err instanceof Error ? err.message : String(err)}`
+          );
+        });
+      }
     }
 
     return { runId: run.id, processed, updated, skipped, failed, status };
