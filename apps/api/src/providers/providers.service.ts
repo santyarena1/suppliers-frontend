@@ -640,41 +640,63 @@ export class ProvidersService implements OnModuleInit {
     const q = name.trim();
     const brand = opts.brand?.trim();
     if (!q && !brand) return [];
+
+    // Si q es vacío o igual a la marca, filtrar solo por marca (no exigir name contains q).
+    const distinctQ = Boolean(q && brand && q.toLowerCase() !== brand.toLowerCase());
+
+    const enrichment = await this.catalogEnrichment.getContext();
+    const rawBrands = brand
+      ? (await this.catalogEnrichment.brandMatchFilters(brand, enrichment)).rawBrands
+      : [];
+
+    const brandClause = brand
+      ? {
+          OR: [
+            ...(rawBrands.length
+              ? [{ brand: { in: rawBrands } }]
+              : []),
+            { brand: { contains: brand, mode: "insensitive" as const } },
+            // Fallback: algunos proveedores meten la marca en el nombre y dejan brand vacío.
+            { name: { contains: brand, mode: "insensitive" as const } },
+          ],
+        }
+      : null;
+
     const productWhere = {
       AND: [
-        ...(brand
-          ? [
-              {
-                OR: [
-                  { brand: { contains: brand, mode: "insensitive" as const } },
-                  { name: { contains: brand, mode: "insensitive" as const } },
-                ],
-              },
-            ]
+        ...(brandClause ? [brandClause] : []),
+        ...(distinctQ || (!brand && q)
+          ? [{ name: { contains: q, mode: "insensitive" as const } }]
           : []),
-        ...(q ? [{ name: { contains: q, mode: "insensitive" as const } }] : []),
       ],
     };
-    const [offers, enrichment] = await Promise.all([
-      this.prisma.tenantProductOffer.findMany({
-        where: {
-          tenantId,
-          provider,
-          active: true,
-          AND: [
-            ...(Object.keys(stockWhere).length ? [stockWhere] : []),
-            { product: productWhere },
-          ],
-        },
-        include: { product: true },
-        orderBy: { product: { name: "asc" } },
-        take: 200,
-      }),
-      this.catalogEnrichment.getContext(),
-    ]);
-    return this.withImageAiFlags(
-      offers.map((offer) => toProductView(offer.product, offer, rules, enrichment)),
-    );
+
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: {
+        tenantId,
+        provider,
+        active: true,
+        AND: [
+          ...(Object.keys(stockWhere).length ? [stockWhere] : []),
+          { product: productWhere },
+        ],
+      },
+      include: { product: true },
+      orderBy: { product: { name: "asc" } },
+      take: 200,
+    });
+
+    const views = brand
+      ? offers
+          .filter((offer) =>
+            this.catalogEnrichment.productMatchesBrand(offer.product, brand!, enrichment) ||
+            // fallback name-contains ya entró por SQL; aceptar esos también
+            (offer.product.name?.toLowerCase().includes(brand!.toLowerCase()) ?? false)
+          )
+          .map((offer) => toProductView(offer.product, offer, rules, enrichment))
+      : offers.map((offer) => toProductView(offer.product, offer, rules, enrichment));
+
+    return this.withImageAiFlags(views);
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
@@ -796,6 +818,38 @@ export class ProvidersService implements OnModuleInit {
         enrichment
       )
       .slice(0, 60);
+  }
+
+  /**
+   * Marcas distintas con conteo, cruzando proveedores visibles — filtros generales
+   * del buscador (no facetas post-resultado).
+   */
+  async getBrands(tenantId: string) {
+    const providers = await this.readableProviders(tenantId);
+    if (providers.length === 0) return [];
+    const [rows, enrichment] = await Promise.all([
+      this.prisma.$queryRaw<{ brand: string; count: bigint }[]>`
+      SELECT ficha.brand AS brand, COUNT(*) AS count
+      FROM "TenantProductOffer" oferta
+      JOIN "ProviderSyncCache" ficha
+        ON ficha.provider = oferta.provider AND ficha."externalId" = oferta."externalId"
+      WHERE oferta."tenantId" = ${tenantId}
+        AND oferta.active
+        AND (oferta.stock IS NULL OR oferta.stock > 0)
+        AND ficha.brand IS NOT NULL
+        AND oferta.provider = ANY(${providers}::text[])
+      GROUP BY ficha.brand
+      ORDER BY count DESC
+      LIMIT 200
+    `,
+      this.catalogEnrichment.getContext(),
+    ]);
+    return this.catalogEnrichment
+      .groupBrands(
+        rows.map((r) => ({ rawBrand: r.brand, count: Number(r.count) })),
+        enrichment
+      )
+      .slice(0, 80);
   }
 
   /**
@@ -1051,6 +1105,82 @@ export class ProvidersService implements OnModuleInit {
     const views = offers
       .filter((offer) => this.catalogEnrichment.productMatchesCategory(offer.product, category, enrichment))
       .map((offer) => toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment))
+      .filter((product) => {
+        if (includeOutOfStock) return true;
+        const action = (rules.get(product.provider) ?? NO_RULES).zeroStockAction;
+        if (!hidesZeroStockFromCatalog(action)) return true;
+        return isDisplayedInStock(product.stock, 0);
+      })
+      .slice(0, limit);
+    return this.withImageAiFlags(views);
+  }
+
+  /** Productos de una marca unificada, cruzando proveedores visibles. */
+  async getByBrand(
+    tenantId: string,
+    brand: string,
+    take: number,
+    opts: { includeOutOfStock?: boolean } = {}
+  ) {
+    const providers = await this.readableProviders(tenantId);
+    if (providers.length === 0) return [];
+    const limit = Math.min(Math.max(take, 1), 200);
+    const includeOutOfStock = Boolean(opts.includeOutOfStock);
+    const [rules, enrichment, match] = await Promise.all([
+      this.rulesByProvider(tenantId),
+      this.catalogEnrichment.getContext(),
+      this.catalogEnrichment.brandMatchFilters(brand),
+    ]);
+
+    const keepProviders = providers.filter(
+      (p) => !hidesZeroStockFromCatalog((rules.get(p) ?? NO_RULES).zeroStockAction)
+    );
+    const hideProviders = providers.filter(
+      (p) => hidesZeroStockFromCatalog((rules.get(p) ?? NO_RULES).zeroStockAction)
+    );
+    const stockOr = [
+      ...(keepProviders.length ? [{ provider: { in: keepProviders } }] : []),
+      ...(hideProviders.length
+        ? [{ AND: [{ provider: { in: hideProviders } }, catalogStockWhere(false, 0, "HIDE")] }]
+        : []),
+    ];
+    const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
+
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: {
+        tenantId,
+        active: true,
+        provider: { in: providers },
+        AND: [
+          ...stockConstraint,
+          {
+            OR: [
+              { product: { brand: { in: match.rawBrands } } },
+              {
+                product: {
+                  brand: { contains: brand, mode: "insensitive" as const },
+                },
+              },
+              ...(match.eans.length ? [{ product: { ean: { in: match.eans } } }] : []),
+              ...(match.partNumbers.length
+                ? [{ product: { partNumber: { in: match.partNumbers } } }]
+                : []),
+            ],
+          },
+        ],
+      },
+      include: { product: true },
+      orderBy: { product: { name: "asc" } },
+      take: limit * 3,
+    });
+
+    const views = offers
+      .filter((offer) =>
+        this.catalogEnrichment.productMatchesBrand(offer.product, brand, enrichment)
+      )
+      .map((offer) =>
+        toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment)
+      )
       .filter((product) => {
         if (includeOutOfStock) return true;
         const action = (rules.get(product.provider) ?? NO_RULES).zeroStockAction;

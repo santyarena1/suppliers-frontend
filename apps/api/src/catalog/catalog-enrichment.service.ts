@@ -5,13 +5,16 @@ import { BrandOrgsService } from "../brands/brand-orgs.service";
 import { CatalogAiService } from "./catalog-ai.service";
 import { CatalogSettingsService } from "./catalog-settings.service";
 import {
+  groupBrandsByDisplay,
   groupCategoriesByDisplay,
   indexCatalogAliases,
   indexCatalogIdentities,
   indexCatalogOverrides,
   looksLikeAirCatalogCode,
   looksLikeProviderCode,
+  matchingRawBrands,
   matchingRawCategories,
+  matchesDisplayBrand,
   matchesDisplayCategory,
   parentWouldCycle,
   normalizeBrandKey,
@@ -1260,6 +1263,10 @@ export class CatalogEnrichmentService implements OnModuleInit {
     return groupCategoriesByDisplay(rows, ctx ?? this.cache);
   }
 
+  groupBrands(rows: { rawBrand: string; count: number }[], ctx?: CatalogEnrichmentContext) {
+    return groupBrandsByDisplay(rows, ctx ?? this.cache);
+  }
+
   productMatchesCategory(
     product: {
       provider: string;
@@ -1273,6 +1280,21 @@ export class CatalogEnrichmentService implements OnModuleInit {
     ctx?: CatalogEnrichmentContext
   ) {
     return matchesDisplayCategory(product, targetCategory, ctx ?? this.cache);
+  }
+
+  productMatchesBrand(
+    product: {
+      provider: string;
+      brand: string | null;
+      category: string | null;
+      subcategory: string | null;
+      ean: string | null;
+      partNumber: string | null;
+    },
+    targetBrand: string,
+    ctx?: CatalogEnrichmentContext
+  ) {
+    return matchesDisplayBrand(product, targetBrand, ctx ?? this.cache);
   }
 
   async categoryMatchFilters(target: string, ctx?: CatalogEnrichmentContext) {
@@ -1289,6 +1311,25 @@ export class CatalogEnrichmentService implements OnModuleInit {
     }
     return {
       rawCategories: matchingRawCategories(target, context),
+      eans,
+      partNumbers,
+    };
+  }
+
+  async brandMatchFilters(target: string, ctx?: CatalogEnrichmentContext) {
+    const context = ctx ?? (await this.getContext());
+    const identities = await this.prisma.platformProductIdentity.findMany({
+      where: { displayBrand: target },
+      select: { matchKind: true, matchKey: true },
+    });
+    const eans: string[] = [];
+    const partNumbers: string[] = [];
+    for (const row of identities) {
+      if (row.matchKind === "EAN") eans.push(row.matchKey);
+      else partNumbers.push(row.matchKey);
+    }
+    return {
+      rawBrands: matchingRawBrands(target, context),
       eans,
       partNumbers,
     };

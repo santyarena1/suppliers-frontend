@@ -68,7 +68,7 @@ export default function BrandHubPage() {
 
   const accent = hub?.theme.primaryColor || "#22c55e";
   const searchHref = hub
-    ? `/search?marca=${encodeURIComponent(hub.name)}&q=${encodeURIComponent(hub.name)}`
+    ? `/search?marca=${encodeURIComponent(hub.name)}`
     : "/search";
 
   return (

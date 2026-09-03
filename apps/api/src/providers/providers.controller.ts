@@ -650,6 +650,12 @@ export class ProvidersController {
     return this.providersService.getCategories(commercialId(tenant));
   }
 
+  @Get("catalog/brands")
+  getBrands(@CurrentTenantOrNone() tenant: TenantContext | null) {
+    if (!tenant) return [];
+    return this.providersService.getBrands(commercialId(tenant));
+  }
+
   @Get("catalog/featured")
   getFeatured(
     @CurrentTenantOrNone() tenant: TenantContext | null,
@@ -674,6 +680,23 @@ export class ProvidersController {
     return this.providersService.getByCategory(
       commercialId(tenant),
       category,
+      take ? Number(take) : 60,
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+    );
+  }
+
+  @Get("catalog/by-brand")
+  getByBrand(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Query("brand") brand: string,
+    @Query("take") take?: string,
+    @Query("includeOutOfStock") includeOutOfStock?: string
+  ) {
+    if (!brand) throw new BadRequestException("Falta el parámetro brand");
+    if (!tenant) return [];
+    return this.providersService.getByBrand(
+      commercialId(tenant),
+      brand,
       take ? Number(take) : 60,
       { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
     );

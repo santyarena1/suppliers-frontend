@@ -672,6 +672,70 @@ export function matchesDisplayCategory(
   return display === targetCategory;
 }
 
+export function matchingRawBrands(
+  target: string,
+  ctx?: CatalogEnrichmentContext
+): string[] {
+  const out = new Set<string>([target]);
+  const targetKey = normalizeBrandKey(target);
+  for (const providerBucket of Object.values(ctx?.aliases.BRAND ?? {})) {
+    if (!providerBucket) continue;
+    for (const [rawKey, hit] of Object.entries(providerBucket)) {
+      if (hit.label === target || normalizeBrandKey(hit.label) === targetKey) {
+        out.add(rawKey);
+      }
+    }
+  }
+  return [...out];
+}
+
+export function groupBrandsByDisplay(
+  rows: { rawBrand: string; count: number }[],
+  ctx?: CatalogEnrichmentContext
+): { brand: string; count: number }[] {
+  const merged = new Map<string, number>();
+  for (const row of rows) {
+    let display =
+      resolveCatalogDisplay(
+        {
+          provider: "",
+          brand: row.rawBrand,
+          category: null,
+          subcategory: null,
+          ean: null,
+          partNumber: null,
+        },
+        ctx
+      ).displayBrand ?? row.rawBrand;
+    // Sin proveedor en el GROUP BY SQL: buscar alias de esta rawKey en cualquier distro.
+    if (ctx?.aliases.BRAND) {
+      for (const bucket of Object.values(ctx.aliases.BRAND)) {
+        const hit = bucket?.[row.rawBrand];
+        if (hit?.label) {
+          display = hit.label;
+          break;
+        }
+      }
+    }
+    if (ctx?.hiddenBrandLabels?.has(display)) continue;
+    merged.set(display, (merged.get(display) ?? 0) + row.count);
+  }
+  return [...merged.entries()]
+    .map(([brand, count]) => ({ brand, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export function matchesDisplayBrand(
+  product: ProductCatalogSlice,
+  targetBrand: string,
+  ctx?: CatalogEnrichmentContext
+): boolean {
+  const display = resolveCatalogDisplay(product, ctx).displayBrand;
+  if (!display) return false;
+  if (display === targetBrand) return true;
+  return normalizeBrandKey(display) === normalizeBrandKey(targetBrand);
+}
+
 /** True si poner `id` debajo de `newParentId` formaría un ciclo. */
 export function parentWouldCycle(
   id: string,

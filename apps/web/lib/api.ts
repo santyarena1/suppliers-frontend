@@ -1867,12 +1867,18 @@ export interface CategoryCount {
   count: number;
 }
 
+export interface BrandCount {
+  brand: string;
+  count: number;
+}
+
 export const catalogApi = {
   getProduct: (provider: Provider, externalId: string) =>
     api.get<ProductDTO>(`/providers/${provider}/products/${externalId}`),
   priceHistory: (provider: Provider, externalId: string) =>
     api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`),
   categories: () => api.get<CategoryCount[]>("/catalog/categories"),
+  brands: () => api.get<BrandCount[]>("/catalog/brands"),
   featured: (take = 24, opts: { mixed?: boolean } = {}) =>
     api.get<ProductDTO[]>("/catalog/featured", {
       params: { take, ...(opts.mixed ? { mixed: true } : {}) },
@@ -1884,6 +1890,14 @@ export const catalogApi = {
     api.get<ProductDTO[]>("/catalog/by-category", {
       params: {
         category,
+        take,
+        ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+      },
+    }),
+  byBrand: (brand: string, take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
+    api.get<ProductDTO[]>("/catalog/by-brand", {
+      params: {
+        brand,
         take,
         ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
       },
