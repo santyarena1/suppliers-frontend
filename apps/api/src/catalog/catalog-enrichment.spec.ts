@@ -1,8 +1,11 @@
 import {
+  groupBrandsByDisplay,
   heuristicCategoryClusters,
   identityIndexKey,
   indexCatalogAliases,
   indexCatalogIdentities,
+  matchingRawBrands,
+  matchesDisplayBrand,
   normalizeBrandKey,
   normalizeCatalogLabel,
   normalizeEan,
@@ -242,5 +245,53 @@ describe("parentWouldCycle", () => {
 
   it("bloquea ser padre de sí mismo", () => {
     expect(parentWouldCycle("a", "a", tree)).toBe(true);
+  });
+});
+
+describe("brand catalog helpers", () => {
+  const ctx = {
+    aliases: indexCatalogAliases([
+      { kind: "BRAND", provider: null, rawKey: "LOGITECH INC.", groupId: "g2", label: "Logitech" },
+      { kind: "BRAND", provider: "AIR", rawKey: "Logi", groupId: "g2", label: "Logitech" },
+    ]),
+    identities: {},
+    overrides: {},
+    hiddenCategoryLabels: new Set<string>(),
+    hiddenBrandLabels: new Set<string>(),
+  };
+
+  it("matchingRawBrands incluye alias del display", () => {
+    const raws = matchingRawBrands("Logitech", ctx);
+    expect(raws).toEqual(expect.arrayContaining(["Logitech", "LOGITECH INC.", "Logi"]));
+  });
+
+  it("groupBrandsByDisplay fusiona alias", () => {
+    const grouped = groupBrandsByDisplay(
+      [
+        { rawBrand: "LOGITECH INC.", count: 3 },
+        { rawBrand: "Logi", count: 2 },
+        { rawBrand: "ASUS", count: 1 },
+      ],
+      ctx
+    );
+    const logitech = grouped.find((g) => g.brand === "Logitech");
+    expect(logitech?.count).toBe(5);
+  });
+
+  it("matchesDisplayBrand respeta clave normalizada", () => {
+    expect(
+      matchesDisplayBrand(
+        {
+          provider: "AIR",
+          brand: "LOGITECH INC.",
+          category: null,
+          subcategory: null,
+          ean: null,
+          partNumber: null,
+        },
+        "logitech",
+        ctx
+      )
+    ).toBe(true);
   });
 });

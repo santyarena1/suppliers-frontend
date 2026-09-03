@@ -16,6 +16,8 @@ import {
   Provider,
   productDisplayBrand,
   productDisplayCategory,
+  type BrandCount,
+  type CategoryCount,
 } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
 import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
@@ -84,8 +86,14 @@ function SearchPage() {
   const [priceView, setPriceView] = useState<PriceView>("list");
   const priceMode: PriceMode = retailer && priceView !== "list" ? priceView : "list";
   const [selectedProviders, setSelectedProviders] = useState<Set<Provider>>(new Set());
-  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set());
-  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(
+    () => (initialMarca.trim() ? new Set([initialMarca.trim()]) : new Set())
+  );
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(
+    () => (initialCategoria.trim() ? new Set([initialCategoria.trim()]) : new Set())
+  );
+  const [catalogBrands, setCatalogBrands] = useState<BrandCount[]>([]);
+  const [catalogCategories, setCatalogCategories] = useState<CategoryCount[]>([]);
   const [touchedFilters, setTouchedFilters] = useState(false);
   const [results, setResults] = useState<ProductDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -110,9 +118,7 @@ function SearchPage() {
     const categoriaTrim =
       opts?.categoria !== undefined
         ? opts.categoria.trim()
-        : lastSearchKind.current === "category"
-          ? trimmed
-          : "";
+        : "";
     const params = new URLSearchParams();
     if (trimmed) params.set("q", trimmed);
     if (marcaTrim) params.set("marca", marcaTrim);
@@ -127,36 +133,67 @@ function SearchPage() {
     }
   }
 
-  async function handleCategoryClick(category: string, withZero = includeOutOfStock) {
-    setError("");
-    setLoading(true);
-    setSearched(true);
-    setQuery(category);
-    setActiveQuery(category);
-    setRefineText("");
-    setMinPrice("");
-    setMaxPrice("");
-    setSelectedBrands(new Set());
-    setSelectedCategories(new Set());
-    lastSearchKind.current = "category";
-    try {
-      const res = await catalogApi.byCategory(category, 60, { includeOutOfStock: withZero });
-      const data = Array.isArray(res.data) ? res.data : [];
-      setResults(data);
-      persistResults(category, data);
-      setUiState({ refineText: "", minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
-      syncSearchUrl(category, "", { categoria: category });
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } }; message?: string };
-      setError(e?.response?.data?.message || e?.message || "Error al consultar la categoría");
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
+  function productKey(p: ProductDTO) {
+    return `${p.provider}::${p.externalId}`;
   }
 
-  // In-results filters
-  const [refineText, setRefineText] = useState("");
+  function mergeUnique(lists: ProductDTO[][]): ProductDTO[] {
+    const seen = new Set<string>();
+    const out: ProductDTO[] = [];
+    for (const list of lists) {
+      for (const p of list) {
+        const k = productKey(p);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push(p);
+      }
+    }
+    return out;
+  }
+
+  function intersectByKey(a: ProductDTO[], b: ProductDTO[]): ProductDTO[] {
+    const keys = new Set(b.map(productKey));
+    return a.filter((p) => keys.has(productKey(p)));
+  }
+
+  async function fetchByBrands(brands: string[], withZero: boolean): Promise<ProductDTO[]> {
+    if (brands.length === 0) return [];
+    const lists = await Promise.all(
+      brands.map(async (brand) => {
+        const res = await catalogApi.byBrand(brand, 120, { includeOutOfStock: withZero });
+        return Array.isArray(res.data) ? res.data : [];
+      })
+    );
+    return mergeUnique(lists);
+  }
+
+  async function fetchByCategories(categories: string[], withZero: boolean): Promise<ProductDTO[]> {
+    if (categories.length === 0) return [];
+    const lists = await Promise.all(
+      categories.map(async (category) => {
+        const res = await catalogApi.byCategory(category, 120, { includeOutOfStock: withZero });
+        return Array.isArray(res.data) ? res.data : [];
+      })
+    );
+    return mergeUnique(lists);
+  }
+
+  async function handleCategoryClick(category: string, withZero = includeOutOfStock) {
+    const nextCats = new Set([category]);
+    setSelectedCategories(nextCats);
+    setSelectedBrands(new Set());
+    setBrandFilter("");
+    setQuery("");
+    await runSearch("", {
+      track: true,
+      includeOutOfStock: withZero,
+      brand: "",
+      brands: new Set(),
+      categories: nextCats,
+    });
+  }
+
+  // Filtros locales sobre resultados (precio / imagen) — no “refinar” por texto
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [hideNoImage, setHideNoImage] = useState(false);
@@ -179,35 +216,111 @@ function SearchPage() {
     });
   }, []);
 
-  async function runSearch(term: string, opts?: { track?: boolean; includeOutOfStock?: boolean; brand?: string }) {
+  async function runSearch(
+    term: string,
+    opts?: {
+      track?: boolean;
+      includeOutOfStock?: boolean;
+      brand?: string;
+      brands?: Set<string>;
+      categories?: Set<string>;
+    }
+  ) {
     const q = term.trim();
-    const brand = (opts?.brand ?? brandFilter).trim();
-    if (!q && !brand) return;
+    const brandFromOpt = opts?.brand !== undefined ? opts.brand.trim() : brandFilter.trim();
+    const brands = new Set(opts?.brands ?? selectedBrands);
+    const categories = new Set(opts?.categories ?? selectedCategories);
+    if (brandFromOpt) brands.add(brandFromOpt);
+
+    if (!q && brands.size === 0 && categories.size === 0) return;
+
     const withZero = opts?.includeOutOfStock ?? includeOutOfStock;
-    lastSearchKind.current = "search";
+    const providerList =
+      selectedProviders.size === 0 && !touchedFilters
+        ? searchable.map((p) => p.provider)
+        : searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider);
+
+    const brandList = [...brands];
+    const categoryList = [...categories];
+    lastSearchKind.current =
+      categoryList.length > 0 && brandList.length === 0 && !q ? "category" : "search";
+
     setError("");
     setLoading(true);
     setSearched(true);
-    setQuery(q || brand);
-    setActiveQuery(q || brand);
-    setBrandFilter(brand);
-    setRefineText("");
+    setQuery(q);
+    setActiveQuery(q || brandList[0] || categoryList[0] || "");
+    const nextBrandFilter = brandFromOpt || (brandList.length > 0 ? brandList[0] : "");
+    setBrandFilter(nextBrandFilter);
+    if (opts?.brands) setSelectedBrands(brands);
+    else if (brandFromOpt && !selectedBrands.has(brandFromOpt)) {
+      setSelectedBrands(brands);
+    }
+    if (opts?.categories) setSelectedCategories(categories);
     setMinPrice("");
     setMaxPrice("");
-    setSelectedBrands(new Set());
-    setSelectedCategories(new Set());
+
     try {
-      const res = await searchApi.all(q, {
-        providers: searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider),
-        includeOutOfStock: withZero,
-        brand: brand || undefined,
-      });
-      const data = res.data;
+      let data: ProductDTO[] = [];
+      const qIsBrand =
+        Boolean(q) && brandList.some((b) => b.toLowerCase() === q.toLowerCase());
+      const distinctQ = Boolean(q) && !qIsBrand;
+
+      if (brandList.length > 0 && categoryList.length > 0) {
+        const [brandProducts, catProducts] = await Promise.all([
+          fetchByBrands(brandList, withZero),
+          fetchByCategories(categoryList, withZero),
+        ]);
+        data = intersectByKey(brandProducts, catProducts);
+        if (distinctQ) {
+          const ql = q.toLowerCase();
+          data = data.filter((p) => p.name?.toLowerCase().includes(ql));
+        }
+      } else if (brandList.length > 0) {
+        if (distinctQ && brandList.length === 1) {
+          const res = await searchApi.all(q, {
+            providers: providerList,
+            includeOutOfStock: withZero,
+            brand: brandList[0],
+          });
+          data = res.data;
+        } else if (distinctQ) {
+          data = await fetchByBrands(brandList, withZero);
+          const ql = q.toLowerCase();
+          data = data.filter((p) => p.name?.toLowerCase().includes(ql));
+        } else {
+          data = await fetchByBrands(brandList, withZero);
+        }
+      } else if (categoryList.length > 0) {
+        data = await fetchByCategories(categoryList, withZero);
+        if (distinctQ) {
+          const ql = q.toLowerCase();
+          data = data.filter((p) => p.name?.toLowerCase().includes(ql));
+        }
+      } else {
+        const res = await searchApi.all(q, {
+          providers: providerList,
+          includeOutOfStock: withZero,
+        });
+        data = res.data;
+      }
+
+      if (providerList.length > 0 && providerList.length < searchable.length) {
+        const allowed = new Set(providerList);
+        data = data.filter((p) => allowed.has(p.provider as Provider));
+      }
+
       setResults(data);
-      persistResults(q || `marca:${brand}`, data);
-      setUiState({ refineText: "", minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
-      if (opts?.track !== false) trackSearch(q || brand);
-      syncSearchUrl(q, brand, { categoria: "" });
+      const persistKey =
+        q ||
+        (brandList.length ? `marca:${brandList.join(",")}` : "") ||
+        (categoryList.length ? `cat:${categoryList.join(",")}` : "");
+      persistResults(persistKey, data);
+      setUiState({ minPrice: "", maxPrice: "", hideNoImage: false, scrollTop: 0 });
+      if (opts?.track !== false) trackSearch(q || brandList[0] || categoryList[0] || "");
+      syncSearchUrl(q, nextBrandFilter, {
+        categoria: categoryList.length > 0 ? categoryList[0] : "",
+      });
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || "Error al consultar la API");
@@ -225,9 +338,26 @@ function SearchPage() {
   function toggleOutOfStock() {
     const next = !includeOutOfStock;
     setIncludeOutOfStock(next);
-    if (!searched || !activeQuery.trim()) return;
-    if (lastSearchKind.current === "category") void handleCategoryClick(activeQuery, next);
-    else void runSearch(activeQuery, { track: false, includeOutOfStock: next });
+    if (!searched) return;
+    if (lastSearchKind.current === "category" && selectedCategories.size > 0) {
+      void runSearch(query, {
+        track: false,
+        includeOutOfStock: next,
+        brands: selectedBrands,
+        categories: selectedCategories,
+        brand: brandFilter,
+      });
+      return;
+    }
+    if (query.trim() || brandFilter.trim() || selectedBrands.size > 0 || selectedCategories.size > 0) {
+      void runSearch(query, {
+        track: false,
+        includeOutOfStock: next,
+        brands: selectedBrands,
+        categories: selectedCategories,
+        brand: brandFilter,
+      });
+    }
   }
 
   function resetToHome() {
@@ -238,7 +368,6 @@ function SearchPage() {
     setResults([]);
     setSearched(false);
     setError("");
-    setRefineText("");
     setMinPrice("");
     setMaxPrice("");
     setHideNoImage(false);
@@ -258,13 +387,13 @@ function SearchPage() {
     setError("");
     if (ui?.sortBy) setSortBy(ui.sortBy);
     if (ui?.viewMode) setViewMode(ui.viewMode);
-    if (typeof ui?.refineText === "string") setRefineText(ui.refineText);
     if (typeof ui?.minPrice === "string") setMinPrice(ui.minPrice);
     if (typeof ui?.maxPrice === "string") setMaxPrice(ui.maxPrice);
     if (typeof ui?.hideNoImage === "boolean") setHideNoImage(ui.hideNoImage);
     if (typeof ui?.includeOutOfStock === "boolean") setIncludeOutOfStock(ui.includeOutOfStock);
-    syncSearchUrl(q);
-    // Restaurar scroll después del paint
+    syncSearchUrl(q, brandFilter, {
+      categoria: selectedCategories.size === 1 ? [...selectedCategories][0] : "",
+    });
     requestAnimationFrame(() => {
       const top = ui?.scrollTop ?? 0;
       if (scrollRef.current && top > 0) {
@@ -273,9 +402,8 @@ function SearchPage() {
     });
   }
 
-  // Apply in-results filters + sort
+  // Apply in-results filters + sort (sin facetas de marca/categoría ni refineText)
   const filtered = useMemo(() => {
-    // iibbEpoch fuerza reorden cuando se aprende una alícuota nueva
     void iibbEpoch;
     const sortPrice = (p: ProductDTO) => {
       const pricing = purchaseLinePricing(p, purchasePolicies[p.provider], priceMode);
@@ -289,10 +417,6 @@ function SearchPage() {
       ).unitDisplayUsd;
     };
     let arr = results;
-    if (refineText.trim()) {
-      const q = refineText.toLowerCase();
-      arr = arr.filter((p) => p.name?.toLowerCase().includes(q));
-    }
     if (hideNoImage) arr = arr.filter((p) => !!p.imageUrl);
     if (minPrice) {
       const m = parseFloat(minPrice);
@@ -302,63 +426,49 @@ function SearchPage() {
       const m = parseFloat(maxPrice);
       if (!isNaN(m)) arr = arr.filter((p) => parsePrice(p.price) <= m);
     }
-    if (selectedBrands.size > 0) {
-      arr = arr.filter((p) => {
-        const b = productDisplayBrand(p);
-        return !!b && selectedBrands.has(b);
-      });
-    }
-    if (selectedCategories.size > 0) {
-      arr = arr.filter((p) => {
-        const c = productDisplayCategory(p);
-        return !!c && selectedCategories.has(c);
-      });
-    }
     if (sortBy === "price_asc") arr = [...arr].sort((a, b) => sortPrice(a) - sortPrice(b));
     if (sortBy === "price_desc") arr = [...arr].sort((a, b) => sortPrice(b) - sortPrice(a));
     if (sortBy === "name_asc") arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
     if (sortBy === "name_desc") arr = [...arr].sort((a, b) => (b.name || "").localeCompare(a.name || ""));
     return arr;
   }, [
-    results, refineText, hideNoImage, minPrice, maxPrice, sortBy, priceMode,
-    purchasePolicies, withIva, withIibb, iibbEpoch, selectedBrands, selectedCategories,
+    results, hideNoImage, minPrice, maxPrice, sortBy, priceMode,
+    purchasePolicies, withIva, withIibb, iibbEpoch,
   ]);
 
-  const brandFacets = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of results) {
-      const b = productDisplayBrand(p);
-      if (!b) continue;
-      counts.set(b, (counts.get(b) || 0) + 1);
+  function toggleBrand(brand: string) {
+    const next = new Set(selectedBrands);
+    next.has(brand) ? next.delete(brand) : next.add(brand);
+    setSelectedBrands(next);
+    const nextFilter = next.size > 0 ? (next.has(brandFilter) ? brandFilter : [...next][0]) : "";
+    setBrandFilter(nextFilter);
+    if (query.trim() || next.size > 0 || selectedCategories.size > 0) {
+      void runSearch(query, {
+        track: false,
+        brands: next,
+        categories: selectedCategories,
+        brand: nextFilter,
+      });
+    } else if (searched) {
+      resetToHome();
     }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  }, [results]);
+  }
 
-  const categoryFacets = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of results) {
-      const c = productDisplayCategory(p);
-      if (!c) continue;
-      counts.set(c, (counts.get(c) || 0) + 1);
+  function toggleCategory(category: string) {
+    const next = new Set(selectedCategories);
+    next.has(category) ? next.delete(category) : next.add(category);
+    setSelectedCategories(next);
+    if (query.trim() || selectedBrands.size > 0 || next.size > 0) {
+      void runSearch(query, {
+        track: false,
+        brands: selectedBrands,
+        categories: next,
+        brand: brandFilter,
+      });
+    } else if (searched) {
+      resetToHome();
     }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  }, [results]);
-
-  const toggleBrand = useCallback((brand: string) => {
-    setSelectedBrands((prev) => {
-      const next = new Set(prev);
-      next.has(brand) ? next.delete(brand) : next.add(brand);
-      return next;
-    });
-  }, []);
-
-  const toggleCategory = useCallback((category: string) => {
-    setSelectedCategories((prev) => {
-      const next = new Set(prev);
-      next.has(category) ? next.delete(category) : next.add(category);
-      return next;
-    });
-  }, []);
+  }
 
   const providerCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -384,6 +494,23 @@ function SearchPage() {
   }
 
   useEffect(() => { setCollapsedProviders(new Set()); }, [activeQuery]);
+
+  // Catálogo de marcas/categorías para filtros generales (antes de tener resultados)
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([catalogApi.brands(), catalogApi.categories()])
+      .then(([brandsRes, catsRes]) => {
+        if (cancelled) return;
+        setCatalogBrands(Array.isArray(brandsRes.data) ? brandsRes.data : []);
+        setCatalogCategories(Array.isArray(catsRes.data) ? catsRes.data : []);
+      })
+      .catch(() => {
+        /* vacío: el panel muestra mensaje */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Al entrar, todos los proveedores del comercio están seleccionados. Si la lista
   // llega después, se completa sola; si ya tocaste los filtros, no se pisa.
@@ -411,8 +538,15 @@ function SearchPage() {
       storedResults.length > 0;
 
     if (urlCategoria) {
-      lastUrlKeyRef.current = searchUrlKey(urlQ || urlCategoria, urlMarca, urlCategoria);
-      void handleCategoryClick(urlCategoria);
+      lastUrlKeyRef.current = searchUrlKey(urlQ, urlMarca, urlCategoria);
+      setSelectedCategories(new Set([urlCategoria]));
+      if (urlMarca) setSelectedBrands(new Set([urlMarca]));
+      void runSearch(urlQ, {
+        track: false,
+        brand: urlMarca,
+        brands: urlMarca ? new Set([urlMarca]) : new Set(),
+        categories: new Set([urlCategoria]),
+      });
       return;
     }
 
@@ -422,9 +556,17 @@ function SearchPage() {
     }
 
     lastUrlKeyRef.current = searchUrlKey(urlQ, urlMarca);
-    if (urlMarca) setBrandFilter(urlMarca);
+    if (urlMarca) {
+      setBrandFilter(urlMarca);
+      setSelectedBrands(new Set([urlMarca]));
+    }
     if (urlQ || urlMarca) {
-      void runSearch(urlQ, { track: false, brand: urlMarca || undefined });
+      void runSearch(urlQ, {
+        track: false,
+        brand: urlMarca || undefined,
+        brands: urlMarca ? new Set([urlMarca]) : new Set(),
+        categories: new Set(),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
@@ -440,13 +582,16 @@ function SearchPage() {
     if (key === (lastUrlKeyRef.current ?? "")) return;
     lastUrlKeyRef.current = key;
     setBrandFilter(urlMarca);
+    if (urlMarca) setSelectedBrands(new Set([urlMarca]));
+    else setSelectedBrands(new Set());
+    if (urlCategoria) setSelectedCategories(new Set([urlCategoria]));
+    else setSelectedCategories(new Set());
     if (!urlQ && !urlMarca && !urlCategoria) {
       setQuery("");
       setActiveQuery("");
       setResults([]);
       setSearched(false);
       setError("");
-      setRefineText("");
       setMinPrice("");
       setMaxPrice("");
       setHideNoImage(false);
@@ -454,16 +599,12 @@ function SearchPage() {
       setSelectedCategories(new Set());
       return;
     }
-    if (urlCategoria) {
-      void handleCategoryClick(urlCategoria);
-      return;
-    }
-    if (
-      !urlMarca &&
-      urlQ.toLowerCase() === activeQuery.trim().toLowerCase() &&
-      results.length > 0
-    ) return;
-    void runSearch(urlQ, { track: false, brand: urlMarca || undefined });
+    void runSearch(urlQ, {
+      track: false,
+      brand: urlMarca || "",
+      brands: urlMarca ? new Set([urlMarca]) : new Set(),
+      categories: urlCategoria ? new Set([urlCategoria]) : new Set(),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQ, initialMarca, initialCategoria]);
 
@@ -481,7 +622,6 @@ function SearchPage() {
     setResults([]);
     setSearched(false);
     setError("");
-    setRefineText("");
     setMinPrice("");
     setMaxPrice("");
     setHideNoImage(false);
@@ -497,13 +637,12 @@ function SearchPage() {
     setUiState({
       sortBy,
       viewMode,
-      refineText,
       minPrice,
       maxPrice,
       hideNoImage,
       includeOutOfStock,
     });
-  }, [searched, sortBy, viewMode, refineText, minPrice, maxPrice, hideNoImage, includeOutOfStock, setUiState]);
+  }, [searched, sortBy, viewMode, minPrice, maxPrice, hideNoImage, includeOutOfStock, setUiState]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -523,7 +662,9 @@ function SearchPage() {
 
   const unselectedCount = searchable.length - selectedProviders.size;
   const hasFacetFilters = selectedBrands.size > 0 || selectedCategories.size > 0;
-  const hasInResultsFilter = refineText || minPrice || maxPrice || hideNoImage || hasFacetFilters;
+  const hasInResultsFilter = Boolean(minPrice || maxPrice || hideNoImage);
+  const canSearch =
+    Boolean(query.trim() || brandFilter.trim() || selectedBrands.size > 0 || selectedCategories.size > 0);
 
   return (
     <>
@@ -555,7 +696,7 @@ function SearchPage() {
               </div>
               <button
                 type="submit"
-                disabled={loading || (!query.trim() && !brandFilter.trim())}
+                disabled={loading || !canSearch}
                 className="flex items-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-medium rounded-lg px-4 py-2 transition-all flex-shrink-0"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
@@ -661,9 +802,20 @@ function SearchPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setBrandFilter("");
-                    if (activeQuery.trim() && searched) void runSearch(activeQuery, { track: false, brand: "" });
-                    else syncSearchUrl(query, "");
+                    const next = new Set(selectedBrands);
+                    next.delete(brandFilter);
+                    setSelectedBrands(next);
+                    setBrandFilter(next.size > 0 ? [...next][0] : "");
+                    if (query.trim() || next.size > 0 || selectedCategories.size > 0) {
+                      void runSearch(query, {
+                        track: false,
+                        brands: next,
+                        categories: selectedCategories,
+                        brand: next.size > 0 ? [...next][0] : "",
+                      });
+                    } else {
+                      resetToHome();
+                    }
                   }}
                   className="w-4 h-4 rounded-full hover:bg-white/10 flex items-center justify-center"
                   title="Quitar filtro de marca"
@@ -710,11 +862,11 @@ function SearchPage() {
 
               <div className="flex items-start gap-3">
                 <span className="text-[11px] font-medium text-surface-500 uppercase tracking-wider pt-1.5 w-20 flex-shrink-0">Marcas</span>
-                <div className="flex items-center gap-1.5 flex-wrap flex-1">
-                  {brandFacets.length === 0 ? (
-                    <span className="text-xs text-surface-600">Sin marcas en resultados</span>
+                <div className="flex items-center gap-1.5 flex-wrap flex-1 max-h-28 overflow-y-auto">
+                  {catalogBrands.length === 0 ? (
+                    <span className="text-xs text-surface-600">Sin marcas en el catálogo</span>
                   ) : (
-                    brandFacets.map(([brand, count]) => (
+                    catalogBrands.map(({ brand, count }) => (
                       <button
                         key={brand}
                         type="button"
@@ -734,7 +886,20 @@ function SearchPage() {
                 {selectedBrands.size > 0 && (
                   <button
                     type="button"
-                    onClick={() => setSelectedBrands(new Set())}
+                    onClick={() => {
+                      setSelectedBrands(new Set());
+                      setBrandFilter("");
+                      if (query.trim() || selectedCategories.size > 0) {
+                        void runSearch(query, {
+                          track: false,
+                          brands: new Set(),
+                          categories: selectedCategories,
+                          brand: "",
+                        });
+                      } else if (searched) {
+                        resetToHome();
+                      }
+                    }}
                     className="text-xs text-surface-400 hover:text-white flex-shrink-0"
                   >
                     Limpiar
@@ -744,11 +909,11 @@ function SearchPage() {
 
               <div className="flex items-start gap-3">
                 <span className="text-[11px] font-medium text-surface-500 uppercase tracking-wider pt-1.5 w-20 flex-shrink-0">Categorías</span>
-                <div className="flex items-center gap-1.5 flex-wrap flex-1">
-                  {categoryFacets.length === 0 ? (
-                    <span className="text-xs text-surface-600">Sin categorías en resultados</span>
+                <div className="flex items-center gap-1.5 flex-wrap flex-1 max-h-28 overflow-y-auto">
+                  {catalogCategories.length === 0 ? (
+                    <span className="text-xs text-surface-600">Sin categorías en el catálogo</span>
                   ) : (
-                    categoryFacets.map(([category, count]) => (
+                    catalogCategories.map(({ category, count }) => (
                       <button
                         key={category}
                         type="button"
@@ -768,7 +933,19 @@ function SearchPage() {
                 {selectedCategories.size > 0 && (
                   <button
                     type="button"
-                    onClick={() => setSelectedCategories(new Set())}
+                    onClick={() => {
+                      setSelectedCategories(new Set());
+                      if (query.trim() || selectedBrands.size > 0) {
+                        void runSearch(query, {
+                          track: false,
+                          brands: selectedBrands,
+                          categories: new Set(),
+                          brand: brandFilter,
+                        });
+                      } else if (searched) {
+                        resetToHome();
+                      }
+                    }}
                     className="text-xs text-surface-400 hover:text-white flex-shrink-0"
                   >
                     Limpiar
@@ -780,21 +957,10 @@ function SearchPage() {
 
           {/* Results area */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto">
-            {/* In-results filters bar */}
+            {/* Sticky toolbar: sort / price / image — sin caja “Refinar” */}
             {searched && !loading && hydrated && results.length > 0 && (
               <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800 px-6 py-2.5 flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-1 min-w-[200px]">
-                  <div className="relative flex-1 max-w-xs">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-600" />
-                    <input
-                      type="text"
-                      value={refineText}
-                      onChange={(e) => setRefineText(e.target.value)}
-                      placeholder="Refinar resultados..."
-                      className="w-full bg-surface-800 border border-surface-700 rounded-md pl-8 pr-2 py-1.5 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500"
-                    />
-                  </div>
-
                   <div className="flex items-center gap-1 text-[11px] text-surface-500">
                     <span>USD</span>
                     <input
@@ -880,12 +1046,9 @@ function SearchPage() {
                   {hasInResultsFilter && (
                     <button
                       onClick={() => {
-                        setRefineText("");
                         setMinPrice("");
                         setMaxPrice("");
                         setHideNoImage(false);
-                        setSelectedBrands(new Set());
-                        setSelectedCategories(new Set());
                       }}
                       className="text-[11px] text-surface-500 hover:text-white flex items-center gap-1"
                     >

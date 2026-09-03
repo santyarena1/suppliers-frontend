@@ -150,12 +150,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Búsqueda de catálogo oculta stock 0
 - **Método**: GET
-- **Ruta**: `/search/provider/:provider` · `/catalog/by-category` · `/catalog/featured` · `/catalog/categories`
+- **Ruta**: `/search/provider/:provider` · `/catalog/by-category` · `/catalog/by-brand` · `/catalog/featured` · `/catalog/categories` · `/catalog/brands`
 - **Auth**: Bearer, organización de la sesión
-- **Body / Params**: `name` (búsqueda) · `includeOutOfStock=true` para listar también ofertas con stock 0 (o debajo del umbral del comercio)
-- **Respuesta esperada**: `ProductDTO[]` · categorías con conteo solo de ofertas con stock
+- **Body / Params**: `name` (búsqueda) · `brand` (filtro de marca; si `name` vacío o igual a `brand`, solo filtra por marca) · `includeOutOfStock=true` para listar también ofertas con stock 0 (o debajo del umbral del comercio) · `category` / `brand` en by-category / by-brand
+- **Respuesta esperada**: `ProductDTO[]` · categorías/marcas con conteo solo de ofertas con stock
 - **Estado**: IMPLEMENTADO
-- **Notas**: Por defecto, si en ese distribuidor la config de stock 0 no es «Mostrar igual», no se listan productos con stock 0 (ni debajo del umbral). `includeOutOfStock=true` los incluye igual. La ficha individual (`GET /providers/:provider/products/:externalId`) sí los devuelve si se entra por link. Qué hacer en la sync con faltantes o stock 0 lo define cada proveedor (`missingProductAction`, `zeroStockAction`), no un comportamiento especial por marca.
+- **Notas**: Por defecto, si en ese distribuidor la config de stock 0 no es «Mostrar igual», no se listan productos con stock 0 (ni debajo del umbral). `includeOutOfStock=true` los incluye igual. La ficha individual (`GET /providers/:provider/products/:externalId`) sí los devuelve si se entra por link. Qué hacer en la sync con faltantes o stock 0 lo define cada proveedor (`missingProductAction`, `zeroStockAction`), no un comportamiento especial por marca. Marcas y categorías del catálogo son filtros generales del buscador (`/catalog/brands`, `/catalog/by-brand`), no facetas post-resultado.
 
 ### [FEATURE] Progreso e historial de sincronización de catálogo
 - **Método**: POST | GET
