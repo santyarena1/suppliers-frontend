@@ -7,7 +7,15 @@ import { publicBrandApi, type PublicBrandLanding } from "@/lib/api";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
-import { Globe, Loader2, Mail, Phone } from "lucide-react";
+import {
+  ActionsSection,
+  BrandSpaceLanding,
+  ContactSection,
+  FilesSection,
+  NewsSection,
+  ProductsSection,
+} from "@/components/org/BrandSpaceLanding";
+import { Loader2 } from "lucide-react";
 
 export default function PublicBrandLandingPage() {
   const params = useParams<{ publicKey: string }>();
@@ -46,82 +54,103 @@ export default function PublicBrandLandingPage() {
           <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
         </div>
       ) : (
-        <main>
-          {landing.htmlDocument ? (
-            <BrandHtmlCanvas
-              html={landing.htmlDocument}
-              slots={{
-                nombre: <span>{landing.name}</span>,
-                logo: landing.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={landing.logoUrl} alt={landing.name} style={{ height: 48 }} />
-                ) : null,
-              }}
-            />
-          ) : (
-          <section
-            className="relative overflow-hidden border-b border-surface-800"
-            style={
-              landing.heroUrl
-                ? { backgroundImage: `url(${landing.heroUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-                : undefined
-            }
-          >
-            <div className={`px-4 sm:px-8 py-16 sm:py-24 ${landing.heroUrl ? "bg-black/65" : "bg-gradient-to-br from-violet-800/50 via-brand-800/30 to-surface-950"}`}>
-              <div className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-6 items-center sm:items-start">
-                {landing.logoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={landing.logoUrl} alt="" className="w-20 h-20 rounded-2xl object-contain bg-white/10 border border-white/15" />
-                )}
-                <div>
-                  <p className="text-[11px] uppercase tracking-widest text-white/70 mb-2">{landing.name}</p>
-                  <h1 className="text-3xl sm:text-4xl font-bold text-balance">{landing.headline || landing.name}</h1>
-                  {landing.about && <p className="mt-4 text-sm sm:text-base text-white/80 max-w-xl leading-relaxed">{landing.about}</p>}
-                </div>
-              </div>
-            </div>
-          </section>
-          )}
-
-          {blocks.length > 0 && (
-            <section className="max-w-3xl mx-auto px-4 sm:px-8 py-10 grid gap-4">
-              {blocks.map((block, i) => (
-                <article key={i} className="border border-surface-800 rounded-xl p-5 bg-surface-900">
-                  {block.title && <h2 className="text-sm font-semibold mb-2">{block.title}</h2>}
-                  {block.body && <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">{block.body}</p>}
-                  {block.url && (
-                    <a href={block.url} className="inline-flex items-center gap-1 text-xs text-brand-400 mt-3" target="_blank" rel="noreferrer">
-                      <Globe className="w-3 h-3" /> Más info
-                    </a>
-                  )}
-                </article>
-              ))}
-            </section>
-          )}
-
-          <section className="max-w-3xl mx-auto px-4 sm:px-8 pb-16">
-            <div className="border border-surface-800 rounded-xl p-5 bg-surface-900 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-              <p className="text-sm text-surface-300">¿Sos un comercio y querés trabajar con {landing.name}? Pedí un código de vinculación. En NODO la marca no se descubre sola.</p>
-              <div className="flex flex-col gap-1 text-sm">
-                {landing.websiteUrl && (
-                  <a href={landing.websiteUrl} className="text-brand-400 inline-flex items-center gap-1.5" target="_blank" rel="noreferrer">
-                    <Globe className="w-3.5 h-3.5" /> Sitio
-                  </a>
-                )}
-                {landing.supportEmail && (
-                  <a href={`mailto:${landing.supportEmail}`} className="text-surface-300 inline-flex items-center gap-1.5">
-                    <Mail className="w-3.5 h-3.5" /> {landing.supportEmail}
-                  </a>
-                )}
-                {landing.supportPhone && (
-                  <p className="text-surface-300 inline-flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5" /> {landing.supportPhone}
-                  </p>
-                )}
-              </div>
-            </div>
-          </section>
-        </main>
+        <BrandSpaceLanding
+          variant="public"
+          name={landing.name}
+          accent={landing.primaryColor || "#22c55e"}
+          theme={{
+            logoUrl: landing.logoUrl,
+            heroUrl: landing.heroUrl,
+            headline: landing.headline,
+            about: landing.about,
+          }}
+          contact={{
+            websiteUrl: landing.websiteUrl,
+            supportEmail: landing.supportEmail,
+            supportPhone: landing.supportPhone,
+          }}
+          products={landing.products ?? []}
+          actions={landing.actions ?? []}
+          news={landing.news ?? []}
+          materials={landing.materials ?? []}
+          trainings={landing.trainings ?? []}
+          extraBlocks={blocks}
+          htmlSlots={landing.htmlSlots}
+          html={
+            landing.htmlDocument ? (
+              <BrandHtmlCanvas
+                html={landing.htmlDocument}
+                slots={{
+                  nombre: <span>{landing.name}</span>,
+                  logo: landing.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={landing.logoUrl} alt={landing.name} style={{ height: 48 }} />
+                  ) : null,
+                  productos: (
+                    <ProductsSection
+                      name={landing.name}
+                      products={landing.products ?? []}
+                      retailer={false}
+                      hub={false}
+                      ready={(landing.products ?? []).length > 0}
+                    />
+                  ),
+                  semaforos: (
+                    <ProductsSection
+                      name={landing.name}
+                      products={landing.products ?? []}
+                      retailer={false}
+                      hub={false}
+                      ready={(landing.products ?? []).length > 0}
+                    />
+                  ),
+                  acciones: (
+                    <ActionsSection
+                      name={landing.name}
+                      actions={landing.actions ?? []}
+                      hub={false}
+                      ready={(landing.actions ?? []).length > 0}
+                    />
+                  ),
+                  novedades: <NewsSection name={landing.name} items={landing.news ?? []} hub={false} />,
+                  noticias: <NewsSection name={landing.name} items={landing.news ?? []} hub={false} />,
+                  materiales: (
+                    <FilesSection
+                      id="materiales"
+                      title="Materiales"
+                      module="materials"
+                      items={landing.materials ?? []}
+                      pendingText={`${landing.name} todavía no publicó materiales.`}
+                      hub={false}
+                    />
+                  ),
+                  capacitaciones: (
+                    <FilesSection
+                      id="capacitaciones"
+                      title="Capacitaciones"
+                      module="trainings"
+                      items={landing.trainings ?? []}
+                      pendingText={`${landing.name} todavía no publicó capacitaciones.`}
+                      hub={false}
+                    />
+                  ),
+                  hablar: (
+                    <ContactSection
+                      name={landing.name}
+                      contact={{
+                        websiteUrl: landing.websiteUrl,
+                        supportEmail: landing.supportEmail,
+                        supportPhone: landing.supportPhone,
+                      }}
+                      hub={false}
+                      ready={Boolean(landing.supportEmail || landing.supportPhone || landing.websiteUrl)}
+                    />
+                  ),
+                }}
+              />
+            ) : null
+          }
+        />
       )}
     </div>
   );
