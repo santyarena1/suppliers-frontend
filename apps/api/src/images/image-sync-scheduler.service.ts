@@ -25,6 +25,11 @@ export class ImageSyncSchedulerService {
     if (!(await this.images.hasSerperKey())) return;
     if (!(await this.images.isCronEnabled())) return;
 
+    if (await this.images.disableCronIfNoPending()) {
+      this.logger.log("Cron imágenes: nada pendiente, cron apagado");
+      return;
+    }
+
     const limit = Math.max(1, Number(this.config.get("IMAGE_SYNC_CRON_LIMIT") ?? this.images.cronLimit()));
     const result = this.images.requestFirstPhoto({
       batchSize: 50,

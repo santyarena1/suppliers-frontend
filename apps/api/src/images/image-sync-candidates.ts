@@ -19,6 +19,29 @@ export type ImageSyncPriority = "visible" | "deferred" | "all";
 /** Skip permanente: sin query no tiene sentido gastar créditos ni reintentar. */
 export const PERMANENT_SKIP_ERROR = "Sin texto para buscar";
 
+/** Primer fallo: Serper no trajo una imagen que cargue. Se permite 1 reintento. */
+export const NO_USABLE_PHOTO_ERROR = "Serper no devolvió una foto que cargue";
+
+/** Tras el reintento: no volver a buscar (evita gasto infinito de créditos). */
+export const NO_USABLE_PHOTO_EXHAUSTED_ERROR =
+  "Serper no devolvió una foto que cargue · sin más reintentos";
+
+export const NON_RETRYABLE_ERRORS: string[] = [
+  PERMANENT_SKIP_ERROR,
+  NO_USABLE_PHOTO_EXHAUSTED_ERROR,
+];
+
+/** Si ya falló una vez con “sin foto usable”, el próximo fallo queda agotado. */
+export function nextNoUsablePhotoError(previousError: string | null | undefined): string {
+  if (
+    previousError === NO_USABLE_PHOTO_ERROR ||
+    previousError === NO_USABLE_PHOTO_EXHAUSTED_ERROR
+  ) {
+    return NO_USABLE_PHOTO_EXHAUSTED_ERROR;
+  }
+  return NO_USABLE_PHOTO_ERROR;
+}
+
 export function missingWhere(provider?: Provider): Prisma.ProviderSyncCacheWhereInput {
   return provider ? { provider, AND: [missingImage] } : missingImage;
 }
@@ -26,8 +49,8 @@ export function missingWhere(provider?: Provider): Prisma.ProviderSyncCacheWhere
 /**
  * Faltantes a procesar / reintentar:
  * - nunca tocados, o
- * - fallidos / salteados (p. ej. sin créditos, 429, Serper sin foto usable)
- * No incluye los que quedaron “Sin texto para buscar” (no hay query).
+ * - fallidos / salteados reintentables (p. ej. timeout, primer “sin foto usable”)
+ * No incluye skip permanente ni “sin foto usable” ya reintentado.
  */
 export function candidateWhere(
   provider?: Provider,
@@ -40,7 +63,7 @@ export function candidateWhere(
         imageFills: {
           some: {
             status: { in: ["failed", "skipped"] },
-            NOT: { error: PERMANENT_SKIP_ERROR },
+            NOT: { error: { in: NON_RETRYABLE_ERRORS } },
           },
         },
       },
