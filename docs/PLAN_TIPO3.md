@@ -64,12 +64,20 @@ sanitizado) y los bloques nativos de NODO:
 | `{{hablar}}` | Chat persona a persona |
 | `{{nombre}}` / `{{logo}}` | Identidad |
 
-Si la marca no pega HTML, los bloques se muestran igual. Si pega HTML, el diseño
-va arriba y **los módulos nativos se listan igual abajo** (productos, semáforo,
-acciones, novedades, materiales, capacitaciones, contacto): un botón muerto del
-HTML (`href="#"`, `<button>` sin destino) salta a ese bloque. Un comercio puede
+Si la marca no pega HTML, **la landing nativa es la página**: hero a ancho
+completo (portada o mosaico con fotos de SKUs y novedades), navegación de
+módulos, productos con imagen grande y semáforo, acciones, novedades con
+cover, materiales, capacitaciones y contacto. Si pega HTML, ese diseño va
+como presentación; si además usa huecos `{{productos}}` etc., el módulo se
+pinta adentro del HTML y no se duplica abajo. Un botón muerto del HTML
+(`href="#"`, `<button>` sin destino) salta a ese bloque. Un comercio puede
 saltar a `/search?marca=Nombre` (la búsqueda general, filtrada). El distro no
 tiene búsqueda: ve el mapa, no arma pedidos de marca.
+
+La URL pública `/m/:publicKey` arma la misma landing con recorte seguro:
+productos (nombre + imagen, sin precio ni semáforo), acciones (título y
+vigencia, sin progreso ni alcances a un comercio/distro), novedades
+`isPublic`, materiales/capacitaciones (título y texto, sin archivos).
 
 En el comercio, **siempre se listan los módulos** (espacio, productos, acciones,
 novedades, materiales, capacitaciones, contacto). Si la marca no cargó uno,

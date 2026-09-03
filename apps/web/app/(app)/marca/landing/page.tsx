@@ -4,7 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import PrefsPanel from "@/components/PrefsPanel";
 import ImageUploadField from "@/components/ImageUploadField";
 import BrandHtmlCanvas, { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
+import {
+  ActionsSection,
+  BrandSpaceLanding,
+  FilesSection,
+  NewsSection,
+  ProductsSection,
+} from "@/components/org/BrandSpaceLanding";
 import { brandApi, newsApi, type BrandAction, type BrandLanding, type BrandResource, type BrandSkuSignal, type NewsCard } from "@/lib/api";
+import { BRAND_LANDING_HTML_TEMPLATE } from "@/lib/brand-visuals";
 import { Copy, Globe, Loader2 } from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
@@ -132,8 +140,8 @@ export default function BrandEspacioPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Espacio</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Lo que ven el comercio y el distro vinculados. Si pegás HTML, va por encima de la identidad de Nodo: tu CSS
-            manda.
+            La landing ya arma productos, acciones, novedades, materiales, capacitaciones y contacto. El HTML propio es
+            opcional: va como presentación, con huecos si querés meter los módulos adentro.
           </p>
         </div>
         <PrefsPanel />
@@ -239,10 +247,9 @@ export default function BrandEspacioPage() {
               <section className="border border-surface-800 rounded-xl p-4 bg-surface-900 flex flex-col gap-3">
                 <h2 className="text-sm font-semibold text-white">HTML propio</h2>
                 <p className="text-[11px] text-surface-500">
-                  Pegá el HTML completo de la marca, con CSS en <code className="text-surface-300">&lt;style&gt;</code> o
-                  style inline. Se pinta por encima de la identidad de Nodo: tu CSS manda. Sin scripts ni iframes. Si
-                  ya lo habías guardado antes de este cambio, volvé a pegarlo y guardá: el guardado viejo se comía el
-                  CSS.
+                  Opcional. Sin HTML, Nodo arma la landing completa (hero con fotos, productos, acciones, novedades,
+                  materiales, capacitaciones y contacto). Si pegás HTML, tu diseño va como presentación y los módulos
+                  siguen abajo — o adentro, si usás los huecos. Sin scripts ni iframes.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {SLOTS.map((slot) => (
@@ -256,6 +263,17 @@ export default function BrandEspacioPage() {
                       {`{{${slot.name}}}`}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!landing) return;
+                      setLanding({ ...landing, html: BRAND_LANDING_HTML_TEMPLATE });
+                      void save({ html: BRAND_LANDING_HTML_TEMPLATE });
+                    }}
+                    className="text-[11px] font-semibold border border-brand-500/40 text-brand-300 rounded-md px-2 py-1 hover:bg-brand-500/10"
+                  >
+                    Plantilla con todos los módulos
+                  </button>
                 </div>
                 <textarea
                   className={`${inputClass} min-h-[360px] font-mono text-xs`}
@@ -273,31 +291,9 @@ export default function BrandEspacioPage() {
                   Guardar HTML
                 </button>
                 {previewHtml.trim() ? (
-                  <div className="border border-surface-700 rounded-xl overflow-hidden bg-white">
-                    <p className="text-[11px] uppercase tracking-widest text-surface-400 px-3 py-2 bg-surface-950 border-b border-surface-800">
-                      Vista previa (así lo ven el comercio y el distro)
-                    </p>
-                    <BrandHtmlCanvas
-                      html={previewHtml}
-                      slots={{
-                        productos: <PreviewFill label="Mapa / semáforos" count={preview.signals.length} sample={preview.signals[0]?.name} />,
-                        semaforos: <PreviewFill label="Semáforos" count={preview.signals.length} sample={preview.signals[0]?.name} />,
-                        acciones: <PreviewFill label="Acciones" count={preview.actions.length} sample={preview.actions[0]?.title} />,
-                        materiales: <PreviewFill label="Materiales" count={preview.materials.length} sample={preview.materials[0]?.title} />,
-                        capacitaciones: <PreviewFill label="Capacitaciones" count={preview.trainings.length} sample={preview.trainings[0]?.title} />,
-                        hablar: <PreviewFill label="Hablar" count={1} sample={`Chat con ${landing.name}`} />,
-                        nombre: <span style={{ fontWeight: 700 }}>{landing.name}</span>,
-                        logo: landing.logoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={landing.logoUrl} alt="" style={{ height: 40 }} />
-                        ) : (
-                          <BrandHtmlSlotHole label="Logo" />
-                        ),
-                        noticias: <PreviewFill label="Novedades" count={preview.news.length} sample={preview.news[0]?.title} />,
-                        novedades: <PreviewFill label="Novedades" count={preview.news.length} sample={preview.news[0]?.title} />,
-                      }}
-                    />
-                  </div>
+                  <p className="text-[11px] text-surface-500">
+                    El HTML se pinta en la landing completa, más abajo en esta página.
+                  </p>
                 ) : null}
               </section>
 
@@ -401,8 +397,137 @@ export default function BrandEspacioPage() {
             </>
           )}
         </div>
+        {!loading && landing && (
+          <section className="border-t border-surface-800">
+            <p className="text-[11px] uppercase tracking-widest text-surface-500 px-4 sm:px-6 py-3">
+              Así lo ven el comercio y el distro
+            </p>
+            <LandingEditorPreview landing={landing} preview={preview} html={previewHtml} />
+          </section>
+        )}
       </div>
     </>
+  );
+}
+
+function LandingEditorPreview({
+  landing,
+  preview,
+  html,
+}: {
+  landing: BrandLanding;
+  preview: {
+    signals: BrandSkuSignal[];
+    actions: BrandAction[];
+    materials: BrandResource[];
+    trainings: BrandResource[];
+    news: NewsCard[];
+  };
+  html: string;
+}) {
+  const htmlSlots = [
+    ...html.matchAll(/\{\{\s*([a-z]+)\s*\}\}/gi),
+    ...html.matchAll(/data-nodo-slot="([a-z]+)"/gi),
+  ].map((m) => m[1].toLowerCase());
+  const news = preview.news.map((n) => ({
+    id: n.id,
+    publicKey: n.publicKey,
+    title: n.title,
+    excerpt: n.excerpt,
+    kind: n.kind,
+    coverUrl: n.coverUrl,
+    isPublic: n.isPublic,
+    publishedAt: n.publishedAt,
+  }));
+  return (
+    <BrandSpaceLanding
+      variant="hub"
+      name={landing.name}
+      accent={landing.primaryColor || "#22c55e"}
+      theme={{
+        logoUrl: landing.logoUrl,
+        heroUrl: landing.heroUrl,
+        headline: landing.headline,
+        about: landing.about,
+      }}
+      contact={{
+        websiteUrl: landing.websiteUrl,
+        supportEmail: landing.supportEmail,
+        supportPhone: landing.supportPhone,
+      }}
+      products={preview.signals}
+      actions={preview.actions}
+      news={news}
+      materials={preview.materials}
+      trainings={preview.trainings}
+      extraBlocks={Array.isArray(landing.blocks) ? (landing.blocks as { title?: string; body?: string; url?: string }[]) : []}
+      htmlSlots={htmlSlots}
+      html={
+        html.trim() ? (
+          <BrandHtmlCanvas
+            html={html}
+            slots={{
+              productos: (
+                <ProductsSection
+                  name={landing.name}
+                  products={preview.signals}
+                  retailer={false}
+                  hub
+                  ready={preview.signals.length > 0}
+                />
+              ),
+              semaforos: (
+                <ProductsSection
+                  name={landing.name}
+                  products={preview.signals}
+                  retailer={false}
+                  hub
+                  ready={preview.signals.length > 0}
+                />
+              ),
+              acciones: (
+                <ActionsSection
+                  name={landing.name}
+                  actions={preview.actions}
+                  hub
+                  ready={preview.actions.length > 0}
+                />
+              ),
+              materiales: (
+                <FilesSection
+                  id="materiales"
+                  title="Materiales"
+                  module="materials"
+                  items={preview.materials}
+                  pendingText="Materiales pendientes"
+                  hub
+                />
+              ),
+              capacitaciones: (
+                <FilesSection
+                  id="capacitaciones"
+                  title="Capacitaciones"
+                  module="trainings"
+                  items={preview.trainings}
+                  pendingText="Capacitaciones pendientes"
+                  hub
+                />
+              ),
+              hablar: <span className="text-sm text-white">Hablar con {landing.name}</span>,
+              nombre: <span>{landing.name}</span>,
+              logo: landing.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={landing.logoUrl} alt="" style={{ height: 48 }} />
+              ) : (
+                <BrandHtmlSlotHole label="Logo" />
+              ),
+              noticias: <NewsSection name={landing.name} items={news} hub />,
+              novedades: <NewsSection name={landing.name} items={news} hub />,
+            }}
+          />
+        ) : null
+      }
+    />
   );
 }
 
@@ -445,27 +570,5 @@ function ColorField({
         />
       </span>
     </label>
-  );
-}
-
-function PreviewFill({ label, count, sample }: { label: string; count: number; sample?: string }) {
-  if (count <= 0) return <BrandHtmlSlotHole label={`${label} (todavía vacío)`} />;
-  return (
-    <div
-      style={{
-        border: "1px solid #cbd5e1",
-        background: "#0f172a",
-        color: "#e2e8f0",
-        borderRadius: 12,
-        padding: "12px 14px",
-        font: "12px/1.4 system-ui,sans-serif",
-      }}
-    >
-      <p style={{ margin: 0, fontWeight: 600 }}>{label}</p>
-      <p style={{ margin: "4px 0 0", opacity: 0.8 }}>
-        {count} publicado{count === 1 ? "" : "s"}
-        {sample ? ` · ${sample}` : ""}
-      </p>
-    </div>
   );
 }

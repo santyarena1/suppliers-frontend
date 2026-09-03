@@ -2715,6 +2715,32 @@ export interface BrandLanding {
   fontFamily: string | null;
 }
 
+export interface PublicBrandProduct {
+  name: string;
+  imageUrl: string | null;
+}
+
+export interface PublicBrandAction {
+  title: string;
+  description: string | null;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface PublicBrandNews {
+  id: string;
+  publicKey: string;
+  title: string;
+  excerpt: string;
+  coverUrl: string | null;
+  publishedAt: string | null;
+}
+
+export interface PublicBrandFile {
+  title: string;
+  description: string | null;
+}
+
 export interface PublicBrandLanding {
   publicKey: string;
   name: string;
@@ -2722,11 +2748,18 @@ export interface PublicBrandLanding {
   about: string | null;
   logoUrl: string | null;
   heroUrl: string | null;
+  primaryColor?: string | null;
   websiteUrl: string | null;
   supportEmail: string | null;
   supportPhone: string | null;
   blocks: { type?: string; title?: string; body?: string; url?: string }[] | unknown;
   htmlDocument?: string;
+  htmlSlots?: string[];
+  products?: PublicBrandProduct[];
+  actions?: PublicBrandAction[];
+  news?: PublicBrandNews[];
+  materials?: PublicBrandFile[];
+  trainings?: PublicBrandFile[];
 }
 
 export type BrandSignalLight = "GREEN" | "YELLOW" | "RED" | "BLUE" | "GRAY";

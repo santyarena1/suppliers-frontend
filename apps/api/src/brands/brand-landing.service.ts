@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { newPublicKey } from "./brand-orgs";
 import { compileBrandHtml, sanitizeBrandHtml } from "./brand-html";
+import { pickPublicLandingModules } from "./brand-landing-public";
 import { UpdateBrandLandingDto } from "./dto/brand.dto";
 
 const LANDING_WRITERS = ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL"] as const;
@@ -55,6 +56,58 @@ export class BrandLandingService {
       throw new NotFoundException("Landing no encontrada");
     }
     const compiled = compileBrandHtml(landing.html ?? "");
+    const brandId = landing.tenantId;
+    const now = new Date();
+    const [signals, actions, news, resources] = await Promise.all([
+      this.prisma.brandSkuSignal.findMany({
+        where: { tenantId: brandId },
+        select: { name: true, imageUrl: true },
+        orderBy: { name: "asc" },
+        take: 24,
+      }),
+      this.prisma.brandAction.findMany({
+        where: {
+          tenantId: brandId,
+          status: "ACTIVE",
+          startsAt: { lte: now },
+          endsAt: { gte: now },
+        },
+        select: {
+          title: true,
+          description: true,
+          startsAt: true,
+          endsAt: true,
+          scopes: { select: { kind: true } },
+        },
+        take: 20,
+      }),
+      this.prisma.newsArticle.findMany({
+        where: {
+          tenantId: brandId,
+          status: "PUBLISHED",
+          isPublic: true,
+          publishedAt: { lte: now },
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+        select: {
+          id: true,
+          publicKey: true,
+          title: true,
+          excerpt: true,
+          coverUrl: true,
+          publishedAt: true,
+        },
+        orderBy: { publishedAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.brandResource.findMany({
+        where: { tenantId: brandId },
+        select: { kind: true, title: true, description: true },
+        orderBy: { createdAt: "desc" },
+        take: 24,
+      }),
+    ]);
+    const modules = pickPublicLandingModules({ signals, actions, news, resources });
     return {
       publicKey: landing.publicKey,
       name: landing.tenant.name,
@@ -62,11 +115,14 @@ export class BrandLandingService {
       about: landing.about,
       logoUrl: landing.logoUrl,
       heroUrl: landing.heroUrl,
+      primaryColor: landing.primaryColor,
       websiteUrl: landing.websiteUrl,
       supportEmail: landing.supportEmail,
       supportPhone: landing.supportPhone,
       blocks: landing.blocks,
       htmlDocument: compiled.html,
+      htmlSlots: compiled.slots,
+      ...modules,
     };
   }
 
