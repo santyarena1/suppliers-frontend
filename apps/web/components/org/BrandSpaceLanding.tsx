@@ -14,7 +14,8 @@ import type {
 } from "@/lib/api";
 import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
 import { BRAND_MODULE_HINT } from "@/lib/brand-presence";
-import { brandHtmlCoversModule, collectBrandVisuals, isVisualAsset } from "@/lib/brand-visuals";
+import { collectBrandVisuals, isVisualAsset } from "@/lib/brand-visuals";
+import { scrollToBrandSection } from "@/lib/brand-html-nav";
 import {
   Bell,
   Building2,
@@ -71,7 +72,7 @@ export function BrandSpaceLanding({
   materials = [],
   trainings = [],
   html,
-  htmlSlots,
+  htmlSlots: _htmlSlots,
   presence,
   connectedAt,
   status,
@@ -120,14 +121,17 @@ export function BrandSpaceLanding({
     materials: materials as Array<{ type?: string; fileUrl?: string | null; contentUrl?: string | null }>,
   }).map(img).filter(Boolean);
 
-  const showProducts = !brandHtmlCoversModule(htmlSlots, "products");
-  const showActions = !brandHtmlCoversModule(htmlSlots, "actions");
-  const showNews = !brandHtmlCoversModule(htmlSlots, "news");
-  const showMaterials = !brandHtmlCoversModule(htmlSlots, "materials");
-  const showTrainings = !brandHtmlCoversModule(htmlSlots, "trainings");
+  function onLandingClick(e: React.MouseEvent) {
+    const a = (e.target as HTMLElement).closest("a");
+    if (!a) return;
+    const href = a.getAttribute("href");
+    if (!href?.startsWith("#")) return;
+    e.preventDefault();
+    scrollToBrandSection(href);
+  }
 
   return (
-    <div className="bg-surface-950 text-white">
+    <div className="bg-surface-950 text-white" onClick={onLandingClick}>
       <Hero
         name={name}
         accent={accent}
@@ -167,6 +171,11 @@ export function BrandSpaceLanding({
               <a
                 key={s.href}
                 href={s.href}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  scrollToBrandSection(s.href);
+                }}
                 className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap border ${
                   ready
                     ? "border-surface-700 text-surface-200 hover:border-surface-500"
@@ -182,71 +191,113 @@ export function BrandSpaceLanding({
         </div>
       </nav>
 
-      {html ? <div className="border-b border-surface-800">{html}</div> : null}
-
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 flex flex-col gap-14">
-        {showProducts && (
-          <ProductsSection
-            name={name}
-            products={products}
-            retailer={retailer}
-            searchHref={searchHref}
-            hub={hub}
-            ready={presence?.modules.products.ready ?? products.length > 0}
-          />
-        )}
-        {showActions && (
-          <ActionsSection
-            name={name}
-            actions={actions}
-            hub={hub}
-            ready={presence?.modules.actions.ready ?? actions.length > 0}
-          />
-        )}
-        {showNews && <NewsSection name={name} items={news} hub={hub} />}
-        {showMaterials && (
-          <FilesSection
-            id="materiales"
-            title="Materiales"
-            module="materials"
-            items={materials}
-            pendingText={`${name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
-            hub={hub}
-          />
-        )}
-        {showTrainings && (
-          <FilesSection
-            id="capacitaciones"
-            title="Capacitaciones"
-            module="trainings"
-            items={trainings}
-            pendingText={`${name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
-            hub={hub}
-          />
-        )}
-        {extraBlocks.length > 0 && (
-          <section className="grid gap-4 sm:grid-cols-2">
-            {extraBlocks.map((block, i) => (
-              <article key={i} className="rounded-2xl border border-surface-800 bg-surface-900 p-5">
-                {block.title && <h2 className="text-sm font-semibold text-white mb-2">{block.title}</h2>}
-                {block.body && <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">{block.body}</p>}
-                {block.url && (
-                  <a href={block.url} className="inline-flex items-center gap-1 text-xs text-brand-400 mt-3" target="_blank" rel="noreferrer">
-                    <Globe className="w-3 h-3" /> Más info
-                  </a>
-                )}
-              </article>
-            ))}
-          </section>
-        )}
-        <ContactSection
+      {html ? (
+        html
+      ) : (
+        <LandingModules
           name={name}
+          products={products}
+          actions={actions}
+          news={news}
+          materials={materials}
+          trainings={trainings}
+          extraBlocks={extraBlocks}
           contact={contact}
           chatHref={chatHref}
+          searchHref={searchHref}
+          retailer={retailer}
           hub={hub}
-          ready={presence?.modules.contact.ready ?? Boolean(contact.supportEmail || contact.supportPhone || contact.websiteUrl)}
+          presence={presence}
         />
-      </div>
+      )}
+    </div>
+  );
+}
+
+function LandingModules({
+  name,
+  products,
+  actions,
+  news,
+  materials,
+  trainings,
+  extraBlocks,
+  contact,
+  chatHref,
+  searchHref,
+  retailer,
+  hub,
+  presence,
+}: {
+  name: string;
+  products: BrandSkuSignal[] | PublicProduct[];
+  actions: BrandAction[] | PublicAction[];
+  news: BrandHub["news"] | PublicNews[];
+  materials: BrandResource[] | PublicFile[];
+  trainings: BrandResource[] | PublicFile[];
+  extraBlocks: ExtraBlock[];
+  contact: { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
+  chatHref?: string;
+  searchHref?: string;
+  retailer: boolean;
+  hub: boolean;
+  presence?: BrandPresence;
+}) {
+  return (
+    <div className="py-8 flex flex-col gap-14">
+      <ProductsSection
+        name={name}
+        products={products}
+        retailer={retailer}
+        searchHref={searchHref}
+        hub={hub}
+        ready={presence?.modules.products.ready ?? products.length > 0}
+      />
+      <ActionsSection
+        name={name}
+        actions={actions}
+        hub={hub}
+        ready={presence?.modules.actions.ready ?? actions.length > 0}
+      />
+      <NewsSection name={name} items={news} hub={hub} />
+      <FilesSection
+        id="materiales"
+        title="Materiales"
+        module="materials"
+        items={materials}
+        pendingText={`${name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
+        hub={hub}
+      />
+      <FilesSection
+        id="capacitaciones"
+        title="Capacitaciones"
+        module="trainings"
+        items={trainings}
+        pendingText={`${name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
+        hub={hub}
+      />
+      {extraBlocks.length > 0 && (
+        <section className="grid gap-4 sm:grid-cols-2 max-w-6xl mx-auto px-4 sm:px-6 w-full">
+          {extraBlocks.map((block, i) => (
+            <article key={i} className="rounded-2xl border border-surface-800 bg-surface-900 p-5">
+              {block.title && <h2 className="text-sm font-semibold text-white mb-2">{block.title}</h2>}
+              {block.body && <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">{block.body}</p>}
+              {block.url && (
+                <a href={block.url} className="inline-flex items-center gap-1 text-xs text-brand-400 mt-3" target="_blank" rel="noreferrer">
+                  <Globe className="w-3 h-3" /> Más info
+                </a>
+              )}
+            </article>
+          ))}
+        </section>
+      )}
+      <ContactSection
+        name={name}
+        contact={contact}
+        chatHref={chatHref}
+        hub={hub}
+        ready={presence?.modules.contact.ready ?? Boolean(contact.supportEmail || contact.supportPhone || contact.websiteUrl)}
+      />
     </div>
   );
 }
@@ -419,7 +470,7 @@ export function ProductsSection({
   const [showAll, setShowAll] = useState(false);
   const list = showAll ? products : products.slice(0, 12);
   return (
-    <section id="productos" className="scroll-mt-16">
+    <section id="productos" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <SectionHead
         title={hub ? "Mapa comercial" : "Productos"}
         hint={hub ? BRAND_MODULE_HINT.products : "Nombre e imagen. El precio y el semáforo quedan para el espacio vinculado."}
@@ -556,7 +607,7 @@ export function ActionsSection({
   ready: boolean;
 }) {
   return (
-    <section id="acciones" className="scroll-mt-16">
+    <section id="acciones" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <SectionHead
         title="Acciones vigentes"
         hint={hub ? BRAND_MODULE_HINT.actions : "Título y vigencia. El progreso se ve en el espacio vinculado."}
@@ -640,7 +691,7 @@ export function NewsSection({
   const featured = items[0];
   const rest = items.slice(1);
   return (
-    <section id="novedades" className="scroll-mt-16">
+    <section id="novedades" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <SectionHead title="Novedades" hint="Notas que publica la marca para el canal" ready={ready} count={items.length} />
       {!ready ? (
         <Pending text={`${name} todavía no publicó notas. Cuando salga un lanzamiento o una promo, aparece acá.`} />
@@ -728,7 +779,7 @@ export function FilesSection({
   hub: boolean;
 }) {
   return (
-    <section id={id} className="scroll-mt-16">
+    <section id={id} className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <SectionHead title={title} hint={BRAND_MODULE_HINT[module]} ready={items.length > 0} count={items.length} />
       {items.length === 0 ? (
         <Pending text={pendingText} />
@@ -797,7 +848,7 @@ export function ContactSection({
   ready: boolean;
 }) {
   return (
-    <section id="contacto" className="scroll-mt-16 pb-8">
+    <section id="contacto" className="scroll-mt-16 pb-8 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <SectionHead title="Contacto" hint={BRAND_MODULE_HINT.contact} ready={ready} />
       {!ready ? (
         <Pending
@@ -873,47 +924,70 @@ function Pending({ text, children }: { text: string; children?: React.ReactNode 
   );
 }
 
-/** Rellenos compactos para huecos del HTML propio (Tailwind aplica: van en light DOM). */
-export function brandHubSlotModules({
+/** Módulos que se pintan adentro de la landing (huecos del HTML o cuerpo nativo). */
+export function landingModuleSlots({
+  name,
+  products,
+  actions,
+  news,
+  materials,
+  trainings,
+  contact,
+  retailer = false,
+  searchHref,
+  chatHref,
   hub,
-  retailer,
+  presence,
+  logoUrl,
 }: {
-  hub: BrandHub;
-  retailer: boolean;
+  name: string;
+  products: BrandSkuSignal[] | PublicProduct[];
+  actions: BrandAction[] | PublicAction[];
+  news: BrandHub["news"] | PublicNews[];
+  materials: BrandResource[] | PublicFile[];
+  trainings: BrandResource[] | PublicFile[];
+  contact: { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
+  retailer?: boolean;
+  searchHref?: string;
+  chatHref?: string;
+  hub: boolean;
+  presence?: BrandPresence;
+  logoUrl?: string | null;
 }) {
-  const searchHref = `/search?marca=${encodeURIComponent(hub.name)}`;
+  const productsReady = presence?.modules.products.ready ?? products.length > 0;
+  const actionsReady = presence?.modules.actions.ready ?? actions.length > 0;
+  const contactReady =
+    presence?.modules.contact.ready ?? Boolean(contact.supportEmail || contact.supportPhone || contact.websiteUrl);
   return {
     productos: (
       <ProductsSection
-        name={hub.name}
-        products={hub.signals}
+        name={name}
+        products={products}
         retailer={retailer}
         searchHref={searchHref}
-        hub
-        ready={hub.presence.modules.products.ready}
+        hub={hub}
+        ready={productsReady}
       />
     ),
     semaforos: (
       <ProductsSection
-        name={hub.name}
-        products={hub.signals}
+        name={name}
+        products={products}
         retailer={retailer}
         searchHref={searchHref}
-        hub
-        ready={hub.presence.modules.products.ready}
+        hub={hub}
+        ready={productsReady}
       />
     ),
-    acciones: (
-      <ActionsSection name={hub.name} actions={hub.actions} hub ready={hub.presence.modules.actions.ready} />
-    ),
+    acciones: <ActionsSection name={name} actions={actions} hub={hub} ready={actionsReady} />,
     materiales: (
       <FilesSection
         id="materiales"
         title="Materiales"
         module="materials"
-        items={hub.materials}
-        pendingText={`${hub.name} todavía no subió fichas ni catálogos.`}
-        hub
+        items={materials}
+        pendingText={`${name} todavía no subió fichas ni catálogos.`}
+        hub={hub}
       />
     ),
     capacitaciones: (
@@ -921,22 +995,45 @@ export function brandHubSlotModules({
         id="capacitaciones"
         title="Capacitaciones"
         module="trainings"
-        items={hub.trainings}
-        pendingText={`${hub.name} todavía no cargó cursos ni argumentarios.`}
-        hub
+        items={trainings}
+        pendingText={`${name} todavía no cargó cursos ni argumentarios.`}
+        hub={hub}
       />
     ),
-    hablar: (
-      <Link href={`/mensajes?linkId=${hub.linkId}`} className="text-sm underline text-white">
-        Hablar con {hub.name}
-      </Link>
+    novedades: <NewsSection name={name} items={news} hub={hub} />,
+    noticias: <NewsSection name={name} items={news} hub={hub} />,
+    contacto: (
+      <ContactSection name={name} contact={contact} chatHref={chatHref} hub={hub} ready={contactReady} />
     ),
-    nombre: <span>{hub.name}</span>,
-    logo: hub.theme.logoUrl ? (
+    hablar: chatHref ? (
+      <Link href={chatHref} className="text-sm underline text-white">
+        Hablar con {name}
+      </Link>
+    ) : (
+      <ContactSection name={name} contact={contact} hub={hub} ready={contactReady} />
+    ),
+    nombre: <span>{name}</span>,
+    logo: logoUrl ? (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={img(hub.theme.logoUrl)} alt={hub.name} style={{ height: 48 }} />
+      <img src={img(logoUrl)} alt={name} style={{ height: 48 }} />
     ) : null,
-    noticias: <NewsSection name={hub.name} items={hub.news ?? []} hub />,
-    novedades: <NewsSection name={hub.name} items={hub.news ?? []} hub />,
   };
+}
+
+export function brandHubSlotModules({ hub, retailer = false }: { hub: BrandHub; retailer?: boolean }) {
+  return landingModuleSlots({
+    name: hub.name,
+    products: hub.signals,
+    actions: hub.actions,
+    news: hub.news ?? [],
+    materials: hub.materials,
+    trainings: hub.trainings,
+    contact: hub.contact,
+    retailer,
+    searchHref: `/search?marca=${encodeURIComponent(hub.name)}`,
+    chatHref: `/mensajes?linkId=${hub.linkId}`,
+    hub: true,
+    presence: hub.presence,
+    logoUrl: hub.theme.logoUrl,
+  });
 }

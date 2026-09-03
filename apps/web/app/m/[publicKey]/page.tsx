@@ -7,14 +7,7 @@ import { publicBrandApi, type PublicBrandLanding } from "@/lib/api";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
-import {
-  ActionsSection,
-  BrandSpaceLanding,
-  ContactSection,
-  FilesSection,
-  NewsSection,
-  ProductsSection,
-} from "@/components/org/BrandSpaceLanding";
+import { BrandSpaceLanding, landingModuleSlots } from "@/components/org/BrandSpaceLanding";
 import { Loader2 } from "lucide-react";
 
 export default function PublicBrandLandingPage() {
@@ -75,78 +68,25 @@ export default function PublicBrandLandingPage() {
           materials={landing.materials ?? []}
           trainings={landing.trainings ?? []}
           extraBlocks={blocks}
-          htmlSlots={landing.htmlSlots}
           html={
             landing.htmlDocument ? (
               <BrandHtmlCanvas
                 html={landing.htmlDocument}
-                slots={{
-                  nombre: <span>{landing.name}</span>,
-                  logo: landing.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={landing.logoUrl} alt={landing.name} style={{ height: 48 }} />
-                  ) : null,
-                  productos: (
-                    <ProductsSection
-                      name={landing.name}
-                      products={landing.products ?? []}
-                      retailer={false}
-                      hub={false}
-                      ready={(landing.products ?? []).length > 0}
-                    />
-                  ),
-                  semaforos: (
-                    <ProductsSection
-                      name={landing.name}
-                      products={landing.products ?? []}
-                      retailer={false}
-                      hub={false}
-                      ready={(landing.products ?? []).length > 0}
-                    />
-                  ),
-                  acciones: (
-                    <ActionsSection
-                      name={landing.name}
-                      actions={landing.actions ?? []}
-                      hub={false}
-                      ready={(landing.actions ?? []).length > 0}
-                    />
-                  ),
-                  novedades: <NewsSection name={landing.name} items={landing.news ?? []} hub={false} />,
-                  noticias: <NewsSection name={landing.name} items={landing.news ?? []} hub={false} />,
-                  materiales: (
-                    <FilesSection
-                      id="materiales"
-                      title="Materiales"
-                      module="materials"
-                      items={landing.materials ?? []}
-                      pendingText={`${landing.name} todavía no publicó materiales.`}
-                      hub={false}
-                    />
-                  ),
-                  capacitaciones: (
-                    <FilesSection
-                      id="capacitaciones"
-                      title="Capacitaciones"
-                      module="trainings"
-                      items={landing.trainings ?? []}
-                      pendingText={`${landing.name} todavía no publicó capacitaciones.`}
-                      hub={false}
-                    />
-                  ),
-                  hablar: (
-                    <ContactSection
-                      name={landing.name}
-                      contact={{
-                        websiteUrl: landing.websiteUrl,
-                        supportEmail: landing.supportEmail,
-                        supportPhone: landing.supportPhone,
-                      }}
-                      hub={false}
-                      ready={Boolean(landing.supportEmail || landing.supportPhone || landing.websiteUrl)}
-                    />
-                  ),
-                }}
+                slots={landingModuleSlots({
+                  name: landing.name,
+                  products: landing.products ?? [],
+                  actions: landing.actions ?? [],
+                  news: landing.news ?? [],
+                  materials: landing.materials ?? [],
+                  trainings: landing.trainings ?? [],
+                  contact: {
+                    websiteUrl: landing.websiteUrl,
+                    supportEmail: landing.supportEmail,
+                    supportPhone: landing.supportPhone,
+                  },
+                  hub: false,
+                  logoUrl: landing.logoUrl,
+                })}
               />
             ) : null
           }

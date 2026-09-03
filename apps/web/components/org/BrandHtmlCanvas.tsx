@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { inferBrandHubTarget, rewriteCssForBrandHost } from "@/lib/brand-html-nav";
+import { inferBrandHubTarget, rewriteCssForBrandHost, scrollToBrandSection, appendMissingLandingSlots } from "@/lib/brand-html-nav";
 
-const HOST_CSS = `:host{all:initial;display:block;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}`;
+const HOST_CSS = `:host{all:initial;display:block;position:relative;isolation:isolate;overflow:visible;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}.nodo-landing-modules{background:#0b1220;color:#f8fafc;padding:28px 16px 64px;}.nodo-landing-modules>section{display:block;max-width:72rem;margin:0 auto 3.5rem;}`;
 
 function compileSlots(html: string): string {
   return html
@@ -23,16 +23,16 @@ function rewriteStyleTags(html: string): string {
   return html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => `<style>${rewriteCssForBrandHost(css)}</style>`);
 }
 
-function scrollToHub(hash: string) {
-  const id = hash.replace(/^#/, "");
-  const el = document.getElementById(id);
-  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+function rewriteInlineStyles(html: string): string {
+  return html.replace(/\bstyle\s*=\s*("([^"]*)"|'([^']*)')/gi, (_, _quoted: string, d?: string, s?: string) => {
+    const css = rewriteCssForBrandHost(d ?? s ?? "");
+    return css ? `style="${css.replace(/"/g, "&quot;")}"` : "";
+  });
 }
 
 /**
- * El HTML de la marca va por encima de la identidad de Nodo.
- * Shadow DOM con `:host { all: initial }`: su CSS manda y el tema de Nodo no lo pisa.
- * Los huecos `{{productos}}` son `<slot>` nativos: los módulos de Nodo quedan en light DOM (Tailwind sí aplica).
+ * El HTML de la marca es el cuerpo de la landing: los módulos van en los huecos
+ * o se agregan al final del mismo documento (nunca una segunda página abajo).
  */
 export default function BrandHtmlCanvas({
   html,
@@ -44,7 +44,9 @@ export default function BrandHtmlCanvas({
   minHeight?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const compiled = rewriteStyleTags(compileSlots(stripActiveHtml(html ?? "")));
+  const compiled = appendMissingLandingSlots(
+    rewriteInlineStyles(rewriteStyleTags(compileSlots(stripActiveHtml(html ?? ""))))
+  );
 
   useEffect(() => {
     const host = hostRef.current;
@@ -62,7 +64,7 @@ export default function BrandHtmlCanvas({
       if (!target) return;
       event.preventDefault();
       event.stopPropagation();
-      scrollToHub(target);
+      scrollToBrandSection(target);
     }
 
     shadow.addEventListener("click", onClick);
@@ -86,17 +88,33 @@ export default function BrandHtmlCanvas({
 
 export function BrandHtmlSlotHole({ label }: { label: string }) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={() => scrollToBrandSection(labelToHash(label))}
       style={{
         border: "1px dashed #94a3b8",
-        background: "#f8fafc",
-        color: "#475569",
+        background: "#0f172a",
+        color: "#e2e8f0",
         borderRadius: 12,
-        padding: "16px 14px",
-        font: "12px/1.4 system-ui,sans-serif",
+        padding: "12px 14px",
+        font: "600 13px/1.4 system-ui,sans-serif",
+        cursor: "pointer",
+        width: "100%",
+        textAlign: "left",
       }}
     >
-      Hueco de NODO: {label}
-    </div>
+      Ver {label} en la landing ↓
+    </button>
   );
+}
+
+function labelToHash(label: string) {
+  const t = label.toLowerCase();
+  if (t.includes("producto") || t.includes("semáforo") || t.includes("semaforo") || t.includes("mapa")) return "#productos";
+  if (t.includes("accion")) return "#acciones";
+  if (t.includes("noved") || t.includes("noticia")) return "#novedades";
+  if (t.includes("material")) return "#materiales";
+  if (t.includes("capacit")) return "#capacitaciones";
+  if (t.includes("hablar") || t.includes("contacto")) return "#contacto";
+  return "#productos";
 }

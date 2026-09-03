@@ -3,14 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import PrefsPanel from "@/components/PrefsPanel";
 import ImageUploadField from "@/components/ImageUploadField";
-import BrandHtmlCanvas, { BrandHtmlSlotHole } from "@/components/org/BrandHtmlCanvas";
-import {
-  ActionsSection,
-  BrandSpaceLanding,
-  FilesSection,
-  NewsSection,
-  ProductsSection,
-} from "@/components/org/BrandSpaceLanding";
+import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
+import { BrandSpaceLanding, landingModuleSlots } from "@/components/org/BrandSpaceLanding";
 import { brandApi, newsApi, type BrandAction, type BrandLanding, type BrandResource, type BrandSkuSignal, type NewsCard } from "@/lib/api";
 import { BRAND_LANDING_HTML_TEMPLATE } from "@/lib/brand-visuals";
 import { Copy, Globe, Loader2 } from "lucide-react";
@@ -425,10 +419,6 @@ function LandingEditorPreview({
   };
   html: string;
 }) {
-  const htmlSlots = [
-    ...html.matchAll(/\{\{\s*([a-z]+)\s*\}\}/gi),
-    ...html.matchAll(/data-nodo-slot="([a-z]+)"/gi),
-  ].map((m) => m[1].toLowerCase());
   const news = preview.news.map((n) => ({
     id: n.id,
     publicKey: n.publicKey,
@@ -461,69 +451,25 @@ function LandingEditorPreview({
       materials={preview.materials}
       trainings={preview.trainings}
       extraBlocks={Array.isArray(landing.blocks) ? (landing.blocks as { title?: string; body?: string; url?: string }[]) : []}
-      htmlSlots={htmlSlots}
       html={
         html.trim() ? (
           <BrandHtmlCanvas
             html={html}
-            slots={{
-              productos: (
-                <ProductsSection
-                  name={landing.name}
-                  products={preview.signals}
-                  retailer={false}
-                  hub
-                  ready={preview.signals.length > 0}
-                />
-              ),
-              semaforos: (
-                <ProductsSection
-                  name={landing.name}
-                  products={preview.signals}
-                  retailer={false}
-                  hub
-                  ready={preview.signals.length > 0}
-                />
-              ),
-              acciones: (
-                <ActionsSection
-                  name={landing.name}
-                  actions={preview.actions}
-                  hub
-                  ready={preview.actions.length > 0}
-                />
-              ),
-              materiales: (
-                <FilesSection
-                  id="materiales"
-                  title="Materiales"
-                  module="materials"
-                  items={preview.materials}
-                  pendingText="Materiales pendientes"
-                  hub
-                />
-              ),
-              capacitaciones: (
-                <FilesSection
-                  id="capacitaciones"
-                  title="Capacitaciones"
-                  module="trainings"
-                  items={preview.trainings}
-                  pendingText="Capacitaciones pendientes"
-                  hub
-                />
-              ),
-              hablar: <span className="text-sm text-white">Hablar con {landing.name}</span>,
-              nombre: <span>{landing.name}</span>,
-              logo: landing.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={landing.logoUrl} alt="" style={{ height: 48 }} />
-              ) : (
-                <BrandHtmlSlotHole label="Logo" />
-              ),
-              noticias: <NewsSection name={landing.name} items={news} hub />,
-              novedades: <NewsSection name={landing.name} items={news} hub />,
-            }}
+            slots={landingModuleSlots({
+              name: landing.name,
+              products: preview.signals,
+              actions: preview.actions,
+              news,
+              materials: preview.materials,
+              trainings: preview.trainings,
+              contact: {
+                websiteUrl: landing.websiteUrl,
+                supportEmail: landing.supportEmail,
+                supportPhone: landing.supportPhone,
+              },
+              hub: true,
+              logoUrl: landing.logoUrl,
+            })}
           />
         ) : null
       }
