@@ -31,6 +31,15 @@ export function canRetailerSeeCommercialFiles(linked: boolean): boolean {
   return linked;
 }
 
+/** Logo del autor: landing de marca, cuenta de marca, o el icono del proveedor. */
+export function resolveAuthorLogo(opts: {
+  landingLogo?: string | null;
+  brandLogo?: string | null;
+  providerLogo?: string | null;
+}): string | null {
+  return opts.landingLogo || opts.brandLogo || opts.providerLogo || null;
+}
+
 /** Qué adjuntos viajan según audiencia. La lista de precios nunca sale sin vínculo. */
 export function visibleNewsAttachments<T extends { kind: string; visibility: string }>(
   attachments: T[],

@@ -58,7 +58,7 @@ const NOTES = [
     excerpt: "El 27 de agosto salió de Santos. Ayer cortamos precinto. 5070 y 5080 con stock real; el que pide en NODO antes de las 16 sale hoy.",
     kind: "INCOMING",
     isPublic: true,
-    publishedAt: "2026-09-02T21:10:00.000Z",
+    publishedAt: "2026-09-02T18:10:00.000Z",
     coverUrl: IMG.gpu,
     images: [
       { url: IMG.gpu2, caption: "El primer pallet, todavía con precinto de aduana." },
@@ -139,7 +139,7 @@ const NOTES = [
     excerpt: "El chat queda. El remito no se arma con un audio de las 23. Cómo usar NODO este mes, sin teatro.",
     kind: "NOTICE",
     isPublic: true,
-    publishedAt: "2026-09-03T01:20:00.000Z",
+    publishedAt: "2026-09-02T16:20:00.000Z",
     coverUrl: IMG.store,
     images: [{ url: IMG.laptop, caption: "El carrito de NODO es el que pica el depósito. El resto es conversación." }],
     bodyHtml: noteHtml({
@@ -175,7 +175,7 @@ const NOTES = [
     excerpt: "Cierra el 30. No entra liquidación. El tope es el de siempre. Si el carrito mezcla outlet y línea, se cae todo el plazo.",
     kind: "PROMO",
     isPublic: true,
-    publishedAt: "2026-09-02T14:30:00.000Z",
+    publishedAt: "2026-09-03T02:40:00.000Z",
     expiresAt: "2026-09-30T23:59:59.000Z",
     coverUrl: IMG.laptop,
     images: [{ url: IMG.monitor, caption: "La promo cubre línea. El monitor de liquidación, no." }],
@@ -214,7 +214,7 @@ const NOTES = [
     excerpt: "A partir del lunes 1. Atención comercial no cambia. El que confirma a las 15.40 viaja mañana, sin discusión.",
     kind: "NOTICE",
     isPublic: false,
-    publishedAt: "2026-09-01T10:00:00.000Z",
+    publishedAt: "2026-09-03T02:15:00.000Z",
     coverUrl: IMG.dock,
     bodyHtml: noteHtml({
       accent: "#8a1c1c",

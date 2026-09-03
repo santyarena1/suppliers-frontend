@@ -1,5 +1,6 @@
 import type { NewsAuthor } from "@/lib/api";
 import { authorTypeLabel, formatNewsDate } from "@/lib/news";
+import { useProviderDisplay } from "@/lib/providerDisplay";
 import NewsPhoto from "./NewsPhoto";
 
 export default function NewsByline({
@@ -13,11 +14,13 @@ export default function NewsByline({
   advertised?: boolean;
   compact?: boolean;
 }) {
+  const display = useProviderDisplay();
+  const logo = author.logoUrl || (author.providerKey ? display.logoUrl(author.providerKey) : null);
   return (
     <div className={`flex items-center gap-2.5 min-w-0 ${compact ? "" : "mt-3"}`}>
       <div className="w-8 h-8 rounded-full overflow-hidden bg-surface-800 border border-white/10 flex-shrink-0">
-        {author.logoUrl ? (
-          <NewsPhoto src={author.logoUrl} alt="" className="object-contain bg-white" />
+        {logo ? (
+          <NewsPhoto src={logo} alt="" className="object-contain bg-white" />
         ) : (
           <span className="w-full h-full flex items-center justify-center text-[10px] text-surface-400">
             {author.name.slice(0, 1)}

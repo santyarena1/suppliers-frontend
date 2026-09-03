@@ -5,6 +5,7 @@ import Link from "next/link";
 import { assetUrl } from "@/lib/assets";
 import { newsApi, type NewsDetail } from "@/lib/api";
 import { authorTypeLabel, formatNewsDate } from "@/lib/news";
+import { useProviderDisplay } from "@/lib/providerDisplay";
 import NewsHtmlBody from "./NewsHtmlBody";
 import NewsKindMark from "./NewsKindMark";
 import NewsPhoto from "./NewsPhoto";
@@ -22,6 +23,8 @@ export default function NewsArticleView({
     if (trackViews) void newsApi.track(article.id, "view");
   }, [article.id, trackViews]);
 
+  const display = useProviderDisplay();
+  const logo = article.author.logoUrl || (article.author.providerKey ? display.logoUrl(article.author.providerKey) : null);
   const ink = paper ? "text-[#111]" : "text-white";
   const mute = paper ? "text-[#5c5c5c]" : "text-surface-400";
 
@@ -42,8 +45,8 @@ export default function NewsArticleView({
           )}
           <div className="flex items-center gap-3 mt-6 pb-8">
             <div className="w-10 h-10 rounded-full overflow-hidden bg-white/10 border border-white/15">
-              {article.author.logoUrl ? (
-                <NewsPhoto src={article.author.logoUrl} alt="" className="object-contain bg-white" />
+              {logo ? (
+                <NewsPhoto src={logo} alt="" className="object-contain bg-white" />
               ) : (
                 <span className="w-full h-full flex items-center justify-center text-xs text-white/70">
                   {article.author.name.slice(0, 1)}

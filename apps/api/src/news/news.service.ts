@@ -8,7 +8,7 @@ import { newPublicKey } from "../brands/brand-orgs";
 import { compileBrandHtml, sanitizeBrandHtml } from "../brands/brand-html";
 import { AdsService } from "../ads/ads.service";
 import { NewsVisibilityService } from "./news-visibility.service";
-import { visibleNewsAttachments } from "./news-visibility";
+import { resolveAuthorLogo, visibleNewsAttachments } from "./news-visibility";
 import type { UpsertNewsDto } from "./dto/news.dto";
 
 function liveWhere(now = new Date()): Prisma.NewsArticleWhereInput {
@@ -59,8 +59,9 @@ export class NewsService {
     const linked = await this.visibility.linkedSupplierIds(commercialId(tenant));
     const page = rows.slice(0, take);
     const last = page[page.length - 1];
+    const logos = await this.logoByTenant(page.map((row) => row.tenant));
     return {
-      items: page.map((row) => this.serializeCard(row, linked.has(row.tenantId))),
+      items: page.map((row) => this.serializeCard(row, linked.has(row.tenantId), logos)),
       nextCursor: rows.length > take && last?.publishedAt ? last.publishedAt.toISOString() : null,
     };
   }
@@ -84,14 +85,14 @@ export class NewsService {
         tenant: { active: true, advertisingEnabled: true, type: { in: ["DISTRIBUTOR", "BRAND"] } },
       },
       include: {
-        tenant: { select: { id: true, name: true, type: true, brandLanding: { select: { logoUrl: true } } } },
+        tenant: { select: this.tenantAuthorSelect() },
         article: { include: this.cardInclude() },
       },
       orderBy: { updatedAt: "desc" },
       take: 8,
     });
     const linked = await this.visibility.linkedSupplierIds(commercialId(tenant));
-    const slides = [];
+    const slides: { article: NonNullable<(typeof campaigns)[number]["article"]>; campaign: (typeof campaigns)[number] }[] = [];
     for (const campaign of campaigns) {
       const article =
         campaign.article && this.isLive(campaign.article, now)
@@ -102,9 +103,14 @@ export class NewsService {
               orderBy: { publishedAt: "desc" },
             });
       if (!article) continue;
-      slides.push(this.serializeHero(article, campaign, linked.has(article.tenantId)));
+      slides.push({ article, campaign });
     }
-    return { slides };
+    const logos = await this.logoByTenant(slides.map((row) => row.article.tenant));
+    return {
+      slides: slides.map(({ article, campaign }) =>
+        this.serializeHero(article, campaign, linked.has(article.tenantId), logos)
+      ),
+    };
   }
 
   async getOne(tenant: TenantContext, id: string) {
@@ -113,9 +119,10 @@ export class NewsService {
       include: this.detailInclude(),
     });
     if (!row) throw new NotFoundException("Nota no encontrada");
+    const logos = await this.logoByTenant([row.tenant]);
     if (row.tenantId === tenant.tenantId) {
       return this.withStats(
-        this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+        this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType, logos })
       );
     }
     const authorIds = await this.visibility.authorIdsFor(tenant);
@@ -127,6 +134,7 @@ export class NewsService {
       linked: linked.has(row.tenantId),
       advertised: !linked.has(row.tenantId),
       viewerType: tenant.tenantType,
+      logos,
     });
   }
 
@@ -138,7 +146,8 @@ export class NewsService {
     if (!row?.isPublic || !this.isLive(row) || !row.tenant.active) {
       throw new NotFoundException("Nota no encontrada");
     }
-    return this.serializeDetail(row, { linked: false, advertised: false, viewerType: null, publicView: true });
+    const logos = await this.logoByTenant([row.tenant]);
+    return this.serializeDetail(row, { linked: false, advertised: false, viewerType: null, publicView: true, logos });
   }
 
   async getMine(tenant: TenantContext, id: string) {
@@ -148,8 +157,9 @@ export class NewsService {
       include: this.detailInclude(),
     });
     if (!row || row.tenantId !== tenant.tenantId) throw new NotFoundException("Nota no encontrada");
+    const logos = await this.logoByTenant([row.tenant]);
     return this.withStats(
-      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType, logos })
     );
   }
 
@@ -162,10 +172,11 @@ export class NewsService {
       take: 80,
     });
     const stats = await this.statsFor(rows.map((r) => r.id));
+    const logos = await this.logoByTenant(rows.map((row) => row.tenant));
     return {
       canWrite: this.canWrite(tenant),
       items: rows.map((row) => ({
-        ...this.serializeCard(row, true),
+        ...this.serializeCard(row, true, logos),
         status: row.status,
         isPublic: row.isPublic,
         stats: stats.get(row.id) ?? { views: 0, attachmentClicks: 0 },
@@ -204,8 +215,9 @@ export class NewsService {
     if (status === "PUBLISHED" && dto.notifyOnPublish) {
       await this.notifyLinked(tenant, row);
     }
+    const logos = await this.logoByTenant([row.tenant]);
     return this.withStats(
-      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType, logos })
     );
   }
 
@@ -255,8 +267,9 @@ export class NewsService {
     if (becomingPublic && (dto.notifyOnPublish ?? existing.notifyOnPublish)) {
       await this.notifyLinked(tenant, row);
     }
+    const logos = await this.logoByTenant([row.tenant]);
     return this.withStats(
-      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType })
+      this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType, logos })
     );
   }
 
@@ -282,9 +295,10 @@ export class NewsService {
       orderBy: [{ updatedAt: "desc" }],
       take: 200,
     });
+    const logos = await this.logoByTenant(rows.map((row) => row.tenant));
     return {
       items: rows.map((row) => ({
-        ...this.serializeCard(row, true),
+        ...this.serializeCard(row, true, logos),
         status: row.status,
         createdAt: row.createdAt.toISOString(),
       })),
@@ -305,7 +319,8 @@ export class NewsService {
       orderBy: { publishedAt: "desc" },
       take,
     });
-    return rows.map((row) => this.serializeCard(row, true));
+    const logos = await this.logoByTenant(rows.map((row) => row.tenant));
+    return rows.map((row) => this.serializeCard(row, true, logos));
   }
 
   private assertPublisher(tenant: TenantContext) {
@@ -425,30 +440,82 @@ export class NewsService {
     return { ...detail, stats: stats.get(detail.id) ?? { views: 0, attachmentClicks: 0 } };
   }
 
+  private tenantAuthorSelect() {
+    return {
+      id: true,
+      name: true,
+      type: true,
+      providerKey: true,
+      brand: { select: { logoUrl: true } },
+      brandLanding: { select: { logoUrl: true, primaryColor: true } },
+    };
+  }
+
   private cardInclude() {
     return {
-      tenant: { select: { id: true, name: true, type: true, brandLanding: { select: { logoUrl: true, primaryColor: true } } } },
+      tenant: { select: this.tenantAuthorSelect() },
       images: { orderBy: { sortOrder: "asc" as const }, take: 1 },
     };
   }
 
   private detailInclude() {
     return {
-      tenant: { select: { id: true, name: true, type: true, active: true, brandLanding: { select: { logoUrl: true, primaryColor: true } } } },
+      tenant: { select: { ...this.tenantAuthorSelect(), active: true } },
       images: { orderBy: { sortOrder: "asc" as const } },
       attachments: { orderBy: { sortOrder: "asc" as const } },
     };
   }
 
-  private authorOf(row: {
-    tenant: { id: string; name: string; type: TenantType | string; brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null };
-  }) {
+  private async logoByTenant(
+    tenants: {
+      id: string;
+      providerKey?: string | null;
+      brand?: { logoUrl: string | null } | null;
+      brandLanding?: { logoUrl: string | null } | null;
+    }[]
+  ) {
+    const keys = [...new Set(tenants.map((t) => t.providerKey).filter((key): key is string => Boolean(key)))];
+    const displays = keys.length
+      ? await this.prisma.providerDisplayConfig.findMany({
+          where: { provider: { in: keys } },
+          select: { provider: true, logoUrl: true },
+        })
+      : [];
+    const byProvider = new Map(displays.map((row) => [row.provider, row.logoUrl]));
+    const map = new Map<string, string | null>();
+    for (const tenant of tenants) {
+      map.set(
+        tenant.id,
+        resolveAuthorLogo({
+          landingLogo: tenant.brandLanding?.logoUrl,
+          brandLogo: tenant.brand?.logoUrl,
+          providerLogo: tenant.providerKey ? byProvider.get(tenant.providerKey) ?? null : null,
+        })
+      );
+    }
+    return map;
+  }
+
+  private authorOf(
+    row: {
+      tenant: {
+        id: string;
+        name: string;
+        type: TenantType | string;
+        providerKey?: string | null;
+        brand?: { logoUrl: string | null } | null;
+        brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null;
+      };
+    },
+    logos?: Map<string, string | null>
+  ) {
     return {
       tenantId: row.tenant.id,
       name: row.tenant.name,
       type: row.tenant.type,
-      logoUrl: row.tenant.brandLanding?.logoUrl ?? null,
+      logoUrl: logos?.get(row.tenant.id) ?? row.tenant.brandLanding?.logoUrl ?? row.tenant.brand?.logoUrl ?? null,
       primaryColor: row.tenant.brandLanding?.primaryColor ?? null,
+      providerKey: row.tenant.providerKey ?? null,
     };
   }
 
@@ -463,9 +530,17 @@ export class NewsService {
       isPublic: boolean;
       publishedAt: Date | null;
       expiresAt: Date | null;
-      tenant: { id: string; name: string; type: string; brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null };
+      tenant: {
+        id: string;
+        name: string;
+        type: string;
+        providerKey?: string | null;
+        brand?: { logoUrl: string | null } | null;
+        brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null;
+      };
     },
-    linked: boolean
+    linked: boolean,
+    logos?: Map<string, string | null>
   ) {
     return {
       id: row.id,
@@ -477,7 +552,7 @@ export class NewsService {
       isPublic: row.isPublic,
       publishedAt: row.publishedAt?.toISOString() ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
-      author: this.authorOf(row),
+      author: this.authorOf(row, logos),
       linked,
     };
   }
@@ -485,10 +560,11 @@ export class NewsService {
   private serializeHero(
     article: Parameters<NewsService["serializeCard"]>[0],
     campaign: { id: string; title: string },
-    linked: boolean
+    linked: boolean,
+    logos?: Map<string, string | null>
   ) {
     return {
-      ...this.serializeCard(article, linked),
+      ...this.serializeCard(article, linked, logos),
       campaignId: campaign.id,
       advertised: true,
       campaignTitle: campaign.title,
@@ -512,7 +588,15 @@ export class NewsService {
       expiresAt: Date | null;
       relatedSkus: Prisma.JsonValue;
       createdAt: Date;
-      tenant: { id: string; name: string; type: string; active: boolean; brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null };
+      tenant: {
+        id: string;
+        name: string;
+        type: string;
+        active: boolean;
+        providerKey?: string | null;
+        brand?: { logoUrl: string | null } | null;
+        brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null;
+      };
       images: { id: string; url: string; caption: string | null; sortOrder: number }[];
       attachments: {
         id: string;
@@ -529,6 +613,7 @@ export class NewsService {
       advertised: boolean;
       viewerType: TenantType | null;
       publicView?: boolean;
+      logos?: Map<string, string | null>;
     }
   ) {
     const compiled = compileBrandHtml(row.bodyHtml ?? "");
@@ -561,7 +646,7 @@ export class NewsService {
       publishedAt: row.publishedAt?.toISOString() ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
-      author: { ...this.authorOf(row), linked: opts.linked, advertised: opts.advertised },
+      author: { ...this.authorOf(row, opts.logos), linked: opts.linked, advertised: opts.advertised },
       images: row.images.map((img) => ({ id: img.id, url: img.url, caption: img.caption })),
       attachments,
       canDownloadCommercial,

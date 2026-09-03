@@ -2900,6 +2900,7 @@ export interface NewsAuthor {
   type: TenantType;
   logoUrl: string | null;
   primaryColor: string | null;
+  providerKey?: string | null;
   linked?: boolean;
   advertised?: boolean;
 }

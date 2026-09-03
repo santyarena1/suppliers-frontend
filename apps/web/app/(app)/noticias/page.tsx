@@ -7,7 +7,7 @@ import NewsByline from "@/components/news/NewsByline";
 import NewsHero from "@/components/news/NewsHero";
 import NewsKindMark from "@/components/news/NewsKindMark";
 import NewsPhoto from "@/components/news/NewsPhoto";
-import { getTenant } from "@/lib/auth";
+import { getTenant, isAdmin } from "@/lib/auth";
 import { newsApi, type NewsCard, type NewsHeroSlide, type NewsKind } from "@/lib/api";
 import { canWriteNews, NEWS_KIND_LABELS, NEWS_KIND_ORDER } from "@/lib/news";
 import "@/app/news.css";
@@ -20,6 +20,7 @@ export default function NoticiasPage() {
   const tenant = getTenant();
   const canWrite = canWriteNews(tenant);
   const isPublisher = tenant?.type === "DISTRIBUTOR" || tenant?.type === "BRAND";
+  const admin = isAdmin();
   const [slides, setSlides] = useState<NewsHeroSlide[]>([]);
   const [items, setItems] = useState<NewsCard[]>([]);
   const [mine, setMine] = useState<NewsCard[]>([]);
@@ -66,6 +67,11 @@ export default function NoticiasPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {admin && (
+            <Link href="/admin?tab=news" className="text-[13px] text-surface-400 hover:text-white">
+              Administrar
+            </Link>
+          )}
           {canWrite && (
             <Link href="/noticias/nueva" className="text-[13px] text-white border border-surface-600 px-3 py-1.5 hover:bg-white hover:text-black">
               Nueva nota

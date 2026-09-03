@@ -1,4 +1,4 @@
-import { authorIdsForViewer, visibleNewsAttachments } from "./news-visibility";
+import { authorIdsForViewer, resolveAuthorLogo, visibleNewsAttachments } from "./news-visibility";
 
 const set = {
   ownId: "me",
@@ -31,6 +31,20 @@ const files = [
   { kind: "FILE", visibility: "IN_APP", title: "interno" },
   { kind: "FILE", visibility: "PUBLIC", title: "foto" },
 ];
+
+describe("resolveAuthorLogo", () => {
+  it("usa el icono del proveedor si la marca no tiene landing", () => {
+    expect(
+      resolveAuthorLogo({ landingLogo: null, brandLogo: null, providerLogo: "/assets/elit.png" })
+    ).toBe("/assets/elit.png");
+  });
+
+  it("la landing de la marca gana sobre el de proveedor", () => {
+    expect(
+      resolveAuthorLogo({ landingLogo: "/assets/asus.svg", brandLogo: null, providerLogo: "/assets/nb.png" })
+    ).toBe("/assets/asus.svg");
+  });
+});
 
 describe("visibleNewsAttachments", () => {
   it("en la pública solo viajan los PUBLIC", () => {

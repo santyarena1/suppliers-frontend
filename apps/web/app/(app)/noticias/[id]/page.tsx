@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import PrefsPanel from "@/components/PrefsPanel";
 import NewsArticleView from "@/components/news/NewsArticleView";
-import { getTenant } from "@/lib/auth";
-import { newsApi, type NewsDetail } from "@/lib/api";
+import { getTenant, isAdmin } from "@/lib/auth";
+import { adminNewsApi, newsApi, type NewsDetail } from "@/lib/api";
 import "@/app/news.css";
 
 function errMsg(err: unknown, fallback: string) {
@@ -15,9 +15,12 @@ function errMsg(err: unknown, fallback: string) {
 
 export default function NoticiaPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const tenant = getTenant();
+  const admin = isAdmin();
   const [article, setArticle] = useState<NewsDetail | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const mine = Boolean(article && tenant && article.author.tenantId === tenant.id);
 
   useEffect(() => {
@@ -32,6 +35,19 @@ export default function NoticiaPage() {
     if (!article) return;
     const path = article.publicPath || `/noticias/${article.id}`;
     await navigator.clipboard.writeText(`${window.location.origin}${path}`);
+  }
+
+  async function removeAsAdmin() {
+    if (!article) return;
+    if (!window.confirm(`¿Borrar “${article.title}”?`)) return;
+    setRemoving(true);
+    try {
+      await adminNewsApi.remove(article.id);
+      router.push("/noticias");
+    } catch (err) {
+      setAviso(errMsg(err, "No se pudo borrar la nota"));
+      setRemoving(false);
+    }
   }
 
   function shareWhatsapp() {
@@ -65,6 +81,16 @@ export default function NoticiaPage() {
                 <Link href={`/noticias/${article.id}/editar`} className="text-[12px] text-white">
                   Editar
                 </Link>
+              )}
+              {admin && (
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={() => void removeAsAdmin()}
+                  className="text-[12px] text-red-400 hover:text-red-300 disabled:opacity-50"
+                >
+                  {removing ? "Borrando…" : "Eliminar"}
+                </button>
               )}
               {article.author.linked && tenant?.type === "RETAILER" && (
                 <Link href="/mensajes" className="text-[12px] text-white">
