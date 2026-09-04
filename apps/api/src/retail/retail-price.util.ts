@@ -20,16 +20,27 @@ export function resolvePriceDivisor(name: string, externalId?: number): number {
   return isCentsBasedStore(name, externalId) ? 100 : 1;
 }
 
-/** Crudo de la API → pesos ARS para persistir. */
+/**
+ * Tope de lo que entra en la columna `Decimal(14, 4)` de precios retail. Un
+ * valor por encima es basura de la fuente (un precio de 10.000 millones no
+ * existe) y, si se intenta guardar, Postgres corta con "numeric field overflow".
+ */
+export const RETAIL_PRICE_DB_MAX = 9_999_999_999;
+
+function clampForDb(value: number): number {
+  return value >= RETAIL_PRICE_DB_MAX ? 0 : value;
+}
+
+/** Crudo de la API → pesos ARS para persistir. 0 = inválido (no se guarda como precio). */
 export function normalizeExternalPrice(precio: unknown, divisor = 1): number {
   const n = typeof precio === "number" ? precio : Number(precio);
   if (!Number.isFinite(n) || n <= 0) return 0;
 
-  if (divisor > 1) return roundMoney(n / divisor);
+  if (divisor > 1) return clampForDb(roundMoney(n / divisor));
 
   // Safety net: crudo absurdo sin divisor (legado / Multiplo sin marcar)
-  if (Number.isInteger(n) && n >= 25_000_000) return roundMoney(n / 100);
-  return n;
+  if (Number.isInteger(n) && n >= 25_000_000) return clampForDb(roundMoney(n / 100));
+  return clampForDb(n);
 }
 
 /**
