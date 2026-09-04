@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import RedeemAccessCode from "@/components/RedeemAccessCode";
+import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
+import { Plus as PlusIcon } from "lucide-react";
 import { getTenant } from "@/lib/auth";
 import { assetUrl } from "@/lib/assets";
 import { brandApi, type BrandModuleId, type RetailerBrandView } from "@/lib/api";
@@ -28,6 +30,7 @@ export default function MarcasHomePage() {
   const [brands, setBrands] = useState<RetailerBrandView[]>([]);
   const [loading, setLoading] = useState(true);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const tenant = getTenant();
   const distro = tenant?.type === "DISTRIBUTOR";
 
@@ -57,8 +60,20 @@ export default function MarcasHomePage() {
               : "Todo lo que podés hacer con las marcas de este local: productos, acciones, materiales y hablar."}
           </p>
         </div>
-        <PrefsPanel />
+        <div className="flex items-center gap-2">
+          {!distro && (
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-brand-500 text-surface-200 hover:text-white rounded-lg px-3 py-1.5 transition-all"
+            >
+              <PlusIcon className="w-3.5 h-3.5" /> Agregar marca
+            </button>
+          )}
+          <PrefsPanel />
+        </div>
       </header>
+      <AddSupplierDialog open={addOpen} onClose={() => setAddOpen(false)} kind="brand" onConnected={() => void load()} />
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
           {aviso && <p className="text-xs rounded-md px-3 py-2 bg-red-500/10 text-red-400">{aviso}</p>}

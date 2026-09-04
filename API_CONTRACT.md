@@ -333,6 +333,43 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - Reemplazado por `POST /providers/:key/imports` (proveedores por lista). Los proveedores con API siguen sincronizando por adapter.
 
 
+### [FEATURE] Canal de precios por comercio y proveedor (API o Lista)
+- **Método**: GET | PUT (campos nuevos en endpoints existentes)
+- **Ruta**: `/providers/:provider/config` · `/my/providers` (`purchase`)
+- **Auth**: Bearer, organización vinculada.
+- **Body / Params**: `PUT /providers/:provider/config` acepta `priceChannel: "API" | "LIST"`, `manualIibbPercent` (0..100 | null) y `manualPerceptionsPercent` (0..100 | null).
+- **Respuesta esperada**: `ProviderConfig` con esos tres campos. `VisibleProvider.purchase` trae además `priceChannel`, `manualIibbPercent`, `manualPerceptionsPercent`; `VisibleProvider.selfConnected` indica un vínculo `LIST_CONNECTED` (sin vendedor ni chat: `accountManager` y `linkId` vienen en `null`).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un proveedor **cotiza por lista** para un comercio cuando es `LIST_*` o cuando el comercio eligió canal `LIST`. Con canal `LIST` el cron no sincroniza ese proveedor y cualquier proveedor (también los que tienen API) admite `POST /providers/:key/imports` a nivel `TENANT`. `providerHasIvaRate(provider, canal)` (shared) es verdadero para los que cotizan por lista: el IVA sale de la fila o del perfil de la planilla (si no hay dato, 21 %), así que offline y esquema se pueden configurar. IIBB y otras percepciones no vienen en la lista: el comercio las carga como % sobre el neto y la UI las suma en lista y esquema (offline sin percepciones).
+
+### [FEATURE] Conexión por lista y directorio de proveedores
+- **Método**: GET | POST
+- **Ruta**: `GET /my/suppliers/search?q=&type=DISTRIBUTOR|BRAND` · `POST /my/suppliers/:tenantId/connect-by-list`
+- **Auth**: Bearer, organización comercio (tipo 1).
+- **Body / Params**: `q` (nombre, contiene, sin distinguir mayúsculas), `type` opcional.
+- **Respuesta esperada**: search: `[{ id, name, type, providerKey, hasApi, managedByPlatform, linkStatus }]`. connect-by-list: `{ linkId, status, provider, tenantName, tenantType }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Antes de crear un proveedor por lista, la UI busca en este directorio para no duplicar a uno existente. Conectarse por lista no pide permiso al proveedor (el comercio usa sus propios datos): crea el vínculo en estado `LIST_CONNECTED` y deja el canal en `LIST`. Si el proveedor no tenía `providerKey`, se le genera uno `LIST_*`. El comercio ve el catálogo con sus precios pero sin vendedor ni chat; cuando el distribuidor le asigna vendedor desde Clientes (`PUT /my/clients/:linkId` con `accountManagerId`), el vínculo pasa solo a `ACTIVE`. `POST /providers` (creado por un comercio) también deja el vínculo en `LIST_CONNECTED`. `TenantLinkStatus` suma `LIST_CONNECTED` ("Conectado por lista").
+
+### [FEATURE] Pedido por mensaje para proveedores que cotizan por lista
+- **Método**: POST (cambio de reglas en endpoint existente)
+- **Ruta**: `/orders/offline`
+- **Auth**: Bearer, comercio con permiso de pedir.
+- **Body / Params**: cada ítem acepta `pricingMode: "list" | "scheme" | "offline"` (default `offline`).
+- **Respuesta esperada**: sin cambios (`TenantOrder[]`, `channel: "OFFLINE"`).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Para un proveedor que cotiza por lista es la única modalidad de compra: el carrito registra el pedido en Nodo con el modo de precio de cada línea y copia el mensaje para el vendedor ("Confirmar y copiar mensaje"). Reglas: ítems `offline` requieren `acceptsOffline`; `scheme` requiere `acceptsScheme`; `list` solo se acepta si el proveedor cotiza por lista (los que se compran por portal siguen con su checkout). Historial: `/pedidos` (filtro Offline) y pestaña Pedidos en la ficha del proveedor (`/proveedores/:key?tab=orders`).
+
+### [FEATURE] Unificar proveedores por lista duplicados (superadmin)
+- **Método**: GET | POST
+- **Ruta**: `GET /admin/providers/merge-candidates` · `POST /admin/providers/merge`
+- **Auth**: Bearer, `ROLE_ADMIN`.
+- **Body / Params**: `{ from: "LIST_*", into: "<clave destino>" }`.
+- **Respuesta esperada**: candidates: `[{ id, name, type, providerKey, managedByPlatform, clients, similar: [{ id, name, providerKey, type }] }]`. merge: `{ from, into, moved: { <tabla>: n }, dropped: { <tabla>: n }, deletedTenantId }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Mueve fichas, ofertas, base, historial de precios, perfiles, cargas, corridas de sync, carrito, pedidos, señales de marca, imágenes, overrides/alias de catálogo, display y vínculos del duplicado al destino; lo que ya existía en el destino se descarta (el destino manda). La organización duplicada se borra si no tiene miembros; si los tiene, queda inactiva y sin clave. UI: Admin → Directorio → "Unificar proveedores por lista".
+
+
 ## Pendiente (futuro)
 
 ## Pendiente (futuro)

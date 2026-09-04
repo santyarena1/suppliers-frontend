@@ -7,6 +7,7 @@ import {
 } from "@/lib/api";
 import { isAdmin, getUser } from "@/lib/auth";
 import OrganizationsTree from "@/components/admin/OrganizationsTree";
+import ProviderMergePanel from "@/components/admin/ProviderMergePanel";
 import CatalogEnrichmentPanel from "@/components/admin/CatalogEnrichmentPanel";
 import DiagnosticsPanel from "@/components/DiagnosticsPanel";
 import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
@@ -109,7 +110,14 @@ function AdminPageInner() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {tab === "organizations" && <OrganizationsTree showToast={showToast} />}
+            {tab === "organizations" && (
+              <>
+                <OrganizationsTree showToast={showToast} />
+                <div className="mt-6">
+                  <ProviderMergePanel showToast={showToast} />
+                </div>
+              </>
+            )}
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
             {tab === "images" && <ImageSyncPanel showToast={showToast} />}

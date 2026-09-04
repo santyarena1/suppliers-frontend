@@ -195,6 +195,9 @@ function asAdj(value: unknown): IvaAdjustment | null {
 }
 
 export function parsePurchasePolicy(raw: {
+  priceChannel?: string | null;
+  manualIibbPercent?: number | string | null;
+  manualPerceptionsPercent?: number | string | null;
   acceptsOffline?: boolean | null;
   acceptsScheme?: boolean | null;
   offlineIvaAdjustment?: string | null;
@@ -206,7 +209,15 @@ export function parsePurchasePolicy(raw: {
   const legacy = asAdj(raw.ivaAdjustment);
   const schemeRaw = raw.schemeDiscountPercent;
   const schemeNum = schemeRaw == null || schemeRaw === "" ? null : Number(schemeRaw);
+  const pct = (v: unknown) => {
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
   return {
+    priceChannel: raw.priceChannel === "LIST" ? "LIST" : raw.priceChannel === "API" ? "API" : null,
+    manualIibbPercent: pct(raw.manualIibbPercent),
+    manualPerceptionsPercent: pct(raw.manualPerceptionsPercent),
     acceptsOffline: Boolean(raw.acceptsOffline),
     acceptsScheme: Boolean(raw.acceptsScheme),
     offlineIvaAdjustment: asAdj(raw.offlineIvaAdjustment) ?? legacy,

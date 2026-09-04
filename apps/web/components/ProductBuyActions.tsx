@@ -35,7 +35,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
   const { add, items, createScheme, schemesFor } = useCart();
   const retailer = useIsRetailer();
   const policy = usePurchasePolicy(product.provider);
-  const hasIva = providerHasIvaRate(product.provider);
+  const hasIva = providerHasIvaRate(product.provider, policy.priceChannel);
   const { withIva, withIibb } = usePrefs();
   useIibbRatesEpoch();
   const [flash, setFlash] = useState<"cart" | "scheme" | "offline" | null>(null);

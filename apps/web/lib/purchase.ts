@@ -30,7 +30,7 @@ export function usePurchasePolicy(provider: string): PurchasePolicy {
   const { providers } = useMyProviders();
   const found = providers.find((p) => p.provider === provider);
   const parsed = parsePurchasePolicy(found?.purchase);
-  if (!providerHasIvaRate(provider)) {
+  if (!providerHasIvaRate(provider, parsed.priceChannel)) {
     return { ...parsed, acceptsOffline: false, acceptsScheme: false };
   }
   return parsed;
@@ -41,7 +41,7 @@ export function usePurchasePolicies(): Record<string, PurchasePolicy> {
   const map: Record<string, PurchasePolicy> = {};
   for (const p of providers) {
     const parsed = parsePurchasePolicy(p.purchase);
-    map[p.provider] = providerHasIvaRate(p.provider)
+    map[p.provider] = providerHasIvaRate(p.provider, parsed.priceChannel)
       ? parsed
       : { ...parsed, acceptsOffline: false, acceptsScheme: false };
   }

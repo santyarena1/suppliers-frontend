@@ -174,3 +174,24 @@ y revert. Aprendiz con respuesta mockeada; validación de esquema real.
 3. IA + frescura: aprendiz, "Sugerir con IA", `expectedUpdateDays`, semáforo,
    leyenda, notificación.
 4. (Futuro) IMAP / Drive como fuentes de ingesta.
+
+## Adenda 2026-09-04: un proveedor, varios canales
+
+- **Canal de precios por comercio y proveedor** (`ProviderSyncConfig.priceChannel`, API |
+  LIST). Un proveedor con API puede recibir precios por lista para un comercio
+  dado; el cron ignora canal LIST. Solo `LIST_*` admite lista base.
+- **IVA**: un proveedor que cotiza por lista sí informa alícuota (fila o perfil,
+  21 % por defecto), así que habilita offline y esquema. **IIBB y percepciones**
+  son porcentajes manuales en la configuración del proveedor
+  (`manualIibbPercent`, `manualPerceptionsPercent`), sumados en lista y esquema.
+- **Carrito**: para proveedores que cotizan por lista la única salida es
+  "Confirmar y copiar mensaje": `POST /orders/offline` con `pricingMode` por
+  línea (list | scheme | offline). Historial en /pedidos y en la pestaña Pedidos.
+- **Vínculo `LIST_CONNECTED`**: el comercio se conecta solo (directorio
+  `GET /my/suppliers/search` + `POST /my/suppliers/:id/connect-by-list`), ve el
+  catálogo con sus precios, sin vendedor ni chat. Asignarle vendedor lo activa.
+  El proveedor no puede rechazarlo: el comercio usa sus propios datos.
+- **Sin duplicados**: "Agregar proveedor / marca" ofrece código de acceso o
+  cargar lista; antes de crear busca en el directorio. El matcher hace caer las
+  filas en fichas conocidas (código, SKU, EAN, part number). El superadmin puede
+  unificar un `LIST_*` dentro del real (`POST /admin/providers/merge`).

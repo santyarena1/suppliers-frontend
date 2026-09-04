@@ -317,12 +317,18 @@ export interface VisibleProvider {
   linked: boolean;
   /** Aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
+  /** El comercio se conectó solo cargando su lista: sin vendedor ni chat hasta que el proveedor lo reconozca. */
+  selfConnected?: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
   linkId?: string | null;
   /** Pedido offline / esquema que configuró este comercio para el distribuidor. */
   purchase?: {
+    /** API o LIST: con LIST los precios salen de una planilla y el carrito arma un mensaje. */
+    priceChannel?: "API" | "LIST";
+    manualIibbPercent?: number | null;
+    manualPerceptionsPercent?: number | null;
     acceptsOffline: boolean;
     acceptsScheme: boolean;
     offlineIvaAdjustment: IvaAdjustment | null;
@@ -330,6 +336,45 @@ export interface VisibleProvider {
     schemeDiscountPercent: number | null;
   };
 }
+
+/** Fila del directorio de proveedores para conectarse por lista. */
+export interface SupplierSearchRow {
+  id: string;
+  name: string;
+  type: TenantType;
+  providerKey: Provider | null;
+  hasApi: boolean;
+  managedByPlatform: boolean;
+  linkStatus: TenantLinkStatus | null;
+}
+
+export const suppliersApi = {
+  search: (q: string, type?: "DISTRIBUTOR" | "BRAND") =>
+    api.get<SupplierSearchRow[]>("/my/suppliers/search", { params: { q: q || undefined, type } }),
+  connectByList: (tenantId: string) =>
+    api.post<{ linkId: string; status: TenantLinkStatus; provider: Provider; tenantName: string; tenantType: TenantType }>(
+      `/my/suppliers/${tenantId}/connect-by-list`
+    ),
+};
+
+export interface ProviderMergeCandidate {
+  id: string;
+  name: string;
+  type: TenantType;
+  providerKey: Provider;
+  managedByPlatform: boolean;
+  clients: number;
+  similar: { id: string; name: string; providerKey: Provider; type: TenantType }[];
+}
+
+export const providerMergeApi = {
+  candidates: () => api.get<ProviderMergeCandidate[]>("/admin/providers/merge-candidates"),
+  merge: (from: Provider, into: Provider) =>
+    api.post<{ from: Provider; into: Provider; moved: Record<string, number>; dropped: Record<string, number>; deletedTenantId: string | null }>(
+      "/admin/providers/merge",
+      { from, into }
+    ),
+};
 
 export interface RedeemedCode {
   linkId: string;
@@ -1046,9 +1091,15 @@ export function canSyncProvider(status?: ProviderStatus | null): boolean {
 export type MissingProductAction = "KEEP" | "OUT_OF_STOCK" | "HIDE" | "DELETE";
 export type ZeroStockAction = "KEEP" | "HIDE" | "DELETE";
 
+export type PriceChannel = "API" | "LIST";
+
 export interface ProviderConfig {
   provider: Provider;
   enabled: boolean;
+  /** API (credenciales + cron) o LIST (planillas que sube el comercio). */
+  priceChannel: PriceChannel;
+  manualIibbPercent: number | null;
+  manualPerceptionsPercent: number | null;
   syncIntervalMinutes: number;
   missingProductAction: MissingProductAction;
   zeroStockAction: ZeroStockAction;
@@ -2652,7 +2703,7 @@ export type TenantRole =
   | "COMMERCIAL"
   | "VIEWER";
 
-export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED";
+export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "LIST_CONNECTED";
 
 export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
   RETAILER: "Comercio",
@@ -2687,6 +2738,7 @@ export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   ACTIVE: "Activo",
   SUSPENDED: "Suspendido",
   REVOKED: "Revocado",
+  LIST_CONNECTED: "Conectado por lista",
 };
 
 export interface TenantMember {

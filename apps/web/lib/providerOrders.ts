@@ -1,4 +1,5 @@
-export function providerOrdersHref(provider: string): string {
+export function providerOrdersHref(provider: string, pricesFromList = false): string {
+  if (pricesFromList || provider.startsWith("LIST_")) return `/proveedores/${provider}?tab=orders`;
   if (provider === "INVID") return "/proveedores/INVID?tab=invid-account";
   if (provider === "NEW_BYTES") return "/proveedores/NEW_BYTES?tab=nb-account";
   if (provider === "ELIT") return "/proveedores/ELIT?tab=elit-account";
@@ -7,7 +8,8 @@ export function providerOrdersHref(provider: string): string {
   return `/proveedores/${provider}`;
 }
 
-export function providerHasOrderHistory(provider: string): boolean {
+export function providerHasOrderHistory(provider: string, pricesFromList = false): boolean {
+  if (pricesFromList || provider.startsWith("LIST_")) return true;
   return (
     provider === "INVID" ||
     provider === "NEW_BYTES" ||

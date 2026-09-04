@@ -40,8 +40,14 @@ function productProvider(product: TaxableProduct): string | null {
 function resolveLineIibb(
   product: TaxableProduct,
   lines: TaxLine[],
-  unitNet: number
+  unitNet: number,
+  policy?: PurchasePolicy | null
 ): { percent: number | null; unitAmount: number; label: string; estimated: boolean } {
+  // Proveedor que cotiza por lista: el IIBB lo cargó a mano el comercio en Configuración.
+  const manual = policy?.manualIibbPercent;
+  if (manual != null && manual > 0 && unitNet > 0) {
+    return { percent: manual, unitAmount: round4(unitNet * (manual / 100)), label: "IIBB", estimated: false };
+  }
   const existing = taxByKind(lines, "iibb");
   if (existing && existing.unitAmount > 0.0001) {
     const percent =
@@ -89,6 +95,13 @@ function withIibbLine(
   ];
 }
 
+/** Otras percepciones manuales (%) del comercio para un proveedor que cotiza por lista. */
+function manualPerceptionLine(policy: PurchasePolicy | null | undefined, unitNet: number): TaxLine | null {
+  const pct = policy?.manualPerceptionsPercent;
+  if (pct == null || pct <= 0 || unitNet <= 0) return null;
+  return { kind: "other", label: "Percepciones", percent: pct, unitAmount: round4(unitNet * (pct / 100)) };
+}
+
 export function priceModeForCartItem(item: {
   channel?: "online" | "offline";
   schemeId?: string | null;
@@ -124,8 +137,9 @@ export function purchaseLinePricing(
 
   if (!useOffline && !useScheme) {
     const listed = linePricing(product, qty);
-    const iibb = resolveLineIibb(product, listed.lines, listed.unitNet);
-    const nextLines = withIibbLine(listed.lines, iibb);
+    const iibb = resolveLineIibb(product, listed.lines, listed.unitNet, policy);
+    const manualOther = manualPerceptionLine(policy, listed.unitNet);
+    const nextLines = manualOther ? [...withIibbLine(listed.lines, iibb), manualOther] : withIibbLine(listed.lines, iibb);
     const taxFromLines = nextLines.reduce((s, l) => s + l.unitAmount, 0);
     const unitGross = taxFromLines > 0.00005
       ? round4(listed.unitNet + taxFromLines)
@@ -146,14 +160,16 @@ export function purchaseLinePricing(
   const lines = extractTaxLines(product);
   const iva = taxByKind(lines, "iva");
   const internos = taxByKind(lines, "internos");
-  const iibb = resolveLineIibb(product, lines, base.unitNet);
+  const iibb = resolveLineIibb(product, lines, base.unitNet, policy);
+  // Offline es sin percepciones: las manuales tampoco van.
+  const manualOther = useOffline ? null : manualPerceptionLine(policy, base.unitNet);
   const unit = computePurchaseUnit({
     net: base.unitNet,
     ivaPercent: iva?.percent ?? null,
     internosAmount: internos?.unitAmount ?? 0,
     iibbAmount: iibb.unitAmount,
     iibbPercent: iibb.percent,
-    otherAmount: otherAmount(lines),
+    otherAmount: otherAmount(lines) + (manualOther?.unitAmount ?? 0),
     ivaAdjustment: ivaAdjustment!,
     schemeDiscountPercent: useScheme ? policy!.schemeDiscountPercent : 0,
     dropPerceptions: useOffline,
@@ -183,6 +199,7 @@ export function purchaseLinePricing(
   for (const line of lines.filter((l) => l.kind === "other")) {
     nextLines.push(line);
   }
+  if (manualOther) nextLines.push(manualOther);
 
   const net = unit.net * qty;
   const gross = unit.gross * qty;

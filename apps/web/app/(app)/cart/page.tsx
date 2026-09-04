@@ -16,7 +16,8 @@ import { usePrefs } from "@/lib/prefs";
 import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
 import { buildSellerMessage } from "@/lib/seller-message";
-import { offlineOrdersFromCart } from "@/lib/offline-order";
+import { messageOrdersFromCart, offlineOrdersFromCart } from "@/lib/offline-order";
+import { providerPricesFromList } from "@/lib/purchase-pricing";
 import { proxyImg, formatUSD, parsePrice } from "@/lib/format";
 import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
@@ -135,6 +136,9 @@ function CartPageInner() {
   const [pedidosOpen, setPedidosOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmingOffline, setConfirmingOffline] = useState(false);
+  const [confirmingList, setConfirmingList] = useState<string | null>(null);
+  // Proveedores cuyos precios salen de una lista: el carrito no compra en ningún portal, arma un mensaje.
+  const pricesFromList = (p: string) => providerPricesFromList(p, policies[p]?.priceChannel);
   const exportRef = useRef<HTMLDivElement>(null);
   const pedidosRef = useRef<HTMLDivElement>(null);
   const appliedProviderParam = useRef<string | null>(null);
@@ -475,8 +479,10 @@ function CartPageInner() {
 
   async function copySellerMessage() {
     const sellers: Record<string, string | null> = {};
+    const providerLabels: Record<string, string> = {};
     for (const p of myProviders) {
       sellers[p.provider] = p.accountManager?.name ?? null;
+      providerLabels[p.provider] = p.name;
     }
     const txt = buildSellerMessage({
       scopeProvider: activeTab === "all" ? undefined : activeTab,
@@ -484,6 +490,7 @@ function CartPageInner() {
       policies,
       clientName: getTenant()?.name ?? null,
       sellers,
+      providerLabels,
       quoteRate: currentRate?.venta ?? null,
     });
     if (!txt) return;
@@ -512,6 +519,26 @@ function CartPageInner() {
       setNotice(msg || "No se pudo guardar el pedido offline");
     } finally {
       setConfirmingOffline(false);
+    }
+  }
+
+  /** Proveedor que cotiza por lista: se registra en Nodo con el modo de precio de cada línea y se copia el mensaje. */
+  async function confirmListOrder(provider: string) {
+    const groups = messageOrdersFromCart(viewItems, policies, provider, currentRate?.venta);
+    if (groups.length === 0) return;
+    setConfirmingList(provider);
+    setNotice(null);
+    try {
+      await ordersApi.createOffline(groups);
+      await copySellerMessage();
+      clearProvider(provider, channelTab);
+      setActiveTab("all");
+      setNotice("Pedido guardado en Nodo. El mensaje quedó copiado para mandárselo al vendedor. Si cambia algo, lo editás en Pedidos.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setNotice(msg || "No se pudo guardar el pedido");
+    } finally {
+      setConfirmingList(null);
     }
   }
 
@@ -684,10 +711,10 @@ function CartPageInner() {
                 {pedidosOpen && (
                   <div className="absolute right-0 top-full mt-1.5 w-64 bg-surface-950 border border-surface-800 shadow-xl z-30 py-1 max-h-80 overflow-y-auto">
                     <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Historial</p>
-                    {ALL_PROVIDERS.filter(providerHasOrderHistory).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
-                        href={providerOrdersHref(p)}
+                        href={providerOrdersHref(p, pricesFromList(p))}
                         onClick={() => setPedidosOpen(false)}
                         className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-900"
                       >
@@ -697,7 +724,7 @@ function CartPageInner() {
                     ))}
                     <div className="h-px bg-surface-800 my-1" />
                     <p className="px-3 pt-1.5 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Distribuidores</p>
-                    {ALL_PROVIDERS.filter((p) => !providerHasOrderHistory(p)).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && !providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
                         href={providerOrdersHref(p)}
@@ -873,8 +900,8 @@ function CartPageInner() {
                     withIva={withIva}
                     currency={currency}
                     showInvidNote={activeTab === "INVID"}
-                    historyHref={activeTab !== "all" ? providerOrdersHref(activeTab) : undefined}
-                    historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
+                    historyHref={activeTab !== "all" ? providerOrdersHref(activeTab, pricesFromList(activeTab)) : undefined}
+                    historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab, pricesFromList(activeTab)) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
                   />
 
                   {currentRate && currency === "ARS" && (
@@ -901,8 +928,8 @@ function CartPageInner() {
                               {warming && <Loader2 className="w-3.5 h-3.5 animate-spin text-surface-500" />}
                             </button>
                             <Link
-                              href={providerOrdersHref(p)}
-                              title={providerHasOrderHistory(p) ? "Ver historial de pedidos" : "Ir a la cuenta del proveedor"}
+                              href={providerOrdersHref(p, pricesFromList(p))}
+                              title={providerHasOrderHistory(p, pricesFromList(p)) ? "Ver historial de pedidos" : "Ir a la cuenta del proveedor"}
                               className="h-9 px-2 inline-flex items-center border-l border-surface-700 text-surface-500 hover:text-white"
                             >
                               <History className="w-3.5 h-3.5" />
@@ -913,6 +940,33 @@ function CartPageInner() {
                       <span className="text-sm text-surface-500">
                         Solo informativo. Confirmá en la pestaña del proveedor.
                       </span>
+                    </div>
+                  )}
+
+                  {activeTab !== "all" && pricesFromList(activeTab) && viewItems.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs text-sky-200/80">
+                        {myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} cotiza por lista: el pedido se guarda en Nodo y el mensaje queda copiado para el vendedor. No se carga en ningún portal.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void confirmListOrder(activeTab)}
+                          disabled={confirmingList !== null}
+                          className="self-start flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-3 py-2"
+                        >
+                          {confirmingList === activeTab ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          {confirmingList === activeTab ? "Guardando…" : "Confirmar y copiar mensaje"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copySellerMessage()}
+                          className="self-start flex items-center gap-2 bg-surface-800 hover:bg-surface-700 border border-surface-700 text-surface-100 text-sm font-medium rounded-lg px-3 py-2"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Solo copiar mensaje
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -988,7 +1042,7 @@ function CartPageInner() {
                       />
                     </div>
                   )}
-                  {channelTab === "offline" && viewItems.length > 0 && (
+                  {channelTab === "offline" && viewItems.length > 0 && !(activeTab !== "all" && pricesFromList(activeTab)) && (
                     <div className="flex flex-col gap-2">
                       <p className="text-xs text-amber-200/80">
                         Se guarda en Nodo como pedido aprobado. No se carga en el portal: el mensaje es para el vendedor. Si después cambia, lo editás en Pedidos.

@@ -11,6 +11,7 @@ import {
   isLiveSyncRun, summarizeSyncRun, isListProvider, isProviderKey,
 } from "@/lib/api";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
+import NodoOrdersPanel from "@/components/list-import/NodoOrdersPanel";
 import { freshnessLabel, useListFreshness } from "@/lib/listFreshness";
 import { getTenant, isAdmin } from "@/lib/auth";
 import { isRetailerSession } from "@/lib/purchase";
@@ -45,10 +46,10 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
-type ProviderTab = "lists" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account";
+type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account";
 
 const VALID_PROVIDER_TABS: ProviderTab[] = [
-  "lists", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account",
+  "lists", "orders", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -69,7 +70,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
   const [tab, setTab] = useState<ProviderTab>(listBased ? "lists" : "sync");
   const [listRefresh, setListRefresh] = useState(0);
-  const listFreshness = useListFreshness(listBased ? provider : null, listRefresh);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -106,6 +106,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
 
   const [config, setConfig] = useState<ProviderConfig | null>(null);
+  // Cotiza por lista: proveedor sin API, o proveedor con API al que este comercio le carga su Excel.
+  const listPriced = listBased || config?.priceChannel === "LIST";
+  const listFreshness = useListFreshness(listPriced ? provider : null, listRefresh);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
@@ -154,6 +157,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     try {
       const res = await providersApi.updateConfig(provider, {
         enabled: config.enabled,
+        priceChannel: config.priceChannel,
+        manualIibbPercent: config.manualIibbPercent == null ? null : Number(config.manualIibbPercent),
+        manualPerceptionsPercent: config.manualPerceptionsPercent == null ? null : Number(config.manualPerceptionsPercent),
         syncIntervalMinutes: config.syncIntervalMinutes,
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,
@@ -334,7 +340,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <StatCard label="En catálogo" value={status?.total} icon={Boxes} loading={loadingStatus} />
                   <StatCard label="Con stock" value={status?.withStock} icon={PackageCheck} loading={loadingStatus} accent="emerald" />
-                  {listBased ? (
+                  {listPriced ? (
                     <div className="bg-surface-900 border border-surface-800 rounded-xl p-4 flex flex-col justify-between">
                       <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Lista de precios</span>
                       <button onClick={() => setTab("lists")} className={`flex items-center gap-1.5 text-sm font-semibold mt-1 text-left ${
@@ -365,9 +371,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   </div>
                   )}
                   <div className="bg-surface-900 border border-surface-800 rounded-xl p-4 flex flex-col justify-between">
-                    <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">{listBased ? "Última lista" : "Última sync"}</span>
+                    <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">{listPriced ? "Última lista" : "Última sync"}</span>
                     <span className="text-sm font-semibold text-white mt-1">
-                      {listBased
+                      {listPriced
                         ? listFreshness?.lastImportAt ? new Date(listFreshness.lastImportAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "—"
                         : status?.lastSyncedAt ? new Date(status.lastSyncedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "—"}
                     </span>
@@ -377,12 +383,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 {/* Tabs */}
                 <div className="flex border-b border-surface-800 overflow-x-auto scrollbar-none">
                   {[
+                    ...(listPriced ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }] : []),
                     ...(listBased
-                      ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }]
+                      ? []
                       : [
                           { key: "credentials" as const, label: "Mi cuenta" },
                           { key: "sync" as const, label: "Sincronización", shortLabel: "Sync" },
                         ]),
+                    ...(listPriced ? [{ key: "orders" as const, label: "Pedidos", shortLabel: "Pedidos" }] : []),
                     { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración", shortLabel: isRetailer ? "Offline" : "Config" },
                     { key: "catalog" as const, label: "Catálogo" },
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
@@ -410,10 +418,12 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   ))}
                 </div>
 
-                {tab === "lists" && listBased && (
+                {tab === "orders" && listPriced && <NodoOrdersPanel provider={provider} />}
+
+                {tab === "lists" && listPriced && (
                   <ListImportsPanel
                     provider={provider}
-                    uploadsAsBase={isAdmin() || !isRetailer}
+                    uploadsAsBase={listBased && (isAdmin() || !isRetailer)}
                     onApplied={() => {
                       void loadStatus();
                       setListRefresh((k) => k + 1);

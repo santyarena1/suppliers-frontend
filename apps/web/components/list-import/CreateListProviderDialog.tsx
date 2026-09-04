@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus, X } from "lucide-react";
 import { invalidateMyProviders, listImportsApi, type MissingProductAction, type ZeroStockAction } from "@/lib/api";
@@ -30,16 +30,26 @@ type Props = {
   onClose: () => void;
   /** Un comercio configura además cómo le compra (markup, faltantes…). */
   showPurchaseConfig: boolean;
+  initialName?: string;
+  initialType?: "DISTRIBUTOR" | "BRAND";
+  onCreated?: () => void;
 };
 
 /**
  * Alta de un distribuidor o marca que manda su lista por planilla. La clave del
  * proveedor la genera el backend a partir del nombre.
  */
-export default function CreateListProviderDialog({ open, onClose, showPurchaseConfig }: Props) {
+export default function CreateListProviderDialog({ open, onClose, showPurchaseConfig, initialName, initialType, onCreated }: Props) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [type, setType] = useState<"DISTRIBUTOR" | "BRAND">("DISTRIBUTOR");
+  const [name, setName] = useState(initialName ?? "");
+  const [type, setType] = useState<"DISTRIBUTOR" | "BRAND">(initialType ?? "DISTRIBUTOR");
+
+  useEffect(() => {
+    if (open) {
+      setName(initialName ?? "");
+      setType(initialType ?? "DISTRIBUTOR");
+    }
+  }, [open, initialName, initialType]);
   const [days, setDays] = useState(15);
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -73,6 +83,7 @@ export default function CreateListProviderDialog({ open, onClose, showPurchaseCo
           : undefined,
       });
       invalidateMyProviders();
+      onCreated?.();
       onClose();
       router.push(`/proveedores/${res.data.providerKey}?tab=lists`);
     } catch (err: unknown) {

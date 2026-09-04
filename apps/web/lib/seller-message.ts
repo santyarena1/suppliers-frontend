@@ -18,6 +18,8 @@ export type SellerMessageOpts = {
   clientName?: string | null;
   /** Vendedor (account manager) por proveedor. */
   sellers?: Record<string, string | null | undefined>;
+  /** Nombre comercial por proveedor (para los proveedores por lista). */
+  providerLabels?: Record<string, string | null | undefined>;
   quoteRate?: number | null;
   now?: Date;
 };
@@ -100,7 +102,7 @@ function buildProviderOrder(
 
   return {
     reference: sellerOrderReference(now),
-    providerLabel: providerDisplayName(provider),
+    providerLabel: opts.providerLabels?.[provider] || providerDisplayName(provider),
     clientName: opts.clientName ?? null,
     sellerName: opts.sellers?.[provider] ?? null,
     quoteRate: opts.quoteRate ?? null,

@@ -14,6 +14,8 @@ import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
 import { useProviderStatuses } from "@/lib/providerStatus";
 import ProviderBadge from "@/components/ProviderBadge";
+import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
+import { Plus as PlusIcon } from "lucide-react";
 import {
   NAV_SECTIONS,
   type NavItemDef,
@@ -80,6 +82,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [openSection, setOpenSection] = useState<NavSectionId | null>(null);
   const [providersOpen, setProvidersOpen] = useState(false);
+  const [addSupplierOpen, setAddSupplierOpen] = useState(false);
   const wasOnProviders = useRef(false);
 
   useEffect(() => {
@@ -292,8 +295,20 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
                 );
               })
             )}
+            <button
+              type="button"
+              onClick={() => {
+                setAddSupplierOpen(true);
+                onCloseMobile();
+              }}
+              className="flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs text-surface-500 hover:text-surface-100 hover:bg-surface-800 transition-all"
+            >
+              <PlusIcon className="w-3.5 h-3.5" />
+              Agregar proveedor
+            </button>
           </div>
         )}
+        <AddSupplierDialog open={addSupplierOpen} onClose={() => setAddSupplierOpen(false)} kind="provider" />
       </div>
     );
   }

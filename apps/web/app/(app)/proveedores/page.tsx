@@ -12,7 +12,7 @@ import {
   canSyncProvider, isLiveSyncRun, summarizeSyncRun, isListProvider, listImportsApi, type VisibleProvider
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
-import CreateListProviderDialog from "@/components/list-import/CreateListProviderDialog";
+import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
 import { ListFreshnessChip } from "@/components/list-import/ListFreshnessHints";
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
@@ -125,7 +125,7 @@ export default function ProveedoresPage() {
               onClick={() => setCreateOpen(true)}
               className="flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-brand-500 text-surface-200 hover:text-white rounded-lg px-3 py-1.5 transition-all"
             >
-              <Plus className="w-3.5 h-3.5" /> Nuevo proveedor por lista
+              <Plus className="w-3.5 h-3.5" /> Agregar proveedor
             </button>
           )}
           {canEnableOwnList && !visible.some((p) => p.linked && isListProvider(p.provider)) && (
@@ -143,7 +143,7 @@ export default function ProveedoresPage() {
         </div>
       </header>
 
-      <CreateListProviderDialog open={createOpen} onClose={() => setCreateOpen(false)} showPurchaseConfig={tenantType === "RETAILER" && !admin} />
+      <AddSupplierDialog open={createOpen} onClose={() => setCreateOpen(false)} kind="provider" onConnected={() => void load(true)} />
 
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
