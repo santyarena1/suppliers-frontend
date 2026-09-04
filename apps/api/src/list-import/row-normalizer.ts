@@ -201,7 +201,8 @@ function resolvePrices(mapped: Partial<Record<NormalizedField, unknown>>, profil
     price = round4(finalPrice / (1 + iva / 100));
   }
 
-  return { price, finalPrice, ivaPercent };
+  const effectiveIva = price != null || finalPrice != null ? (ivaPercent ?? IVA_DEFAULT_PERCENT) : ivaPercent;
+  return { price, finalPrice, ivaPercent: effectiveIva };
 }
 
 function round4(value: number): number {

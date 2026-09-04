@@ -80,6 +80,9 @@ export class ProvidersService implements OnModuleInit {
       provider,
       enabled: false,
       syncIntervalMinutes: 60,
+      priceChannel: (isListProviderKey(provider) ? "LIST" : "API") as "API" | "LIST",
+      manualIibbPercent: null as number | null,
+      manualPerceptionsPercent: null as number | null,
       missingProductAction: "KEEP" as const,
       zeroStockAction: "KEEP" as const,
       priceMarkupPercent: 0,
@@ -119,7 +122,8 @@ export class ProvidersService implements OnModuleInit {
             ? null
             : Number(current.schemeDiscountPercent),
     };
-    if ((merged.acceptsOffline || merged.acceptsScheme) && !providerHasIvaRate(provider)) {
+    const priceChannel = dto.priceChannel ?? current?.priceChannel ?? (isListProviderKey(provider) ? "LIST" : "API");
+    if ((merged.acceptsOffline || merged.acceptsScheme) && !providerHasIvaRate(provider, priceChannel)) {
       throw new BadRequestException(
         "Este distribuidor no informa alícuota de IVA: no se puede configurar pedido offline ni esquema."
       );
@@ -867,7 +871,7 @@ export class ProvidersService implements OnModuleInit {
   private async baseListDiscountFor(tenantId: string, provider: Provider): Promise<number> {
     if (!isListProviderKey(provider)) return 0;
     const link = await this.prisma.tenantLink.findFirst({
-      where: { clientTenantId: tenantId, status: "ACTIVE", supplierTenant: { providerKey: provider } },
+      where: { clientTenantId: tenantId, status: { in: ["ACTIVE", "LIST_CONNECTED"] }, supplierTenant: { providerKey: provider } },
       select: { discountPercent: true },
     });
     return Number(link?.discountPercent) || 0;
@@ -883,7 +887,7 @@ export class ProvidersService implements OnModuleInit {
       this.prisma.tenantLink.findMany({
         where: {
           clientTenantId: tenantId,
-          status: "ACTIVE",
+          status: { in: ["ACTIVE", "LIST_CONNECTED"] },
           supplierTenant: { providerKey: { startsWith: LIST_PROVIDER_PREFIX } },
         },
         select: { discountPercent: true, supplierTenant: { select: { providerKey: true } } },
@@ -1389,8 +1393,9 @@ export class ProvidersService implements OnModuleInit {
 
   /** Usado por el cron de sincronización automática. */
   async findDueConfigs() {
+    // Los comercios que reciben precios por lista no sincronizan por API.
     const configs = await this.prisma.providerSyncConfig.findMany({
-      where: { enabled: true, tenant: { active: true } },
+      where: { enabled: true, priceChannel: "API", tenant: { active: true } },
     });
     const now = Date.now();
     return configs.filter((c) => {
@@ -1429,6 +1434,8 @@ function serializeSyncConfig<T extends object>(c: T) {
     ...row,
     priceMarkupPercent: Number(row.priceMarkupPercent) || 0,
     schemeDiscountPercent: row.schemeDiscountPercent == null ? null : Number(row.schemeDiscountPercent),
+    manualIibbPercent: row.manualIibbPercent == null ? null : Number(row.manualIibbPercent),
+    manualPerceptionsPercent: row.manualPerceptionsPercent == null ? null : Number(row.manualPerceptionsPercent),
     acceptsOffline: Boolean(row.acceptsOffline),
     acceptsScheme: Boolean(row.acceptsScheme),
     offlineIvaAdjustment: (row.offlineIvaAdjustment as IvaAdjustment | null | undefined) ?? null,

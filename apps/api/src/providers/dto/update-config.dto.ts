@@ -1,11 +1,30 @@
 import { Type } from "class-transformer";
 import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, Max, Min, ValidateIf } from "class-validator";
-import { IvaAdjustment, MissingProductAction, ZeroStockAction } from "@prisma/client";
+import { IvaAdjustment, MissingProductAction, PriceChannel, ZeroStockAction } from "@prisma/client";
 
 export class UpdateProviderConfigDto {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  /** API (credenciales + cron) o LIST (planillas que sube el comercio). */
+  @IsOptional()
+  @IsEnum(PriceChannel)
+  priceChannel?: PriceChannel;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  manualIibbPercent?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v != null)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  manualPerceptionsPercent?: number | null;
 
   @IsOptional()
   @IsInt()

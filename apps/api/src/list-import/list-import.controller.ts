@@ -70,7 +70,8 @@ export class ListImportController {
     const providerKey = supplier.providerKey as string;
     if (createdByRetailer && tenant) {
       const client = commercialId(tenant);
-      await this.tenants.upsertLink({ clientTenantId: client, supplierTenantId: supplier.id });
+      // Lo creó el comercio: no hay nadie del otro lado todavía. Queda conectado por lista.
+      await this.tenants.upsertLink({ clientTenantId: client, supplierTenantId: supplier.id, status: "LIST_CONNECTED" });
       if (dto.config) await this.providers.updateConfig(client, providerKey, dto.config);
     }
     return { id: supplier.id, name: supplier.name, type: supplier.type, providerKey, listUpdateDays: supplier.listUpdateDays };

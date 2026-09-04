@@ -126,11 +126,13 @@ export class PortfolioService {
       if (!member) throw new BadRequestException("El vendedor no pertenece a tu organización");
     }
 
+    // Asignarle vendedor a alguien que se conectó por lista es reconocerlo: pasa a activo.
+    const autoActivate = link.status === "LIST_CONNECTED" && dto.status === undefined && Boolean(dto.accountManagerId);
     const updated = await this.prisma.tenantLink.update({
       where: { id: link.id },
       data: {
         ...(dto.accountManagerId === undefined ? {} : { accountManagerId: dto.accountManagerId }),
-        ...(dto.status === undefined ? {} : { status: dto.status }),
+        ...(dto.status === undefined ? (autoActivate ? { status: "ACTIVE" } : {}) : { status: dto.status }),
         ...(dto.discountPercent === undefined ? {} : { discountPercent: dto.discountPercent }),
         ...(dto.notes === undefined ? {} : { notes: dto.notes }),
       },

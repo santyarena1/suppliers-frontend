@@ -26,7 +26,18 @@ const TENANT_ROLES = [
   "VIEWER",
 ] as const;
 
-const LINK_STATUSES = ["PENDING", "ACTIVE", "SUSPENDED", "REVOKED"] as const;
+const LINK_STATUSES = ["PENDING", "ACTIVE", "SUSPENDED", "REVOKED", "LIST_CONNECTED"] as const;
+
+export class SearchSuppliersDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  q?: string;
+
+  @IsOptional()
+  @IsIn(["DISTRIBUTOR", "BRAND"])
+  type?: "DISTRIBUTOR" | "BRAND";
+}
 
 export class CreateTenantDto {
   @IsString()

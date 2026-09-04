@@ -55,7 +55,7 @@ export class ListImportSchedulerService implements OnModuleInit, OnModuleDestroy
         const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: row.provider }, select: { id: true } });
         if (!supplier) continue;
         const links = await this.prisma.tenantLink.findMany({
-          where: { supplierTenantId: supplier.id, status: "ACTIVE", clientTenant: { active: true } },
+          where: { supplierTenantId: supplier.id, status: { in: ["ACTIVE", "LIST_CONNECTED"] }, clientTenant: { active: true } },
           select: { clientTenantId: true },
         });
         for (const link of links) {

@@ -6,6 +6,7 @@ import {
   TENANT_ROLES_BY_TYPE,
   TENANT_ROLES_CAN_MANAGE_PORTFOLIO,
   TENANT_ROLES_CAN_MANAGE_TEAM,
+  isKnownProvider,
   makeListProviderKey,
   type TenantRole,
   type TenantType,
@@ -24,7 +25,7 @@ import {
   UpdateTenantDto,
   UpsertLinkDto,
 } from "./dto/tenant.dto";
-import type { TenantContext } from "./tenant-context.service";
+import { commercialId, type TenantContext } from "./tenant-context.service";
 import { tenantLinkAllowed, tenantLinkRejection } from "./link-sides";
 
 const MEMBERSHIP_INCLUDE = {
@@ -268,6 +269,84 @@ export class TenantsService {
       data: { providerKey, listUpdateDays: listUpdateDays ?? null },
       include: TENANT_INCLUDE,
     });
+  }
+
+  /**
+   * Directorio de distribuidores y marcas para que un comercio se conecte por
+   * lista sin crear duplicados: busca por nombre y dice si ya está vinculado y si
+   * tiene integración por API.
+   */
+  async searchSuppliers(tenant: TenantContext, q: string | undefined, type?: "DISTRIBUTOR" | "BRAND") {
+    if (tenant.tenantType !== "RETAILER") {
+      throw new ForbiddenException("Solo un comercio busca proveedores para conectarse");
+    }
+    const query = (q ?? "").trim();
+    const rows = await this.prisma.tenant.findMany({
+      where: {
+        active: true,
+        type: type ? type : { in: ["DISTRIBUTOR", "BRAND"] },
+        ...(query ? { name: { contains: query, mode: "insensitive" } } : {}),
+      },
+      select: { id: true, name: true, type: true, providerKey: true, managedByPlatform: true },
+      orderBy: { name: "asc" },
+      take: 30,
+    });
+    const links = await this.prisma.tenantLink.findMany({
+      where: { clientTenantId: commercialId(tenant), supplierTenantId: { in: rows.map((r) => r.id) } },
+      select: { supplierTenantId: true, status: true },
+    });
+    const linkByTenant = new Map(links.map((l) => [l.supplierTenantId, l.status]));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      providerKey: r.providerKey,
+      hasApi: Boolean(r.providerKey && isKnownProvider(r.providerKey)),
+      managedByPlatform: r.managedByPlatform,
+      linkStatus: linkByTenant.get(r.id) ?? null,
+    }));
+  }
+
+  /**
+   * El comercio se conecta solo con un proveedor existente para cargarle su propia
+   * lista. No pide permiso: usa sus propios datos. Queda "conectado por lista",
+   * sin vendedor ni chat hasta que el proveedor lo reconozca. Si ya había vínculo
+   * activo, solo cambia el canal de precios a LIST.
+   */
+  async connectByList(tenant: TenantContext, supplierTenantId: string) {
+    if (tenant.tenantType !== "RETAILER") {
+      throw new ForbiddenException("Solo un comercio se conecta por lista");
+    }
+    const clientTenantId = commercialId(tenant);
+    const supplier = await this.assertTenantExists(supplierTenantId);
+    if (supplier.id === clientTenantId) throw new BadRequestException("Una organización no puede vincularse consigo misma");
+    const linkError = tenantLinkRejection(tenant.tenantType, supplier.type);
+    if (linkError) throw new BadRequestException(linkError);
+
+    let providerKey = supplier.providerKey;
+    if (!providerKey) {
+      providerKey = await this.freeListProviderKey(supplier.name);
+      await this.prisma.tenant.update({ where: { id: supplier.id }, data: { providerKey } });
+    }
+
+    const existing = await this.prisma.tenantLink.findUnique({
+      where: { clientTenantId_supplierTenantId: { clientTenantId, supplierTenantId: supplier.id } },
+    });
+    const link = existing
+      ? existing.status === "ACTIVE" || existing.status === "SUSPENDED"
+        ? existing
+        : await this.prisma.tenantLink.update({ where: { id: existing.id }, data: { status: "LIST_CONNECTED" } })
+      : await this.prisma.tenantLink.create({
+          data: { clientTenantId, supplierTenantId: supplier.id, status: "LIST_CONNECTED" },
+        });
+
+    await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId: clientTenantId, provider: providerKey } },
+      create: { tenantId: clientTenantId, provider: providerKey, priceChannel: "LIST", enabled: false },
+      update: { priceChannel: "LIST" },
+    });
+    domainEvents.emit("tenant.linked", { clientTenantId, supplierTenantId: supplier.id, provider: providerKey });
+    return { linkId: link.id, status: link.status, provider: providerKey, tenantName: supplier.name, tenantType: supplier.type };
   }
 
   /** Clave `LIST_<SLUG>` libre: si el slug ya está tomado, agrega un sufijo numérico. */

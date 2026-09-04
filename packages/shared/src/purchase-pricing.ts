@@ -25,11 +25,33 @@ export const PROVIDERS_WITH_IVA_RATE = [
   "DIAPSTORE",
 ] as const;
 
-export function providerHasIvaRate(provider: string): boolean {
-  return (PROVIDERS_WITH_IVA_RATE as readonly string[]).includes(provider);
+export type PriceChannel = "API" | "LIST";
+
+/**
+ * Si conocemos la alícuota de IVA de cada producto de este proveedor, que es lo
+ * que hace posible el pedido offline y el esquema. La conocemos cuando el
+ * proveedor la informa por API, o cuando los precios salen de una lista
+ * (proveedor por lista, o proveedor con API al que el comercio le carga su
+ * propio Excel): la lista trae la alícuota por fila o por perfil.
+ */
+export function providerHasIvaRate(provider: string, priceChannel?: PriceChannel | string | null): boolean {
+  if ((PROVIDERS_WITH_IVA_RATE as readonly string[]).includes(provider)) return true;
+  if (provider.startsWith("LIST_")) return true;
+  return priceChannel === "LIST";
+}
+
+/** Los precios de este proveedor, para este comercio, salen de una planilla. */
+export function providerPricesFromList(provider: string, priceChannel?: PriceChannel | string | null): boolean {
+  return provider.startsWith("LIST_") || priceChannel === "LIST";
 }
 
 export type PurchasePolicy = {
+  /** API o LIST. Con LIST el carrito solo genera un mensaje para el vendedor. */
+  priceChannel?: PriceChannel | null;
+  /** IIBB manual (%) sobre el neto, para proveedores que cotizan por lista. */
+  manualIibbPercent?: number | null;
+  /** Otras percepciones manuales (%) sobre el neto, para proveedores que cotizan por lista. */
+  manualPerceptionsPercent?: number | null;
   acceptsOffline: boolean;
   acceptsScheme: boolean;
   offlineIvaAdjustment: IvaAdjustment | null;

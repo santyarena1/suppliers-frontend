@@ -5,11 +5,12 @@ import { UsersModule } from "../users/users.module";
 import { AdminController, PlatformController } from "./admin.controller";
 import { CatalogEnrichmentController } from "./catalog-enrichment.controller";
 import { AdminService } from "./admin.service";
+import { ProviderMergeService } from "./provider-merge.service";
 
 @Module({
   imports: [UsersModule, AuthModule, CatalogModule],
   controllers: [AdminController, PlatformController, CatalogEnrichmentController],
-  providers: [AdminService],
+  providers: [AdminService, ProviderMergeService],
   exports: [AdminService],
 })
 export class AdminModule {}

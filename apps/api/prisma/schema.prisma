@@ -81,6 +81,15 @@ enum TenantLinkStatus {
   ACTIVE
   SUSPENDED
   REVOKED
+  /// El comercio se conectó solo, cargando su propia lista de precios del proveedor.
+  /// Ve el catálogo con sus precios, pero sin vendedor ni chat hasta que el proveedor lo reconozca (→ ACTIVE).
+  LIST_CONNECTED
+}
+
+/// Por dónde recibe un comercio los precios de un proveedor.
+enum PriceChannel {
+  API // Sincronización con credenciales (cron / manual)
+  LIST // Planillas que sube el comercio; el cron no toca este proveedor
 }
 
 /// Cómo se recalcula el IVA. Offline y esquema tienen cada uno el suyo.
@@ -819,6 +828,12 @@ model ProviderSyncConfig {
   provider             String
   enabled              Boolean              @default(false)
   syncIntervalMinutes  Int                  @default(60)
+  /// API o LIST. Un solo canal activo: nunca dos fuentes pisándose el precio.
+  priceChannel         PriceChannel         @default(API)
+  /// Proveedores que cotizan por lista: IIBB (%) sobre el neto, cargado a mano por el comercio.
+  manualIibbPercent    Decimal?             @db.Decimal(6, 2)
+  /// Proveedores que cotizan por lista: otras percepciones (%) sobre el neto, a mano.
+  manualPerceptionsPercent Decimal?         @db.Decimal(6, 2)
   missingProductAction MissingProductAction @default(KEEP)
   zeroStockAction      ZeroStockAction      @default(KEEP)
   priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)

@@ -14,6 +14,7 @@ import { ProviderRegistry } from "../providers/provider-registry";
 import type { NormalizedProduct } from "../providers/types";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
+import { matchAgainstCatalog } from "./catalog-matcher";
 import { computeDiff } from "./diff";
 import { readGrid } from "./grid-reader";
 import { normalizeRows } from "./row-normalizer";
@@ -91,17 +92,23 @@ export class ListImportService {
 
   /** A qué nivel escribe este actor sobre este proveedor, o corta si no puede. */
   async resolveAccess(actor: ImportActor, provider: Provider): Promise<ImportAccess> {
-    if (!isListProviderKey(provider) || this.registry.get(provider)) {
-      throw new BadRequestException("Este proveedor se sincroniza por API: no admite listas");
-    }
     const supplier = await this.prisma.tenant.findUnique({
       where: { providerKey: provider },
       select: { id: true, name: true, active: true },
     });
     if (!supplier || !supplier.active) throw new NotFoundException("Proveedor no encontrado");
+    // Un proveedor con API tiene su base en la API: la lista solo vale como precios
+    // propios de un comercio (canal LIST). Uno por lista admite base y propios.
+    const acceptsBase = isListProviderKey(provider) && !this.registry.get(provider);
 
     if (actor.isSuperadmin) {
-      return { level: "BASE", tenantId: actor.tenant?.tenantId ?? supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name };
+      if (acceptsBase) {
+        return { level: "BASE", tenantId: actor.tenant?.tenantId ?? supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name };
+      }
+      if (actor.tenant && actor.tenant.tenantType === "RETAILER") {
+        return { level: "TENANT", tenantId: commercialId(actor.tenant), supplierTenantId: supplier.id, supplierName: supplier.name };
+      }
+      throw new BadRequestException(`${supplier.name} se sincroniza por API: solo un comercio puede cargar su propia lista`);
     }
     const tenant = actor.tenant;
     if (!tenant) throw new ForbiddenException("Tu usuario no pertenece a ninguna organización");
@@ -109,6 +116,7 @@ export class ListImportService {
       throw new ForbiddenException("Solo dueños, administradores o product managers pueden cargar listas");
     }
     if (tenant.tenantId === supplier.id || tenant.commercialTenantId === supplier.id) {
+      if (!acceptsBase) throw new BadRequestException("Tu catálogo se sincroniza por API: no admite lista base");
       return { level: "BASE", tenantId: supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name };
     }
     if (tenant.tenantType === "RETAILER") {
@@ -177,6 +185,9 @@ export class ListImportService {
     const resolved = await this.resolveProfile(record.provider, analysis);
     const sheet = resolved.sheet;
     const normalized = normalizeRows(sheet, resolved.spec);
+    const matched = await matchAgainstCatalog(this.prisma, record.provider, normalized.items);
+    normalized.items = matched.items;
+    normalized.issues.push(...matched.issues);
     const previous = await this.previousOffers(record.provider, record.level, record.tenantId);
     const diff = computeDiff(previous, normalized.items);
     const thresholds = await this.sanityThresholds();
@@ -187,6 +198,11 @@ export class ListImportService {
       profileMatch: resolved.match,
     };
     const reasons = evaluateSanity(sanity, thresholds);
+    if (matched.knownCatalogSize > 0 && matched.unmatched > 0 && matched.unmatched > matched.matched) {
+      reasons.push(
+        `${matched.unmatched} de ${normalized.items.length} productos no coinciden con el catálogo conocido de este proveedor: puede estar mal mapeada la columna de código.`
+      );
+    }
 
     await this.prisma.$transaction([
       this.prisma.importRowIssue.deleteMany({ where: { importId } }),
@@ -208,6 +224,9 @@ export class ListImportService {
             issues: normalized.issues.length,
             normalized: normalized.items.length,
             profileMatch: resolved.match,
+            matchedToCatalog: matched.matched,
+            unmatchedToCatalog: matched.unmatched,
+            knownCatalogSize: matched.knownCatalogSize,
           },
           diff: { counts: diff.counts, samples: diff.samples, missingIds: diff.missingIds } as unknown as Prisma.InputJsonValue,
           reviewReasons: reasons,
@@ -447,7 +466,7 @@ export class ListImportService {
     const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: provider }, select: { id: true } });
     if (!supplier) return [];
     const links = await this.prisma.tenantLink.findMany({
-      where: { supplierTenantId: supplier.id, status: "ACTIVE", clientTenant: { active: true } },
+      where: { supplierTenantId: supplier.id, status: { in: ["ACTIVE", "LIST_CONNECTED"] }, clientTenant: { active: true } },
       select: { clientTenantId: true },
     });
     return [supplier.id, ...links.map((l) => l.clientTenantId)];
