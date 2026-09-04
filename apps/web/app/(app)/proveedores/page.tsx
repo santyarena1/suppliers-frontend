@@ -9,12 +9,15 @@ import RedeemAccessCode from "@/components/RedeemAccessCode";
 import LocalPurchaseDashboard from "@/components/insights/LocalPurchaseDashboard";
 import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
-  canSyncProvider, isLiveSyncRun, summarizeSyncRun, type VisibleProvider
+  canSyncProvider, isLiveSyncRun, summarizeSyncRun, isListProvider, listImportsApi, type VisibleProvider
 } from "@/lib/api";
+import { getTenant, isAdmin } from "@/lib/auth";
+import CreateListProviderDialog from "@/components/list-import/CreateListProviderDialog";
+import { ListFreshnessChip } from "@/components/list-import/ListFreshnessHints";
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
-import { Boxes, CheckCircle2, Clock, KeyRound, Loader2, MessageSquare, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
+import { Boxes, CheckCircle2, Clock, FileSpreadsheet, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
@@ -25,6 +28,28 @@ export default function ProveedoresPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<Provider | null>(null);
   const [syncResult, setSyncResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [createOpen, setCreateOpen] = useState(false);
+  const [enablingOwn, setEnablingOwn] = useState(false);
+  const [ownError, setOwnError] = useState<string | null>(null);
+  const tenantType = getTenant()?.type ?? null;
+  const admin = isAdmin();
+  // Un comercio (o el superadmin) da de alta proveedores por lista; un distribuidor o marca habilita la suya.
+  const canCreateListProvider = admin || tenantType === "RETAILER";
+  const canEnableOwnList = !admin && (tenantType === "DISTRIBUTOR" || tenantType === "BRAND");
+
+  async function handleEnableOwnList() {
+    setEnablingOwn(true);
+    setOwnError(null);
+    try {
+      const res = await listImportsApi.enableOwnList({ listUpdateDays: 15 });
+      invalidateMyProviders();
+      window.location.href = `/proveedores/${res.data.providerKey}?tab=lists`;
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setOwnError(msg || "No se pudo habilitar la lista");
+      setEnablingOwn(false);
+    }
+  }
 
   const loadStatuses = useCallback(async (linkedProviders: Provider[]) => {
     const results = await Promise.allSettled(linkedProviders.map((p) => providersApi.status(p)));
@@ -93,8 +118,32 @@ export default function ProveedoresPage() {
             Compras, marcas y catálogo de este comercio — las cuentas no se mezclan con otros locales
           </p>
         </div>
-        <PrefsPanel />
+        <div className="flex items-center gap-2">
+          {canCreateListProvider && (
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-brand-500 text-surface-200 hover:text-white rounded-lg px-3 py-1.5 transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" /> Nuevo proveedor por lista
+            </button>
+          )}
+          {canEnableOwnList && !visible.some((p) => p.linked && isListProvider(p.provider)) && (
+            <button
+              type="button"
+              onClick={handleEnableOwnList}
+              disabled={enablingOwn}
+              className="flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-brand-500 text-surface-200 hover:text-white rounded-lg px-3 py-1.5 transition-all disabled:opacity-50"
+              title={ownError ?? "Publicar tu catálogo subiendo tu lista de precios"}
+            >
+              {enablingOwn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />} Habilitar mi lista
+            </button>
+          )}
+          <PrefsPanel />
+        </div>
       </header>
+
+      <CreateListProviderDialog open={createOpen} onClose={() => setCreateOpen(false)} showPurchaseConfig={tenantType === "RETAILER" && !admin} />
 
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
@@ -136,7 +185,11 @@ export default function ProveedoresPage() {
                         >
                           <Link href={`/proveedores/${provider}`} className="flex items-center justify-between gap-3">
                             <ProviderBadge provider={provider} label={name} variant="inline" size="md" />
-                            {s?.hasCredentials ? (
+                            {isListProvider(provider) ? (
+                              <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400">
+                                <FileSpreadsheet className="w-3 h-3" /> Por lista
+                              </span>
+                            ) : s?.hasCredentials ? (
                               <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                                 <CheckCircle2 className="w-3 h-3" /> Configurado
                               </span>
@@ -167,6 +220,7 @@ export default function ProveedoresPage() {
                               Tu vendedor: {accountManager.name} · {accountManager.email}
                             </p>
                           )}
+                          {isListProvider(provider) && <ListFreshnessChip provider={provider} />}
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
                             {linkId && (
@@ -180,11 +234,11 @@ export default function ProveedoresPage() {
                               </Link>
                             )}
                             <Link
-                              href={`/proveedores/${provider}?tab=${canSyncProvider(s) ? "sync" : "credentials"}`}
+                              href={`/proveedores/${provider}?tab=${isListProvider(provider) ? "config" : canSyncProvider(s) ? "sync" : "credentials"}`}
                               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-lg py-1.5 transition-all"
                             >
-                              {s?.hasCredentials ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
-                              {s?.hasCredentials ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
+                              {s?.hasCredentials || isListProvider(provider) ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
+                              {s?.hasCredentials || isListProvider(provider) ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
                             </Link>
                             {retailer && providerHasIvaRate(provider) && (
                               <Link
@@ -195,6 +249,14 @@ export default function ProveedoresPage() {
                                 <StickyNote className="w-3.5 h-3.5" />
                               </Link>
                             )}
+                            {isListProvider(provider) ? (
+                              <Link
+                                href={`/proveedores/${provider}?tab=lists`}
+                                className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg py-1.5 transition-all"
+                              >
+                                <FileSpreadsheet className="w-3.5 h-3.5" /> Subir lista
+                              </Link>
+                            ) : (
                             <button
                               onClick={(e) => handleSync(provider, e)}
                               disabled={isSyncing || !canSyncProvider(s)}
@@ -204,6 +266,7 @@ export default function ProveedoresPage() {
                               {isSyncing ? <NodoSpinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
                               {isSyncing ? "Sincronizando" : "Sincronizar"}
                             </button>
+                            )}
                           </div>
 
                           {isSyncing && <SyncProgressBar run={s?.currentRun} />}

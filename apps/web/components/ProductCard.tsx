@@ -28,6 +28,7 @@ import {
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
 import ProductSyncedAt from "./ProductSyncedAt";
+import { ListOverdueHint } from "@/components/list-import/ListFreshnessHints";
 import AiImageDisclaimer from "./AiImageDisclaimer";
 
 function CardProviderPill({ provider }: { provider: string }) {
@@ -345,6 +346,7 @@ export default function ProductCard({ product, priceMode = "list" }: { product: 
           syncedAt={product.syncedAt}
           className="text-[9px] text-surface-500 text-center leading-tight px-1 pb-0.5"
         />
+        <ListOverdueHint provider={product.provider} />
       </div>
 
       <SalePricePanel

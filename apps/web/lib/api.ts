@@ -135,10 +135,22 @@ export const assetsApi = {
 };
 
 // --- Types ---
-export type Provider =
-  | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE"
-  | "INVID" | "GC" | "POLYTECH" | "ASHIR" | "HDC"
-  | "SOLUTION_BOX" | "DISTECNA" | "CEVEN" | "DIAPSTORE";
+/**
+ * Clave de proveedor. Los 14 con integración están en ALL_PROVIDERS; los
+ * proveedores por lista (creados desde el panel) usan claves `LIST_<SLUG>`.
+ */
+export type Provider = string;
+
+export const LIST_PROVIDER_PREFIX = "LIST_";
+
+export function isListProvider(provider: string | null | undefined): boolean {
+  return typeof provider === "string" && provider.startsWith(LIST_PROVIDER_PREFIX);
+}
+
+export function isProviderKey(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return ALL_PROVIDERS.includes(value) || /^LIST_[A-Z0-9]+(?:_[A-Z0-9]+)*$/.test(value);
+}
 
 export const ALL_PROVIDERS: Provider[] = [
   "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE",
@@ -147,7 +159,7 @@ export const ALL_PROVIDERS: Provider[] = [
 ];
 
 /** Nombre comercial normalizado de cada proveedor. Es lo único que se muestra en pantalla. */
-export const PROVIDER_LABELS: Record<Provider, string> = {
+export const PROVIDER_LABELS: Record<string, string> = {
   NEW_BYTES: "New Bytes",
   ELIT: "Elit",
   GRUPO_NUCLEO: "Grupo Núcleo",
@@ -1072,15 +1084,169 @@ export const providersApi = {
     api.post<{ provider: Provider; deleted: number }>(`/providers/${providerName}/clear-zero-stock`),
   deleteAllProducts: (providerName: Provider) =>
     api.delete<{ provider: Provider; deleted: number }>(`/providers/${providerName}/products`),
-  importFile: (providerName: Provider, file: File) => {
+};
+
+// --- Proveedores por lista: importación de planillas ---
+export type ListImportLevel = "BASE" | "TENANT";
+export type ListImportStatus = "PROCESSING" | "NEEDS_REVIEW" | "APPLIED" | "DISCARDED" | "REVERTED" | "FAILED";
+export type ImportNumberFormat = "DOT" | "COMMA";
+export type ImportDividerMeaning = "BRAND" | "CATEGORY" | "IGNORE";
+export type FreshnessStatus = "NONE" | "NO_CADENCE" | "OK" | "DUE_SOON" | "OVERDUE";
+
+export interface ListImportSummary {
+  created: number;
+  priceChanged: number;
+  unchanged: number;
+  missing: number;
+  withoutPrice: number;
+  issues: number;
+  normalized: number;
+  profileMatch: "EXACT" | "PARTIAL" | "PROPOSED" | "MANUAL";
+}
+
+export interface ListImportRecord {
+  id: string;
+  provider: Provider;
+  level: ListImportLevel;
+  status: ListImportStatus;
+  tenantId: string;
+  tenantName: string | null;
+  uploadedByUserId: string;
+  originalFileName: string;
+  profileId: string | null;
+  rowsTotal: number;
+  rowsData: number;
+  summary: ListImportSummary | null;
+  error: string | null;
+  createdAt: string;
+  appliedAt: string | null;
+  revertedAt: string | null;
+}
+
+export interface ListImportDiffItem {
+  externalId: string;
+  name: string;
+  price: number | null;
+}
+
+export interface ListImportPriceChange {
+  externalId: string;
+  name: string;
+  before: number | null;
+  after: number | null;
+  percent: number | null;
+}
+
+export interface ListImportPreview {
+  sheetCount: number;
+  sheets: { index: number; name: string; dataRows: number; headerRow: number | null }[];
+  sheetIndex: number;
+  headerRow: number | null;
+  headers: string[];
+  rows: (string | number | boolean | null)[][];
+  dividers: string[];
+}
+
+export interface ListImportDetail extends ListImportRecord {
+  diff: {
+    counts: { created: number; priceChanged: number; unchanged: number; missing: number; withoutPrice: number };
+    samples: { created: ListImportDiffItem[]; priceChanged: ListImportPriceChange[]; missing: ListImportDiffItem[] };
+    missingIds: string[];
+  } | null;
+  reviewReasons: string[] | null;
+  preview: ListImportPreview | null;
+  issues: { id: string; row: number; column: string | null; message: string }[];
+}
+
+export interface ImportProfileView {
+  id: string;
+  provider: Provider;
+  version: number;
+  status: "PROPOSED" | "ACTIVE" | "ARCHIVED";
+  fingerprint: string;
+  sheetIndex: number;
+  sheetName: string | null;
+  headerRow: number;
+  columnMap: Record<string, string | null>;
+  currency: string | null;
+  priceIncludesIva: boolean;
+  ivaPercent: number | null;
+  numberFormat: ImportNumberFormat;
+  dividerMeaning: ImportDividerMeaning;
+  sampleRows: { headers: string[]; rows: (string | number | boolean | null)[][] } | null;
+  proposedByAi: boolean;
+  aiReasoning: string | null;
+  createdAt: string;
+}
+
+export interface ImportProfileSpecInput {
+  sheetIndex?: number;
+  headerRow?: number;
+  columnMap: Record<string, string | null>;
+  currency?: string | null;
+  priceIncludesIva?: boolean;
+  ivaPercent?: number | null;
+  numberFormat?: ImportNumberFormat;
+  dividerMeaning?: ImportDividerMeaning;
+  reprocessImportId?: string;
+}
+
+export interface ImportProfileBundle {
+  fields: string[];
+  active: ImportProfileView | null;
+  proposed: ImportProfileView | null;
+  latestImport: { id: string; status: ListImportStatus; preview: ListImportPreview | null; originalFileName: string; createdAt: string } | null;
+}
+
+export interface ListFreshness {
+  provider: Provider;
+  listUpdateDays: number | null;
+  lastImportAt: string | null;
+  lastImportLevel: ListImportLevel | null;
+  expectedAt: string | null;
+  status: FreshnessStatus;
+}
+
+export interface CreatedListProvider {
+  id: string;
+  name: string;
+  type: TenantType;
+  providerKey: Provider;
+  listUpdateDays: number | null;
+}
+
+export const listImportsApi = {
+  createProvider: (data: {
+    name: string;
+    type: "DISTRIBUTOR" | "BRAND";
+    listUpdateDays?: number | null;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    notes?: string | null;
+    config?: Partial<ProviderConfig>;
+  }) => api.post<CreatedListProvider>("/providers", data),
+  enableOwnList: (data: { listUpdateDays?: number | null }) =>
+    api.post<CreatedListProvider>("/providers/enable-own-list", data),
+  upload: (provider: Provider, file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return api.post<ProviderSyncResult & { rowsInFile: number; rowsSkipped: number; unmappedColumns: string[] }>(
-      `/providers/${providerName}/import`,
-      form,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
+    return api.post<ListImportRecord>(`/providers/${provider}/imports`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
   },
+  list: (provider: Provider) => api.get<ListImportRecord[]>(`/providers/${provider}/imports`),
+  get: (provider: Provider, id: string) => api.get<ListImportDetail>(`/providers/${provider}/imports/${id}`),
+  apply: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/apply`),
+  discard: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/discard`),
+  revert: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/revert`),
+  profile: (provider: Provider) => api.get<ImportProfileBundle>(`/providers/${provider}/import-profile`),
+  saveProfile: (provider: Provider, spec: ImportProfileSpecInput) =>
+    api.put<ImportProfileView>(`/providers/${provider}/import-profile`, spec),
+  suggestProfile: (provider: Provider, sheetIndex?: number) =>
+    api.post<{ spec: Required<Omit<ImportProfileSpecInput, "reprocessImportId">>; fromAi: boolean; reasoning: string; headers: string[] }>(
+      `/providers/${provider}/import-profile/suggest${sheetIndex === undefined ? "" : `?sheet=${sheetIndex}`}`
+    ),
+  freshness: (provider: Provider) => api.get<ListFreshness>(`/providers/${provider}/freshness`),
 };
 
 // --- Invid: pedidos y cuenta corriente (solo lectura, datos reales de su portal) ---
@@ -2625,6 +2791,7 @@ export const tenantsApi = {
       notes: string | null;
       advertisingEnabled: boolean;
       active: boolean;
+      listUpdateDays: number | null;
     }>
   ) => api.put<TenantNode>(`/admin/tenants/${id}`, data),
   remove: (id: string) => api.delete(`/admin/tenants/${id}`),

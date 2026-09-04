@@ -293,6 +293,47 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: feed `{ items: NewsCard[], nextCursor? }` · hero `{ slides[] }` · ficha `{ article, author: { name, type, logoUrl, linked, advertised }, attachments[], canDownloadCommercial, stats? }` · pública sin adjuntos `IN_APP`
 - **Estado**: IMPLEMENTADO
 - **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes (cualquier campaña ACTIVE). El hero usa el slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. Cuerpo HTML sanitizado (`sanitizeBrandHtml`). UI: `/noticias`, `/n/:publicKey`. Admin: `/admin?tab=news`. Aislamiento: `scripts/check-news-visibility.mjs`. Muestra: `scripts/seed-demo-news.mjs`.
+### [FEATURE] Proveedores por lista (distribuidores / marcas sin API) — alta
+- **Método**: POST
+- **Ruta**: `/providers` · `/providers/enable-own-list`
+- **Auth**: Bearer. `/providers`: superadmin o comercio (tipo 1). `/providers/enable-own-list`: organización distribuidor o marca.
+- **Body / Params**: `/providers`: `{ name, type: "DISTRIBUTOR"|"BRAND", listUpdateDays?, contactEmail?, contactPhone?, notes?, config? }` (`config` = mismos campos que `PUT /providers/:provider/config`, solo para el comercio que lo crea). `/providers/enable-own-list`: `{ listUpdateDays? }`.
+- **Respuesta esperada**: `{ id, name, type, providerKey, listUpdateDays }`. `providerKey` es `LIST_<SLUG>` generado a partir del nombre (único, inmutable).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un proveedor por lista es un `Tenant` DISTRIBUTOR/BRAND con `providerKey` `LIST_*`; usa toda la configuración de proveedor existente (markup, faltantes, stock cero, offline/esquema, logo/color). Si lo crea un comercio queda vinculado automáticamente y marcado `managedByPlatform`. El tipo `Provider` ya no es una unión cerrada: los 14 con adapter están en `ALL_PROVIDERS`; una clave válida cumple `isProviderKey`. La búsqueda, el carrito y las fichas funcionan igual: las ofertas del proveedor se materializan como `TenantProductOffer` (`source` BASE_LIST) en cada comercio vinculado, y el descuento del vínculo se aplica al leer solo sobre esas.
+
+### [FEATURE] Proveedores por lista — subir y gestionar planillas
+- **Método**: POST | GET
+- **Ruta**: `POST /providers/:key/imports` (multipart, campo `file`, .xlsx/.xls/.csv, máx. 20 MB) · `GET /providers/:key/imports` · `GET /providers/:key/imports/:id` · `POST /providers/:key/imports/:id/apply` · `POST /providers/:key/imports/:id/discard` · `POST /providers/:key/imports/:id/revert`
+- **Auth**: Bearer. Nivel según quién sube: superadmin o la organización dueña del `providerKey` (OWNER/ADMIN/PRODUCT_MANAGER) → `level: BASE` (precio base para todos los vinculados); comercio vinculado (OWNER/ADMIN/PRODUCT_MANAGER) → `level: TENANT` (sus precios, solo él). Un proveedor con API responde 400.
+- **Body / Params**: —
+- **Respuesta esperada**: `ListImportRecord` `{ id, provider, level, status: PROCESSING|NEEDS_REVIEW|APPLIED|DISCARDED|REVERTED|FAILED, tenantId, tenantName, originalFileName, profileId, rowsTotal, rowsData, summary: { created, priceChanged, unchanged, missing, withoutPrice, issues, normalized, profileMatch }, error, createdAt, appliedAt, revertedAt }`. El detalle agrega `diff: { counts, samples: { created[], priceChanged[] (before/after/percent), missing[] }, missingIds[] }`, `reviewReasons[]`, `preview` (encabezados, primeras 30 filas, hojas) e `issues[]` (fila, columna, motivo).
+- **Estado**: IMPLEMENTADO
+- **Notas**: La subida responde enseguida en `PROCESSING` y el procesamiento corre en background (la UI consulta el detalle cada pocos segundos). Pipeline: lectura cruda (celdas unificadas), análisis estructural (encabezado real debajo de logos, divisores por marca/categoría, pie de página, encabezados repetidos), perfil de lectura por huella del archivo, normalización con issues por fila, diff contra la última carga aplicada del mismo nivel y chequeos de sanidad (faltantes > 30 %, cambios > 80 %, todos con el mismo %, > 5 % sin precio, filas < mitad, perfil parcial o propuesto). Si todo cierra se aplica sola; si no, queda `NEEDS_REVIEW` y notifica (`OrgNotification` SYSTEM, `landingKey` `list-import:<id>`). `apply` fuerza una carga en revisión y aprueba su perfil propuesto. `revert` solo sobre la última aplicada del nivel; restaura el snapshot. Una lista propia (TENANT) de un comercio no pisa ni oculta lo que viene de la base y viceversa (acción de faltantes acotada por `source`). Si solo hay lista de un comercio, los demás vinculados ven la ficha sin precio. Un cron marca `FAILED` lo que quedó `PROCESSING` más de 30 min.
+
+### [FEATURE] Proveedores por lista — perfil de lectura
+- **Método**: GET | PUT | POST
+- **Ruta**: `GET /providers/:key/import-profile` · `PUT /providers/:key/import-profile` · `POST /providers/:key/import-profile/suggest?sheet=`
+- **Auth**: Bearer, mismos permisos que subir.
+- **Body / Params**: PUT: `{ sheetIndex?, columnMap: { "<encabezado>": "<campo>"|null }, currency?, priceIncludesIva?, ivaPercent?, numberFormat: DOT|COMMA, dividerMeaning: BRAND|CATEGORY|IGNORE, reprocessImportId? }`. Campos válidos = los de `NormalizedProduct` (externalId, name, price, finalPrice, brand, category, stock…). Obligatorio `name` y `price` o `finalPrice`.
+- **Respuesta esperada**: GET: `{ fields[], active, proposed, latestImport: { id, status, preview, originalFileName, createdAt } }`. PUT: el perfil creado (versión nueva, ACTIVE; los anteriores quedan ARCHIVED). suggest: `{ spec, fromAi, reasoning, headers[] }` sin guardar.
+- **Estado**: IMPLEMENTADO
+- **Notas**: La IA (OpenAI, clave guardada en base como en el enriquecimiento de catálogo) se consulta una sola vez por formato nuevo con encabezado + 25 filas de muestra; sin clave o si falla, mapeo heurístico por nombres de columna. Un perfil propuesto siempre pasa por revisión antes de usarse solo. Con `reprocessImportId` la carga en revisión se vuelve a procesar con el perfil nuevo.
+
+### [FEATURE] Proveedores por lista — frescura
+- **Método**: GET
+- **Ruta**: `/providers/:key/freshness`
+- **Auth**: Bearer, organización vinculada, dueña o superadmin.
+- **Body / Params**: —
+- **Respuesta esperada**: `{ provider, listUpdateDays, lastImportAt, lastImportLevel, expectedAt, status: NONE|NO_CADENCE|OK|DUE_SOON|OVERDUE }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: `listUpdateDays` es del proveedor (`Tenant.listUpdateDays`, se define al crearlo; editable por superadmin en `PUT /admin/tenants/:id`). `DUE_SOON` = faltan 2 días o menos. La UI muestra el semáforo en la ficha del proveedor y, en el buscador, la leyenda "Lista vencida, se sugiere actualizar" debajo de la fecha de actualización del producto para quien puede subir listas. Un cron diario (09:00) crea una `OrgNotification` al proveedor y a los últimos que subieron cuando la lista vence (`landingKey` `list-overdue:<key>`), sin repetir en 24 h.
+
+### [ELIMINADO] `POST /providers/:provider/import`
+- Reemplazado por `POST /providers/:key/imports` (proveedores por lista). Los proveedores con API siguen sincronizando por adapter.
+
+
+## Pendiente (futuro)
 
 ## Pendiente (futuro)
 

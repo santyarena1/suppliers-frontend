@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDER_LABELS, type Provider } from "@/lib/api";
+import { PROVIDER_LABELS, cachedMyProviders, type Provider } from "@/lib/api";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { PROVIDER_CHIP_COLOR } from "@/lib/providerColors";
 
@@ -9,7 +9,18 @@ export type ProviderBadgeSize = "sm" | "md" | "lg";
 
 export function providerLabel(provider: string, override?: string): string {
   if (override?.trim()) return override.trim();
-  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  const known = PROVIDER_LABELS[provider as Provider];
+  if (known) return known;
+  const cached = cachedMyProviders()?.find((p) => p.provider === provider)?.name;
+  if (cached) return cached;
+  // Proveedor por lista sin nombre a mano: "LIST_ACME_SRL" → "Acme Srl".
+  const body = provider.startsWith("LIST_") ? provider.slice(5) : provider;
+  return body
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 const LOGO: Record<ProviderBadgeSize, string> = {

@@ -5,11 +5,13 @@ import Link from "next/link";
 import Image from "next/image";
 import PrefsPanel from "@/components/PrefsPanel";
 import {
-  ALL_PROVIDERS, IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
+  IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
   TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders,
-  isLiveSyncRun, summarizeSyncRun,
+  isLiveSyncRun, summarizeSyncRun, isListProvider, isProviderKey,
 } from "@/lib/api";
+import ListImportsPanel from "@/components/list-import/ListImportsPanel";
+import { freshnessLabel, useListFreshness } from "@/lib/listFreshness";
 import { getTenant, isAdmin } from "@/lib/auth";
 import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
@@ -26,7 +28,7 @@ import GrupoNucleoAccountPanel from "@/components/GrupoNucleoAccountPanel";
 import AirAccountPanel from "@/components/AirAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import {
-  AlertTriangle, ArrowLeft, Boxes, CheckCircle2, FileSpreadsheet, ImageOff, KeyRound,
+  AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
   Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
 } from "lucide-react";
 
@@ -43,10 +45,10 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
-type ProviderTab = "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account";
+type ProviderTab = "lists" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account";
 
 const VALID_PROVIDER_TABS: ProviderTab[] = [
-  "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account",
+  "lists", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -61,14 +63,16 @@ const INTERVAL_OPTIONS = [
 export default function ProviderDetailPage({ params }: { params: Promise<{ provider: string }> }) {
   const { provider: raw } = use(params);
   const provider = raw.toUpperCase() as Provider;
-  const valid = ALL_PROVIDERS.includes(provider);
-  const implemented = IMPLEMENTED_PROVIDERS.includes(provider);
+  const valid = isProviderKey(provider);
+  const listBased = isListProvider(provider);
+  const implemented = IMPLEMENTED_PROVIDERS.includes(provider) || listBased;
 
-  const [tab, setTab] = useState<ProviderTab>("sync");
+  const [tab, setTab] = useState<ProviderTab>(listBased ? "lists" : "sync");
+  const [listRefresh, setListRefresh] = useState(0);
+  const listFreshness = useListFreshness(listBased ? provider : null, listRefresh);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [importing, setImporting] = useState(false);
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [chatLinkId, setChatLinkId] = useState<string | null>(null);
   const [chatSeller, setChatSeller] = useState<string | null>(null);
@@ -223,7 +227,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
   useEffect(() => { loadStatus(); loadConfig(); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const liveSync = isLiveSyncRun(status?.currentRun) || syncing || importing;
+  const liveSync = isLiveSyncRun(status?.currentRun) || syncing;
 
   useEffect(() => {
     if (!liveSync) return;
@@ -261,35 +265,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setSyncResult({ ok: false, msg: msg || "Error al sincronizar" });
     } finally {
       setSyncing(false);
-    }
-  }
-
-  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setImporting(true);
-    setSyncResult(null);
-    try {
-      const res = await providersApi.importFile(provider, file);
-      const parts = [
-        summarizeSyncRun({
-          processed: res.data.synced,
-          created: res.data.created ?? 0,
-          updated: res.data.updated ?? 0,
-          unchanged: res.data.unchanged ?? 0,
-        }),
-      ];
-      if (res.data.rowsSkipped > 0) parts.push(`${res.data.rowsSkipped} filas omitidas (sin código o nombre)`);
-      if (res.data.unmappedColumns.length > 0) parts.push(`columnas no reconocidas: ${res.data.unmappedColumns.join(", ")}`);
-      setSyncResult({ ok: true, msg: parts.join(" · ") });
-      await loadStatus({ silent: true });
-      setHistoryKey((n) => n + 1);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setSyncResult({ ok: false, msg: msg || "Error al importar el archivo" });
-    } finally {
-      setImporting(false);
     }
   }
 
@@ -359,6 +334,17 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <StatCard label="En catálogo" value={status?.total} icon={Boxes} loading={loadingStatus} />
                   <StatCard label="Con stock" value={status?.withStock} icon={PackageCheck} loading={loadingStatus} accent="emerald" />
+                  {listBased ? (
+                    <div className="bg-surface-900 border border-surface-800 rounded-xl p-4 flex flex-col justify-between">
+                      <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Lista de precios</span>
+                      <button onClick={() => setTab("lists")} className={`flex items-center gap-1.5 text-sm font-semibold mt-1 text-left ${
+                        listFreshness ? FRESHNESS_TONE[freshnessLabel(listFreshness).tone] : "text-surface-400"
+                      }`}>
+                        <CalendarClock className="w-4 h-4 flex-shrink-0" />
+                        {listFreshness ? freshnessLabel(listFreshness).text : "Cargando…"}
+                      </button>
+                    </div>
+                  ) : (
                   <div className="bg-surface-900 border border-surface-800 rounded-xl p-4 flex flex-col justify-between">
                     <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Tu cuenta</span>
                     {loadingStatus ? (
@@ -377,10 +363,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       </button>
                     )}
                   </div>
+                  )}
                   <div className="bg-surface-900 border border-surface-800 rounded-xl p-4 flex flex-col justify-between">
-                    <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Última sync</span>
+                    <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">{listBased ? "Última lista" : "Última sync"}</span>
                     <span className="text-sm font-semibold text-white mt-1">
-                      {status?.lastSyncedAt ? new Date(status.lastSyncedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                      {listBased
+                        ? listFreshness?.lastImportAt ? new Date(listFreshness.lastImportAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "—"
+                        : status?.lastSyncedAt ? new Date(status.lastSyncedAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" }) : "—"}
                     </span>
                   </div>
                 </div>
@@ -388,8 +377,12 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 {/* Tabs */}
                 <div className="flex border-b border-surface-800 overflow-x-auto scrollbar-none">
                   {[
-                    { key: "credentials" as const, label: "Mi cuenta" },
-                    { key: "sync" as const, label: "Sincronización", shortLabel: "Sync" },
+                    ...(listBased
+                      ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }]
+                      : [
+                          { key: "credentials" as const, label: "Mi cuenta" },
+                          { key: "sync" as const, label: "Sincronización", shortLabel: "Sync" },
+                        ]),
                     { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración", shortLabel: isRetailer ? "Offline" : "Config" },
                     { key: "catalog" as const, label: "Catálogo" },
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
@@ -417,7 +410,18 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   ))}
                 </div>
 
-                {tab === "credentials" && (
+                {tab === "lists" && listBased && (
+                  <ListImportsPanel
+                    provider={provider}
+                    uploadsAsBase={isAdmin() || !isRetailer}
+                    onApplied={() => {
+                      void loadStatus();
+                      setListRefresh((k) => k + 1);
+                    }}
+                  />
+                )}
+
+                {tab === "credentials" && !listBased && (
                   <ProviderCredentialForm provider={provider} onChanged={loadStatus} />
                 )}
 
@@ -456,7 +460,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       )}
                       <button
                         onClick={handleSync}
-                        disabled={syncing || importing || isLiveSyncRun(status?.currentRun) || loadingStatus || !canSyncProvider(status)}
+                        disabled={syncing || isLiveSyncRun(status?.currentRun) || loadingStatus || !canSyncProvider(status)}
                         className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                       >
                         {syncing || isLiveSyncRun(status?.currentRun) ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
@@ -475,24 +479,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           {syncResult.msg}
                         </div>
                       )}
-                    </div>
-
-                    <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                        <FileSpreadsheet className="w-4 h-4 text-brand-700 dark:text-brand-400" />
-                        Importar desde Excel/CSV
-                      </div>
-                      <p className="text-xs text-surface-500">
-                        Alternativa cuando la API del proveedor no da abasto (límites de requests, etc.): exportá el
-                        catálogo desde el portal de {provider.replace(/_/g, " ")} y subilo acá. Reconoce columnas
-                        como código/SKU, nombre, precio, stock, marca, categoría — lo que no matchea se ignora, no se inventa.
-                      </p>
-                      <label className={`flex items-center justify-center gap-2 border border-dashed border-surface-700 hover:border-brand-500 text-surface-300 hover:text-white text-sm font-medium rounded-lg py-2.5 transition-all cursor-pointer ${importing ? "opacity-50 pointer-events-none" : ""}`}>
-                        {importing ? <NodoSpinner className="w-4 h-4" /> : <FileSpreadsheet className="w-4 h-4" />}
-                        {importing ? "Importando..." : "Elegir archivo (.xlsx, .csv)"}
-                        <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} disabled={importing} />
-                      </label>
-                      {importing && <SyncProgressBar run={status?.currentRun} />}
                     </div>
 
                     <CatalogSyncHistory provider={provider} refreshKey={historyKey} live={liveSync} />
@@ -515,6 +501,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           <ProviderPurchaseConfig provider={provider} config={config} onChange={setConfig} />
                         )}
 
+                        {!listBased && (
                         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="flex items-center gap-2 text-sm font-semibold text-white">
                             <Settings className="w-4 h-4 text-brand-700 dark:text-brand-400" />
@@ -559,6 +546,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                             <p className="text-[11px] text-surface-500 mt-1">Fijo del proveedor, no editable.</p>
                           </div>
                         </div>
+                        )}
 
                         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="text-sm font-semibold text-white">Precio</div>
@@ -809,6 +797,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     </>
   );
 }
+
+const FRESHNESS_TONE = {
+  ok: "text-emerald-700 dark:text-emerald-400",
+  warn: "text-amber-400",
+  bad: "text-red-400",
+  muted: "text-surface-400",
+};
 
 function StatCard({ label, value, icon: Icon, loading, accent }: {
   label: string; value: number | undefined; icon: React.ElementType; loading: boolean; accent?: "emerald";
