@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
-import { providerHasIvaRate, type Provider } from "@nodo/shared";
-import type { IvaAdjustment } from "@prisma/client";
+import { isListProviderKey, providerHasIvaRate, LIST_PROVIDER_PREFIX, type Provider } from "@nodo/shared";
+import type { IvaAdjustment, OfferSource } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { CredentialsService } from "../credentials/credentials.service";
@@ -21,6 +21,23 @@ import {
   type CatalogSyncProgress,
   type CatalogSyncSource,
 } from "./catalog-sync-progress";
+
+/** Cómo se guarda una tanda: de dónde vienen las ofertas. */
+export interface SyncOptions {
+  /** SYNC (default): API del proveedor. OWN_LIST / BASE_LIST: listas importadas. */
+  offerSource?: OfferSource;
+}
+
+export type SyncResult = {
+  provider: string;
+  synced: number;
+  created: number;
+  updated: number;
+  unchanged?: number;
+  missingAffected: number;
+  zeroStockAffected: number;
+  runId?: string;
+};
 
 /** Lo que pertenece a la oferta de una organización y no a la ficha del producto. */
 const OFFER_FIELDS = new Set([
@@ -212,20 +229,92 @@ export class ProvidersService implements OnModuleInit {
     }
   }
 
-  /** Igual que sync(), pero la fuente de productos es un archivo Excel/CSV subido a mano en vez de la API del proveedor. */
-  async importFromRows(tenantId: string, provider: Provider, items: NormalizedProduct[]) {
-    await this.visibility.assertLinked(tenantId, provider);
-    return this.runSync(tenantId, provider, async (onPage) => {
-      await onPage(items);
-    }, "import");
+  /**
+   * Guarda en una organización las ofertas que salieron de una lista importada
+   * (propia del comercio, o base del proveedor materializada). Mismo pipeline que
+   * un sync real: ficha, oferta, historial de precio, corrida de sync y reglas de
+   * faltantes / stock cero, pero acotado a las filas del mismo origen para que una
+   * lista propia parcial no esconda lo que viene de la lista base, ni al revés.
+   *
+   * No valida vínculo: el módulo de importación ya decidió quién puede escribir.
+   */
+  async applyListOffers(params: {
+    tenantId: string;
+    provider: Provider;
+    items: NormalizedProduct[];
+    source: Exclude<OfferSource, "SYNC">;
+  }): Promise<SyncResult> {
+    return this.runSync(
+      params.tenantId,
+      params.provider,
+      async (onPage) => {
+        await onPage(params.items);
+      },
+      "import",
+      { offerSource: params.source }
+    );
+  }
+
+  /**
+   * Copia la lista base de un proveedor (SupplierBaseOffer) a las ofertas de una
+   * organización, como source BASE_LIST. Donde la organización ya tiene una oferta
+   * OWN_LIST no pisa nada: sus precios mandan. Es lo que corre al aplicar una lista
+   * base y al crear un vínculo nuevo con un proveedor por lista.
+   */
+  async materializeBaseOffers(tenantId: string, provider: Provider): Promise<SyncResult | null> {
+    if (!isListProviderKey(provider)) return null;
+    const rows = await this.prisma.supplierBaseOffer.findMany({ where: { provider } });
+    if (rows.length === 0) return null;
+    const fichas = await this.prisma.providerSyncCache.findMany({
+      where: { provider, externalId: { in: rows.map((r) => r.externalId) } },
+    });
+    const fichaById = new Map(fichas.map((f) => [f.externalId, f]));
+    const items: NormalizedProduct[] = [];
+    for (const row of rows) {
+      const ficha = fichaById.get(row.externalId);
+      if (!ficha) continue;
+      items.push({
+        externalId: row.externalId,
+        sku: ficha.sku ?? undefined,
+        partNumber: ficha.partNumber ?? undefined,
+        ean: ficha.ean ?? undefined,
+        name: ficha.name,
+        brand: ficha.brand ?? undefined,
+        category: ficha.category ?? undefined,
+        subcategory: ficha.subcategory ?? undefined,
+        description: ficha.description ?? undefined,
+        longDescription: ficha.longDescription ?? undefined,
+        imageUrl: ficha.imageUrl ?? undefined,
+        productUrl: ficha.productUrl ?? undefined,
+        warranty: ficha.warranty ?? undefined,
+        weight: numberOrUndefined(ficha.weight),
+        weightUnit: ficha.weightUnit ?? undefined,
+        height: numberOrUndefined(ficha.height),
+        width: numberOrUndefined(ficha.width),
+        length: numberOrUndefined(ficha.length),
+        dimensionsUnit: ficha.dimensionsUnit ?? undefined,
+        volume: numberOrUndefined(ficha.volume),
+        tags: ficha.tags ?? undefined,
+        price: numberOrUndefined(row.price),
+        finalPrice: numberOrUndefined(row.finalPrice),
+        currency: row.currency ?? undefined,
+        ivaPercent: numberOrUndefined(row.ivaPercent),
+        stock: row.stock ?? undefined,
+        stockStatus: row.stockStatus ?? undefined,
+        raw: ficha.raw,
+      });
+    }
+    return this.applyListOffers({ tenantId, provider, items, source: "BASE_LIST" });
   }
 
   private async runSync(
     tenantId: string,
     provider: Provider,
     run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>,
-    source: CatalogSyncSource = "manual"
-  ) {
+    source: CatalogSyncSource = "manual",
+    opts: SyncOptions = {}
+  ): Promise<SyncResult> {
+    const offerSource: OfferSource = opts.offerSource ?? "SYNC";
     const config = await this.getConfig(tenantId, provider);
     const minStock = config.minStockThreshold || 0;
     const expectedTotal = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
@@ -249,7 +338,7 @@ export class ProvidersService implements OnModuleInit {
 
     try {
       await run(async (items) => {
-        await this.upsertPage(tenantId, provider, items, progress);
+        await this.upsertPage(tenantId, provider, items, progress, offerSource);
       });
     } catch (err) {
       await progress.fail(errorMessage(err));
@@ -265,14 +354,16 @@ export class ProvidersService implements OnModuleInit {
       tenantId,
       provider,
       syncStartedAt,
-      config.missingProductAction
+      config.missingProductAction,
+      offerSource
     );
     const zeroStockCount = await this.applyZeroStockAction(
       tenantId,
       provider,
       syncStartedAt,
       config.zeroStockAction,
-      minStock
+      minStock,
+      offerSource
     );
 
     const finished = await progress.succeed({
@@ -330,10 +421,13 @@ export class ProvidersService implements OnModuleInit {
     tenantId: string,
     provider: Provider,
     syncStartedAt: Date,
-    action: string
+    action: string,
+    source: OfferSource = "SYNC"
   ) {
     if (action === "KEEP") return 0;
-    const where = { tenantId, provider, syncedAt: { lt: syncStartedAt } };
+    // Una lista solo decide sobre las filas de su mismo origen: la propia del
+    // comercio no esconde lo que viene de la base, ni la base lo propio.
+    const where = { tenantId, provider, syncedAt: { lt: syncStartedAt }, ...(source === "SYNC" ? {} : { source }) };
     if (action === "DELETE") {
       const res = await this.prisma.tenantProductOffer.deleteMany({ where });
       return res.count;
@@ -355,7 +449,8 @@ export class ProvidersService implements OnModuleInit {
     provider: Provider,
     syncStartedAt: Date,
     action: string,
-    minStock: number
+    minStock: number,
+    source: OfferSource = "SYNC"
   ) {
     if (action === "KEEP") return 0;
     const where = {
@@ -363,6 +458,7 @@ export class ProvidersService implements OnModuleInit {
       provider,
       syncedAt: { gte: syncStartedAt },
       stock: { lte: Math.max(minStock, 0) },
+      ...(source === "SYNC" ? {} : { source }),
     };
     if (action === "DELETE") {
       const res = await this.prisma.tenantProductOffer.deleteMany({ where });
@@ -387,7 +483,8 @@ export class ProvidersService implements OnModuleInit {
     tenantId: string,
     provider: Provider,
     items: NormalizedProduct[],
-    progress?: CatalogSyncProgress
+    progress?: CatalogSyncProgress,
+    offerSource: OfferSource = "SYNC"
   ): Promise<CatalogSyncDiff[]> {
     // Historial de precio: se compara contra el precio guardado antes de
     // pisarlo, y solo se graba una fila nueva si realmente cambió (o es un
@@ -403,6 +500,7 @@ export class ProvidersService implements OnModuleInit {
         ivaPercent: true,
         stock: true,
         stockStatus: true,
+        source: true,
       },
     });
     const previousByExternalId = new Map(existing.map((e) => [e.externalId, e]));
@@ -472,14 +570,18 @@ export class ProvidersService implements OnModuleInit {
             stockStatus: item.stockStatus,
             active: true,
             needsResync: false,
+            source: offerSource,
           };
 
           const previous = previousByExternalId.get(item.externalId);
           const previousFicha = previousFichaById.get(item.externalId);
+          // La lista base nunca pisa los precios propios del comercio.
+          const keepOwnPrice = offerSource === "BASE_LIST" && previous?.source === "OWN_LIST";
           const priceChanged =
-            !previous ||
-            numberOrNull(previous.price) !== numberOrNull(oferta.price) ||
-            numberOrNull(previous.finalPrice) !== numberOrNull(oferta.finalPrice);
+            !keepOwnPrice &&
+            (!previous ||
+              numberOrNull(previous.price) !== numberOrNull(oferta.price) ||
+              numberOrNull(previous.finalPrice) !== numberOrNull(oferta.finalPrice));
           if (priceChanged && (oferta.price != null || oferta.finalPrice != null)) {
             historyRows.push({
               tenantId,
@@ -517,6 +619,7 @@ export class ProvidersService implements OnModuleInit {
             update: { ...ficha, syncedAt: new Date() },
           });
 
+          if (keepOwnPrice) return diff;
           await this.prisma.tenantProductOffer.upsert({
             where: {
               tenantId_provider_externalId: { tenantId, provider, externalId: item.externalId },
@@ -741,34 +844,69 @@ export class ProvidersService implements OnModuleInit {
 
   /** Markup y umbral configurados por la organización para un proveedor. */
   private async rulesFor(tenantId: string, provider: Provider): Promise<OfferRules> {
-    const config = await this.prisma.providerSyncConfig.findUnique({
-      where: { tenantId_provider: { tenantId, provider } },
-      select: { priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
-    });
-    if (!config) return NO_RULES;
+    const [config, baseListDiscountPercent] = await Promise.all([
+      this.prisma.providerSyncConfig.findUnique({
+        where: { tenantId_provider: { tenantId, provider } },
+        select: { priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
+      }),
+      this.baseListDiscountFor(tenantId, provider),
+    ]);
+    if (!config) return { ...NO_RULES, baseListDiscountPercent };
     return {
       markupPercent: Number(config.priceMarkupPercent) || 0,
       minStockThreshold: config.minStockThreshold || 0,
       zeroStockAction: config.zeroStockAction || "KEEP",
+      baseListDiscountPercent,
     };
+  }
+
+  /**
+   * Descuento pactado en el vínculo con un proveedor por lista. Solo se aplica a
+   * ofertas BASE_LIST (ver catalog-view): las propias del comercio ya son su precio.
+   */
+  private async baseListDiscountFor(tenantId: string, provider: Provider): Promise<number> {
+    if (!isListProviderKey(provider)) return 0;
+    const link = await this.prisma.tenantLink.findFirst({
+      where: { clientTenantId: tenantId, status: "ACTIVE", supplierTenant: { providerKey: provider } },
+      select: { discountPercent: true },
+    });
+    return Number(link?.discountPercent) || 0;
   }
 
   /** Igual que `rulesFor` pero para varios proveedores de una, en las vistas mezcladas. */
   private async rulesByProvider(tenantId: string): Promise<Map<string, OfferRules>> {
-    const configs = await this.prisma.providerSyncConfig.findMany({
-      where: { tenantId },
-      select: { provider: true, priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
-    });
-    return new Map(
+    const [configs, listLinks] = await Promise.all([
+      this.prisma.providerSyncConfig.findMany({
+        where: { tenantId },
+        select: { provider: true, priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
+      }),
+      this.prisma.tenantLink.findMany({
+        where: {
+          clientTenantId: tenantId,
+          status: "ACTIVE",
+          supplierTenant: { providerKey: { startsWith: LIST_PROVIDER_PREFIX } },
+        },
+        select: { discountPercent: true, supplierTenant: { select: { providerKey: true } } },
+      }),
+    ]);
+    const discountByProvider = new Map(
+      listLinks.map((l) => [l.supplierTenant.providerKey ?? "", Number(l.discountPercent) || 0])
+    );
+    const rules = new Map<string, OfferRules>(
       configs.map((c) => [
         c.provider,
         {
           markupPercent: Number(c.priceMarkupPercent) || 0,
           minStockThreshold: c.minStockThreshold || 0,
           zeroStockAction: c.zeroStockAction || "KEEP",
+          baseListDiscountPercent: discountByProvider.get(c.provider) ?? 0,
         },
       ])
     );
+    for (const [provider, discount] of discountByProvider) {
+      if (provider && !rules.has(provider)) rules.set(provider, { ...NO_RULES, baseListDiscountPercent: discount });
+    }
+    return rules;
   }
 
   private async hiddenProviders(): Promise<Set<string>> {
@@ -1267,6 +1405,12 @@ function withMarkup(value: unknown, markupPercent: number): number | null {
   const price = numberOrNull(value);
   if (price == null) return null;
   return Math.round(price * (1 + markupPercent / 100) * 100) / 100;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function numberOrNull(value: unknown): number | null {

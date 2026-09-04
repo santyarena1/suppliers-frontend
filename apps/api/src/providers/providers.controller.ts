@@ -11,7 +11,6 @@ import { TENANT_ROLES_CAN_PURGE_CATALOG } from "@nodo/shared";
 import { assertTenantRole } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { ProvidersService } from "./providers.service";
-import { FileImportService } from "./file-import.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
@@ -52,7 +51,6 @@ function assertProvider(value: string): Provider {
 export class ProvidersController {
   constructor(
     private readonly providersService: ProvidersService,
-    private readonly fileImportService: FileImportService,
     private readonly credentialsService: CredentialsService,
     private readonly invidAccountService: InvidAccountService,
     private readonly invidOrderService: InvidOrderService,
@@ -534,35 +532,6 @@ export class ProvidersController {
     @Param("id") id: string
   ) {
     return this.providersService.getSyncRun(commercialId(tenant), assertProvider(provider), id);
-  }
-
-  /**
-   * Alternativa a la sync por API cuando el proveedor limita muy fuerte
-   * (ej. AIR a 1 req/5min): el usuario exporta el catálogo a Excel/CSV
-   * desde el propio portal del proveedor y lo sube acá. Mismo pipeline de
-   * guardado (markup, stock mínimo, historial de precio) que un sync real.
-   */
-  @Post("providers/:provider/import")
-  async importFile(
-    @CurrentTenant() tenant: TenantContext,
-    @Param("provider") provider: string,
-    @Req() req: FastifyRequest
-  ) {
-    const prov = assertProvider(provider);
-    const file = await req.file();
-    if (!file) throw new BadRequestException("No se recibió ningún archivo");
-    const buffer = await file.toBuffer();
-
-    const rows = this.fileImportService.parseFile(buffer, file.filename);
-    const { items, skipped, unmappedColumns } = this.fileImportService.mapRows(rows);
-    if (items.length === 0) {
-      throw new BadRequestException(
-        "No se pudo mapear ninguna fila (hace falta al menos una columna de código/SKU y una de nombre/descripción)."
-      );
-    }
-
-    const result = await this.providersService.importFromRows(commercialId(tenant), prov, items);
-    return { ...result, rowsInFile: rows.length, rowsSkipped: skipped, unmappedColumns };
   }
 
   @Get("providers/:provider/status")

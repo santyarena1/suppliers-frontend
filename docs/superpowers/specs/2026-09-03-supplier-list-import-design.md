@@ -65,13 +65,22 @@ SupplierListImport  id, provider, tenantId (quien sube), uploadedByUserId,
                     issues}, reviewReasons Json[], diff Json (muestras por grupo),
                     snapshot Json (ofertas previas), error?, createdAt, appliedAt?
 ImportRowIssue      id, importId, row, column?, message
-ProviderSyncConfig  + expectedUpdateDays Int? (null = no aplica)
+Tenant              + listUpdateDays Int? (cadencia esperada del proveedor por lista)
+TenantProductOffer  + source (SYNC|OWN_LIST|BASE_LIST): de dónde salió la oferta
 Tenant.providerKey  se genera para proveedores por lista
 PlatformSettings    + umbrales de sanidad (JSON) con defaults
 ```
 
-Historial de precio base: `ProductPriceHistory` con `tenantId` = tenant de
-plataforma (`PLATFORM_TENANT_ID`, constante, se crea en seed si no existe).
+**Lectura del precio base por materialización.** Para no tocar cada camino de
+lectura (búsqueda, ficha, categorías, destacados, carrito), al aplicar una lista
+BASE se copia `SupplierBaseOffer` a `TenantProductOffer` (source BASE_LIST) de
+cada comercio vinculado y del proveedor mismo, salvo donde el comercio ya tiene
+una oferta OWN_LIST. Al crear un vínculo nuevo con un proveedor por lista se
+materializa igual. La acción ante faltantes respeta el `source`: una lista OWN
+solo afecta filas OWN, una BASE solo filas BASE. Si solo hay lista de un
+comercio, los demás vinculados reciben una oferta BASE_LIST con precio nulo
+(ven la ficha, sin precio). El descuento del vínculo se aplica al leer solo a
+ofertas BASE_LIST. El historial de precio se graba por comercio como hoy.
 
 ## Motor de parseo (`apps/api/src/list-import/`)
 
@@ -83,8 +92,8 @@ plataforma (`PLATFORM_TENANT_ID`, constante, se crea en seed si no existe).
    normalizados + nº hojas).
 3. `profile-resolver.ts` — huella exacta → perfil; parcial (columnas clave
    iguales) → perfil + revisión; ninguna → aprendiz.
-4. `profile-learner.ts` — llama a OpenAI (vía infraestructura de
-   `catalog-ai.service.ts`) con encabezado + 25 filas + 3 divisores; JSON
+4. `profile-learner.ts` — llama a OpenAI reutilizando `chatJson` de
+   `catalog-ai.service.ts` (clave guardada en base, modo JSON) con encabezado + 25 filas + 3 divisores; JSON
    estricto validado con esquema. Resultado = perfil PROPOSED, siempre pasa por
    revisión humana.
 5. `row-normalizer.ts` — perfil + filas → `NormalizedProduct[]` + issues.
@@ -97,13 +106,15 @@ plataforma (`PLATFORM_TENANT_ID`, constante, se crea en seed si no existe).
 8. `apply.ts` — snapshot → reutiliza `runSync`/`upsertPage` de
    `ProvidersService`, escribiendo en `SupplierBaseOffer` o `TenantProductOffer`
    según `level`. Revert = restaurar snapshot, solo la última carga del nivel.
-9. Procesamiento en cola BullMQ (`list-import`), reintento ×2, luego FAILED.
+9. Procesamiento en background en proceso (promesa con dedup por carga, mismo
+   patrón que el enriquecimiento de catálogo; el repo no tiene BullMQ). Un cron
+   cada 5 min marca FAILED toda carga PROCESSING de más de 30 min.
 
 `FileImportService` actual se elimina; su endpoint pasa a usar este motor.
 
 ## Frescura
 
-`expectedUpdateDays` por proveedor. Ficha: última carga, próxima esperada,
+`Tenant.listUpdateDays` por proveedor. Ficha: última carga, próxima esperada,
 semáforo (verde / amarillo a 2 días / rojo vencido). Buscador: junto a la fecha
 de actualización del producto, leyenda "Lista vencida, se sugiere actualizar"
 para quien pueda subir. Cron diario → `OrgNotification` al proveedor y superadmin.
@@ -145,7 +156,7 @@ dueño del `providerKey` (nivel BASE); OWNER/ADMIN de un comercio vinculado
 
 Toda carga termina en un estado visible. Archivo ilegible → FAILED. IA falla →
 editor vacío, la carga no se pierde. Falla a mitad de aplicación → snapshot
-previo permite revert. Job muerto → 2 reintentos → FAILED con error guardado.
+previo permite revert. Job muerto → el cron de rescate lo marca FAILED con error guardado.
 
 ## Tests
 

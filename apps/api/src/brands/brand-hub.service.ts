@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import { type Provider, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { compileBrandHtml } from "./brand-html";
@@ -121,7 +121,7 @@ export class BrandHubService {
       signals: signals.map((row) => ({
         id: row.id,
         provider: row.provider,
-        providerName: PROVIDER_LABELS[row.provider as Provider] ?? row.provider,
+        providerName: providerLabel(row.provider as Provider) ?? row.provider,
         externalId: row.externalId,
         name: row.name,
         sku: row.sku,

@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
-import { ALL_PROVIDERS, type JwtPayload, type Provider } from "@nodo/shared";
+import { type JwtPayload, type Provider, isProviderKey } from "@nodo/shared";
 import { AuthService } from "../auth/auth.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -19,7 +19,7 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 
 function assertProvider(value: string): Provider {
-  if (!ALL_PROVIDERS.includes(value as Provider)) {
+  if (!isProviderKey(value)) {
     throw new BadRequestException(`Proveedor inválido: ${value}`);
   }
   return value as Provider;

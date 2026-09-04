@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { providerHasIvaRate, PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import { providerHasIvaRate, type Provider, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { AirOrderService, type AirDraftInput } from "../providers/air-order.service";
@@ -94,7 +94,7 @@ export class OrdersService {
       await this.assertOfflineAllowed(commercialId(tenant), provider);
       const items = normalizeOfflineItems(group.items);
       if (items.length === 0) {
-        throw new BadRequestException(`No hay productos de ${PROVIDER_LABELS[provider]} en el pedido`);
+        throw new BadRequestException(`No hay productos de ${providerLabel(provider)} en el pedido`);
       }
       const snap = snapshotOfflineOrder(items, group.notes, group.quoteRate);
       const row = await this.prisma.providerOrder.create({
@@ -536,7 +536,7 @@ export class OrdersService {
     await this.visibility.assertLinked(tenantId, provider);
     if (!providerHasIvaRate(provider)) {
       throw new BadRequestException(
-        `${PROVIDER_LABELS[provider]} no informa alícuota de IVA: no se puede registrar un pedido offline.`
+        `${providerLabel(provider)} no informa alícuota de IVA: no se puede registrar un pedido offline.`
       );
     }
     const config = await this.prisma.providerSyncConfig.findUnique({
@@ -545,7 +545,7 @@ export class OrdersService {
     });
     if (!config?.acceptsOffline) {
       throw new BadRequestException(
-        `Activá el pedido offline de ${PROVIDER_LABELS[provider]} en Configuración antes de confirmarlo.`
+        `Activá el pedido offline de ${providerLabel(provider)} en Configuración antes de confirmarlo.`
       );
     }
   }

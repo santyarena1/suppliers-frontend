@@ -117,6 +117,8 @@ model Tenant {
   mirrorsCommercialFromId String?
   mirrorsCommercialFrom   Tenant?  @relation("CommercialMirror", fields: [mirrorsCommercialFromId], references: [id], onDelete: SetNull)
   commercialMirrors       Tenant[] @relation("CommercialMirror")
+  /// Proveedores por lista: cada cuántos días se espera una lista nueva. `null` = sin cadencia.
+  listUpdateDays     Int?
   active             Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
@@ -132,6 +134,7 @@ model Tenant {
   catalogSyncRuns CatalogSyncRun[]
   offers        TenantProductOffer[]
   priceHistory  ProductPriceHistory[]
+  listImports   SupplierListImport[]
   cartItems     CartItem[]
   orgCart       OrgCart?
   orders        ProviderOrder[]
@@ -553,6 +556,8 @@ model TenantProductOffer {
   /// adentro y no hay forma de saber cuál era el crudo. Quedan marcados hasta la
   /// próxima sincronización real.
   needsResync Boolean           @default(false)
+  /// De dónde salió esta oferta: sync por API, lista propia del comercio o lista base del proveedor.
+  source      OfferSource       @default(SYNC)
   syncedAt    DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
@@ -578,6 +583,151 @@ model ProductPriceHistory {
   capturedAt DateTime @default(now())
 
   @@index([tenantId, provider, externalId, capturedAt])
+}
+
+// ---------- Importación de listas de precios (proveedores por lista) ----------
+
+enum OfferSource {
+  SYNC // Sync por API / portal del proveedor
+  OWN_LIST // Lista que subió el propio comercio: sus precios
+  BASE_LIST // Lista base del proveedor, materializada para cada comercio vinculado
+}
+
+enum ImportProfileStatus {
+  PROPOSED
+  ACTIVE
+  ARCHIVED
+}
+
+enum ImportNumberFormat {
+  DOT // 1234.50
+  COMMA // 1.234,50
+}
+
+enum ImportDividerMeaning {
+  BRAND
+  CATEGORY
+  IGNORE
+}
+
+enum ListImportLevel {
+  BASE // Precio base del proveedor (lo sube el proveedor o superadmin)
+  TENANT // Precios propios de un comercio
+}
+
+enum ListImportStatus {
+  PROCESSING
+  NEEDS_REVIEW
+  APPLIED
+  DISCARDED
+  REVERTED
+  FAILED
+}
+
+// Precio y stock **base** de un proveedor por lista: lo que el proveedor mismo
+// (o el superadmin) informó. Se materializa en TenantProductOffer (source
+// BASE_LIST) para cada comercio vinculado, así todos los caminos de lectura
+// siguen funcionando igual que con un sync por API.
+model SupplierBaseOffer {
+  id          String   @id @default(uuid())
+  provider    String
+  externalId  String
+  price       Decimal? @db.Decimal(14, 4)
+  finalPrice  Decimal? @db.Decimal(14, 4)
+  currency    String?
+  ivaPercent  Decimal? @db.Decimal(6, 2)
+  stock       Int?
+  stockStatus String?
+  syncedAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([provider, syncedAt])
+}
+
+// Cómo se lee la planilla de un proveedor: qué hoja, en qué fila está el
+// encabezado, qué columna es cada campo, moneda, IVA, formato numérico y qué
+// significan las filas divisorias. Se aprende una vez (IA o a mano) y se
+// reutiliza mientras la huella del archivo coincida. Cada guardado es una versión.
+model ImportProfile {
+  id               String               @id @default(uuid())
+  provider         String
+  version          Int                  @default(1)
+  status           ImportProfileStatus  @default(PROPOSED)
+  /// Hash de encabezados normalizados + cantidad de hojas.
+  fingerprint      String
+  /// Encabezados normalizados, para coincidencia parcial.
+  headers          Json
+  sheetIndex       Int                  @default(0)
+  sheetName        String?
+  headerRow        Int                  @default(0)
+  /// { "<encabezado original>": "<campo NormalizedProduct>" | null }
+  columnMap        Json
+  currency         String?
+  priceIncludesIva Boolean              @default(false)
+  ivaPercent       Decimal?             @db.Decimal(6, 2)
+  numberFormat     ImportNumberFormat   @default(COMMA)
+  dividerMeaning   ImportDividerMeaning @default(IGNORE)
+  /// Primeras filas crudas de la planilla con la que se creó, para el editor.
+  sampleRows       Json?
+  proposedByAi     Boolean              @default(false)
+  aiReasoning      String?
+  approvedByUserId String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  imports SupplierListImport[]
+
+  @@index([provider, status])
+  @@index([provider, fingerprint])
+}
+
+// Una planilla subida. Termina siempre en un estado visible.
+model SupplierListImport {
+  id               String           @id @default(uuid())
+  provider         String
+  /// Organización desde la que se subió (comercio, proveedor o la del superadmin).
+  tenantId         String
+  tenant           Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedByUserId String
+  level            ListImportLevel
+  originalFileName String
+  storedAssetId    String?
+  profileId        String?
+  profile          ImportProfile?   @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  status           ListImportStatus @default(PROCESSING)
+  rowsTotal        Int              @default(0)
+  rowsData         Int              @default(0)
+  /// { created, priceChanged, unchanged, missing, issues }
+  summary          Json?
+  /// Motivos por los que quedó en revisión (texto para humanos).
+  reviewReasons    Json?
+  /// Muestras por grupo del diff, para la pantalla de revisión.
+  diff             Json?
+  /// Filas normalizadas listas para aplicar (se conservan hasta aplicar/descartar).
+  normalizedRows   Json?
+  /// Ofertas previas afectadas, para revertir.
+  snapshot         Json?
+  error            String?
+  createdAt        DateTime         @default(now())
+  appliedAt        DateTime?
+  revertedAt       DateTime?
+
+  issues ImportRowIssue[]
+
+  @@index([provider, level, status, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+model ImportRowIssue {
+  id       String             @id @default(uuid())
+  importId String
+  import   SupplierListImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  row      Int
+  column   String?
+  message  String
+
+  @@index([importId])
 }
 
 // Imágenes subidas desde el panel (logos, banners). Se guardan en Postgres
@@ -638,6 +788,8 @@ model HomeBanner {
 model PlatformSettings {
   id          String   @id @default("platform")
   brandPreset String   @default("violet")
+  /// Umbrales de sanidad para auto-aplicar listas importadas (ver list-import/sanity-checks).
+  importSanity Json?
   updatedAt   DateTime @updatedAt
 }
 

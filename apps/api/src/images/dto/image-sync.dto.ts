@@ -1,6 +1,6 @@
 import { Type } from "class-transformer";
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
-import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength, Matches } from "class-validator";
+import { PROVIDER_KEY_PATTERN, type Provider } from "@nodo/shared";
 import { IsImageUrlOrUploadPath } from "../../common/validators/image-url.validator";
 
 export class SaveSerperKeyDto {
@@ -12,7 +12,7 @@ export class SaveSerperKeyDto {
 
 export class StartFirstPhotoDto {
   @IsOptional()
-  @IsIn([...ALL_PROVIDERS])
+  @Matches(PROVIDER_KEY_PATTERN, { message: "Proveedor inválido" })
   provider?: Provider;
 
   @IsOptional()

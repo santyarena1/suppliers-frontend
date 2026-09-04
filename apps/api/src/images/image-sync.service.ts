@@ -5,7 +5,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from "@nestjs/common";
-import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { type Provider, isProviderKey } from "@nodo/shared";
 import { Prisma } from "@prisma/client";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { AssetsService } from "../assets/assets.service";
@@ -51,7 +51,7 @@ function errText(err: unknown): string {
 
 function assertProvider(value: string | undefined): Provider | undefined {
   if (!value?.trim()) return undefined;
-  if (!ALL_PROVIDERS.includes(value as Provider)) {
+  if (!isProviderKey(value)) {
     throw new BadRequestException(`Proveedor inválido: ${value}`);
   }
   return value as Provider;

@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
-import { ALL_PROVIDERS, DEFAULT_MODULES_BY_ROLE, MODULE_KEYS, type ModuleKey, type Provider, type UserRole } from "@nodo/shared";
+import { KNOWN_PROVIDERS, LIST_PROVIDER_PREFIX, DEFAULT_MODULES_BY_ROLE, MODULE_KEYS, type ModuleKey, type Provider, type UserRole } from "@nodo/shared";
 import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -151,9 +151,20 @@ export class AdminService {
   // ---------- Visibilidad / display de proveedores ----------
 
   async listProviderDisplay() {
-    const configs = await this.prisma.providerDisplayConfig.findMany();
+    const [configs, listSuppliers] = await Promise.all([
+      this.prisma.providerDisplayConfig.findMany(),
+      this.prisma.tenant.findMany({
+        where: { providerKey: { startsWith: LIST_PROVIDER_PREFIX } },
+        select: { providerKey: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
     const byProvider = new Map(configs.map((c) => [c.provider, c]));
-    return ALL_PROVIDERS.map((provider) => {
+    const providers: string[] = [
+      ...KNOWN_PROVIDERS,
+      ...listSuppliers.map((t) => t.providerKey).filter((k): k is string => Boolean(k)),
+    ];
+    return providers.map((provider) => {
       const c = byProvider.get(provider);
       return {
         provider,

@@ -10,9 +10,8 @@ import {
   Max,
   MaxLength,
   Min,
-  ValidateNested,
-} from "class-validator";
-import { ALL_PROVIDERS } from "@nodo/shared";
+  ValidateNested, Matches } from "class-validator";
+import { PROVIDER_KEY_PATTERN } from "@nodo/shared";
 
 export class OfflineOrderItemDto {
   @IsString()
@@ -101,7 +100,7 @@ export class OfflineOrderItemDto {
 }
 
 export class OfflineOrderGroupDto {
-  @IsIn(ALL_PROVIDERS as unknown as string[])
+  @Matches(PROVIDER_KEY_PATTERN, { message: "Proveedor inválido" })
   provider!: string;
 
   @IsOptional()

@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
+import { domainEvents } from "../common/events/domain-events";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type PurchasePolicyView = {
@@ -205,6 +206,7 @@ export class TenantVisibilityService {
       create: { clientTenantId: tenantId, supplierTenantId: supplier.id, status: "ACTIVE" },
       update: { status: "ACTIVE" },
     });
+    domainEvents.emit("tenant.linked", { clientTenantId: tenantId, supplierTenantId: supplier.id, provider });
     return { ...visible, linked: true, advertised: false };
   }
 }

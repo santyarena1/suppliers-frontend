@@ -1,11 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import {
-  PROVIDER_LABELS,
-  TENANT_ROLES_CAN_MANAGE_PORTFOLIO,
-  type Provider,
-  type TenantRole,
-} from "@nodo/shared";
+import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO, type Provider, type TenantRole, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { UpdateOwnClientDto } from "./dto/tenant.dto";
 import {
@@ -371,7 +366,7 @@ export class PortfolioService {
     return {
       id: row.id,
       provider: row.provider,
-      providerName: PROVIDER_LABELS[row.provider as Provider] ?? row.provider,
+      providerName: providerLabel(row.provider as Provider) ?? row.provider,
       status: row.status,
       approvalStatus: row.approvalStatus,
       total: row.total == null ? null : Number(row.total),

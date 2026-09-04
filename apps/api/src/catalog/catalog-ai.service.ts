@@ -133,7 +133,11 @@ Producto: ${JSON.stringify({
     };
   }
 
-  private async chatJson<T>(userPrompt: string): Promise<T> {
+  /**
+   * Una llamada en modo JSON al modelo configurado. `systemPrompt` permite que
+   * otros módulos (ej. el aprendiz de perfiles de importación) fijen su propio rol.
+   */
+  async chatJson<T>(userPrompt: string, systemPrompt?: string): Promise<T> {
     const apiKey = await this.settings.readOpenAiKey();
     if (!apiKey) throw new Error("OpenAI API key not configured");
     const model = this.config.get<string>("OPENAI_MODEL") ?? "gpt-4o-mini";
@@ -149,6 +153,7 @@ Producto: ${JSON.stringify({
           {
             role: "system",
             content:
+              systemPrompt ??
               'Sos un asistente de taxonomía de catálogo IT. Respondé solo JSON válido. Para arrays envolvé en { "items": [...] } si hace falta.',
           },
           { role: "user", content: userPrompt },

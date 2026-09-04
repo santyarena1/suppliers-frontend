@@ -1,8 +1,8 @@
-import { IsIn, IsObject } from "class-validator";
-import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { IsIn, IsObject, Matches } from "class-validator";
+import { type Provider, PROVIDER_KEY_PATTERN } from "@nodo/shared";
 
 export class SaveCredentialDto {
-  @IsIn(ALL_PROVIDERS)
+  @Matches(PROVIDER_KEY_PATTERN, { message: "Proveedor inválido" })
   providerName!: Provider;
 
   @IsObject()

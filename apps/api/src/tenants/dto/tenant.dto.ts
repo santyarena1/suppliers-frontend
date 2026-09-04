@@ -12,15 +12,8 @@ import {
   MaxLength,
   Min,
   MinLength,
-  ValidateIf,
-} from "class-validator";
-import {
-  ALL_PROVIDERS,
-  TENANT_TYPES,
-  type TenantLinkStatus,
-  type TenantRole,
-  type TenantType,
-} from "@nodo/shared";
+  ValidateIf, Matches } from "class-validator";
+import { TENANT_TYPES, type TenantLinkStatus, type TenantRole, type TenantType, PROVIDER_KEY_PATTERN } from "@nodo/shared";
 
 const TENANT_ROLES = [
   "OWNER",
@@ -45,7 +38,7 @@ export class CreateTenantDto {
   type!: TenantType;
 
   @IsOptional()
-  @IsIn(ALL_PROVIDERS as unknown as string[])
+  @Matches(PROVIDER_KEY_PATTERN, { message: "Proveedor inválido" })
   providerKey?: string;
 
   @IsOptional()
@@ -67,6 +60,14 @@ export class CreateTenantDto {
   @IsOptional()
   @IsBoolean()
   advertisingEnabled?: boolean;
+
+  /** Proveedores por lista: cada cuántos días se espera una lista nueva. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  listUpdateDays?: number | null;
 }
 
 export class UpdateTenantDto {
@@ -78,7 +79,7 @@ export class UpdateTenantDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null)
-  @IsIn(ALL_PROVIDERS as unknown as string[])
+  @Matches(PROVIDER_KEY_PATTERN, { message: "Proveedor inválido" })
   providerKey?: string | null;
 
   @IsOptional()
@@ -114,6 +115,13 @@ export class UpdateTenantDto {
   @ValidateIf((_, value) => value !== null)
   @IsUUID()
   mirrorsCommercialFromId?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  listUpdateDays?: number | null;
 }
 
 export class CreateMembershipDto {
