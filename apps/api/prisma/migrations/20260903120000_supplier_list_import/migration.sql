@@ -85,6 +85,7 @@ CREATE TABLE "SupplierListImport" (
     "summary" JSONB,
     "reviewReasons" JSONB,
     "diff" JSONB,
+    "preview" JSONB,
     "normalizedRows" JSONB,
     "snapshot" JSONB,
     "error" TEXT,

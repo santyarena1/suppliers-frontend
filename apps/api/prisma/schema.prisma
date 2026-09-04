@@ -704,6 +704,8 @@ model SupplierListImport {
   reviewReasons    Json?
   /// Muestras por grupo del diff, para la pantalla de revisión.
   diff             Json?
+  /// Vista previa cruda para el editor de perfil: encabezados, primeras filas, hojas.
+  preview          Json?
   /// Filas normalizadas listas para aplicar (se conservan hasta aplicar/descartar).
   normalizedRows   Json?
   /// Ofertas previas afectadas, para revertir.
