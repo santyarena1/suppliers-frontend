@@ -60,6 +60,27 @@ export function detectNumberFormat(samples: CellValue[]): NumberFormat {
 const IVA_DEFAULT_PERCENT = 21;
 
 /**
+ * Texto en una celda numérica que en realidad informa disponibilidad. Muchas
+ * listas ponen "AGOTADO" o "consultar" en la columna de precio o de stock en
+ * vez de un número: eso es un producto sin stock, no una fila rota.
+ */
+const OUT_OF_STOCK_TEXT =
+  /\b(agotad[oa]s?|sin\s*stock|s\/\s*stock|no\s*hay|no\s*disponible|consultar|a\s*consultar|pr[oó]ximamente|discontinuad[oa]|sin\s*existencia)\b/i;
+const IN_STOCK_TEXT = /^\s*(s[ií]|hay|disponible|en\s*stock|ok|x|✓|✔)\s*$/i;
+
+export type AvailabilityText = { stock: number | null; stockStatus: string };
+
+/** Interpreta un texto de disponibilidad. `null` si no es uno. */
+export function interpretAvailabilityText(value: CellValue): AvailabilityText | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!text) return null;
+  if (OUT_OF_STOCK_TEXT.test(text)) return { stock: 0, stockStatus: text };
+  if (IN_STOCK_TEXT.test(text)) return { stock: null, stockStatus: text };
+  return null;
+}
+
+/**
  * Aplica el perfil a las filas de datos y produce productos normalizados, el
  * mismo tipo que devuelven los adapters de API. Nada se descarta en silencio:
  * cada fila que no cierra deja un issue con fila, columna y motivo.
@@ -85,6 +106,13 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
       if (NUMERIC_FIELDS.has(field)) {
         const n = parseNumber(cell, profile.numberFormat);
         if (n === null) {
+          // "AGOTADO" en precio o stock = sin stock (y sin precio si venía ahí).
+          const availability = field === "price" || field === "finalPrice" || field === "stock" ? interpretAvailabilityText(cell) : null;
+          if (availability) {
+            if (availability.stock === 0) mapped.stock = 0;
+            if (mapped.stockStatus === undefined) mapped.stockStatus = availability.stockStatus;
+            return;
+          }
           issues.push({ row: rowNumber, column: header, message: `"${String(cell)}" no es un número válido` });
           return;
         }
@@ -116,7 +144,7 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
     seenIds.set(externalId, rowNumber);
 
     const prices = resolvePrices(mapped, profile);
-    if (prices.price == null && prices.finalPrice == null) {
+    if (prices.price == null && prices.finalPrice == null && mapped.stock !== 0) {
       issues.push({ row: rowNumber, message: "Fila sin precio: se carga sin precio" });
     }
 

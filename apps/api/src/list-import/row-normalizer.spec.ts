@@ -1,4 +1,4 @@
-import { detectNumberFormat, normalizeRows, parseNumber } from "./row-normalizer";
+import { detectNumberFormat, interpretAvailabilityText, normalizeRows, parseNumber } from "./row-normalizer";
 import type { ImportProfileSpec, SheetAnalysis } from "./types";
 
 function sheetOf(headers: string[], rows: (string | number | null)[][], dividers: (string | null)[] = []): SheetAnalysis {
@@ -86,6 +86,28 @@ describe("normalizeRows", () => {
     expect(item.finalPrice).toBeCloseTo(110.5, 2);
   });
 
+  test("\"AGOTADO\" en la columna de precio es un producto sin stock y sin precio, no una fila con error (caso Ashir)", () => {
+    const sheet = sheetOf(["Código", "Producto", "Precio"], [["A1", "Uno", "AGOTADO"], ["A2", "Dos", "Consultar"], ["A3", "Tres", 10]]);
+    const { items, issues } = normalizeRows(sheet, baseProfile);
+    expect(items).toHaveLength(3);
+    expect(items[0]).toMatchObject({ externalId: "A1", stock: 0, stockStatus: "AGOTADO" });
+    expect(items[0].price).toBeUndefined();
+    expect(items[1]).toMatchObject({ externalId: "A2", stock: 0 });
+    expect(items[2]).toMatchObject({ externalId: "A3", price: 10 });
+    expect(issues).toEqual([]);
+  });
+
+  test("un texto en la columna de stock también se interpreta", () => {
+    const sheet = sheetOf(["Código", "Producto", "Precio", "Stock"], [["A1", "Uno", 10, "sin stock"], ["A2", "Dos", 20, "Hay"], ["A3", "Tres", 30, "muchos"]]);
+    const profile = { ...baseProfile, columnMap: { ...baseProfile.columnMap, Stock: "stock" as const } };
+    const { items, issues } = normalizeRows(sheet, profile);
+    expect(items[0]).toMatchObject({ stock: 0, stockStatus: "sin stock" });
+    expect(items[1].stock).toBeUndefined();
+    expect(items[1].stockStatus).toBe("Hay");
+    expect(issues.map((i) => i.row)).toEqual([4]);
+    expect(interpretAvailabilityText("Próximamente")?.stock).toBe(0);
+  });
+
   test("sin columna de código, genera uno estable a partir de nombre y marca", () => {
     const sheet = sheetOf(["Producto", "Precio", "Marca"], [["Mouse M185", 10, "Logitech"]]);
     const profile: ImportProfileSpec = { ...baseProfile, columnMap: { Producto: "name", Precio: "price", Marca: "brand" } };
@@ -109,7 +131,8 @@ describe("normalizeRows", () => {
     const { items, issues } = normalizeRows(sheet, baseProfile);
     expect(items.map((i) => i.externalId)).toEqual(["A1"]);
     expect(items[0].price).toBeUndefined();
-    expect(issues.map((i) => i.row)).toEqual([2, 2, 3, 4]);
+    // "consultar" en precio ya no es error: es sin stock.
+    expect(issues.map((i) => i.row)).toEqual([3, 4]);
     expect(issues.some((i) => i.message.includes("repetido"))).toBe(true);
     expect(issues.some((i) => i.message.includes("sin nombre"))).toBe(true);
   });
