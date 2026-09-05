@@ -659,15 +659,20 @@ export class ProvidersController {
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Query("brand") brand: string,
     @Query("take") take?: string,
-    @Query("includeOutOfStock") includeOutOfStock?: string
+    @Query("includeOutOfStock") includeOutOfStock?: string,
+    @Query("providers") providers?: string
   ) {
     if (!brand) throw new BadRequestException("Falta el parámetro brand");
     if (!tenant) return [];
+    const providerList = (providers ?? "")
+      .split(",")
+      .map((p) => p.trim().toUpperCase())
+      .filter((p) => isProviderKey(p));
     return this.providersService.getByBrand(
       commercialId(tenant),
       brand,
       take ? Number(take) : 60,
-      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock), providers: providerList }
     );
   }
 }

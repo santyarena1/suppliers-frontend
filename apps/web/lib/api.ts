@@ -2112,12 +2112,13 @@ export const catalogApi = {
         ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
       },
     }),
-  byBrand: (brand: string, take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
+  byBrand: (brand: string, take = 60, opts: { includeOutOfStock?: boolean; providers?: string[] } = {}) =>
     api.get<ProductDTO[]>("/catalog/by-brand", {
       params: {
         brand,
         take,
         ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+        ...(opts.providers?.length ? { providers: opts.providers.join(",") } : {}),
       },
     }),
   providerDisplay: () => api.get<ProviderDisplay[]>("/catalog/provider-display"),

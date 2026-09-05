@@ -158,11 +158,11 @@ function SearchPage() {
     return a.filter((p) => keys.has(productKey(p)));
   }
 
-  async function fetchByBrands(brands: string[], withZero: boolean): Promise<ProductDTO[]> {
+  async function fetchByBrands(brands: string[], withZero: boolean, providers?: Provider[]): Promise<ProductDTO[]> {
     if (brands.length === 0) return [];
     const lists = await Promise.all(
       brands.map(async (brand) => {
-        const res = await catalogApi.byBrand(brand, 120, { includeOutOfStock: withZero });
+        const res = await catalogApi.byBrand(brand, 200, { includeOutOfStock: withZero, providers });
         return Array.isArray(res.data) ? res.data : [];
       })
     );
@@ -214,11 +214,13 @@ function SearchPage() {
     setSelectedProviders(next);
     if (!searched) return;
     if (query.trim() || selectedBrands.size > 0 || selectedCategories.size > 0 || brandFilter.trim()) {
+      // La selección nueva se pasa explícita: el estado todavía no se actualizó en este render.
       void runSearch(query, {
         track: false,
         brands: selectedBrands,
         categories: selectedCategories,
         brand: brandFilter,
+        providers: next,
       });
     }
   }
@@ -237,6 +239,7 @@ function SearchPage() {
       brand?: string;
       brands?: Set<string>;
       categories?: Set<string>;
+      providers?: Set<Provider>;
     }
   ) {
     const q = term.trim();
@@ -248,10 +251,12 @@ function SearchPage() {
     if (!q && brands.size === 0 && categories.size === 0) return;
 
     const withZero = opts?.includeOutOfStock ?? includeOutOfStock;
+    const chosenProviders = opts?.providers ?? selectedProviders;
     const providerList =
-      selectedProviders.size === 0 && !touchedFilters
+      chosenProviders.size === 0 && !touchedFilters
         ? searchable.map((p) => p.provider)
-        : searchable.filter((p) => selectedProviders.has(p.provider)).map((p) => p.provider);
+        : searchable.filter((p) => chosenProviders.has(p.provider)).map((p) => p.provider);
+    const brandProviders = providerList.length > 0 && providerList.length < searchable.length ? providerList : undefined;
 
     const brandList = [...brands];
     const categoryList = [...categories];
@@ -281,7 +286,7 @@ function SearchPage() {
 
       if (brandList.length > 0 && categoryList.length > 0) {
         const [brandProducts, catProducts] = await Promise.all([
-          fetchByBrands(brandList, withZero),
+          fetchByBrands(brandList, withZero, brandProviders),
           fetchByCategories(categoryList, withZero),
         ]);
         data = intersectByKey(brandProducts, catProducts);
@@ -298,11 +303,11 @@ function SearchPage() {
           });
           data = res.data;
         } else if (distinctQ) {
-          data = await fetchByBrands(brandList, withZero);
+          data = await fetchByBrands(brandList, withZero, brandProviders);
           const ql = q.toLowerCase();
           data = data.filter((p) => p.name?.toLowerCase().includes(ql));
         } else {
-          data = await fetchByBrands(brandList, withZero);
+          data = await fetchByBrands(brandList, withZero, brandProviders);
         }
       } else if (categoryList.length > 0) {
         data = await fetchByCategories(categoryList, withZero);

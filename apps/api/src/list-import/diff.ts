@@ -22,7 +22,8 @@ export function computeDiff(previous: PreviousOffer[], items: NormalizedProduct[
   for (const item of items) {
     seen.add(item.externalId);
     const price = comparablePrice(item.price, item.finalPrice);
-    if (price == null) withoutPrice++;
+    // Un agotado sin precio es normal en muchas listas: no cuenta como fila inválida.
+    if (price == null && item.stock !== 0) withoutPrice++;
 
     const before = previousById.get(item.externalId);
     if (!before) {

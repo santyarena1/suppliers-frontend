@@ -108,6 +108,17 @@ describe("normalizeRows", () => {
     expect(interpretAvailabilityText("Próximamente")?.stock).toBe(0);
   });
 
+  test("\"-\" en precio no es error, y una columna ESTADO con AGOTADO deja stock 0 (caso Ashir)", () => {
+    const sheet = sheetOf(["Código", "Producto", "Precio", "Estado"], [["A1", "Uno", "-", "AGOTADO"], ["A2", "Dos", 10, "EN STOCK"]]);
+    const profile = { ...baseProfile, columnMap: { ...baseProfile.columnMap, Estado: "stockStatus" as const } };
+    const { items, issues } = normalizeRows(sheet, profile);
+    expect(issues).toEqual([]);
+    expect(items[0]).toMatchObject({ externalId: "A1", stock: 0, stockStatus: "AGOTADO" });
+    expect(items[0].price).toBeUndefined();
+    expect(items[1]).toMatchObject({ externalId: "A2", price: 10, stockStatus: "EN STOCK" });
+    expect(items[1].stock).toBeUndefined();
+  });
+
   test("sin columna de código, genera uno estable a partir de nombre y marca", () => {
     const sheet = sheetOf(["Producto", "Precio", "Marca"], [["Mouse M185", 10, "Logitech"]]);
     const profile: ImportProfileSpec = { ...baseProfile, columnMap: { Producto: "name", Precio: "price", Marca: "brand" } };

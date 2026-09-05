@@ -70,6 +70,13 @@ const IN_STOCK_TEXT = /^\s*(s[ií]|hay|disponible|en\s*stock|ok|x|✓|✔)\s*$/i
 
 export type AvailabilityText = { stock: number | null; stockStatus: string };
 
+/** "-", "—", "s/d", "n/a" en una celda numérica: no hay dato, no es un error. */
+const EMPTY_PLACEHOLDER = /^\s*(-+|—|–|s\/d|n\/a|na|\.|x)\s*$/i;
+
+export function isEmptyPlaceholder(value: CellValue): boolean {
+  return typeof value === "string" && EMPTY_PLACEHOLDER.test(value);
+}
+
 /** Interpreta un texto de disponibilidad. `null` si no es uno. */
 export function interpretAvailabilityText(value: CellValue): AvailabilityText | null {
   if (typeof value !== "string") return null;
@@ -113,6 +120,7 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
             if (mapped.stockStatus === undefined) mapped.stockStatus = availability.stockStatus;
             return;
           }
+          if (isEmptyPlaceholder(cell)) return;
           issues.push({ row: rowNumber, column: header, message: `"${String(cell)}" no es un número válido` });
           return;
         }
@@ -130,6 +138,12 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
     }
 
     applyDivider(mapped, dataRow.divider, profile.dividerMeaning);
+
+    // Una columna de estado ("AGOTADO", "EN STOCK") decide el stock si no vino un número.
+    if (mapped.stock === undefined && typeof mapped.stockStatus === "string") {
+      const availability = interpretAvailabilityText(mapped.stockStatus);
+      if (availability && availability.stock === 0) mapped.stock = 0;
+    }
 
     const externalId = resolveExternalId(mapped, hasExplicitCode);
     if (!externalId) {

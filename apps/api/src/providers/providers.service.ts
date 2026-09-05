@@ -1267,9 +1267,13 @@ export class ProvidersService implements OnModuleInit {
     tenantId: string,
     brand: string,
     take: number,
-    opts: { includeOutOfStock?: boolean } = {}
+    opts: { includeOutOfStock?: boolean; providers?: string[] } = {}
   ) {
-    const providers = await this.readableProviders(tenantId);
+    // Si el comercio filtró por distribuidor, se busca solo ahí: así el tope de
+    // resultados no deja afuera a un proveedor cuyos nombres ordenan al final.
+    const readable = await this.readableProviders(tenantId);
+    const wanted = opts.providers?.length ? new Set(opts.providers) : null;
+    const providers = wanted ? readable.filter((p) => wanted.has(p)) : readable;
     if (providers.length === 0) return [];
     const limit = Math.min(Math.max(take, 1), 200);
     const includeOutOfStock = Boolean(opts.includeOutOfStock);
