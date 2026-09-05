@@ -52,10 +52,14 @@ export function readGrid(buffer: Buffer, filename: string): GridSheet[] {
 const LINK_TEXT_MAX = 12;
 
 function withHyperlink(sheet: XLSX.WorkSheet, r: number, c: number, value: CellValue): CellValue {
-  if (typeof value !== "string" || value.length > LINK_TEXT_MAX || /^https?:///i.test(value)) return value;
+  if (typeof value !== "string" || value.length > LINK_TEXT_MAX || isHttpUrl(value)) return value;
   const cell = sheet[XLSX.utils.encode_cell({ r, c })] as { l?: { Target?: string } } | undefined;
   const target = cell?.l?.Target?.trim();
-  return target && /^https?:///i.test(target) ? target : value;
+  return target && isHttpUrl(target) ? target : value;
+}
+
+function isHttpUrl(text: string): boolean {
+  return text.startsWith("http://") || text.startsWith("https://");
 }
 
 function toCellValue(value: unknown): CellValue {
