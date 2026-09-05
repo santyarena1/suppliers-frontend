@@ -596,9 +596,9 @@ export class ProvidersService implements OnModuleInit {
               tenantId,
               provider,
               externalId: item.externalId,
-              price: oferta.price,
-              finalPrice: oferta.finalPrice,
-              currency: oferta.currency,
+              price: oferta.price ?? undefined,
+              finalPrice: oferta.finalPrice ?? undefined,
+              currency: oferta.currency ?? undefined,
             });
           }
 
