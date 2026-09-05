@@ -46,6 +46,11 @@ const GENERIC_WORDS = new Set(
   m-atx atx itx e-atx mini-itx micro-atx matx formato torre tower peak real power fan fans ventilador ventiladores
   pwm rpm dba nivel ruido ruido vgas vga incluye incluido incluidos sin unidad unidades caja cajas x pcs pc pcs
   fuente-gabinete gabinete-fuente kit-gabinete pecera panoramica cubo dell lenovo hp calidad tipo producto productos articulo articulos item items modelo marca nuevo nueva original generico generica
+  cpu gpu psu apu aio watercooler water cooling liquid refrigeracion sodimm udimm dimm nvme sata ssd hdd hd disk drive
+  mb motherboard mother placa madre socket am4 am5 lga vga nb notebook pcs desktop combo headset earbuds mousepad pad
+  toner cartucho drum botella tinta ml pag paginas access point router switch ap wifi wireless bt bluetooth
+  monitor tv led lcd tft ips va oled curvo curva hz ghz mhz gb tb mb kb bits fuente-de-poder vencido liquidacion
+  ventilador cooler fan mesh glass templado pecera striker backfire hunter bearer a35 t10 f70 f75 f80 f-series
   `
     .split(/\s+/)
     .filter(Boolean)
@@ -89,6 +94,7 @@ export function suggestBrands(products: BrandCandidateProduct[], knownBrands: Se
       s.spellings.set(raw, (s.spellings.get(raw) ?? 0) + 1);
       s.count++;
       s.positionSum += Math.min(position, 6);
+      if (position <= EARLY_POSITION) s.early++;
       s.ids.push(product.externalId);
       if (s.names.length < 3) s.names.push(product.name);
       stats.set(norm, s);
@@ -103,6 +109,7 @@ export function suggestBrands(products: BrandCandidateProduct[], knownBrands: Se
         s.spellings.set(raw, (s.spellings.get(raw) ?? 0) + 1);
         s.count++;
         s.positionSum += 2;
+        s.early++;
         s.fromExtra++;
         s.ids.push(product.externalId);
         if (s.names.length < 3) s.names.push(product.name);
@@ -112,17 +119,23 @@ export function suggestBrands(products: BrandCandidateProduct[], knownBrands: Se
   }
 
   const total = products.length;
+  // Si casi todos los nombres vienen en mayúsculas, la mayúscula no dice nada.
+  const upperNames = products.filter((p) => p.name === p.name.toUpperCase()).length;
+  const caseIsInformative = upperNames / total < 0.6;
   const out: BrandCandidate[] = [];
   for (const [norm, s] of stats) {
     const known = knownBrands.has(norm);
     if (!known && s.count < MIN_COUNT) continue;
     const spelling = [...s.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0];
     const share = s.count / total;
-    const avgPosition = s.positionSum / s.count;
+    // La marca va al principio del nombre (primeras palabras). Una palabra que
+    // casi siempre aparece más adentro es un atributo (AIO, WATERCOOLER, ARGB…).
+    const earlyShare = s.early / s.count;
+    if (!known && earlyShare < 0.4) continue;
     let score = 0;
-    score += Math.min(share / STRONG_SHARE, 1) * 0.4;
-    score += Math.max(0, 1 - avgPosition / 4) * 0.3;
-    if (/^[A-Z][a-z]+$/.test(spelling) || /^[A-Z]{2,}$/.test(spelling)) score += 0.15;
+    score += Math.min(share / STRONG_SHARE, 1) * 0.35;
+    score += earlyShare * 0.35;
+    if (caseIsInformative && (/^[A-Z][a-z]+$/.test(spelling) || /^[A-Z]{2,}$/.test(spelling))) score += 0.15;
     if (known) score += 0.3;
     if (s.fromExtra > 0) score += 0.1;
     score = Math.min(1, Math.round(score * 100) / 100);
@@ -140,10 +153,22 @@ export function suggestBrands(products: BrandCandidateProduct[], knownBrands: Se
   return out.sort((a, b) => b.score - a.score || b.count - a.count);
 }
 
-type BrandStat = { spellings: Map<string, number>; count: number; positionSum: number; ids: string[]; names: string[]; fromExtra: number };
+type BrandStat = {
+  spellings: Map<string, number>;
+  count: number;
+  positionSum: number;
+  /** Veces que apareció entre las tres primeras palabras del nombre. */
+  early: number;
+  ids: string[];
+  names: string[];
+  fromExtra: number;
+};
+
+/** Hasta qué posición del nombre una palabra todavía puede ser la marca. */
+const EARLY_POSITION = 2;
 
 function emptyStat(): BrandStat {
-  return { spellings: new Map(), count: 0, positionSum: 0, ids: [], names: [], fromExtra: 0 };
+  return { spellings: new Map(), count: 0, positionSum: 0, early: 0, ids: [], names: [], fromExtra: 0 };
 }
 
 function tokenize(text: string): string[] {

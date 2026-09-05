@@ -44,8 +44,9 @@ export default function MissingBrandsTab({
     }
   }, [showToast]);
 
+  // Al abrir, ya valida con IA: es una llamada por proveedor sobre la lista corta.
   useEffect(() => {
-    void load(false);
+    void load(true);
   }, [load]);
 
   function keyOf(provider: string, s: BrandSuggestion) {
