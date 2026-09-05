@@ -1286,6 +1286,7 @@ export const listImportsApi = {
     });
   },
   list: (provider: Provider) => api.get<ListImportRecord[]>(`/providers/${provider}/imports`),
+  reprocessLatest: (provider: Provider) => api.post<ListImportRecord>(`/providers/${provider}/imports/reprocess-latest`),
   get: (provider: Provider, id: string) => api.get<ListImportDetail>(`/providers/${provider}/imports/${id}`),
   apply: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/apply`),
   discard: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/discard`),

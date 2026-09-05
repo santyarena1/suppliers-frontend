@@ -110,6 +110,15 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const listPriced = listBased || config?.priceChannel === "LIST";
   // Usable si tiene adapter, es por lista, o el comercio le eligió canal Lista (ej. Ashir sin integración).
   const implemented = hasAdapter || listPriced;
+
+  // Un proveedor con API al que este comercio le carga su Excel abre en Listas, salvo que la URL pida otra pestaña.
+  useEffect(() => {
+    if (!listBased && config?.priceChannel === "LIST" && !tabFromQuery.current && !autoTabDone.current) {
+      autoTabDone.current = true;
+      setTab("lists");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.priceChannel, listBased]);
   const listFreshness = useListFreshness(listPriced ? provider : null, listRefresh);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);

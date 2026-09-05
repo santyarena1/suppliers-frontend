@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isListProvider, listImportsApi, type ListFreshness } from "./api";
+import { listImportsApi, type ListFreshness } from "./api";
 import { getTenant, isAdmin } from "./auth";
 
 const TTL_MS = 5 * 60_000;
@@ -18,7 +18,7 @@ export function canUploadLists(): boolean {
 }
 
 export async function loadListFreshness(provider: string, force = false): Promise<ListFreshness | null> {
-  if (!isListProvider(provider)) return null;
+  if (!provider) return null;
   const hit = cache.get(provider);
   if (!force && hit && Date.now() - hit.at < TTL_MS) return hit.value;
   const pending = inflight.get(provider);
@@ -46,7 +46,7 @@ export function useListFreshness(provider: string | null | undefined, refreshKey
   const [value, setValue] = useState<ListFreshness | null>(() => (provider ? cache.get(provider)?.value ?? null : null));
   useEffect(() => {
     let alive = true;
-    if (!provider || !isListProvider(provider)) {
+    if (!provider) {
       setValue(null);
       return;
     }

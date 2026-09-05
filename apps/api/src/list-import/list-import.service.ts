@@ -632,6 +632,37 @@ export class ListImportService {
     };
   }
 
+  /**
+   * Vuelve a procesar la última planilla subida como una carga nueva, con el
+   * perfil vigente. Sirve después de corregir el perfil sin tener que volver a
+   * subir el archivo: la carga original queda como está en el historial.
+   */
+  async reprocessLatest(actor: ImportActor, provider: Provider) {
+    const access = await this.resolveAccess(actor, provider);
+    const latest = await this.prisma.supplierListImport.findFirst({
+      where: {
+        provider,
+        storedAssetId: { not: null },
+        ...(access.level === "TENANT" ? { level: "TENANT", tenantId: access.tenantId } : { level: "BASE" }),
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!latest) throw new BadRequestException("No hay ninguna planilla subida para reprocesar");
+    const record = await this.prisma.supplierListImport.create({
+      data: {
+        provider,
+        tenantId: access.tenantId,
+        uploadedByUserId: actor.userId,
+        level: access.level,
+        originalFileName: latest.originalFileName,
+        storedAssetId: latest.storedAssetId,
+        status: "PROCESSING",
+      },
+    });
+    this.kick(record.id);
+    return this.serialize(record);
+  }
+
   /** Guarda una versión nueva del perfil como activa y, si se pide, reprocesa una carga en revisión. */
   async saveProfile(actor: ImportActor, provider: Provider, dto: SaveImportProfileDto) {
     await this.resolveAccess(actor, provider);

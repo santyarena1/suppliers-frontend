@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, Save, Sparkles, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, RefreshCw, Save, Sparkles, XCircle } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import ProviderBadge from "@/components/ProviderBadge";
 import {
@@ -85,6 +85,7 @@ export default function ImportProfilePage({ params }: { params: Promise<{ provid
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [aiNote, setAiNote] = useState<string | null>(null);
 
@@ -182,6 +183,19 @@ export default function ImportProfilePage({ params }: { params: Promise<{ provid
     }
   }
 
+  async function reprocess() {
+    setReprocessing(true);
+    setMessage(null);
+    try {
+      const res = await listImportsApi.reprocessLatest(provider);
+      router.push(`/proveedores/${provider}/listas/${res.data.id}`);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setMessage({ ok: false, text: msg || "No se pudo reprocesar" });
+      setReprocessing(false);
+    }
+  }
+
   const fields = bundle?.fields ?? Object.keys(FIELD_LABELS);
   const canSave = Boolean(draft && usedFields.has("name") && (usedFields.has("price") || usedFields.has("finalPrice")));
 
@@ -215,6 +229,18 @@ export default function ImportProfilePage({ params }: { params: Promise<{ provid
                   {bundle?.latestImport && <> · sobre <span className="text-surface-300">{bundle.latestImport.originalFileName}</span></>}
                 </div>
                 <div className="ml-auto flex items-center gap-2">
+                  {bundle?.active && !reprocessImportId && (
+                    <button
+                      type="button"
+                      onClick={reprocess}
+                      disabled={reprocessing}
+                      title="Vuelve a leer la última planilla subida con el perfil guardado, como carga nueva"
+                      className="flex items-center gap-2 border border-surface-700 hover:border-surface-500 text-surface-200 text-sm font-medium rounded-lg px-3.5 py-2 disabled:opacity-50"
+                    >
+                      {reprocessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                      Reprocesar última planilla
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={suggest}

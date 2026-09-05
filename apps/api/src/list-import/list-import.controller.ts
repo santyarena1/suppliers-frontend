@@ -98,6 +98,12 @@ export class ListImportController {
     return this.imports.upload(actorOf(user, tenant), assertProvider(provider), { buffer, filename: file.filename });
   }
 
+  /** Reprocesa la última planilla subida con el perfil vigente, como carga nueva. */
+  @Post("providers/:provider/imports/reprocess-latest")
+  reprocessLatest(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("provider") provider: string) {
+    return this.imports.reprocessLatest(actorOf(user, tenant), assertProvider(provider));
+  }
+
   @Get("providers/:provider/imports")
   list(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("provider") provider: string) {
     return this.imports.list(actorOf(user, tenant), assertProvider(provider));
