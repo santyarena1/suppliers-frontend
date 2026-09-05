@@ -20,6 +20,9 @@ import { AirAccountService } from "./air-account.service";
 import { AirOrderService } from "./air-order.service";
 import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
+import { NewTreeAccountService } from "./new-tree-account.service";
+import { NewTreeOrderService } from "./new-tree-order.service";
+import { NewTreeCheckoutDraftDto, NewTreeCheckoutPreviewDto } from "./dto/new-tree-checkout.dto";
 import { OrderApprovalService } from "../orders/order-approval.service";
 import type { OrderAuthor } from "./provider-draft";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
@@ -61,6 +64,8 @@ export class ProvidersController {
     private readonly airOrderService: AirOrderService,
     private readonly elitAccountService: ElitAccountService,
     private readonly elitOrderService: ElitOrderService,
+    private readonly newTreeAccountService: NewTreeAccountService,
+    private readonly newTreeOrderService: NewTreeOrderService,
     private readonly orderApproval: OrderApprovalService,
     private readonly accountCache: AccountPortalCache
   ) {}
@@ -497,6 +502,58 @@ export class ProvidersController {
     const held = await this.hold(tenant, user.userId, "ELIT", dto);
     if (held) return held;
     return this.elitOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "ELIT"), dto);
+  }
+
+  // ---------- New Tree (portal newtree.com.ar) ----------
+  @Get("providers/NEW_TREE/drafts")
+  newTreeDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.newTreeOrderService.listDrafts(tenant.tenantId);
+  }
+
+  @Get("providers/NEW_TREE/drafts/:id")
+  async newTreeDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.newTreeOrderService.getDraft(tenant.tenantId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
+  @Get("providers/NEW_TREE/account")
+  async newTreeAccount(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    const key = `${tenant.tenantId}:NEW_TREE:account:${from ?? ""}:${to ?? ""}`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.newTreeAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "NEW_TREE"), { from, to })
+    );
+  }
+
+  @Get("providers/NEW_TREE/documents")
+  async newTreeDocument(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("token") token: string,
+    @Query("name") name?: string
+  ) {
+    if (!token) throw new BadRequestException("Falta token");
+    return this.newTreeAccountService.getDocument(await this.credentialsOf(tenant, "NEW_TREE"), token, name);
+  }
+
+  @Post("providers/NEW_TREE/checkout/preview")
+  async newTreePreview(@CurrentTenant() tenant: TenantContext, @Body() dto: NewTreeCheckoutPreviewDto) {
+    return this.newTreeOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "NEW_TREE"), dto);
+  }
+
+  @Post("providers/NEW_TREE/checkout/draft")
+  async newTreeDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: NewTreeCheckoutDraftDto
+  ) {
+    const held = await this.hold(tenant, user.userId, "NEW_TREE", dto);
+    if (held) return held;
+    return this.newTreeOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "NEW_TREE"), dto);
   }
 
   @Post("providers/:provider/sync")

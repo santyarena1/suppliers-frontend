@@ -253,18 +253,32 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     ],
   },
   NEW_TREE: {
-    title: "Conectar tu cuenta de NewTree",
-    intro: "Usuario SOAP de GlobalBluePoint / NewTree. Se guarda cifrada y es solo tuya.",
+    title: "Conectar tu cuenta de New Tree",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Protocolo SOAP (AuthenticateUser + getArticulos). Hace falta una llamada de prueba con tu cuenta para mapear el XML/JSON exacto.",
-    portalUrl: "https://ws.globalbluepoint.com/newtree/app_webservices/wserpconnect.asmx",
-    portalLabel: "WSDL NewTree",
+      "Usuario y contraseña del portal www.newtree.com.ar. Con la cuenta se ven tus precios, se crean pedidos y se lee la cuenta corriente. Sin cuenta, el catálogo se sincroniza con precios de lista.",
+    portalUrl: "https://www.newtree.com.ar",
+    portalLabel: "www.newtree.com.ar",
     fields: [
-      { key: "username", label: "Usuario", type: "text", required: true, aliases: ["user", "PUSERNAME"], autoComplete: "username" },
-      { key: "password", label: "Contraseña", type: "password", required: true, aliases: ["pass", "PPASSWORD"], autoComplete: "current-password" },
-      { key: "company", label: "Company", type: "text", required: true, aliases: ["PCOMPANY"] },
-      { key: "webservice", label: "Web service ID", type: "text", required: false, help: "PWEBSERVICE. NewTree lo confirma.", aliases: ["PWEBSERVICE"] },
-      { key: "client_id", label: "Client ID (getArticulos)", type: "text", required: false, placeholder: "15 por defecto en la doc", aliases: ["clientId"] },
+      {
+        key: "username",
+        label: "Usuario",
+        type: "text",
+        required: true,
+        placeholder: "Usuario o mail del portal",
+        aliases: ["user", "email", "usuario"],
+        autoComplete: "username",
+      },
+      {
+        key: "password",
+        label: "Contraseña",
+        type: "password",
+        required: true,
+        placeholder: "Contraseña del portal",
+        aliases: ["pass"],
+        autoComplete: "current-password",
+      },
     ],
   },
   HDC: {

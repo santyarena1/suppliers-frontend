@@ -401,3 +401,66 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: `{ url: "/assets/<uuid>" }`
 - **Estado**: IMPLEMENTADO
 - **Notas**: Los bytes se guardan en Postgres (`StoredAsset`) y se sirven en `GET /assets/<uuid>` (público, sin auth). Así viajan con la DB entre máquinas/deploys. Banners y logos aceptan URL externa, path `/assets/...` o legacy `/uploads/...` (disco local; se mantiene por compatibilidad).
+
+
+## New Tree — portal newtree.com.ar (catálogo, checkout, cuenta)
+
+Integración por emulación del portal (GlobalBluePoint / ASP.NET PageMethods). Diseño:
+`docs/superpowers/specs/2026-09-05-new-tree-portal-integration-design.md`.
+Credenciales: `username` + `password` del portal (guardadas como las demás en
+`POST /credentials`). Sin credenciales el catálogo sincroniza con precios de lista.
+
+### `GET /providers/NEW_TREE/account`
+
+Query: `refresh=1` (salta el cache de 5 min), `from` / `to` en `yyyymmdd` (por
+defecto últimos 24 meses).
+
+```json
+{
+  "profile": { "id": "12345", "salesTermsId": "3", "priceListId": "7" },
+  "range": { "from": "20240905", "to": "20260905" },
+  "balance": { "currency": "USD", "total": 10000, "overdue": 10000, "toExpire": 0 },
+  "movements": [
+    { "date": "2026-04-27", "form": "Fc A", "number": "00011-00095294", "voucher": "Fc A 00011-00095294",
+      "dueDate": "2026-04-27", "currency": "ARS", "debit": 549913.98, "credit": null, "documentToken": "RWpAeg…" }
+  ],
+  "invoices": [ "…solo Fc / NC / ND de movements…" ],
+  "orders": [ { "id": "1234", "date": "2026-05-01", "status": "Pendiente", "origin": "Web", "currency": "USD", "amount": 120.5, "detailUrl": "/PEDIDO/…" } ],
+  "drafts": [ "…ProviderOrder de Nodo (mapProviderDraft)…" ],
+  "note": "…"
+}
+```
+
+### `GET /providers/NEW_TREE/documents?token=<documentToken>&name=<archivo>`
+
+Descarga el PDF del comprobante (`wfmPrintMyDocument.aspx?<token>`) con la sesión
+del portal. `token` es el `documentToken` del movimiento; nada más entra a la URL.
+
+### `POST /providers/NEW_TREE/checkout/preview`
+
+Body: `{ items: [{ code, qty, name? }], deliveryAddress?, notes? }`. `code` es el
+`externalId` (ITEM_ID del portal). Vacía el carrito del portal, agrega cada ítem y
+calcula.
+
+```json
+{
+  "items": [ { "code": "20227", "qty": 2, "name": "Fuente XPG Probe 700W", "price": 48.87, "finalPrice": 54, "subtotal": 97.74, "error": null } ],
+  "itemCount": 2, "subtotal": 97.74, "vat": 10.26, "interest": 0, "discount": 0, "perceptions": 0,
+  "total": 108, "currency": "USD", "deliveryAddress": null, "stockOk": true, "note": "…"
+}
+```
+
+`items[].error` trae el motivo cuando el portal rechaza un ítem (`stockOk: false`).
+
+### `POST /providers/NEW_TREE/checkout/draft`
+
+Mismo body más `background?: boolean`. Con `background` responde `PENDING` y el
+pedido se crea en segundo plano (`GET /providers/NEW_TREE/drafts/:id` para seguirlo).
+Crea el pedido real con `wsNRW_SaveSaleOrder`; el pago y la entrega los coordina el
+vendedor de New Tree. Respuesta: `{ id, status, orderNumber, webOrderNumber,
+paymentLabel, deliveryLabel, items, total, message }`. Pasa por el flujo de
+aprobación (`PENDING_APPROVAL`) cuando el comercio lo exige.
+
+### `GET /providers/NEW_TREE/drafts` · `GET /providers/NEW_TREE/drafts/:id`
+
+Historial de pedidos creados desde Nodo (mismo formato que Elit).

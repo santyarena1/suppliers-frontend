@@ -8,6 +8,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import InvidDraftPanel from "@/components/InvidDraftPanel";
 import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
 import ElitCheckoutPanel from "@/components/ElitCheckoutPanel";
+import NewTreeCheckoutPanel from "@/components/NewTreeCheckoutPanel";
 import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
 import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
@@ -269,12 +270,14 @@ function CartPageInner() {
   const nbLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_BYTES ?? []), [onlineByProvider.NEW_BYTES]);
   const airLines = useMemo(() => cartLinesFromItems(onlineByProvider.AIR ?? []), [onlineByProvider.AIR]);
   const gnLines = useMemo(() => cartLinesFromItems(onlineByProvider.GRUPO_NUCLEO ?? []), [onlineByProvider.GRUPO_NUCLEO]);
+  const ntLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_TREE ?? []), [onlineByProvider.NEW_TREE]);
   const warmEnabled = hydrated && channelTab === "online";
   const invidWarm = useCheckoutWarmup("INVID", invidLines, warmEnabled);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines, warmEnabled);
   const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines, warmEnabled);
   const airWarm = useCheckoutWarmup("AIR", airLines, warmEnabled);
   const gnWarm = useCheckoutWarmup("GRUPO_NUCLEO", gnLines, warmEnabled);
+  const ntWarm = useCheckoutWarmup("NEW_TREE", ntLines, warmEnabled);
   useWarmAllCheckoutCarts(onlineByProvider, warmEnabled);
 
   const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
@@ -288,6 +291,7 @@ function CartPageInner() {
     NEW_BYTES: nbWarm,
     AIR: airWarm,
     GRUPO_NUCLEO: gnWarm,
+    NEW_TREE: ntWarm,
   };
 
   const invidExtra: TaxExtra | undefined = invidQuoted?.stockOk
@@ -1013,6 +1017,19 @@ function CartPageInner() {
                           clearProvider("ELIT", "online");
                         }}
                         onPreviewed={setElitPreview}
+                      />
+                    </div>
+                  )}
+
+                  {channelTab === "online" && onlineByProvider.NEW_TREE?.length > 0 && (activeTab === "all" || activeTab === "NEW_TREE") && (
+                    <div className={activeTab === "NEW_TREE" ? undefined : "hidden"} aria-hidden={activeTab !== "NEW_TREE"}>
+                      <NewTreeCheckoutPanel
+                        items={onlineByProvider.NEW_TREE}
+                        onCreated={(message) => {
+                          setNotice(message || "Pedido creado en New Tree");
+                          setActiveTab("all");
+                          clearProvider("NEW_TREE", "online");
+                        }}
                       />
                     </div>
                   )}

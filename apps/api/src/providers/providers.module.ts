@@ -14,6 +14,9 @@ import { GrupoNucleoAdapter } from "./adapters/grupo-nucleo.adapter";
 import { NewBytesAdapter } from "./adapters/new-bytes.adapter";
 import { CevenAdapter } from "./adapters/ceven.adapter";
 import { DiapstoreAdapter } from "./adapters/diapstore.adapter";
+import { NewTreeAdapter } from "./adapters/new-tree.adapter";
+import { NewTreeAccountService } from "./new-tree-account.service";
+import { NewTreeOrderService } from "./new-tree-order.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
@@ -41,6 +44,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     NewBytesAdapter,
     CevenAdapter,
     DiapstoreAdapter,
+    NewTreeAdapter,
     InvidAccountService,
     InvidOrderService,
     NewBytesAccountService,
@@ -50,6 +54,8 @@ import { AccountPortalCache } from "./account-portal-cache";
     AirOrderService,
     ElitAccountService,
     ElitOrderService,
+    NewTreeAccountService,
+    NewTreeOrderService,
     OrderApprovalService,
   ],
   exports: [
@@ -61,6 +67,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     GrupoNucleoOrderService,
     AirOrderService,
     ElitOrderService,
+    NewTreeOrderService,
   ],
 })
 export class ProvidersModule {}

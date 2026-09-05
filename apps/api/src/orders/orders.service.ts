@@ -9,6 +9,7 @@ import { ElitOrderService, type ElitCartItems } from "../providers/elit-order.se
 import { GrupoNucleoOrderService, type GnDraftInput } from "../providers/grupo-nucleo-order.service";
 import { InvidOrderService, type InvidDraftInput } from "../providers/invid-order.service";
 import { NewBytesOrderService, type NewBytesDraftInput } from "../providers/new-bytes-order.service";
+import { NewTreeOrderService, type NewTreeCartItems } from "../providers/new-tree-order.service";
 import type { OrderAuthor } from "../providers/provider-draft";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -52,6 +53,7 @@ export class OrdersService {
     private readonly grupoNucleo: GrupoNucleoOrderService,
     private readonly air: AirOrderService,
     private readonly elit: ElitOrderService,
+    private readonly newTree: NewTreeOrderService,
     @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
@@ -593,6 +595,8 @@ export class OrdersService {
         return this.air.approveDraft(author, credentials, input as unknown as AirDraftInput, orderId);
       case "ELIT":
         return this.elit.approveDraft(author, credentials, input as unknown as ElitCartItems, orderId);
+      case "NEW_TREE":
+        return this.newTree.approveDraft(author, credentials, input as unknown as NewTreeCartItems, orderId);
       default:
         throw new BadRequestException(`Todavía no se pueden aprobar pedidos de ${provider} desde Nodo`);
     }

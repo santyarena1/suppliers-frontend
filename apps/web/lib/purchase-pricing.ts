@@ -19,6 +19,7 @@ export const IVA_ADJUSTMENT_LABELS: Record<IvaAdjustment, string> = {
 /** Proveedores cuyo catálogo trae alícuota de IVA. El resto no puede usar offline/esquema. */
 export const PROVIDERS_WITH_IVA_RATE = [
   "NEW_BYTES",
+  "NEW_TREE",
   "ELIT",
   "GRUPO_NUCLEO",
   "AIR",

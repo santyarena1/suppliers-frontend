@@ -178,7 +178,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
 
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
 export const IMPLEMENTED_PROVIDERS: Provider[] = [
-  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE",
+  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE",
 ];
 
 export interface ProductDTO {
@@ -2060,6 +2060,107 @@ export const elitCheckoutApi = {
     }),
   drafts: () => api.get<NodoProviderDraft[]>("/providers/ELIT/drafts"),
   draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/ELIT/drafts/${id}`),
+};
+
+// --- New Tree (portal newtree.com.ar) ---
+export interface NewTreeCheckoutPreview {
+  items: {
+    code: string;
+    qty: number;
+    name: string;
+    price: number | null;
+    finalPrice: number | null;
+    subtotal: number | null;
+    error: string | null;
+  }[];
+  itemCount: number;
+  subtotal: number;
+  vat: number;
+  interest: number;
+  discount: number;
+  perceptions: number;
+  total: number;
+  currency: string;
+  deliveryAddress: string | null;
+  stockOk: boolean;
+  note: string;
+}
+
+export interface NewTreeDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export type NewTreeCheckoutPayload = {
+  items: { code: string; qty: number; name?: string }[];
+  deliveryAddress?: string;
+  notes?: string;
+};
+
+export const newTreeCheckoutApi = {
+  preview: (body: NewTreeCheckoutPayload) =>
+    api.post<NewTreeCheckoutPreview>("/providers/NEW_TREE/checkout/preview", body),
+  draft: (body: NewTreeCheckoutPayload & { background?: boolean }) =>
+    api.post<NewTreeDraftResult>("/providers/NEW_TREE/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/NEW_TREE/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/NEW_TREE/drafts/${id}`),
+};
+
+export interface NewTreeBalance {
+  currency: string;
+  total: number | null;
+  overdue: number | null;
+  toExpire: number | null;
+}
+
+export interface NewTreeMovement {
+  date: string;
+  form: string;
+  number: string;
+  voucher: string;
+  dueDate: string;
+  currency: string | null;
+  debit: number | null;
+  credit: number | null;
+  documentToken: string | null;
+}
+
+export interface NewTreePortalOrder {
+  id: string;
+  date: string;
+  status: string;
+  origin: string;
+  currency: string | null;
+  amount: number | null;
+  detailUrl: string | null;
+}
+
+export const newTreeAccountApi = {
+  account: (opts?: { refresh?: boolean; from?: string; to?: string }) =>
+    api.get<{
+      profile: { id: string; salesTermsId: string | null; priceListId: string | null };
+      range: { from: string; to: string };
+      balance: NewTreeBalance;
+      movements: NewTreeMovement[];
+      invoices: NewTreeMovement[];
+      orders: NewTreePortalOrder[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/NEW_TREE/account", {
+      params: {
+        ...(opts?.refresh ? { refresh: 1 } : {}),
+        ...(opts?.from ? { from: opts.from } : {}),
+        ...(opts?.to ? { to: opts.to } : {}),
+      },
+    }),
 };
 
 // --- Admin / Users ---
