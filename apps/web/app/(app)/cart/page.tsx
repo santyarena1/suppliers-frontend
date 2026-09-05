@@ -338,8 +338,30 @@ function CartPageInner() {
       }
     : undefined;
 
+  const sbQuoted = sbWarm.status === "ready" ? sbWarm.data?.preview ?? null : null;
+  const sbExtra: TaxExtra | undefined = sbQuoted
+    ? {
+        shippingUSD: sbQuoted.shippingCost ?? 0,
+        perceptionsUSD: sbQuoted.perceptions ?? 0,
+        perceptionLines: sbQuoted.perceptionLines ?? [],
+      }
+    : undefined;
+
   function extraFor(provider: string): TaxExtra | undefined {
     if (channelTab === "offline") return undefined;
+    // El % de IIBB cargado en Configuración del distribuidor pisa lo que cotice
+    // su portal: se conserva solo el envío cotizado y se descarta la percepción.
+    const manualPct = policies[provider]?.manualIibbPercent;
+    if (manualPct != null) {
+      const quotedShipping =
+        provider === "INVID" ? invidExtra?.shippingUSD
+        : provider === "ELIT" ? elitExtra?.shippingUSD
+        : provider === "NEW_BYTES" ? nbExtra?.shippingUSD
+        : provider === "AIR" ? airExtra?.shippingUSD
+        : provider === "SOLUTION_BOX" ? sbExtra?.shippingUSD
+        : undefined;
+      return { shippingUSD: quotedShipping ?? 0, percepcionPercent: Math.max(0, manualPct) };
+    }
     const cfgPct = getIibbRatePercent(provider);
     const cfg: TaxExtra | undefined =
       cfgPct != null && cfgPct > 0 ? { percepcionPercent: cfgPct } : undefined;
@@ -350,6 +372,7 @@ function CartPageInner() {
     else if (provider === "ELIT") quoted = elitExtra;
     else if (provider === "NEW_BYTES") quoted = nbExtra;
     else if (provider === "AIR") quoted = airExtra;
+    else if (provider === "SOLUTION_BOX") quoted = sbExtra;
     const quotedHasPerc =
       quoted != null &&
       ((quoted.perceptionsUSD ?? 0) > 0.0005 || (quoted.percepcionPercent ?? 0) > 0);

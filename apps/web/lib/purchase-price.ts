@@ -43,9 +43,11 @@ function resolveLineIibb(
   unitNet: number,
   policy?: PurchasePolicy | null
 ): { percent: number | null; unitAmount: number; label: string; estimated: boolean } {
-  // Proveedor que cotiza por lista: el IIBB lo cargó a mano el comercio en Configuración.
+  // El % cargado en Configuración del distribuidor manda sobre lo que traiga el
+  // producto o cotice el portal; 0 explícito anula la percepción.
   const manual = policy?.manualIibbPercent;
-  if (manual != null && manual > 0 && unitNet > 0) {
+  if (manual != null) {
+    if (manual <= 0 || unitNet <= 0) return { percent: 0, unitAmount: 0, label: "IIBB", estimated: false };
     return { percent: manual, unitAmount: round4(unitNet * (manual / 100)), label: "IIBB", estimated: false };
   }
   const existing = taxByKind(lines, "iibb");

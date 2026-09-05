@@ -101,12 +101,14 @@ export default function ProviderPurchaseConfig({
       </div>
 
       {/* Impuestos manuales */}
-      {fromList && (
+      {(
         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
           <div>
-            <div className="text-sm font-semibold text-white">Impuestos que no vienen en la lista</div>
+            <div className="text-sm font-semibold text-white">{fromList ? "Impuestos que no vienen en la lista" : "IIBB y percepciones"}</div>
             <p className="text-xs text-surface-500 mt-1 leading-relaxed">
-              El IVA sale de la lista. IIBB y otras percepciones las cargás acá, como porcentaje sobre el neto. Vacío = no se suma nada.
+              {fromList
+                ? "El IVA sale de la lista. IIBB y otras percepciones las cargás acá, como porcentaje sobre el neto. Vacío = no se suma nada."
+                : "Porcentaje sobre el neto. Si cargás un número, pisa lo que cotice el portal del distribuidor en el carrito (poné 0 para anularlo). Vacío = manda lo que diga el carrito."}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
