@@ -21,8 +21,8 @@ describe("providerHasIvaRate", () => {
   it("habilita solo proveedores que informan alícuota", () => {
     expect(providerHasIvaRate("NEW_BYTES")).toBe(true);
     expect(providerHasIvaRate("ELIT")).toBe(true);
+    expect(providerHasIvaRate("NEW_TREE")).toBe(true);
     expect(providerHasIvaRate("CEVEN")).toBe(false);
-    expect(providerHasIvaRate("NEW_TREE")).toBe(false);
   });
 });
 
