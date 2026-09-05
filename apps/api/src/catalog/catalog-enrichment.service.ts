@@ -29,6 +29,21 @@ import {
   type RawValueStat,
 } from "./catalog-enrichment";
 import { repairInvidMojibake } from "../providers/adapters/invid-encoding";
+import { normalizeBrandToken, productsMatchingBrand, suggestBrands, type BrandCandidate } from "./brand-suggestions";
+
+const BRAND_SUGGESTION_SCAN_LIMIT = 20_000;
+const BRAND_SUGGESTIONS_PER_PROVIDER = 15;
+const BRAND_APPLY_CHUNK = 100;
+
+type MissingBrandRow = {
+  provider: string;
+  externalId: string;
+  name: string;
+  tags: string | null;
+  category: string | null;
+  subcategory: string | null;
+  description: string | null;
+};
 
 @Injectable()
 export class CatalogEnrichmentService implements OnModuleInit {
@@ -843,6 +858,154 @@ export class CatalogEnrichmentService implements OnModuleInit {
       limit,
       offset,
     };
+  }
+
+  // ---------- Marcas faltantes ----------
+
+  /** Productos sin marca (ni cruda ni por override), por proveedor. */
+  private async missingBrandRows(provider?: string): Promise<MissingBrandRow[]> {
+    const rows = provider
+      ? await this.prisma.$queryRawUnsafe<MissingBrandRow[]>(
+          `SELECT provider, "externalId", name, tags, category, subcategory, description
+           FROM "ProviderSyncCache" WHERE (brand IS NULL OR TRIM(brand) = '') AND provider = $1
+           ORDER BY provider, name LIMIT $2`,
+          provider,
+          BRAND_SUGGESTION_SCAN_LIMIT
+        )
+      : await this.prisma.$queryRawUnsafe<MissingBrandRow[]>(
+          `SELECT provider, "externalId", name, tags, category, subcategory, description
+           FROM "ProviderSyncCache" WHERE (brand IS NULL OR TRIM(brand) = '')
+           ORDER BY provider, name LIMIT $1`,
+          BRAND_SUGGESTION_SCAN_LIMIT
+        );
+    const ctx = await this.getContext();
+    return rows.filter((r) => !ctx.overrides[`${r.provider}:${r.externalId}`]?.displayBrand?.trim());
+  }
+
+  /** Marcas que ya existen en la plataforma (términos y alias), normalizadas. */
+  private async knownBrandKeys(): Promise<Set<string>> {
+    const [terms, aliases] = await Promise.all([
+      this.prisma.platformCatalogTerm.findMany({ where: { kind: "BRAND" }, select: { label: true } }),
+      this.prisma.platformCatalogAlias.findMany({ where: { kind: "BRAND" }, select: { rawKey: true, label: true } }),
+    ]);
+    const keys = new Set<string>();
+    for (const t of terms) keys.add(normalizeBrandToken(t.label));
+    for (const a of aliases) {
+      keys.add(normalizeBrandToken(a.rawKey));
+      keys.add(normalizeBrandToken(a.label));
+    }
+    keys.delete("");
+    return keys;
+  }
+
+  /**
+   * Sugerencias de marca para productos que no la traen: palabras que se repiten
+   * en los nombres (o tags / categoría) de un proveedor y parecen nombre propio.
+   * Con `validateWithAi` el modelo confirma o descarta la lista corta de
+   * candidatas de cada proveedor (una llamada por proveedor, no por producto).
+   */
+  async brandSuggestions(params: { provider?: string; validateWithAi?: boolean }) {
+    const rows = await this.missingBrandRows(params.provider);
+    const known = await this.knownBrandKeys();
+    const byProvider = new Map<string, MissingBrandRow[]>();
+    for (const r of rows) {
+      const list = byProvider.get(r.provider) ?? [];
+      list.push(r);
+      byProvider.set(r.provider, list);
+    }
+    const aiOn = params.validateWithAi && (await this.ai.isConfigured());
+    const providers: {
+      provider: string;
+      missingCount: number;
+      suggestions: (BrandCandidate & { aiConfirmed: boolean | null })[];
+      usedAi: boolean;
+    }[] = [];
+
+    for (const [provider, products] of byProvider) {
+      const candidates = suggestBrands(
+        products.map((p) => ({ externalId: p.externalId, name: p.name, extra: [p.tags, p.category, p.subcategory] })),
+        known
+      ).slice(0, BRAND_SUGGESTIONS_PER_PROVIDER);
+      let confirmed: Set<string> | null = null;
+      if (aiOn && candidates.length > 0) {
+        confirmed = await this.aiConfirmBrands(provider, candidates);
+      }
+      providers.push({
+        provider,
+        missingCount: products.length,
+        usedAi: confirmed !== null,
+        suggestions: candidates
+          .map((c) => ({ ...c, aiConfirmed: confirmed ? confirmed.has(c.normalized) : null }))
+          .sort((a, b) => Number(b.aiConfirmed === true) - Number(a.aiConfirmed === true) || b.score - a.score),
+      });
+    }
+    providers.sort((a, b) => b.missingCount - a.missingCount);
+    return { providers, totalMissing: rows.length };
+  }
+
+  private async aiConfirmBrands(provider: string, candidates: BrandCandidate[]): Promise<Set<string> | null> {
+    try {
+      const prompt = [
+        `Distribuidor de tecnología en Argentina: ${provider}. Estas palabras se repiten en nombres de productos que no traen marca.`,
+        "Decí cuáles son marcas comerciales reales (fabricantes) y cuáles no (modelos, características, palabras del rubro).",
+        JSON.stringify(candidates.map((c) => ({ palabra: c.brand, apariciones: c.count, ejemplos: c.sampleNames.slice(0, 2) }))),
+        'Respondé { "marcas": ["palabra", ...] } usando exactamente las palabras que te pasé. Si ninguna es marca, devolvé una lista vacía.',
+      ].join("\n");
+      const res = await this.ai.chatJson<{ marcas?: unknown }>(
+        prompt,
+        "Sos un experto en marcas de hardware, periféricos e informática. Respondé solo JSON válido."
+      );
+      const list = Array.isArray(res?.marcas) ? res.marcas : [];
+      return new Set(list.filter((x): x is string => typeof x === "string").map(normalizeBrandToken));
+    } catch (err) {
+      this.logger.warn(`Validación de marcas con IA falló: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Asigna una marca a los productos indicados (o a todos los que la tengan en el
+   * nombre). Crea el término de marca si no existe (y con él su organización de
+   * marca), deja el override canónico y completa la marca cruda vacía para que
+   * los conteos y filtros la vean.
+   */
+  async applyBrandSuggestion(input: { provider: string; brand: string; externalIds?: string[]; source?: CatalogEnrichmentSource }) {
+    const brand = input.brand.trim();
+    if (!brand) throw new BadRequestException("Indicá la marca");
+    const source = input.source ?? "MANUAL";
+    const missing = await this.missingBrandRows(input.provider);
+    const missingIds = new Set(missing.map((m) => m.externalId));
+    const externalIds = (
+      input.externalIds?.length
+        ? input.externalIds.filter((id) => missingIds.has(id))
+        : productsMatchingBrand(
+            missing.map((p) => ({ externalId: p.externalId, name: p.name, extra: [p.tags, p.category, p.subcategory] })),
+            brand
+          )
+    );
+    if (externalIds.length === 0) return { brand, updated: 0 };
+
+    const term = await this.ensureTerm({ kind: "BRAND", label: brand, source });
+    let updated = 0;
+    for (let i = 0; i < externalIds.length; i += BRAND_APPLY_CHUNK) {
+      const chunk = externalIds.slice(i, i + BRAND_APPLY_CHUNK);
+      await this.prisma.$transaction([
+        ...chunk.map((externalId) =>
+          this.prisma.platformProductCatalogOverride.upsert({
+            where: { provider_externalId: { provider: input.provider, externalId } },
+            create: { provider: input.provider, externalId, displayBrand: term.label, source },
+            update: { displayBrand: term.label, source },
+          })
+        ),
+        this.prisma.providerSyncCache.updateMany({
+          where: { provider: input.provider, externalId: { in: chunk }, OR: [{ brand: null }, { brand: "" }] },
+          data: { brand: term.label },
+        }),
+      ]);
+      updated += chunk.length;
+    }
+    await this.refreshCache(true);
+    return { brand: term.label, termId: term.id, updated };
   }
 
   async assignProduct(input: {

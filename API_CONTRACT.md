@@ -370,6 +370,25 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Notas**: Mueve fichas, ofertas, base, historial de precios, perfiles, cargas, corridas de sync, carrito, pedidos, señales de marca, imágenes, overrides/alias de catálogo, display y vínculos del duplicado al destino; lo que ya existía en el destino se descarta (el destino manda). La organización duplicada se borra si no tiene miembros; si los tiene, queda inactiva y sin clave. UI: Admin → Directorio → "Unificar proveedores por lista".
 
 
+### [FEATURE] Marcas faltantes (superadmin)
+- **Método**: GET | POST
+- **Ruta**: `GET /admin/catalog-enrichment/brand-suggestions?provider=&ai=1` · `POST /admin/catalog-enrichment/brand-suggestions/apply`
+- **Auth**: Bearer, `ROLE_ADMIN`.
+- **Body / Params**: GET: `provider` opcional, `ai=1` valida las candidatas con OpenAI (una llamada por proveedor). POST: `{ provider, brand, externalIds?: string[], source?: MANUAL|AUTO|AI }` — sin `externalIds` se asigna a todos los productos sin marca del proveedor que tengan la palabra en el nombre, tags o categoría.
+- **Respuesta esperada**: GET: `{ totalMissing, providers: [{ provider, missingCount, usedAi, suggestions: [{ brand, normalized, count, score (0..1), known, aiConfirmed: true|false|null, externalIds[], sampleNames[] }] }] }`. POST: `{ brand, termId, updated }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Productos "sin marca" = `brand` cruda vacía y sin override `displayBrand`. La detección es determinística: palabras repetidas en los nombres (y tags / categoría / subcategoría) de cada proveedor, descartando palabras del rubro (gabinete, fuente, garantía…), códigos de modelo (TM50, SX550-TS) y puntuando posición en el nombre, forma de nombre propio y coincidencia con marcas ya conocidas (términos y alias BRAND). Al aplicar se hace `ensureTerm(BRAND)` (si la marca es nueva se crea el término y su organización de marca), se escribe el override `displayBrand` y se completa la `brand` cruda vacía para que conteos y filtros la vean. UI: Admin → Catálogo → "Marcas faltantes", con "Validar con IA" y "Asignar las seguras" (confirmadas por IA, conocidas o confianza ≥ 70 %).
+
+### [FEATURE] Imágenes: pendientes para todos los proveedores
+- **Método**: GET (cambio de regla en endpoints existentes)
+- **Ruta**: `/admin/images/status` · `/admin/images/missing` · `POST /admin/images/first-photo`
+- **Auth**: Bearer, `ROLE_ADMIN`.
+- **Body / Params**: sin cambios.
+- **Respuesta esperada**: sin cambios.
+- **Estado**: IMPLEMENTADO
+- **Notas**: "Pendiente visible" ahora es oferta activa con stock > 0 **o stock desconocido** (las listas de precios no siempre lo traen y el catálogo igual muestra esos productos). Antes, todo producto sin stock informado caía en "sin stock / diferidos" y parecía que solo Air tenía pendientes. El selector de distribuidor de la pantalla sale de `status.byProvider` (todos los que tienen productos, incluidos `LIST_*`), no de la lista fija de 14.
+
+
 ## Pendiente (futuro)
 
 ## Pendiente (futuro)

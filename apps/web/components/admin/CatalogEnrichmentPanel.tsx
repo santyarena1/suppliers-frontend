@@ -22,9 +22,10 @@ import {
 } from "lucide-react";
 import UnifyBoard from "./UnifyBoard";
 import IncompleteTab from "./IncompleteTab";
+import MissingBrandsTab from "./MissingBrandsTab";
 import { aggregateLabelChoices } from "@/lib/catalog-menu";
 
-type MainTab = "categories" | "brands" | "incomplete" | "config";
+type MainTab = "categories" | "brands" | "missing-brands" | "incomplete" | "config";
 
 export default function CatalogEnrichmentPanel({
   showToast,
@@ -149,6 +150,7 @@ export default function CatalogEnrichmentPanel({
           [
             ["categories", "Categorías", Layers],
             ["brands", "Marcas", Tags],
+            ["missing-brands", "Marcas faltantes", Tags],
             ["incomplete", "Incompletos", AlertTriangle],
             ["config", "Términos", Settings2],
           ] as const
@@ -185,6 +187,20 @@ export default function CatalogEnrichmentPanel({
           setBusy={setBusy}
           onReload={() => load({ silent: true })}
           showToast={showToast}
+        />
+      )}
+
+      {tab === "missing-brands" && (
+        <MissingBrandsTab
+          brandChoices={aggregateLabelChoices(
+            (brandBoard?.rows ?? []).map((r) => ({
+              ...r,
+              provider: PROVIDER_LABELS[r.provider as Provider] ?? r.provider.replace(/_/g, " "),
+            })),
+            terms.filter((t) => t.kind === "BRAND").map((t) => t.label)
+          )}
+          showToast={showToast}
+          onChanged={() => load({ silent: true })}
         />
       )}
 

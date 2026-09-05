@@ -302,3 +302,32 @@ export class PreviewRawQueryDto {
   @IsOptional()
   limit?: number;
 }
+
+export class BrandSuggestionsQueryDto {
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  /** "1" para validar las candidatas con IA (una llamada por proveedor). */
+  @IsOptional()
+  @IsString()
+  ai?: string;
+}
+
+export class ApplyBrandSuggestionDto {
+  @IsString()
+  provider!: string;
+
+  @IsString()
+  @MaxLength(80)
+  brand!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  externalIds?: string[];
+
+  @IsOptional()
+  @IsIn(["MANUAL", "AUTO", "AI"])
+  source?: "MANUAL" | "AUTO" | "AI";
+}

@@ -2480,6 +2480,22 @@ export interface CatalogMergeCluster {
   members: { provider: string; rawKey: string; count: number }[];
 }
 
+export interface BrandSuggestion {
+  brand: string;
+  normalized: string;
+  count: number;
+  score: number;
+  known: boolean;
+  externalIds: string[];
+  sampleNames: string[];
+  aiConfirmed: boolean | null;
+}
+
+export interface BrandSuggestionsResponse {
+  providers: { provider: string; missingCount: number; usedAi: boolean; suggestions: BrandSuggestion[] }[];
+  totalMissing: number;
+}
+
 export const catalogEnrichmentApi = {
   overview: () => api.get<CatalogEnrichmentOverview>("/admin/catalog-enrichment/overview"),
   board: (kind: CatalogAliasKind) =>
@@ -2566,6 +2582,12 @@ export const catalogEnrichmentApi = {
     }>("/admin/catalog-enrichment/ai/suggest-merges", { excludeKeys: opts?.excludeKeys ?? [] }, {
       params: { kind, offset: opts?.offset ?? 0 },
     }),
+  brandSuggestions: (params?: { provider?: string; ai?: boolean }) =>
+    api.get<BrandSuggestionsResponse>("/admin/catalog-enrichment/brand-suggestions", {
+      params: { provider: params?.provider || undefined, ai: params?.ai ? "1" : undefined },
+    }),
+  applyBrandSuggestion: (data: { provider: string; brand: string; externalIds?: string[]; source?: "MANUAL" | "AUTO" | "AI" }) =>
+    api.post<{ brand: string; termId?: string; updated: number }>("/admin/catalog-enrichment/brand-suggestions/apply", data),
   aiProductHint: (provider: string, externalId: string) =>
     api.get<{
       displayBrand: string | null;

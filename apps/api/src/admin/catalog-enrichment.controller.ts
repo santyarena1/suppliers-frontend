@@ -15,7 +15,9 @@ import { RolesGuard } from "../common/guards/roles.guard";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import {
   AiProductHintQueryDto,
+  ApplyBrandSuggestionDto,
   ApplyCatalogSuggestionDto,
+  BrandSuggestionsQueryDto,
   AssignProductDto,
   CreateCatalogTermDto,
   IncompleteQueryDto,
@@ -115,6 +117,20 @@ export class CatalogEnrichmentController {
   @Post("products/assign")
   assignProduct(@Body() dto: AssignProductDto) {
     return this.catalog.assignProduct(dto);
+  }
+
+  /** Marcas faltantes: palabras repetidas en los nombres que parecen marca, por proveedor. */
+  @Get("brand-suggestions")
+  brandSuggestions(@Query() query: BrandSuggestionsQueryDto) {
+    return this.catalog.brandSuggestions({
+      provider: query.provider?.trim() || undefined,
+      validateWithAi: query.ai === "1" || query.ai === "true",
+    });
+  }
+
+  @Post("brand-suggestions/apply")
+  applyBrandSuggestion(@Body() dto: ApplyBrandSuggestionDto) {
+    return this.catalog.applyBrandSuggestion(dto);
   }
 
   @Get("raw-values")

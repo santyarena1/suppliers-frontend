@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { providerLabel } from "@/components/ProviderBadge";
 import {
   ALL_PROVIDERS,
   PROVIDER_LABELS,
@@ -280,9 +281,12 @@ export default function ImageSyncPanel({
               className="mt-1 block bg-surface-800 border border-surface-700 rounded-lg px-2.5 py-1.5 text-sm text-white"
             >
               <option value="">Todos</option>
-              {ALL_PROVIDERS.map((p) => (
+              {(status?.byProvider?.length
+                ? status.byProvider.map((b) => b.provider)
+                : ALL_PROVIDERS
+              ).map((p) => (
                 <option key={p} value={p}>
-                  {PROVIDER_LABELS[p as Provider]}
+                  {PROVIDER_LABELS[p as Provider] ?? providerLabel(p)}
                 </option>
               ))}
             </select>
