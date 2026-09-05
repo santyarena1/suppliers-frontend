@@ -5,16 +5,22 @@ import {
   hasNewTreePortalLogin,
   parseNewTreeCredentials,
 } from "../new-tree-web-client";
+import { NewTreeSoapClient, parseNewTreeApiCredentials } from "../new-tree-soap-client";
 import {
   detailPath,
   listingPath,
+  mapApiArticle,
   mapListingItem,
   parseCategoryNav,
   parseDetail,
   parseListing,
   parseMaxPage,
+  type NewTreeApiArticle,
   type NewTreeCategory,
 } from "../new-tree-catalog.parser";
+
+/** Tanda con la que se persiste el catálogo de la API (viene entero en una respuesta). */
+const API_BATCH = 200;
 
 /** Páginas del listado que se piden en paralelo (el portal es WebForms: sin abusar). */
 const PAGE_CONCURRENCY = 3;
@@ -48,6 +54,41 @@ export class NewTreeAdapter implements ProviderAdapter {
   }
 
   async syncAll(
+    credentials: Record<string, string>,
+    onPage: (items: NormalizedProduct[]) => Promise<void>
+  ): Promise<void> {
+    // Con credenciales de la API (SOAP de GlobalBluePoint) el catálogo entra por ahí:
+    // precios del cliente y un solo pedido, sin depender del portal (Cloudflare).
+    if (parseNewTreeApiCredentials(credentials)) {
+      await this.syncFromApi(credentials, onPage);
+      return;
+    }
+    await this.syncFromPortal(credentials, onPage);
+  }
+
+  private async syncFromApi(
+    credentials: Record<string, string>,
+    onPage: (items: NormalizedProduct[]) => Promise<void>
+  ): Promise<void> {
+    const soap = await NewTreeSoapClient.authenticate(credentials);
+    const rows = await soap.getArticulos();
+    const seen = new Set<string>();
+    let batch: NormalizedProduct[] = [];
+    for (const row of rows) {
+      const item = mapApiArticle(row as NewTreeApiArticle);
+      if (!item || seen.has(item.externalId)) continue;
+      seen.add(item.externalId);
+      batch.push(item);
+      if (batch.length >= API_BATCH) {
+        await onPage(batch);
+        batch = [];
+      }
+    }
+    if (batch.length) await onPage(batch);
+    if (seen.size === 0) throw new BadGatewayException("La API de New Tree no devolvió artículos");
+  }
+
+  private async syncFromPortal(
     credentials: Record<string, string>,
     onPage: (items: NormalizedProduct[]) => Promise<void>
   ): Promise<void> {
@@ -103,6 +144,8 @@ export class NewTreeAdapter implements ProviderAdapter {
     onItem: (externalId: string, patch: Partial<NormalizedProduct>) => Promise<void>
   ): Promise<void> {
     if (codes.length === 0) return;
+    // La API ya trae marca, modelo, IVA y descripción: no hace falta leer fichas del portal.
+    if (parseNewTreeApiCredentials(credentials)) return;
     const client = await this.open(credentials);
     const queue = [...codes];
     let failures = 0;

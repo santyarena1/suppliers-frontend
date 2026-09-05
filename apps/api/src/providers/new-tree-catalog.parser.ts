@@ -169,6 +169,91 @@ export function mapListingItem(item: NewTreeListingItem, cat: NewTreeCategory | 
 }
 
 /** "Modelo : PROBE700B" → "PROBE700B". El label debe ir seguido de ":" y no ser parte de otra palabra (MARCAS). */
+/**
+ * Artículo del script `getArticulos` del SOAP de GlobalBluePoint. `price` es neto
+ * (sin IVA) según la doc "API articulos - CLIENTE"; `stock_semaphore` es un nivel
+ * ("ALTO", "MEDIO", "BAJO", "SIN STOCK"…), no una cantidad.
+ */
+export interface NewTreeApiArticle {
+  id: number | string;
+  title?: string;
+  currency_symbol?: string;
+  price?: number | string;
+  iva?: number | string;
+  part_number?: string;
+  brand?: string;
+  description?: string;
+  stock_semaphore?: string | number;
+  category_id?: number | string;
+  category?: string;
+  image_url?: string;
+  height?: number | string;
+  width?: number | string;
+  length?: number | string;
+  volume?: number | string;
+  weight?: number | string;
+  dimensions_unit?: string;
+  weight_unit?: string;
+}
+
+function num(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function str(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const s = String(value).trim();
+  return s ? s : undefined;
+}
+
+const OUT_OF_STOCK_LEVEL = /^(0|sin|no|agotad|nulo|none|rojo)/i;
+
+/** "ALTO"/"MEDIO"/"BAJO" quedan como estado; "SIN STOCK"/0 es stock 0. */
+export function stockFromSemaphore(level: string | number | undefined): { stock?: number; stockStatus?: string } {
+  if (level == null || level === "") return {};
+  const text = String(level).trim();
+  if (OUT_OF_STOCK_LEVEL.test(text)) return { stock: 0, stockStatus: text };
+  return { stockStatus: text };
+}
+
+export function mapApiArticle(raw: NewTreeApiArticle): NormalizedProduct | null {
+  const externalId = str(raw.id);
+  const name = str(raw.title);
+  if (!externalId || !name) return null;
+  const price = num(raw.price);
+  const iva = num(raw.iva);
+  const finalPrice = price != null ? round4(price * (1 + (iva ?? IVA_DEFAULT_PERCENT) / 100)) : undefined;
+  const currencyRaw = str(raw.currency_symbol)?.toUpperCase();
+  const currency = currencyRaw ? (currencyRaw === "$" || currencyRaw === "ARS" ? "ARS" : currencyRaw === "U$S" ? "USD" : currencyRaw) : undefined;
+  const brand = str(raw.brand);
+  return {
+    externalId,
+    sku: externalId,
+    partNumber: str(raw.part_number),
+    name,
+    brand: brand && !/^sin marca$/i.test(brand) ? brand : undefined,
+    category: str(raw.category),
+    description: str(raw.description),
+    price,
+    finalPrice,
+    currency,
+    ivaPercent: price != null ? (iva ?? IVA_DEFAULT_PERCENT) : iva,
+    ...stockFromSemaphore(raw.stock_semaphore),
+    imageUrl: str(raw.image_url),
+    productUrl: `https://www.newtree.com.ar/DETALLE/producto/ITEM_ID=${externalId}/newtree.aspx`,
+    height: num(raw.height),
+    width: num(raw.width),
+    length: num(raw.length),
+    volume: num(raw.volume),
+    weight: num(raw.weight),
+    dimensionsUnit: str(raw.dimensions_unit),
+    weightUnit: str(raw.weight_unit),
+    raw,
+  };
+}
+
 function labelValue(text: string, label: string): string | undefined {
   const re = new RegExp(
     `(?:^|[^A-Za-zÁÉÍÓÚáéíóú])${label}\\s*:\\s*([^|]+?)(?=\\s*(?:\\||C[oó]digo\\s*:|Modelo\\s*:|Marca\\s*:|Stock\\s*:|USD|ARS|$))`,

@@ -407,8 +407,11 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 Integración por emulación del portal (GlobalBluePoint / ASP.NET PageMethods). Diseño:
 `docs/superpowers/specs/2026-09-05-new-tree-portal-integration-design.md`.
-Credenciales: `username` + `password` del portal (guardadas como las demás en
-`POST /credentials`). Sin credenciales el catálogo sincroniza con precios de lista.
+Credenciales (`POST /credentials`): `api_username`, `api_password`, `company`, `webservice`,
+`client_id` (API SOAP de GlobalBluePoint: catálogo con precios del cliente, es lo que
+Railway puede alcanzar) y/o `username` + `password` del portal (pedidos y cuenta
+corriente; el portal bloquea IPs de datacenter salvo `NEW_TREE_PROXY_URL`). Sin nada, el
+catálogo sincroniza por portal con precios de lista.
 
 ### `GET /providers/NEW_TREE/account`
 

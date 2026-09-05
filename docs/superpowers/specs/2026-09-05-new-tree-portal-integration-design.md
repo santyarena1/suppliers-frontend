@@ -66,6 +66,18 @@ pasa por `OrdersService.send` como el resto.
   Nodo → Proveedores → New Tree → Mi cuenta. Nunca en código ni en el repo.
 - **Sin cuenta**: `publicCatalog: true`, el catálogo sincroniza igual con precios de lista.
 
+## Catálogo por la API SOAP (preferido)
+
+New Tree entregó "API articulos - CLIENTE": SOAP en
+`https://ws.globalbluepoint.com/newtree/app_webservices/wserpconnect.asmx`, header
+`wsERPConnectHeader` (pUsername, pPassword, pCompany, pWebWervice, pAuthenticatedToken),
+`AuthenticateUser` → token y `wsGBPScriptExecute("getArticulos", {"client_id":N})` → JSON
+(id, title, currency_symbol, price neto, iva, part_number, brand, description,
+stock_semaphore, category, image_url, dimensiones). Railway sí llega a ese host. Con las
+cinco credenciales de la API cargadas, `syncAll` usa el SOAP (`new-tree-soap-client.ts`,
+`mapApiArticle`) y no lee fichas del portal; sin ellas cae al portal. Pedidos y cuenta
+corriente siguen siendo solo por portal.
+
 ## Bloqueo de Cloudflare
 
 newtree.com.ar está detrás de Cloudflare y responde `403 Attention Required` a las IP de

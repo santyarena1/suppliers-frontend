@@ -257,25 +257,67 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     intro:
       "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Usuario y contraseña del portal www.newtree.com.ar. Con la cuenta se ven tus precios, se crean pedidos y se lee la cuenta corriente. Sin cuenta, el catálogo se sincroniza con precios de lista.",
+      "La API (usuario, contraseña, company, web service y client_id que te da New Tree) sincroniza el catálogo con tus precios. Usuario y contraseña del portal www.newtree.com.ar habilitan pedidos y cuenta corriente. Podés cargar una, la otra o las dos.",
     portalUrl: "https://www.newtree.com.ar",
     portalLabel: "www.newtree.com.ar",
     fields: [
       {
-        key: "username",
-        label: "Usuario",
+        key: "api_username",
+        label: "Usuario API",
         type: "text",
-        required: true,
-        placeholder: "Usuario o mail del portal",
+        required: false,
+        placeholder: "pUsername que te dio New Tree",
+        help: "Catálogo por la API de GlobalBluePoint (wserpconnect.asmx).",
+        aliases: ["apiUser", "PUSERNAME"],
+      },
+      {
+        key: "api_password",
+        label: "Contraseña API",
+        type: "password",
+        required: false,
+        placeholder: "pPassword",
+        aliases: ["apiPassword", "PPASSWORD"],
+      },
+      {
+        key: "company",
+        label: "Company",
+        type: "text",
+        required: false,
+        placeholder: "pCompany, ej. 18",
+        aliases: ["PCOMPANY"],
+      },
+      {
+        key: "webservice",
+        label: "Web service",
+        type: "text",
+        required: false,
+        placeholder: "pWebService, ej. 1000",
+        aliases: ["web_service", "PWEBSERVICE"],
+      },
+      {
+        key: "client_id",
+        label: "Client ID",
+        type: "text",
+        required: false,
+        placeholder: "client_id para getArticulos",
+        aliases: ["clientId"],
+      },
+      {
+        key: "username",
+        label: "Usuario del portal",
+        type: "text",
+        required: false,
+        placeholder: "Usuario o mail de newtree.com.ar",
+        help: "Para pedidos y cuenta corriente.",
         aliases: ["user", "email", "usuario"],
         autoComplete: "username",
       },
       {
         key: "password",
-        label: "Contraseña",
+        label: "Contraseña del portal",
         type: "password",
-        required: true,
-        placeholder: "Contraseña del portal",
+        required: false,
+        placeholder: "Contraseña de newtree.com.ar",
         aliases: ["pass"],
         autoComplete: "current-password",
       },
@@ -404,6 +446,20 @@ export function validateCredentialValues(
     if (userId && token) return null;
     if (password) return "Cargá el nº de cliente junto con la contraseña del portal.";
     return "Cargá nro. de cliente y contraseña del portal, o user id y token de catálogo.";
+  }
+
+  if (provider === "NEW_TREE") {
+    const api = ["api_username", "api_password", "company", "webservice", "client_id"].map((k) => (values[k] ?? "").trim());
+    const apiFilled = api.filter(Boolean).length;
+    const portal = Boolean((values.username ?? "").trim() && (values.password ?? "").trim());
+    if (apiFilled > 0 && apiFilled < api.length) {
+      return "Completá los cinco datos de la API (usuario, contraseña, company, web service y client_id).";
+    }
+    if (apiFilled === api.length || portal) return null;
+    if ((values.username ?? "").trim() || (values.password ?? "").trim()) {
+      return "Completá usuario y contraseña del portal juntos.";
+    }
+    return "Cargá las credenciales de la API de New Tree, las del portal, o las dos.";
   }
 
   for (const field of schema.fields) {
