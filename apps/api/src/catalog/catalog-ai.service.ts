@@ -109,6 +109,84 @@ Producto: ${JSON.stringify({
     }
   }
 
+  /**
+   * Igual que suggestProductMetadata pero para una página entera de productos en
+   * una sola llamada: mucho más barato y rápido que uno por uno. Sin clave o si
+   * el modelo falla, cae a la heurística por producto.
+   */
+  async suggestProductMetadataBatch(input: {
+    products: {
+      externalId: string;
+      name: string;
+      provider: string;
+      brand?: string | null;
+      category?: string | null;
+      subcategory?: string | null;
+      sku?: string | null;
+      partNumber?: string | null;
+    }[];
+    knownBrands: string[];
+    knownCategories: string[];
+  }): Promise<Map<string, AiProductHint>> {
+    const out = new Map<string, AiProductHint>();
+    const fallback = () => {
+      for (const p of input.products) {
+        out.set(p.externalId, this.heuristicProductHint({ ...p, knownBrands: input.knownBrands, knownCategories: input.knownCategories }));
+      }
+      return out;
+    };
+    if (input.products.length === 0) return out;
+    if (!(await this.isConfigured())) return fallback();
+
+    try {
+      const result = await this.chatJson<{ items?: unknown }>(
+        `Sugerí marca, categoría y subcategoría para cada producto de un catálogo IT en Argentina.
+Respondé JSON { "items": [ { "externalId": string, "displayBrand": string|null, "displayCategory": string|null, "displaySubcategory": string|null } ] } con un ítem por producto, mismo externalId.
+Elegí marca y categoría SOLO de las listas conocidas cuando haya match razonable (la marca suele estar en el nombre); si no hay match claro, null en ese campo.
+Marcas conocidas: ${input.knownBrands.slice(0, 80).join(", ")}
+Categorías conocidas: ${input.knownCategories.slice(0, 80).join(", ")}
+Productos: ${JSON.stringify(
+          input.products.map((p) => ({
+            externalId: p.externalId,
+            name: p.name,
+            provider: p.provider,
+            brand: p.brand ?? undefined,
+            category: p.category ?? undefined,
+            subcategory: p.subcategory ?? undefined,
+            sku: p.sku ?? undefined,
+            partNumber: p.partNumber ?? undefined,
+          }))
+        )}`
+      );
+      const items = Array.isArray(result) ? result : Array.isArray(result?.items) ? result.items : [];
+      const byId = new Map<string, Record<string, unknown>>();
+      for (const it of items) {
+        if (it && typeof it === "object" && typeof (it as { externalId?: unknown }).externalId === "string") {
+          byId.set((it as { externalId: string }).externalId, it as Record<string, unknown>);
+        }
+      }
+      const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+      for (const p of input.products) {
+        const hit = byId.get(p.externalId);
+        if (!hit) {
+          out.set(p.externalId, this.heuristicProductHint({ ...p, knownBrands: input.knownBrands, knownCategories: input.knownCategories }));
+          continue;
+        }
+        out.set(p.externalId, {
+          displayBrand: str(hit.displayBrand),
+          displayCategory: str(hit.displayCategory),
+          displaySubcategory: str(hit.displaySubcategory),
+          reasoning: "Sugerencia IA",
+          source: "ai",
+        });
+      }
+      return out;
+    } catch (err) {
+      this.logger.warn(`AI batch product hints failed: ${err instanceof Error ? err.message : err}`);
+      return fallback();
+    }
+  }
+
   private heuristicProductHint(input: {
     name: string;
     brand?: string | null;

@@ -181,6 +181,20 @@ export class IncompleteQueryDto {
   @IsOptional()
   @IsString()
   q?: string;
+
+  @IsOptional()
+  @IsString()
+  provider?: string;
+}
+
+export class AiAutoCompleteDto {
+  @IsString()
+  provider!: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  externalIds?: string[];
 }
 
 export class UpsertCatalogAliasDto {
@@ -330,4 +344,19 @@ export class ApplyBrandSuggestionDto {
   @IsOptional()
   @IsIn(["MANUAL", "AUTO", "AI"])
   source?: "MANUAL" | "AUTO" | "AI";
+}
+
+export class AiProductHintsItemDto {
+  @IsString()
+  provider!: string;
+
+  @IsString()
+  externalId!: string;
+}
+
+export class AiProductHintsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AiProductHintsItemDto)
+  items!: AiProductHintsItemDto[];
 }

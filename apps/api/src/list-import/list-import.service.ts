@@ -404,13 +404,17 @@ export class ListImportService {
     } else {
       await this.applyTenant(record, items);
     }
-    // Los productos nuevos heredan las marcas ya aprobadas (Sentey, LNZ…) sin pasar por revisión.
-    const brands = await this.catalog
-      .autoAssignKnownBrands(record.provider, items.map((i) => i.externalId))
-      .catch((err) => {
-        this.logger.warn(`Autoasignación de marcas en ${record.provider} falló: ${err instanceof Error ? err.message : String(err)}`);
-        return { assigned: 0, byBrand: {} };
-      });
+    // Los productos nuevos heredan las marcas ya aprobadas (Sentey, LNZ…) sin pasar por revisión,
+    // y lo que sigue incompleto se intenta cerrar con IA usando solo marcas y categorías conocidas.
+    const ids = items.map((i) => i.externalId);
+    const brands = await this.catalog.autoAssignKnownBrands(record.provider, ids).catch((err) => {
+      this.logger.warn(`Autoasignación de marcas en ${record.provider} falló: ${err instanceof Error ? err.message : String(err)}`);
+      return { assigned: 0, byBrand: {} };
+    });
+    const ai = await this.catalog.autoCompleteWithAi(record.provider, ids).catch((err) => {
+      this.logger.warn(`Autocompletado con IA en ${record.provider} falló: ${err instanceof Error ? err.message : String(err)}`);
+      return { completed: 0, considered: 0, usedAi: false };
+    });
 
     await this.prisma.$transaction([
       this.prisma.supplierListImport.update({
@@ -420,7 +424,12 @@ export class ListImportService {
           appliedAt: new Date(),
           normalizedRows: Prisma.DbNull,
           error: null,
-          summary: { ...((record.summary as Record<string, unknown> | null) ?? {}), brandsAutoAssigned: brands.assigned },
+          summary: {
+            ...((record.summary as Record<string, unknown> | null) ?? {}),
+            brandsAutoAssigned: brands.assigned,
+            aiCompleted: ai.completed,
+            stillIncomplete: Math.max(0, ai.considered - ai.completed),
+          },
         },
       }),
       ...(record.profileId

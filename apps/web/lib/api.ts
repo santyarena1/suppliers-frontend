@@ -2550,8 +2550,10 @@ export const catalogEnrichmentApi = {
     rawKey: string;
     visible: boolean;
   }) => api.post("/admin/catalog-enrichment/visibility", data),
-  incomplete: (params?: { limit?: number; offset?: number; q?: string }) =>
-    api.get<{ items: CatalogIncompleteProduct[]; total: number; limit: number; offset: number }>(
+  aiAutoComplete: (data: { provider: string; externalIds?: string[] }) =>
+    api.post<{ completed: number; considered: number; usedAi: boolean }>("/admin/catalog-enrichment/ai/auto-complete", data),
+  incomplete: (params?: { limit?: number; offset?: number; q?: string; provider?: string }) =>
+    api.get<{ items: CatalogIncompleteProduct[]; total: number; limit: number; offset: number; byProvider?: { provider: string; count: number }[] }>(
       "/admin/catalog-enrichment/incomplete",
       { params }
     ),
@@ -2588,6 +2590,11 @@ export const catalogEnrichmentApi = {
     }),
   applyBrandSuggestion: (data: { provider: string; brand: string; externalIds?: string[]; source?: "MANUAL" | "AUTO" | "AI" }) =>
     api.post<{ brand: string; termId?: string; updated: number }>("/admin/catalog-enrichment/brand-suggestions/apply", data),
+  aiProductHints: (items: { provider: string; externalId: string }[]) =>
+    api.post<{
+      usedAi: boolean;
+      items: { provider: string; externalId: string; displayBrand: string | null; displayCategory: string | null; displaySubcategory: string | null; source: string }[];
+    }>("/admin/catalog-enrichment/ai/product-hints", { items }),
   aiProductHint: (provider: string, externalId: string) =>
     api.get<{
       displayBrand: string | null;

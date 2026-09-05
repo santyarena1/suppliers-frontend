@@ -95,7 +95,7 @@ export default function ImageSyncPanel({
     try {
       const [st, miss, probs, hist] = await Promise.all([
         imageSyncApi.status(),
-        imageSyncApi.missing({ take: 8, provider: provider || undefined }),
+        imageSyncApi.missing({ take: 24, provider: provider || undefined }),
         imageSyncApi.history({
           page: 1,
           take: 40,
@@ -360,6 +360,73 @@ export default function ImageSyncPanel({
         </div>
       </div>
 
+      {(
+        <div>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-surface-500">
+              Sin imagen · pendientes{provider ? ` · ${PROVIDER_LABELS[provider as Provider] ?? providerLabel(provider)}` : ""}
+            </h3>
+            {(status?.byProvider ?? []).map((b) => (
+              <button
+                key={b.provider}
+                type="button"
+                onClick={() => {
+                  setProvider(provider === b.provider ? "" : b.provider);
+                  setPage(1);
+                }}
+                className={`text-[11px] rounded-full border px-2 py-0.5 tabular-nums ${
+                  provider === b.provider ? "border-brand-500 text-brand-300 bg-brand-500/10" : "border-surface-700 text-surface-400 hover:text-surface-200"
+                }`}
+              >
+                {PROVIDER_LABELS[b.provider as Provider] ?? providerLabel(b.provider)} · {b.missing}
+              </button>
+            ))}
+          </div>
+          {missing.length === 0 && <p className="text-sm text-surface-500">Nada pendiente{provider ? " para este distribuidor" : ""}.</p>}
+          <ul className="flex flex-col gap-1.5">
+            {missing.map((it) => (
+              <li key={it.id} className="border border-surface-800 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm text-surface-200 line-clamp-1">{it.name}</p>
+                  <p className="text-[11px] text-surface-500 font-mono truncate">
+                    {PROVIDER_LABELS[it.provider as Provider] ?? providerLabel(it.provider)} · {it.query}
+                    {it.inCatalog === false ? " · después" : ""}
+                  </p>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPicker(it)}
+                    className="text-[11px] text-brand-300 border border-brand-500/30 rounded px-1.5 py-0.5"
+                  >
+                    Serper
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadFor(it.id);
+                      fileRef.current?.click();
+                    }}
+                    className="text-[11px] text-surface-400 border border-surface-700 rounded px-1.5 py-0.5"
+                  >
+                    Subir
+                  </button>
+                  <a
+                    href={productHref(it.provider, it.externalId)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11px] text-surface-400 border border-surface-700 rounded px-1.5 py-0.5"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Ver ficha
+                  </a>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <section className="border border-amber-500/25 bg-amber-500/[0.04] rounded-xl p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
           <h3 className="text-sm font-semibold text-amber-100">
@@ -474,54 +541,6 @@ export default function ImageSyncPanel({
         )}
       </section>
 
-      {missing.length > 0 && (
-        <div>
-          <h3 className="text-xs font-medium uppercase tracking-wider text-surface-500 mb-2">
-            Pendientes (muestra · primero con stock)
-          </h3>
-          <ul className="flex flex-col gap-1.5">
-            {missing.map((it) => (
-              <li key={it.id} className="border border-surface-800 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm text-surface-200 line-clamp-1">{it.name}</p>
-                  <p className="text-[11px] text-surface-500 font-mono truncate">
-                    {PROVIDER_LABELS[it.provider as Provider] ?? it.provider} · {it.query}
-                    {it.inCatalog === false ? " · después" : ""}
-                  </p>
-                </div>
-                <div className="flex gap-1 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setPicker(it)}
-                    className="text-[11px] text-brand-300 border border-brand-500/30 rounded px-1.5 py-0.5"
-                  >
-                    Serper
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUploadFor(it.id);
-                      fileRef.current?.click();
-                    }}
-                    className="text-[11px] text-surface-400 border border-surface-700 rounded px-1.5 py-0.5"
-                  >
-                    Subir
-                  </button>
-                  <a
-                    href={productHref(it.provider, it.externalId)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] text-surface-400 border border-surface-700 rounded px-1.5 py-0.5"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Ver ficha
-                  </a>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       <input
         ref={fileRef}
