@@ -43,6 +43,17 @@ describe("readGrid", () => {
     expect(analysis.chosen?.dataRows.map((r) => r.divider)).toEqual(["MARCA X", "MARCA X"]);
   });
 
+  test("un texto corto con hipervínculo (LINK) vale por su URL", () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([["Código", "Producto", "Precio", "Spec"], ["A1", "Uno", 10, "LINK"], ["A2", "Dos", 20, "LINK"]]);
+    ws["D2"].l = { Target: "https://sentey.com/tm50" };
+    XLSX.utils.book_append_sheet(wb, ws, "Lista");
+    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const sheets = readGrid(buffer, "lista.xlsx");
+    expect(sheets[0].rows[1][3]).toBe("https://sentey.com/tm50");
+    expect(sheets[0].rows[2][3]).toBe("LINK");
+  });
+
   test("lee un csv dejando los números como texto (los decimales con coma se resuelven después)", () => {
     const csv = Buffer.from('Codigo,Producto,Precio\nA1,Uno,"12,5"\nA2,Dos,20\n', "utf8");
     const sheets = readGrid(csv, "lista.csv");

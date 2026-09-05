@@ -35,7 +35,9 @@ export function readGrid(buffer: Buffer, filename: string): GridSheet[] {
     });
     const rows: CellValue[][] = matrix
       .slice(0, MAX_ROWS)
-      .map((row) => (Array.isArray(row) ? row.slice(0, MAX_COLS).map(toCellValue) : []));
+      .map((row, r) =>
+        Array.isArray(row) ? row.slice(0, MAX_COLS).map((value, c) => withHyperlink(sheet, r, c, toCellValue(value))) : []
+      );
     const merges: MergeRange[] = (sheet["!merges"] ?? []).map((m) => ({
       r0: m.s.r,
       c0: m.s.c,
@@ -44,6 +46,16 @@ export function readGrid(buffer: Buffer, filename: string): GridSheet[] {
     }));
     return { index, name, rows, merges };
   });
+}
+
+/** Un texto corto tipo "LINK" o "Ver" que es un hipervínculo vale por su destino. */
+const LINK_TEXT_MAX = 12;
+
+function withHyperlink(sheet: XLSX.WorkSheet, r: number, c: number, value: CellValue): CellValue {
+  if (typeof value !== "string" || value.length > LINK_TEXT_MAX || /^https?:///i.test(value)) return value;
+  const cell = sheet[XLSX.utils.encode_cell({ r, c })] as { l?: { Target?: string } } | undefined;
+  const target = cell?.l?.Target?.trim();
+  return target && /^https?:///i.test(target) ? target : value;
 }
 
 function toCellValue(value: unknown): CellValue {

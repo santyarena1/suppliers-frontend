@@ -565,13 +565,18 @@ export class ProvidersService implements OnModuleInit {
             raw: item.raw as object,
           };
 
+          // Una lista es la verdad completa de la oferta: lo que no trae (stock,
+          // moneda…) queda en null, no arrastra el valor de una carga anterior.
+          // Un sync por API sí deja intacto lo que no manda (undefined = sin cambio).
+          const fromList = offerSource !== "SYNC";
+          const orNull = <T,>(v: T | undefined): T | null | undefined => (fromList ? (v ?? null) : v);
           const oferta = {
-            price: item.price,
-            finalPrice: item.finalPrice,
-            currency: item.currency,
-            ivaPercent: item.ivaPercent,
-            stock: item.stock,
-            stockStatus: item.stockStatus,
+            price: orNull(item.price),
+            finalPrice: orNull(item.finalPrice),
+            currency: orNull(item.currency),
+            ivaPercent: orNull(item.ivaPercent),
+            stock: orNull(item.stock),
+            stockStatus: orNull(item.stockStatus),
             active: true,
             needsResync: false,
             source: offerSource,
