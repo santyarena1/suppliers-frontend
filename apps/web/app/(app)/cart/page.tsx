@@ -9,6 +9,7 @@ import InvidDraftPanel from "@/components/InvidDraftPanel";
 import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
 import ElitCheckoutPanel from "@/components/ElitCheckoutPanel";
 import NewTreeCheckoutPanel from "@/components/NewTreeCheckoutPanel";
+import SolutionBoxCheckoutPanel from "@/components/SolutionBoxCheckoutPanel";
 import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
 import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
@@ -271,6 +272,7 @@ function CartPageInner() {
   const airLines = useMemo(() => cartLinesFromItems(onlineByProvider.AIR ?? []), [onlineByProvider.AIR]);
   const gnLines = useMemo(() => cartLinesFromItems(onlineByProvider.GRUPO_NUCLEO ?? []), [onlineByProvider.GRUPO_NUCLEO]);
   const ntLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_TREE ?? []), [onlineByProvider.NEW_TREE]);
+  const sbLines = useMemo(() => cartLinesFromItems(onlineByProvider.SOLUTION_BOX ?? []), [onlineByProvider.SOLUTION_BOX]);
   const warmEnabled = hydrated && channelTab === "online";
   const invidWarm = useCheckoutWarmup("INVID", invidLines, warmEnabled);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines, warmEnabled);
@@ -278,6 +280,7 @@ function CartPageInner() {
   const airWarm = useCheckoutWarmup("AIR", airLines, warmEnabled);
   const gnWarm = useCheckoutWarmup("GRUPO_NUCLEO", gnLines, warmEnabled);
   const ntWarm = useCheckoutWarmup("NEW_TREE", ntLines, warmEnabled);
+  const sbWarm = useCheckoutWarmup("SOLUTION_BOX", sbLines, warmEnabled);
   useWarmAllCheckoutCarts(onlineByProvider, warmEnabled);
 
   const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
@@ -292,6 +295,7 @@ function CartPageInner() {
     AIR: airWarm,
     GRUPO_NUCLEO: gnWarm,
     NEW_TREE: ntWarm,
+    SOLUTION_BOX: sbWarm,
   };
 
   const invidExtra: TaxExtra | undefined = invidQuoted?.stockOk
@@ -1029,6 +1033,19 @@ function CartPageInner() {
                           setNotice(message || "Pedido creado en New Tree");
                           setActiveTab("all");
                           clearProvider("NEW_TREE", "online");
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {channelTab === "online" && onlineByProvider.SOLUTION_BOX?.length > 0 && (activeTab === "all" || activeTab === "SOLUTION_BOX") && (
+                    <div className={activeTab === "SOLUTION_BOX" ? undefined : "hidden"} aria-hidden={activeTab !== "SOLUTION_BOX"}>
+                      <SolutionBoxCheckoutPanel
+                        items={onlineByProvider.SOLUTION_BOX}
+                        onCreated={(message) => {
+                          setNotice(message || "Pedido creado en Solution Box");
+                          setActiveTab("all");
+                          clearProvider("SOLUTION_BOX", "online");
                         }}
                       />
                     </div>

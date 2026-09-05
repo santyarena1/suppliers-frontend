@@ -10,6 +10,7 @@ import { GrupoNucleoOrderService, type GnDraftInput } from "../providers/grupo-n
 import { InvidOrderService, type InvidDraftInput } from "../providers/invid-order.service";
 import { NewBytesOrderService, type NewBytesDraftInput } from "../providers/new-bytes-order.service";
 import { NewTreeOrderService, type NewTreeCartItems } from "../providers/new-tree-order.service";
+import { SolutionBoxOrderService, type SolutionBoxCartItems } from "../providers/solution-box-order.service";
 import type { OrderAuthor } from "../providers/provider-draft";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -54,6 +55,7 @@ export class OrdersService {
     private readonly air: AirOrderService,
     private readonly elit: ElitOrderService,
     private readonly newTree: NewTreeOrderService,
+    private readonly solutionBox: SolutionBoxOrderService,
     @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
@@ -597,6 +599,8 @@ export class OrdersService {
         return this.elit.approveDraft(author, credentials, input as unknown as ElitCartItems, orderId);
       case "NEW_TREE":
         return this.newTree.approveDraft(author, credentials, input as unknown as NewTreeCartItems, orderId);
+      case "SOLUTION_BOX":
+        return this.solutionBox.approveDraft(author, credentials, input as unknown as SolutionBoxCartItems, orderId);
       default:
         throw new BadRequestException(`Todavía no se pueden aprobar pedidos de ${provider} desde Nodo`);
     }

@@ -467,3 +467,16 @@ aprobación (`PENDING_APPROVAL`) cuando el comercio lo exige.
 ### `GET /providers/NEW_TREE/drafts` · `GET /providers/NEW_TREE/drafts/:id`
 
 Historial de pedidos creados desde Nodo (mismo formato que Elit).
+
+
+## Solution Box — API interna de solutionbox.com.ar (catálogo, checkout, pedidos)
+
+Emula la API JSON de la tienda (login con mail y contraseña del sitio). Diseño y
+tabla de llamadas: `docs/superpowers/specs/2026-09-05-solution-box-site-api-design.md`.
+Credenciales: `email` + `password`.
+
+- `GET /providers/SOLUTION_BOX/account?refresh=1` → `{ profile:{id,name,email,cuit,exchange,paymentCondition,deliveryType}, orders:[{number,extension,date,seller,paymentCondition,amount,currency,exchange,invoice,status,items:[{code,qty,price,currency}]}], invoices:[…solo con factura…], drafts:[…], note }`.
+- `GET /providers/SOLUTION_BOX/orders/:number/:ext` → un pedido; `…/invoice` → PDF de la factura.
+- `POST /providers/SOLUTION_BOX/checkout/preview` body `{ items:[{code,qty,name?}], paymentCondition?, deliveryType? }` → `{ items, paymentConditions, paymentCondition, paymentLabel, deliveryTypes, deliveryType, deliveryLabel, deliveryAddress, subtotal, vat, internalTax, perceptions, perceptionLines, shippingCost, total, totalArs, exchange, currency:"USD", stockOk, note }` (totales de la proforma del sitio; `perceptionLines` trae la percepción de IIBB).
+- `POST /providers/SOLUTION_BOX/checkout/draft` mismo body + `background?` → crea el pedido real (`{ id, status, orderNumber, … }`), con aprobación previa si el comercio la exige.
+- `GET /providers/SOLUTION_BOX/drafts[/:id]` historial desde Nodo.

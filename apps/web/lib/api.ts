@@ -178,7 +178,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
 
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
 export const IMPLEMENTED_PROVIDERS: Provider[] = [
-  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE",
+  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX",
 ];
 
 export interface ProductDTO {
@@ -2161,6 +2161,93 @@ export const newTreeAccountApi = {
         ...(opts?.to ? { to: opts.to } : {}),
       },
     }),
+};
+
+// --- Solution Box (API interna de solutionbox.com.ar) ---
+export interface SolutionBoxCheckoutPreview {
+  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  paymentConditions: { value: string; label: string }[];
+  paymentCondition: string | null;
+  paymentLabel: string | null;
+  deliveryTypes: { value: string; label: string }[];
+  deliveryType: string;
+  deliveryLabel: string;
+  deliveryAddress: string | null;
+  subtotal: number;
+  vat: number;
+  internalTax: number;
+  perceptions: number;
+  perceptionLines: { label: string; amount: number }[];
+  shippingCost: number;
+  total: number;
+  totalArs: number | null;
+  exchange: number | null;
+  currency: string;
+  stockOk: boolean;
+  note: string;
+}
+
+export interface SolutionBoxDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export type SolutionBoxCheckoutPayload = {
+  items: { code: string; qty: number; name?: string }[];
+  paymentCondition?: string;
+  deliveryType?: string;
+};
+
+export const solutionBoxCheckoutApi = {
+  preview: (body: SolutionBoxCheckoutPayload) =>
+    api.post<SolutionBoxCheckoutPreview>("/providers/SOLUTION_BOX/checkout/preview", body),
+  draft: (body: SolutionBoxCheckoutPayload & { background?: boolean }) =>
+    api.post<SolutionBoxDraftResult>("/providers/SOLUTION_BOX/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/SOLUTION_BOX/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/SOLUTION_BOX/drafts/${id}`),
+};
+
+export interface SolutionBoxOrder {
+  number: string;
+  extension: string;
+  date: string;
+  seller: string;
+  paymentCondition: string;
+  amount: number | null;
+  currency: string | null;
+  exchange: number | null;
+  invoice: string | null;
+  status: string;
+  items: { code: string; qty: number; price: number | null; currency: string | null }[];
+}
+
+export const solutionBoxAccountApi = {
+  account: (opts?: { refresh?: boolean }) =>
+    api.get<{
+      profile: {
+        id: string;
+        name: string;
+        email: string;
+        cuit: string;
+        exchange: number | null;
+        paymentCondition: string | null;
+        deliveryType: string | null;
+      };
+      orders: SolutionBoxOrder[];
+      invoices: SolutionBoxOrder[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/SOLUTION_BOX/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
+  order: (number: string, ext: string) =>
+    api.get<SolutionBoxOrder>(`/providers/SOLUTION_BOX/orders/${encodeURIComponent(number)}/${encodeURIComponent(ext)}`),
 };
 
 // --- Admin / Users ---

@@ -6,6 +6,7 @@ export function providerOrdersHref(provider: string, pricesFromList = false): st
   if (provider === "GRUPO_NUCLEO") return "/proveedores/GRUPO_NUCLEO?tab=gn-account";
   if (provider === "AIR") return "/proveedores/AIR?tab=air-account";
   if (provider === "NEW_TREE") return "/proveedores/NEW_TREE?tab=nt-account";
+  if (provider === "SOLUTION_BOX") return "/proveedores/SOLUTION_BOX?tab=sb-account";
   return `/proveedores/${provider}`;
 }
 
@@ -17,11 +18,12 @@ export function providerHasOrderHistory(provider: string, pricesFromList = false
     provider === "ELIT" ||
     provider === "GRUPO_NUCLEO" ||
     provider === "AIR" ||
-    provider === "NEW_TREE"
+    provider === "NEW_TREE" ||
+    provider === "SOLUTION_BOX"
   );
 }
 
-export const ORDER_HISTORY_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE"] as const;
+export const ORDER_HISTORY_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX"] as const;
 
 export type PolledDraft = {
   id: string;

@@ -336,14 +336,31 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   },
   SOLUTION_BOX: {
     title: "Conectar tu cuenta de Solution Box",
-    intro: "Usuario y contraseña de la API (createToken). Se guarda cifrada y es solo tuya.",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Límite documentado: 2 requests/hora. El host lxc.solutionbox.com.ar todavía no expone el endpoint de artículos en las rutas probadas.",
+      "Mail y contraseña con los que entrás a www.solutionbox.com.ar. Con eso Nodo sincroniza el catálogo con tus precios, crea pedidos y lee tus pedidos y facturas.",
     portalUrl: "https://www.solutionbox.com.ar",
-    portalLabel: "solutionbox.com.ar",
+    portalLabel: "www.solutionbox.com.ar",
     fields: [
-      { key: "user", label: "Usuario API", type: "text", required: true, aliases: ["username", "usuario"], autoComplete: "username" },
-      { key: "password", label: "Contraseña API", type: "password", required: true, aliases: ["pass"], autoComplete: "current-password" },
+      {
+        key: "email",
+        label: "Mail",
+        type: "text",
+        required: true,
+        placeholder: "Mail de tu usuario en solutionbox.com.ar",
+        aliases: ["user", "username", "usuario"],
+        autoComplete: "username",
+      },
+      {
+        key: "password",
+        label: "Contraseña",
+        type: "password",
+        required: true,
+        placeholder: "Contraseña del sitio",
+        aliases: ["pass"],
+        autoComplete: "current-password",
+      },
     ],
   },
   GC: {

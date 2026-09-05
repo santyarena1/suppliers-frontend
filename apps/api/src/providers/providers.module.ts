@@ -17,6 +17,9 @@ import { DiapstoreAdapter } from "./adapters/diapstore.adapter";
 import { NewTreeAdapter } from "./adapters/new-tree.adapter";
 import { NewTreeAccountService } from "./new-tree-account.service";
 import { NewTreeOrderService } from "./new-tree-order.service";
+import { SolutionBoxAdapter } from "./adapters/solution-box.adapter";
+import { SolutionBoxAccountService } from "./solution-box-account.service";
+import { SolutionBoxOrderService } from "./solution-box-order.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
@@ -45,6 +48,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     CevenAdapter,
     DiapstoreAdapter,
     NewTreeAdapter,
+    SolutionBoxAdapter,
     InvidAccountService,
     InvidOrderService,
     NewBytesAccountService,
@@ -56,6 +60,8 @@ import { AccountPortalCache } from "./account-portal-cache";
     ElitOrderService,
     NewTreeAccountService,
     NewTreeOrderService,
+    SolutionBoxAccountService,
+    SolutionBoxOrderService,
     OrderApprovalService,
   ],
   exports: [
@@ -68,6 +74,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     AirOrderService,
     ElitOrderService,
     NewTreeOrderService,
+    SolutionBoxOrderService,
   ],
 })
 export class ProvidersModule {}

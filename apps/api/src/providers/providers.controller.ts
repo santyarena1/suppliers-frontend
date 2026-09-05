@@ -22,6 +22,9 @@ import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
 import { NewTreeAccountService } from "./new-tree-account.service";
 import { NewTreeOrderService } from "./new-tree-order.service";
+import { SolutionBoxAccountService } from "./solution-box-account.service";
+import { SolutionBoxOrderService } from "./solution-box-order.service";
+import { SolutionBoxCheckoutDraftDto, SolutionBoxCheckoutPreviewDto } from "./dto/solution-box-checkout.dto";
 import { NewTreeCheckoutDraftDto, NewTreeCheckoutPreviewDto } from "./dto/new-tree-checkout.dto";
 import { OrderApprovalService } from "../orders/order-approval.service";
 import type { OrderAuthor } from "./provider-draft";
@@ -66,6 +69,8 @@ export class ProvidersController {
     private readonly elitOrderService: ElitOrderService,
     private readonly newTreeAccountService: NewTreeAccountService,
     private readonly newTreeOrderService: NewTreeOrderService,
+    private readonly solutionBoxAccountService: SolutionBoxAccountService,
+    private readonly solutionBoxOrderService: SolutionBoxOrderService,
     private readonly orderApproval: OrderApprovalService,
     private readonly accountCache: AccountPortalCache
   ) {}
@@ -554,6 +559,53 @@ export class ProvidersController {
     const held = await this.hold(tenant, user.userId, "NEW_TREE", dto);
     if (held) return held;
     return this.newTreeOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "NEW_TREE"), dto);
+  }
+
+  // ---------- Solution Box (API interna de solutionbox.com.ar) ----------
+  @Get("providers/SOLUTION_BOX/drafts")
+  solutionBoxDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.solutionBoxOrderService.listDrafts(tenant.tenantId);
+  }
+
+  @Get("providers/SOLUTION_BOX/drafts/:id")
+  async solutionBoxDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.solutionBoxOrderService.getDraft(tenant.tenantId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
+  @Get("providers/SOLUTION_BOX/account")
+  async solutionBoxAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
+    const key = `${tenant.tenantId}:SOLUTION_BOX:account`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.solutionBoxAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "SOLUTION_BOX"))
+    );
+  }
+
+  @Get("providers/SOLUTION_BOX/orders/:number/:ext")
+  async solutionBoxOrder(@CurrentTenant() tenant: TenantContext, @Param("number") number: string, @Param("ext") ext: string) {
+    return this.solutionBoxAccountService.getOrder(await this.credentialsOf(tenant, "SOLUTION_BOX"), number, ext);
+  }
+
+  @Get("providers/SOLUTION_BOX/orders/:number/:ext/invoice")
+  async solutionBoxInvoice(@CurrentTenant() tenant: TenantContext, @Param("number") number: string, @Param("ext") ext: string) {
+    return this.solutionBoxAccountService.getInvoice(await this.credentialsOf(tenant, "SOLUTION_BOX"), number, ext);
+  }
+
+  @Post("providers/SOLUTION_BOX/checkout/preview")
+  async solutionBoxPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: SolutionBoxCheckoutPreviewDto) {
+    return this.solutionBoxOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "SOLUTION_BOX"), dto);
+  }
+
+  @Post("providers/SOLUTION_BOX/checkout/draft")
+  async solutionBoxDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: SolutionBoxCheckoutDraftDto
+  ) {
+    const held = await this.hold(tenant, user.userId, "SOLUTION_BOX", dto);
+    if (held) return held;
+    return this.solutionBoxOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "SOLUTION_BOX"), dto);
   }
 
   @Post("providers/:provider/sync")
