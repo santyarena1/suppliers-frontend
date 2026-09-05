@@ -66,6 +66,14 @@ pasa por `OrdersService.send` como el resto.
   Nodo → Proveedores → New Tree → Mi cuenta. Nunca en código ni en el repo.
 - **Sin cuenta**: `publicCatalog: true`, el catálogo sincroniza igual con precios de lista.
 
+## Bloqueo de Cloudflare
+
+newtree.com.ar está detrás de Cloudflare y responde `403 Attention Required` a las IP de
+datacenter (Railway, IP saliente 208.77.246.12 al 2026-09-05); desde una IP residencial
+argentina responde normal. Salidas: que New Tree habilite la IP del servidor, o un proxy
+HTTP con IP permitida en `NEW_TREE_PROXY_URL` (`http://user:pass@host:puerto`), que el
+cliente usa para todo el tráfico de New Tree. El error se informa con ese texto.
+
 ## Pendiente
 
 - Detalle de líneas de un pedido web (el portal lo muestra solo en su sesión).

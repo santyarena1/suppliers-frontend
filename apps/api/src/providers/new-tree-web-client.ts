@@ -1,12 +1,41 @@
 import { BadGatewayException, BadRequestException } from "@nestjs/common";
-import axios from "axios";
+import axios, { type AxiosInstance } from "axios";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { axiosErrorMessage } from "./json-value";
 
 export const NEW_TREE_SITE = "https://www.newtree.com.ar";
 export const NEW_TREE_HOSTS = ["www.newtree.com.ar", "newtree.com.ar"];
 const PAGE_METHODS_PATH = "/wfmWebSite2.aspx";
 const TIMEOUT_MS = 30_000;
-const USER_AGENT = "Mozilla/5.0 (compatible; Nodo/1.0)";
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
+
+/**
+ * Cloudflare, delante de newtree.com.ar, bloquea las IP de datacenter (Railway
+ * responde 403 "Attention Required"). `NEW_TREE_PROXY_URL` (http://user:pass@host:puerto)
+ * saca el tráfico de New Tree por otra IP; si no está, se va directo.
+ */
+function buildHttp(): AxiosInstance {
+  const proxyUrl = (process.env.NEW_TREE_PROXY_URL || "").trim();
+  const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+  return axios.create({
+    timeout: TIMEOUT_MS,
+    ...(agent ? { httpsAgent: agent, httpAgent: agent, proxy: false } : {}),
+    headers: {
+      "User-Agent": USER_AGENT,
+      "Accept-Language": "es-AR,es;q=0.9",
+    },
+  });
+}
+
+const http = buildHttp();
+
+const CLOUDFLARE_BLOCK_MESSAGE =
+  "Cloudflare bloquea la IP del servidor de Nodo en newtree.com.ar. Pedile a New Tree que la habilite o configurá NEW_TREE_PROXY_URL.";
+
+function cloudflareBlocked(status: number, body: unknown): boolean {
+  return status === 403 && typeof body === "string" && body.includes("Attention Required");
+}
 
 export interface NewTreeCredentials {
   username?: string;
@@ -79,14 +108,16 @@ export class NewTreeWebClient {
     const jar: CookieJar = new Map();
     let html: string;
     try {
-      const res = await axios.get<string>(`${NEW_TREE_SITE}/HOME/newtree.aspx`, {
-        timeout: TIMEOUT_MS,
+      const res = await http.get<string>(`${NEW_TREE_SITE}/HOME/newtree.aspx`, {
         responseType: "text",
-        headers: { "User-Agent": USER_AGENT },
+        validateStatus: (s) => s < 500,
       });
+      if (cloudflareBlocked(res.status, res.data)) throw new BadGatewayException(CLOUDFLARE_BLOCK_MESSAGE);
+      if (res.status >= 400) throw new BadGatewayException(`New Tree HOME → HTTP ${res.status}`);
       absorbCookies(jar, res.headers as { "set-cookie"?: string[] });
       html = res.data;
     } catch (err) {
+      if (err instanceof BadGatewayException) throw err;
       throw new BadGatewayException(`No se pudo abrir el portal de New Tree: ${axiosErrorMessage(err, "error")}`);
     }
     const webSiteId = extractWebSiteId(html);
@@ -122,22 +153,19 @@ export class NewTreeWebClient {
   /** Llama un PageMethod y devuelve el string crudo de `d`. */
   async pageMethod(name: string, args: Record<string, unknown>): Promise<string> {
     try {
-      const res = await axios.post<{ d?: unknown }>(`${NEW_TREE_SITE}${PAGE_METHODS_PATH}/${name}`, args, {
-        timeout: TIMEOUT_MS,
+      const res = await http.post<{ d?: unknown } | string>(`${NEW_TREE_SITE}${PAGE_METHODS_PATH}/${name}`, args, {
         headers: {
           "Content-Type": "application/json; charset=utf-8",
           Accept: "application/json",
           "X-Requested-With": "XMLHttpRequest",
           Cookie: cookieHeader(this.jar),
-          "User-Agent": USER_AGENT,
         },
         validateStatus: (s) => s < 500,
       });
       absorbCookies(this.jar, res.headers as { "set-cookie"?: string[] });
-      if (res.status >= 400) {
-        throw new BadGatewayException(`New Tree ${name} → HTTP ${res.status}`);
-      }
-      const d = res.data?.d;
+      if (cloudflareBlocked(res.status, res.data)) throw new BadGatewayException(CLOUDFLARE_BLOCK_MESSAGE);
+      if (res.status >= 400) throw new BadGatewayException(`New Tree ${name} → HTTP ${res.status}`);
+      const d = typeof res.data === "object" && res.data ? res.data.d : undefined;
       return d == null ? "" : String(d);
     } catch (err) {
       if (err instanceof BadGatewayException) throw err;
@@ -148,25 +176,27 @@ export class NewTreeWebClient {
   async getHtml(path: string): Promise<string> {
     const url = path.startsWith("http") ? path : `${NEW_TREE_SITE}${path.startsWith("/") ? "" : "/"}${path}`;
     try {
-      const res = await axios.get<string>(url, {
-        timeout: TIMEOUT_MS,
+      const res = await http.get<string>(url, {
         responseType: "text",
-        headers: { Cookie: cookieHeader(this.jar), "User-Agent": USER_AGENT },
+        headers: { Cookie: cookieHeader(this.jar) },
         maxRedirects: 3,
+        validateStatus: (s) => s < 500,
       });
+      if (cloudflareBlocked(res.status, res.data)) throw new BadGatewayException(CLOUDFLARE_BLOCK_MESSAGE);
+      if (res.status >= 400) throw new BadGatewayException(`New Tree ${path} → HTTP ${res.status}`);
       absorbCookies(this.jar, res.headers as { "set-cookie"?: string[] });
       return res.data;
     } catch (err) {
+      if (err instanceof BadGatewayException) throw err;
       throw new BadGatewayException(`New Tree ${path} falló: ${axiosErrorMessage(err, "error")}`);
     }
   }
 
   async getBuffer(url: string): Promise<{ buffer: Buffer; contentType: string }> {
     try {
-      const res = await axios.get<ArrayBuffer>(url, {
-        timeout: TIMEOUT_MS,
+      const res = await http.get<ArrayBuffer>(url, {
         responseType: "arraybuffer",
-        headers: { Cookie: cookieHeader(this.jar), "User-Agent": USER_AGENT },
+        headers: { Cookie: cookieHeader(this.jar) },
         maxRedirects: 3,
       });
       return {
