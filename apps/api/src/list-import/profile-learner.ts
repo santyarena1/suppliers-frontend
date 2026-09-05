@@ -99,6 +99,9 @@ export class ProfileLearner {
       "Aclaraciones: externalId es el código del proveedor; price es el precio neto (sin IVA); finalPrice el precio con IVA; " +
         "ivaPercent la alícuota; stock la cantidad disponible. Si hay varias columnas de precio, elegí la principal como price y, " +
         "si hay una con IVA incluido, como finalPrice.",
+      "Un encabezado \"Columna X\" es una columna sin título: deducí qué es por los valores de la muestra (un código corto suele ser " +
+        "externalId, un texto largo name, un número price). Un título que describe un grupo de productos (ej. \"GABINETES KIT\") no es " +
+        "un campo: mapealo a null. Columnas CANTIDAD / TOTAL vacías o en cero son para que el cliente arme el pedido, no stock: null.",
       "",
       "Encabezado (columnas en orden): " + JSON.stringify(sheet.headers),
       "Muestra de filas: " + JSON.stringify(rows),
