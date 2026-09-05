@@ -49,7 +49,7 @@ describe("ProfileLearner", () => {
     expect(learned.fromAi).toBe(false);
     expect(learned.spec.columnMap).toEqual({ Código: "externalId", Producto: "name", Precio: "price", Obs: null });
     expect(learned.spec.numberFormat).toBe("COMMA");
-    expect(learned.spec.dividerMeaning).toBe("BRAND");
+    expect(learned.spec.dividerMeaning).toBe("CATEGORY");
     expect(learned.spec.sheetIndex).toBe(1);
     expect(learned.spec.headerRow).toBe(3);
     expect(ai.chatJson).not.toHaveBeenCalled();

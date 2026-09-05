@@ -66,7 +66,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const provider = raw.toUpperCase() as Provider;
   const valid = isProviderKey(provider);
   const listBased = isListProvider(provider);
-  const implemented = IMPLEMENTED_PROVIDERS.includes(provider) || listBased;
+  const hasAdapter = IMPLEMENTED_PROVIDERS.includes(provider);
 
   const [tab, setTab] = useState<ProviderTab>(listBased ? "lists" : "sync");
   const [listRefresh, setListRefresh] = useState(0);
@@ -108,6 +108,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [config, setConfig] = useState<ProviderConfig | null>(null);
   // Cotiza por lista: proveedor sin API, o proveedor con API al que este comercio le carga su Excel.
   const listPriced = listBased || config?.priceChannel === "LIST";
+  // Usable si tiene adapter, es por lista, o el comercio le eligió canal Lista (ej. Ashir sin integración).
+  const implemented = hasAdapter || listPriced;
   const listFreshness = useListFreshness(listPriced ? provider : null, listRefresh);
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
@@ -129,7 +131,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   }, []);
 
   async function loadConfig() {
-    if (!implemented) return;
     setLoadingConfig(true);
     try {
       const res = await providersApi.getConfig(provider);
@@ -219,7 +220,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   }
 
   async function loadStatus(opts?: { silent?: boolean }) {
-    if (!implemented) return;
     if (!opts?.silent) setLoadingStatus(true);
     try {
       const res = await providersApi.status(provider);

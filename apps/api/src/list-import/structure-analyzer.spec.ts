@@ -102,6 +102,20 @@ describe("analyzeSheet", () => {
   });
 });
 
+describe("encabezado en dos filas", () => {
+  test("las columnas sin título toman el texto de la fila de arriba (caso Sentey)", () => {
+    const s = sheet([
+      ["", "CÓDIGO", "DESCRIPCIÓN", "PRECIO USD", null, null, null],
+      ["GABINETES KIT (calidad DELL)", null, null, null, "IVA", "SPEC", "CANTIDAD"],
+      ["", "TM50", "KIT Sentey TM50", 24, 0.105, "LINK", 0],
+      ["", "TM10", "KIT Sentey TM10", 27, 0.105, "LINK", 0],
+    ]);
+    const a = analyzeSheet(s);
+    expect(a.headerRow).toBe(1);
+    expect(a.headers).toEqual(["GABINETES KIT (calidad DELL)", "CÓDIGO", "DESCRIPCIÓN", "PRECIO USD", "IVA", "SPEC", "CANTIDAD"]);
+  });
+});
+
 describe("analyzeStructure", () => {
   test("elige la hoja con más datos y la huella depende de los encabezados", () => {
     const portada = sheet([["Bienvenidos", null], ["a la lista", null]], [], 0, "Portada");

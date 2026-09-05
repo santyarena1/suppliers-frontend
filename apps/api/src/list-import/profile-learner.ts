@@ -87,7 +87,7 @@ export class ProfileLearner {
       priceIncludesIva: false,
       ivaPercent: null,
       numberFormat: detectNumberFormat(samples),
-      dividerMeaning: sheet.dividers.length > 0 ? "BRAND" : "IGNORE",
+      dividerMeaning: sheet.dividers.length > 0 ? "CATEGORY" : "IGNORE",
     };
   }
 

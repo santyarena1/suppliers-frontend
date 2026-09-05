@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { FastifyRequest } from "fastify";
-import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { isProviderKey, type Provider } from "@nodo/shared";
 import { CurrentTenant, CurrentTenantOrNone } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -38,10 +38,10 @@ import { AccountPortalCache, wantsRefresh } from "./account-portal-cache";
 import { parseIncludeOutOfStock } from "./catalog-stock";
 
 function assertProvider(value: string): Provider {
-  if (!ALL_PROVIDERS.includes(value as Provider)) {
+  if (!isProviderKey(value)) {
     throw new BadRequestException(`Proveedor inválido: ${value}`);
   }
-  return value as Provider;
+  return value;
 }
 
 // `RolesGuard` deja pasar todo lo que no declare `@Roles`, así que sumarlo acá no

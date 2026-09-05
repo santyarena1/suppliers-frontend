@@ -134,7 +134,7 @@ export class ProvidersService implements OnModuleInit {
     if (merged.acceptsScheme && !merged.schemeIvaAdjustment) {
       throw new BadRequestException("Si acepta esquema, hay que elegir cómo tratar el IVA de esquema.");
     }
-    const data = { ...dto, ...merged };
+    const data = { ...dto, ...merged, priceChannel };
     const saved = await this.prisma.providerSyncConfig.upsert({
       where: { tenantId_provider: { tenantId, provider } },
       create: { tenantId, provider, ...data },

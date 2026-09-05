@@ -79,6 +79,13 @@ describe("normalizeRows", () => {
     expect(neto.finalPrice).toBeCloseTo(146.41, 2);
   });
 
+  test("IVA escrito como fracción (0,105) se interpreta como 10,5 puntos", () => {
+    const sheet = sheetOf(["Código", "Producto", "Precio", "IVA"], [["A1", "Algo", 100, 0.105]]);
+    const item = normalizeRows(sheet, { ...baseProfile, columnMap: { ...baseProfile.columnMap, IVA: "ivaPercent" } }).items[0];
+    expect(item.ivaPercent).toBe(10.5);
+    expect(item.finalPrice).toBeCloseTo(110.5, 2);
+  });
+
   test("sin columna de código, genera uno estable a partir de nombre y marca", () => {
     const sheet = sheetOf(["Producto", "Precio", "Marca"], [["Mouse M185", 10, "Logitech"]]);
     const profile: ImportProfileSpec = { ...baseProfile, columnMap: { Producto: "name", Precio: "price", Marca: "brand" } };

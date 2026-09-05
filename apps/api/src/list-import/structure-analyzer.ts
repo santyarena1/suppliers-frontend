@@ -11,6 +11,8 @@ const MIN_DATA_ROWS_AFTER_HEADER = 2;
 const WIDE_MERGE_MIN_COLS = 3;
 /** Texto más largo que esto no es un encabezado de columna, es una leyenda. */
 const MAX_HEADER_TEXT_LENGTH = 60;
+/** Cuántas filas por encima del encabezado se miran para completar títulos faltantes. */
+const HEADER_STACK_ROWS = 2;
 
 interface RowStats {
   nonEmpty: number;
@@ -50,7 +52,7 @@ export function analyzeSheet(sheet: GridSheet): SheetAnalysis {
   const wideMergeRows = new Set(
     sheet.merges.filter((m) => m.c1 - m.c0 + 1 >= WIDE_MERGE_MIN_COLS && m.r0 === m.r1).map((m) => m.r0)
   );
-  const headerRow = findHeaderRow(sheet.rows, stats);
+  const headerRow = extendStackedHeader(stats, findHeaderRow(sheet.rows, stats));
   const kinds: RowKind[] = sheet.rows.map((_, i) => (headerRow === null || i < headerRow ? "PREAMBLE" : "EMPTY"));
 
   if (headerRow === null) {
@@ -175,6 +177,19 @@ function findHeaderRow(rows: CellValue[][], stats: RowStats[]): number | null {
   return best?.index ?? null;
 }
 
+/**
+ * Encabezado apilado en dos filas ("CÓDIGO / DESCRIPCIÓN" arriba y "IVA / CANTIDAD"
+ * abajo, o títulos de grupo arriba): si la fila siguiente también es solo texto y
+ * debajo de ella hay datos, el encabezado real es la de abajo; las columnas que le
+ * falten se completan con la fila de arriba (ver labelFromRowsAbove).
+ */
+function extendStackedHeader(stats: RowStats[], headerRow: number | null): number | null {
+  if (headerRow === null) return null;
+  const next = stats[headerRow + 1];
+  if (!next || next.numeric > 0 || next.text < 2) return headerRow;
+  return hasDataBelow(stats, headerRow + 1) ? headerRow + 1 : headerRow;
+}
+
 function hasDataBelow(stats: RowStats[], headerIndex: number): boolean {
   let dataRows = 0;
   const end = Math.min(stats.length, headerIndex + 1 + HEADER_LOOKAHEAD_ROWS);
@@ -202,12 +217,25 @@ function buildHeaders(rows: CellValue[][], stats: RowStats[], headerRow: number)
   for (let col = firstCol; col <= lastCol; col++) {
     const raw = header[col];
     let label = raw === null || raw === undefined ? "" : String(raw).trim();
+    // Encabezado partido en dos filas ("CÓDIGO" arriba, subtítulos abajo, o al
+    // revés): una columna sin título toma el texto corto que tenga justo arriba.
+    if (!label) label = labelFromRowsAbove(rows, headerRow, col);
     if (!label) label = `Columna ${columnLetter(col)}`;
     const count = seen.get(label) ?? 0;
     seen.set(label, count + 1);
     headers.push(count === 0 ? label : `${label} (${count + 1})`);
   }
   return { headers, firstCol, lastCol };
+}
+
+function labelFromRowsAbove(rows: CellValue[][], headerRow: number, col: number): string {
+  for (let r = headerRow - 1; r >= Math.max(0, headerRow - HEADER_STACK_ROWS); r--) {
+    const cell = rows[r]?.[col];
+    if (typeof cell !== "string") continue;
+    const text = cell.trim();
+    if (text && text.length <= MAX_HEADER_TEXT_LENGTH && !looksNumeric(text)) return text;
+  }
+  return "";
 }
 
 export function columnLetter(col: number): string {

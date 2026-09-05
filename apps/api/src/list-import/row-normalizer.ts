@@ -183,8 +183,9 @@ function normalizeText(text: string): string {
  * asume 21 %.
  */
 function resolvePrices(mapped: Partial<Record<NormalizedField, unknown>>, profile: ImportProfileSpec) {
-  const ivaPercent =
-    typeof mapped.ivaPercent === "number" ? mapped.ivaPercent : profile.ivaPercent ?? null;
+  const ivaRaw = typeof mapped.ivaPercent === "number" ? mapped.ivaPercent : profile.ivaPercent ?? null;
+  // Muchas planillas escriben la alícuota como fracción (0,105 / 0,21): se pasa a puntos.
+  const ivaPercent = ivaRaw != null && ivaRaw > 0 && ivaRaw < 1 ? Math.round(ivaRaw * 10000) / 100 : ivaRaw;
   let price = typeof mapped.price === "number" ? mapped.price : null;
   let finalPrice = typeof mapped.finalPrice === "number" ? mapped.finalPrice : null;
 
