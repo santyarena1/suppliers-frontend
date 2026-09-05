@@ -160,7 +160,48 @@ export class TenantVisibilityService {
       });
     }
 
+    // El administrador de la plataforma ve todo: cada distribuidor activo con clave
+    // de proveedor aparece vinculado, sin código de acceso ni vendedor asignado.
+    if (await this.isPlatformAdminOrg(tenantId)) {
+      const distribuidores = await this.prisma.tenant.findMany({
+        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null } },
+        select: { id: true, name: true, providerKey: true },
+      });
+      for (const d of distribuidores) {
+        const key = d.providerKey as Provider;
+        const current = visibles.get(key);
+        if (current?.linked || d.id === tenantId) continue;
+        visibles.set(key, {
+          provider: key,
+          name: d.name,
+          linked: true,
+          advertised: false,
+          selfConnected: false,
+          accountManager: null,
+          discountPercent: null,
+          linkId: null,
+          purchase: purchaseFromConfig(key, configByProvider.get(key)),
+        });
+      }
+    }
+
     return [...visibles.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }
+
+  /**
+   * `true` si en esta organización (o en una que la espeja, como Administración →
+   * Comercio de Pruebas) hay una persona con rol de administrador de plataforma.
+   */
+  private async isPlatformAdminOrg(tenantId: string): Promise<boolean> {
+    const admin = await this.prisma.tenantMembership.findFirst({
+      where: {
+        active: true,
+        user: { role: "ROLE_ADMIN" },
+        tenant: { OR: [{ id: tenantId }, { mirrorsCommercialFromId: tenantId }] },
+      },
+      select: { id: true },
+    });
+    return admin != null;
   }
 
   /** Claves de los proveedores cuyo catálogo puede leer esta organización. */
