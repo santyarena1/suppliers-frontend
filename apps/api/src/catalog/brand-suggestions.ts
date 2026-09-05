@@ -191,6 +191,22 @@ function titleCase(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 }
 
+/**
+ * La primera marca conocida que aparece en el nombre (o en los campos extra) de
+ * un producto. `known` mapea la forma normalizada al nombre canónico del término.
+ * Sirve para que una carga nueva herede las marcas que ya se aprobaron.
+ */
+export function detectKnownBrand(product: BrandCandidateProduct, known: Map<string, string>): string | null {
+  for (const text of [product.name, ...(product.extra ?? [])]) {
+    if (!text) continue;
+    for (const raw of tokenize(text)) {
+      const label = known.get(normalizeBrandToken(raw));
+      if (label) return label;
+    }
+  }
+  return null;
+}
+
 /** Productos del lote cuyo nombre (o campos extra) contiene la marca como palabra entera. */
 export function productsMatchingBrand(products: BrandCandidateProduct[], brand: string): string[] {
   const norm = normalizeBrandToken(brand);

@@ -8,7 +8,7 @@ function service(overrides: { isLinked?: boolean; supplier?: typeof SUPPLIER | n
   const prisma = { tenant: { findUnique: jest.fn().mockResolvedValue(overrides.supplier === undefined ? SUPPLIER : overrides.supplier) } };
   const registry = { get: jest.fn().mockReturnValue(overrides.hasAdapter ? {} : undefined) };
   const visibility = { isLinked: jest.fn().mockResolvedValue(overrides.isLinked ?? true) };
-  return new ListImportService(prisma as never, {} as never, registry as never, visibility as never, {} as never);
+  return new ListImportService(prisma as never, {} as never, registry as never, visibility as never, {} as never, {} as never);
 }
 
 function tenant(partial: Partial<TenantContext>): TenantContext {

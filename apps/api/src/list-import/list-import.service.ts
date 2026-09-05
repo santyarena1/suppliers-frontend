@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { isListProviderKey, type Provider } from "@nodo/shared";
 import { Prisma, type ImportProfile, type ListImportLevel, type SupplierListImport } from "@prisma/client";
+import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProvidersService } from "../providers/providers.service";
 import { ProviderRegistry } from "../providers/provider-registry";
@@ -85,7 +86,8 @@ export class ListImportService {
     private readonly providers: ProvidersService,
     private readonly registry: ProviderRegistry,
     private readonly visibility: TenantVisibilityService,
-    private readonly learner: ProfileLearner
+    private readonly learner: ProfileLearner,
+    private readonly catalog: CatalogEnrichmentService
   ) {}
 
   // ---------- Permisos ----------
@@ -402,11 +404,24 @@ export class ListImportService {
     } else {
       await this.applyTenant(record, items);
     }
+    // Los productos nuevos heredan las marcas ya aprobadas (Sentey, LNZ…) sin pasar por revisión.
+    const brands = await this.catalog
+      .autoAssignKnownBrands(record.provider, items.map((i) => i.externalId))
+      .catch((err) => {
+        this.logger.warn(`Autoasignación de marcas en ${record.provider} falló: ${err instanceof Error ? err.message : String(err)}`);
+        return { assigned: 0, byBrand: {} };
+      });
 
     await this.prisma.$transaction([
       this.prisma.supplierListImport.update({
         where: { id: importId },
-        data: { status: "APPLIED", appliedAt: new Date(), normalizedRows: Prisma.DbNull, error: null },
+        data: {
+          status: "APPLIED",
+          appliedAt: new Date(),
+          normalizedRows: Prisma.DbNull,
+          error: null,
+          summary: { ...((record.summary as Record<string, unknown> | null) ?? {}), brandsAutoAssigned: brands.assigned },
+        },
       }),
       ...(record.profileId
         ? [

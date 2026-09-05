@@ -1,4 +1,4 @@
-import { productsMatchingBrand, suggestBrands } from "./brand-suggestions";
+import { detectKnownBrand, productsMatchingBrand, suggestBrands } from "./brand-suggestions";
 
 const sentey = [
   { externalId: "1", name: "KIT Sentey TM50 c/Fuente LNZ FB600-LX, Formato MICRO ATX, front mesh" },
@@ -52,3 +52,14 @@ describe("suggestBrands", () => {
     expect(productsMatchingBrand(sentey, "sen")).toEqual([]);
   });
 });
+
+describe("detectKnownBrand", () => {
+  const known = new Map([["sentey", "Sentey"], ["lnz", "LNZ"], ["evolabs", "Evolabs"]]);
+  test("devuelve la primera marca conocida que aparece en el nombre, con su nombre canónico", () => {
+    expect(detectKnownBrand({ externalId: "1", name: "KIT Sentey TM50 c/Fuente LNZ" }, known)).toBe("Sentey");
+    expect(detectKnownBrand({ externalId: "2", name: "Fuente Lnz SX550-TS" }, known)).toBe("LNZ");
+    expect(detectKnownBrand({ externalId: "3", name: "Gabinete generico", extra: ["EVOLABS"] }, known)).toBe("Evolabs");
+    expect(detectKnownBrand({ externalId: "4", name: "Mouse Redragon" }, known)).toBeNull();
+  });
+});
+

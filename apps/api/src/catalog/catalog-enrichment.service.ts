@@ -29,7 +29,7 @@ import {
   type RawValueStat,
 } from "./catalog-enrichment";
 import { repairInvidMojibake } from "../providers/adapters/invid-encoding";
-import { normalizeBrandToken, productsMatchingBrand, suggestBrands, type BrandCandidate } from "./brand-suggestions";
+import { detectKnownBrand, normalizeBrandToken, productsMatchingBrand, suggestBrands, type BrandCandidate } from "./brand-suggestions";
 
 const BRAND_SUGGESTION_SCAN_LIMIT = 20_000;
 const BRAND_SUGGESTIONS_PER_PROVIDER = 15;
@@ -961,6 +961,57 @@ export class CatalogEnrichmentService implements OnModuleInit {
       this.logger.warn(`Validación de marcas con IA falló: ${err instanceof Error ? err.message : String(err)}`);
       return null;
     }
+  }
+
+  /** Marca conocida (término o alias BRAND) por forma normalizada → nombre canónico del término. */
+  private async knownBrandLabels(): Promise<Map<string, string>> {
+    const [terms, aliases] = await Promise.all([
+      this.prisma.platformCatalogTerm.findMany({ where: { kind: "BRAND" }, select: { label: true } }),
+      this.prisma.platformCatalogAlias.findMany({ where: { kind: "BRAND" }, select: { rawKey: true, label: true } }),
+    ]);
+    const map = new Map<string, string>();
+    for (const t of terms) {
+      const key = normalizeBrandToken(t.label);
+      if (key) map.set(key, t.label);
+    }
+    for (const a of aliases) {
+      for (const key of [normalizeBrandToken(a.rawKey), normalizeBrandToken(a.label)]) {
+        if (key && !map.has(key)) map.set(key, a.label);
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Después de una carga: los productos nuevos sin marca que tengan en el nombre
+   * (o tags / categoría) una marca ya aprobada la reciben solos. No usa IA: son
+   * marcas que ya existen en la plataforma. Devuelve cuántos se completaron.
+   */
+  async autoAssignKnownBrands(provider: string, externalIds?: string[]): Promise<{ assigned: number; byBrand: Record<string, number> }> {
+    const known = await this.knownBrandLabels();
+    if (known.size === 0) return { assigned: 0, byBrand: {} };
+    const wanted = externalIds?.length ? new Set(externalIds) : null;
+    const missing = (await this.missingBrandRows(provider)).filter((r) => !wanted || wanted.has(r.externalId));
+    const byBrand = new Map<string, string[]>();
+    for (const row of missing) {
+      const label = detectKnownBrand(
+        { externalId: row.externalId, name: row.name, extra: [row.tags, row.category, row.subcategory] },
+        known
+      );
+      if (!label) continue;
+      const list = byBrand.get(label) ?? [];
+      list.push(row.externalId);
+      byBrand.set(label, list);
+    }
+    let assigned = 0;
+    const summary: Record<string, number> = {};
+    for (const [brand, ids] of byBrand) {
+      const res = await this.applyBrandSuggestion({ provider, brand, externalIds: ids, source: "AUTO" });
+      assigned += res.updated;
+      summary[res.brand] = res.updated;
+    }
+    if (assigned > 0) this.logger.log(`Marcas conocidas autoasignadas en ${provider}: ${JSON.stringify(summary)}`);
+    return { assigned, byBrand: summary };
   }
 
   /**
