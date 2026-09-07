@@ -1,0 +1,298 @@
+/* ============================================================
+ * BUSQUEDA SIN CONSULTA
+ * Publicidad, marcas y bajas de precio: lo que ya vive ahi,
+ * con el idioma nuevo encima.
+ * ========================================================== */
+
+.hm--search { padding: 0; }
+
+.se__bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 1.25rem;
+  border-bottom: 1px solid var(--hm-line);
+  background: #0b0d14;
+}
+.se__input {
+  flex: 1;
+  max-width: 34rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0 0.8rem;
+  background: var(--hm-panel);
+  border: 1px solid var(--hm-line-2);
+  border-radius: 7px;
+  transition: border-color 160ms ease;
+}
+.se__input:focus-within { border-color: var(--hm-accent); }
+.se__input input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 0.55rem 0;
+  font-size: 0.82rem;
+  color: var(--hm-fg);
+  font-family: inherit;
+}
+.se__input input::placeholder { color: var(--hm-faint); }
+.se__prefs { margin-left: auto; font-size: 0.62rem; color: var(--hm-faint); }
+
+.se__body { padding: 1.5rem 1.25rem 2rem; }
+
+/* --- Publicidad en bento --- */
+.se__bento {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: 6.5rem;
+  gap: 0.6rem;
+  margin-top: 1.75rem;
+}
+@media (max-width: 780px) {
+  .se__bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.se__ad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0.85rem;
+  border-radius: 9px;
+  border: 1px solid var(--hm-line-2);
+  overflow: hidden;
+  text-decoration: none;
+  background:
+    linear-gradient(160deg, color-mix(in oklab, var(--ad) 55%, transparent), transparent 72%),
+    var(--hm-panel);
+  transition: border-color 180ms ease, transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.se__ad:hover { border-color: color-mix(in oklab, var(--ad) 70%, transparent); transform: translateY(-2px); }
+.se__ad--hero { grid-column: span 2; grid-row: span 2; }
+.se__ad--wide { grid-column: span 2; }
+.se__ad--tall { grid-row: span 2; }
+
+.se__ad-kind {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  padding: 0.14rem 0.35rem;
+  border-radius: 3px;
+  background: rgb(11 13 20 / 0.72);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  font-size: 0.52rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #dfe6ff;
+}
+.se__ad-body { display: block; }
+.se__ad-body b {
+  display: block;
+  font-size: 0.92rem;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--hm-fg);
+}
+.se__ad--hero .se__ad-body b { font-size: 1.35rem; font-variation-settings: "wdth" 84, "wght" 700; }
+.se__ad-body em {
+  display: block;
+  margin-top: 0.25rem;
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--hm-dim);
+}
+
+/* --- Marcas --- */
+.se__partners-title {
+  margin-top: 2rem;
+  text-align: center;
+  font-size: 0.55rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--hm-faint);
+}
+.se__partners {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 2.25rem;
+}
+.se__partner {
+  font-size: 0.9rem;
+  font-variation-settings: "wdth" 88, "wght" 700;
+  letter-spacing: 0.02em;
+  color: var(--hm-faint);
+  opacity: 0.75;
+  transition: opacity 160ms ease, color 160ms ease;
+  cursor: default;
+}
+.se__partner:hover { opacity: 1; color: var(--hm-dim); }
+
+/* --- Bajaron de precio --- */
+.se__drops {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+  gap: 0.9rem;
+  margin-top: 0.9rem;
+}
+
+/* ============================================================
+ * PRODUCTO · modalidades, grafico y locales
+ * ========================================================== */
+
+.pp__name { max-width: none; }
+
+.pp__prev { margin-top: 0.5rem; font-size: 0.66rem; color: var(--p-faint); }
+
+/* --- Las tres modalidades, lado a lado --- */
+.pp__modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+}
+.pp__mode {
+  display: flex;
+  flex-direction: column;
+  background: var(--p-panel);
+  border: 1px solid var(--p-line);
+  border-radius: 9px;
+  padding: 0.95rem 1rem 1rem;
+}
+.pp__mode[data-off="true"] { opacity: 0.6; }
+.pp__mode-head { padding-bottom: 0.65rem; border-bottom: 1px solid var(--p-line); }
+.pp__mode-head b {
+  display: block;
+  font-size: 0.88rem;
+  letter-spacing: -0.015em;
+  color: var(--p-fg);
+}
+.pp__mode-head span {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.6rem;
+  color: var(--p-faint);
+}
+.pp__mode .pp__rows { padding: 0.7rem 0 0; border: 0; }
+.pp__mode-foot {
+  margin-top: auto;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--p-line);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.pp__mode-total { font-size: 1.15rem; letter-spacing: -0.025em; color: var(--p-fg); }
+.pp__mode-vs { font-size: 0.66rem; color: var(--p-good); }
+.pp__mode-off {
+  margin-top: 0.9rem;
+  font-size: 0.68rem;
+  line-height: 1.55;
+  color: var(--p-faint);
+}
+
+/* --- Grafico con referencias --- */
+.ch { margin-top: 0.9rem; color: var(--p-accent); }
+.ch__refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 2.25rem;
+  padding-bottom: 0.9rem;
+}
+.ch__ref { display: flex; flex-direction: column; gap: 0.2rem; }
+.ch__ref em {
+  font-style: normal;
+  font-size: 0.55rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+.ch__ref b { font-size: 0.88rem; font-weight: 500; color: var(--p-fg); }
+.ch__ref b.is-good { color: var(--p-good); }
+.ch__ref b.is-warn { color: var(--p-ember); }
+
+.ch__plot { position: relative; padding-right: 6.5rem; }
+.ch__area { position: relative; }
+.ch__plot svg { width: 100%; height: 8.5rem; display: block; }
+.ch__guide { stroke: var(--p-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ch__guide.is-mid { stroke-dasharray: 3 4; opacity: 0.65; }
+/* Fuera del SVG: asi no los deforma el estirado horizontal. */
+.ch__dot {
+  position: absolute;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 999px;
+  background: var(--p-bg);
+  border: 2px solid currentColor;
+}
+.ch__dot.is-last {
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in oklab, currentColor 22%, transparent);
+}
+.ch__axis {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.1rem 0;
+  font-size: 0.6rem;
+  color: var(--p-faint);
+  text-align: right;
+}
+.ch__dates {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-right: 6.5rem;
+  font-size: 0.58rem;
+  color: var(--p-faint);
+}
+@media (max-width: 640px) {
+  .ch__dates span[data-hide="true"] { display: none; }
+}
+
+/* --- Locales cargados, no detras de un boton --- */
+.pp__locales {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+  gap: 0.1rem 2.5rem;
+}
+.pp__local {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 0.9rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--p-line);
+}
+.pp__local-shop {
+  font-size: 0.78rem;
+  color: var(--p-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp__local-price { font-size: 0.82rem; color: var(--p-fg); }
+.pp__local-margin { font-size: 0.68rem; min-width: 3.5rem; text-align: right; }
+.pp__local-margin.is-up { color: var(--p-good); }
+.pp__local-margin.is-down { color: var(--p-ember); }
+.pp__local-note {
+  margin-top: 0.85rem;
+  font-size: 0.62rem;
+  line-height: 1.55;
+  color: var(--p-faint);
+}

@@ -4,18 +4,21 @@ import { useState } from "react";
 import { Check, DollarSign, GitCompare, MapPin, Minus, Plus, Sparkles } from "lucide-react";
 
 /**
- * Una vuelta sobre la tarjeta que ya existe. No es un rediseño: es la misma
- * tarjeta hablando el idioma de la landing, siempre en claro.
+ * Una vuelta sobre la tarjeta que ya existe. Siempre en claro.
  *
- * Regla nueva: la tarjeta habla una sola moneda, la que el comercio eligió.
- * Eso obliga a repensar dos cosas que hoy están fijas:
- *  - La línea secundaria de hoy es la OTRA moneda. Se va: si elegiste ARS, no
- *    hay nada en la tarjeta en USD.
- *  - "Base US$ 238,02 · s/imp" estaba siempre en dólares. Pasa a ser un
- *    desglose en la moneda elegida, y absorbe la pastilla de impuesto, que
- *    decía lo mismo con otras palabras.
+ * Dos reglas nuevas:
  *
- * Además el stock, que el DTO ya trae y la tarjeta no mostraba.
+ * 1. Una sola moneda, la que el comercio eligió. Eso obliga a repensar dos
+ *    cosas que hoy están fijas en dólares: la línea secundaria (que es
+ *    justamente la otra moneda, y se va) y "Base US$ ... s/imp", que pasa a la
+ *    moneda elegida y absorbe la pastilla de impuesto porque decían lo mismo.
+ *
+ * 2. Retícula fija: cada dato vive siempre en el mismo renglón, tenga o no
+ *    contenido. Lo que un producto no tiene deja el lugar vacío en vez de
+ *    correr todo lo de abajo. Así una grilla de veinte tarjetas se lee en
+ *    columnas: todos los precios a la misma altura, todos los stocks juntos.
+ *    Por eso la marca de imagen automática pasó a ser un sello sobre la foto:
+ *    ahí aparece y desaparece sin mover nada.
  */
 
 export type PassCard = {
@@ -35,9 +38,8 @@ export type PassCard = {
   /** Desglose en la misma moneda: base y los impuestos que se estén aplicando. */
   breakdown: string;
   breakdownTitle?: string;
-  /** Precio en esquema, en la misma moneda. */
+  /** Renglón de aviso: precio en esquema o alícuota faltante. Uno solo. */
   schemeHint?: string;
-  schemeDiscount?: string;
   missingIva?: boolean;
   offline?: "on" | "off" | null;
   scheme?: "on" | "off" | null;
@@ -95,41 +97,50 @@ export default function CardPass({ c }: { c: PassCard }) {
             {c.location}
           </span>
         )}
+
+        {/* Sobre la foto, para que aparezca y desaparezca sin correr el resto */}
+        {c.imageAiSelected && (
+          <span className="pc__ai mono" title="Imagen elegida automáticamente, puede no corresponder">
+            <Sparkles size={9} strokeWidth={1.8} />
+            IA
+          </span>
+        )}
       </div>
 
-      {c.imageAiSelected && (
-        <p className="pc__ai mono">
-          <Sparkles size={9} strokeWidth={1.6} />
-          Imagen elegida automáticamente
-        </p>
-      )}
-
+      {/* Retícula fija: cada fila existe siempre, tenga o no contenido. */}
       <div className="pc__body">
         <h3 className="pc__name">{c.name}</h3>
-        {(c.brand || c.category) && (
-          <p className="pc__meta">
-            {c.brand && <a href="#">{c.brand}</a>}
-            {c.brand && c.category ? " · " : ""}
-            {c.category && <a href="#">{c.category}</a>}
-          </p>
-        )}
 
-        <div className="pc__price">
+        <p className="pc__meta">
+          {c.brand && <a href="#">{c.brand}</a>}
+          {c.brand && c.category ? " · " : ""}
+          {c.category && <a href="#">{c.category}</a>}
+        </p>
+
+        <p className="pc__price">
           <span className="pc__amount mono">{c.price}</span>
-          {c.previousPrice && <s className="mono">{c.previousPrice}</s>}
-        </div>
+          {c.previousPrice && (
+            <span className="pc__prev mono" title="Precio de la sincronización anterior">
+              antes <s>{c.previousPrice}</s>
+            </span>
+          )}
+        </p>
 
         {/* Una sola moneda, un solo renglón: de dónde sale el número de arriba. */}
         <p className="pc__base mono" title={c.breakdownTitle}>
           {c.breakdown}
         </p>
 
-        {c.schemeHint && <p className="pc__scheme mono">{c.schemeHint}</p>}
-        {c.schemeDiscount && <p className="pc__scheme pc__scheme--dim mono">{c.schemeDiscount}</p>}
-        {c.missingIva && <p className="pc__warn mono">Sin alícuota de IVA</p>}
+        {/* Renglón de aviso. Vacío si el producto no tiene ninguno. */}
+        <p className="pc__aside mono">
+          {c.missingIva ? (
+            <span className="is-warn">Sin alícuota de IVA</span>
+          ) : c.schemeHint ? (
+            <span className="is-alt">{c.schemeHint}</span>
+          ) : null}
+        </p>
 
-        {/* Estado y modalidades: bajaron de la foto al lugar donde se leen con
-            el precio, porque es el precio lo que modifican. */}
+        {/* Estado y modalidades, junto al precio que modifican. */}
         <div className="pc__flags">
           {chip && (
             <span className={`pc__flag pc__flag--${chip.tone} mono`}>
