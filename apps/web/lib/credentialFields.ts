@@ -253,18 +253,74 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     ],
   },
   NEW_TREE: {
-    title: "Conectar tu cuenta de NewTree",
-    intro: "Usuario SOAP de GlobalBluePoint / NewTree. Se guarda cifrada y es solo tuya.",
+    title: "Conectar tu cuenta de New Tree",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Protocolo SOAP (AuthenticateUser + getArticulos). Hace falta una llamada de prueba con tu cuenta para mapear el XML/JSON exacto.",
-    portalUrl: "https://ws.globalbluepoint.com/newtree/app_webservices/wserpconnect.asmx",
-    portalLabel: "WSDL NewTree",
+      "La API (usuario, contraseña, company, web service y client_id que te da New Tree) sincroniza el catálogo con tus precios. Usuario y contraseña del portal www.newtree.com.ar habilitan pedidos y cuenta corriente. Podés cargar una, la otra o las dos.",
+    portalUrl: "https://www.newtree.com.ar",
+    portalLabel: "www.newtree.com.ar",
     fields: [
-      { key: "username", label: "Usuario", type: "text", required: true, aliases: ["user", "PUSERNAME"], autoComplete: "username" },
-      { key: "password", label: "Contraseña", type: "password", required: true, aliases: ["pass", "PPASSWORD"], autoComplete: "current-password" },
-      { key: "company", label: "Company", type: "text", required: true, aliases: ["PCOMPANY"] },
-      { key: "webservice", label: "Web service ID", type: "text", required: false, help: "PWEBSERVICE. NewTree lo confirma.", aliases: ["PWEBSERVICE"] },
-      { key: "client_id", label: "Client ID (getArticulos)", type: "text", required: false, placeholder: "15 por defecto en la doc", aliases: ["clientId"] },
+      {
+        key: "api_username",
+        label: "Usuario API",
+        type: "text",
+        required: false,
+        placeholder: "pUsername que te dio New Tree",
+        help: "Catálogo por la API de GlobalBluePoint (wserpconnect.asmx).",
+        aliases: ["apiUser", "PUSERNAME"],
+      },
+      {
+        key: "api_password",
+        label: "Contraseña API",
+        type: "password",
+        required: false,
+        placeholder: "pPassword",
+        aliases: ["apiPassword", "PPASSWORD"],
+      },
+      {
+        key: "company",
+        label: "Company",
+        type: "text",
+        required: false,
+        placeholder: "pCompany, ej. 18",
+        aliases: ["PCOMPANY"],
+      },
+      {
+        key: "webservice",
+        label: "Web service",
+        type: "text",
+        required: false,
+        placeholder: "pWebService, ej. 1000",
+        aliases: ["web_service", "PWEBSERVICE"],
+      },
+      {
+        key: "client_id",
+        label: "Client ID",
+        type: "text",
+        required: false,
+        placeholder: "client_id para getArticulos",
+        aliases: ["clientId"],
+      },
+      {
+        key: "username",
+        label: "Usuario del portal",
+        type: "text",
+        required: false,
+        placeholder: "Usuario o mail de newtree.com.ar",
+        help: "Para pedidos y cuenta corriente.",
+        aliases: ["user", "email", "usuario"],
+        autoComplete: "username",
+      },
+      {
+        key: "password",
+        label: "Contraseña del portal",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña de newtree.com.ar",
+        aliases: ["pass"],
+        autoComplete: "current-password",
+      },
     ],
   },
   HDC: {
@@ -280,14 +336,49 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   },
   SOLUTION_BOX: {
     title: "Conectar tu cuenta de Solution Box",
-    intro: "Usuario y contraseña de la API (createToken). Se guarda cifrada y es solo tuya.",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Límite documentado: 2 requests/hora. El host lxc.solutionbox.com.ar todavía no expone el endpoint de artículos en las rutas probadas.",
+      "Usuario y contraseña de la API (createToken) traen el catálogo con impuestos y stock por depósito — pedilos a tu vendedor de Solution Box. Mail y contraseña de www.solutionbox.com.ar habilitan pedidos, historial y facturas. Podés cargar uno, el otro, o los dos.",
     portalUrl: "https://www.solutionbox.com.ar",
-    portalLabel: "solutionbox.com.ar",
+    portalLabel: "www.solutionbox.com.ar",
     fields: [
-      { key: "user", label: "Usuario API", type: "text", required: true, aliases: ["username", "usuario"], autoComplete: "username" },
-      { key: "password", label: "Contraseña API", type: "password", required: true, aliases: ["pass"], autoComplete: "current-password" },
+      {
+        key: "api_user",
+        label: "Usuario API",
+        type: "text",
+        required: false,
+        placeholder: "Usuario de la API (createToken)",
+        help: "Catálogo con impuestos por producto y stock por depósito. Te lo da Solution Box.",
+        aliases: ["apiUser", "apiUsuario"],
+      },
+      {
+        key: "api_password",
+        label: "Contraseña API",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña de la API",
+        aliases: ["apiPassword", "apiClave"],
+      },
+      {
+        key: "email",
+        label: "Mail del portal",
+        type: "text",
+        required: false,
+        placeholder: "Mail de tu usuario en solutionbox.com.ar",
+        help: "Para pedidos, historial y facturas.",
+        aliases: ["user", "username", "usuario"],
+        autoComplete: "username",
+      },
+      {
+        key: "password",
+        label: "Contraseña del portal",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña del sitio",
+        aliases: ["pass"],
+        autoComplete: "current-password",
+      },
     ],
   },
   GC: {
@@ -381,6 +472,21 @@ export function validateCredentialValues(
     return "Cargá usuario y contraseña de nb.com.ar, o el token de lista de precios.";
   }
 
+  if (provider === "SOLUTION_BOX") {
+    const apiUser = (values.api_user ?? "").trim();
+    const apiPassword = (values.api_password ?? "").trim();
+    const email = (values.email ?? "").trim();
+    const password = (values.password ?? "").trim();
+    const apiComplete = apiUser && apiPassword;
+    const apiPartial = (apiUser || apiPassword) && !apiComplete;
+    const webComplete = email && password;
+    const webPartial = (email || password) && !webComplete;
+    if (apiPartial) return "Cargá el usuario y la contraseña de la API juntos.";
+    if (webPartial) return "Cargá el mail y la contraseña del portal juntos.";
+    if (apiComplete || webComplete) return null;
+    return "Cargá usuario y contraseña de la API, o mail y contraseña del portal.";
+  }
+
   if (provider === "ELIT") {
     const userId = (values.user_id ?? "").trim();
     const token = (values.token ?? "").trim();
@@ -390,6 +496,20 @@ export function validateCredentialValues(
     if (userId && token) return null;
     if (password) return "Cargá el nº de cliente junto con la contraseña del portal.";
     return "Cargá nro. de cliente y contraseña del portal, o user id y token de catálogo.";
+  }
+
+  if (provider === "NEW_TREE") {
+    const api = ["api_username", "api_password", "company", "webservice", "client_id"].map((k) => (values[k] ?? "").trim());
+    const apiFilled = api.filter(Boolean).length;
+    const portal = Boolean((values.username ?? "").trim() && (values.password ?? "").trim());
+    if (apiFilled > 0 && apiFilled < api.length) {
+      return "Completá los cinco datos de la API (usuario, contraseña, company, web service y client_id).";
+    }
+    if (apiFilled === api.length || portal) return null;
+    if ((values.username ?? "").trim() || (values.password ?? "").trim()) {
+      return "Completá usuario y contraseña del portal juntos.";
+    }
+    return "Cargá las credenciales de la API de New Tree, las del portal, o las dos.";
   }
 
   for (const field of schema.fields) {

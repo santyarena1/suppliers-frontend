@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
-import { ALL_PROVIDERS, type JwtPayload, type Provider } from "@nodo/shared";
+import { type JwtPayload, type Provider, isProviderKey } from "@nodo/shared";
 import { AuthService } from "../auth/auth.service";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -7,6 +7,8 @@ import { RolesGuard } from "../common/guards/roles.guard";
 import { UsersService } from "../users/users.service";
 import { DeleteUserDto } from "../users/dto/delete-user.dto";
 import { AdminService } from "./admin.service";
+import { ProviderMergeService } from "./provider-merge.service";
+import { MergeProvidersDto } from "./dto/merge-providers.dto";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateRoleDto } from "./dto/update-role.dto";
 import { UpdatePermissionsDto } from "./dto/update-permissions.dto";
@@ -19,7 +21,7 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 
 function assertProvider(value: string): Provider {
-  if (!ALL_PROVIDERS.includes(value as Provider)) {
+  if (!isProviderKey(value)) {
     throw new BadRequestException(`Proveedor inválido: ${value}`);
   }
   return value as Provider;
@@ -33,7 +35,8 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly usersService: UsersService,
-    private readonly authService: AuthService
+    private readonly authService: AuthService,
+    private readonly providerMerge: ProviderMergeService
   ) {}
 
   // Listar usuarios ya lo expone UsersController en GET /admin/users (se
@@ -91,6 +94,17 @@ export class AdminController {
   @Put("permissions/:userId")
   updatePermissions(@Param("userId") userId: string, @Body() dto: UpdatePermissionsDto) {
     return this.adminService.updatePermissions(userId, dto);
+  }
+
+  // Unificar un proveedor por lista duplicado dentro del real
+  @Get("providers/merge-candidates")
+  mergeCandidates() {
+    return this.providerMerge.candidates();
+  }
+
+  @Post("providers/merge")
+  mergeProviders(@Body() dto: MergeProvidersDto) {
+    return this.providerMerge.merge(assertProvider(dto.from), assertProvider(dto.into));
   }
 
   // Visibilidad / display de proveedores

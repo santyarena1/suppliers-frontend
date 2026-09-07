@@ -7,6 +7,7 @@ import {
   CreateAccessCodeDto,
   CreateOwnMemberDto,
   RedeemAccessCodeDto,
+  SearchSuppliersDto,
   SetProductManagerScopeDto,
   UpdateMembershipDto,
   UpdateOwnClientDto,
@@ -42,6 +43,18 @@ export class MyTenantController {
   @Get("providers")
   providers(@CurrentTenant() tenant: TenantContext) {
     return this.visibility.listFor(commercialId(tenant));
+  }
+
+  /** Directorio para conectarse por lista sin crear duplicados. */
+  @Get("suppliers/search")
+  searchSuppliers(@CurrentTenant() tenant: TenantContext, @Query() dto: SearchSuppliersDto) {
+    return this.tenants.searchSuppliers(tenant, dto.q, dto.type);
+  }
+
+  /** El comercio se conecta solo con un proveedor existente para cargarle su lista. */
+  @Post("suppliers/:tenantId/connect-by-list")
+  connectByList(@CurrentTenant() tenant: TenantContext, @Param("tenantId") supplierTenantId: string) {
+    return this.tenants.connectByList(tenant, supplierTenantId);
   }
 
   @Post("redeem-code")

@@ -1,8 +1,13 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
+import { isListProviderKey, providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
+import { domainEvents } from "../common/events/domain-events";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type PurchasePolicyView = {
+  /** API o LIST: con LIST los precios salen de una planilla y el carrito solo arma un mensaje. */
+  priceChannel: "API" | "LIST";
+  manualIibbPercent: number | null;
+  manualPerceptionsPercent: number | null;
   acceptsOffline: boolean;
   acceptsScheme: boolean;
   offlineIvaAdjustment: IvaAdjustment | null;
@@ -18,6 +23,8 @@ export interface VisibleProvider {
   linked: boolean;
   /** `true` cuando aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
+  /** `true` cuando el comercio se conectó solo cargando su lista: sin vendedor ni chat hasta que el proveedor lo reconozca. */
+  selfConnected: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
@@ -58,6 +65,7 @@ export class TenantVisibilityService {
           name: propio.name,
           linked: true,
           advertised: false,
+          selfConnected: false,
           accountManager: null,
           discountPercent: null,
           linkId: null,
@@ -71,7 +79,7 @@ export class TenantVisibilityService {
       this.prisma.tenantLink.findMany({
         where: {
           clientTenantId: tenantId,
-          status: "ACTIVE",
+          status: { in: ["ACTIVE", "LIST_CONNECTED"] },
           supplierTenant: { active: true, providerKey: { not: null } },
         },
         include: {
@@ -98,6 +106,9 @@ export class TenantVisibilityService {
         where: { tenantId },
         select: {
           provider: true,
+          priceChannel: true,
+          manualIibbPercent: true,
+          manualPerceptionsPercent: true,
           acceptsOffline: true,
           acceptsScheme: true,
           offlineIvaAdjustment: true,
@@ -112,15 +123,19 @@ export class TenantVisibilityService {
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
+      const selfConnected = link.status === "LIST_CONNECTED";
       visibles.set(key, {
         provider: key,
         name: link.supplierTenant.name,
         linked: true,
         advertised: false,
-        accountManager: link.accountManager
-          ? { name: link.accountManager.username, email: link.accountManager.email }
-          : null,
-        linkId: link.id,
+        selfConnected,
+        accountManager:
+          link.accountManager && !selfConnected
+            ? { name: link.accountManager.username, email: link.accountManager.email }
+            : null,
+        // Sin vendedor no hay con quién chatear: el vínculo existe pero no se ofrece.
+        linkId: selfConnected ? null : link.id,
         discountPercent: link.discountPercent == null ? null : Number(link.discountPercent),
         purchase: purchaseFromConfig(key, configByProvider.get(key)),
       });
@@ -137,6 +152,7 @@ export class TenantVisibilityService {
         name: anunciante.name,
         linked: false,
         advertised: true,
+        selfConnected: false,
         accountManager: null,
         discountPercent: null,
         linkId: null,
@@ -144,7 +160,48 @@ export class TenantVisibilityService {
       });
     }
 
+    // El administrador de la plataforma ve todo: cada distribuidor activo con clave
+    // de proveedor aparece vinculado, sin código de acceso ni vendedor asignado.
+    if (await this.isPlatformAdminOrg(tenantId)) {
+      const distribuidores = await this.prisma.tenant.findMany({
+        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null } },
+        select: { id: true, name: true, providerKey: true },
+      });
+      for (const d of distribuidores) {
+        const key = d.providerKey as Provider;
+        const current = visibles.get(key);
+        if (current?.linked || d.id === tenantId) continue;
+        visibles.set(key, {
+          provider: key,
+          name: d.name,
+          linked: true,
+          advertised: false,
+          selfConnected: false,
+          accountManager: null,
+          discountPercent: null,
+          linkId: null,
+          purchase: purchaseFromConfig(key, configByProvider.get(key)),
+        });
+      }
+    }
+
     return [...visibles.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }
+
+  /**
+   * `true` si en esta organización (o en una que la espeja, como Administración →
+   * Comercio de Pruebas) hay una persona con rol de administrador de plataforma.
+   */
+  private async isPlatformAdminOrg(tenantId: string): Promise<boolean> {
+    const admin = await this.prisma.tenantMembership.findFirst({
+      where: {
+        active: true,
+        user: { role: "ROLE_ADMIN" },
+        tenant: { OR: [{ id: tenantId }, { mirrorsCommercialFromId: tenantId }] },
+      },
+      select: { id: true },
+    });
+    return admin != null;
   }
 
   /** Claves de los proveedores cuyo catálogo puede leer esta organización. */
@@ -205,11 +262,15 @@ export class TenantVisibilityService {
       create: { clientTenantId: tenantId, supplierTenantId: supplier.id, status: "ACTIVE" },
       update: { status: "ACTIVE" },
     });
+    domainEvents.emit("tenant.linked", { clientTenantId: tenantId, supplierTenantId: supplier.id, provider });
     return { ...visible, linked: true, advertised: false };
   }
 }
 
 const EMPTY_PURCHASE: PurchasePolicyView = {
+  priceChannel: "API",
+  manualIibbPercent: null,
+  manualPerceptionsPercent: null,
   acceptsOffline: false,
   acceptsScheme: false,
   offlineIvaAdjustment: null,
@@ -224,6 +285,9 @@ function asAdj(value: unknown): IvaAdjustment | null {
 function purchaseFromConfig(
   provider: string,
   config: {
+    priceChannel?: string | null;
+    manualIibbPercent?: unknown;
+    manualPerceptionsPercent?: unknown;
     acceptsOffline: boolean;
     acceptsScheme: boolean;
     offlineIvaAdjustment?: string | null;
@@ -232,9 +296,17 @@ function purchaseFromConfig(
     schemeDiscountPercent: unknown;
   } | null | undefined
 ): PurchasePolicyView {
-  if (!config || !providerHasIvaRate(provider)) return { ...EMPTY_PURCHASE };
+  const priceChannel: "API" | "LIST" =
+    config?.priceChannel === "LIST" || (config?.priceChannel == null && isListProviderKey(provider)) ? "LIST" : "API";
+  const manual = {
+    priceChannel,
+    manualIibbPercent: config?.manualIibbPercent == null ? null : Number(config.manualIibbPercent),
+    manualPerceptionsPercent: config?.manualPerceptionsPercent == null ? null : Number(config.manualPerceptionsPercent),
+  };
+  if (!config || !providerHasIvaRate(provider, priceChannel)) return { ...EMPTY_PURCHASE, ...manual };
   const legacy = asAdj(config.ivaAdjustment);
   return {
+    ...manual,
     acceptsOffline: config.acceptsOffline,
     acceptsScheme: config.acceptsScheme,
     offlineIvaAdjustment: asAdj(config.offlineIvaAdjustment) ?? legacy,

@@ -133,7 +133,7 @@ function RetailerPedidosPage() {
 
   return (
     <>
-      <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+      <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         <div className="min-w-0">
           <h1 className="text-base font-semibold text-white">Pedidos</h1>
           <p className="text-xs text-surface-500 hidden sm:block truncate">

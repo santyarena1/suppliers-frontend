@@ -5,13 +5,22 @@ const missingImage: Prisma.ProviderSyncCacheWhereInput = {
   OR: [{ imageUrl: null }, { imageUrl: "" }],
 };
 
-/** Misma regla que el catálogo: oferta activa con stock > 0 (el umbral mínimo se aplica al leer). */
+/**
+ * Misma regla que el catálogo: oferta activa con stock > 0, o con stock desconocido
+ * (las listas de precios no siempre lo traen y el catálogo igual los muestra).
+ * El umbral mínimo se aplica al leer.
+ */
+const inStockOrUnknown: Prisma.TenantProductOfferWhereInput = {
+  active: true,
+  OR: [{ stock: null }, { stock: { gt: 0 } }],
+};
+
 export const visibleInCatalogOffer: Prisma.TenantProductOfferListRelationFilter = {
-  some: { active: true, stock: { gt: 0 } },
+  some: inStockOrUnknown,
 };
 
 export const notVisibleInCatalog: Prisma.ProviderSyncCacheWhereInput = {
-  offers: { none: { active: true, stock: { gt: 0 } } },
+  offers: { none: inStockOrUnknown },
 };
 
 export type ImageSyncPriority = "visible" | "deferred" | "all";

@@ -55,3 +55,25 @@ pnpm-debug.log*
 next-env.d.ts
 
 .vercel
+
+# impeccable: evidencia de revisión y referencias descargadas (artefactos, no fuente).
+# El surface brief sí se versiona: es el contrato que releen los agentes.
+**/.impeccable/review/
+**/.impeccable/refs/
+**/.impeccable/mocks/
+**/.impeccable/build/
+.claude/settings.local.json
+**/.impeccable/questions/
+
+# Skills instaladas con `npx skills add` / `npx impeccable install`.
+# Se reinstalan desde skills-lock.json; pesan ~34 MB y no son fuente del producto.
+/.agents/
+/.claude/skills/
+/.claude/agents/
+/.cursor/skills/
+/.cursor/agents/
+/.cursor/hooks.json
+/.github/skills/
+/.github/agents/
+/.github/hooks/
+/.codex/

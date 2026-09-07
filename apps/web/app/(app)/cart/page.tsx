@@ -8,6 +8,8 @@ import PrefsPanel from "@/components/PrefsPanel";
 import InvidDraftPanel from "@/components/InvidDraftPanel";
 import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
 import ElitCheckoutPanel from "@/components/ElitCheckoutPanel";
+import NewTreeCheckoutPanel from "@/components/NewTreeCheckoutPanel";
+import SolutionBoxCheckoutPanel from "@/components/SolutionBoxCheckoutPanel";
 import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
 import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
@@ -16,7 +18,8 @@ import { usePrefs } from "@/lib/prefs";
 import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing, priceModeForCartItem } from "@/lib/purchase-price";
 import { buildSellerMessage } from "@/lib/seller-message";
-import { offlineOrdersFromCart } from "@/lib/offline-order";
+import { messageOrdersFromCart, offlineOrdersFromCart } from "@/lib/offline-order";
+import { providerPricesFromList } from "@/lib/purchase-pricing";
 import { proxyImg, formatUSD, parsePrice } from "@/lib/format";
 import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
@@ -135,6 +138,9 @@ function CartPageInner() {
   const [pedidosOpen, setPedidosOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmingOffline, setConfirmingOffline] = useState(false);
+  const [confirmingList, setConfirmingList] = useState<string | null>(null);
+  // Proveedores cuyos precios salen de una lista: el carrito no compra en ningún portal, arma un mensaje.
+  const pricesFromList = (p: string) => providerPricesFromList(p, policies[p]?.priceChannel);
   const exportRef = useRef<HTMLDivElement>(null);
   const pedidosRef = useRef<HTMLDivElement>(null);
   const appliedProviderParam = useRef<string | null>(null);
@@ -211,6 +217,7 @@ function CartPageInner() {
         if (line.kind === "iva") ivaUSD += amt;
         else if (line.kind === "internos") internosUSD += amt;
         else if (line.kind === "iibb") {
+          if (quotedLump) continue;
           lineIibb += amt;
           iibbUSD += amt;
           if (amt > 0.0005 && !extra?.perceptionLines?.length) {
@@ -264,12 +271,16 @@ function CartPageInner() {
   const nbLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_BYTES ?? []), [onlineByProvider.NEW_BYTES]);
   const airLines = useMemo(() => cartLinesFromItems(onlineByProvider.AIR ?? []), [onlineByProvider.AIR]);
   const gnLines = useMemo(() => cartLinesFromItems(onlineByProvider.GRUPO_NUCLEO ?? []), [onlineByProvider.GRUPO_NUCLEO]);
+  const ntLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_TREE ?? []), [onlineByProvider.NEW_TREE]);
+  const sbLines = useMemo(() => cartLinesFromItems(onlineByProvider.SOLUTION_BOX ?? []), [onlineByProvider.SOLUTION_BOX]);
   const warmEnabled = hydrated && channelTab === "online";
   const invidWarm = useCheckoutWarmup("INVID", invidLines, warmEnabled);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines, warmEnabled);
   const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines, warmEnabled);
   const airWarm = useCheckoutWarmup("AIR", airLines, warmEnabled);
   const gnWarm = useCheckoutWarmup("GRUPO_NUCLEO", gnLines, warmEnabled);
+  const ntWarm = useCheckoutWarmup("NEW_TREE", ntLines, warmEnabled);
+  const sbWarm = useCheckoutWarmup("SOLUTION_BOX", sbLines, warmEnabled);
   useWarmAllCheckoutCarts(onlineByProvider, warmEnabled);
 
   const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
@@ -283,6 +294,8 @@ function CartPageInner() {
     NEW_BYTES: nbWarm,
     AIR: airWarm,
     GRUPO_NUCLEO: gnWarm,
+    NEW_TREE: ntWarm,
+    SOLUTION_BOX: sbWarm,
   };
 
   const invidExtra: TaxExtra | undefined = invidQuoted?.stockOk
@@ -325,8 +338,30 @@ function CartPageInner() {
       }
     : undefined;
 
+  const sbQuoted = sbWarm.status === "ready" ? sbWarm.data?.preview ?? null : null;
+  const sbExtra: TaxExtra | undefined = sbQuoted
+    ? {
+        shippingUSD: sbQuoted.shippingCost ?? 0,
+        perceptionsUSD: sbQuoted.perceptions ?? 0,
+        perceptionLines: sbQuoted.perceptionLines ?? [],
+      }
+    : undefined;
+
   function extraFor(provider: string): TaxExtra | undefined {
     if (channelTab === "offline") return undefined;
+    // El % de IIBB cargado en Configuración del distribuidor pisa lo que cotice
+    // su portal: se conserva solo el envío cotizado y se descarta la percepción.
+    const manualPct = policies[provider]?.manualIibbPercent;
+    if (manualPct != null) {
+      const quotedShipping =
+        provider === "INVID" ? invidExtra?.shippingUSD
+        : provider === "ELIT" ? elitExtra?.shippingUSD
+        : provider === "NEW_BYTES" ? nbExtra?.shippingUSD
+        : provider === "AIR" ? airExtra?.shippingUSD
+        : provider === "SOLUTION_BOX" ? sbExtra?.shippingUSD
+        : undefined;
+      return { shippingUSD: quotedShipping ?? 0, percepcionPercent: Math.max(0, manualPct) };
+    }
     const cfgPct = getIibbRatePercent(provider);
     const cfg: TaxExtra | undefined =
       cfgPct != null && cfgPct > 0 ? { percepcionPercent: cfgPct } : undefined;
@@ -337,6 +372,7 @@ function CartPageInner() {
     else if (provider === "ELIT") quoted = elitExtra;
     else if (provider === "NEW_BYTES") quoted = nbExtra;
     else if (provider === "AIR") quoted = airExtra;
+    else if (provider === "SOLUTION_BOX") quoted = sbExtra;
     const quotedHasPerc =
       quoted != null &&
       ((quoted.perceptionsUSD ?? 0) > 0.0005 || (quoted.percepcionPercent ?? 0) > 0);
@@ -435,8 +471,9 @@ function CartPageInner() {
         const extra = extraFor(prov);
         const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
         const perc = cartPerception(it, its, extra);
-        const onProduct = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) > 0.0001;
-        const gross = pricing.gross + (!onProduct && perc ? perc.unitAmount * it.qty : 0);
+        const pricedIibb = (taxByKind(pricing.lines, "iibb")?.unitAmount ?? 0) * it.qty;
+        const quotedIibb = perc ? perc.unitAmount * it.qty : 0;
+        const gross = pricing.gross - pricedIibb + quotedIibb;
         const unit = withIva ? gross / it.qty : pricing.unitNet;
         const subtotal = withIva ? gross : pricing.net;
         const nameTrim = it.name.length > 70 ? it.name.slice(0, 67) + "..." : it.name;
@@ -473,8 +510,10 @@ function CartPageInner() {
 
   async function copySellerMessage() {
     const sellers: Record<string, string | null> = {};
+    const providerLabels: Record<string, string> = {};
     for (const p of myProviders) {
       sellers[p.provider] = p.accountManager?.name ?? null;
+      providerLabels[p.provider] = p.name;
     }
     const txt = buildSellerMessage({
       scopeProvider: activeTab === "all" ? undefined : activeTab,
@@ -482,6 +521,7 @@ function CartPageInner() {
       policies,
       clientName: getTenant()?.name ?? null,
       sellers,
+      providerLabels,
       quoteRate: currentRate?.venta ?? null,
     });
     if (!txt) return;
@@ -510,6 +550,26 @@ function CartPageInner() {
       setNotice(msg || "No se pudo guardar el pedido offline");
     } finally {
       setConfirmingOffline(false);
+    }
+  }
+
+  /** Proveedor que cotiza por lista: se registra en Nodo con el modo de precio de cada línea y se copia el mensaje. */
+  async function confirmListOrder(provider: string) {
+    const groups = messageOrdersFromCart(viewItems, policies, provider, currentRate?.venta);
+    if (groups.length === 0) return;
+    setConfirmingList(provider);
+    setNotice(null);
+    try {
+      await ordersApi.createOffline(groups);
+      await copySellerMessage();
+      clearProvider(provider, channelTab);
+      setActiveTab("all");
+      setNotice("Pedido guardado en Nodo. El mensaje quedó copiado para mandárselo al vendedor. Si cambia algo, lo editás en Pedidos.");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setNotice(msg || "No se pudo guardar el pedido");
+    } finally {
+      setConfirmingList(null);
     }
   }
 
@@ -626,7 +686,7 @@ function CartPageInner() {
 
   return (
     <>
-          <header className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 py-3.5 flex items-center justify-between gap-4">
+          <header className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 py-3.5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h1 className="text-lg font-semibold tracking-tight text-white">
                 {channelTab === "offline" ? "Pedido offline" : "Cotización"}
@@ -667,24 +727,25 @@ function CartPageInner() {
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex flex-wrap items-center gap-1.5 justify-end">
               <PrefsPanel />
               <div className="relative" ref={pedidosRef}>
                 <button
                   onClick={() => setPedidosOpen((v) => !v)}
                   className="flex items-center gap-1.5 text-sm text-surface-300 hover:text-white border border-surface-700 hover:border-surface-500 rounded-sm px-3 py-1.5 transition-colors"
+                  aria-label="Pedidos"
                 >
                   <History className="w-3.5 h-3.5" />
-                  Pedidos
+                  <span className="hidden sm:inline">Pedidos</span>
                   <ChevronDown className="w-3 h-3 text-surface-500" />
                 </button>
                 {pedidosOpen && (
                   <div className="absolute right-0 top-full mt-1.5 w-64 bg-surface-950 border border-surface-800 shadow-xl z-30 py-1 max-h-80 overflow-y-auto">
                     <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Historial</p>
-                    {ALL_PROVIDERS.filter(providerHasOrderHistory).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
-                        href={providerOrdersHref(p)}
+                        href={providerOrdersHref(p, pricesFromList(p))}
                         onClick={() => setPedidosOpen(false)}
                         className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-surface-200 hover:bg-surface-900"
                       >
@@ -694,7 +755,7 @@ function CartPageInner() {
                     ))}
                     <div className="h-px bg-surface-800 my-1" />
                     <p className="px-3 pt-1.5 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Distribuidores</p>
-                    {ALL_PROVIDERS.filter((p) => !providerHasOrderHistory(p)).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && !providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
                         href={providerOrdersHref(p)}
@@ -714,9 +775,10 @@ function CartPageInner() {
                     <button
                       onClick={() => setExportOpen((v) => !v)}
                       className="flex items-center gap-1.5 text-sm text-surface-300 hover:text-white border border-surface-700 hover:border-surface-500 rounded-md px-3 py-1.5 transition-colors"
+                      aria-label={copied ? "Copiado" : "Exportar"}
                     >
                       {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
-                      {copied ? "Copiado" : "Exportar"}
+                      <span className="hidden sm:inline">{copied ? "Copiado" : "Exportar"}</span>
                       <ChevronDown className="w-3 h-3 text-surface-500" />
                     </button>
                     {exportOpen && (
@@ -742,9 +804,11 @@ function CartPageInner() {
                   </div>
                   <button
                     onClick={() => setConfirmClear("all")}
-                    className="text-sm text-surface-500 hover:text-red-400 border border-transparent hover:border-red-500/30 rounded-md px-3 py-1.5 transition-colors"
+                    className="flex items-center gap-1.5 text-sm text-surface-500 hover:text-red-400 border border-transparent hover:border-red-500/30 rounded-md px-3 py-1.5 transition-colors"
+                    aria-label="Vaciar"
                   >
-                    Vaciar
+                    <Trash2 className="w-3.5 h-3.5 sm:hidden" />
+                    <span className="hidden sm:inline">Vaciar</span>
                   </button>
                 </>
               )}
@@ -858,7 +922,7 @@ function CartPageInner() {
                 )}
               </div>
 
-              <footer className="flex-shrink-0 border-t border-white/5 bg-surface-950">
+              <footer className="flex-shrink-0 border-t border-white/5 bg-surface-950 pb-[max(1rem,env(safe-area-inset-bottom))]">
                 <div className="px-5 lg:px-8 py-4 flex flex-col gap-4">
                   <SummaryBar
                     title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
@@ -867,8 +931,8 @@ function CartPageInner() {
                     withIva={withIva}
                     currency={currency}
                     showInvidNote={activeTab === "INVID"}
-                    historyHref={activeTab !== "all" ? providerOrdersHref(activeTab) : undefined}
-                    historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
+                    historyHref={activeTab !== "all" ? providerOrdersHref(activeTab, pricesFromList(activeTab)) : undefined}
+                    historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab, pricesFromList(activeTab)) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
                   />
 
                   {currentRate && currency === "ARS" && (
@@ -895,8 +959,8 @@ function CartPageInner() {
                               {warming && <Loader2 className="w-3.5 h-3.5 animate-spin text-surface-500" />}
                             </button>
                             <Link
-                              href={providerOrdersHref(p)}
-                              title={providerHasOrderHistory(p) ? "Ver historial de pedidos" : "Ir a la cuenta del proveedor"}
+                              href={providerOrdersHref(p, pricesFromList(p))}
+                              title={providerHasOrderHistory(p, pricesFromList(p)) ? "Ver historial de pedidos" : "Ir a la cuenta del proveedor"}
                               className="h-9 px-2 inline-flex items-center border-l border-surface-700 text-surface-500 hover:text-white"
                             >
                               <History className="w-3.5 h-3.5" />
@@ -907,6 +971,33 @@ function CartPageInner() {
                       <span className="text-sm text-surface-500">
                         Solo informativo. Confirmá en la pestaña del proveedor.
                       </span>
+                    </div>
+                  )}
+
+                  {activeTab !== "all" && pricesFromList(activeTab) && viewItems.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-xs text-sky-200/80">
+                        {myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} cotiza por lista: el pedido se guarda en Nodo y el mensaje queda copiado para el vendedor. No se carga en ningún portal.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void confirmListOrder(activeTab)}
+                          disabled={confirmingList !== null}
+                          className="self-start flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-3 py-2"
+                        >
+                          {confirmingList === activeTab ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          {confirmingList === activeTab ? "Guardando…" : "Confirmar y copiar mensaje"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copySellerMessage()}
+                          className="self-start flex items-center gap-2 bg-surface-800 hover:bg-surface-700 border border-surface-700 text-surface-100 text-sm font-medium rounded-lg px-3 py-2"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Solo copiar mensaje
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -957,6 +1048,32 @@ function CartPageInner() {
                     </div>
                   )}
 
+                  {channelTab === "online" && onlineByProvider.NEW_TREE?.length > 0 && (activeTab === "all" || activeTab === "NEW_TREE") && (
+                    <div className={activeTab === "NEW_TREE" ? undefined : "hidden"} aria-hidden={activeTab !== "NEW_TREE"}>
+                      <NewTreeCheckoutPanel
+                        items={onlineByProvider.NEW_TREE}
+                        onCreated={(message) => {
+                          setNotice(message || "Pedido creado en New Tree");
+                          setActiveTab("all");
+                          clearProvider("NEW_TREE", "online");
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {channelTab === "online" && onlineByProvider.SOLUTION_BOX?.length > 0 && (activeTab === "all" || activeTab === "SOLUTION_BOX") && (
+                    <div className={activeTab === "SOLUTION_BOX" ? undefined : "hidden"} aria-hidden={activeTab !== "SOLUTION_BOX"}>
+                      <SolutionBoxCheckoutPanel
+                        items={onlineByProvider.SOLUTION_BOX}
+                        onCreated={(message) => {
+                          setNotice(message || "Pedido creado en Solution Box");
+                          setActiveTab("all");
+                          clearProvider("SOLUTION_BOX", "online");
+                        }}
+                      />
+                    </div>
+                  )}
+
                   {channelTab === "online" && onlineByProvider.GRUPO_NUCLEO?.length > 0 && (activeTab === "all" || activeTab === "GRUPO_NUCLEO") && (
                     <div className={activeTab === "GRUPO_NUCLEO" ? undefined : "hidden"} aria-hidden={activeTab !== "GRUPO_NUCLEO"}>
                       <GrupoNucleoCheckoutPanel
@@ -982,7 +1099,7 @@ function CartPageInner() {
                       />
                     </div>
                   )}
-                  {channelTab === "offline" && viewItems.length > 0 && (
+                  {channelTab === "offline" && viewItems.length > 0 && !(activeTab !== "all" && pricesFromList(activeTab)) && (
                     <div className="flex flex-col gap-2">
                       <p className="text-xs text-amber-200/80">
                         Se guarda en Nodo como pedido aprobado. No se carga en el portal: el mensaje es para el vendedor. Si después cambia, lo editás en Pedidos.
@@ -1373,9 +1490,9 @@ function CartLine({
   const internos = taxByKind(taxLines, "internos");
   const iibb = cartPerception(item, siblings, extra);
   const others = taxLines.filter((l) => l.kind === "other" && l.unitAmount > 0);
-  const onProduct = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) > 0.0001;
-  const percExtra = !onProduct && iibb ? iibb.unitAmount * item.qty : 0;
-  const lineGross = pricing.gross + percExtra;
+  const pricedIibb = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) * item.qty;
+  const quotedIibb = iibb ? iibb.unitAmount * item.qty : 0;
+  const lineGross = pricing.gross - pricedIibb + quotedIibb;
   const href = `/product/${encodeURIComponent(item.provider)}/${encodeURIComponent(item.externalId)}`;
   const sku = item.sku || item.partNumber || item.externalId;
   const ref: CartRef = { provider: item.provider, externalId: item.externalId, channel: item.channel, schemeId: item.schemeId };
@@ -1563,8 +1680,8 @@ function QtyControl({
   onSet: (q: number) => void;
 }) {
   return (
-    <div className="inline-flex items-center border border-surface-700 rounded-md h-8">
-      <button onClick={onDec} className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Restar">
+    <div className="inline-flex items-center border border-surface-700 rounded-md h-9 sm:h-8">
+      <button onClick={onDec} className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Restar">
         <Minus className="w-3.5 h-3.5" />
       </button>
       <input
@@ -1574,7 +1691,7 @@ function QtyControl({
         onChange={(e) => onSet(Math.max(1, parseInt(e.target.value) || 1))}
         className="w-9 bg-transparent text-white text-sm font-medium text-center focus:outline-none tabular-nums"
       />
-      <button onClick={onInc} className="w-8 h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Sumar">
+      <button onClick={onInc} className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white" aria-label="Sumar">
         <Plus className="w-3.5 h-3.5" />
       </button>
     </div>

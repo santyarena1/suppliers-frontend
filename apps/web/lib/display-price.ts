@@ -38,7 +38,11 @@ function resolveIibb(
   const existing = taxByKind(pricing.lines, "iibb");
   const existingUnit = existing && existing.unitAmount > 0.0001 ? existing.unitAmount : 0;
   if (existingUnit > 0.0001) {
-    return { unit: existingUnit, percent: existing?.percent ?? null, estimated: false };
+    return {
+      unit: existingUnit,
+      percent: existing?.percent ?? null,
+      estimated: Boolean(existing?.estimated),
+    };
   }
   const pct = getIibbRatePercent(provider);
   if (pct != null && pct > 0 && pricing.unitNet > 0) {

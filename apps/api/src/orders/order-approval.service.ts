@@ -1,12 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import type { Prisma, ProviderOrder } from "@prisma/client";
-import {
-  PROVIDER_LABELS,
-  TENANT_ROLES_CAN_APPROVE_ORDERS,
-  TENANT_ROLES_CAN_CONFIRM_ORDERS,
-  TENANT_ROLES_CAN_ORDER,
-  type Provider,
-} from "@nodo/shared";
+import { TENANT_ROLES_CAN_APPROVE_ORDERS, TENANT_ROLES_CAN_CONFIRM_ORDERS, TENANT_ROLES_CAN_ORDER, type Provider, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -76,7 +70,7 @@ export class OrderApprovalService {
 
     const items = Array.isArray(draft.items) ? draft.items : [];
     if (items.length === 0) {
-      throw new BadRequestException(`No hay productos de ${PROVIDER_LABELS[provider]} en el pedido`);
+      throw new BadRequestException(`No hay productos de ${providerLabel(provider)} en el pedido`);
     }
 
     const order = await this.prisma.providerOrder.create({
@@ -116,7 +110,7 @@ export class OrderApprovalService {
       deliveryLabel: null,
       items,
       total: null,
-      message: `El pedido de ${PROVIDER_LABELS[provider]} quedó guardado esperando que lo apruebe un responsable de ${tenant.tenantName}. Hasta entonces no se manda al proveedor.`,
+      message: `El pedido de ${providerLabel(provider)} quedó guardado esperando que lo apruebe un responsable de ${tenant.tenantName}. Hasta entonces no se manda al proveedor.`,
     };
   }
 
@@ -197,7 +191,7 @@ export class OrderApprovalService {
     return {
       id: row.id,
       provider: row.provider,
-      providerName: PROVIDER_LABELS[row.provider as Provider] ?? row.provider,
+      providerName: providerLabel(row.provider as Provider) ?? row.provider,
       status: row.status,
       approvalStatus: row.approvalStatus,
       orderNumber: row.invidOrderNumber,

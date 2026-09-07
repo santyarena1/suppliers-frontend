@@ -137,7 +137,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: config `{ acceptsOffline?, acceptsScheme?, offlineIvaAdjustment?, schemeIvaAdjustment?, schemeDiscountPercent? }`. Alta offline `{ orders: [{ provider, notes?, quoteRate?, items: [{ externalId, name, qty, unitPrice, internosAmount?, ivaPercent?, internosPercent? }] }] }`. Edición `{ notes?, items? }`.
 - **Respuesta esperada**: `ProviderConfig` / `purchase` por proveedor. `POST /orders/offline` y `PATCH /orders/:id` devuelven `TenantOrder` con `channel: "OFFLINE"`, `status: "OFFLINE"`, `approvalStatus: "APPROVED"`, `editable: true`.
 - **Estado**: IMPLEMENTADO
-- **Notas**: Offline = compra sin facturar (antes “.com”); **no se llama al portal del proveedor**. Sí se registra en Nodo como pedido **aprobado** y se puede editar (cantidades, precio, notas) si el vendedor cambia algo. El mensaje al vendedor se copia aparte. **Sin percepciones (IIBB); internos sí.** Esquema = facturado, con % extra que carga el comercio una vez por distribuidor (no aplica a ítems sueltos del carrito online); al portal los ítems van sueltos. El IVA de offline y el de esquema son independientes. Si offline está activo, `offlineIvaAdjustment` es obligatorio; si esquema está activo, `schemeIvaAdjustment` es obligatorio. Si el proveedor no informa alícuota de IVA (p. ej. Ceven), offline/esquema quedan deshabilitados: no se inventa 21%, 0% ni 10,5%. Aprobar un pedido offline está bloqueado: no hay envío al portal.
+- **Notas**: Offline = compra sin facturar (antes “.com”); **no se llama al portal del proveedor**. Sí se registra en Nodo como pedido **aprobado** y se puede editar (cantidades, precio, notas) si el vendedor cambia algo. El mensaje al vendedor se copia aparte. **Sin percepciones (IIBB); internos sí.** Esquema = facturado, con % extra que carga el comercio una vez por distribuidor (no aplica a ítems sueltos del carrito online); al portal los ítems van sueltos. **El esquema sí suma percepciones/IIBB** sobre el neto ya descontado, con la alícuota de ese comercio. El IVA de offline y el de esquema son independientes. Si offline está activo, `offlineIvaAdjustment` es obligatorio; si esquema está activo, `schemeIvaAdjustment` es obligatorio. Si el proveedor no informa alícuota de IVA (p. ej. Ceven), offline/esquema quedan deshabilitados: no se inventa 21%, 0% ni 10,5%. Aprobar un pedido offline está bloqueado: no hay envío al portal.
 
 ### [FEATURE] Unificar direcciones, pagos y envíos del local
 - **Método**: PUT · PATCH · DELETE · POST
@@ -211,7 +211,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `{ items: CartItem[], schemes: CartScheme[] }`
 - **Respuesta esperada**: `{ tenantId, items, schemes, updatedByUserId, updatedAt }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un solo carrito por local, no por persona. El SSE `cart_updated` avisa al equipo del comercio y al vendedor/dueño del distro vinculado. `/cart/items` queda por compatibilidad y la web ya no lo usa. Las percepciones/IIBB son **de ese comercio** (las confirma el carrito o las carga a mano): no hay alícuota global por proveedor. Marcas y distribuidores no ven ni aplican ese impuesto.
+- **Notas**: Un solo carrito por local, no por persona. El SSE `cart_updated` avisa al equipo del comercio y al vendedor/dueño del distro vinculado. `/cart/items` queda por compatibilidad y la web ya no lo usa. Las percepciones/IIBB son **de ese comercio** (las confirma el carrito o las carga a mano): no hay alícuota global por proveedor. El catálogo (búsqueda y ficha) usa la misma alícuota: Elit y varios no la mandan en el producto, solo en la cotización. **Lista y esquema las suman; offline no.** Marcas y distribuidores no ven ni aplican ese impuesto.
 
 ### [FEATURE] Publicidad paga (espacios, campañas, stats)
 - **Método**: GET | PUT | POST
@@ -293,6 +293,103 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: feed `{ items: NewsCard[], nextCursor? }` · hero `{ slides[] }` · ficha `{ article, author: { name, type, logoUrl, linked, advertised }, attachments[], canDownloadCommercial, stats? }` · pública sin adjuntos `IN_APP`
 - **Estado**: IMPLEMENTADO
 - **Notas**: Plan: `docs/PLAN_NOTICIAS.md`. Módulo fijo `news`. 404 si no es audiencia. Distro no ve notas de otro distro; marca no ve notas de otra marca. El comercio ve vinculados ∪ anunciantes (cualquier campaña ACTIVE). El hero usa el slot `news_hero`. `canDownloadCommercial` solo con `TenantLink`. Cuerpo HTML sanitizado (`sanitizeBrandHtml`). UI: `/noticias`, `/n/:publicKey`. Admin: `/admin?tab=news`. Aislamiento: `scripts/check-news-visibility.mjs`. Muestra: `scripts/seed-demo-news.mjs`.
+### [FEATURE] Proveedores por lista (distribuidores / marcas sin API) — alta
+- **Método**: POST
+- **Ruta**: `/providers` · `/providers/enable-own-list`
+- **Auth**: Bearer. `/providers`: superadmin o comercio (tipo 1). `/providers/enable-own-list`: organización distribuidor o marca.
+- **Body / Params**: `/providers`: `{ name, type: "DISTRIBUTOR"|"BRAND", listUpdateDays?, contactEmail?, contactPhone?, notes?, config? }` (`config` = mismos campos que `PUT /providers/:provider/config`, solo para el comercio que lo crea). `/providers/enable-own-list`: `{ listUpdateDays? }`.
+- **Respuesta esperada**: `{ id, name, type, providerKey, listUpdateDays }`. `providerKey` es `LIST_<SLUG>` generado a partir del nombre (único, inmutable).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un proveedor por lista es un `Tenant` DISTRIBUTOR/BRAND con `providerKey` `LIST_*`; usa toda la configuración de proveedor existente (markup, faltantes, stock cero, offline/esquema, logo/color). Si lo crea un comercio queda vinculado automáticamente y marcado `managedByPlatform`. El tipo `Provider` ya no es una unión cerrada: los 14 con adapter están en `ALL_PROVIDERS`; una clave válida cumple `isProviderKey`. La búsqueda, el carrito y las fichas funcionan igual: las ofertas del proveedor se materializan como `TenantProductOffer` (`source` BASE_LIST) en cada comercio vinculado, y el descuento del vínculo se aplica al leer solo sobre esas.
+
+### [FEATURE] Proveedores por lista — subir y gestionar planillas
+- **Método**: POST | GET
+- **Ruta**: `POST /providers/:key/imports` (multipart, campo `file`, .xlsx/.xls/.csv, máx. 20 MB) · `GET /providers/:key/imports` · `GET /providers/:key/imports/:id` · `POST /providers/:key/imports/:id/apply` · `POST /providers/:key/imports/:id/discard` · `POST /providers/:key/imports/:id/revert`
+- **Auth**: Bearer. Nivel según quién sube: superadmin o la organización dueña del `providerKey` (OWNER/ADMIN/PRODUCT_MANAGER) → `level: BASE` (precio base para todos los vinculados); comercio vinculado (OWNER/ADMIN/PRODUCT_MANAGER) → `level: TENANT` (sus precios, solo él). Un proveedor con API responde 400.
+- **Body / Params**: —
+- **Respuesta esperada**: `ListImportRecord` `{ id, provider, level, status: PROCESSING|NEEDS_REVIEW|APPLIED|DISCARDED|REVERTED|FAILED, tenantId, tenantName, originalFileName, profileId, rowsTotal, rowsData, summary: { created, priceChanged, unchanged, missing, withoutPrice, issues, normalized, profileMatch }, error, createdAt, appliedAt, revertedAt }`. El detalle agrega `diff: { counts, samples: { created[], priceChanged[] (before/after/percent), missing[] }, missingIds[] }`, `reviewReasons[]`, `preview` (encabezados, primeras 30 filas, hojas) e `issues[]` (fila, columna, motivo).
+- **Estado**: IMPLEMENTADO
+- **Notas**: La subida responde enseguida en `PROCESSING` y el procesamiento corre en background (la UI consulta el detalle cada pocos segundos). Pipeline: lectura cruda (celdas unificadas), análisis estructural (encabezado real debajo de logos, divisores por marca/categoría, pie de página, encabezados repetidos), perfil de lectura por huella del archivo, normalización con issues por fila, diff contra la última carga aplicada del mismo nivel y chequeos de sanidad (faltantes > 30 %, cambios > 80 %, todos con el mismo %, > 5 % sin precio, filas < mitad, perfil parcial o propuesto). Si todo cierra se aplica sola; si no, queda `NEEDS_REVIEW` y notifica (`OrgNotification` SYSTEM, `landingKey` `list-import:<id>`). `apply` fuerza una carga en revisión y aprueba su perfil propuesto. `revert` solo sobre la última aplicada del nivel; restaura el snapshot. Una lista propia (TENANT) de un comercio no pisa ni oculta lo que viene de la base y viceversa (acción de faltantes acotada por `source`). Si solo hay lista de un comercio, los demás vinculados ven la ficha sin precio. Un cron marca `FAILED` lo que quedó `PROCESSING` más de 30 min.
+
+### [FEATURE] Proveedores por lista — perfil de lectura
+- **Método**: GET | PUT | POST
+- **Ruta**: `GET /providers/:key/import-profile` · `PUT /providers/:key/import-profile` · `POST /providers/:key/import-profile/suggest?sheet=`
+- **Auth**: Bearer, mismos permisos que subir.
+- **Body / Params**: PUT: `{ sheetIndex?, columnMap: { "<encabezado>": "<campo>"|null }, currency?, priceIncludesIva?, ivaPercent?, numberFormat: DOT|COMMA, dividerMeaning: BRAND|CATEGORY|IGNORE, reprocessImportId? }`. Campos válidos = los de `NormalizedProduct` (externalId, name, price, finalPrice, brand, category, stock…). Obligatorio `name` y `price` o `finalPrice`.
+- **Respuesta esperada**: GET: `{ fields[], active, proposed, latestImport: { id, status, preview, originalFileName, createdAt } }`. PUT: el perfil creado (versión nueva, ACTIVE; los anteriores quedan ARCHIVED). suggest: `{ spec, fromAi, reasoning, headers[] }` sin guardar.
+- **Estado**: IMPLEMENTADO
+- **Notas**: La IA (OpenAI, clave guardada en base como en el enriquecimiento de catálogo) se consulta una sola vez por formato nuevo con encabezado + 25 filas de muestra; sin clave o si falla, mapeo heurístico por nombres de columna. Un perfil propuesto siempre pasa por revisión antes de usarse solo. Con `reprocessImportId` la carga en revisión se vuelve a procesar con el perfil nuevo.
+
+### [FEATURE] Proveedores por lista — frescura
+- **Método**: GET
+- **Ruta**: `/providers/:key/freshness`
+- **Auth**: Bearer, organización vinculada, dueña o superadmin.
+- **Body / Params**: —
+- **Respuesta esperada**: `{ provider, listUpdateDays, lastImportAt, lastImportLevel, expectedAt, status: NONE|NO_CADENCE|OK|DUE_SOON|OVERDUE }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: `listUpdateDays` es del proveedor (`Tenant.listUpdateDays`, se define al crearlo; editable por superadmin en `PUT /admin/tenants/:id`). `DUE_SOON` = faltan 2 días o menos. La UI muestra el semáforo en la ficha del proveedor y, en el buscador, la leyenda "Lista vencida, se sugiere actualizar" debajo de la fecha de actualización del producto para quien puede subir listas. Un cron diario (09:00) crea una `OrgNotification` al proveedor y a los últimos que subieron cuando la lista vence (`landingKey` `list-overdue:<key>`), sin repetir en 24 h.
+
+### [ELIMINADO] `POST /providers/:provider/import`
+- Reemplazado por `POST /providers/:key/imports` (proveedores por lista). Los proveedores con API siguen sincronizando por adapter.
+
+
+### [FEATURE] Canal de precios por comercio y proveedor (API o Lista)
+- **Método**: GET | PUT (campos nuevos en endpoints existentes)
+- **Ruta**: `/providers/:provider/config` · `/my/providers` (`purchase`)
+- **Auth**: Bearer, organización vinculada.
+- **Body / Params**: `PUT /providers/:provider/config` acepta `priceChannel: "API" | "LIST"`, `manualIibbPercent` (0..100 | null) y `manualPerceptionsPercent` (0..100 | null).
+- **Respuesta esperada**: `ProviderConfig` con esos tres campos. `VisibleProvider.purchase` trae además `priceChannel`, `manualIibbPercent`, `manualPerceptionsPercent`; `VisibleProvider.selfConnected` indica un vínculo `LIST_CONNECTED` (sin vendedor ni chat: `accountManager` y `linkId` vienen en `null`).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un proveedor **cotiza por lista** para un comercio cuando es `LIST_*` o cuando el comercio eligió canal `LIST`. Con canal `LIST` el cron no sincroniza ese proveedor y cualquier proveedor (también los que tienen API) admite `POST /providers/:key/imports` a nivel `TENANT`. `providerHasIvaRate(provider, canal)` (shared) es verdadero para los que cotizan por lista: el IVA sale de la fila o del perfil de la planilla (si no hay dato, 21 %), así que offline y esquema se pueden configurar. IIBB y otras percepciones no vienen en la lista: el comercio las carga como % sobre el neto y la UI las suma en lista y esquema (offline sin percepciones).
+
+### [FEATURE] Conexión por lista y directorio de proveedores
+- **Método**: GET | POST
+- **Ruta**: `GET /my/suppliers/search?q=&type=DISTRIBUTOR|BRAND` · `POST /my/suppliers/:tenantId/connect-by-list`
+- **Auth**: Bearer, organización comercio (tipo 1).
+- **Body / Params**: `q` (nombre, contiene, sin distinguir mayúsculas), `type` opcional.
+- **Respuesta esperada**: search: `[{ id, name, type, providerKey, hasApi, managedByPlatform, linkStatus }]`. connect-by-list: `{ linkId, status, provider, tenantName, tenantType }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Antes de crear un proveedor por lista, la UI busca en este directorio para no duplicar a uno existente. Conectarse por lista no pide permiso al proveedor (el comercio usa sus propios datos): crea el vínculo en estado `LIST_CONNECTED` y deja el canal en `LIST`. Si el proveedor no tenía `providerKey`, se le genera uno `LIST_*`. El comercio ve el catálogo con sus precios pero sin vendedor ni chat; cuando el distribuidor le asigna vendedor desde Clientes (`PUT /my/clients/:linkId` con `accountManagerId`), el vínculo pasa solo a `ACTIVE`. `POST /providers` (creado por un comercio) también deja el vínculo en `LIST_CONNECTED`. `TenantLinkStatus` suma `LIST_CONNECTED` ("Conectado por lista").
+
+### [FEATURE] Pedido por mensaje para proveedores que cotizan por lista
+- **Método**: POST (cambio de reglas en endpoint existente)
+- **Ruta**: `/orders/offline`
+- **Auth**: Bearer, comercio con permiso de pedir.
+- **Body / Params**: cada ítem acepta `pricingMode: "list" | "scheme" | "offline"` (default `offline`).
+- **Respuesta esperada**: sin cambios (`TenantOrder[]`, `channel: "OFFLINE"`).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Para un proveedor que cotiza por lista es la única modalidad de compra: el carrito registra el pedido en Nodo con el modo de precio de cada línea y copia el mensaje para el vendedor ("Confirmar y copiar mensaje"). Reglas: ítems `offline` requieren `acceptsOffline`; `scheme` requiere `acceptsScheme`; `list` solo se acepta si el proveedor cotiza por lista (los que se compran por portal siguen con su checkout). Historial: `/pedidos` (filtro Offline) y pestaña Pedidos en la ficha del proveedor (`/proveedores/:key?tab=orders`).
+
+### [FEATURE] Unificar proveedores por lista duplicados (superadmin)
+- **Método**: GET | POST
+- **Ruta**: `GET /admin/providers/merge-candidates` · `POST /admin/providers/merge`
+- **Auth**: Bearer, `ROLE_ADMIN`.
+- **Body / Params**: `{ from: "LIST_*", into: "<clave destino>" }`.
+- **Respuesta esperada**: candidates: `[{ id, name, type, providerKey, managedByPlatform, clients, similar: [{ id, name, providerKey, type }] }]`. merge: `{ from, into, moved: { <tabla>: n }, dropped: { <tabla>: n }, deletedTenantId }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Mueve fichas, ofertas, base, historial de precios, perfiles, cargas, corridas de sync, carrito, pedidos, señales de marca, imágenes, overrides/alias de catálogo, display y vínculos del duplicado al destino; lo que ya existía en el destino se descarta (el destino manda). La organización duplicada se borra si no tiene miembros; si los tiene, queda inactiva y sin clave. UI: Admin → Directorio → "Unificar proveedores por lista".
+
+
+### [FEATURE] Marcas faltantes (superadmin)
+- **Método**: GET | POST
+- **Ruta**: `GET /admin/catalog-enrichment/brand-suggestions?provider=&ai=1` · `POST /admin/catalog-enrichment/brand-suggestions/apply`
+- **Auth**: Bearer, `ROLE_ADMIN`.
+- **Body / Params**: GET: `provider` opcional, `ai=1` valida las candidatas con OpenAI (una llamada por proveedor). POST: `{ provider, brand, externalIds?: string[], source?: MANUAL|AUTO|AI }` — sin `externalIds` se asigna a todos los productos sin marca del proveedor que tengan la palabra en el nombre, tags o categoría.
+- **Respuesta esperada**: GET: `{ totalMissing, providers: [{ provider, missingCount, usedAi, suggestions: [{ brand, normalized, count, score (0..1), known, aiConfirmed: true|false|null, externalIds[], sampleNames[] }] }] }`. POST: `{ brand, termId, updated }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Productos "sin marca" = `brand` cruda vacía y sin override `displayBrand`. La detección es determinística: palabras repetidas en los nombres (y tags / categoría / subcategoría) de cada proveedor, descartando palabras del rubro (gabinete, fuente, garantía…), códigos de modelo (TM50, SX550-TS) y puntuando posición en el nombre, forma de nombre propio y coincidencia con marcas ya conocidas (términos y alias BRAND). Al aplicar se hace `ensureTerm(BRAND)` (si la marca es nueva se crea el término y su organización de marca), se escribe el override `displayBrand` y se completa la `brand` cruda vacía para que conteos y filtros la vean. UI: Admin → Catálogo → "Marcas faltantes", con "Validar con IA" y "Asignar las seguras" (confirmadas por IA, conocidas o confianza ≥ 70 %).
+
+### [FEATURE] Imágenes: pendientes para todos los proveedores
+- **Método**: GET (cambio de regla en endpoints existentes)
+- **Ruta**: `/admin/images/status` · `/admin/images/missing` · `POST /admin/images/first-photo`
+- **Auth**: Bearer, `ROLE_ADMIN`.
+- **Body / Params**: sin cambios.
+- **Respuesta esperada**: sin cambios.
+- **Estado**: IMPLEMENTADO
+- **Notas**: "Pendiente visible" ahora es oferta activa con stock > 0 **o stock desconocido** (las listas de precios no siempre lo traen y el catálogo igual muestra esos productos). Antes, todo producto sin stock informado caía en "sin stock / diferidos" y parecía que solo Air tenía pendientes. El selector de distribuidor de la pantalla sale de `status.byProvider` (todos los que tienen productos, incluidos `LIST_*`), no de la lista fija de 14.
+
+
+## Pendiente (futuro)
 
 ## Pendiente (futuro)
 
@@ -304,3 +401,82 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Respuesta esperada**: `{ url: "/assets/<uuid>" }`
 - **Estado**: IMPLEMENTADO
 - **Notas**: Los bytes se guardan en Postgres (`StoredAsset`) y se sirven en `GET /assets/<uuid>` (público, sin auth). Así viajan con la DB entre máquinas/deploys. Banners y logos aceptan URL externa, path `/assets/...` o legacy `/uploads/...` (disco local; se mantiene por compatibilidad).
+
+
+## New Tree — portal newtree.com.ar (catálogo, checkout, cuenta)
+
+Integración por emulación del portal (GlobalBluePoint / ASP.NET PageMethods). Diseño:
+`docs/superpowers/specs/2026-09-05-new-tree-portal-integration-design.md`.
+Credenciales (`POST /credentials`): `api_username`, `api_password`, `company`, `webservice`,
+`client_id` (API SOAP de GlobalBluePoint: catálogo con precios del cliente, es lo que
+Railway puede alcanzar) y/o `username` + `password` del portal (pedidos y cuenta
+corriente; el portal bloquea IPs de datacenter salvo `NEW_TREE_PROXY_URL`). Sin nada, el
+catálogo sincroniza por portal con precios de lista.
+
+### `GET /providers/NEW_TREE/account`
+
+Query: `refresh=1` (salta el cache de 5 min), `from` / `to` en `yyyymmdd` (por
+defecto últimos 24 meses).
+
+```json
+{
+  "profile": { "id": "12345", "salesTermsId": "3", "priceListId": "7" },
+  "range": { "from": "20240905", "to": "20260905" },
+  "balance": { "currency": "USD", "total": 10000, "overdue": 10000, "toExpire": 0 },
+  "movements": [
+    { "date": "2026-04-27", "form": "Fc A", "number": "00011-00095294", "voucher": "Fc A 00011-00095294",
+      "dueDate": "2026-04-27", "currency": "ARS", "debit": 549913.98, "credit": null, "documentToken": "RWpAeg…" }
+  ],
+  "invoices": [ "…solo Fc / NC / ND de movements…" ],
+  "orders": [ { "id": "1234", "date": "2026-05-01", "status": "Pendiente", "origin": "Web", "currency": "USD", "amount": 120.5, "detailUrl": "/PEDIDO/…" } ],
+  "drafts": [ "…ProviderOrder de Nodo (mapProviderDraft)…" ],
+  "note": "…"
+}
+```
+
+### `GET /providers/NEW_TREE/documents?token=<documentToken>&name=<archivo>`
+
+Descarga el PDF del comprobante (`wfmPrintMyDocument.aspx?<token>`) con la sesión
+del portal. `token` es el `documentToken` del movimiento; nada más entra a la URL.
+
+### `POST /providers/NEW_TREE/checkout/preview`
+
+Body: `{ items: [{ code, qty, name? }], deliveryAddress?, notes? }`. `code` es el
+`externalId` (ITEM_ID del portal). Vacía el carrito del portal, agrega cada ítem y
+calcula.
+
+```json
+{
+  "items": [ { "code": "20227", "qty": 2, "name": "Fuente XPG Probe 700W", "price": 48.87, "finalPrice": 54, "subtotal": 97.74, "error": null } ],
+  "itemCount": 2, "subtotal": 97.74, "vat": 10.26, "interest": 0, "discount": 0, "perceptions": 0,
+  "total": 108, "currency": "USD", "deliveryAddress": null, "stockOk": true, "note": "…"
+}
+```
+
+`items[].error` trae el motivo cuando el portal rechaza un ítem (`stockOk: false`).
+
+### `POST /providers/NEW_TREE/checkout/draft`
+
+Mismo body más `background?: boolean`. Con `background` responde `PENDING` y el
+pedido se crea en segundo plano (`GET /providers/NEW_TREE/drafts/:id` para seguirlo).
+Crea el pedido real con `wsNRW_SaveSaleOrder`; el pago y la entrega los coordina el
+vendedor de New Tree. Respuesta: `{ id, status, orderNumber, webOrderNumber,
+paymentLabel, deliveryLabel, items, total, message }`. Pasa por el flujo de
+aprobación (`PENDING_APPROVAL`) cuando el comercio lo exige.
+
+### `GET /providers/NEW_TREE/drafts` · `GET /providers/NEW_TREE/drafts/:id`
+
+Historial de pedidos creados desde Nodo (mismo formato que Elit).
+
+
+## Solution Box — API interna de solutionbox.com.ar (catálogo, checkout, pedidos)
+
+Emula la API JSON de la tienda (login con mail y contraseña del sitio). Diseño y
+tabla de llamadas: `docs/superpowers/specs/2026-09-05-solution-box-site-api-design.md`.
+Credenciales: `email` + `password`.
+
+- `GET /providers/SOLUTION_BOX/account?refresh=1` → `{ profile:{id,name,email,cuit,exchange,paymentCondition,deliveryType}, orders:[{number,extension,date,seller,paymentCondition,amount,currency,exchange,invoice,status,items:[{code,qty,price,currency}]}], invoices:[…solo con factura…], drafts:[…], note }`.
+- `GET /providers/SOLUTION_BOX/orders/:number/:ext` → un pedido; `…/invoice` → PDF de la factura.
+- `POST /providers/SOLUTION_BOX/checkout/preview` body `{ items:[{code,qty,name?}], paymentCondition?, deliveryType? }` → `{ items, paymentConditions, paymentCondition, paymentLabel, deliveryTypes, deliveryType, deliveryLabel, deliveryAddress, subtotal, vat, internalTax, perceptions, perceptionLines, shippingCost, total, totalArs, exchange, currency:"USD", stockOk, note }` (totales de la proforma del sitio; `perceptionLines` trae la percepción de IIBB).
+- `POST /providers/SOLUTION_BOX/checkout/draft` mismo body + `background?` → crea el pedido real (`{ id, status, orderNumber, … }`), con aprobación previa si el comercio la exige.
+- `GET /providers/SOLUTION_BOX/drafts[/:id]` historial desde Nodo.

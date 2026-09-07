@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
-import { providerHasIvaRate, PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import { providerPricesFromList, providerHasIvaRate, type Provider, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { AirOrderService, type AirDraftInput } from "../providers/air-order.service";
@@ -9,6 +9,8 @@ import { ElitOrderService, type ElitCartItems } from "../providers/elit-order.se
 import { GrupoNucleoOrderService, type GnDraftInput } from "../providers/grupo-nucleo-order.service";
 import { InvidOrderService, type InvidDraftInput } from "../providers/invid-order.service";
 import { NewBytesOrderService, type NewBytesDraftInput } from "../providers/new-bytes-order.service";
+import { NewTreeOrderService, type NewTreeCartItems } from "../providers/new-tree-order.service";
+import { SolutionBoxOrderService, type SolutionBoxCartItems } from "../providers/solution-box-order.service";
 import type { OrderAuthor } from "../providers/provider-draft";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -52,6 +54,8 @@ export class OrdersService {
     private readonly grupoNucleo: GrupoNucleoOrderService,
     private readonly air: AirOrderService,
     private readonly elit: ElitOrderService,
+    private readonly newTree: NewTreeOrderService,
+    private readonly solutionBox: SolutionBoxOrderService,
     @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
@@ -91,10 +95,15 @@ export class OrdersService {
     const created = [];
     for (const group of dto.orders) {
       const provider = group.provider as Provider;
-      await this.assertOfflineAllowed(commercialId(tenant), provider);
+      const modes = new Set((group.items ?? []).map((i) => (i as { pricingMode?: string }).pricingMode ?? "offline"));
+      await this.assertOfflineAllowed(commercialId(tenant), provider, {
+        offline: modes.has("offline"),
+        scheme: modes.has("scheme"),
+        list: modes.has("list"),
+      });
       const items = normalizeOfflineItems(group.items);
       if (items.length === 0) {
-        throw new BadRequestException(`No hay productos de ${PROVIDER_LABELS[provider]} en el pedido`);
+        throw new BadRequestException(`No hay productos de ${providerLabel(provider)} en el pedido`);
       }
       const snap = snapshotOfflineOrder(items, group.notes, group.quoteRate);
       const row = await this.prisma.providerOrder.create({
@@ -532,20 +541,40 @@ export class OrdersService {
     };
   }
 
-  private async assertOfflineAllowed(tenantId: string, provider: Provider) {
+  /**
+   * Un pedido que no viaja al portal del proveedor: se registra en Nodo y se le
+   * manda al vendedor como mensaje. Para un proveedor con API es el "offline"
+   * clásico (sin facturar). Para uno que cotiza por lista es la única forma de
+   * pedir, con el precio de lista, offline o esquema según lo que el comercio
+   * configuró.
+   */
+  private async assertOfflineAllowed(
+    tenantId: string,
+    provider: Provider,
+    modes: { offline: boolean; scheme: boolean; list: boolean } = { offline: true, scheme: false, list: false }
+  ) {
     await this.visibility.assertLinked(tenantId, provider);
-    if (!providerHasIvaRate(provider)) {
-      throw new BadRequestException(
-        `${PROVIDER_LABELS[provider]} no informa alícuota de IVA: no se puede registrar un pedido offline.`
-      );
-    }
     const config = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
-      select: { acceptsOffline: true },
+      select: { acceptsOffline: true, acceptsScheme: true, priceChannel: true },
     });
-    if (!config?.acceptsOffline) {
+    const fromList = providerPricesFromList(provider, config?.priceChannel);
+    if (!providerHasIvaRate(provider, config?.priceChannel)) {
       throw new BadRequestException(
-        `Activá el pedido offline de ${PROVIDER_LABELS[provider]} en Configuración antes de confirmarlo.`
+        `${providerLabel(provider)} no informa alícuota de IVA: no se puede registrar un pedido offline.`
+      );
+    }
+    if (modes.offline && !config?.acceptsOffline) {
+      throw new BadRequestException(
+        `Activá el pedido offline de ${providerLabel(provider)} en Configuración antes de confirmarlo.`
+      );
+    }
+    if (modes.scheme && !config?.acceptsScheme) {
+      throw new BadRequestException(`Activá el esquema de ${providerLabel(provider)} en Configuración antes de confirmarlo.`);
+    }
+    if (modes.list && !fromList) {
+      throw new BadRequestException(
+        `${providerLabel(provider)} se compra desde su portal: el pedido por mensaje es solo para proveedores que cotizan por lista.`
       );
     }
   }
@@ -568,6 +597,10 @@ export class OrdersService {
         return this.air.approveDraft(author, credentials, input as unknown as AirDraftInput, orderId);
       case "ELIT":
         return this.elit.approveDraft(author, credentials, input as unknown as ElitCartItems, orderId);
+      case "NEW_TREE":
+        return this.newTree.approveDraft(author, credentials, input as unknown as NewTreeCartItems, orderId);
+      case "SOLUTION_BOX":
+        return this.solutionBox.approveDraft(author, credentials, input as unknown as SolutionBoxCartItems, orderId);
       default:
         throw new BadRequestException(`Todavía no se pueden aprobar pedidos de ${provider} desde Nodo`);
     }

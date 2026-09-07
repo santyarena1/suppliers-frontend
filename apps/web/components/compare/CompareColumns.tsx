@@ -149,7 +149,7 @@ export function ProviderCompareColumn({
         e.preventDefault();
         onDropOn();
       }}
-      className={`flex flex-col w-[280px] flex-shrink-0 rounded-2xl border bg-surface-900/90 ring-1 overflow-hidden cursor-grab active:cursor-grabbing ${MODE_ACCENT[mode]} ${
+      className={`flex flex-col w-[min(280px,calc(100vw-3rem))] flex-shrink-0 rounded-2xl border bg-surface-900/90 ring-1 overflow-hidden cursor-grab active:cursor-grabbing ${MODE_ACCENT[mode]} ${
         isCheapest ? "shadow-[0_0_0_1px_rgba(16,185,129,0.35)]" : ""
       }`}
     >
@@ -284,7 +284,7 @@ export function RetailCompareColumn({
         e.preventDefault();
         onDropOn();
       }}
-      className={`flex flex-col w-[280px] flex-shrink-0 rounded-2xl border bg-surface-900/90 ring-1 overflow-hidden cursor-grab active:cursor-grabbing ${MODE_ACCENT.local} ${
+      className={`flex flex-col w-[min(280px,calc(100vw-3rem))] flex-shrink-0 rounded-2xl border bg-surface-900/90 ring-1 overflow-hidden cursor-grab active:cursor-grabbing ${MODE_ACCENT.local} ${
         isBestSale ? "shadow-[0_0_0_1px_rgba(16,185,129,0.45)]" : ""
       }`}
     >

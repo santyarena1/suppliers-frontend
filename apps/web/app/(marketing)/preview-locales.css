@@ -1,0 +1,216 @@
+/* ============================================================
+ * PRECIOS DE VENTA EN LOCALES
+ * Mismo panel que hoy: encabezado con su aclaracion, buscador
+ * amplio, orden, filtro de locales, rango y las dos grillas de
+ * coincidencias. Solo cambia la estetica.
+ * ========================================================== */
+
+.pp__sec--plain { margin-top: 2.25rem; }
+
+.lc {
+  background: var(--p-panel);
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  padding: 1.15rem 1.2rem 1.3rem;
+}
+.lc__title {
+  font-size: 0.95rem;
+  letter-spacing: -0.015em;
+  color: var(--p-fg);
+}
+.lc__lead {
+  margin-top: 0.4rem;
+  max-width: 62ch;
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--p-faint);
+}
+
+.lc__field {
+  margin-top: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0 0.8rem;
+  background: var(--p-bg);
+  border: 1px solid var(--p-line-2);
+  border-radius: 7px;
+  transition: border-color 160ms ease;
+}
+.lc__field:focus-within { border-color: var(--p-accent); }
+.lc__field input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  padding: 0.55rem 0;
+  font-size: 0.8rem;
+  color: var(--p-fg);
+  font-family: inherit;
+}
+.lc__field input::placeholder { color: var(--p-faint); }
+
+.lc__tokens { margin-top: 0.5rem; font-size: 0.6rem; color: var(--p-faint); }
+
+.lc__tools {
+  margin-top: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.lc__sort {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.lc__sort select {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--p-line-2);
+  background: var(--p-bg);
+  color: var(--p-dim);
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.lc__stores {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.42rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid var(--p-line-2);
+  background: transparent;
+  color: var(--p-dim);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.lc__stores:hover { border-color: var(--p-accent); color: var(--p-fg); }
+
+.lc__range { margin-top: 0.7rem; font-size: 0.7rem; color: var(--p-dim); }
+.lc__range b { color: var(--p-good); font-weight: 500; }
+.lc__sep { color: var(--p-faint); }
+
+.lc__group {
+  margin-top: 1.15rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.7rem;
+  color: var(--p-dim);
+}
+.lc__group.is-best { color: var(--p-good); }
+.lc__group em { font-style: normal; color: var(--p-faint); }
+
+.lc__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
+  gap: 0.6rem;
+}
+
+/* --- Tarjeta de coincidencia --- */
+.lc__hit {
+  display: flex;
+  gap: 0.7rem;
+  min-width: 0;
+  text-align: left;
+  padding: 0.65rem;
+  border-radius: 9px;
+  border: 1px solid var(--p-line);
+  background: var(--p-bg);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.lc__hit:hover { border-color: var(--p-line-2); }
+.lc__hit.is-best {
+  border-color: color-mix(in oklab, var(--p-good) 32%, transparent);
+  background: color-mix(in oklab, var(--p-good) 6%, var(--p-bg));
+}
+.lc__hit.is-best:hover { border-color: color-mix(in oklab, var(--p-good) 52%, transparent); }
+
+.lc__thumb {
+  flex: 0 0 auto;
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 7px;
+  background: #fff;
+  overflow: hidden;
+  display: block;
+}
+.lc__thumb img { width: 100%; height: 100%; object-fit: contain; padding: 0.3rem; }
+
+.lc__hit-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.lc__hit-top {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.lc__hit-store {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--p-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc__hit-when { flex: 0 0 auto; font-size: 0.58rem; color: var(--p-faint); }
+
+.lc__hit-name {
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--p-fg);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lc__hit-cat {
+  margin-top: 0.2rem;
+  font-size: 0.6rem;
+  color: var(--p-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc__hit-foot {
+  margin-top: auto;
+  padding-top: 0.45rem;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+}
+.lc__hit-price {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--p-good);
+  white-space: nowrap;
+}
+.lc__hit-tags {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
+  min-width: 0;
+  font-size: 0.6rem;
+}
+.lc__hit-tags em { font-style: normal; color: var(--p-faint); white-space: nowrap; }
+.lc__hit-tags b { font-weight: 600; white-space: nowrap; }
+.lc__hit-tags b.is-up { color: var(--p-good); }
+.lc__hit-tags b.is-down { color: var(--p-ember); }

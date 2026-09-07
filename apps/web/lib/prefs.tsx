@@ -27,7 +27,7 @@ interface PrefsContextValue {
   setCurrency: (c: Currency) => void;
   withIva: boolean;
   setWithIva: (v: boolean) => void;
-  /** Incluir percepciones/IIBB. Independiente del IVA. Default: false. */
+  /** Incluir percepciones/IIBB. Independiente del IVA. Default: true. Offline nunca las suma. */
   withIibb: boolean;
   setWithIibb: (v: boolean) => void;
   dollarType: DollarType;
@@ -45,7 +45,7 @@ const PrefsContext = createContext<PrefsContextValue | null>(null);
 export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>("ARS");
   const [withIva, setWithIvaState] = useState<boolean>(true);
-  const [withIibb, setWithIibbState] = useState<boolean>(false);
+  const [withIibb, setWithIibbState] = useState<boolean>(true);
   const [dollarType, setDollarTypeState] = useState<DollarType>("oficial");
   const [rates, setRates] = useState<DollarRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);

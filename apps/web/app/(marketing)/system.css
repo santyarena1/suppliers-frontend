@@ -1,0 +1,221 @@
+/*
+ * Propuesta de sistema visual para la aplicación (modo Operate).
+ *
+ * Traduce el mundo de la landing a una herramienta de trabajo: mismo idioma de
+ * color, tipografía y detalle, pero sin lo que sirve para seducir y estorba
+ * para trabajar. Fuera: campo de partículas a sangre, grano de película, bloom,
+ * titulares a pantalla completa. Adentro: el fondo profundo, el violeta solo
+ * para acción, el ámbar solo para lo que importa, la mono para todo número, los
+ * paneles de línea fina y las superficies del navegador tematizadas.
+ *
+ * Todo va bajo `.sys` para poder convivir con el tema actual sin pisarlo.
+ */
+
+.sys {
+  /* Fondos: más claros que la landing, porque acá se pasan horas. */
+  --sys-bg: #0e1018;
+  --sys-panel: #151926;
+  --sys-raised: #1c2130;
+  --sys-sunken: #0a0c13;
+
+  /* Acción y marca */
+  --sys-accent: #6a6cf6;
+  --sys-accent-deep: #4033fc;
+
+  /* El acento cálido: solo baja de precio, mejor precio y alerta. */
+  --sys-ember: #ff6a3d;
+  /* Disponibilidad: dato funcional de la app, no decoración. */
+  --sys-stock: #35c98a;
+
+  /* Texto teñido del matiz del fondo, nunca gris neutro. */
+  --sys-fg: #e9edfa;
+  --sys-fg-dim: #a7b0cd;
+  --sys-fg-faint: #8b95b8;
+
+  --sys-hair: rgb(180 196 255 / 0.13);
+  --sys-hair-strong: rgb(180 196 255 / 0.26);
+
+  --sys-ease: cubic-bezier(0.23, 1, 0.32, 1);
+
+  background: var(--sys-bg);
+  color: var(--sys-fg);
+  font-family: var(--lnd-font-display), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Superficies del navegador: lo que más rápido delata un sistema de plantilla. */
+.sys ::selection { background: var(--sys-accent-deep); color: #fff; }
+.sys input, .sys textarea { caret-color: var(--sys-ember); }
+.sys :focus-visible { outline: 2px solid var(--sys-ember); outline-offset: 2px; border-radius: 3px; }
+.sys { scrollbar-color: var(--sys-raised) var(--sys-bg); scrollbar-width: thin; }
+.sys ::-webkit-scrollbar { width: 10px; height: 10px; }
+.sys ::-webkit-scrollbar-track { background: var(--sys-bg); }
+.sys ::-webkit-scrollbar-thumb {
+  background: var(--sys-raised);
+  border: 2px solid var(--sys-bg);
+  border-radius: 999px;
+}
+
+/* --- Tipografía --- */
+.sys-title {
+  font-family: var(--lnd-font-display), sans-serif;
+  font-variation-settings: "wdth" 82, "wght" 700;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+}
+.sys-label {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.17em;
+  color: var(--sys-fg-faint);
+}
+/* Todo número comparable va en mono con cifras de ancho fijo: es lo que deja
+   leer una columna de precios de un vistazo en vez de renglón por renglón. */
+.sys-num {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Panel: contenedor único del sistema --- */
+.sys-panel {
+  background: var(--sys-panel);
+  border: 1px solid var(--sys-hair);
+  border-radius: 10px;
+}
+.sys-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.1rem;
+  border-bottom: 1px solid var(--sys-hair);
+}
+
+/* --- Tarjeta de producto --- */
+.sys-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--sys-panel);
+  border: 1px solid var(--sys-hair);
+  border-radius: 12px;
+  overflow: hidden;
+  transition:
+    border-color 180ms var(--sys-ease),
+    transform 180ms var(--sys-ease),
+    box-shadow 180ms var(--sys-ease);
+}
+.sys-card:hover {
+  border-color: var(--sys-hair-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px -22px rgb(0 0 0 / 0.95);
+}
+.sys-card__shot {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: #f4f6fa;
+  overflow: hidden;
+}
+.sys-card__shot img {
+  transition: transform 420ms var(--sys-ease);
+}
+.sys-card:hover .sys-card__shot img { transform: scale(1.04); }
+
+/* Cinta de estado: una sola fila bajo la foto, en vez de pastillas apiladas
+   encima de ella tapando el producto. */
+.sys-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+.sys-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid var(--sys-hair);
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sys-fg-dim);
+  white-space: nowrap;
+}
+.sys-flag--ember { border-color: rgb(255 106 61 / 0.45); color: var(--sys-ember); }
+.sys-flag--stock { border-color: rgb(53 201 138 / 0.4); color: var(--sys-stock); }
+.sys-flag--off { color: var(--sys-fg-faint); opacity: 0.75; }
+.sys-flag--accent { border-color: rgb(106 108 246 / 0.45); color: var(--sys-accent); }
+
+/* --- Botón --- */
+.sys-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.sys-btn--primary {
+  background: var(--sys-accent-deep);
+  color: #fff;
+}
+.sys-btn--primary:hover { background: var(--sys-accent); }
+.sys-btn--ghost {
+  border-color: var(--sys-hair-strong);
+  color: var(--sys-fg);
+  background: transparent;
+}
+.sys-btn--ghost:hover { border-color: var(--sys-ember); color: var(--sys-ember); }
+.sys-icon-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  border: 1px solid var(--sys-hair);
+  background: var(--sys-raised);
+  color: var(--sys-fg-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
+}
+.sys-icon-btn:hover { border-color: var(--sys-accent); color: var(--sys-accent); }
+
+/* --- Entrada de la grilla: una sola vez, al cargar, no en cada scroll --- */
+@keyframes sysRise {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to { opacity: 1; transform: none; }
+}
+.sys-rise {
+  animation: sysRise 500ms var(--sys-ease) both;
+}
+
+/* --- Malla quieta: el recurso del mundo que sí sirve en una herramienta.
+   Estática, sin canvas ni rAF, solo en cabeceras. Nunca detrás de una tabla. --- */
+.sys-mesh {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    radial-gradient(circle at center, rgb(106 108 246 / 0.5) 0.8px, transparent 0.9px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(120% 130% at 88% 0%, #000 0%, transparent 62%);
+  -webkit-mask-image: radial-gradient(120% 130% at 88% 0%, #000 0%, transparent 62%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sys *, .sys *::before, .sys *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+  .sys-rise { animation: none; opacity: 1; transform: none; }
+}

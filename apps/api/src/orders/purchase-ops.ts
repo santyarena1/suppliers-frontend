@@ -4,7 +4,7 @@
  * en ProviderOrder; no inventa costos.
  */
 
-import { PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import { type Provider, providerLabel } from "@nodo/shared";
 import {
   suggestOpsMerges,
   resolveOpsAlias,
@@ -538,7 +538,7 @@ export function computeOpsInsights(orders: OrderOpsInput[], aliases?: OpsAliasIn
     shippingByProvider: [...providers.entries()]
       .map(([provider, row]) => ({
         provider,
-        label: PROVIDER_LABELS[provider as Provider] ?? provider,
+        label: providerLabel(provider as Provider) ?? provider,
         shippingUsd: row.shippingUsd,
         shippingArs: row.shippingArs,
         orders: row.orders,

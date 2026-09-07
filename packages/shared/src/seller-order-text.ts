@@ -1,3 +1,4 @@
+import { providerLabel } from "./providers";
 /**
  * Texto que se le manda al vendedor del distribuidor.
  * Parece un pedido: cantidades, IVA, internos, precios. Sin jerga interna
@@ -37,6 +38,7 @@ export function sellerOrderReference(now: Date): string {
 }
 
 export function providerDisplayName(provider: string): string {
+  if (provider.startsWith("LIST_")) return providerLabel(provider);
   return provider
     .split("_")
     .filter(Boolean)

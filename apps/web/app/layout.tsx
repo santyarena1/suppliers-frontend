@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./nodo-system.css";
+import "./nodo-home.css";
+import "./nodo-product.css";
+import { archivo, chivoMono } from "./(marketing)/fonts";
 import { PrefsProvider } from "@/lib/prefs";
 import { CartProvider } from "@/lib/cart";
 import { ResultsProvider } from "@/lib/results";
@@ -15,7 +19,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className="h-full" data-theme="soft" suppressHydrationWarning>
+    <html
+      lang="es"
+      className={`h-full ${archivo.variable} ${chivoMono.variable}`}
+      data-theme="soft"
+      suppressHydrationWarning
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{ __html: brandThemeBootScript() }}

@@ -591,8 +591,10 @@ export class RetailIngestService implements OnModuleInit {
     });
 
     // Solo últimos puntos de historial (el chart no necesita todo el archivo).
+    // Un punto cuyo precio normalizado da 0 es basura de la fuente: se saltea en
+    // vez de reventar el upsert con "numeric field overflow".
     const history = (product.historialPrecios ?? [])
-      .filter((h) => h?.id && h.precioActual != null)
+      .filter((h) => h?.id && h.precioActual != null && normalizeExternalPrice(h.precioActual, divisor) > 0)
       .slice(-8);
 
     if (history.length === 0) return;
@@ -607,22 +609,23 @@ export class RetailIngestService implements OnModuleInit {
         create: {
           productId: row.id,
           externalId: h.id,
-          previousPrice:
-            h.precioAnterior != null
-              ? new Prisma.Decimal(normalizeExternalPrice(h.precioAnterior, divisor))
-              : null,
+          previousPrice: previousPriceOrNull(h.precioAnterior, divisor),
           price: new Prisma.Decimal(normalizeExternalPrice(h.precioActual, divisor)),
           changedAt,
         },
         update: {
-          previousPrice:
-            h.precioAnterior != null
-              ? new Prisma.Decimal(normalizeExternalPrice(h.precioAnterior, divisor))
-              : null,
+          previousPrice: previousPriceOrNull(h.precioAnterior, divisor),
           price: new Prisma.Decimal(normalizeExternalPrice(h.precioActual, divisor)),
           changedAt,
         },
       });
     });
   }
+}
+
+/** Precio anterior de un punto de historial, o null si no vino o es basura (0). */
+function previousPriceOrNull(raw: unknown, divisor: number): Prisma.Decimal | null {
+  if (raw == null) return null;
+  const n = normalizeExternalPrice(raw, divisor);
+  return n > 0 ? new Prisma.Decimal(n) : null;
 }

@@ -135,10 +135,22 @@ export const assetsApi = {
 };
 
 // --- Types ---
-export type Provider =
-  | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE"
-  | "INVID" | "GC" | "POLYTECH" | "ASHIR" | "HDC"
-  | "SOLUTION_BOX" | "DISTECNA" | "CEVEN" | "DIAPSTORE";
+/**
+ * Clave de proveedor. Los 14 con integración están en ALL_PROVIDERS; los
+ * proveedores por lista (creados desde el panel) usan claves `LIST_<SLUG>`.
+ */
+export type Provider = string;
+
+export const LIST_PROVIDER_PREFIX = "LIST_";
+
+export function isListProvider(provider: string | null | undefined): boolean {
+  return typeof provider === "string" && provider.startsWith(LIST_PROVIDER_PREFIX);
+}
+
+export function isProviderKey(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return ALL_PROVIDERS.includes(value) || /^LIST_[A-Z0-9]+(?:_[A-Z0-9]+)*$/.test(value);
+}
 
 export const ALL_PROVIDERS: Provider[] = [
   "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE",
@@ -147,7 +159,7 @@ export const ALL_PROVIDERS: Provider[] = [
 ];
 
 /** Nombre comercial normalizado de cada proveedor. Es lo único que se muestra en pantalla. */
-export const PROVIDER_LABELS: Record<Provider, string> = {
+export const PROVIDER_LABELS: Record<string, string> = {
   NEW_BYTES: "New Bytes",
   ELIT: "Elit",
   GRUPO_NUCLEO: "Grupo Núcleo",
@@ -166,7 +178,7 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
 export const IMPLEMENTED_PROVIDERS: Provider[] = [
-  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE",
+  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX",
 ];
 
 export interface ProductDTO {
@@ -305,12 +317,18 @@ export interface VisibleProvider {
   linked: boolean;
   /** Aparece solo porque el distribuidor pagó publicidad. */
   advertised: boolean;
+  /** El comercio se conectó solo cargando su lista: sin vendedor ni chat hasta que el proveedor lo reconozca. */
+  selfConnected?: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
   linkId?: string | null;
   /** Pedido offline / esquema que configuró este comercio para el distribuidor. */
   purchase?: {
+    /** API o LIST: con LIST los precios salen de una planilla y el carrito arma un mensaje. */
+    priceChannel?: "API" | "LIST";
+    manualIibbPercent?: number | null;
+    manualPerceptionsPercent?: number | null;
     acceptsOffline: boolean;
     acceptsScheme: boolean;
     offlineIvaAdjustment: IvaAdjustment | null;
@@ -318,6 +336,45 @@ export interface VisibleProvider {
     schemeDiscountPercent: number | null;
   };
 }
+
+/** Fila del directorio de proveedores para conectarse por lista. */
+export interface SupplierSearchRow {
+  id: string;
+  name: string;
+  type: TenantType;
+  providerKey: Provider | null;
+  hasApi: boolean;
+  managedByPlatform: boolean;
+  linkStatus: TenantLinkStatus | null;
+}
+
+export const suppliersApi = {
+  search: (q: string, type?: "DISTRIBUTOR" | "BRAND") =>
+    api.get<SupplierSearchRow[]>("/my/suppliers/search", { params: { q: q || undefined, type } }),
+  connectByList: (tenantId: string) =>
+    api.post<{ linkId: string; status: TenantLinkStatus; provider: Provider; tenantName: string; tenantType: TenantType }>(
+      `/my/suppliers/${tenantId}/connect-by-list`
+    ),
+};
+
+export interface ProviderMergeCandidate {
+  id: string;
+  name: string;
+  type: TenantType;
+  providerKey: Provider;
+  managedByPlatform: boolean;
+  clients: number;
+  similar: { id: string; name: string; providerKey: Provider; type: TenantType }[];
+}
+
+export const providerMergeApi = {
+  candidates: () => api.get<ProviderMergeCandidate[]>("/admin/providers/merge-candidates"),
+  merge: (from: Provider, into: Provider) =>
+    api.post<{ from: Provider; into: Provider; moved: Record<string, number>; dropped: Record<string, number>; deletedTenantId: string | null }>(
+      "/admin/providers/merge",
+      { from, into }
+    ),
+};
 
 export interface RedeemedCode {
   linkId: string;
@@ -1034,9 +1091,15 @@ export function canSyncProvider(status?: ProviderStatus | null): boolean {
 export type MissingProductAction = "KEEP" | "OUT_OF_STOCK" | "HIDE" | "DELETE";
 export type ZeroStockAction = "KEEP" | "HIDE" | "DELETE";
 
+export type PriceChannel = "API" | "LIST";
+
 export interface ProviderConfig {
   provider: Provider;
   enabled: boolean;
+  /** API (credenciales + cron) o LIST (planillas que sube el comercio). */
+  priceChannel: PriceChannel;
+  manualIibbPercent: number | null;
+  manualPerceptionsPercent: number | null;
   syncIntervalMinutes: number;
   missingProductAction: MissingProductAction;
   zeroStockAction: ZeroStockAction;
@@ -1072,15 +1135,170 @@ export const providersApi = {
     api.post<{ provider: Provider; deleted: number }>(`/providers/${providerName}/clear-zero-stock`),
   deleteAllProducts: (providerName: Provider) =>
     api.delete<{ provider: Provider; deleted: number }>(`/providers/${providerName}/products`),
-  importFile: (providerName: Provider, file: File) => {
+};
+
+// --- Proveedores por lista: importación de planillas ---
+export type ListImportLevel = "BASE" | "TENANT";
+export type ListImportStatus = "PROCESSING" | "NEEDS_REVIEW" | "APPLIED" | "DISCARDED" | "REVERTED" | "FAILED";
+export type ImportNumberFormat = "DOT" | "COMMA";
+export type ImportDividerMeaning = "BRAND" | "CATEGORY" | "IGNORE";
+export type FreshnessStatus = "NONE" | "NO_CADENCE" | "OK" | "DUE_SOON" | "OVERDUE";
+
+export interface ListImportSummary {
+  created: number;
+  priceChanged: number;
+  unchanged: number;
+  missing: number;
+  withoutPrice: number;
+  issues: number;
+  normalized: number;
+  profileMatch: "EXACT" | "PARTIAL" | "PROPOSED" | "MANUAL";
+}
+
+export interface ListImportRecord {
+  id: string;
+  provider: Provider;
+  level: ListImportLevel;
+  status: ListImportStatus;
+  tenantId: string;
+  tenantName: string | null;
+  uploadedByUserId: string;
+  originalFileName: string;
+  profileId: string | null;
+  rowsTotal: number;
+  rowsData: number;
+  summary: ListImportSummary | null;
+  error: string | null;
+  createdAt: string;
+  appliedAt: string | null;
+  revertedAt: string | null;
+}
+
+export interface ListImportDiffItem {
+  externalId: string;
+  name: string;
+  price: number | null;
+}
+
+export interface ListImportPriceChange {
+  externalId: string;
+  name: string;
+  before: number | null;
+  after: number | null;
+  percent: number | null;
+}
+
+export interface ListImportPreview {
+  sheetCount: number;
+  sheets: { index: number; name: string; dataRows: number; headerRow: number | null }[];
+  sheetIndex: number;
+  headerRow: number | null;
+  headers: string[];
+  rows: (string | number | boolean | null)[][];
+  dividers: string[];
+}
+
+export interface ListImportDetail extends ListImportRecord {
+  diff: {
+    counts: { created: number; priceChanged: number; unchanged: number; missing: number; withoutPrice: number };
+    samples: { created: ListImportDiffItem[]; priceChanged: ListImportPriceChange[]; missing: ListImportDiffItem[] };
+    missingIds: string[];
+  } | null;
+  reviewReasons: string[] | null;
+  preview: ListImportPreview | null;
+  issues: { id: string; row: number; column: string | null; message: string }[];
+}
+
+export interface ImportProfileView {
+  id: string;
+  provider: Provider;
+  version: number;
+  status: "PROPOSED" | "ACTIVE" | "ARCHIVED";
+  fingerprint: string;
+  sheetIndex: number;
+  sheetName: string | null;
+  headerRow: number;
+  columnMap: Record<string, string | null>;
+  currency: string | null;
+  priceIncludesIva: boolean;
+  ivaPercent: number | null;
+  numberFormat: ImportNumberFormat;
+  dividerMeaning: ImportDividerMeaning;
+  sampleRows: { headers: string[]; rows: (string | number | boolean | null)[][] } | null;
+  proposedByAi: boolean;
+  aiReasoning: string | null;
+  createdAt: string;
+}
+
+export interface ImportProfileSpecInput {
+  sheetIndex?: number;
+  headerRow?: number;
+  columnMap: Record<string, string | null>;
+  currency?: string | null;
+  priceIncludesIva?: boolean;
+  ivaPercent?: number | null;
+  numberFormat?: ImportNumberFormat;
+  dividerMeaning?: ImportDividerMeaning;
+  reprocessImportId?: string;
+}
+
+export interface ImportProfileBundle {
+  fields: string[];
+  active: ImportProfileView | null;
+  proposed: ImportProfileView | null;
+  latestImport: { id: string; status: ListImportStatus; preview: ListImportPreview | null; originalFileName: string; createdAt: string } | null;
+}
+
+export interface ListFreshness {
+  provider: Provider;
+  listUpdateDays: number | null;
+  lastImportAt: string | null;
+  lastImportLevel: ListImportLevel | null;
+  expectedAt: string | null;
+  status: FreshnessStatus;
+}
+
+export interface CreatedListProvider {
+  id: string;
+  name: string;
+  type: TenantType;
+  providerKey: Provider;
+  listUpdateDays: number | null;
+}
+
+export const listImportsApi = {
+  createProvider: (data: {
+    name: string;
+    type: "DISTRIBUTOR" | "BRAND";
+    listUpdateDays?: number | null;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    notes?: string | null;
+    config?: Partial<ProviderConfig>;
+  }) => api.post<CreatedListProvider>("/providers", data),
+  enableOwnList: (data: { listUpdateDays?: number | null }) =>
+    api.post<CreatedListProvider>("/providers/enable-own-list", data),
+  upload: (provider: Provider, file: File) => {
     const form = new FormData();
     form.append("file", file);
-    return api.post<ProviderSyncResult & { rowsInFile: number; rowsSkipped: number; unmappedColumns: string[] }>(
-      `/providers/${providerName}/import`,
-      form,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
+    return api.post<ListImportRecord>(`/providers/${provider}/imports`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
   },
+  list: (provider: Provider) => api.get<ListImportRecord[]>(`/providers/${provider}/imports`),
+  reprocessLatest: (provider: Provider) => api.post<ListImportRecord>(`/providers/${provider}/imports/reprocess-latest`),
+  get: (provider: Provider, id: string) => api.get<ListImportDetail>(`/providers/${provider}/imports/${id}`),
+  apply: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/apply`),
+  discard: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/discard`),
+  revert: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/revert`),
+  profile: (provider: Provider) => api.get<ImportProfileBundle>(`/providers/${provider}/import-profile`),
+  saveProfile: (provider: Provider, spec: ImportProfileSpecInput) =>
+    api.put<ImportProfileView>(`/providers/${provider}/import-profile`, spec),
+  suggestProfile: (provider: Provider, sheetIndex?: number) =>
+    api.post<{ spec: Required<Omit<ImportProfileSpecInput, "reprocessImportId">>; fromAi: boolean; reasoning: string; headers: string[] }>(
+      `/providers/${provider}/import-profile/suggest${sheetIndex === undefined ? "" : `?sheet=${sheetIndex}`}`
+    ),
+  freshness: (provider: Provider) => api.get<ListFreshness>(`/providers/${provider}/freshness`),
 };
 
 // --- Invid: pedidos y cuenta corriente (solo lectura, datos reales de su portal) ---
@@ -1844,6 +2062,194 @@ export const elitCheckoutApi = {
   draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/ELIT/drafts/${id}`),
 };
 
+// --- New Tree (portal newtree.com.ar) ---
+export interface NewTreeCheckoutPreview {
+  items: {
+    code: string;
+    qty: number;
+    name: string;
+    price: number | null;
+    finalPrice: number | null;
+    subtotal: number | null;
+    error: string | null;
+  }[];
+  itemCount: number;
+  subtotal: number;
+  vat: number;
+  interest: number;
+  discount: number;
+  perceptions: number;
+  total: number;
+  currency: string;
+  deliveryAddress: string | null;
+  stockOk: boolean;
+  note: string;
+}
+
+export interface NewTreeDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export type NewTreeCheckoutPayload = {
+  items: { code: string; qty: number; name?: string }[];
+  deliveryAddress?: string;
+  notes?: string;
+};
+
+export const newTreeCheckoutApi = {
+  preview: (body: NewTreeCheckoutPayload) =>
+    api.post<NewTreeCheckoutPreview>("/providers/NEW_TREE/checkout/preview", body),
+  draft: (body: NewTreeCheckoutPayload & { background?: boolean }) =>
+    api.post<NewTreeDraftResult>("/providers/NEW_TREE/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/NEW_TREE/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/NEW_TREE/drafts/${id}`),
+};
+
+export interface NewTreeBalance {
+  currency: string;
+  total: number | null;
+  overdue: number | null;
+  toExpire: number | null;
+}
+
+export interface NewTreeMovement {
+  date: string;
+  form: string;
+  number: string;
+  voucher: string;
+  dueDate: string;
+  currency: string | null;
+  debit: number | null;
+  credit: number | null;
+  documentToken: string | null;
+}
+
+export interface NewTreePortalOrder {
+  id: string;
+  date: string;
+  status: string;
+  origin: string;
+  currency: string | null;
+  amount: number | null;
+  detailUrl: string | null;
+}
+
+export const newTreeAccountApi = {
+  account: (opts?: { refresh?: boolean; from?: string; to?: string }) =>
+    api.get<{
+      profile: { id: string; salesTermsId: string | null; priceListId: string | null };
+      range: { from: string; to: string };
+      balance: NewTreeBalance;
+      movements: NewTreeMovement[];
+      invoices: NewTreeMovement[];
+      orders: NewTreePortalOrder[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/NEW_TREE/account", {
+      params: {
+        ...(opts?.refresh ? { refresh: 1 } : {}),
+        ...(opts?.from ? { from: opts.from } : {}),
+        ...(opts?.to ? { to: opts.to } : {}),
+      },
+    }),
+};
+
+// --- Solution Box (API interna de solutionbox.com.ar) ---
+export interface SolutionBoxCheckoutPreview {
+  items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
+  paymentConditions: { value: string; label: string }[];
+  paymentCondition: string | null;
+  paymentLabel: string | null;
+  deliveryTypes: { value: string; label: string }[];
+  deliveryType: string;
+  deliveryLabel: string;
+  deliveryAddress: string | null;
+  subtotal: number;
+  vat: number;
+  internalTax: number;
+  perceptions: number;
+  perceptionLines: { label: string; amount: number }[];
+  shippingCost: number;
+  total: number;
+  totalArs: number | null;
+  exchange: number | null;
+  currency: string;
+  stockOk: boolean;
+  note: string;
+}
+
+export interface SolutionBoxDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export type SolutionBoxCheckoutPayload = {
+  items: { code: string; qty: number; name?: string }[];
+  paymentCondition?: string;
+  deliveryType?: string;
+};
+
+export const solutionBoxCheckoutApi = {
+  preview: (body: SolutionBoxCheckoutPayload) =>
+    api.post<SolutionBoxCheckoutPreview>("/providers/SOLUTION_BOX/checkout/preview", body),
+  draft: (body: SolutionBoxCheckoutPayload & { background?: boolean }) =>
+    api.post<SolutionBoxDraftResult>("/providers/SOLUTION_BOX/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/SOLUTION_BOX/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/SOLUTION_BOX/drafts/${id}`),
+};
+
+export interface SolutionBoxOrder {
+  number: string;
+  extension: string;
+  date: string;
+  seller: string;
+  paymentCondition: string;
+  amount: number | null;
+  currency: string | null;
+  exchange: number | null;
+  invoice: string | null;
+  status: string;
+  items: { code: string; qty: number; price: number | null; currency: string | null }[];
+}
+
+export const solutionBoxAccountApi = {
+  account: (opts?: { refresh?: boolean }) =>
+    api.get<{
+      profile: {
+        id: string;
+        name: string;
+        email: string;
+        cuit: string;
+        exchange: number | null;
+        paymentCondition: string | null;
+        deliveryType: string | null;
+      };
+      orders: SolutionBoxOrder[];
+      invoices: SolutionBoxOrder[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/SOLUTION_BOX/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
+  order: (number: string, ext: string) =>
+    api.get<SolutionBoxOrder>(`/providers/SOLUTION_BOX/orders/${encodeURIComponent(number)}/${encodeURIComponent(ext)}`),
+};
+
 // --- Admin / Users ---
 export const userApi = {
   updateActiveStatus: (userId: string, active: boolean) =>
@@ -1894,12 +2300,13 @@ export const catalogApi = {
         ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
       },
     }),
-  byBrand: (brand: string, take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
+  byBrand: (brand: string, take = 60, opts: { includeOutOfStock?: boolean; providers?: string[] } = {}) =>
     api.get<ProductDTO[]>("/catalog/by-brand", {
       params: {
         brand,
         take,
         ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+        ...(opts.providers?.length ? { providers: opts.providers.join(",") } : {}),
       },
     }),
   providerDisplay: () => api.get<ProviderDisplay[]>("/catalog/provider-display"),
@@ -2262,6 +2669,22 @@ export interface CatalogMergeCluster {
   members: { provider: string; rawKey: string; count: number }[];
 }
 
+export interface BrandSuggestion {
+  brand: string;
+  normalized: string;
+  count: number;
+  score: number;
+  known: boolean;
+  externalIds: string[];
+  sampleNames: string[];
+  aiConfirmed: boolean | null;
+}
+
+export interface BrandSuggestionsResponse {
+  providers: { provider: string; missingCount: number; usedAi: boolean; suggestions: BrandSuggestion[] }[];
+  totalMissing: number;
+}
+
 export const catalogEnrichmentApi = {
   overview: () => api.get<CatalogEnrichmentOverview>("/admin/catalog-enrichment/overview"),
   board: (kind: CatalogAliasKind) =>
@@ -2316,8 +2739,10 @@ export const catalogEnrichmentApi = {
     rawKey: string;
     visible: boolean;
   }) => api.post("/admin/catalog-enrichment/visibility", data),
-  incomplete: (params?: { limit?: number; offset?: number; q?: string }) =>
-    api.get<{ items: CatalogIncompleteProduct[]; total: number; limit: number; offset: number }>(
+  aiAutoComplete: (data: { provider: string; externalIds?: string[] }) =>
+    api.post<{ completed: number; considered: number; usedAi: boolean }>("/admin/catalog-enrichment/ai/auto-complete", data),
+  incomplete: (params?: { limit?: number; offset?: number; q?: string; provider?: string }) =>
+    api.get<{ items: CatalogIncompleteProduct[]; total: number; limit: number; offset: number; byProvider?: { provider: string; count: number }[] }>(
       "/admin/catalog-enrichment/incomplete",
       { params }
     ),
@@ -2348,6 +2773,17 @@ export const catalogEnrichmentApi = {
     }>("/admin/catalog-enrichment/ai/suggest-merges", { excludeKeys: opts?.excludeKeys ?? [] }, {
       params: { kind, offset: opts?.offset ?? 0 },
     }),
+  brandSuggestions: (params?: { provider?: string; ai?: boolean }) =>
+    api.get<BrandSuggestionsResponse>("/admin/catalog-enrichment/brand-suggestions", {
+      params: { provider: params?.provider || undefined, ai: params?.ai ? "1" : undefined },
+    }),
+  applyBrandSuggestion: (data: { provider: string; brand: string; externalIds?: string[]; source?: "MANUAL" | "AUTO" | "AI" }) =>
+    api.post<{ brand: string; termId?: string; updated: number }>("/admin/catalog-enrichment/brand-suggestions/apply", data),
+  aiProductHints: (items: { provider: string; externalId: string }[]) =>
+    api.post<{
+      usedAi: boolean;
+      items: { provider: string; externalId: string; displayBrand: string | null; displayCategory: string | null; displaySubcategory: string | null; source: string }[];
+    }>("/admin/catalog-enrichment/ai/product-hints", { items }),
   aiProductHint: (provider: string, externalId: string) =>
     api.get<{
       displayBrand: string | null;
@@ -2486,7 +2922,7 @@ export type TenantRole =
   | "COMMERCIAL"
   | "VIEWER";
 
-export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED";
+export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "LIST_CONNECTED";
 
 export const TENANT_TYPE_LABELS: Record<TenantType, string> = {
   RETAILER: "Comercio",
@@ -2521,6 +2957,7 @@ export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   ACTIVE: "Activo",
   SUSPENDED: "Suspendido",
   REVOKED: "Revocado",
+  LIST_CONNECTED: "Conectado por lista",
 };
 
 export interface TenantMember {
@@ -2625,6 +3062,7 @@ export const tenantsApi = {
       notes: string | null;
       advertisingEnabled: boolean;
       active: boolean;
+      listUpdateDays: number | null;
     }>
   ) => api.put<TenantNode>(`/admin/tenants/${id}`, data),
   remove: (id: string) => api.delete(`/admin/tenants/${id}`),

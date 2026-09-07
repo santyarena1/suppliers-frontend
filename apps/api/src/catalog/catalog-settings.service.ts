@@ -56,7 +56,14 @@ export class CatalogSettingsService implements OnModuleInit {
     return { hasOpenAiKey: Boolean(this.config.get<string>("OPENAI_API_KEY")?.trim()) };
   }
 
+  /**
+   * La variable de entorno del deploy manda: es la que administra quien opera la
+   * infraestructura y no depende de lo que haya quedado guardado en el panel (una
+   * clave vieja ahí no puede tapar a la vigente). Sin variable, se usa la del panel.
+   */
   async readOpenAiKey(): Promise<string | null> {
+    const env = this.config.get<string>("OPENAI_API_KEY")?.trim();
+    if (env && env.length >= 8) return env;
     const row = await this.prisma.catalogEnrichmentSettings.findUnique({ where: { id: SETTINGS_ID } });
     if (row?.openAiApiKeyEncrypted) {
       try {
@@ -65,7 +72,6 @@ export class CatalogSettingsService implements OnModuleInit {
         throw new BadRequestException("No se pudo leer la API key de OpenAI. Volvé a guardarla.");
       }
     }
-    const env = this.config.get<string>("OPENAI_API_KEY")?.trim();
-    return env && env.length >= 8 ? env : null;
+    return null;
   }
 }

@@ -468,7 +468,7 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
               Solo los ve un comercio vinculado. Si no hay vínculo, el chip no aparece.
             </p>
             {draft.relatedSkus.map((sku, i) => (
-              <div key={`${sku.provider}-${sku.externalId}-${i}`} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 mb-2">
+              <div key={`${sku.provider}-${sku.externalId}-${i}`} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 mb-2">
                 <input
                   className={`${field} text-sm`}
                   placeholder="Nombre"

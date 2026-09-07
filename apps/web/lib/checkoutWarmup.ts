@@ -17,10 +17,14 @@ import {
   type NewBytesCheckoutPreview,
   type NewBytesPaymentOption,
   type ProviderOption,
+  newTreeCheckoutApi,
+  type NewTreeCheckoutPreview,
+  solutionBoxCheckoutApi,
+  type SolutionBoxCheckoutPreview,
 } from "@/lib/api";
 import { getToken, isTokenExpired } from "@/lib/auth";
 
-export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR"] as const;
+export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX"] as const;
 export type WarmProvider = (typeof WARM_PROVIDERS)[number];
 
 export type CartLine = { code: string; qty: number; name?: string };
@@ -52,6 +56,10 @@ export type NewBytesWarmData = {
 
 export type ElitWarmData = { preview: ElitCheckoutPreview };
 
+export type NewTreeWarmData = { preview: NewTreeCheckoutPreview };
+
+export type SolutionBoxWarmData = { preview: SolutionBoxCheckoutPreview };
+
 export type GnWarmData = {
   preview: GnCheckoutPreview;
   provinces: { value: number; label: string }[];
@@ -75,6 +83,8 @@ type WarmDataMap = {
   INVID: InvidWarmData;
   NEW_BYTES: NewBytesWarmData;
   ELIT: ElitWarmData;
+  NEW_TREE: NewTreeWarmData;
+  SOLUTION_BOX: SolutionBoxWarmData;
   GRUPO_NUCLEO: GnWarmData;
   AIR: AirWarmData;
 };
@@ -175,6 +185,16 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
   if (provider === "ELIT") {
     const preview = (await elitCheckoutApi.preview({ items })).data;
     return { preview } satisfies ElitWarmData;
+  }
+
+  if (provider === "NEW_TREE") {
+    const preview = (await newTreeCheckoutApi.preview({ items })).data;
+    return { preview } satisfies NewTreeWarmData;
+  }
+
+  if (provider === "SOLUTION_BOX") {
+    const preview = (await solutionBoxCheckoutApi.preview({ items })).data;
+    return { preview } satisfies SolutionBoxWarmData;
   }
 
   if (provider === "GRUPO_NUCLEO") {

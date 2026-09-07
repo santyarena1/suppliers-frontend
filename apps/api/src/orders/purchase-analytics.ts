@@ -5,7 +5,7 @@
  * `tenantId`. No hay agregados globales ni cruce entre locales.
  */
 
-import { PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import { providerLabel as sharedProviderLabel } from "@nodo/shared";
 import { computeOpsInsights, type OpsInsights } from "./purchase-ops";
 
 export const COUNTED_ORDER_STATUSES = ["CREATED", "OFFLINE"] as const;
@@ -219,8 +219,8 @@ export function purchaseChannel(order: { status: string; channel?: string | null
   return "ONLINE";
 }
 
-export function providerLabel(provider: string) {
-  return PROVIDER_LABELS[provider as Provider] ?? provider;
+export function providerLabel(provider: string): string {
+  return sharedProviderLabel(provider);
 }
 
 function asNum(value: unknown): number {

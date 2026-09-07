@@ -34,12 +34,18 @@ export default function IncompleteTab({
   const [offset, setOffset] = useState(0);
   const [q, setQ] = useState("");
   const [missing, setMissing] = useState<MissingFilter>("all");
+  const [provider, setProvider] = useState("");
+  const [byProvider, setByProvider] = useState<{ provider: string; count: number }[]>([]);
+  const [autoBusy, setAutoBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<
     Record<string, { brand: string; category: string; subcategory: string }>
   >({});
   const [extraBrands, setExtraBrands] = useState<LabelChoice[]>([]);
+  const [aiKeys, setAiKeys] = useState<Set<string>>(new Set());
+  const [aiBusy, setAiBusy] = useState(false);
+  const [savingAll, setSavingAll] = useState(false);
   const [extraCats, setExtraCats] = useState<LabelChoice[]>([]);
   const limit = 30;
 
@@ -52,7 +58,7 @@ export default function IncompleteTab({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await catalogEnrichmentApi.incomplete({ limit, offset, q: q || undefined });
+      const res = await catalogEnrichmentApi.incomplete({ limit, offset, q: q || undefined , provider: provider || undefined });
       setItems(res.data.items);
       setTotal(res.data.total);
       const next: Record<string, { brand: string; category: string; subcategory: string }> = {};
@@ -70,7 +76,7 @@ export default function IncompleteTab({
     } finally {
       setLoading(false);
     }
-  }, [offset, q, showToast]);
+  }, [offset, q, provider, showToast]);
 
   useEffect(() => {
     void load();
@@ -122,6 +128,91 @@ export default function IncompleteTab({
       showToast("No se pudo guardar", false);
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** Cierra con IA todo lo incompleto del proveedor elegido, sin revisión: solo marcas y categorías ya conocidas. */
+  async function autoComplete() {
+    if (!provider) return;
+    setAutoBusy(true);
+    try {
+      const res = await catalogEnrichmentApi.aiAutoComplete({ provider });
+      showToast(
+        res.data.completed
+          ? `${res.data.completed} de ${res.data.considered} completados${res.data.usedAi ? "" : " (heurística, sin IA)"}. Lo que queda necesita una marca o categoría nueva.`
+          : "La IA no pudo cerrar ninguno con lo que ya existe: revisalos abajo o creá la marca desde Marcas faltantes.",
+        res.data.completed > 0
+      );
+      await load();
+      await onChanged();
+    } catch {
+      showToast("No se pudo autocompletar", false);
+    } finally {
+      setAutoBusy(false);
+    }
+  }
+
+  /** IA para toda la página: una llamada por tanda, deja las sugerencias cargadas para revisar. */
+  async function suggestAiPage() {
+    if (visible.length === 0) return;
+    setAiBusy(true);
+    try {
+      const res = await catalogEnrichmentApi.aiProductHints(visible.map((p) => ({ provider: p.provider, externalId: p.externalId })));
+      const next = { ...drafts };
+      const keys = new Set(aiKeys);
+      let filled = 0;
+      for (const h of res.data.items) {
+        const key = `${h.provider}:${h.externalId}`;
+        const p = visible.find((v) => v.provider === h.provider && v.externalId === h.externalId);
+        if (!p) continue;
+        const brand = p.missingBrand ? h.displayBrand ?? "" : next[key]?.brand ?? "";
+        const category = p.missingCategory ? h.displayCategory ?? "" : next[key]?.category ?? "";
+        const subcategory = h.displaySubcategory ?? next[key]?.subcategory ?? "";
+        if (!brand && !category && !subcategory) continue;
+        next[key] = { brand, category, subcategory };
+        keys.add(key);
+        filled++;
+      }
+      setDrafts(next);
+      setAiKeys(keys);
+      showToast(filled ? `${filled} sugerencias listas para revisar${res.data.usedAi ? "" : " (heurística, sin IA)"}` : "La IA no encontró nada claro", filled > 0);
+    } catch {
+      showToast("No se pudieron pedir sugerencias", false);
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  /** Guarda todas las filas de la página que tienen sugerencia cargada. */
+  async function saveSuggested() {
+    const targets = visible.filter((p) => {
+      const d = drafts[`${p.provider}:${p.externalId}`];
+      return aiKeys.has(`${p.provider}:${p.externalId}`) && d && (d.brand || d.category);
+    });
+    if (targets.length === 0) return;
+    setSavingAll(true);
+    let ok = 0;
+    try {
+      for (const p of targets) {
+        const d = drafts[`${p.provider}:${p.externalId}`];
+        await catalogEnrichmentApi.assignProduct({
+          provider: p.provider,
+          externalId: p.externalId,
+          displayBrand: d.brand || null,
+          displayCategory: d.category || null,
+          displaySubcategory: d.subcategory || null,
+          source: "AI",
+        });
+        ok++;
+      }
+      showToast(`${ok} productos completados`);
+      setAiKeys(new Set());
+      await load();
+      await onChanged();
+    } catch {
+      showToast(`Se guardaron ${ok}; el resto falló`, false);
+    } finally {
+      setSavingAll(false);
     }
   }
 
@@ -186,7 +277,55 @@ export default function IncompleteTab({
             </button>
           ))}
         </div>
+        <select
+          value={provider}
+          onChange={(e) => {
+            setOffset(0);
+            setProvider(e.target.value);
+          }}
+          className="bg-surface-900 border border-surface-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+        >
+          <option value="">Todos los proveedores</option>
+          {byProvider.map((b) => (
+            <option key={b.provider} value={b.provider}>{providerName(b.provider)} ({b.count})</option>
+          ))}
+        </select>
         <p className="text-xs text-surface-500">{total} en total</p>
+        <div className="flex items-center gap-2">
+          {provider && (
+            <button
+              type="button"
+              onClick={() => void autoComplete()}
+              disabled={autoBusy || loading}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-lg px-3 py-1.5"
+              title="Completa con IA todo lo incompleto de este proveedor usando solo marcas y categorías ya conocidas"
+            >
+              {autoBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Completar {providerName(provider)} con IA
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void suggestAiPage()}
+            disabled={aiBusy || loading || visible.length === 0}
+            className="flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-brand-500 text-surface-200 rounded-lg px-3 py-1.5 disabled:opacity-50"
+            title="Pide a la IA marca, categoría y subcategoría para todos los productos de esta página"
+          >
+            {aiBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-brand-400" />}
+            Sugerir con IA (página)
+          </button>
+          {aiKeys.size > 0 && (
+            <button
+              type="button"
+              onClick={() => void saveSuggested()}
+              disabled={savingAll}
+              className="flex items-center gap-1.5 text-xs font-semibold bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-lg px-3 py-1.5"
+            >
+              {savingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Guardar sugeridas ({aiKeys.size})
+            </button>
+          )}
+        </div>
       </div>
 
       <section className="rounded-xl border border-surface-800 overflow-hidden">
@@ -225,6 +364,11 @@ export default function IncompleteTab({
                       {p.missingCategory && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">
                           sin categoría
+                        </span>
+                      )}
+                      {aiKeys.has(key) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/15 text-brand-300">
+                          sugerido por IA
                         </span>
                       )}
                     </div>

@@ -8,6 +8,6 @@ import { CatalogSettingsService } from "./catalog-settings.service";
 @Module({
   imports: [CryptoModule, forwardRef(() => BrandsModule)],
   providers: [CatalogEnrichmentService, CatalogAiService, CatalogSettingsService],
-  exports: [CatalogEnrichmentService, CatalogSettingsService],
+  exports: [CatalogEnrichmentService, CatalogSettingsService, CatalogAiService],
 })
 export class CatalogModule {}

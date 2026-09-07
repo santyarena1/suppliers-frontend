@@ -6,9 +6,12 @@ import {
   TENANT_ROLES_BY_TYPE,
   TENANT_ROLES_CAN_MANAGE_PORTFOLIO,
   TENANT_ROLES_CAN_MANAGE_TEAM,
+  isKnownProvider,
+  makeListProviderKey,
   type TenantRole,
   type TenantType,
 } from "@nodo/shared";
+import { domainEvents } from "../common/events/domain-events";
 import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -22,7 +25,7 @@ import {
   UpdateTenantDto,
   UpsertLinkDto,
 } from "./dto/tenant.dto";
-import type { TenantContext } from "./tenant-context.service";
+import { commercialId, type TenantContext } from "./tenant-context.service";
 import { tenantLinkAllowed, tenantLinkRejection } from "./link-sides";
 
 const MEMBERSHIP_INCLUDE = {
@@ -203,9 +206,164 @@ export class TenantsService {
         contactPhone: dto.contactPhone ?? null,
         notes: dto.notes ?? null,
         advertisingEnabled: dto.advertisingEnabled ?? false,
+        listUpdateDays: dto.listUpdateDays ?? null,
       },
       include: TENANT_INCLUDE,
     });
+  }
+
+  // ---------- Proveedores por lista ----------
+
+  /**
+   * Crea un distribuidor o marca que no tiene integración: su catálogo va a entrar
+   * por planillas. La clave de proveedor se genera a partir del nombre y no cambia
+   * más, porque es lo que referencian fichas, ofertas e historial.
+   */
+  async createListProvider(params: {
+    name: string;
+    type: Extract<TenantType, "DISTRIBUTOR" | "BRAND">;
+    listUpdateDays?: number | null;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    notes?: string | null;
+    /** Lo creó un comercio, no el proveedor ni el superadmin: queda gestionado por la plataforma. */
+    managedByPlatform: boolean;
+  }) {
+    const name = params.name.trim();
+    await this.assertTenantNameFree(name);
+    const providerKey = await this.freeListProviderKey(name);
+    return this.prisma.tenant.create({
+      data: {
+        name,
+        type: params.type,
+        providerKey,
+        listUpdateDays: params.listUpdateDays ?? null,
+        contactEmail: params.contactEmail ?? null,
+        contactPhone: params.contactPhone ?? null,
+        notes: params.notes ?? null,
+        managedByPlatform: params.managedByPlatform,
+      },
+      include: TENANT_INCLUDE,
+    });
+  }
+
+  /**
+   * Un distribuidor o marca que ya existe como organización (por ejemplo, entró
+   * con código) y todavía no tiene catálogo: le asigna una clave de proveedor por
+   * lista para que pueda subir planillas.
+   */
+  async enableOwnListProvider(tenantId: string, listUpdateDays?: number | null) {
+    const tenant = await this.assertTenantExists(tenantId);
+    if (tenant.type === "RETAILER") {
+      throw new BadRequestException("Un comercio no publica catálogo: creá el proveedor desde Proveedores");
+    }
+    if (tenant.providerKey) {
+      if (listUpdateDays !== undefined) {
+        return this.prisma.tenant.update({ where: { id: tenantId }, data: { listUpdateDays }, include: TENANT_INCLUDE });
+      }
+      return this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, include: TENANT_INCLUDE });
+    }
+    const providerKey = await this.freeListProviderKey(tenant.name);
+    return this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { providerKey, listUpdateDays: listUpdateDays ?? null },
+      include: TENANT_INCLUDE,
+    });
+  }
+
+  /**
+   * Directorio de distribuidores y marcas para que un comercio se conecte por
+   * lista sin crear duplicados: busca por nombre y dice si ya está vinculado y si
+   * tiene integración por API.
+   */
+  async searchSuppliers(tenant: TenantContext, q: string | undefined, type?: "DISTRIBUTOR" | "BRAND") {
+    if (tenant.tenantType !== "RETAILER") {
+      throw new ForbiddenException("Solo un comercio busca proveedores para conectarse");
+    }
+    const query = (q ?? "").trim();
+    const rows = await this.prisma.tenant.findMany({
+      where: {
+        active: true,
+        type: type ? type : { in: ["DISTRIBUTOR", "BRAND"] },
+        ...(query ? { name: { contains: query, mode: "insensitive" } } : {}),
+      },
+      select: { id: true, name: true, type: true, providerKey: true, managedByPlatform: true },
+      orderBy: { name: "asc" },
+      take: 30,
+    });
+    const links = await this.prisma.tenantLink.findMany({
+      where: { clientTenantId: commercialId(tenant), supplierTenantId: { in: rows.map((r) => r.id) } },
+      select: { supplierTenantId: true, status: true },
+    });
+    const linkByTenant = new Map(links.map((l) => [l.supplierTenantId, l.status]));
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      providerKey: r.providerKey,
+      hasApi: Boolean(r.providerKey && isKnownProvider(r.providerKey)),
+      managedByPlatform: r.managedByPlatform,
+      linkStatus: linkByTenant.get(r.id) ?? null,
+    }));
+  }
+
+  /**
+   * El comercio se conecta solo con un proveedor existente para cargarle su propia
+   * lista. No pide permiso: usa sus propios datos. Queda "conectado por lista",
+   * sin vendedor ni chat hasta que el proveedor lo reconozca. Si ya había vínculo
+   * activo, solo cambia el canal de precios a LIST.
+   */
+  async connectByList(tenant: TenantContext, supplierTenantId: string) {
+    if (tenant.tenantType !== "RETAILER") {
+      throw new ForbiddenException("Solo un comercio se conecta por lista");
+    }
+    const clientTenantId = commercialId(tenant);
+    const supplier = await this.assertTenantExists(supplierTenantId);
+    if (supplier.id === clientTenantId) throw new BadRequestException("Una organización no puede vincularse consigo misma");
+    const linkError = tenantLinkRejection(tenant.tenantType, supplier.type);
+    if (linkError) throw new BadRequestException(linkError);
+
+    let providerKey = supplier.providerKey;
+    if (!providerKey) {
+      providerKey = await this.freeListProviderKey(supplier.name);
+      await this.prisma.tenant.update({ where: { id: supplier.id }, data: { providerKey } });
+    }
+
+    const existing = await this.prisma.tenantLink.findUnique({
+      where: { clientTenantId_supplierTenantId: { clientTenantId, supplierTenantId: supplier.id } },
+    });
+    const link = existing
+      ? existing.status === "ACTIVE" || existing.status === "SUSPENDED"
+        ? existing
+        : await this.prisma.tenantLink.update({ where: { id: existing.id }, data: { status: "LIST_CONNECTED" } })
+      : await this.prisma.tenantLink.create({
+          data: { clientTenantId, supplierTenantId: supplier.id, status: "LIST_CONNECTED" },
+        });
+
+    await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId: clientTenantId, provider: providerKey } },
+      create: { tenantId: clientTenantId, provider: providerKey, priceChannel: "LIST", enabled: false },
+      update: { priceChannel: "LIST" },
+    });
+    domainEvents.emit("tenant.linked", { clientTenantId, supplierTenantId: supplier.id, provider: providerKey });
+    return { linkId: link.id, status: link.status, provider: providerKey, tenantName: supplier.name, tenantType: supplier.type };
+  }
+
+  /** Clave `LIST_<SLUG>` libre: si el slug ya está tomado, agrega un sufijo numérico. */
+  private async freeListProviderKey(name: string): Promise<string> {
+    const base = makeListProviderKey(name);
+    if (!base) throw new BadRequestException("El nombre no sirve para generar una clave de proveedor");
+    const taken = await this.prisma.tenant.findMany({
+      where: { providerKey: { startsWith: base } },
+      select: { providerKey: true },
+    });
+    const used = new Set(taken.map((t) => t.providerKey));
+    if (!used.has(base)) return base;
+    for (let n = 2; n < 1000; n++) {
+      const candidate = `${base}_${n}`;
+      if (!used.has(candidate)) return candidate;
+    }
+    throw new ConflictException("No se pudo generar una clave de proveedor libre");
   }
 
   async updateTenant(tenantId: string, dto: UpdateTenantDto) {
@@ -237,6 +395,7 @@ export class TenantsService {
         ...(dto.advertisingEnabled === undefined ? {} : { advertisingEnabled: dto.advertisingEnabled }),
         ...(dto.active === undefined ? {} : { active: dto.active }),
         ...(dto.mirrorsCommercialFromId === undefined ? {} : { mirrorsCommercialFromId: dto.mirrorsCommercialFromId }),
+        ...(dto.listUpdateDays === undefined ? {} : { listUpdateDays: dto.listUpdateDays }),
       },
       include: TENANT_INCLUDE,
     });
@@ -381,7 +540,7 @@ export class TenantsService {
       notes: dto.notes ?? null,
     };
 
-    return this.prisma.tenantLink.upsert({
+    const link = await this.prisma.tenantLink.upsert({
       where: {
         clientTenantId_supplierTenantId: {
           clientTenantId: dto.clientTenantId,
@@ -396,6 +555,14 @@ export class TenantsService {
         accountManager: { select: { id: true, username: true, email: true } },
       },
     });
+    if (link.status === "ACTIVE") {
+      domainEvents.emit("tenant.linked", {
+        clientTenantId: link.clientTenantId,
+        supplierTenantId: link.supplierTenantId,
+        provider: supplier.providerKey,
+      });
+    }
+    return link;
   }
 
   async deleteLink(linkId: string) {
@@ -484,6 +651,12 @@ export class TenantsService {
         },
       }),
     ]);
+
+    domainEvents.emit("tenant.linked", {
+      clientTenantId: client.tenantId,
+      supplierTenantId: code.tenantId,
+      provider: code.tenant.providerKey,
+    });
 
     return {
       linkId: link.id,
@@ -765,8 +938,8 @@ export class TenantsService {
   }
 
   private assertProviderKeyMatchesType(type: TenantType, providerKey?: string | null) {
-    if (providerKey && type !== "DISTRIBUTOR") {
-      throw new BadRequestException("Solo un distribuidor puede tener un proveedor del catálogo asignado");
+    if (providerKey && type === "RETAILER") {
+      throw new BadRequestException("Un comercio no puede tener un proveedor del catálogo asignado");
     }
   }
 

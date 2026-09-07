@@ -1,0 +1,288 @@
+.lnd {
+  /* Mundo */
+  --void: #0b0d1a;
+  --ink: #13162b;
+  --night: #1a1d3a;
+  --lilac: #6a6cf6;
+  --lilac-deep: #4033fc;
+  --mist: #bfd2ff;
+  --ember: #ff6a3d;
+
+  /* Roles de texto. El secundario se tiñe del matiz del fondo, nunca gris. */
+  --fg: #e9efff;
+  --fg-dim: #a9b6dd;
+  --fg-faint: #8b98c6;
+  --hair: rgb(191 210 255 / 0.14);
+  --hair-strong: rgb(191 210 255 / 0.26);
+
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --shell: 1240px;
+
+  position: relative;
+  isolation: isolate;
+  background: var(--void);
+  color: var(--fg);
+  font-family: var(--lnd-font-display), ui-sans-serif, system-ui, sans-serif;
+  font-variation-settings: "wdth" 100;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 1;
+}
+
+/* --- Superficies del navegador: caret, selección, scrollbar, foco --- */
+.lnd ::selection { background: var(--lilac-deep); color: #fff; }
+.lnd input,
+.lnd textarea { caret-color: var(--ember); }
+.lnd :focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+.lnd { scrollbar-color: var(--night) var(--void); scrollbar-width: thin; }
+.lnd ::-webkit-scrollbar { width: 10px; height: 10px; }
+.lnd ::-webkit-scrollbar-track { background: var(--void); }
+.lnd ::-webkit-scrollbar-thumb {
+  background: var(--night);
+  border: 2px solid var(--void);
+  border-radius: 999px;
+}
+.lnd ::-webkit-scrollbar-thumb:hover { background: #262a52; }
+
+/* --- Grano fino: material del mundo, encima de todo, sin capturar el mouse --- */
+.lnd-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.4;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* --- Tipografía --- */
+.lnd-display {
+  font-family: var(--lnd-font-display), sans-serif;
+  font-variation-settings: "wdth" 74, "wght" 800;
+  text-transform: uppercase;
+  line-height: 0.86;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  margin: 0;
+}
+.lnd-display--xl { font-size: clamp(2.85rem, 8vw, 6rem); }
+.lnd-display--lg { font-size: clamp(2.4rem, 5vw, 3.6rem); }
+.lnd-display--md { font-size: clamp(1.7rem, 3vw, 2.3rem); }
+
+.lnd-label {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--fg-faint);
+}
+.lnd-note {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  line-height: 1.7;
+  color: var(--fg-faint);
+}
+
+.lnd-mono {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.lnd-body {
+  color: var(--fg-dim);
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  max-width: 68ch;
+}
+
+/* --- Reglas hairline --- */
+.lnd section[id] { scroll-margin-top: 96px; }
+
+.lnd-rule { height: 1px; background: var(--hair); border: 0; }
+
+/* --- Botones --- */
+.lnd-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.95rem 1.4rem;
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    transform 160ms var(--ease-out),
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms var(--ease-out);
+}
+.lnd-btn:active { transform: translateY(1px); }
+.lnd-btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+.lnd-btn--primary {
+  background: linear-gradient(180deg, var(--lilac) 0%, var(--lilac-deep) 100%);
+  color: #fff;
+  box-shadow: 0 10px 30px -12px rgb(64 51 252 / 0.9);
+}
+.lnd-btn--primary:hover:not([disabled]) {
+  border-color: var(--ember);
+  box-shadow: 0 14px 36px -12px rgb(64 51 252 / 0.95);
+}
+.lnd-btn--ghost {
+  background: transparent;
+  color: var(--fg);
+  border-color: var(--hair-strong);
+}
+.lnd-btn--ghost:hover { border-color: var(--ember); color: var(--ember); }
+
+.lnd-btn__arrow { transition: transform 200ms var(--ease-out); }
+.lnd-btn:hover .lnd-btn__arrow { transform: translateX(3px); }
+
+/* --- Paneles: la carcasa del mundo, borde hairline y grano propio --- */
+.lnd-panel {
+  position: relative;
+  background: linear-gradient(180deg, rgb(26 29 58 / 0.72), rgb(19 22 43 / 0.72));
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.9);
+}
+.lnd-panel--active { border-color: var(--ember); }
+
+/* Panel translúcido: deja ver el lecho de partículas sobre el que aterriza. */
+.lnd-panel--sheer {
+  background: linear-gradient(180deg, rgb(26 29 58 / 0.5), rgb(19 22 43 / 0.58));
+  backdrop-filter: blur(3px);
+}
+
+/* --- Campo de datos: el canvas vive detrás de todo el contenido --- */
+.lnd-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.lnd-field canvas { display: block; width: 100%; height: 100%; }
+
+/* Vignette para que el texto gane contraste sobre el campo */
+.lnd-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 78% at 22% 44%, rgb(11 13 26 / 0.96) 0%, rgb(11 13 26 / 0.72) 45%, transparent 82%),
+    linear-gradient(180deg, rgb(11 13 26 / 0.5) 0%, transparent 16%, transparent 78%, var(--void) 100%);
+}
+
+/* --- Riel de secciones --- */
+.lnd-rail {
+  position: fixed;
+  left: 1.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+@media (min-width: 1180px) { .lnd-rail { display: flex; } }
+.lnd-rail a {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--fg-faint);
+  transition: color 180ms ease;
+}
+.lnd-rail a:hover { color: var(--mist); }
+.lnd-rail a[data-on="true"] { color: var(--ember); }
+/* Escala en vez de ancho: la misma marca, sin recalcular layout. */
+.lnd-rail__tick {
+  width: 28px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0.5);
+  transform-origin: left center;
+  transition: transform 220ms var(--ease-out);
+}
+.lnd-rail a[data-on="true"] .lnd-rail__tick { transform: scaleX(1); }
+
+/* --- Revelado: sobrio, una sola gramática, nunca en cada hijo --- */
+.lnd-reveal {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition:
+    opacity 620ms var(--ease-out),
+    transform 620ms var(--ease-out);
+}
+.lnd-reveal[data-shown="true"] { opacity: 1; transform: none; }
+
+/* --- Fila de resultado: la unidad de dato del sistema --- */
+.lnd-row {
+  display: grid;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1.1rem;
+  border-top: 1px solid var(--hair);
+  transition: background-color 180ms ease;
+}
+.lnd-row:hover { background: rgb(191 210 255 / 0.04); }
+.lnd-row--best { background: rgb(255 106 61 / 0.07); }
+.lnd-row--best:hover { background: rgb(255 106 61 / 0.11); }
+
+.lnd-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--hair);
+  border-radius: 3px;
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+.lnd-chip--ember { border-color: rgb(255 106 61 / 0.5); color: var(--ember); }
+.lnd-chip--out { color: var(--fg-faint); border-color: var(--hair); opacity: 0.7; }
+
+/* --- Campos de formulario --- */
+.lnd-input {
+  width: 100%;
+  background: rgb(11 13 26 / 0.72);
+  border: 1px solid var(--hair-strong);
+  border-radius: 4px;
+  padding: 0.85rem 1rem;
+  color: var(--fg);
+  font-size: 0.9rem;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+.lnd-input::placeholder { color: var(--fg-faint); }
+.lnd-input:focus { outline: none; border-color: var(--lilac); background: rgb(11 13 26 / 0.9); }
+.lnd-input:focus-visible { outline: none; }
+
+/* --- Marca de agua de la sección de planes --- */
+.lnd-draft {
+  border: 1px dashed rgb(255 106 61 / 0.4);
+  color: var(--ember);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lnd *,
+  .lnd *::before,
+  .lnd *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .lnd-reveal { opacity: 1; transform: none; }
+}

@@ -36,7 +36,7 @@ describe("image-sync-candidates", () => {
             },
           ],
         },
-        { offers: { some: { active: true, stock: { gt: 0 } } } },
+        { offers: { some: { active: true, OR: [{ stock: null }, { stock: { gt: 0 } }] } } },
       ],
     });
   });
@@ -62,7 +62,7 @@ describe("image-sync-candidates", () => {
             },
           ],
         },
-        { offers: { none: { active: true, stock: { gt: 0 } } } },
+        { offers: { none: { active: true, OR: [{ stock: null }, { stock: { gt: 0 } }] } } },
       ],
     });
   });

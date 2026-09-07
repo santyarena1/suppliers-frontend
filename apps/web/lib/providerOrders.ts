@@ -1,23 +1,29 @@
-export function providerOrdersHref(provider: string): string {
+export function providerOrdersHref(provider: string, pricesFromList = false): string {
+  if (pricesFromList || provider.startsWith("LIST_")) return `/proveedores/${provider}?tab=orders`;
   if (provider === "INVID") return "/proveedores/INVID?tab=invid-account";
   if (provider === "NEW_BYTES") return "/proveedores/NEW_BYTES?tab=nb-account";
   if (provider === "ELIT") return "/proveedores/ELIT?tab=elit-account";
   if (provider === "GRUPO_NUCLEO") return "/proveedores/GRUPO_NUCLEO?tab=gn-account";
   if (provider === "AIR") return "/proveedores/AIR?tab=air-account";
+  if (provider === "NEW_TREE") return "/proveedores/NEW_TREE?tab=nt-account";
+  if (provider === "SOLUTION_BOX") return "/proveedores/SOLUTION_BOX?tab=sb-account";
   return `/proveedores/${provider}`;
 }
 
-export function providerHasOrderHistory(provider: string): boolean {
+export function providerHasOrderHistory(provider: string, pricesFromList = false): boolean {
+  if (pricesFromList || provider.startsWith("LIST_")) return true;
   return (
     provider === "INVID" ||
     provider === "NEW_BYTES" ||
     provider === "ELIT" ||
     provider === "GRUPO_NUCLEO" ||
-    provider === "AIR"
+    provider === "AIR" ||
+    provider === "NEW_TREE" ||
+    provider === "SOLUTION_BOX"
   );
 }
 
-export const ORDER_HISTORY_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR"] as const;
+export const ORDER_HISTORY_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX"] as const;
 
 export type PolledDraft = {
   id: string;

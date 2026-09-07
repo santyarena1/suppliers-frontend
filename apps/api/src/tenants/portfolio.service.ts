@@ -1,11 +1,6 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import {
-  PROVIDER_LABELS,
-  TENANT_ROLES_CAN_MANAGE_PORTFOLIO,
-  type Provider,
-  type TenantRole,
-} from "@nodo/shared";
+import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO, type Provider, type TenantRole, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { UpdateOwnClientDto } from "./dto/tenant.dto";
 import {
@@ -131,11 +126,13 @@ export class PortfolioService {
       if (!member) throw new BadRequestException("El vendedor no pertenece a tu organización");
     }
 
+    // Asignarle vendedor a alguien que se conectó por lista es reconocerlo: pasa a activo.
+    const autoActivate = link.status === "LIST_CONNECTED" && dto.status === undefined && Boolean(dto.accountManagerId);
     const updated = await this.prisma.tenantLink.update({
       where: { id: link.id },
       data: {
         ...(dto.accountManagerId === undefined ? {} : { accountManagerId: dto.accountManagerId }),
-        ...(dto.status === undefined ? {} : { status: dto.status }),
+        ...(dto.status === undefined ? (autoActivate ? { status: "ACTIVE" } : {}) : { status: dto.status }),
         ...(dto.discountPercent === undefined ? {} : { discountPercent: dto.discountPercent }),
         ...(dto.notes === undefined ? {} : { notes: dto.notes }),
       },
@@ -371,7 +368,7 @@ export class PortfolioService {
     return {
       id: row.id,
       provider: row.provider,
-      providerName: PROVIDER_LABELS[row.provider as Provider] ?? row.provider,
+      providerName: providerLabel(row.provider as Provider) ?? row.provider,
       status: row.status,
       approvalStatus: row.approvalStatus,
       total: row.total == null ? null : Number(row.total),

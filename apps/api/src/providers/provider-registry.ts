@@ -8,6 +8,8 @@ import { GrupoNucleoAdapter } from "./adapters/grupo-nucleo.adapter";
 import { NewBytesAdapter } from "./adapters/new-bytes.adapter";
 import { CevenAdapter } from "./adapters/ceven.adapter";
 import { DiapstoreAdapter } from "./adapters/diapstore.adapter";
+import { NewTreeAdapter } from "./adapters/new-tree.adapter";
+import { SolutionBoxAdapter } from "./adapters/solution-box.adapter";
 
 @Injectable()
 export class ProviderRegistry {
@@ -20,7 +22,9 @@ export class ProviderRegistry {
     grupoNucleo: GrupoNucleoAdapter,
     newBytes: NewBytesAdapter,
     ceven: CevenAdapter,
-    diapstore: DiapstoreAdapter
+    diapstore: DiapstoreAdapter,
+    newTree: NewTreeAdapter,
+    solutionBox: SolutionBoxAdapter
   ) {
     this.adapters = {
       ELIT: elit,
@@ -30,6 +34,8 @@ export class ProviderRegistry {
       NEW_BYTES: newBytes,
       CEVEN: ceven,
       DIAPSTORE: diapstore,
+      NEW_TREE: newTree,
+      SOLUTION_BOX: solutionBox,
     };
   }
 

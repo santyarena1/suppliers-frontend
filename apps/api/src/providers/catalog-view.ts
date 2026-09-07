@@ -8,6 +8,11 @@ export interface OfferRules {
   minStockThreshold: number;
   /** KEEP = listar stock 0; HIDE/DELETE = no listarlos salvo includeOutOfStock. */
   zeroStockAction: string;
+  /**
+   * Descuento pactado en el vínculo con un proveedor por lista. Se aplica solo a
+   * ofertas materializadas desde la lista base (source BASE_LIST), antes del markup.
+   */
+  baseListDiscountPercent?: number;
 }
 
 export const NO_RULES: OfferRules = { markupPercent: 0, minStockThreshold: 0, zeroStockAction: "KEEP" };
@@ -51,12 +56,13 @@ export function toProductView(
   const { id: _id, updatedAt: _updatedAt, ...ficha } = product;
   const rawStock = offer.stock;
   const display = resolveCatalogDisplay(product, enrichment);
+  const discount = offer.source === "BASE_LIST" ? rules.baseListDiscountPercent ?? 0 : 0;
 
   return {
     ...ficha,
     ...display,
-    price: withMarkup(offer.price, rules.markupPercent),
-    finalPrice: withMarkup(offer.finalPrice, rules.markupPercent),
+    price: withMarkup(withDiscount(offer.price, discount), rules.markupPercent),
+    finalPrice: withMarkup(withDiscount(offer.finalPrice, discount), rules.markupPercent),
     currency: offer.currency,
     ivaPercent: offer.ivaPercent == null ? null : Number(offer.ivaPercent),
     // Debajo del mínimo que el comercio considera vendible, es como no tener.
@@ -66,6 +72,14 @@ export function toProductView(
     needsResync: offer.needsResync,
     syncedAt: offer.syncedAt,
   };
+}
+
+function withDiscount(value: unknown, discountPercent: number): number | null {
+  if (value == null) return null;
+  const price = Number(value);
+  if (!Number.isFinite(price)) return null;
+  if (!discountPercent) return price;
+  return price * (1 - discountPercent / 100);
 }
 
 function withMarkup(value: unknown, markupPercent: number): number | null {

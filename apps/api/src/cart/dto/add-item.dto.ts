@@ -1,8 +1,8 @@
-import { IsIn, IsInt, IsString, Min } from "class-validator";
-import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { IsIn, IsInt, IsString, Min, Matches } from "class-validator";
+import { type Provider, PROVIDER_KEY_PATTERN } from "@nodo/shared";
 
 export class AddCartItemDto {
-  @IsIn(ALL_PROVIDERS)
+  @Matches(PROVIDER_KEY_PATTERN, { message: "Proveedor inválido" })
   provider!: Provider;
 
   @IsString()

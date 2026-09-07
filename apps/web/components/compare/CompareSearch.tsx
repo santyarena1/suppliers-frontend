@@ -41,7 +41,7 @@ export default function CompareSearch({
   const [openModes, setOpenModes] = useState<string | null>(null);
   const policies = usePurchasePolicies();
   const { withIva, withIibb, convert, currency } = usePrefs();
-  useIibbRatesEpoch();
+  const iibbEpoch = useIibbRatesEpoch();
   const abortRef = useRef(0);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +103,7 @@ export default function CompareSearch({
           wholesaleUnitDisplayUsd(a, policies[a.provider], "list", { withIva, withIibb }) -
           wholesaleUnitDisplayUsd(b, policies[b.provider], "list", { withIva, withIibb })
       ),
-    [results, policies, withIva, withIibb]
+    [results, policies, withIva, withIibb, iibbEpoch]
   );
 
   const rankedLocals = useMemo(() => {

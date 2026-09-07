@@ -27,7 +27,7 @@ export default function MobileTopBar({ onOpen }: Props) {
 
   return (
     <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-surface-900 border-b border-surface-800 flex items-center justify-between px-4 h-12">
-      <button type="button" onClick={onOpen} className="text-surface-300 hover:text-white" aria-label="Abrir menú">
+      <button type="button" onClick={onOpen} className="w-10 h-10 flex items-center justify-center text-surface-300 hover:text-white" aria-label="Abrir menú">
         <Menu className="w-5 h-5" />
       </button>
       <div className="flex items-center gap-1.5">

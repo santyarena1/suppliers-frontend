@@ -17,8 +17,9 @@ export default function IibbRatesEditor() {
     <div className="flex flex-col gap-2 pt-1">
       <p className="text-[11px] text-surface-500 leading-snug">
         Cada comercio tiene su alícuota: no hay un % fijo por distribuidor. Si el carrito o el
-        portal la confirman, se completa sola. Si no, cargala a mano (como en la factura). 0 = no
-        sumar en este proveedor.
+        portal la confirman, se completa sola y se usa en búsqueda, ficha y esquema. Offline no
+        suma percepciones. Si no, cargala a mano (como en la factura). 0 = no sumar en este
+        proveedor.
       </p>
       <div className="rounded-xl border border-surface-800 overflow-hidden">
         {rows.map((row) => (

@@ -16,7 +16,10 @@ export type TenantRole =
   | "COMMERCIAL"
   | "VIEWER";
 
-export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED";
+export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "LIST_CONNECTED";
+
+/** Vínculos con los que el comercio ve el catálogo del proveedor. */
+export const TENANT_LINK_STATUSES_WITH_CATALOG: TenantLinkStatus[] = ["ACTIVE", "LIST_CONNECTED"];
 
 export type OrderApprovalStatus = "NOT_REQUIRED" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
 
@@ -110,6 +113,7 @@ export const TENANT_LINK_STATUS_LABELS: Record<TenantLinkStatus, string> = {
   ACTIVE: "Activo",
   SUSPENDED: "Suspendido",
   REVOKED: "Revocado",
+  LIST_CONNECTED: "Conectado por lista",
 };
 
 export const ORDER_APPROVAL_STATUS_LABELS: Record<OrderApprovalStatus, string> = {

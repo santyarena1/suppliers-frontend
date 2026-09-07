@@ -37,7 +37,7 @@ export default function BrandHubPage() {
   return (
     <div className={`flex-1 flex flex-col min-h-0 ${customHtml ? "bg-white" : "bg-surface-950"}`}>
       <header
-        className={`flex-shrink-0 border-b px-4 sm:px-6 py-3 flex items-center justify-between ${
+        className={`flex-shrink-0 border-b px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 ${
           customHtml ? "border-slate-200 bg-white" : "border-surface-800"
         }`}
       >

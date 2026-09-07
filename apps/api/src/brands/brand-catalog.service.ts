@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { BrandSignalLight } from "@prisma/client";
-import { ALL_PROVIDERS, PROVIDER_LABELS, type Provider } from "@nodo/shared";
+import { type Provider, isProviderKey, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO } from "@nodo/shared";
@@ -30,7 +30,7 @@ export class BrandCatalogService {
     const names = await brandMatchNames(this.prisma, tenant.tenantId);
     if (names.length === 0) return { canWrite: this.canWrite(tenant), products: [] };
     const needle = q.trim();
-    const providerFilter = provider && ALL_PROVIDERS.includes(provider as Provider) ? provider : undefined;
+    const providerFilter = provider && isProviderKey(provider) ? provider : undefined;
     const orBrand = names.map((name) => ({ brand: { equals: name, mode: "insensitive" as const } }));
     const textFilter = needle
       ? {
@@ -116,7 +116,7 @@ export class BrandCatalogService {
       })
       .map((row) => ({
         provider: row.provider,
-        providerName: PROVIDER_LABELS[row.provider as Provider] ?? row.provider,
+        providerName: providerLabel(row.provider as Provider) ?? row.provider,
         externalId: row.externalId,
         name: row.name,
         sku: row.sku,
@@ -138,7 +138,7 @@ export class BrandCatalogService {
   async upsertSignal(tenant: TenantContext, dto: UpsertBrandSignalDto) {
     this.assertBrand(tenant);
     if (!this.canWrite(tenant)) throw new ForbiddenException("No podés marcar productos");
-    if (!ALL_PROVIDERS.includes(dto.provider as Provider)) {
+    if (!isProviderKey(dto.provider)) {
       throw new BadRequestException("Ese distribuidor no existe");
     }
     const product = await this.prisma.providerSyncCache.findUnique({
@@ -269,7 +269,7 @@ export class BrandCatalogService {
     return {
       id: row.id,
       provider: row.provider,
-      providerName: PROVIDER_LABELS[row.provider as Provider] ?? row.provider,
+      providerName: providerLabel(row.provider as Provider) ?? row.provider,
       externalId: row.externalId,
       name: row.name,
       sku: row.sku,

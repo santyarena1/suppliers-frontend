@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { FastifyRequest } from "fastify";
-import { ALL_PROVIDERS, type Provider } from "@nodo/shared";
+import { isProviderKey, type Provider } from "@nodo/shared";
 import { CurrentTenant, CurrentTenantOrNone } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -11,7 +11,6 @@ import { TENANT_ROLES_CAN_PURGE_CATALOG } from "@nodo/shared";
 import { assertTenantRole } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { ProvidersService } from "./providers.service";
-import { FileImportService } from "./file-import.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
@@ -21,6 +20,12 @@ import { AirAccountService } from "./air-account.service";
 import { AirOrderService } from "./air-order.service";
 import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
+import { NewTreeAccountService } from "./new-tree-account.service";
+import { NewTreeOrderService } from "./new-tree-order.service";
+import { SolutionBoxAccountService } from "./solution-box-account.service";
+import { SolutionBoxOrderService } from "./solution-box-order.service";
+import { SolutionBoxCheckoutDraftDto, SolutionBoxCheckoutPreviewDto } from "./dto/solution-box-checkout.dto";
+import { NewTreeCheckoutDraftDto, NewTreeCheckoutPreviewDto } from "./dto/new-tree-checkout.dto";
 import { OrderApprovalService } from "../orders/order-approval.service";
 import type { OrderAuthor } from "./provider-draft";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
@@ -39,10 +44,10 @@ import { AccountPortalCache, wantsRefresh } from "./account-portal-cache";
 import { parseIncludeOutOfStock } from "./catalog-stock";
 
 function assertProvider(value: string): Provider {
-  if (!ALL_PROVIDERS.includes(value as Provider)) {
+  if (!isProviderKey(value)) {
     throw new BadRequestException(`Proveedor inválido: ${value}`);
   }
-  return value as Provider;
+  return value;
 }
 
 // `RolesGuard` deja pasar todo lo que no declare `@Roles`, así que sumarlo acá no
@@ -52,7 +57,6 @@ function assertProvider(value: string): Provider {
 export class ProvidersController {
   constructor(
     private readonly providersService: ProvidersService,
-    private readonly fileImportService: FileImportService,
     private readonly credentialsService: CredentialsService,
     private readonly invidAccountService: InvidAccountService,
     private readonly invidOrderService: InvidOrderService,
@@ -63,6 +67,10 @@ export class ProvidersController {
     private readonly airOrderService: AirOrderService,
     private readonly elitAccountService: ElitAccountService,
     private readonly elitOrderService: ElitOrderService,
+    private readonly newTreeAccountService: NewTreeAccountService,
+    private readonly newTreeOrderService: NewTreeOrderService,
+    private readonly solutionBoxAccountService: SolutionBoxAccountService,
+    private readonly solutionBoxOrderService: SolutionBoxOrderService,
     private readonly orderApproval: OrderApprovalService,
     private readonly accountCache: AccountPortalCache
   ) {}
@@ -501,6 +509,105 @@ export class ProvidersController {
     return this.elitOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "ELIT"), dto);
   }
 
+  // ---------- New Tree (portal newtree.com.ar) ----------
+  @Get("providers/NEW_TREE/drafts")
+  newTreeDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.newTreeOrderService.listDrafts(tenant.tenantId);
+  }
+
+  @Get("providers/NEW_TREE/drafts/:id")
+  async newTreeDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.newTreeOrderService.getDraft(tenant.tenantId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
+  @Get("providers/NEW_TREE/account")
+  async newTreeAccount(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("refresh") refresh?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string
+  ) {
+    const key = `${tenant.tenantId}:NEW_TREE:account:${from ?? ""}:${to ?? ""}`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.newTreeAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "NEW_TREE"), { from, to })
+    );
+  }
+
+  @Get("providers/NEW_TREE/documents")
+  async newTreeDocument(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("token") token: string,
+    @Query("name") name?: string
+  ) {
+    if (!token) throw new BadRequestException("Falta token");
+    return this.newTreeAccountService.getDocument(await this.credentialsOf(tenant, "NEW_TREE"), token, name);
+  }
+
+  @Post("providers/NEW_TREE/checkout/preview")
+  async newTreePreview(@CurrentTenant() tenant: TenantContext, @Body() dto: NewTreeCheckoutPreviewDto) {
+    return this.newTreeOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "NEW_TREE"), dto);
+  }
+
+  @Post("providers/NEW_TREE/checkout/draft")
+  async newTreeDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: NewTreeCheckoutDraftDto
+  ) {
+    const held = await this.hold(tenant, user.userId, "NEW_TREE", dto);
+    if (held) return held;
+    return this.newTreeOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "NEW_TREE"), dto);
+  }
+
+  // ---------- Solution Box (API interna de solutionbox.com.ar) ----------
+  @Get("providers/SOLUTION_BOX/drafts")
+  solutionBoxDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.solutionBoxOrderService.listDrafts(tenant.tenantId);
+  }
+
+  @Get("providers/SOLUTION_BOX/drafts/:id")
+  async solutionBoxDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.solutionBoxOrderService.getDraft(tenant.tenantId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
+  @Get("providers/SOLUTION_BOX/account")
+  async solutionBoxAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
+    const key = `${tenant.tenantId}:SOLUTION_BOX:account`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.solutionBoxAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "SOLUTION_BOX"))
+    );
+  }
+
+  @Get("providers/SOLUTION_BOX/orders/:number/:ext")
+  async solutionBoxOrder(@CurrentTenant() tenant: TenantContext, @Param("number") number: string, @Param("ext") ext: string) {
+    return this.solutionBoxAccountService.getOrder(await this.credentialsOf(tenant, "SOLUTION_BOX"), number, ext);
+  }
+
+  @Get("providers/SOLUTION_BOX/orders/:number/:ext/invoice")
+  async solutionBoxInvoice(@CurrentTenant() tenant: TenantContext, @Param("number") number: string, @Param("ext") ext: string) {
+    return this.solutionBoxAccountService.getInvoice(await this.credentialsOf(tenant, "SOLUTION_BOX"), number, ext);
+  }
+
+  @Post("providers/SOLUTION_BOX/checkout/preview")
+  async solutionBoxPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: SolutionBoxCheckoutPreviewDto) {
+    return this.solutionBoxOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "SOLUTION_BOX"), dto);
+  }
+
+  @Post("providers/SOLUTION_BOX/checkout/draft")
+  async solutionBoxDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: SolutionBoxCheckoutDraftDto
+  ) {
+    const held = await this.hold(tenant, user.userId, "SOLUTION_BOX", dto);
+    if (held) return held;
+    return this.solutionBoxOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "SOLUTION_BOX"), dto);
+  }
+
   @Post("providers/:provider/sync")
   sync(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
     return this.providersService.sync(commercialId(tenant), assertProvider(provider));
@@ -534,35 +641,6 @@ export class ProvidersController {
     @Param("id") id: string
   ) {
     return this.providersService.getSyncRun(commercialId(tenant), assertProvider(provider), id);
-  }
-
-  /**
-   * Alternativa a la sync por API cuando el proveedor limita muy fuerte
-   * (ej. AIR a 1 req/5min): el usuario exporta el catálogo a Excel/CSV
-   * desde el propio portal del proveedor y lo sube acá. Mismo pipeline de
-   * guardado (markup, stock mínimo, historial de precio) que un sync real.
-   */
-  @Post("providers/:provider/import")
-  async importFile(
-    @CurrentTenant() tenant: TenantContext,
-    @Param("provider") provider: string,
-    @Req() req: FastifyRequest
-  ) {
-    const prov = assertProvider(provider);
-    const file = await req.file();
-    if (!file) throw new BadRequestException("No se recibió ningún archivo");
-    const buffer = await file.toBuffer();
-
-    const rows = this.fileImportService.parseFile(buffer, file.filename);
-    const { items, skipped, unmappedColumns } = this.fileImportService.mapRows(rows);
-    if (items.length === 0) {
-      throw new BadRequestException(
-        "No se pudo mapear ninguna fila (hace falta al menos una columna de código/SKU y una de nombre/descripción)."
-      );
-    }
-
-    const result = await this.providersService.importFromRows(commercialId(tenant), prov, items);
-    return { ...result, rowsInFile: rows.length, rowsSkipped: skipped, unmappedColumns };
   }
 
   @Get("providers/:provider/status")
@@ -690,15 +768,20 @@ export class ProvidersController {
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Query("brand") brand: string,
     @Query("take") take?: string,
-    @Query("includeOutOfStock") includeOutOfStock?: string
+    @Query("includeOutOfStock") includeOutOfStock?: string,
+    @Query("providers") providers?: string
   ) {
     if (!brand) throw new BadRequestException("Falta el parámetro brand");
     if (!tenant) return [];
+    const providerList = (providers ?? "")
+      .split(",")
+      .map((p) => p.trim().toUpperCase())
+      .filter((p) => isProviderKey(p));
     return this.providersService.getByBrand(
       commercialId(tenant),
       brand,
       take ? Number(take) : 60,
-      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock), providers: providerList }
     );
   }
 }

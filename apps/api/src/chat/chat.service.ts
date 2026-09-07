@@ -5,15 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import {
-  isChatReactionEmoji,
-  PROVIDER_LABELS,
-  TENANT_ROLE_LABELS,
-  tenantCanWriteChat,
-  type Provider,
-  type TenantRole,
-  type TenantType,
-} from "@nodo/shared";
+import { isChatReactionEmoji, TENANT_ROLE_LABELS, tenantCanWriteChat, type Provider, type TenantRole, type TenantType, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import {
@@ -472,11 +464,11 @@ export class ChatService {
     if (!target) throw new BadRequestException("No hay un vínculo con ese distribuidor para avisar");
     return this.persistMessage(tenant, target.id, {
       kind: "ORDER",
-      body: `Pedido a ${PROVIDER_LABELS[order.provider as Provider] ?? order.provider}`,
+      body: `Pedido a ${providerLabel(order.provider as Provider) ?? order.provider}`,
       payload: {
         orderId: order.id,
         provider: order.provider,
-        providerName: PROVIDER_LABELS[order.provider as Provider] ?? order.provider,
+        providerName: providerLabel(order.provider as Provider) ?? order.provider,
         total: order.total == null ? null : Number(order.total),
         status: order.status,
         approvalStatus: order.approvalStatus,
@@ -519,7 +511,7 @@ export class ChatService {
           payload: {
             orderId: order.id,
             provider: order.provider,
-            providerName: PROVIDER_LABELS[order.provider as Provider] ?? order.provider,
+            providerName: providerLabel(order.provider as Provider) ?? order.provider,
             total: order.total == null ? null : Number(order.total),
             status: order.status,
             approvalStatus: order.approvalStatus,

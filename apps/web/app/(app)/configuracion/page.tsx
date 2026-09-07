@@ -271,7 +271,7 @@ function ConfiguracionPageInner() {
                           <div className="text-left min-w-0">
                             <span className="text-sm text-surface-200 block">Incluir percepciones / IIBB</span>
                             <span className="text-[11px] text-surface-500 leading-snug block mt-0.5">
-                              Independiente del IVA. {iibbHint || "Cargá la alícuota de cada proveedor abajo."} Apagado por defecto.
+                              Independiente del IVA. {iibbHint || "Cargá la alícuota de cada proveedor abajo."} En esquema se suma; en offline no.
                             </span>
                           </div>
                         </div>

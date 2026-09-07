@@ -15,7 +15,11 @@ import { RolesGuard } from "../common/guards/roles.guard";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import {
   AiProductHintQueryDto,
+  AiProductHintsDto,
+  AiAutoCompleteDto,
+  ApplyBrandSuggestionDto,
   ApplyCatalogSuggestionDto,
+  BrandSuggestionsQueryDto,
   AssignProductDto,
   CreateCatalogTermDto,
   IncompleteQueryDto,
@@ -115,6 +119,32 @@ export class CatalogEnrichmentController {
   @Post("products/assign")
   assignProduct(@Body() dto: AssignProductDto) {
     return this.catalog.assignProduct(dto);
+  }
+
+  /** Completa con IA (solo marcas y categorías ya conocidas) los incompletos de un proveedor. */
+  @Post("ai/auto-complete")
+  aiAutoComplete(@Body() dto: AiAutoCompleteDto) {
+    return this.catalog.autoCompleteWithAi(dto.provider, dto.externalIds);
+  }
+
+  /** Sugerencias de IA para una página de incompletos, en una sola llamada por tanda. */
+  @Post("ai/product-hints")
+  aiProductHints(@Body() dto: AiProductHintsDto) {
+    return this.catalog.aiProductHints(dto.items);
+  }
+
+  /** Marcas faltantes: palabras repetidas en los nombres que parecen marca, por proveedor. */
+  @Get("brand-suggestions")
+  brandSuggestions(@Query() query: BrandSuggestionsQueryDto) {
+    return this.catalog.brandSuggestions({
+      provider: query.provider?.trim() || undefined,
+      validateWithAi: query.ai === "1" || query.ai === "true",
+    });
+  }
+
+  @Post("brand-suggestions/apply")
+  applyBrandSuggestion(@Body() dto: ApplyBrandSuggestionDto) {
+    return this.catalog.applyBrandSuggestion(dto);
   }
 
   @Get("raw-values")
