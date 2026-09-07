@@ -14,20 +14,12 @@ import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { SchemePicker } from "@/components/SchemePicker";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 
+/** Una sola moneda: la que el comercio eligio. Antes mostraba las dos. */
 function FinalPriceLine({ usd, className }: { usd: number; className?: string }) {
-  const { currentRate } = usePrefs();
-  const rate = currentRate?.venta ?? 0;
-  const ars = rate > 0 ? usd * rate : null;
+  const { currency, convert } = usePrefs();
+  const shown = currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
   return (
-    <p className={`text-[11px] text-center tabular-nums leading-relaxed ${className ?? ""}`}>
-      {formatUSD(usd)}
-      {ars != null && (
-        <>
-          <span className="opacity-50"> · </span>
-          {formatARS(ars)}
-        </>
-      )}
-    </p>
+    <p className={`pp-mono text-[11px] text-center leading-relaxed ${className ?? ""}`}>{shown}</p>
   );
 }
 

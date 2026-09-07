@@ -1412,7 +1412,7 @@ function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: PriceM
               <ProviderBadge provider={p.provider} variant="inline" size="sm" />
             </div>
             <div className="w-36 text-right">
-              <PriceTag product={p} size="sm" showSecondary priceMode={priceMode} />
+              <PriceTag product={p} size="sm" priceMode={priceMode} />
             </div>
             <div className="w-[7.5rem]">
               <ListRowActions product={p} priceMode={priceMode} />

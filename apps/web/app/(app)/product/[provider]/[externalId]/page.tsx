@@ -444,7 +444,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   <PriceHistoryChart points={priceHistory} />
                 ) : priceHistory.length === 1 ? (
                   <p className="text-xs text-surface-500 leading-relaxed">
-                    Hay un único precio registrado ({formatUSD(Number(priceHistory[0].price) || 0)}).
+                    Hay un único precio registrado ({money(Number(priceHistory[0].price) || 0)}).
                     El gráfico aparece cuando haya al menos un cambio en próximas sincronizaciones.
                   </p>
                 ) : (
