@@ -1,36 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Check, Copy, Minus, Plus, Sparkles, ZoomIn } from "lucide-react";
+import { ArrowLeft, Check, Copy, Minus, Plus, Search, Sparkles, ZoomIn } from "lucide-react";
 
 /**
  * Página de producto con el idioma de la landing.
  *
- * Está todo lo que hay hoy, y el panel de precio suma lo que faltaba: en vez de
- * una sola columna, las tres modalidades desglosadas y comparadas entre sí, que
- * es la pregunta real —cuánto me sale en lista, cuánto offline, cuánto en
- * esquema—. Una modalidad que el distribuidor no acepta se dice, no se esconde.
+ * Cambio estético, no estructural: la información de precio vive toda en el
+ * panel de la derecha, junto al botón de agregar al carrito, igual que hoy. Lo
+ * que suma es el detalle de las modalidades que el distribuidor sí acepta, con
+ * su total y la diferencia contra lista. Una modalidad que no acepta no se
+ * nombra: no hace falta un renglón para decir que algo no existe.
  *
  * Todo en la moneda elegida.
  */
 
 export type Fact = { k: string; v: string };
 
-export type ModeRow = { label: string; value: string; kind?: "add" | "total" | "muted" };
+export type PriceRow = { label: string; value: string; kind?: "add" | "muted" };
 
 export type Mode = {
   key: string;
   name: string;
   caption: string;
-  total?: string;
-  /** Diferencia contra la modalidad de lista, ya formateada. */
+  total: string;
+  /** Diferencia contra lista, ya formateada. Solo en modalidades alternativas. */
   vsList?: string;
-  rows?: ModeRow[];
-  available: boolean;
-  unavailableNote?: string;
+  rows: PriceRow[];
 };
 
-export type LocalRow = { shop: string; price: string; margin: string; marginTone: "up" | "down" };
+export type LocalRow = {
+  shop: string;
+  product: string;
+  price: string;
+  margin: string;
+  marginTone: "up" | "down";
+};
 
 export type ProductPassData = {
   provider: string;
@@ -44,21 +49,20 @@ export type ProductPassData = {
   imageAiSelected?: boolean;
   stock: number | null;
   stockStatus?: string;
-  priceCaption: string;
   price: string;
   /** Precio de la sincronización anterior, dicho con todas las letras. */
   previousPrice?: string;
   previousAt?: string;
   dropPercent?: number;
+  /** Modalidades que el distribuidor acepta. La primera es la de lista. */
   modes: Mode[];
   description: string;
   facts: Fact[];
-  /** Serie de precios con su fecha, en la moneda elegida. */
   history: { date: string; value: number }[];
   currency: string;
   related: { name: string; provider: string; color: string; price: string }[];
   syncedAt: string;
-  locales: { rows: LocalRow[]; note: string };
+  locales: { query: string; rows: LocalRow[]; note: string };
 };
 
 function PriceChart({ points, currency }: { points: { date: string; value: number }[]; currency: string }) {
@@ -75,7 +79,7 @@ function PriceChart({ points, currency }: { points: { date: string; value: numbe
     y: PAD + (1 - (p.value - min) / span) * (H - PAD * 2),
     ...p,
   }));
-  const line = xy.map((p) => `${p.x},${p.y}`).join(" ");
+  const line = xy.map((pt) => `${pt.x},${pt.y}`).join(" ");
   const area = `0,${H} ${line} ${W},${H}`;
 
   const first = points[0].value;
@@ -116,42 +120,41 @@ function PriceChart({ points, currency }: { points: { date: string; value: numbe
 
         <div className="ch__area">
           <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Evolución del precio">
-          <defs>
-            <linearGradient id="chFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="currentColor" stopOpacity="0.24" />
-              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          <line x1="0" y1={PAD} x2={W} y2={PAD} className="ch__guide" />
-          <line x1="0" y1={H - PAD} x2={W} y2={H - PAD} className="ch__guide" />
-          <line x1="0" y1={H / 2} x2={W} y2={H / 2} className="ch__guide is-mid" />
-          <polygon points={area} fill="url(#chFill)" />
-          <polyline
-            points={line}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
+            <defs>
+              <linearGradient id="chFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.24" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <line x1="0" y1={PAD} x2={W} y2={PAD} className="ch__guide" />
+            <line x1="0" y1={H / 2} x2={W} y2={H / 2} className="ch__guide is-mid" />
+            <line x1="0" y1={H - PAD} x2={W} y2={H - PAD} className="ch__guide" />
+            <polygon points={area} fill="url(#chFill)" />
+            <polyline
+              points={line}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
           </svg>
 
-          {xy.map((p, i) => (
+          {/* Fuera del SVG: el trazado se estira a lo ancho y deformaría los puntos */}
+          {xy.map((pt, i) => (
             <span
-              key={p.date}
+              key={pt.date}
               className={i === xy.length - 1 ? "ch__dot is-last" : "ch__dot"}
-              style={{ left: `${p.x}%`, top: `${(p.y / H) * 100}%` }}
-              title={`${p.date} · ${fmt(p.value)}`}
+              style={{ left: `${pt.x}%`, top: `${(pt.y / H) * 100}%` }}
+              title={`${pt.date} · ${fmt(pt.value)}`}
             />
           ))}
         </div>
       </div>
 
       <div className="ch__dates mono">
-        {points.map((p, i) => (
-          <span key={p.date} data-hide={i > 0 && i < points.length - 1 && i % 2 === 1 ? "true" : "false"}>
-            {p.date}
-          </span>
+        {points.map((pt) => (
+          <span key={pt.date}>{pt.date}</span>
         ))}
       </div>
     </div>
@@ -161,6 +164,8 @@ function PriceChart({ points, currency }: { points: { date: string; value: numbe
 export default function ProductPass({ p }: { p: ProductPassData }) {
   const [qty, setQty] = useState(1);
   const [copied, setCopied] = useState(false);
+  const [mode, setMode] = useState(p.modes[0].key);
+  const current = p.modes.find((m) => m.key === mode) ?? p.modes[0];
 
   return (
     <div className="pp">
@@ -191,7 +196,7 @@ export default function ProductPass({ p }: { p: ProductPassData }) {
           </button>
         </div>
 
-        {/* El título usa el ancho completo: no hay razón para apretarlo */}
+        {/* El título usa el ancho completo */}
         <h1 className="pp__name">{p.name}</h1>
 
         <p className="pp__stock mono">
@@ -222,22 +227,55 @@ export default function ProductPass({ p }: { p: ProductPassData }) {
             )}
           </div>
 
+          {/* Todo el precio en un solo panel, junto a la acción de comprar */}
           <aside className="pp__panel">
+            {p.modes.length > 1 && (
+              <div className="pp__tabs" role="tablist" aria-label="Modalidad de compra">
+                {p.modes.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={m.key === mode}
+                    className="pp__tab mono"
+                    onClick={() => setMode(m.key)}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="pp__head">
               <p className="pp__caption mono">
-                {p.priceCaption}
+                {current.caption}
                 {qty > 1 ? ` · ${qty} u.` : ""}
               </p>
               <p className="pp__price">
-                <span className="pp__amount mono">{p.price}</span>
+                <span className="pp__amount mono">{current.total}</span>
+                {current.vsList && <span className="pp__vs mono">{current.vsList}</span>}
               </p>
-              {p.previousPrice && (
+              {p.previousPrice && mode === p.modes[0].key && (
                 <p className="pp__prev mono">
                   Antes {p.previousPrice}
                   {p.previousAt ? ` · sync del ${p.previousAt}` : ""}
                   {p.dropPercent != null ? ` · bajó ${p.dropPercent}%` : ""}
                 </p>
               )}
+            </div>
+
+            <div className="pp__rows">
+              <p className="pp__rows-title mono">Desglose de costo</p>
+              {current.rows.map((r) => (
+                <div key={r.label} className={`pp__row${r.kind ? ` is-${r.kind}` : ""}`}>
+                  <span>{r.label}</span>
+                  <span className="mono">{r.value}</span>
+                </div>
+              ))}
+              <div className="pp__row is-total">
+                <span>Costo unitario final</span>
+                <span className="mono">{current.total}</span>
+              </div>
             </div>
 
             <div className="pp__buy">
@@ -263,40 +301,6 @@ export default function ProductPass({ p }: { p: ProductPassData }) {
           </aside>
         </div>
 
-        {/* --- Las tres modalidades, desglosadas y comparadas --- */}
-        <section className="pp__sec">
-          <h2>Desglose por modalidad de compra</h2>
-          <div className="pp__modes">
-            {p.modes.map((m) => (
-              <div key={m.key} className="pp__mode" data-off={!m.available}>
-                <div className="pp__mode-head">
-                  <b>{m.name}</b>
-                  <span className="mono">{m.caption}</span>
-                </div>
-
-                {m.available ? (
-                  <>
-                    <div className="pp__rows">
-                      {(m.rows ?? []).map((r) => (
-                        <div key={r.label} className={`pp__row${r.kind ? ` is-${r.kind}` : ""}`}>
-                          <span>{r.label}</span>
-                          <span className="mono">{r.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="pp__mode-foot">
-                      <span className="pp__mode-total mono">{m.total}</span>
-                      {m.vsList && <span className="pp__mode-vs mono">{m.vsList}</span>}
-                    </div>
-                  </>
-                ) : (
-                  <p className="pp__mode-off mono">{m.unavailableNote}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section className="pp__sec">
           <h2>Descripción</h2>
           <p className="pp__desc">{p.description}</p>
@@ -319,19 +323,30 @@ export default function ProductPass({ p }: { p: ProductPassData }) {
           <PriceChart points={p.history} currency={p.currency} />
         </section>
 
-        {/* --- Locales: cargado, no detrás de un botón --- */}
+        {/* Locales: el mini buscador de siempre, con los que más coinciden */}
         <section className="pp__sec">
           <h2>Precios de venta en locales</h2>
-          <div className="pp__locales">
-            {p.locales.rows.map((l) => (
-              <div key={l.shop} className="pp__local">
-                <span className="pp__local-shop">{l.shop}</span>
-                <span className="pp__local-price mono">{l.price}</span>
-                <span className={`pp__local-margin mono is-${l.marginTone}`}>{l.margin}</span>
-              </div>
-            ))}
+          <div className="lc">
+            <div className="lc__field">
+              <Search size={14} strokeWidth={1.7} style={{ color: "var(--p-faint)" }} />
+              <input defaultValue={p.locales.query} aria-label="Buscar en locales" />
+              <button type="button" className="lc__go mono">
+                Buscar
+              </button>
+            </div>
+
+            <div className="lc__list">
+              {p.locales.rows.map((l) => (
+                <a key={l.shop} href="#" className="lc__row">
+                  <span className="lc__shop">{l.shop}</span>
+                  <span className="lc__prod">{l.product}</span>
+                  <span className="lc__price mono">{l.price}</span>
+                  <span className={`lc__margin mono is-${l.marginTone}`}>{l.margin}</span>
+                </a>
+              ))}
+            </div>
+            <p className="lc__note mono">{p.locales.note}</p>
           </div>
-          <p className="pp__local-note mono">{p.locales.note}</p>
         </section>
 
         <section className="pp__sec">

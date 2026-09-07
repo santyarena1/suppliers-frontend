@@ -3,7 +3,7 @@ import CardPass, { type PassCard } from "@/components/system/CardPass";
 import {
   HomeInicio,
   SearchEmpty,
-  type AdBanner,
+  type AdSlot,
   type ProvState,
   type SearchRow,
 } from "@/components/system/Homes";
@@ -190,19 +190,23 @@ const CATEGORIES = [
  * BUSQUEDA SIN CONSULTA
  * ========================================================== */
 
-const BANNERS: AdBanner[] = [
-  {
-    title: "Campaña destacada",
-    subtitle: "Espacio principal del bento, imagen a sangre",
-    tone: "#4033fc",
-    kind: "propio",
-    span: "hero",
-  },
-  { title: "Marca aliada", subtitle: "Slot secundario", tone: "#ff6a3d", kind: "patrocinado", span: "unit" },
-  { title: "Lanzamiento", subtitle: "Slot secundario", tone: "#0284c7", kind: "patrocinado", span: "unit" },
-  { title: "Promo del distribuidor", subtitle: "Slot ancho", tone: "#10b981", kind: "demo", span: "wide" },
-  { title: "Combo del mes", subtitle: "Slot unitario", tone: "#a855f7", kind: "demo", span: "unit" },
-  { title: "Financiación", subtitle: "Slot unitario", tone: "#eab308", kind: "propio", span: "unit" },
+const PRIMARY_ADS: AdSlot[] = [
+  { slot: "hero_main", title: "Campaña destacada", kind: "propio", tone: "#4033fc" },
+  { slot: "hero_side", title: "Marca aliada", kind: "patrocinado", tone: "#ff6a3d" },
+  { slot: "tile_4", title: "Lanzamiento", kind: "patrocinado", tone: "#0284c7" },
+  { slot: "tile_3", title: "Promo del distribuidor", kind: "demo", tone: "#10b981" },
+  { slot: "tile_1", title: "Combo del mes", kind: "demo", tone: "#a855f7" },
+  { slot: "tile_2", title: "Financiación", kind: "propio", tone: "#eab308" },
+  { slot: "strip", title: "Franja de ancho completo", kind: "propio", tone: "#6366f1" },
+];
+
+const SECONDARY_ADS: AdSlot[] = [
+  { slot: "mid_wide", title: "Segunda campaña", kind: "patrocinado", tone: "#ec4899" },
+  { slot: "mid_a", title: "Marca del mes", kind: "demo", tone: "#14b8a6" },
+  { slot: "mid_tall", title: "Vertical destacada", kind: "propio", tone: "#f97316" },
+  { slot: "mid_b", title: "Novedad", kind: "demo", tone: "#84cc16" },
+  { slot: "mid_c", title: "Bloque medio", kind: "propio", tone: "#8b5cf6" },
+  { slot: "mid_strip", title: "Franja inferior", kind: "patrocinado", tone: "#0ea5e9" },
 ];
 
 const PARTNERS = ["AMD", "ASUS", "Kingston", "Logitech", "Razer", "Samsung", "Seagate", "TP-Link"];
@@ -265,7 +269,6 @@ const PRODUCT: ProductPassData = {
   imageUrl: HEADSET,
   stock: 12,
   stockStatus: "Disponible",
-  priceCaption: "Costo final en lista, con IVA",
   price: "$ 402.409",
   previousPrice: "$ 428.096",
   previousAt: "6/9/26",
@@ -275,36 +278,25 @@ const PRODUCT: ProductPassData = {
     {
       key: "lista",
       name: "Lista",
-      caption: "Precio publicado por el distribuidor",
-      available: true,
+      caption: "Costo final con IVA",
+      total: "$ 402.409",
       rows: [
         { label: "Costo del distribuidor", value: "$ 364.171" },
         { label: "IVA 10,5%", value: "+ $ 38.238", kind: "add" },
         { label: "Percepciones", value: "no aplicadas", kind: "muted" },
       ],
-      total: "$ 402.409",
     },
     {
       key: "offline",
       name: "Offline",
-      caption: "Pago fuera de factura, sin percepciones",
-      available: true,
+      caption: "Pago fuera de factura",
+      total: "$ 349.604",
+      vsList: "−$ 52.805 vs lista",
       rows: [
         { label: "Costo del distribuidor", value: "$ 364.171" },
         { label: "Descuento offline 4%", value: "− $ 14.567", kind: "add" },
         { label: "IVA", value: "no se aplica", kind: "muted" },
-        { label: "Percepciones", value: "no se aplican", kind: "muted" },
       ],
-      total: "$ 349.604",
-      vsList: "−$ 52.805 vs lista",
-    },
-    {
-      key: "esquema",
-      name: "Esquema",
-      caption: "IVA ajustado por acuerdo con el distribuidor",
-      available: false,
-      unavailableNote:
-        "New Bytes no acepta esquema. Si empieza a aceptarlo, cargalo en Configuración del proveedor y esta columna se completa sola.",
     },
   ],
   description:
@@ -336,15 +328,45 @@ const PRODUCT: ProductPassData = {
   ],
   syncedAt: "Actualizado 7/9/26, 11:40 a. m. · New Bytes sincroniza cada 15 minutos",
   locales: {
+    query: "razer blackshark v3 pro",
     rows: [
-      { shop: "Compra Gamer", price: "$ 589.999", margin: "+46%", marginTone: "up" },
-      { shop: "Mercado Libre (promedio)", price: "$ 561.400", margin: "+40%", marginTone: "up" },
-      { shop: "Venex", price: "$ 574.900", margin: "+43%", marginTone: "up" },
-      { shop: "Full H4rd", price: "$ 549.000", margin: "+36%", marginTone: "up" },
-      { shop: "Maximus Gaming", price: "$ 396.000", margin: "−2%", marginTone: "down" },
-      { shop: "Gaming City", price: "$ 612.000", margin: "+52%", marginTone: "up" },
+      {
+        shop: "Compra Gamer",
+        product: "Razer BlackShark V3 Pro Blanco",
+        price: "$ 589.999",
+        margin: "+46%",
+        marginTone: "up",
+      },
+      {
+        shop: "Venex",
+        product: "Auricular Razer BlackShark V3 Pro Wireless",
+        price: "$ 574.900",
+        margin: "+43%",
+        marginTone: "up",
+      },
+      {
+        shop: "Mercado Libre",
+        product: "Razer BlackShark V3 Pro (promedio de 14 publicaciones)",
+        price: "$ 561.400",
+        margin: "+40%",
+        marginTone: "up",
+      },
+      {
+        shop: "Full H4rd",
+        product: "Razer BlackShark V3 Pro White THX",
+        price: "$ 549.000",
+        margin: "+36%",
+        marginTone: "up",
+      },
+      {
+        shop: "Maximus Gaming",
+        product: "Razer BlackShark V3 (modelo base, no Pro)",
+        price: "$ 396.000",
+        margin: "−2%",
+        marginTone: "down",
+      },
     ],
-    note: "Margen calculado sobre tu costo neto de lista. Referencia de mercado tomada hoy; no incluye envío ni financiación de cada local.",
+    note: "Coincidencias ordenadas por parecido con el nombre del producto. El margen se calcula sobre tu costo neto de lista y no incluye envío ni financiación de cada local.",
   },
 };
 
@@ -359,10 +381,11 @@ export default function PreviewPage() {
         <h2 className="lnd-display lnd-display--md mt-20">1 · La tarjeta</h2>
         <div className="lnd-body mt-4 max-w-2xl space-y-4">
           <p>
-            Ahora la tarjeta es una retícula fija: cada dato tiene su renglón y lo ocupa siempre,
-            tenga o no contenido. Un producto sin aviso de esquema deja ese renglón vacío en vez de
-            subir todo lo de abajo. En una grilla de veinte, todos los precios quedan a la misma
-            altura y todos los stocks juntos.
+            Retícula fija: cada dato tiene su renglón y lo ocupa siempre, tenga o no contenido. Y
+            corregí el desbordamiento, que era un error mío: sin{" "}
+            <span className="lnd-mono">min-width: 0</span> la tarjeta no puede achicarse por debajo
+            del ancho mínimo de su pie, así que la cuarta se salía de la columna. Además le di aire:
+            columnas más anchas, más separación entre filas y más margen interno.
           </p>
           <p>
             Por eso la marca de imagen automática pasó a ser un sello sobre la foto: era la única
@@ -377,14 +400,14 @@ export default function PreviewPage() {
         </div>
 
         <p className="lnd-note mt-10">Preferencia en ARS · cuatro productos con datos distintos, todo alineado</p>
-        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(14.5rem, 1fr))" }}>
+        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(16.5rem, 1fr))" }}>
           {ARS_CARDS.map((c) => (
             <CardPass key={c.externalId} c={c} />
           ))}
         </div>
 
         <p className="lnd-note mt-10">Los mismos, con la preferencia en USD</p>
-        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(14.5rem, 1fr))" }}>
+        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(16.5rem, 1fr))" }}>
           {USD_CARDS.map((c) => (
             <CardPass key={c.externalId} c={c} />
           ))}
@@ -404,59 +427,45 @@ export default function PreviewPage() {
         <h2 className="lnd-display lnd-display--md mt-24">3 · Búsqueda sin consulta</h2>
         <div className="lnd-body mt-4 max-w-2xl space-y-4">
           <p>
-            Acá me faltaba mirar qué había: los espacios de publicidad en bento con sus etiquetas de
-            propio, patrocinado y demo; el carrusel de marcas; y la grilla de bajas de precio. Está
-            todo, no saqué nada.
+            Ahora sí con lo que hay de verdad: los desplegables de Categoría, Marca y Distribuidor
+            que ya existen en la barra, y los <b>dos módulos de publicidad completos</b> con sus
+            trece espacios y los tamaños que tienen definidos. Yo había puesto seis inventados.
           </p>
           <p>
-            Lo que sumé arriba es lo que ayuda a arrancar cuando todavía no escribiste: categorías,
-            tus últimas búsquedas y el consejo de buscar por part number, que es lo único que todos
-            los distribuidores escriben igual.
+            Después el carrusel de marcas y la grilla de bajas de precio, igual que hoy. Lo único
+            que sumé son tus búsquedas recientes arriba.
           </p>
         </div>
 
         <div className="mt-10">
           <SearchEmpty
-            banners={BANNERS}
+            primaryAds={PRIMARY_ADS}
+            secondaryAds={SECONDARY_ADS}
             partners={PARTNERS}
             drops={DROPS}
             recent={RECENT}
-            categories={CATEGORIES}
           />
         </div>
 
         {/* ---------------- 4. PRODUCTO ---------------- */}
         <h2 className="lnd-display lnd-display--md mt-24">4 · Página de producto</h2>
         <div className="lnd-body mt-4 max-w-2xl space-y-4">
-          <p>Cinco cambios sobre lo que te mostré:</p>
-          <ol className="list-decimal space-y-2 pl-5">
-            <li>
-              <b>El título usa el ancho completo.</b> Lo tenía apretado a 32 caracteres sin ninguna
-              razón.
-            </li>
-            <li>
-              <b>Saqué el texto de la cotización.</b> Ese renglón explicativo no va.
-            </li>
-            <li>
-              <b>En su lugar, el desglose por modalidad.</b> Lista, offline y esquema, cada una con
-              sus renglones, su total y la diferencia contra lista. Es la pregunta real que te hacés
-              parado en el producto. Cuando el distribuidor no acepta una modalidad, la columna lo
-              dice y explica dónde se habilita, en vez de desaparecer.
-            </li>
-            <li>
-              <b>El precio tachado ahora tiene nombre.</b> Dice{" "}
-              <span className="lnd-mono">Antes $ 428.096 · sync del 6/9/26 · bajó 6%</span>. Antes
-              era un número tachado sin explicación.
-            </li>
-            <li>
-              <b>Los locales vienen cargados</b>, con el precio de cada uno y tu margen contra el
-              costo neto. Ya no hay botón de &quot;ver comparativa&quot;.
-            </li>
-          </ol>
           <p>
-            Y el gráfico ahora tiene referencias: máximo, mínimo, valor de hoy y variación a 30
-            días, con la escala a la derecha y las fechas abajo. Se ve dónde estás parado dentro del
-            recorrido del precio, no solo que sube o baja.
+            Corregido: todo el precio vuelve a un solo panel a la derecha, junto a agregar al
+            carrito, como estaba. Las modalidades son pestañas de ese mismo panel, y solo aparecen
+            las que el distribuidor acepta — nada de un renglón para decir que algo no existe.
+          </p>
+          <p>
+            El título usa el ancho completo, se fue el texto de la cotización, y el precio tachado
+            ahora dice <span className="lnd-mono">Antes $ 428.096 · sync del 6/9/26 · bajó 6%</span>.
+          </p>
+          <p>
+            Los locales vuelven a ser el mini buscador con las coincidencias ordenadas por parecido,
+            como estaba. Solo cambió la estética y se sumó la columna de margen.
+          </p>
+          <p>
+            El gráfico tiene referencias: máximo, mínimo, valor de hoy y variación a 30 días, con la
+            escala a la derecha, las fechas abajo y un punto por sincronización.
           </p>
         </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowUpRight, Clock, Search, TrendingDown } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Clock, Search, TrendingDown } from "lucide-react";
 import CardPass, { type PassCard } from "./CardPass";
 
 /**
@@ -11,9 +11,9 @@ import CardPass, { type PassCard } from "./CardPass";
  * operación en una línea, y tus proveedores y tu historial abajo.
  *
  * BÚSQUEDA SIN CONSULTA es el estado del módulo de búsqueda antes de escribir.
- * Ahí ya viven los espacios de publicidad, el carrusel de marcas y la grilla de
- * bajas de precio. Nada de eso se toca: se le suma lo que ayuda a arrancar una
- * búsqueda y se le pone el idioma nuevo encima.
+ * Los desplegables de categoría, marca y distribuidor son los que ya existen,
+ * los dos módulos de publicidad conservan sus trece espacios con sus tamaños, y
+ * la grilla de bajas de precio queda igual. Solo cambia la estética.
  */
 
 export type ProvState = {
@@ -26,13 +26,7 @@ export type ProvState = {
 
 export type SearchRow = { q: string; count?: number };
 
-export type AdBanner = {
-  title: string;
-  subtitle?: string;
-  tone: string;
-  kind: "propio" | "patrocinado" | "demo";
-  span: "hero" | "wide" | "tall" | "unit";
-};
+export type AdSlot = { slot: string; title: string; kind: "propio" | "patrocinado" | "demo"; tone: string };
 
 /* ============================================================
  * MÓDULO INICIO
@@ -166,24 +160,45 @@ export function HomeInicio({
  * BÚSQUEDA · SIN CONSULTA
  * ========================================================== */
 
+function AdBento({ slots, variant }: { slots: AdSlot[]; variant: "primary" | "secondary" }) {
+  return (
+    <div className={`se__bento se__bento--${variant}`}>
+      {slots.map((b) => (
+        <a
+          key={b.slot}
+          href="#"
+          className={`se__ad se__ad--${b.slot}`}
+          style={{ ["--ad" as string]: b.tone }}
+        >
+          <span className="se__ad-kind mono">{b.kind}</span>
+          <span className="se__ad-body">
+            <b>{b.title}</b>
+            <em className="mono">{b.slot}</em>
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export function SearchEmpty({
-  banners,
+  primaryAds,
+  secondaryAds,
   partners,
   drops,
   recent,
-  categories,
 }: {
-  banners: AdBanner[];
+  primaryAds: AdSlot[];
+  secondaryAds: AdSlot[];
   partners: string[];
   drops: PassCard[];
   recent: SearchRow[];
-  categories: string[];
 }) {
   const [q, setQ] = useState("");
 
   return (
     <div className="hm hm--search">
-      {/* La barra del módulo, que ya existe y queda fija arriba */}
+      {/* La barra del módulo con sus tres desplegables, como ya está */}
       <div className="se__bar">
         <div className="se__input">
           <Search size={15} strokeWidth={1.7} style={{ color: "var(--hm-faint)" }} />
@@ -194,19 +209,20 @@ export function SearchEmpty({
             aria-label="Buscar producto"
           />
         </div>
+
+        <div className="se__filters">
+          {["Categoría", "Marca", "Distribuidor"].map((label) => (
+            <button key={label} type="button" className="se__filter">
+              {label}
+              <ChevronDown size={12} strokeWidth={1.8} />
+            </button>
+          ))}
+        </div>
+
         <span className="se__prefs mono">ARS · Dólar oficial · con IVA</span>
       </div>
 
       <div className="se__body">
-        {/* Nuevo: lo que ayuda a arrancar cuando todavía no escribiste nada */}
-        <div className="hm__sug">
-          <span>Categorías</span>
-          {categories.map((s) => (
-            <button key={s} type="button" className="hm__chip">
-              {s}
-            </button>
-          ))}
-        </div>
         <div className="hm__sug hm__sug--recent">
           <span>
             <Clock size={10} strokeWidth={1.8} style={{ display: "inline", marginRight: "0.3rem" }} />
@@ -218,23 +234,8 @@ export function SearchEmpty({
             </button>
           ))}
         </div>
-        <p className="hm__hint mono">
-          Si tenés el part number, buscá por ahí: es lo único que todos los distribuidores escriben
-          igual.
-        </p>
 
-        {/* Publicidad: el bento que ya existe, con el idioma nuevo */}
-        <div className="se__bento">
-          {banners.map((b) => (
-            <a key={b.title} href="#" className={`se__ad se__ad--${b.span}`} style={{ ["--ad" as string]: b.tone }}>
-              <span className="se__ad-kind mono">{b.kind}</span>
-              <span className="se__ad-body">
-                <b>{b.title}</b>
-                {b.subtitle && <em>{b.subtitle}</em>}
-              </span>
-            </a>
-          ))}
-        </div>
+        <AdBento slots={primaryAds} variant="primary" />
 
         <p className="se__partners-title mono">Marcas que trabajan con la red</p>
         <div className="se__partners">
@@ -245,15 +246,14 @@ export function SearchEmpty({
           ))}
         </div>
 
+        <AdBento slots={secondaryAds} variant="secondary" />
+
         <div className="hm__sec">
           <h3>
             <TrendingDown size={11} strokeWidth={2} style={{ display: "inline", marginRight: "0.4rem" }} />
             Bajaron de precio
           </h3>
-          <a href="#">
-            Descuentos y bajas recientes · varios proveedores{" "}
-            <ArrowUpRight size={11} strokeWidth={1.8} style={{ display: "inline" }} />
-          </a>
+          <a href="#">Descuentos y bajas recientes · varios proveedores</a>
         </div>
         <div className="se__drops">
           {drops.map((d) => (

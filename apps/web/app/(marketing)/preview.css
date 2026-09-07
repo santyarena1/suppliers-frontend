@@ -16,6 +16,7 @@
   --pc-warn: #c2410c;
 
   position: relative;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--pc-paper);
@@ -153,15 +154,17 @@
 .pc__body {
   display: grid;
   grid-template-rows:
-    2.08rem            /* nombre, dos líneas */
-    1.05rem            /* marca y categoría */
-    1.5rem             /* precio */
-    1rem               /* desglose */
-    1rem               /* aviso: esquema o alícuota faltante */
-    1.35rem            /* estado y modalidades */
+    2.3rem             /* nombre, dos líneas */
+    1.1rem             /* marca y categoría */
+    1.75rem            /* precio */
+    1.05rem            /* desglose */
+    1.05rem            /* aviso: esquema o alícuota faltante */
+    1.5rem             /* estado y modalidades */
     1fr                /* empuja el pie hacia abajo */
     auto;              /* sincronización */
-  padding: 0.75rem 0.85rem 0.6rem;
+  row-gap: 0.3rem;
+  padding: 0.95rem 1rem 0.8rem;
+  min-width: 0;
   flex: 1;
 }
 .pc__name {
@@ -257,13 +260,15 @@
 /* --- Pie --- */
 .pc__foot {
   align-self: end;
-  padding-top: 0.55rem;
+  width: 100%;
+  padding-top: 0.7rem;
   border-top: 1px solid var(--pc-line);
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 .pc__id {
+  flex: 1 1 auto;
   font-size: 0.6rem;
   color: var(--pc-faint);
   min-width: 0;
@@ -271,7 +276,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pc__acts { margin-left: auto; display: flex; align-items: center; gap: 0.35rem; }
+.pc__acts { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; }
 
 /* Los auxiliares en linea fina: el unico elemento pintado de la tarjeta es la
    accion que importa. */
@@ -310,7 +315,7 @@
 .pc__step b { min-width: 1.3rem; text-align: center; font-size: 0.78rem; color: #fff; }
 
 .pc__sync {
-  margin-top: 0.45rem;
+  margin-top: 0.6rem;
   min-height: 0.9rem;
   font-size: 0.58rem;
   color: var(--pc-faint);
