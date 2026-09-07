@@ -1,6 +1,11 @@
 import { NextResponse, NextRequest } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login", "/register", "/landing", "/preview"]);
+// Solo estas rebotan al inicio cuando ya hay sesión: entrar al login estando
+// logueado no tiene sentido.
+const AUTH_PATHS = new Set(["/login", "/register"]);
+// Estas se ven siempre, con o sin sesión. Un usuario logueado tiene que poder
+// abrir la landing o una propuesta sin que lo manden a la app.
+const OPEN_PATHS = new Set(["/landing", "/preview"]);
 const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
 
 function isPrefetch(req: NextRequest): boolean {
@@ -14,7 +19,8 @@ function isPrefetch(req: NextRequest): boolean {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (PUBLIC_PATHS.has(pathname)) return guardLogin(req);
+  if (OPEN_PATHS.has(pathname)) return NextResponse.next();
+  if (AUTH_PATHS.has(pathname)) return guardLogin(req);
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
   const auth = req.cookies.get("tgs_auth")?.value;
