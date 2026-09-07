@@ -1,146 +1,222 @@
-import "../system.css";
-import "../directions.css";
-import { DeskDirection, LiveDirection, type Row } from "@/components/system/Directions";
+import type { Metadata } from "next";
+import CardPass, { type PassCard } from "@/components/system/CardPass";
+import SearchHome, { type ProvState, type SearchRow } from "@/components/system/SearchHome";
+import "../landing.css";
+import "../preview.css";
 
-export const metadata = { title: "NODO — Dos direcciones para el sistema" };
-
-const IMG = {
-  cpu: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><rect width='200' height='200' fill='%23ffffff'/><rect x='62' y='62' width='76' height='76' rx='6' fill='%23cbd5e1'/><rect x='78' y='78' width='44' height='44' rx='3' fill='%2394a3b8'/><rect x='68' y='48' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='68' y='140' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='80' y='48' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='80' y='140' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='92' y='48' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='92' y='140' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='104' y='48' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='104' y='140' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='116' y='48' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='116' y='140' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='128' y='48' width='4' height='12' rx='0' fill='%23cbd5e1'/><rect x='128' y='140' width='4' height='12' rx='0' fill='%23cbd5e1'/></svg>",
-  gpu: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><rect width='200' height='200' fill='%23ffffff'/><rect x='30' y='74' width='140' height='58' rx='5' fill='%23cbd5e1'/><circle cx='72' cy='103' r='19' fill='%2394a3b8'/><circle cx='126' cy='103' r='19' fill='%2394a3b8'/><rect x='30' y='64' width='140' height='10' rx='3' fill='%23e2e8f0'/></svg>",
-  ssd: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><rect width='200' height='200' fill='%23ffffff'/><rect x='52' y='86' width='96' height='30' rx='4' fill='%23cbd5e1'/><rect x='60' y='94' width='34' height='14' rx='2' fill='%2394a3b8'/><rect x='132' y='90' width='8' height='22' rx='0' fill='%2394a3b8'/></svg>",
-  mon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><rect width='200' height='200' fill='%23ffffff'/><rect x='34' y='52' width='132' height='80' rx='5' fill='%23cbd5e1'/><rect x='42' y='60' width='116' height='64' rx='2' fill='%2394a3b8'/><rect x='88' y='132' width='24' height='18' rx='0' fill='%23cbd5e1'/><rect x='66' y='150' width='68' height='7' rx='3' fill='%23cbd5e1'/></svg>",
+export const metadata: Metadata = {
+  title: "NODO — Propuesta de sistema",
+  robots: { index: false, follow: false },
 };
 
-/** Cada producto con TODOS los distribuidores que lo tienen: eso es el sistema. */
-const ROWS: Row[] = [
-  {
-    name: "AMD Ryzen 5 5600 3.5GHz AM4",
-    brand: "AMD",
-    category: "Procesadores",
-    sku: "100-100000927BOX",
-    img: IMG.cpu,
-    offers: [
-      { dist: "Distribuidor B", color: "#34d399", price: 119.37, prev: 127.0, stock: 96, sync: "sync 4 min" },
-      { dist: "Distribuidor A", color: "#38bdf8", price: 124.8, prev: 124.8, stock: 12, sync: "sync 9 min", mode: "offline" },
-      { dist: "Distribuidor E", color: "#f472b6", price: 128.4, prev: 126.1, stock: 3, sync: "sync 22 min" },
-      { dist: "Distribuidor C", color: "#fb923c", price: 131.9, stock: 0, sync: "lista de hoy" },
-    ],
-  },
-  {
-    name: "Placa de video RTX 4060 8GB GDDR6",
-    brand: "ASUS",
-    category: "Placas de video",
-    sku: "DUAL-RTX4060-O8G",
-    img: IMG.gpu,
-    offers: [
-      { dist: "Distribuidor A", color: "#38bdf8", price: 297.16, prev: 312.8, stock: 4, sync: "sync 12 min", mode: "esquema" },
-      { dist: "Distribuidor D", color: "#a78bfa", price: 305.0, stock: 9, sync: "sync 31 min" },
-      { dist: "Distribuidor B", color: "#34d399", price: 312.8, prev: 309.4, stock: 21, sync: "sync 4 min" },
-    ],
-  },
-  {
-    name: "SSD NVMe 1TB Gen4 7000MB/s M.2 2280",
-    brand: "Kingston",
-    category: "Almacenamiento",
-    sku: "SSD1TBG4",
-    img: IMG.ssd,
-    offers: [
-      { dist: "Distribuidor C", color: "#fb923c", price: 62.1, prev: 66.4, stock: 40, sync: "lista de hoy" },
-      { dist: "Distribuidor E", color: "#f472b6", price: 64.9, stock: 8, sync: "sync 22 min" },
-      { dist: "Distribuidor B", color: "#34d399", price: 68.2, stock: 0, sync: "sync 4 min" },
-      { dist: "Distribuidor D", color: "#a78bfa", price: 71.0, stock: 15, sync: "sync 31 min" },
-      { dist: "Distribuidor A", color: "#38bdf8", price: 74.9, stock: 2, sync: "sync 9 min" },
-    ],
-  },
-  {
-    name: 'Monitor 27" 180Hz IPS 1ms FreeSync',
-    brand: "Gigabyte",
-    category: "Monitores",
-    sku: "MON27180",
-    img: IMG.mon,
-    offers: [
-      { dist: "Distribuidor D", color: "#a78bfa", price: 184.0, prev: 191.6, stock: 6, sync: "sync 31 min" },
-      { dist: "Distribuidor A", color: "#38bdf8", price: 199.5, stock: null, sync: "sync 9 min" },
-      { dist: "Distribuidor C", color: "#fb923c", price: 212.5, stock: 11, sync: "lista de hoy" },
-    ],
-  },
+/* Silueta neutra: el producto real de la captura, sin usar una foto ajena. */
+const SHOT =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'><g fill='none' stroke='#aab2c4' stroke-width='4' stroke-linecap='round'><path d='M28 70V56a32 32 0 0 1 64 0v14'/><rect x='18' y='66' width='18' height='30' rx='9' fill='#cbd2e0' stroke='none'/><rect x='84' y='66' width='18' height='30' rx='9' fill='#cbd2e0' stroke='none'/><path d='M30 96v6a10 10 0 0 0 10 10h10'/></g></svg>",
+  );
+
+const NAME = "AURICULAR RAZER BLACKSHARK V3 PRO WHITE HYPERSPEED WIRELESS+BT ANC THX";
+
+const CARD: PassCard = {
+  provider: "New Bytes",
+  providerColor: "#0284c7",
+  name: NAME,
+  brand: "RAZER",
+  category: "Auriculares",
+  imageUrl: SHOT,
+  price: "$ 402.409",
+  priceAlt: "US$ 263,01",
+  taxBadge: "+ IVA 10.5%",
+  taxTitle: "Sobre el neto, alicuota informada por el distribuidor",
+  baseLine: "Base US$ 238,02 · s/imp",
+  stock: 12,
+  offline: "off",
+  scheme: "off",
+  externalId: "121495",
+  syncedAt: "Actualizado 7/9/26, 11:40 a. m.",
+};
+
+const CARD_B: PassCard = {
+  ...CARD,
+  provider: "Elit",
+  providerColor: "#a855f7",
+  name: "PROCESADOR AMD RYZEN 5 5600 3.5GHZ AM4 SIN VIDEO",
+  brand: "AMD",
+  category: "Procesadores",
+  price: "$ 182.640",
+  priceAlt: "US$ 119,37",
+  previousPrice: "US$ 127,00",
+  dropPercent: 6,
+  taxBadge: "+ IVA 21%",
+  baseLine: "Base US$ 98,65 · s/imp · IIBB 3,5%",
+  stock: 96,
+  offline: "on",
+  scheme: null,
+  location: "Depósito Buenos Aires",
+  externalId: "AMD5600",
+  syncedAt: "Actualizado 7/9/26, 11:38 a. m.",
+};
+
+const CARD_C: PassCard = {
+  ...CARD,
+  provider: "Air",
+  providerColor: "#10b981",
+  name: "SSD KINGSTON NV3 1TB NVME M.2 2280 PCIE 4.0 7000MB/S",
+  brand: "Kingston",
+  category: "Almacenamiento",
+  price: "$ 95.014",
+  priceAlt: "US$ 62,10",
+  taxBadge: "+ IVA 21%",
+  baseLine: "Base US$ 51,32 · s/imp",
+  schemeHint: "Esquema US$ 59,80 (−3,7%)",
+  stock: 0,
+  offline: "off",
+  scheme: "on",
+  imageAiSelected: true,
+  externalId: "SSD1T8G4",
+  syncedAt: "Actualizado 7/9/26, 09:12 a. m.",
+  listOverdue: "lista de ayer",
+};
+
+const PROVIDERS: ProvState[] = [
+  { name: "New Bytes", color: "#0284c7", sync: "hace 4 min", on: true },
+  { name: "Elit", color: "#a855f7", sync: "hace 6 min", on: true },
+  { name: "Grupo Núcleo", color: "#10b981", sync: "hace 9 min", on: true },
+  { name: "Air", color: "#06b6d4", sync: "hace 12 min", on: true },
+  { name: "Invid", color: "#14b8a6", sync: "hace 18 min", on: true },
+  { name: "GC", color: "#f97316", sync: "hace 22 min", on: true },
+  { name: "Polytech", color: "#ef4444", sync: "hace 31 min", on: true },
+  { name: "Ashir", color: "#ec4899", sync: "lista de ayer", on: true, stale: true },
+  { name: "HDC", color: "#6366f1", sync: "hace 44 min", on: true },
+  { name: "Distecna", color: "#eab308", sync: "sin credenciales", on: false },
+  { name: "Ceven", color: "#84cc16", sync: "sin credenciales", on: false },
+  { name: "Diapstore", color: "#8b5cf6", sync: "sin credenciales", on: false },
 ];
 
-function Head({
-  kicker,
-  title,
-  children,
-}: {
-  kicker: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-6">
-      <div className="flex items-baseline gap-3">
-        <span className="sys-num text-[1.05rem]" style={{ color: "var(--sys-fg-faint)" }}>
-          {kicker}
-        </span>
-        <h2 className="sys-title text-[1.35rem]">{title}</h2>
-      </div>
-      <p className="mt-3 max-w-3xl text-[0.82rem] leading-relaxed" style={{ color: "var(--sys-fg-dim)" }}>
-        {children}
-      </p>
-    </div>
-  );
-}
+const TOP: SearchRow[] = [
+  { q: "ryzen 5 5600", count: 34 },
+  { q: "rtx 4060", count: 28 },
+  { q: "ssd 1tb nvme", count: 19 },
+  { q: "monitor 27 144hz", count: 12 },
+  { q: "teclado mecánico", count: 9 },
+];
+
+const RECENT: SearchRow[] = [
+  { q: "auricular razer" },
+  { q: "notebook lenovo i5" },
+  { q: "fuente 750w 80 plus" },
+  { q: "ddr5 32gb" },
+  { q: "ups 1500va" },
+];
+
+const SUGGESTIONS = [
+  "Procesadores",
+  "Placas de video",
+  "SSD",
+  "Memoria RAM",
+  "Monitores",
+  "Notebooks",
+  "Periféricos",
+  "UPS",
+];
 
 export default function PreviewPage() {
   return (
-    <div className="sys min-h-screen">
-      <div className="mx-auto w-full max-w-[1320px] px-6 sm:px-8 py-10 sm:py-14">
-        <header className="mb-14">
-          <span className="sys-label">Propuesta · no está en producción</span>
-          <h1 className="sys-title text-[2rem] sm:text-[2.6rem] mt-3">Dos direcciones</h1>
-          <p className="mt-4 max-w-3xl text-[0.86rem] leading-relaxed" style={{ color: "var(--sys-fg-dim)" }}>
-            La propuesta anterior tenía poca vida y con razón: hice todo más silencioso y lo llamé
-            profesional. Fondo casi negro, un solo acento, todos los bordes iguales, todas las
-            etiquetas en la misma mono chiquita. Eso es exactamente el molde donde caen las
-            interfaces hechas por IA.
-          </p>
-          <p className="mt-3 max-w-3xl text-[0.86rem] leading-relaxed" style={{ color: "var(--sys-fg-dim)" }}>
-            Estas dos parten de algo que tu sistema ya tiene y yo había ignorado: cada distribuidor
-            tiene su color. Eso no es adorno, es el dato que más rápido se lee, y ninguna otra
-            herramienta lo puede copiar porque nadie más tiene tus quince proveedores. Acá el color
-            manda.
-          </p>
-        </header>
+    <main className="lnd">
+      <div className="mx-auto max-w-6xl px-6 py-20">
+        <p className="lnd-label">Propuesta · no está en producción</p>
+        <h1 className="lnd-display lnd-display--lg mt-4">La card y la home</h1>
 
-        <section className="mb-20">
-          <Head kicker="1" title="Mesa de operaciones">
-            Comprar stock es operar: los precios se mueven, hay quince contrapartes y gana el que ve
-            el número primero. La pantalla se comporta como una mesa. Arriba corre la cinta con el
-            dólar y las bajas del día. Cada fila lleva el color del distribuidor que tiene el mejor
-            precio, y el precio es el número más grande de la pantalla, pintado de ese color. El
-            abanico del medio muestra dónde cae cada distribuidor entre el más barato y el más caro.
-            Tocá una fila y se abre el libro completo.
-          </Head>
-          <DeskDirection rows={ROWS} />
-        </section>
-
-        <section className="mb-16">
-          <Head kicker="2" title="Catálogo vivo">
-            Lo opuesto: papel claro y cálido, foto grande, y el color del distribuidor como filo
-            superior de cada tarjeta. La energía la ponen los productos y el código de color, no un
-            acento neón sobre negro. El resultado más barato ocupa el doble de espacio, y abajo de
-            cada precio aparecen las otras fuentes con su color y su número, para comparar sin
-            abrir nada.
-          </Head>
-          <LiveDirection rows={ROWS} />
-        </section>
-
-        <footer className="pt-8" style={{ borderTop: "1px solid var(--sys-hair)" }}>
-          <p className="text-[0.72rem] leading-relaxed" style={{ color: "var(--sys-fg-faint)" }}>
-            Vista de propuesta con datos de ejemplo. No toca el sistema en funcionamiento ni cambia
-            ninguna ruta real. Los distribuidores se muestran anónimos.
+        <div className="lnd-body mt-8 max-w-2xl space-y-4">
+          <p>
+            Descarté la mesa de operaciones. La había armado asumiendo que el mismo producto se
+            puede agrupar entre distribuidores, y no es cierto: los nombres no coinciden aunque sea
+            el mismo artículo. Sin ese matching, esa pantalla compara cosas distintas.
           </p>
-        </footer>
+          <p>
+            Así que acá van las dos cosas que sí pediste. Primero una vuelta sobre la tarjeta que ya
+            existe, sin sacarle nada. Después la home del buscador, que es donde dijiste que podía
+            innovar.
+          </p>
+        </div>
+
+        {/* ---------------- CARD ---------------- */}
+        <h2 className="lnd-display lnd-display--md mt-24">1 · La tarjeta</h2>
+        <div className="lnd-body mt-4 max-w-2xl space-y-4">
+          <p>
+            No es un rediseño, es la misma tarjeta hablando el idioma de la landing. Está toda la
+            información de hoy, incluidas las etiquetas de lo que el producto no tiene. Cuatro
+            cambios:
+          </p>
+          <ol className="list-decimal space-y-2 pl-5">
+            <li>
+              <b>Todo número va en la mono de la landing</b>, con cifras de ancho fijo. Es lo que
+              deja leer una grilla de precios en columna en vez de renglón por renglón.
+            </li>
+            <li>
+              <b>Las modalidades bajan de la foto al bloque de precio.</b> Offline y esquema
+              modifican el precio, así que se leen con el precio y dejan de tapar el producto. Sobre
+              la foto queda solo la baja, que es noticia.
+            </li>
+            <li>
+              <b>Los dos botones auxiliares pasan a línea fina.</b> Hoy hay violeta, verde y el
+              stepper compitiendo en una fila de tres centímetros. El único elemento pintado pasa a
+              ser agregar al carrito.
+            </li>
+            <li>
+              <b>Se suma el stock</b>, que el backend ya manda y la tarjeta no mostraba. Está en la
+              página de producto y en la de proveedor, pero no acá, que es donde comprás.
+            </li>
+          </ol>
+          <p>
+            Lo que el producto no tiene sigue estando, pero en línea punteada y en voz baja: se lee
+            si lo buscás y no compite con lo que sí hay.
+          </p>
+        </div>
+
+        <div className="mt-10 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(15rem, 1fr))" }}>
+          <CardPass c={CARD} />
+          <CardPass c={CARD_B} />
+          <CardPass c={CARD_C} />
+        </div>
+
+        <p className="lnd-note mt-10">La misma tarjeta en el tema oscuro del sistema</p>
+        <div
+          className="pc-dark mt-4 grid gap-5 rounded-xl p-5"
+          style={{ background: "#0e1018", gridTemplateColumns: "repeat(auto-fill, minmax(15rem, 1fr))" }}
+        >
+          <CardPass c={CARD} />
+          <CardPass c={CARD_B} />
+          <CardPass c={CARD_C} />
+        </div>
+
+        {/* ---------------- HOME ---------------- */}
+        <h2 className="lnd-display lnd-display--md mt-24">2 · La home del buscador</h2>
+        <div className="lnd-body mt-4 max-w-2xl space-y-4">
+          <p>
+            La de hoy abre con un carrusel de tres slides con degradé que le explican a alguien que
+            entra todos los días qué hace el producto que ya compró, y que se mueve solo cada seis
+            segundos. Debajo hay cuatro tarjetas de dashboard, y una de ellas dice <i>8 de 14</i> sin
+            dejarte hacer nada con ese número.
+          </p>
+          <p>
+            Acá el buscador es la página. El estado del sistema baja a una línea de texto. Y el{" "}
+            <i>8 de 14</i> se convierte en el rail de proveedores: cada uno con su color, con cuándo
+            sincronizó, y clickeable. Una lista vencida se ve acá en ámbar en vez de quedar escondida
+            adentro de una cuenta, y los que no tienen credenciales están apagados al final.
+          </p>
+        </div>
+
+        <div className="mt-10">
+          <SearchHome providers={PROVIDERS} top={TOP} recent={RECENT} suggestions={SUGGESTIONS} />
+        </div>
+
+        <p className="lnd-note mt-16">
+          Nada de esto toca producción. Decime qué queda y qué no y lo llevo al sistema detrás de un
+          switch.
+        </p>
       </div>
-    </div>
+    </main>
   );
 }
