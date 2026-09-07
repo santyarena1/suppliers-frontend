@@ -1,7 +1,7 @@
 /* ============================================================
  * TARJETA DE PRODUCTO · una vuelta sobre la que ya existe
- * Misma información, idioma de la landing. Funciona en claro y
- * en oscuro porque el sistema hoy usa las dos.
+ * Misma información, idioma de la landing. Siempre en claro:
+ * es un objeto de papel apoyado sobre el fondo del sistema.
  * ========================================================== */
 
 .pc {
@@ -37,18 +37,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.pc-dark .pc {
-  --pc-paper: #151926;
-  --pc-ink: #e9edfa;
-  --pc-dim: #a7b0cd;
-  --pc-faint: #8b95b8;
-  --pc-line: rgb(180 196 255 / 0.14);
-  --pc-shot: #ffffff;
-  --pc-accent: #6a6cf6;
-  --pc-good: #35c98a;
-  --pc-warn: #ff6a3d;
-}
-.pc-dark .pc:hover { border-color: rgb(180 196 255 / 0.3); }
 
 /* --- Foto --- */
 .pc__shot {
@@ -196,23 +184,7 @@
 }
 .pc__price s { font-size: 0.68rem; color: var(--pc-faint); }
 
-.pc__sub {
-  margin-top: 0.35rem;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex-wrap: wrap;
-  font-size: 0.68rem;
-  color: var(--pc-dim);
-}
-.pc__tax {
-  padding: 0.12rem 0.35rem;
-  border-radius: 3px;
-  border: 1px solid var(--pc-line);
-  font-size: 0.62rem;
-  color: var(--pc-dim);
-}
-.pc__base { margin-top: 0.3rem; font-size: 0.62rem; color: var(--pc-faint); }
+.pc__base { margin-top: 0.4rem; font-size: 0.62rem; color: var(--pc-faint); }
 .pc__scheme { margin-top: 0.25rem; font-size: 0.66rem; color: var(--pc-accent); }
 .pc__scheme--dim { opacity: 0.72; font-size: 0.62rem; }
 .pc__warn { margin-top: 0.25rem; font-size: 0.62rem; color: var(--pc-warn); }
@@ -306,7 +278,7 @@
 }
 
 /* ============================================================
- * HOME DEL BUSCADOR
+ * INICIO Y BÚSQUEDA VACÍA
  * ========================================================== */
 
 .hm {

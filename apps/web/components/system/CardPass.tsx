@@ -1,28 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Check,
-  DollarSign,
-  GitCompare,
-  MapPin,
-  Minus,
-  Plus,
-  Sparkles,
-} from "lucide-react";
+import { Check, DollarSign, GitCompare, MapPin, Minus, Plus, Sparkles } from "lucide-react";
 
 /**
  * Una vuelta sobre la tarjeta que ya existe. No es un rediseño: es la misma
- * tarjeta hablando el idioma de la landing.
+ * tarjeta hablando el idioma de la landing, siempre en claro.
  *
- * No se saca ninguna información. Tres cambios y uno agregado:
- *  1. Todo número va en la mono de la landing con cifras de ancho fijo, para
- *     que una grilla de precios se lea en columna y no renglón por renglón.
- *  2. Las modalidades (offline, esquema) bajan de la foto al bloque de precio,
- *     que es lo que modifican. Dejan de tapar el producto.
- *  3. Los dos botones auxiliares pasan a línea fina: el único elemento pintado
- *     de la tarjeta es la acción que importa, agregar al carrito.
- *  4. Se suma el stock, que el DTO ya trae y la tarjeta no mostraba.
+ * Regla nueva: la tarjeta habla una sola moneda, la que el comercio eligió.
+ * Eso obliga a repensar dos cosas que hoy están fijas:
+ *  - La línea secundaria de hoy es la OTRA moneda. Se va: si elegiste ARS, no
+ *    hay nada en la tarjeta en USD.
+ *  - "Base US$ 238,02 · s/imp" estaba siempre en dólares. Pasa a ser un
+ *    desglose en la moneda elegida, y absorbe la pastilla de impuesto, que
+ *    decía lo mismo con otras palabras.
+ *
+ * Además el stock, que el DTO ya trae y la tarjeta no mostraba.
  */
 
 export type PassCard = {
@@ -34,15 +27,15 @@ export type PassCard = {
   category?: string;
   imageUrl?: string;
   imageAiSelected?: boolean;
-  /** Importe principal ya formateado en la moneda elegida. */
+  /** Importe principal, ya formateado en la moneda elegida. */
   price: string;
-  /** El mismo importe en la otra moneda. */
-  priceAlt?: string;
+  /** Precio de la sync anterior, en la misma moneda. */
   previousPrice?: string;
   dropPercent?: number;
-  taxBadge: string;
-  taxTitle?: string;
-  baseLine?: string;
+  /** Desglose en la misma moneda: base y los impuestos que se estén aplicando. */
+  breakdown: string;
+  breakdownTitle?: string;
+  /** Precio en esquema, en la misma moneda. */
   schemeHint?: string;
   schemeDiscount?: string;
   missingIva?: boolean;
@@ -126,14 +119,11 @@ export default function CardPass({ c }: { c: PassCard }) {
           {c.previousPrice && <s className="mono">{c.previousPrice}</s>}
         </div>
 
-        <div className="pc__sub">
-          {c.priceAlt && <span className="mono">{c.priceAlt}</span>}
-          <span className="pc__tax mono" title={c.taxTitle}>
-            {c.taxBadge}
-          </span>
-        </div>
+        {/* Una sola moneda, un solo renglón: de dónde sale el número de arriba. */}
+        <p className="pc__base mono" title={c.breakdownTitle}>
+          {c.breakdown}
+        </p>
 
-        {c.baseLine && <p className="pc__base mono">{c.baseLine}</p>}
         {c.schemeHint && <p className="pc__scheme mono">{c.schemeHint}</p>}
         {c.schemeDiscount && <p className="pc__scheme pc__scheme--dim mono">{c.schemeDiscount}</p>}
         {c.missingIva && <p className="pc__warn mono">Sin alícuota de IVA</p>}
