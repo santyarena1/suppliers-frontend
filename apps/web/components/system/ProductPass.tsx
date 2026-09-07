@@ -1,7 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft, Check, Copy, Minus, Plus, Search, Sparkles, ZoomIn } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpDown,
+  Check,
+  ChevronDown,
+  Copy,
+  Minus,
+  Plus,
+  Search,
+  Sparkles,
+  Store,
+  ZoomIn,
+} from "lucide-react";
 
 /**
  * Página de producto con el idioma de la landing.
@@ -29,12 +41,26 @@ export type Mode = {
   rows: PriceRow[];
 };
 
-export type LocalRow = {
-  shop: string;
-  product: string;
+/** Una coincidencia de local, con la misma información que muestra hoy. */
+export type LocalHit = {
+  store: string;
+  name: string;
+  category?: string;
   price: string;
+  match: number;
   margin: string;
   marginTone: "up" | "down";
+  syncedAt: string;
+  imageUrl: string;
+};
+
+export type Locales = {
+  query: string;
+  tokens: string[];
+  range: string;
+  counts: string;
+  best: LocalHit[];
+  others: LocalHit[];
 };
 
 export type ProductPassData = {
@@ -62,7 +88,7 @@ export type ProductPassData = {
   currency: string;
   related: { name: string; provider: string; color: string; price: string }[];
   syncedAt: string;
-  locales: { query: string; rows: LocalRow[]; note: string };
+  locales: Locales;
 };
 
 function PriceChart({ points, currency }: { points: { date: string; value: number }[]; currency: string }) {
@@ -145,7 +171,10 @@ function PriceChart({ points, currency }: { points: { date: string; value: numbe
             <span
               key={pt.date}
               className={i === xy.length - 1 ? "ch__dot is-last" : "ch__dot"}
-              style={{ left: `${pt.x}%`, top: `${(pt.y / H) * 100}%` }}
+              style={{
+                left: `calc(7px + (100% - 14px) * ${pt.x / 100})`,
+                top: `${(pt.y / H) * 100}%`,
+              }}
               title={`${pt.date} · ${fmt(pt.value)}`}
             />
           ))}
@@ -158,6 +187,33 @@ function PriceChart({ points, currency }: { points: { date: string; value: numbe
         ))}
       </div>
     </div>
+  );
+}
+
+function LocalCard({ h, best = false }: { h: LocalHit; best?: boolean }) {
+  return (
+    <button type="button" className={`lc__hit${best ? " is-best" : ""}`}>
+      <span className="lc__thumb">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={h.imageUrl} alt="" />
+      </span>
+      <span className="lc__hit-body">
+        <span className="lc__hit-top">
+          <Store size={11} strokeWidth={1.7} style={{ color: "var(--p-faint)", flex: "0 0 auto" }} />
+          <span className="lc__hit-store">{h.store}</span>
+          <span className="lc__hit-when mono">{h.syncedAt}</span>
+        </span>
+        <span className="lc__hit-name">{h.name}</span>
+        {h.category && <span className="lc__hit-cat">{h.category}</span>}
+        <span className="lc__hit-foot">
+          <span className="lc__hit-price mono">{h.price}</span>
+          <span className="lc__hit-tags mono">
+            <em>{h.match}% match</em>
+            <b className={`is-${h.marginTone}`}>{h.margin}</b>
+          </span>
+        </span>
+      </span>
+    </button>
   );
 }
 
@@ -323,29 +379,59 @@ export default function ProductPass({ p }: { p: ProductPassData }) {
           <PriceChart points={p.history} currency={p.currency} />
         </section>
 
-        {/* Locales: el mini buscador de siempre, con los que más coinciden */}
-        <section className="pp__sec">
-          <h2>Precios de venta en locales</h2>
+        {/* Locales: el panel de siempre, con su buscador y sus coincidencias */}
+        <section className="pp__sec pp__sec--plain">
           <div className="lc">
+            <p className="lc__title">Precios de venta en locales</p>
+            <p className="lc__lead">
+              Referencia de mercado en locales de computación. Sirve para estimar a cuánto se vende
+              el producto afuera y calcular margen. No es tu precio de compra ni una oferta de NODO.
+            </p>
+
             <div className="lc__field">
               <Search size={14} strokeWidth={1.7} style={{ color: "var(--p-faint)" }} />
-              <input defaultValue={p.locales.query} aria-label="Buscar en locales" />
-              <button type="button" className="lc__go mono">
-                Buscar
+              <input defaultValue={p.locales.query} placeholder="Ajustá la búsqueda (amplia)..." aria-label="Ajustar búsqueda" />
+            </div>
+            <p className="lc__tokens mono">Criterios amplios: {p.locales.tokens.join(" · ")}</p>
+
+            <div className="lc__tools">
+              <span className="lc__sort">
+                <ArrowUpDown size={12} strokeWidth={1.7} style={{ color: "var(--p-faint)" }} />
+                <select aria-label="Ordenar resultados" defaultValue="match">
+                  <option value="match">Mejor coincidencia</option>
+                  <option value="price-asc">Precio más bajo</option>
+                  <option value="price-desc">Precio más alto</option>
+                  <option value="store">Local</option>
+                </select>
+              </span>
+              <button type="button" className="lc__stores">
+                <Store size={12} strokeWidth={1.7} />
+                Locales
+                <ChevronDown size={12} strokeWidth={1.7} />
               </button>
             </div>
 
-            <div className="lc__list">
-              {p.locales.rows.map((l) => (
-                <a key={l.shop} href="#" className="lc__row">
-                  <span className="lc__shop">{l.shop}</span>
-                  <span className="lc__prod">{l.product}</span>
-                  <span className="lc__price mono">{l.price}</span>
-                  <span className={`lc__margin mono is-${l.marginTone}`}>{l.margin}</span>
-                </a>
+            <p className="lc__range mono">
+              Rango: <b>{p.locales.range}</b>
+              <span className="lc__sep"> · </span>
+              {p.locales.counts}
+            </p>
+
+            <p className="lc__group is-best">
+              Mejores coincidencias <em>· ≥85% de palabras de la búsqueda</em>
+            </p>
+            <div className="lc__grid">
+              {p.locales.best.map((h) => (
+                <LocalCard key={h.store + h.name} h={h} best />
               ))}
             </div>
-            <p className="lc__note mono">{p.locales.note}</p>
+
+            <p className="lc__group">Otras referencias</p>
+            <div className="lc__grid">
+              {p.locales.others.map((h) => (
+                <LocalCard key={h.store + h.name} h={h} />
+              ))}
+            </div>
           </div>
         </section>
 

@@ -12,6 +12,7 @@ import "../landing.css";
 import "../preview.css";
 import "../preview-system.css";
 import "../preview-search.css";
+import "../preview-locales.css";
 
 export const metadata: Metadata = {
   title: "NODO — Propuesta de sistema",
@@ -329,44 +330,79 @@ const PRODUCT: ProductPassData = {
   syncedAt: "Actualizado 7/9/26, 11:40 a. m. · New Bytes sincroniza cada 15 minutos",
   locales: {
     query: "razer blackshark v3 pro",
-    rows: [
+    tokens: ["razer", "blackshark", "v3", "pro"],
+    range: "$ 396.000 – $ 612.000",
+    counts: "6 mostrados · 6 locales",
+    best: [
       {
-        shop: "Compra Gamer",
-        product: "Razer BlackShark V3 Pro Blanco",
+        store: "Compra Gamer",
+        name: "Auricular Razer BlackShark V3 Pro Blanco Inalámbrico",
+        category: "Auriculares gamer",
         price: "$ 589.999",
+        match: 100,
         margin: "+46%",
         marginTone: "up",
+        syncedAt: "hace 2 h",
+        imageUrl: HEADSET,
       },
       {
-        shop: "Venex",
-        product: "Auricular Razer BlackShark V3 Pro Wireless",
+        store: "Venex",
+        name: "Razer BlackShark V3 Pro Wireless THX White",
+        category: "Periféricos · Auriculares",
         price: "$ 574.900",
+        match: 100,
         margin: "+43%",
         marginTone: "up",
+        syncedAt: "hace 5 h",
+        imageUrl: HEADSET,
       },
       {
-        shop: "Mercado Libre",
-        product: "Razer BlackShark V3 Pro (promedio de 14 publicaciones)",
-        price: "$ 561.400",
-        margin: "+40%",
-        marginTone: "up",
-      },
-      {
-        shop: "Full H4rd",
-        product: "Razer BlackShark V3 Pro White THX",
+        store: "Full H4rd",
+        name: "Auricular Razer BlackShark V3 Pro White THX Spatial",
+        category: "Audio",
         price: "$ 549.000",
+        match: 92,
         margin: "+36%",
         marginTone: "up",
-      },
-      {
-        shop: "Maximus Gaming",
-        product: "Razer BlackShark V3 (modelo base, no Pro)",
-        price: "$ 396.000",
-        margin: "−2%",
-        marginTone: "down",
+        syncedAt: "hace 1 d",
+        imageUrl: HEADSET,
       },
     ],
-    note: "Coincidencias ordenadas por parecido con el nombre del producto. El margen se calcula sobre tu costo neto de lista y no incluye envío ni financiación de cada local.",
+    others: [
+      {
+        store: "Gaming City",
+        name: "Razer BlackShark V3 Pro Edición Limitada",
+        category: "Auriculares",
+        price: "$ 612.000",
+        match: 78,
+        margin: "+52%",
+        marginTone: "up",
+        syncedAt: "hace 8 h",
+        imageUrl: HEADSET,
+      },
+      {
+        store: "Maximus Gaming",
+        name: "Auricular Razer BlackShark V3 (modelo base, con cable)",
+        category: "Auriculares",
+        price: "$ 396.000",
+        match: 62,
+        margin: "−2%",
+        marginTone: "down",
+        syncedAt: "hace 3 h",
+        imageUrl: HEADSET,
+      },
+      {
+        store: "Mercado Libre",
+        name: "Razer BlackShark V3 Pro — promedio de 14 publicaciones",
+        category: "Marketplace",
+        price: "$ 561.400",
+        match: 88,
+        margin: "+40%",
+        marginTone: "up",
+        syncedAt: "hace 1 h",
+        imageUrl: HEADSET,
+      },
+    ],
   },
 };
 
@@ -400,14 +436,14 @@ export default function PreviewPage() {
         </div>
 
         <p className="lnd-note mt-10">Preferencia en ARS · cuatro productos con datos distintos, todo alineado</p>
-        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(16.5rem, 1fr))" }}>
+        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(16.5rem, 100%), 1fr))" }}>
           {ARS_CARDS.map((c) => (
             <CardPass key={c.externalId} c={c} />
           ))}
         </div>
 
         <p className="lnd-note mt-10">Los mismos, con la preferencia en USD</p>
-        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(16.5rem, 1fr))" }}>
+        <div className="mt-3 grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(16.5rem, 100%), 1fr))" }}>
           {USD_CARDS.map((c) => (
             <CardPass key={c.externalId} c={c} />
           ))}
@@ -460,8 +496,10 @@ export default function PreviewPage() {
             ahora dice <span className="lnd-mono">Antes $ 428.096 · sync del 6/9/26 · bajó 6%</span>.
           </p>
           <p>
-            Los locales vuelven a ser el mini buscador con las coincidencias ordenadas por parecido,
-            como estaba. Solo cambió la estética y se sumó la columna de margen.
+            La sección de locales quedó igual que hoy: mismo encabezado con su aclaración, el
+            buscador amplio, los criterios, el orden, el filtro de locales, el rango, y las dos
+            grillas de Mejores coincidencias y Otras referencias con su porcentaje de match y su
+            margen. La vez pasada la había convertido en una lista, que no era lo que había.
           </p>
           <p>
             El gráfico tiene referencias: máximo, mínimo, valor de hoy y variación a 30 días, con la

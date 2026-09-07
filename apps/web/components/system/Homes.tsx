@@ -236,6 +236,7 @@ export function SearchEmpty({
         </div>
 
         <AdBento slots={primaryAds} variant="primary" />
+        <AdBento slots={secondaryAds} variant="secondary" />
 
         <p className="se__partners-title mono">Marcas que trabajan con la red</p>
         <div className="se__partners">
@@ -245,8 +246,6 @@ export function SearchEmpty({
             </span>
           ))}
         </div>
-
-        <AdBento slots={secondaryAds} variant="secondary" />
 
         <div className="hm__sec">
           <h3>
