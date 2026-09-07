@@ -339,24 +339,42 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     intro:
       "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Mail y contraseña con los que entrás a www.solutionbox.com.ar. Con eso Nodo sincroniza el catálogo con tus precios, crea pedidos y lee tus pedidos y facturas.",
+      "Usuario y contraseña de la API (createToken) traen el catálogo con impuestos y stock por depósito — pedilos a tu vendedor de Solution Box. Mail y contraseña de www.solutionbox.com.ar habilitan pedidos, historial y facturas. Podés cargar uno, el otro, o los dos.",
     portalUrl: "https://www.solutionbox.com.ar",
     portalLabel: "www.solutionbox.com.ar",
     fields: [
       {
-        key: "email",
-        label: "Mail",
+        key: "api_user",
+        label: "Usuario API",
         type: "text",
-        required: true,
+        required: false,
+        placeholder: "Usuario de la API (createToken)",
+        help: "Catálogo con impuestos por producto y stock por depósito. Te lo da Solution Box.",
+        aliases: ["apiUser", "apiUsuario"],
+      },
+      {
+        key: "api_password",
+        label: "Contraseña API",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña de la API",
+        aliases: ["apiPassword", "apiClave"],
+      },
+      {
+        key: "email",
+        label: "Mail del portal",
+        type: "text",
+        required: false,
         placeholder: "Mail de tu usuario en solutionbox.com.ar",
+        help: "Para pedidos, historial y facturas.",
         aliases: ["user", "username", "usuario"],
         autoComplete: "username",
       },
       {
         key: "password",
-        label: "Contraseña",
+        label: "Contraseña del portal",
         type: "password",
-        required: true,
+        required: false,
         placeholder: "Contraseña del sitio",
         aliases: ["pass"],
         autoComplete: "current-password",
@@ -452,6 +470,21 @@ export function validateCredentialValues(
       return "Completá usuario y contraseña juntos, o el token de lista de precios.";
     }
     return "Cargá usuario y contraseña de nb.com.ar, o el token de lista de precios.";
+  }
+
+  if (provider === "SOLUTION_BOX") {
+    const apiUser = (values.api_user ?? "").trim();
+    const apiPassword = (values.api_password ?? "").trim();
+    const email = (values.email ?? "").trim();
+    const password = (values.password ?? "").trim();
+    const apiComplete = apiUser && apiPassword;
+    const apiPartial = (apiUser || apiPassword) && !apiComplete;
+    const webComplete = email && password;
+    const webPartial = (email || password) && !webComplete;
+    if (apiPartial) return "Cargá el usuario y la contraseña de la API juntos.";
+    if (webPartial) return "Cargá el mail y la contraseña del portal juntos.";
+    if (apiComplete || webComplete) return null;
+    return "Cargá usuario y contraseña de la API, o mail y contraseña del portal.";
   }
 
   if (provider === "ELIT") {
