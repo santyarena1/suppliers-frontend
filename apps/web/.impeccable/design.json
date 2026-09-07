@@ -1,0 +1,343 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-06T00:00:00.000Z",
+  "title": "Design System: NODO — Superficie pública",
+  "scope": "Solo app/(marketing) + components/landing/*. La app autenticada (app/(app)) sigue con el tema Tailwind surface-* / brand-* y no está descripta acá.",
+  "extensions": {
+    "colorMeta": {
+      "void": {
+        "role": "neutral",
+        "displayName": "Void",
+        "canonical": "#0b0d1a",
+        "purpose": "Lecho del mundo: fondo de página, fondo de campos, riel de scrollbar.",
+        "tonalRamp": ["#05060d", "#0b0d1a", "#131728", "#1c2138", "#2a3050", "#414a72", "#6b76a0", "#c3c9de"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#13162b",
+        "purpose": "Cara inferior del degradado de panel.",
+        "tonalRamp": ["#070813", "#0d0f1f", "#13162b", "#1d2140", "#2c3160", "#454b8c", "#7278b4", "#c6c9e4"]
+      },
+      "night": {
+        "role": "neutral",
+        "displayName": "Night",
+        "canonical": "#1a1d3a",
+        "purpose": "Cara superior del degradado de panel, pulgar de scrollbar, pestaña activa.",
+        "tonalRamp": ["#0a0b18", "#101226", "#1a1d3a", "#25294f", "#343a71", "#4a52a0", "#7880c4", "#c9cde8"]
+      },
+      "lilac": {
+        "role": "primary",
+        "displayName": "Lilac",
+        "canonical": "#6a6cf6",
+        "purpose": "Marca en acción: cara superior del botón primario, ícono de búsqueda, viñetas, borde de foco de campo.",
+        "tonalRamp": ["#141446", "#1e1e69", "#2b2b95", "#3c3cc2", "#5252e6", "#6a6cf6", "#9799fa", "#c9cafd"]
+      },
+      "lilac-deep": {
+        "role": "primary",
+        "displayName": "Lilac Profundo",
+        "canonical": "#4033fc",
+        "purpose": "Cara inferior del botón primario, ::selection, fuente del halo de acción. Nunca como color de texto.",
+        "tonalRamp": ["#0d0a4a", "#150f6d", "#1e1699", "#2a1fc4", "#3629e6", "#4033fc", "#8079fd", "#c0bbfe"]
+      },
+      "ember": {
+        "role": "secondary",
+        "displayName": "Ember",
+        "canonical": "#ff6a3d",
+        "purpose": "Único cálido. Tres significados: mejor precio, baja de precio, estado activo. Más anillo de foco y caret.",
+        "tonalRamp": ["#3d1206", "#5c1d0c", "#872c13", "#b33c1c", "#dd4f27", "#ff6a3d", "#ff9c7c", "#ffd0c0"]
+      },
+      "mist": {
+        "role": "tertiary",
+        "displayName": "Mist",
+        "canonical": "#bfd2ff",
+        "purpose": "Realce frío: hover de navegación y riel, cifra del contador del hero, base de las partículas. Matiz del que derivan hairlines y hover de fila.",
+        "tonalRamp": ["#131c3a", "#1d2b58", "#2b3f80", "#3d57ab", "#5975d1", "#8aa3ea", "#bfd2ff", "#e6eeff"]
+      },
+      "fg": {
+        "role": "neutral",
+        "displayName": "Texto principal",
+        "canonical": "#e9efff",
+        "purpose": "Títulos, cifras, nombres de producto.",
+        "tonalRamp": ["#161b2c", "#232a44", "#343d63", "#4b568a", "#6b78b0", "#95a1d0", "#c2caea", "#e9efff"]
+      },
+      "fg-dim": {
+        "role": "neutral",
+        "displayName": "Texto atenuado",
+        "canonical": "#a9b6dd",
+        "purpose": "Párrafos de cuerpo e ítems de lista.",
+        "tonalRamp": ["#151a2b", "#212843", "#313b62", "#465288", "#6472ad", "#8894c8", "#a9b6dd", "#dfe5f5"]
+      },
+      "fg-faint": {
+        "role": "neutral",
+        "displayName": "Texto tenue",
+        "canonical": "#8b98c6",
+        "purpose": "Etiquetas mono, notas ilustrativas, metadatos, sin stock. Piso de contraste: 5.78:1 sobre night. No oscurecer.",
+        "tonalRamp": ["#121623", "#1c2238", "#2a3252", "#3c4674", "#55609a", "#717dae", "#8b98c6", "#ccd4e9"]
+      },
+      "hair": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgb(191 210 255 / 0.14)",
+        "purpose": "Toda la separación estructural en reposo: bordes de panel, líneas entre filas, reglas de encabezado.",
+        "tonalRamp": []
+      },
+      "hair-strong": {
+        "role": "neutral",
+        "displayName": "Hairline fuerte",
+        "canonical": "rgb(191 210 255 / 0.26)",
+        "purpose": "Borde de campo en reposo y de botón fantasma.",
+        "tonalRamp": []
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display condensada",
+        "purpose": "Archivo variable a 'wdth' 74 / 'wght' 800, mayúsculas. Un solo uso por página: el titular del hero."
+      },
+      "headline": { "displayName": "Headline", "purpose": "Títulos de sección vía SectionHead." },
+      "title": { "displayName": "Title", "purpose": "Nombres de plan y de audiencia dentro de panel." },
+      "body": { "displayName": "Body", "purpose": "Bajadas y párrafos, en color atenuado, con max-width 68ch." },
+      "label": { "displayName": "Label mono", "purpose": "Navegación, riel, encabezados de columna, metadata de sección, texto de botón." },
+      "note": { "displayName": "Nota mono", "purpose": "La voz de la honestidad: notas ilustrativas, timestamps, descargo del pie." },
+      "mono": { "displayName": "Dato mono", "purpose": "Todo precio, cantidad, porcentaje, fecha y numeral, con tabular-nums." }
+    },
+    "shadows": [
+      {
+        "name": "panel-seat",
+        "value": "0 24px 60px -30px rgb(0 0 0 / 0.9)",
+        "purpose": "Sombra por defecto y única de todo panel. Oscurecimiento del lecho, no halo. Los paneles se apoyan, no flotan."
+      },
+      {
+        "name": "action-halo",
+        "value": "0 10px 30px -12px rgb(64 51 252 / 0.9)",
+        "purpose": "Exclusiva del botón primario: luz de color, no sombra negra. En hover sube a 0 14px 36px -12px rgb(64 51 252 / 0.95)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "Curva por defecto: revelado (620ms), hover de botón (160ms), flecha (200ms), tick del riel (220ms)."
+      },
+      {
+        "name": "ease-in-out",
+        "value": "cubic-bezier(0.77, 0, 0.175, 1)",
+        "purpose": "Curva simétrica disponible para transiciones de ida y vuelta."
+      },
+      {
+        "name": "field-beat",
+        "value": "520ms",
+        "purpose": "Compás antes de que el campo arranque a converger."
+      },
+      {
+        "name": "field-converge",
+        "value": "1700ms",
+        "purpose": "Duración de la convergencia del campo, con easeOutExpo. El panel del hero se revela a beat + converge*0.66."
+      },
+      {
+        "name": "reveal",
+        "value": "620ms",
+        "purpose": "Entrada única: opacidad 0→1 y translate3d(0,14px,0). Nueve nodos en toda la página."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Transiciones y animaciones a 0.001ms, .lnd-reveal visible, y el campo dibuja su estado final una sola vez sin bucle de rAF."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "rail", "value": "1180px" },
+      { "name": "shell", "value": "1240px" }
+    ],
+    "namedRules": [
+      "La Regla de los Tres Significados",
+      "La Regla del Matiz",
+      "La Regla Sin Semáforo",
+      "La Regla del Número Alineado",
+      "La Regla del Título Sin Anuncio",
+      "La Regla de la Mayúscula Condensada",
+      "La Regla del Ritmo Único",
+      "La Regla del Vidrio Sobre el Campo",
+      "La Regla de la Sombra Que No Sube",
+      "La Regla de la Línea, No el Bloque"
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón primario",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal. Degradado lilac con halo de color propio; el borde se marca ember en hover y la flecha avanza.",
+      "html": "<button class=\"ds-btn ds-btn-primary\"><span>Crear mi cuenta</span><svg class=\"ds-btn-arrow\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 0.85rem; padding: 0.95rem 1.4rem; font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; border: 1px solid transparent; border-radius: 4px; cursor: pointer; transition: transform 160ms cubic-bezier(0.23,1,0.32,1), border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms cubic-bezier(0.23,1,0.32,1); } .ds-btn:active { transform: translateY(1px); } .ds-btn-arrow { transition: transform 200ms cubic-bezier(0.23,1,0.32,1); } .ds-btn:hover .ds-btn-arrow { transform: translateX(3px); } .ds-btn-primary { background: linear-gradient(180deg, #6a6cf6 0%, #4033fc 100%); color: #fff; box-shadow: 0 10px 30px -12px rgb(64 51 252 / 0.9); } .ds-btn-primary:hover { border-color: #ff6a3d; box-shadow: 0 14px 36px -12px rgb(64 51 252 / 0.95); } .ds-btn-primary:focus-visible { outline: 2px solid #ff6a3d; outline-offset: 3px; }"
+    },
+    {
+      "name": "Botón fantasma",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Acción secundaria. Solo borde hairline; en hover borde y texto pasan a ember.",
+      "html": "<button class=\"ds-btn ds-btn-ghost\"><span>Ver cómo funciona</span><svg class=\"ds-btn-arrow\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/></svg></button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; gap: 0.85rem; padding: 0.95rem 1.4rem; font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; background: transparent; color: #e9efff; border: 1px solid rgb(191 210 255 / 0.26); border-radius: 4px; cursor: pointer; transition: border-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(0.23,1,0.32,1); } .ds-btn-ghost:hover { border-color: #ff6a3d; color: #ff6a3d; } .ds-btn-ghost:active { transform: translateY(1px); } .ds-btn-ghost:focus-visible { outline: 2px solid #ff6a3d; outline-offset: 3px; }"
+    },
+    {
+      "name": "Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "La carcasa del mundo: degradado night→ink translúcido, borde hairline y sombra de asiento. La variante activa cambia el borde a ember.",
+      "html": "<div class=\"ds-panel\"><h3 class=\"ds-panel-title\">Local</h3><p class=\"ds-panel-note\">Un local con equipo</p></div>",
+      "css": ".ds-panel { position: relative; background: linear-gradient(180deg, rgb(26 29 58 / 0.72), rgb(19 22 43 / 0.72)); border: 1px solid rgb(191 210 255 / 0.14); border-radius: 10px; box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.9); padding: 1.5rem; color: #e9efff; } .ds-panel-title { font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-variation-settings: 'wdth' 74, 'wght' 800; text-transform: uppercase; font-size: clamp(1.7rem, 3vw, 2.3rem); line-height: 0.86; letter-spacing: -0.02em; margin: 0; } .ds-panel-note { font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.66rem; letter-spacing: 0.06em; line-height: 1.7; color: #8b98c6; margin: 0.5rem 0 0; }"
+    },
+    {
+      "name": "Panel activo",
+      "kind": "card",
+      "refersTo": "panel-active",
+      "description": "Única forma de marcar 'este es el que importa': plan recomendado, distribuidor con compra online. Solo cambia el borde.",
+      "html": "<div class=\"ds-panel-active\"><h3 class=\"ds-panel-active-title\">Canal</h3><span class=\"ds-panel-active-chip\">Recomendado</span></div>",
+      "css": ".ds-panel-active { background: linear-gradient(180deg, rgb(26 29 58 / 0.72), rgb(19 22 43 / 0.72)); border: 1px solid #ff6a3d; border-radius: 10px; box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.9); padding: 1.5rem; color: #e9efff; } .ds-panel-active-title { font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-variation-settings: 'wdth' 74, 'wght' 800; text-transform: uppercase; font-size: clamp(1.7rem, 3vw, 2.3rem); line-height: 0.86; letter-spacing: -0.02em; margin: 0 0 0.9rem; } .ds-panel-active-chip { display: inline-flex; align-items: center; padding: 0.2rem 0.5rem; border: 1px solid rgb(255 106 61 / 0.5); border-radius: 3px; font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: #ff6a3d; }"
+    },
+    {
+      "name": "Fila de resultado",
+      "kind": "custom",
+      "refersTo": "row",
+      "description": "La unidad de dato del sistema. Separada por border-top hairline; la variante --best lleva el único fondo teñido y su precio en ember.",
+      "html": "<div class=\"ds-rows\"><div class=\"ds-row\"><div><div class=\"ds-row-name\">Distribuidor A</div><div class=\"ds-row-note\">actualizado hace 4 min</div></div><div class=\"ds-row-price\">USD 128,40</div></div><div class=\"ds-row ds-row-best\"><div><div class=\"ds-row-name\">Distribuidor B</div><div class=\"ds-row-note\">actualizado hace 9 min</div></div><div><div class=\"ds-row-price ds-row-price-best\">USD 119,37</div><div class=\"ds-row-label\">Mejor precio</div></div></div></div>",
+      "css": ".ds-rows { background: linear-gradient(180deg, rgb(26 29 58 / 0.72), rgb(19 22 43 / 0.72)); border: 1px solid rgb(191 210 255 / 0.14); border-radius: 10px; overflow: hidden; } .ds-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 1rem; padding: 0.85rem 1.1rem; border-top: 1px solid rgb(191 210 255 / 0.14); transition: background-color 180ms ease; } .ds-row:first-child { border-top: 0; } .ds-row:hover { background: rgb(191 210 255 / 0.04); } .ds-row-best { background: rgb(255 106 61 / 0.07); } .ds-row-best:hover { background: rgb(255 106 61 / 0.11); } .ds-row-name { font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-size: 0.85rem; color: #e9efff; } .ds-row-note { font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.66rem; letter-spacing: 0.06em; line-height: 1.7; color: #8b98c6; margin-top: 0.1rem; } .ds-row-price { font-family: 'Chivo Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 1rem; color: #e9efff; text-align: right; } .ds-row-price-best { color: #ff6a3d; } .ds-row-label { font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.625rem; letter-spacing: 0.2em; text-transform: uppercase; color: #ff6a3d; text-align: right; margin-top: 0.25rem; }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Estado y filtro. Neutro en reposo, ember para activo, atenuado para agotado. Nunca semáforo.",
+      "html": "<span class=\"ds-chip\">3 distribuidores</span> <span class=\"ds-chip ds-chip-ember\">Con stock</span> <span class=\"ds-chip ds-chip-out\">sin stock</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.2rem 0.5rem; border: 1px solid rgb(191 210 255 / 0.14); border-radius: 3px; font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: #a9b6dd; background: transparent; } .ds-chip-ember { border-color: rgb(255 106 61 / 0.5); color: #ff6a3d; } .ds-chip-out { color: #8b98c6; border-color: rgb(191 210 255 / 0.14); opacity: 0.7; }"
+    },
+    {
+      "name": "Campo de formulario",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Fondo void translúcido y borde hairline fuerte; al foco el borde pasa a lilac y el fondo se cierra. Caret ember.",
+      "html": "<input class=\"ds-input\" type=\"email\" placeholder=\"tu@comercio.com\" />",
+      "css": ".ds-input { width: 100%; background: rgb(11 13 26 / 0.72); border: 1px solid rgb(191 210 255 / 0.26); border-radius: 4px; padding: 0.85rem 1rem; color: #e9efff; font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-size: 0.9rem; caret-color: #ff6a3d; transition: border-color 160ms ease, background-color 160ms ease; } .ds-input::placeholder { color: #8b98c6; } .ds-input:focus { outline: none; border-color: #6a6cf6; background: rgb(11 13 26 / 0.9); } .ds-input:focus-visible { outline: none; }"
+    },
+    {
+      "name": "Encabezado de sección",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Título display condensado con la metadata al costado sobre una regla hairline. Nunca antetítulo apilado.",
+      "html": "<div class=\"ds-head\"><div class=\"ds-head-top\"><h2 class=\"ds-head-title\">Una sola<br>búsqueda</h2><div class=\"ds-head-meta\"><hr class=\"ds-rule\"><span class=\"ds-label\">01 · Búsqueda</span></div></div><p class=\"ds-lead\">Escribís el producto y ves quiénes lo tienen, desde qué precio y cómo se viene moviendo.</p></div>",
+      "css": ".ds-head-top { display: flex; align-items: flex-end; gap: 1.5rem; } .ds-head-title { font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-variation-settings: 'wdth' 74, 'wght' 800; text-transform: uppercase; font-size: clamp(2.4rem, 5vw, 3.6rem); line-height: 0.86; letter-spacing: -0.02em; text-wrap: balance; margin: 0; flex-shrink: 0; color: #e9efff; } .ds-head-meta { display: flex; flex: 1; align-items: center; gap: 1rem; padding-bottom: 0.5rem; } .ds-rule { flex: 1; height: 1px; background: rgb(191 210 255 / 0.14); border: 0; } .ds-label { font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.625rem; letter-spacing: 0.2em; text-transform: uppercase; color: #8b98c6; white-space: nowrap; } .ds-lead { font-family: Archivo, ui-sans-serif, system-ui, sans-serif; font-size: 0.98rem; line-height: 1.6; letter-spacing: 0.01em; color: #a9b6dd; max-width: 68ch; margin: 1.25rem 0 0; }"
+    },
+    {
+      "name": "Riel de secciones",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "Navegación lateral fija desde 1180px, aria-hidden porque duplica la barra. El tick crece con scaleX, nunca con width.",
+      "html": "<nav class=\"ds-rail\" aria-hidden=\"true\"><a href=\"#buscar\" data-on=\"true\"><span class=\"ds-rail-tick\"></span><span class=\"ds-rail-n\">01</span><span class=\"ds-rail-label\">Búsqueda</span></a><a href=\"#costo\" data-on=\"false\"><span class=\"ds-rail-tick\"></span><span class=\"ds-rail-n\">02</span><span class=\"ds-rail-label\">Costo</span></a></nav>",
+      "css": ".ds-rail { display: flex; flex-direction: column; gap: 1.35rem; } .ds-rail a { display: flex; align-items: center; gap: 0.6rem; color: #8b98c6; text-decoration: none; transition: color 180ms ease; } .ds-rail a:hover { color: #bfd2ff; } .ds-rail a[data-on=\"true\"] { color: #ff6a3d; } .ds-rail-tick { width: 28px; height: 1px; background: currentColor; transform: scaleX(0.5); transform-origin: left center; transition: transform 220ms cubic-bezier(0.23,1,0.32,1); } .ds-rail a[data-on=\"true\"] .ds-rail-tick { transform: scaleX(1); } .ds-rail-n { font-family: 'Chivo Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; font-size: 0.62rem; letter-spacing: 0.18em; } .ds-rail-label { font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase; }"
+    },
+    {
+      "name": "Sello provisorio",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Marca de agua de honestidad: el punteado significa provisorio y ese es su único uso en el sistema.",
+      "html": "<span class=\"ds-draft\">Precio a definir</span>",
+      "css": ".ds-draft { display: inline-flex; align-items: center; border: 1px dashed rgb(255 106 61 / 0.4); border-radius: 3px; padding: 0.375rem 0.625rem; font-family: 'Chivo Mono', ui-monospace, monospace; font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: #ff6a3d; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "El campo de datos que se ordena solo",
+    "overview": "El mundo es una noche azul-violácea, no negra: void (#0b0d1a) es un azul profundo con matiz, y todo lo que se apoya encima —paneles, reglas hairline, texto secundario— se tiñe del mismo matiz. Nada es gris. Sobre ese lecho corre un campo de partículas dibujado en canvas (DataField) que es la metáfora entera del producto: la oferta empieza dispersa y termina alineada en filas comparables. El resto del sistema es deliberadamente sobrio para que ese único momento tenga lugar dónde ocurrir: paneles hairline sin relleno, tipografía condensada en mayúsculas para los títulos, mono para todo lo que sea dato, y un solo acento cálido usado con avaricia.\n\nLa densidad es de herramienta, no de folleto. Las escenas centrales son maquetas de la interfaz real: tablas con encabezado de columna, chips de estado, precios en tabular-nums, filas con hover. La landing no ilustra el producto con dibujos; lo muestra en su propia gramática. Eso obliga a una disciplina de honestidad que es parte del sistema visual y no una nota legal: cada escena sintética lleva su IllustrativeNote, los distribuidores son anónimos, los planes están estampados 'Precio a definir', y el pie carga el descargo global.\n\nEl grano fino (ruido SVG al 40% en mix-blend-mode: overlay, fijo sobre todo el z-stack) es el material del mundo: mantiene los degradados sin bandas y le saca a la pantalla el acabado plano de CSS puro. Es atmósfera, no decoración: no se apaga por sección ni se intensifica para dar énfasis.",
+    "keyCharacteristics": [
+      "Noche azul-violácea con matiz en todos los neutros; ningún gris puro.",
+      "Un solo momento autoral animado en toda la página (el campo del hero); el resto es quietud.",
+      "Paneles hairline traslúcidos, sin sombra difusa salvo la de asiento.",
+      "Display Archivo condensada en mayúsculas contra mono Chivo para dato y etiqueta.",
+      "Ember (#ff6a3d) restringido a tres significados; nunca decorativo.",
+      "Grano fijo sobre todo el mundo.",
+      "Honestidad tipografiada: lo ilustrativo se declara ilustrativo, en el mismo estilo de nota mono."
+    ],
+    "rules": [
+      {
+        "name": "La Regla de los Tres Significados",
+        "body": "Ember tiene exactamente tres significados en la superficie pública: mejor precio, baja de precio, y estado activo (pestaña seleccionada, plan recomendado, panel enfocado, ítem activo del riel). Se le suman dos usos funcionales del navegador: el anillo de :focus-visible y el caret-color. Cualquier otro uso de ember —un ícono, una viñeta, un borde decorativo, un título— está fuera del sistema. Test: si tapás el ember de una pantalla y no perdés información de precio ni de estado, ese ember sobraba.",
+        "section": "colors"
+      },
+      {
+        "name": "La Regla del Matiz",
+        "body": "No existe un gris en este mundo. Todo neutro —texto secundario, línea, sombra, borde— se construye desde el matiz del fondo o desde mist con alfa. Un #888 en esta superficie es un defecto, no una variante.",
+        "section": "colors"
+      },
+      {
+        "name": "La Regla Sin Semáforo",
+        "body": "El estado de stock no se pinta con verde/amarillo/rojo. 'Con stock' y 'sin stock' se distinguen por chip, ícono de trazo y peso de texto (fg-dim contra fg-faint con opacidad 0.7), nunca por color de semáforo. No hay verde importado en la paleta y no se agrega uno.",
+        "section": "colors"
+      },
+      {
+        "name": "La Regla del Número Alineado",
+        "body": "Cualquier cifra que un usuario pueda comparar contra otra cifra se compone en mono con tabular-nums. Los precios de una columna tienen que caer sobre la misma grilla vertical; un precio en la cara display es un defecto.",
+        "section": "typography"
+      },
+      {
+        "name": "La Regla del Título Sin Anuncio",
+        "body": "La metadata de sección (01 · Búsqueda) no se apila encima del título como antetítulo. Va al costado, sobre una regla hairline que ocupa el espacio sobrante, alineada a la línea base inferior del título. En viewport chico la regla y la metadata desaparecen; el título queda solo. No se introducen antetítulos ni kickers apilados.",
+        "section": "typography"
+      },
+      {
+        "name": "La Regla de la Mayúscula Condensada",
+        "body": "Las mayúsculas están reservadas al display condensado y a la mono espaciada. El cuerpo nunca va en mayúsculas, y el display nunca va en caja mixta.",
+        "section": "typography"
+      },
+      {
+        "name": "La Regla del Ritmo Único",
+        "body": "Todas las secciones respiran igual (6rem / 9rem). Una sección no pide énfasis con más aire; lo pide con su contenido. La única altura especial de la página es el hero.",
+        "section": "layout"
+      },
+      {
+        "name": "La Regla del Vidrio Sobre el Campo",
+        "body": "El backdrop-filter está reservado a dos superficies que tienen algo detrás que vale la pena dejar ver: el panel del hero (sobre el campo de partículas) y la barra de navegación una vez que la página scrolleó (blur(14px) a partir de scrollY > 24). Un panel apoyado sobre fondo liso se pinta opaco; desenfocar la nada es costo sin lectura.",
+        "section": "elevation"
+      },
+      {
+        "name": "La Regla de la Sombra Que No Sube",
+        "body": "Ningún elemento se eleva al hover. El feedback de estado es borde, color y translación mínima; la única transformación de hover en el sistema es la flecha del botón (translateX(3px)), y la única del :active es translateY(1px). Nada crece, nada levita.",
+        "section": "elevation"
+      },
+      {
+        "name": "La Regla de la Línea, No el Bloque",
+        "body": "Estructura, división y jerarquía se expresan con líneas de 1px sobre alfa de mist. No se usan fondos de bloque, franjas alternas ni cajas de relleno para agrupar. Test: si le sacás todos los border a una escena y sigue habiendo estructura pintada con rellenos, sobra relleno.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do construir toda escena nueva sobre lnd-panel + lnd-row: panel hairline, filas separadas por border-top, precios en mono tabular a la derecha.",
+      "Do componer cualquier cifra comparable en Chivo Mono con tabular-nums.",
+      "Do reservar ember para mejor precio, baja de precio y estado activo (más anillo de foco y caret), y aceptar que una pantalla entera pueda no tener ningún ember.",
+      "Do derivar todo neutro del matiz azul del fondo o de mist con alfa; usar hair / hair-strong para toda separación.",
+      "Do animar solo transform y opacity, con --ease-out: cubic-bezier(0.23, 1, 0.32, 1) y --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1).",
+      "Do poner una IllustrativeNote debajo de toda escena con datos sintéticos, mantener anónimos a los distribuidores de ejemplo y estampar 'Precio a definir' mientras el número no sea el definitivo.",
+      "Do respetar el ritmo de sección 6rem / 9rem y el contenedor único de 1240px.",
+      "Do dar a todo ícono trazo 1.25 (ICON_STROKE).",
+      "Do dejar el contenido legible sin JavaScript: el bloque <noscript> que fuerza .lnd-reveal visible se mantiene, y toda entrada nueva tiene que caer bajo esa misma clase.",
+      "Do dibujar el estado final una sola vez y sin bucle de requestAnimationFrame cuando prefers-reduced-motion: reduce esté activo."
+    ],
+    "donts": [
+      "Don't convertir el estado asentado del campo en un resplandor permanente. La campana sin(π · settled) es la obra; el cuadro final callado es intencional.",
+      "Don't dejar que las partículas del campo sobresalgan del panel ni crucen el titular. El recorte +6 / −6 es una decisión tomada, no un descuido.",
+      "Don't usar gris (#888, #666, slate-*) para texto secundario, borde ni sombra. Ni un neutro sin matiz.",
+      "Don't oscurecer fg-faint por debajo de #8b98c6: es el piso de contraste medido (5.78:1 sobre night), no una preferencia.",
+      "Don't introducir verde ni una paleta de semáforo para stock, disponibilidad o éxito. El estado se dice con chip, ícono y peso.",
+      "Don't usar ember para íconos, viñetas, títulos ni bordes decorativos.",
+      "Don't animar width, height, top, left, margin ni font-size. El tick del riel usa scaleX justamente porque una transición de width fue reemplazada.",
+      "Don't poner Reveal en cada sección ni en cada hijo de una lista. Nueve nodos en la página entera es el techo observado; una cascada por sección anula el mecanismo.",
+      "Don't agregar niveles de sombra ni elevar elementos al hover. El sistema tiene exactamente dos sombras: asiento de panel y halo de acción.",
+      "Don't aplicar backdrop-filter a un panel que no tenga el campo de partículas o contenido scrolleable detrás.",
+      "Don't apilar antetítulos, kickers o etiquetas encima de un título. La metadata va al costado sobre una regla hairline.",
+      "Don't suprimir el anillo de foco ember (outline: 2px solid con offset 3px) en ningún elemento interactivo.",
+      "Don't llevar tokens surface-* / brand-* de la app autenticada a esta superficie, ni al revés: son dos mundos y el aislamiento del contenedor .lnd es deliberado."
+    ]
+  }
+}
