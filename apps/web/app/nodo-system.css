@@ -1,0 +1,339 @@
+/* ============================================================
+ * SISTEMA NODO · tarjeta de producto
+ *
+ * El idioma de la landing dentro de la aplicacion. La tarjeta va
+ * siempre en claro, tambien cuando el sistema esta en oscuro: es
+ * un objeto de papel apoyado sobre el fondo.
+ *
+ * Reticula fija: cada dato tiene su renglon y lo ocupa siempre,
+ * tenga o no contenido, para que en una grilla todos los precios
+ * queden a la misma altura.
+ * ========================================================== */
+
+.pc {
+  --pc-paper: #ffffff;
+  --pc-ink: #14172a;
+  --pc-dim: #646c85;
+  --pc-faint: #8d94a8;
+  --pc-line: #e5e7ef;
+  --pc-shot: #f7f8fb;
+  --pc-accent: #4033fc;
+  --pc-good: #0f9d63;
+  --pc-warn: #c2410c;
+
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--pc-paper);
+  border: 1px solid var(--pc-line);
+  border-radius: 10px;
+  overflow: hidden;
+  color: var(--pc-ink);
+  font-family: var(--lnd-font-display), ui-sans-serif, system-ui, sans-serif;
+  transition:
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.pc:hover {
+  border-color: #cfd4e2;
+  box-shadow: 0 12px 28px -20px rgb(20 23 42 / 0.45);
+}
+.pc .pc-mono {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Foto --- */
+.pc__shot {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--pc-shot);
+  overflow: hidden;
+  display: block;
+}
+.pc__shot img {
+  transition: transform 420ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.pc:hover .pc__shot img { transform: scale(1.035); }
+.pc__noimg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  color: #97a0b5;
+}
+
+/* El distribuidor con su color, en linea fina sobre vidrio */
+.pc__prov {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  max-width: calc(100% - 1rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem 0.2rem 0.2rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.92);
+  border: 1px solid color-mix(in oklab, var(--pv, #4033fc) 42%, transparent);
+  backdrop-filter: blur(6px);
+  font-size: 0.68rem;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--pv, #4033fc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 1;
+}
+.pc__prov > span:first-child {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  background: #fff;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  font-size: 0.5rem;
+  flex: 0 0 auto;
+  color: #334155;
+}
+.pc__prov img { width: 100%; height: 100%; object-fit: contain; padding: 1px; }
+
+.pc__drop {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  padding: 0.22rem 0.45rem;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.94);
+  border: 1px solid color-mix(in oklab, var(--pc-good) 45%, transparent);
+  color: var(--pc-good);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.pc__loc {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  z-index: 1;
+  max-width: calc(100% - 1rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background: rgb(20 23 42 / 0.7);
+  color: #eef1fb;
+  font-size: 0.6rem;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Sobre la foto: aparece y desaparece sin correr el resto */
+.pc__ai {
+  position: absolute;
+  bottom: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.16rem 0.35rem;
+  border-radius: 3px;
+  background: rgb(20 23 42 / 0.7);
+  color: #dfe6ff;
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+/* --- Cuerpo: filas de altura fija --- */
+.pc__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows:
+    2.3rem      /* nombre, dos lineas */
+    1.1rem      /* marca y categoria */
+    1.75rem     /* precio */
+    1.05rem     /* desglose */
+    1.05rem     /* aviso */
+    1.5rem      /* estado */
+    1fr         /* empuja el pie */
+    auto;       /* sincronizacion */
+  row-gap: 0.3rem;
+  padding: 0.95rem 1rem 0.8rem;
+  min-width: 0;
+  flex: 1;
+}
+.pc__body > * { min-width: 0; }
+
+.pc__name {
+  font-size: 0.8rem;
+  line-height: 1.3;
+  font-variation-settings: "wdth" 92, "wght" 600;
+  letter-spacing: -0.012em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--pc-ink);
+}
+a.pc__name:hover { color: var(--pc-accent); }
+
+/* Un renglon vacio tiene altura cero y, centrado, cae en otro lugar que uno
+   con texto: estirado y con interlineado fijo, arrancan igual. */
+.pc__meta {
+  align-self: stretch;
+  line-height: 1.1rem;
+  font-size: 0.68rem;
+  color: var(--pc-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc__meta a { color: inherit; text-decoration: none; }
+.pc__meta a:hover { color: var(--pc-accent); }
+
+.pc__price {
+  align-self: center;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.pc__amount {
+  font-size: 1.24rem;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+}
+.pc__prev {
+  font-size: 0.6rem;
+  color: var(--pc-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pc__base {
+  align-self: stretch;
+  line-height: 1.05rem;
+  font-size: 0.62rem;
+  color: var(--pc-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc__aside {
+  align-self: stretch;
+  line-height: 1.05rem;
+  font-size: 0.63rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc__aside .is-alt { color: var(--pc-accent); }
+.pc__aside .is-warn { color: var(--pc-warn); }
+
+/* Estirada, no centrada: una fila de estado vacia colapsa a altura cero y
+   dejaria de alinear con las tarjetas que si tienen etiquetas. */
+.pc__flags {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  overflow: hidden;
+}
+.pc__flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 3px;
+  border: 1px solid var(--pc-line);
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pc-dim);
+  line-height: 1.35;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.pc__flag--yes { border-color: color-mix(in oklab, var(--pc-good) 40%, transparent); color: var(--pc-good); }
+.pc__flag--none { color: var(--pc-faint); }
+.pc__flag--on { border-color: color-mix(in oklab, var(--pc-warn) 45%, transparent); color: var(--pc-warn); }
+.pc__flag--alt { border-color: color-mix(in oklab, var(--pc-accent) 45%, transparent); color: var(--pc-accent); }
+
+/* --- Pie --- */
+.pc__foot {
+  align-self: end;
+  width: 100%;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--pc-line);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pc__id {
+  flex: 1 1 auto;
+  font-size: 0.6rem;
+  color: var(--pc-faint);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc__acts { flex: 0 0 auto; display: flex; align-items: center; gap: 0.4rem; }
+
+/* Los auxiliares en linea fina: lo unico pintado es agregar al carrito */
+.pc__ghost {
+  width: 1.85rem;
+  height: 1.85rem;
+  border-radius: 5px;
+  border: 1px solid var(--pc-line);
+  background: transparent;
+  color: var(--pc-dim);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.pc__ghost:hover,
+.pc__ghost.is-on { border-color: var(--pc-accent); color: var(--pc-accent); }
+
+.pc__sync {
+  margin-top: 0.6rem;
+  min-height: 0.9rem;
+  font-size: 0.58rem;
+  color: var(--pc-faint);
+}
+.pc__sync-line { line-height: 0.9rem; }
+.pc__sync-warn {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--pc-warn);
+  text-decoration: none;
+}
+.pc__sync-warn:hover { text-decoration: underline; }
+
+@media (max-width: 380px) {
+  .pc__body {
+    grid-template-rows: 2.3rem 1.1rem 1.75rem 1.05rem 1.05rem 2.9rem 1fr auto;
+  }
+  .pc__flags { flex-wrap: wrap; align-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pc, .pc * { transition-duration: 0.001ms !important; }
+}

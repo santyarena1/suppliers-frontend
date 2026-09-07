@@ -1,0 +1,258 @@
+/* ============================================================
+ * PAGINA DE PRODUCTO
+ * Panel de precio y grafico con el idioma de la landing.
+ * Cambio estetico: la estructura de la pagina queda igual.
+ * ========================================================== */
+
+.pp {
+  --p-panel: #151926;
+  --p-line: rgb(180 196 255 / 0.13);
+  --p-line-2: rgb(180 196 255 / 0.26);
+  --p-fg: #e9edfa;
+  --p-dim: #a7b0cd;
+  --p-faint: #8b95b8;
+  --p-accent: #6a6cf6;
+  --p-deep: #4033fc;
+  --p-ember: #ff6a3d;
+  --p-good: #35c98a;
+
+  font-family: var(--lnd-font-display), ui-sans-serif, system-ui, sans-serif;
+}
+.pp-mono {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* El titulo usa el ancho completo: no hay razon para apretarlo */
+.pp__name {
+  font-size: clamp(1.4rem, 1rem + 1.6vw, 2rem);
+  font-variation-settings: "wdth" 86, "wght" 700;
+  letter-spacing: -0.025em;
+  line-height: 1.14;
+  color: var(--p-fg);
+}
+
+.pp__panel {
+  background: var(--p-panel);
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.pp__head { padding: 1.1rem 1.2rem; border-bottom: 1px solid var(--p-line); }
+.pp__caption {
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+.pp__amount {
+  display: block;
+  margin-top: 0.55rem;
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(1.7rem, 1.2rem + 1.4vw, 2.1rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  color: var(--p-fg);
+}
+.pp__sub {
+  margin-top: 0.5rem;
+  font-family: var(--lnd-font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.68rem;
+  color: var(--p-faint);
+}
+
+/* Desglose: una sola moneda para todo importe */
+.pp__rows { padding: 1rem 1.2rem; border-bottom: 1px solid var(--p-line); }
+.pp__rows-title {
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+  margin-bottom: 0.6rem;
+}
+.pp__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0;
+  font-size: 0.74rem;
+  color: var(--p-dim);
+  min-width: 0;
+}
+.pp__row > span:last-child {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+.pp__row.is-muted { color: var(--p-faint); font-size: 0.7rem; }
+.pp__row.is-total {
+  margin-top: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--p-line);
+  color: var(--p-fg);
+  font-size: 0.84rem;
+}
+.pp__note {
+  margin-top: 0.75rem;
+  font-size: 0.62rem;
+  line-height: 1.55;
+  color: var(--p-faint);
+}
+
+.pp__buy { padding: 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.pp__qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--p-dim);
+}
+.pp__step {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--p-line-2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pp__step button {
+  width: 2.2rem;
+  height: 2.2rem;
+  display: grid;
+  place-items: center;
+  color: var(--p-dim);
+  transition: color 150ms ease, background-color 150ms ease;
+}
+.pp__step button:hover { color: var(--p-fg); background: rgb(180 196 255 / 0.07); }
+.pp__step input {
+  width: 3rem;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  text-align: center;
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--p-fg);
+}
+
+.pp__ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 7px;
+  border: 1px solid var(--p-line-2);
+  background: transparent;
+  color: var(--p-dim);
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.pp__ghost:hover { border-color: var(--p-accent); color: var(--p-fg); }
+
+/* --- Secciones --- */
+.pp__sec {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.pp__sec-title {
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--p-line);
+  margin-bottom: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* --- Grafico con referencias --- */
+.ch { color: var(--p-accent); }
+.ch__refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 2.25rem;
+  padding-bottom: 0.9rem;
+}
+.ch__ref { display: flex; flex-direction: column; gap: 0.2rem; }
+.ch__ref em {
+  font-style: normal;
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--p-faint);
+}
+.ch__ref b {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--p-fg);
+}
+.ch__ref b.is-good { color: var(--p-good); }
+.ch__ref b.is-warn { color: var(--p-ember); }
+
+.ch__plot { position: relative; padding-right: 6.5rem; }
+.ch__area { position: relative; padding: 0 7px; }
+.ch__plot svg { width: 100%; height: 8.5rem; display: block; }
+.ch__guide { stroke: var(--p-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ch__guide.is-mid { stroke-dasharray: 3 4; opacity: 0.6; }
+.ch__dot {
+  position: absolute;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 999px;
+  background: #0e1018;
+  border: 2px solid currentColor;
+}
+.ch__dot.is-last {
+  width: 13px;
+  height: 13px;
+  margin: -6.5px 0 0 -6.5px;
+  background: currentColor;
+  box-shadow: 0 0 0 4px color-mix(in oklab, currentColor 22%, transparent);
+}
+.ch__axis {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.1rem 0;
+  font-family: var(--lnd-font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.6rem;
+  color: var(--p-faint);
+  text-align: right;
+}
+.ch__dates {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-right: 6.5rem;
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.58rem;
+  color: var(--p-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp * { transition-duration: 0.001ms !important; }
+}

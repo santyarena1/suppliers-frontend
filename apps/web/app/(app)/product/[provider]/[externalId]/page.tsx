@@ -132,9 +132,6 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     : null;
   const displayUSD = shown?.displayUsd ?? 0;
   const unitDisplayUsd = shown?.unitDisplayUsd ?? 0;
-  const conv = convert(displayUSD);
-  const unitConv = convert(unitDisplayUsd);
-  const unitNetConv = convert(pricing?.unitNet ?? 0);
   const estimatedIibbLine =
     shown?.estimatedIibb && shown.iibbUnitUsd > 0.0001
       ? {
@@ -245,9 +242,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                     {copied ? "Copiado" : "Copiar"}
                   </button>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white leading-snug text-balance tracking-tight">
-                  {product.name}
-                </h1>
+                <h1 className="pp__name text-balance">{product.name}</h1>
                 {(product.stock != null || product.stockStatus) && (
                   <p className="mt-2 text-xs text-surface-400">
                     {product.stock != null && (
@@ -299,58 +294,36 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 </div>
 
                 <aside className="flex flex-col gap-4 lg:sticky lg:top-16">
-                  <div className="rounded-2xl border border-surface-800 bg-surface-900/80 overflow-hidden">
-                    <div className="px-5 pt-5 pb-4 border-b border-surface-800">
-                      <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-1">
+                  <div className="pp pp__panel">
+                    <div className="pp__head">
+                      <p className="pp__caption">
                         {displayTaxTitle({ withIva, withIibb, provider: providerName })}
                         {qty > 1 ? ` · ${qty} u.` : ""}
                       </p>
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="text-3xl sm:text-4xl font-bold text-white tabular-nums tracking-tight">
-                          {currency === "USD" ? formatUSD(conv.amount) : formatARS(conv.amount)}
-                        </span>
-                      </div>
-                      {currency === "ARS" ? (
-                        <p className="text-sm text-surface-400 tabular-nums mt-1.5">
-                          {formatUSD(displayUSD)}
-                          {currentRate && (
-                            <>
-                              <span className="text-surface-600"> · </span>
-                              Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
-                            </>
-                          )}
+                      <span className="pp__amount">{money(displayUSD)}</span>
+                      {currency === "ARS" && currentRate && (
+                        <p className="pp__sub">
+                          Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
                         </p>
-                      ) : (
-                        unitConv.amount > 0 && (
-                          <p className="text-sm text-surface-400 tabular-nums mt-1.5">
-                            ≈ {formatARS(unitConv.amount)}
-                            {qty > 1 ? " c/u" : ""}
-                          </p>
-                        )
                       )}
+                      {qty > 1 && <p className="pp__sub">{money(unitDisplayUsd)} por unidad</p>}
                     </div>
 
-                    <div className="px-5 py-4 space-y-2.5 text-xs">
-                      <p className="text-[10px] uppercase tracking-wider text-surface-500 font-medium">
-                        Desglose de costo
-                      </p>
+                    <div className="pp__rows">
+                      <p className="pp__rows-title">Desglose de costo</p>
 
                       <BreakdownRow
-                        label="Precio de lista (USD)"
-                        value={formatUSD(pricing.unitNet)}
-                        hint="Costo del proveedor"
+                        label="Costo del distribuidor"
+                        value={money(pricing.unitNet)}
+                        hint="Precio de lista, sin impuestos"
                       />
-                      {currentRate && (
+                      {currency === "ARS" && currentRate && (
                         <BreakdownRow
                           label={`Cotización · ${dollarLabel(dollarType)}`}
                           value={`$${currentRate.venta.toLocaleString("es-AR")}`}
                           hint="Tipo de cambio aplicado"
                         />
                       )}
-                      <BreakdownRow
-                        label="Costo en ARS (sin imp.)"
-                        value={formatARS(unitNetConv.amount)}
-                      />
 
                       {visibleTaxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
                         <BreakdownRow
@@ -383,7 +356,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         <BreakdownRow label={taxLabel(product)} value={`+ ${money(pricing.tax / qty)}`} muted />
                       )}
 
-                      <div className="border-t border-surface-800 pt-2.5 mt-1">
+                      <div className="pt-2.5 mt-1" style={{ borderTop: "1px solid var(--p-line)" }}>
                         <BreakdownRow
                           label="Costo unitario final"
                           value={money(unitDisplayUsd)}
@@ -397,7 +370,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           />
                         )}
                       </div>
-                      <p className="text-[10px] text-surface-600 leading-relaxed pt-1">
+                      <p className="pp__note">
                         El desglose usa tu cotización. IVA y percepciones se eligen por separado
                         {withIva ? "" : " · sin IVA"}
                         {withIibb ? " · con percepciones si se conocen (en esquema también; en offline no)" : " · sin percepciones"}
@@ -405,14 +378,14 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       </p>
                     </div>
 
-                    <div className="px-5 pb-5 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-xs text-surface-400">Cantidad</span>
-                        <div className="flex items-center gap-0.5 bg-surface-800 border border-surface-700 rounded-lg p-0.5">
+                    <div className="pp__buy">
+                      <div className="pp__qty">
+                        <span>Cantidad</span>
+                        <span className="pp__step">
                           <button
                             type="button"
                             onClick={() => setQty((q) => Math.max(1, q - 1))}
-                            className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white"
+                            aria-label="Quitar uno"
                           >
                             <ChevronLeft className="w-4 h-4" />
                           </button>
@@ -421,27 +394,19 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                             value={qty}
                             min={1}
                             onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            className="w-12 bg-transparent text-white text-sm font-semibold text-center focus:outline-none tabular-nums"
+                            aria-label="Cantidad"
                           />
-                          <button
-                            type="button"
-                            onClick={() => setQty((q) => q + 1)}
-                            className="w-10 h-10 sm:w-8 sm:h-8 flex items-center justify-center text-surface-400 hover:text-white"
-                          >
+                          <button type="button" onClick={() => setQty((q) => q + 1)} aria-label="Sumar uno">
                             <ChevronRight className="w-4 h-4" />
                           </button>
-                        </div>
+                        </span>
                       </div>
 
                       <ProductBuyActions product={product} qty={qty} />
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => void searchSameName()}
-                    className="flex items-center justify-center gap-2 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-xl py-2.5 transition-all"
-                  >
+                  <button type="button" onClick={() => void searchSameName()} className="pp pp__ghost">
                     <Sparkles className="w-3.5 h-3.5" />
                     Buscar similares en otros proveedores
                   </button>
@@ -449,8 +414,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
               </div>
 
               {(product.description || product.longDescription) && (
-                <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-                  <h2 className="text-sm font-semibold text-white mb-3">Descripción</h2>
+                <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+                  <h2 className="pp__sec-title">Descripción</h2>
                   {product.description && (
                     <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
                       {product.description}
@@ -467,11 +432,14 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
 
               <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
 
-              <section className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-                <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-brand-400" />
+              <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+                <h2 className="pp__sec-title">
+                  <TrendingUp className="w-3 h-3" />
                   Evolución de precio
                 </h2>
+                {priceHistory.length >= 2 && (
+                  <PriceRefs points={priceHistory} money={money} />
+                )}
                 {priceHistory.length >= 2 ? (
                   <PriceHistoryChart points={priceHistory} />
                 ) : priceHistory.length === 1 ? (
@@ -489,8 +457,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
 
               {related.length > 0 && (
                 <section>
-                  <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-brand-400" />
+                  <h2 className="pp pp__sec-title">
+                    <Sparkles className="w-3 h-3" />
                     Relacionados
                   </h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -587,6 +555,51 @@ function LocalesFooter({
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Máximo, mínimo, valor de hoy y variación del período, en la moneda elegida.
+ * Sin esto el gráfico es una línea que zigzaguea sin escala.
+ */
+function PriceRefs({
+  points,
+  money,
+}: {
+  points: { capturedAt: string; price?: string | number | null; finalPrice?: string | number | null }[];
+  money: (usd: number) => string;
+}) {
+  const values = points
+    .map((p) => Number(p.finalPrice ?? p.price) || 0)
+    .filter((n) => n > 0);
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const first = values[0];
+  const last = values[values.length - 1];
+  const change = first > 0 ? ((last - first) / first) * 100 : 0;
+  return (
+    <div className="ch__refs">
+      <span className="ch__ref">
+        <em>Máximo</em>
+        <b>{money(max)}</b>
+      </span>
+      <span className="ch__ref">
+        <em>Mínimo</em>
+        <b className="is-good">{money(min)}</b>
+      </span>
+      <span className="ch__ref">
+        <em>Hoy</em>
+        <b>{money(last)}</b>
+      </span>
+      <span className="ch__ref">
+        <em>Variación</em>
+        <b className={change < 0 ? "is-good" : change > 0 ? "is-warn" : ""}>
+          {change > 0 ? "+" : ""}
+          {change.toFixed(1)}%
+        </b>
+      </span>
+    </div>
   );
 }
 

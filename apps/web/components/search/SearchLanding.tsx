@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingDown, Loader2 } from "lucide-react";
+import { TrendingDown, Loader2, Clock } from "lucide-react";
 import ProductCard from "@/components/ProductCard";
 import PromoGrid from "./PromoGrid";
 import PartnerCarousel from "./PartnerCarousel";
+import { getRecentSearches, SearchEntry, trackSearch } from "@/lib/history";
+import { useRouter } from "next/navigation";
 import {
   bannersApi, catalogApi, type Banner, type ProductDTO,
 } from "@/lib/api";
+
+/**
+ * Estado del módulo de búsqueda cuando todavía no hay consulta.
+ *
+ * Los espacios de publicidad y el carrusel de marcas quedan como están: son
+ * superficies con creativos reales y sus tamaños ya están definidos. Lo que
+ * cambia es el idioma de las secciones propias, y se suma lo que ayuda a
+ * arrancar una búsqueda: las últimas consultas y el consejo del part number.
+ */
 
 interface SearchLandingProps {
   onCategoryClick: (category: string) => void;
@@ -15,9 +26,15 @@ interface SearchLandingProps {
 }
 
 export default function SearchLanding({ onCategoryClick: _onCategoryClick }: SearchLandingProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [priceDrops, setPriceDrops] = useState<ProductDTO[]>([]);
+  const [recent, setRecent] = useState<SearchEntry[]>([]);
+
+  useEffect(() => {
+    setRecent(getRecentSearches(6));
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -41,6 +58,11 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick }: Sea
     return () => { alive = false; };
   }, []);
 
+  function go(q: string) {
+    trackSearch(q);
+    router.push(`/search?q=${encodeURIComponent(q)}`);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -50,19 +72,36 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick }: Sea
   }
 
   return (
-    <div className="flex flex-col gap-2 pb-8">
+    <div className="hm flex flex-col gap-2 pb-8">
+      {recent.length > 0 && (
+        <div className="hm__sug" style={{ marginTop: 0, marginBottom: "0.5rem" }}>
+          <span>
+            <Clock className="w-2.5 h-2.5 inline mr-1" />
+            Recientes
+          </span>
+          {recent.map((e) => (
+            <button key={e.query} type="button" className="hm__chip" onClick={() => go(e.query)}>
+              {e.query}
+            </button>
+          ))}
+        </div>
+      )}
+
       <PromoGrid banners={banners} />
       <PartnerCarousel />
+
       {priceDrops.length > 0 && (
         <section>
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <TrendingDown className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-base font-bold text-white">Bajaron de precio</h2>
-            <span className="text-xs text-surface-500">
+          <div className="hm__sec">
+            <h3>
+              <TrendingDown className="w-3 h-3 inline mr-1.5" />
+              Bajaron de precio
+            </h3>
+            <span className="text-[0.7rem]" style={{ color: "var(--hm-faint)" }}>
               Descuentos y bajas recientes · varios proveedores
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 mt-4">
             {priceDrops.map((product, i) => (
               <ProductCard
                 key={`${product.provider}-${product.externalId}-${i}`}
@@ -74,13 +113,24 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick }: Sea
       )}
 
       {priceDrops.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 gap-2 text-center rounded-2xl border border-dashed border-surface-700 bg-surface-900/30 px-6">
-          <p className="text-sm font-medium text-surface-300">Buscador mayorista NODO</p>
-          <p className="text-xs text-surface-500 max-w-md">
-            Los banners de arriba son espacios de publicidad (propios o patrocinados). Cargá creativos en Configuración. Consultá precios desde la barra de búsqueda.
+        <div className="hm__empty">
+          <p style={{ color: "var(--hm-fg)", fontWeight: 600, marginBottom: "0.35rem" }}>
+            Buscador mayorista NODO
+          </p>
+          <p style={{ fontSize: "0.75rem" }}>
+            Los banners de arriba son espacios de publicidad (propios o patrocinados). Cargá
+            creativos en Configuración. Consultá precios desde la barra de búsqueda.
           </p>
         </div>
       )}
+
+      <p
+        className="hm-mono mt-2"
+        style={{ fontSize: "0.66rem", color: "var(--hm-faint)" }}
+      >
+        Si tenés el part number, buscá por ahí: es lo único que todos los distribuidores escriben
+        igual.
+      </p>
     </div>
   );
 }
