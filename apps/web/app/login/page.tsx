@@ -7,16 +7,26 @@ import { authApi } from "@/lib/api";
 import { saveSession, sessionFromToken } from "@/lib/auth";
 import { invalidateMyModules } from "@/lib/permissions";
 import { invalidateTgsEnabled } from "@/lib/tgs";
-import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowRight, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 
+function justRegistered(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("registrado") === "1";
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const [registered, setRegistered] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setRegistered(justRegistered());
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("expired")) {
@@ -78,6 +88,13 @@ export default function LoginPage() {
             <h1 className="text-xl font-semibold text-white mb-1.5">Iniciar sesión</h1>
             <p className="text-sm text-surface-400">Ingresá a tu cuenta para continuar</p>
           </div>
+
+          {registered && !error && (
+            <div className="flex items-center gap-2.5 bg-emerald-500/8 border border-emerald-500/25 text-emerald-400 text-sm rounded-lg px-4 py-3 mb-6">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+              Tu cuenta quedó creada. Entrá con el usuario que elegiste.
+            </div>
+          )}
 
           {error && (
             <div className="flex items-center gap-2.5 bg-red-500/8 border border-red-500/20 text-red-400 text-sm rounded-lg px-4 py-3 mb-6">

@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from "next/server";
 
-const PUBLIC_PATHS = new Set(["/login", "/register"]);
+const PUBLIC_PATHS = new Set(["/login", "/register", "/landing"]);
 const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
 
 function isPrefetch(req: NextRequest): boolean {
@@ -26,6 +26,11 @@ export function middleware(req: NextRequest) {
       return new NextResponse(null, { status: 204 });
     }
     const url = req.nextUrl.clone();
+    // Sin sesión, la raíz es la landing pública; el resto sigue yendo al login.
+    if (pathname === "/") {
+      url.pathname = "/landing";
+      return NextResponse.redirect(url);
+    }
     url.pathname = "/login";
     url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
