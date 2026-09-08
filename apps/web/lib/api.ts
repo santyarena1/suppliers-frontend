@@ -5,6 +5,13 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 const api = axios.create({ baseURL: BASE_URL });
 
+/**
+ * Páginas que se ven sin sesión. Un 401 acá no significa que la sesión murió:
+ * significa que alguien anónimo tocó un endpoint con auth. Nunca redirigimos
+ * desde estas rutas.
+ */
+const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview"]);
+
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("token");
@@ -29,12 +36,19 @@ api.interceptors.response.use(
     // checkout de varios portales: si alguno contesta 401 y el JWT nuestro
     // sigue vivo, echar al usuario parece un cierre de sesión al tocar el
     // carrito. Solo limpiamos cuando el token falta o ya venció.
-    if (typeof window !== "undefined" && error?.response?.status === 401 && window.location.pathname !== "/login") {
+    if (typeof window !== "undefined" && error?.response?.status === 401 && !PUBLIC_PAGES.has(window.location.pathname)) {
       const url = String(error?.config?.url ?? "");
       if (url.includes("/auth/login") || url.includes("/auth/register")) {
         return Promise.reject(error);
       }
-      if (!isTokenExpired(getToken(), 0)) {
+      // Sin token nunca hubo sesión que vencer: es una visita anónima que pegó
+      // contra un endpoint con auth. Echarla al login diciendo que "venció la
+      // sesión" es mentira y además rompe la landing.
+      const token = getToken();
+      if (!token) {
+        return Promise.reject(error);
+      }
+      if (!isTokenExpired(token, 0)) {
         return Promise.reject(error);
       }
       if (stopImpersonation()) {

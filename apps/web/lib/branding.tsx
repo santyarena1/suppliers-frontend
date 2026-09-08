@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { platformApi } from "./api";
+import { getToken } from "./auth";
 import {
   applyBrandPreset,
   BrandPreset,
@@ -30,6 +31,13 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const cached = readCachedBrandPreset();
     if (cached) applyBrandPreset(cached);
+
+    // Sin sesión no hay a quién preguntarle: /platform/settings pide auth y el
+    // 401 sería puro ruido en la landing y el login.
+    if (!getToken()) {
+      setLoading(false);
+      return;
+    }
 
     let alive = true;
     platformApi.settings()

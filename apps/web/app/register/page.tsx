@@ -4,10 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
-import { ArrowRight, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
+import DataField from "@/components/landing/DataField";
+import "../(marketing)/landing.css";
+import "../login/login.css";
 
+/** Registro: la misma antesala que el login, con el mismo mundo. */
 export default function RegisterPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -19,12 +23,17 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirm) { setError("Las contraseñas no coinciden"); return; }
+    if (password !== confirm) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
       await authApi.register(username, email, password);
-      router.push("/login");
+      // Con el flag el login puede confirmar que la cuenta quedó creada; sin él
+      // ese mensaje no aparecía nunca.
+      router.push("/login?registrado=1");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "Error al registrarse. Intentá de nuevo.");
@@ -34,92 +43,122 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-950 px-6">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2.5 mb-8">
+    <main className="lnd lgn">
+      <DataField className="lgn__field" />
+      <div className="lnd-vignette" aria-hidden="true" />
+      <div className="lnd-grain" aria-hidden="true" />
+
+      <div className="lgn__wrap">
+        <Link href="/landing" className="lgn__brand">
           <NodoLogo className="w-7 h-7" />
-          <NodoWordmark className="h-3.5" />
+          <span>
+            <NodoWordmark className="h-3.5" />
+            <em className="lnd-mono">Buscador mayorista</em>
+          </span>
+        </Link>
+
+        <div className="lgn__grid">
+          <section className="lgn__pitch">
+            <h1 className="lnd-display lnd-display--md">Creá tu cuenta y conectá tus proveedores</h1>
+            <p className="lgn__lead">
+              Con la cuenta creada cargás las credenciales que ya tenés en cada distribuidor. NODO
+              no compra por vos: entra con tu usuario, al precio que tenés vos.
+            </p>
+            <Link href="/landing" className="lgn__back lnd-mono">
+              <ArrowLeft className="w-3 h-3" />
+              Ver cómo funciona
+            </Link>
+          </section>
+
+          <section className="lnd-panel lnd-panel--sheer lgn__card">
+            <p className="lnd-label">Registro</p>
+            <h2 className="lgn__title">Crear cuenta</h2>
+
+            {error && (
+              <p className="lgn__msg is-bad">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </p>
+            )}
+
+            <form onSubmit={handleSubmit} className="lgn__form">
+              <label className="lgn__row" data-field-row>
+                <span className="lnd-label">Usuario</span>
+                <input
+                  type="text"
+                  className="lnd-input"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Elegí un usuario"
+                  required
+                  autoFocus
+                  autoComplete="username"
+                />
+              </label>
+
+              <label className="lgn__row" data-field-row>
+                <span className="lnd-label">Email</span>
+                <input
+                  type="email"
+                  className="lnd-input"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@email.com"
+                  required
+                  autoComplete="email"
+                />
+              </label>
+
+              <label className="lgn__row" data-field-row>
+                <span className="lnd-label">Contraseña</span>
+                <input
+                  type="password"
+                  className="lnd-input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Mínimo 8 caracteres"
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                />
+              </label>
+
+              <label className="lgn__row" data-field-row>
+                <span className="lnd-label">Confirmar contraseña</span>
+                <input
+                  type="password"
+                  className="lnd-input"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="Repetí la contraseña"
+                  required
+                  autoComplete="new-password"
+                />
+              </label>
+
+              <button type="submit" disabled={loading} className="lnd-btn lnd-btn--primary lgn__go">
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Creando
+                  </>
+                ) : (
+                  <>
+                    Crear cuenta
+                    <ArrowRight className="w-4 h-4 lnd-btn__arrow" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            <p className="lgn__foot">
+              ¿Ya tenés cuenta? <Link href="/login">Ingresá</Link>
+            </p>
+          </section>
         </div>
 
-        <div className="mb-7">
-          <h1 className="text-xl font-semibold text-white mb-1.5">Crear cuenta</h1>
-          <p className="text-sm text-surface-400">Completá los datos para registrarte</p>
-        </div>
-
-        {error && (
-          <div className="flex items-center gap-2.5 bg-red-500/8 border border-red-500/20 text-red-400 text-sm rounded-lg px-4 py-3 mb-6">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1.5">Usuario</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Elegí un usuario"
-              required
-              autoFocus
-              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1.5">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@email.com"
-              required
-              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1.5">Contraseña</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mínimo 8 caracteres"
-              required
-              minLength={8}
-              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1.5">Confirmar contraseña</label>
-            <input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Repetí la contraseña"
-              required
-              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-1 flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
-          >
-            {loading
-              ? <><Loader2 className="w-4 h-4 animate-spin" />Registrando...</>
-              : <><ArrowRight className="w-4 h-4" />Crear cuenta</>
-            }
-          </button>
-        </form>
-
-        <p className="text-center text-xs text-surface-500 mt-6">
-          ¿Ya tenés cuenta?{" "}
-          <Link href="/login" className="text-brand-400 hover:text-brand-300 font-medium transition-colors">
-            Iniciá sesión
-          </Link>
-        </p>
+        <p className="lgn__legal lnd-mono">© 2026 NODO</p>
       </div>
-    </div>
+    </main>
   );
 }
