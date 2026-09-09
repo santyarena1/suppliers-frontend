@@ -1263,6 +1263,70 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /** Productos de una marca unificada, cruzando proveedores visibles. */
+  /**
+   * Catálogo de uno o varios distribuidores, sin texto ni marca ni categoría.
+   *
+   * Existía por marca y por categoría, pero no por distribuidor solo: elegir un
+   * distribuidor y tocar Buscar no devolvía nada. Es la misma consulta que
+   * getByBrand sin el filtro de marca.
+   */
+  async getByProvider(
+    tenantId: string,
+    providersWanted: string[],
+    take: number,
+    opts: { includeOutOfStock?: boolean } = {}
+  ) {
+    const readable = await this.readableProviders(tenantId);
+    const wanted = providersWanted.length ? new Set(providersWanted) : null;
+    const providers = wanted ? readable.filter((p) => wanted.has(p)) : readable;
+    if (providers.length === 0) return [];
+    const limit = Math.min(Math.max(take, 1), 200);
+    const includeOutOfStock = Boolean(opts.includeOutOfStock);
+    const [rules, enrichment] = await Promise.all([
+      this.rulesByProvider(tenantId),
+      this.catalogEnrichment.getContext(),
+    ]);
+
+    const keepProviders = providers.filter(
+      (p) => !hidesZeroStockFromCatalog((rules.get(p) ?? NO_RULES).zeroStockAction)
+    );
+    const hideProviders = providers.filter(
+      (p) => hidesZeroStockFromCatalog((rules.get(p) ?? NO_RULES).zeroStockAction)
+    );
+    const stockOr = [
+      ...(keepProviders.length ? [{ provider: { in: keepProviders } }] : []),
+      ...(hideProviders.length
+        ? [{ AND: [{ provider: { in: hideProviders } }, catalogStockWhere(false, 0, "HIDE")] }]
+        : []),
+    ];
+    const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
+
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: {
+        tenantId,
+        active: true,
+        provider: { in: providers },
+        AND: [...stockConstraint],
+      },
+      include: { product: true },
+      orderBy: { product: { name: "asc" } },
+      take: limit * 2,
+    });
+
+    const views = offers
+      .map((offer) =>
+        toProductView(offer.product, offer, rules.get(offer.provider) ?? NO_RULES, enrichment)
+      )
+      .filter((product) => {
+        if (includeOutOfStock) return true;
+        const action = (rules.get(product.provider) ?? NO_RULES).zeroStockAction;
+        if (!hidesZeroStockFromCatalog(action)) return true;
+        return isDisplayedInStock(product.stock, 0);
+      })
+      .slice(0, limit);
+    return this.withImageAiFlags(views);
+  }
+
   async getByBrand(
     tenantId: string,
     brand: string,

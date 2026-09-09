@@ -180,6 +180,13 @@ function SearchPage() {
     return mergeUnique(lists);
   }
 
+  /** Catálogo de los distribuidores elegidos, sin texto ni marca ni categoría. */
+  async function fetchByProviders(providers: string[], withZero: boolean): Promise<ProductDTO[]> {
+    if (providers.length === 0) return [];
+    const res = await catalogApi.byProvider(providers, 200, { includeOutOfStock: withZero });
+    return Array.isArray(res.data) ? res.data : [];
+  }
+
   async function handleCategoryClick(category: string, withZero = includeOutOfStock) {
     const nextCats = new Set([category]);
     setSelectedCategories(nextCats);
@@ -212,8 +219,13 @@ function SearchPage() {
   function applyProviders(next: Set<Provider>) {
     setTouchedFilters(true);
     setSelectedProviders(next);
-    if (!searched) return;
-    if (query.trim() || selectedBrands.size > 0 || selectedCategories.size > 0 || brandFilter.trim()) {
+    if (
+      query.trim() ||
+      selectedBrands.size > 0 ||
+      selectedCategories.size > 0 ||
+      brandFilter.trim() ||
+      next.size > 0
+    ) {
       // La selección nueva se pasa explícita: el estado todavía no se actualizó en este render.
       void runSearch(query, {
         track: false,
@@ -248,10 +260,13 @@ function SearchPage() {
     const categories = new Set(opts?.categories ?? selectedCategories);
     if (brandFromOpt) brands.add(brandFromOpt);
 
-    if (!q && brands.size === 0 && categories.size === 0) return;
-
     const withZero = opts?.includeOutOfStock ?? includeOutOfStock;
     const chosenProviders = opts?.providers ?? selectedProviders;
+    // Alcanza con UNA cosa: texto, marca, categoría o distribuidor. Antes el
+    // distribuidor solo no contaba y elegirlo no buscaba nada.
+    const onlyProviders =
+      !q && brands.size === 0 && categories.size === 0 && chosenProviders.size > 0;
+    if (!q && brands.size === 0 && categories.size === 0 && !onlyProviders) return;
     const providerList =
       chosenProviders.size === 0 && !touchedFilters
         ? searchable.map((p) => p.provider)
@@ -284,7 +299,9 @@ function SearchPage() {
         Boolean(q) && brandList.some((b) => b.toLowerCase() === q.toLowerCase());
       const distinctQ = Boolean(q) && !qIsBrand;
 
-      if (brandList.length > 0 && categoryList.length > 0) {
+      if (onlyProviders) {
+        data = await fetchByProviders([...chosenProviders], withZero);
+      } else if (brandList.length > 0 && categoryList.length > 0) {
         const [brandProducts, catProducts] = await Promise.all([
           fetchByBrands(brandList, withZero, brandProviders),
           fetchByCategories(categoryList, withZero),
@@ -710,6 +727,18 @@ function SearchPage() {
       })),
     [catalogBrands]
   );
+
+  /**
+   * No hay nada pedido: ni texto, ni marca, ni categoría, ni distribuidor.
+   * En ese caso se muestra la portada de búsqueda aunque haya resultados
+   * viejos restaurados de la sesión anterior.
+   */
+  const nothingAsked =
+    !query.trim() &&
+    !brandFilter.trim() &&
+    selectedBrands.size === 0 &&
+    selectedCategories.size === 0 &&
+    selectedProviders.size === 0;
 
   const distributorOptions = useMemo(
     () =>
@@ -1226,7 +1255,7 @@ function SearchPage() {
                 </div>
               )}
 
-              {hydrated && !loading && searched && !error && results.length === 0 && (
+              {hydrated && !loading && searched && !nothingAsked && !error && results.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
                   <Package className="w-9 h-9 text-surface-700 mb-1" />
                   <p className="text-sm font-medium text-surface-300">Sin resultados</p>
@@ -1238,7 +1267,7 @@ function SearchPage() {
                 </div>
               )}
 
-              {hydrated && !loading && searched && !error && results.length > 0 && filtered.length === 0 && (
+              {hydrated && !loading && searched && !nothingAsked && !error && results.length > 0 && filtered.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-32 gap-2 text-center">
                   <Package className="w-9 h-9 text-surface-700 mb-1" />
                   <p className="text-sm font-medium text-surface-300">Nada con esos filtros</p>
@@ -1248,14 +1277,14 @@ function SearchPage() {
                 </div>
               )}
 
-              {hydrated && !loading && !searched && (
+              {hydrated && !loading && (!searched || nothingAsked) && (
                 <SearchLanding onCategoryClick={handleCategoryClick} />
               )}
 
-              {hydrated && !loading && filtered.length > 0 && <SponsoredStrip />}
+              {hydrated && !loading && !nothingAsked && filtered.length > 0 && <SponsoredStrip />}
 
               {/* Grid */}
-              {hydrated && !loading && filtered.length > 0 && viewMode === "grid" && (
+              {hydrated && !loading && !nothingAsked && filtered.length > 0 && viewMode === "grid" && (
                 <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
                   {filtered.map((product, i) => (
                     <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} priceMode={priceMode} />
@@ -1264,12 +1293,12 @@ function SearchPage() {
               )}
 
               {/* List */}
-              {hydrated && !loading && filtered.length > 0 && viewMode === "list" && (
+              {hydrated && !loading && !nothingAsked && filtered.length > 0 && viewMode === "list" && (
                 <ListView items={filtered} priceMode={priceMode} />
               )}
 
               {/* Grouped */}
-              {hydrated && !loading && filtered.length > 0 && viewMode === "grouped" && (
+              {hydrated && !loading && !nothingAsked && filtered.length > 0 && viewMode === "grouped" && (
                 <div className="flex flex-col gap-5">
                   {Object.entries(groupedByProvider).sort((a, b) => b[1].length - a[1].length).map(([prov, items]) => {
                     const collapsed = collapsedProviders.has(prov);

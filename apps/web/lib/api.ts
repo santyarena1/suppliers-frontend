@@ -2306,6 +2306,15 @@ export const catalogApi = {
   /** Alias semántico: solo bajadas de precio (default del endpoint featured). */
   priceDrops: (take = 24) =>
     api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
+  /** Catálogo de uno o varios distribuidores, sin texto ni marca ni categoría. */
+  byProvider: (providers: string[], take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
+    api.get<ProductDTO[]>("/catalog/by-provider", {
+      params: {
+        providers: providers.join(","),
+        take,
+        ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+      },
+    }),
   byCategory: (category: string, take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
     api.get<ProductDTO[]>("/catalog/by-category", {
       params: {

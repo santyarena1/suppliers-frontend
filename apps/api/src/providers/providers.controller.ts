@@ -763,6 +763,27 @@ export class ProvidersController {
     );
   }
 
+  @Get("catalog/by-provider")
+  getByProvider(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Query("providers") providers?: string,
+    @Query("take") take?: string,
+    @Query("includeOutOfStock") includeOutOfStock?: string
+  ) {
+    if (!tenant) return [];
+    const providerList = (providers ?? "")
+      .split(",")
+      .map((p) => p.trim().toUpperCase())
+      .filter((p) => isProviderKey(p));
+    if (providerList.length === 0) throw new BadRequestException("Falta el parámetro providers");
+    return this.providersService.getByProvider(
+      commercialId(tenant),
+      providerList,
+      take ? Number(take) : 60,
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+    );
+  }
+
   @Get("catalog/by-brand")
   getByBrand(
     @CurrentTenantOrNone() tenant: TenantContext | null,
