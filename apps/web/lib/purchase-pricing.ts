@@ -210,10 +210,12 @@ export function parsePurchasePolicy(raw: {
   const legacy = asAdj(raw.ivaAdjustment);
   const schemeRaw = raw.schemeDiscountPercent;
   const schemeNum = schemeRaw == null || schemeRaw === "" ? null : Number(schemeRaw);
+  // 0 es un valor cargado a propósito ("anular la percepción"), no un campo
+  // vacío: solo null y "" significan "no configurado, manda el carrito".
   const pct = (v: unknown) => {
     if (v == null || v === "") return null;
     const n = Number(v);
-    return Number.isFinite(n) && n > 0 ? n : null;
+    return Number.isFinite(n) && n >= 0 ? n : null;
   };
   return {
     priceChannel: raw.priceChannel === "LIST" ? "LIST" : raw.priceChannel === "API" ? "API" : null,

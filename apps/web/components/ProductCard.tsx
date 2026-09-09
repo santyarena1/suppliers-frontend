@@ -145,7 +145,11 @@ export default function ProductCard({
      solo renglón. Absorbe la pastilla de impuesto, que decía lo mismo. */
   const breakdown = (() => {
     const parts = [`Base ${money(listed.net)}`];
-    parts.push(withIva ? displayTaxBadge(product, taxOpts) : "sin imp.");
+    // El badge arma IVA e internos. La percepción se agrega una sola vez acá,
+    // con su marca de estimada, para no repetirla.
+    parts.push(
+      withIva ? displayTaxBadge(product, { ...taxOpts, withIibb: false }) : "sin imp.",
+    );
     if (shown.iibbIncluded) {
       parts.push(
         `IIBB${shown.estimatedIibb ? " est." : ""}${
