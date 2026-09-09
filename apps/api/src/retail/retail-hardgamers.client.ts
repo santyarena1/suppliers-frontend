@@ -70,6 +70,8 @@ export class RetailHardgamersClient {
   /** Cortacircuito: si la fuente nos bloquea, dejamos de golpearla un rato. */
   private blockedUntil = 0;
   private consecutiveBlocks = 0;
+  /** Cuantas veces seguidas nos bloquearon: cada una espera mas que la anterior. */
+  private blockRounds = 0;
 
   constructor(private readonly config: ConfigService) {
     const baseURL = (config.get<string>("RETAIL_HG_BASE_URL") || DEFAULT_BASE).replace(/\/$/, "");
@@ -178,9 +180,15 @@ export class RetailHardgamersClient {
       // endurecer el bloqueo: después de tres seguidos, media hora de pausa.
       this.consecutiveBlocks += 1;
       if (this.consecutiveBlocks >= 3) {
-        this.blockedUntil = Date.now() + 30 * 60_000;
+        // Retroceso creciente: 30 min, 2 h, 6 h, 12 h. Si nos bloquearon a
+        // proposito, insistir cada media hora no lo va a destrabar y solo
+        // ensucia el log; si fue algo pasajero, igual se recupera solo.
+        const esperas = [30, 120, 360, 720];
+        const minutos = esperas[Math.min(this.blockRounds, esperas.length - 1)];
+        this.blockRounds += 1;
+        this.blockedUntil = Date.now() + minutos * 60_000;
         this.consecutiveBlocks = 0;
-        this.logger.warn(`${this.blockedReason()} Pauso la fuente 30 minutos.`);
+        this.logger.warn(`${this.blockedReason()} Pauso la fuente ${minutos} minutos.`);
       }
       return null;
     }
@@ -190,7 +198,9 @@ export class RetailHardgamersClient {
       return null;
     }
 
+    // Volvio a responder: se reinicia el retroceso.
     this.consecutiveBlocks = 0;
+    this.blockRounds = 0;
 
     // Si el servidor avisa que queda poco margen, frenamos antes de que corte.
     const remaining = Number(res.headers["x-ratelimit-remaining"]);
