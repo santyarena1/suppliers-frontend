@@ -111,7 +111,27 @@ export class RetailHardgamersClient {
     const raw = (this.config.get<string>("RETAIL_HG_STORES") || "").trim();
     const list = raw
       ? raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
-      : ["hardcore", "hypergaming", "liontech", "maximus", "fullh4rd", "xtpc"];
+      : [
+          // Los slugs del sitio son camelCase; se sacaron de los enlaces de su
+          // portada, no adivinados. Solo van los locales que el agregador
+          // principal NO publica: sumar acá uno que ya viene por la otra fuente
+          // crearia el mismo local dos veces.
+          "hardcore",
+          "portalTech",
+          "armyTech",
+          "hypergaming",
+          "compufanStore",
+          "liontech",
+          "fullh4rd",
+          "maximus",
+          "gamerfactory",
+          "vertexRetail",
+          "mexx",
+          "noxie",
+          "xtpc",
+          // El agregador lo lista pero sin catalogo; acá sí tiene productos.
+          "slotOne",
+        ];
     return [...new Set(list)];
   }
 
