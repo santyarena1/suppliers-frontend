@@ -3,6 +3,12 @@ import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { RetailSourceClient, type ExternalProduct, type ExternalStore } from "./retail-source.client";
+import {
+  HG_PAGE_SIZE,
+  RetailHardgamersClient,
+  hardgamersExternalId,
+  type HardgamersDoc,
+} from "./retail-hardgamers.client";
 import { normalizeSearchText } from "./retail-search.util";
 import {
   catalogLooksFalselyDivided,
@@ -56,8 +62,151 @@ export class RetailIngestService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly client: RetailSourceClient,
+    private readonly hardgamers: RetailHardgamersClient,
     private readonly config: ConfigService
   ) {}
+
+  /**
+   * Segunda fuente: los locales que el agregador principal no publica.
+   *
+   * Va aparte del ciclo grande a propósito. HardGamers permite 12 pedidos por
+   * minuto y cada local son ~13 páginas, así que esto avanza despacio (cerca de
+   * un local por minuto) y no puede compartir la concurrencia del ingest normal
+   * sin hacernos cortar.
+   */
+  async ingestHardgamersStores(slugs?: string[]): Promise<{
+    stores: number;
+    products: number;
+    skipped: string[];
+  }> {
+    const targets = slugs?.length ? slugs : this.hardgamers.storeSlugs();
+    let storesDone = 0;
+    let productsUpserted = 0;
+    const skipped: string[] = [];
+
+    for (const slug of targets) {
+      try {
+        const first = await this.hardgamers.fetchStorePage(slug, 1);
+        if (!first || first.docs.length === 0) {
+          skipped.push(slug);
+          continue;
+        }
+
+        const storeName = first.storeName || slug;
+        const store = await this.upsertHardgamersStore(slug, storeName);
+
+        productsUpserted += await this.saveHardgamersDocs(store.id, first.docs);
+
+        const pages = Math.max(1, Math.min(first.pages, Math.ceil(first.total / HG_PAGE_SIZE)));
+        for (let page = 2; page <= pages; page++) {
+          const data = await this.hardgamers.fetchStorePage(slug, page);
+          if (!data || data.docs.length === 0) break;
+          productsUpserted += await this.saveHardgamersDocs(store.id, data.docs);
+        }
+
+        await this.prisma.retailStore.update({
+          where: { id: store.id },
+          data: { syncedAt: new Date() },
+        });
+        storesDone += 1;
+        this.logger.log("HardGamers: " + storeName + " (" + slug + ") " + first.total + " productos");
+      } catch (err) {
+        skipped.push(slug);
+        this.logger.warn(
+          "HardGamers " + slug + " falló: " + (err instanceof Error ? err.message : String(err))
+        );
+      }
+    }
+
+    return { stores: storesDone, products: productsUpserted, skipped };
+  }
+
+  private async upsertHardgamersStore(slug: string, name: string) {
+    const externalId = hardgamersExternalId("store:" + slug);
+    return this.prisma.retailStore.upsert({
+      where: { externalId },
+      create: {
+        externalId,
+        name,
+        active: true,
+        // HardGamers publica el precio final en pesos, sin centavos escondidos.
+        priceDivisor: 1,
+        raw: { source: "hardgamers", slug } as object,
+        syncedAt: new Date(0),
+      },
+      update: {
+        name,
+        active: true,
+        priceDivisor: 1,
+        raw: { source: "hardgamers", slug } as object,
+      },
+      select: { id: true },
+    });
+  }
+
+  private async saveHardgamersDocs(storeId: string, docs: HardgamersDoc[]): Promise<number> {
+    let n = 0;
+    for (const doc of docs) {
+      const name = (doc.name || "").trim();
+      const price = Number(doc.price);
+      if (!name || !doc._id || !Number.isFinite(price) || price <= 0) continue;
+
+      const externalId = hardgamersExternalId(doc._id);
+      const searchText = normalizeSearchText(name);
+      // El link trae utm de HardGamers: guardamos la ficha del local, limpia.
+      const productUrl = (doc.link || "").split("?")[0] || null;
+
+      const row = await this.prisma.retailProduct.upsert({
+        where: { externalId },
+        create: {
+          externalId,
+          storeId,
+          name,
+          price: new Prisma.Decimal(price),
+          productUrl,
+          imageUrl: doc.image?.trim() || null,
+          searchText,
+          active: doc.availability !== false,
+          syncedAt: new Date(),
+        },
+        update: {
+          storeId,
+          name,
+          price: new Prisma.Decimal(price),
+          productUrl,
+          imageUrl: doc.image?.trim() || null,
+          searchText,
+          active: doc.availability !== false,
+          syncedAt: new Date(),
+        },
+        select: { id: true, price: true },
+      });
+
+      // Historial: un punto por cambio real de precio, igual que la otra fuente.
+      // Esta fuente no entrega id de cambio, asi que el punto se fecha al momento
+      // de la lectura y se guarda el precio anterior para poder graficar el salto.
+      const last = await this.prisma.retailPriceHistory.findFirst({
+        where: { productId: row.id },
+        orderBy: { changedAt: "desc" },
+        select: { price: true },
+      });
+      const previous = last ? Number(last.price) : null;
+      if (previous == null || Math.abs(previous - price) > 0.009) {
+        await this.prisma.retailPriceHistory
+          .create({
+            data: {
+              productId: row.id,
+              price: new Prisma.Decimal(price),
+              previousPrice: previous == null ? null : new Prisma.Decimal(previous),
+              changedAt: new Date(),
+            },
+          })
+          .catch(() => undefined);
+      }
+      n += 1;
+    }
+    return n;
+  }
 
   async onModuleInit() {
     // Corridas huérfanas tras restart del proceso

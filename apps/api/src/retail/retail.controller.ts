@@ -41,6 +41,15 @@ export class RetailController {
     return this.ingest.requestFullIngest();
   }
 
+  /** Dispara la ingesta de la segunda fuente (HardGamers), que va por su propio cron. */
+  @UseGuards(RolesGuard)
+  @Roles("ROLE_ADMIN")
+  @Post("admin/retail/hardgamers/ingest")
+  triggerHardgamers(@Query("stores") stores?: string) {
+    const slugs = (stores || "").split(/[,s]+/).map((x) => x.trim()).filter(Boolean);
+    return this.ingest.ingestHardgamersStores(slugs.length ? slugs : undefined);
+  }
+
   /** Repara precios ÷100 falsos en locales que no son Multiplo (inmediato, sin esperar sync). */
   @UseGuards(RolesGuard)
   @Roles("ROLE_ADMIN")

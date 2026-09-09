@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { RetailSourceClient } from "./retail-source.client";
+import { RetailHardgamersClient } from "./retail-hardgamers.client";
 import { RetailIngestService } from "./retail-ingest.service";
 import { RetailSearchService } from "./retail-search.service";
 import { RetailSchedulerService } from "./retail-scheduler.service";
@@ -7,7 +8,13 @@ import { RetailController } from "./retail.controller";
 
 @Module({
   controllers: [RetailController],
-  providers: [RetailSourceClient, RetailIngestService, RetailSearchService, RetailSchedulerService],
+  providers: [
+    RetailSourceClient,
+    RetailHardgamersClient,
+    RetailIngestService,
+    RetailSearchService,
+    RetailSchedulerService,
+  ],
   exports: [RetailSearchService, RetailIngestService],
 })
 export class RetailModule {}

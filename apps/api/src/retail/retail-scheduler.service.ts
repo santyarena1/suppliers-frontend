@@ -7,6 +7,8 @@ import { isRetailDaytime } from "./retail-time";
 @Injectable()
 export class RetailSchedulerService {
   private readonly logger = new Logger(RetailSchedulerService.name);
+  /** Una sola pasada de la segunda fuente por vez: es lenta por el rate limit. */
+  private hgRunning = false;
 
   constructor(
     private readonly ingest: RetailIngestService,
@@ -50,6 +52,38 @@ export class RetailSchedulerService {
       this.logger.warn(
         `Cron retail ${source} falló: ${err instanceof Error ? err.message : String(err)}`
       );
+    }
+  }
+  /**
+   * Segunda fuente, en su propio ciclo. Va cada 6 horas y no cada 5 minutos
+   * porque el sitio limita a 12 pedidos por minuto: una pasada completa tarda
+   * varios minutos y no tiene sentido repetirla seguido.
+   */
+  @Cron("17 */6 * * *")
+  async handleHardgamersCron() {
+    if (this.config.get("RETAIL_INGEST_DISABLED") === "true") return;
+    if (this.config.get("RETAIL_HG_DISABLED") === "true") return;
+    if (this.hgRunning) {
+      this.logger.debug("Cron HardGamers: ya hay una pasada en curso, se salta");
+      return;
+    }
+    this.hgRunning = true;
+    try {
+      const r = await this.ingest.ingestHardgamersStores();
+      this.logger.log(
+        "Cron HardGamers: " +
+          r.stores +
+          " locales / " +
+          r.products +
+          " productos" +
+          (r.skipped.length ? " (sin datos: " + r.skipped.join(", ") + ")" : "")
+      );
+    } catch (err) {
+      this.logger.warn(
+        "Cron HardGamers falló: " + (err instanceof Error ? err.message : String(err))
+      );
+    } finally {
+      this.hgRunning = false;
     }
   }
 }
