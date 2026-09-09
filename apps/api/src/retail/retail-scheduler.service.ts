@@ -55,11 +55,12 @@ export class RetailSchedulerService {
     }
   }
   /**
-   * Segunda fuente, en su propio ciclo. Va cada 6 horas y no cada 5 minutos
-   * porque el sitio limita a 12 pedidos por minuto: una pasada completa tarda
-   * varios minutos y no tiene sentido repetirla seguido.
+   * Misma cadencia que el resto de los locales: cada 5 minutos. Lo que cambia
+   * es que el lote se mide en paginas, porque el limite de esta fuente es de
+   * pedidos por minuto. Con el presupuesto por defecto una vuelta completa de
+   * todos los locales toma unos diez minutos.
    */
-  @Cron("17 */6 * * *")
+  @Cron("*/5 * * * *")
   async handleHardgamersCron() {
     if (this.config.get("RETAIL_INGEST_DISABLED") === "true") return;
     if (this.config.get("RETAIL_HG_DISABLED") === "true") return;
@@ -69,13 +70,16 @@ export class RetailSchedulerService {
     }
     this.hgRunning = true;
     try {
-      const r = await this.ingest.ingestHardgamersStores();
+      const pageBudget = Math.max(4, Number(this.config.get("RETAIL_HG_PAGE_BUDGET") ?? 32));
+      const r = await this.ingest.ingestHardgamersStores(undefined, { pageBudget });
       this.logger.log(
         "Cron HardGamers: " +
           r.stores +
           " locales / " +
           r.products +
-          " productos" +
+          " productos / " +
+          r.pages +
+          " paginas" +
           (r.skipped.length ? " (sin datos: " + r.skipped.join(", ") + ")" : "")
       );
     } catch (err) {

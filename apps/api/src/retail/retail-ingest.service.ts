@@ -67,26 +67,34 @@ export class RetailIngestService implements OnModuleInit {
   ) {}
 
   /**
-   * Segunda fuente: los locales que el agregador principal no publica.
+   * Segunda fuente, con la misma cadencia que el resto de los locales.
    *
-   * Va aparte del ciclo grande a propósito. HardGamers permite 12 pedidos por
-   * minuto y cada local son ~13 páginas, así que esto avanza despacio (cerca de
-   * un local por minuto) y no puede compartir la concurrencia del ingest normal
-   * sin hacernos cortar.
+   * El ingest principal corre cada 5 minutos y en cada vuelta toma un lote de
+   * las tiendas más viejas; acá igual, pero el lote se mide en páginas porque
+   * el límite real es de pedidos por minuto, no de tiendas. Con el presupuesto
+   * por defecto una vuelta completa de todos los locales tarda unos diez
+   * minutos, en vez de esperar un batch cada seis horas.
    */
-  async ingestHardgamersStores(slugs?: string[]): Promise<{
-    stores: number;
-    products: number;
-    skipped: string[];
-  }> {
-    const targets = slugs?.length ? slugs : this.hardgamers.storeSlugs();
+  async ingestHardgamersStores(
+    slugs?: string[],
+    opts: { pageBudget?: number } = {}
+  ): Promise<{ stores: number; products: number; pages: number; skipped: string[] }> {
+    const configured = slugs?.length ? slugs : this.hardgamers.storeSlugs();
+    // Sin presupuesto (disparo manual) se hace la vuelta entera.
+    let budget = opts.pageBudget ?? Number.POSITIVE_INFINITY;
+    const targets = await this.hardgamersByStaleness(configured);
+
     let storesDone = 0;
     let productsUpserted = 0;
+    let pagesRead = 0;
     const skipped: string[] = [];
 
     for (const slug of targets) {
+      if (budget <= 0) break;
       try {
         const first = await this.hardgamers.fetchStorePage(slug, 1);
+        budget -= 1;
+        pagesRead += 1;
         if (!first || first.docs.length === 0) {
           skipped.push(slug);
           continue;
@@ -94,22 +102,34 @@ export class RetailIngestService implements OnModuleInit {
 
         const storeName = first.storeName || slug;
         const store = await this.upsertHardgamersStore(slug, storeName);
-
         productsUpserted += await this.saveHardgamersDocs(store.id, first.docs);
 
         const pages = Math.max(1, Math.min(first.pages, Math.ceil(first.total / HG_PAGE_SIZE)));
+        let completo = true;
         for (let page = 2; page <= pages; page++) {
+          if (budget <= 0) {
+            // Se corta a mitad de tienda: no se marca sincronizada, así la
+            // próxima vuelta la vuelve a tomar primero y termina el trabajo.
+            completo = false;
+            break;
+          }
           const data = await this.hardgamers.fetchStorePage(slug, page);
+          budget -= 1;
+          pagesRead += 1;
           if (!data || data.docs.length === 0) break;
           productsUpserted += await this.saveHardgamersDocs(store.id, data.docs);
         }
 
-        await this.prisma.retailStore.update({
-          where: { id: store.id },
-          data: { syncedAt: new Date() },
-        });
-        storesDone += 1;
-        this.logger.log("HardGamers: " + storeName + " (" + slug + ") " + first.total + " productos");
+        if (completo) {
+          await this.prisma.retailStore.update({
+            where: { id: store.id },
+            data: { syncedAt: new Date() },
+          });
+          storesDone += 1;
+          this.logger.log(
+            "HardGamers: " + storeName + " (" + slug + ") " + first.total + " productos"
+          );
+        }
       } catch (err) {
         skipped.push(slug);
         this.logger.warn(
@@ -118,7 +138,23 @@ export class RetailIngestService implements OnModuleInit {
       }
     }
 
-    return { stores: storesDone, products: productsUpserted, skipped };
+    return { stores: storesDone, products: productsUpserted, pages: pagesRead, skipped };
+  }
+
+  /** Las tiendas más viejas primero; las que nunca se trajeron van al frente. */
+  private async hardgamersByStaleness(slugs: string[]): Promise<string[]> {
+    const ids = new Map(slugs.map((s) => [hardgamersExternalId("store:" + s), s]));
+    const rows = await this.prisma.retailStore.findMany({
+      where: { externalId: { in: [...ids.keys()] } },
+      select: { externalId: true, syncedAt: true },
+    });
+    const syncedAt = new Map<string, number>();
+    for (const slug of slugs) syncedAt.set(slug, 0);
+    for (const row of rows) {
+      const slug = ids.get(row.externalId);
+      if (slug) syncedAt.set(slug, row.syncedAt.getTime());
+    }
+    return [...slugs].sort((a, b) => (syncedAt.get(a) ?? 0) - (syncedAt.get(b) ?? 0));
   }
 
   private async upsertHardgamersStore(slug: string, name: string) {
