@@ -73,6 +73,8 @@ type TaxExtra = {
   perceptionsUSD?: number;
   perceptionLines?: PerceptionLine[];
   totalUSD?: number;
+  /** El % lo cargó el comercio en Configuración y pisa lo que cotice el portal. */
+  manual?: boolean;
 };
 
 const EMPTY_TOTALS: Totals = {
@@ -373,7 +375,11 @@ function CartPageInner() {
         : provider === "SOLUTION_BOX" ? sbExtra?.shippingUSD
         : provider === "NEW_TREE" ? ntExtra?.shippingUSD
         : undefined;
-      return { shippingUSD: quotedShipping ?? 0, percepcionPercent: Math.max(0, manualPct) };
+      return {
+        shippingUSD: quotedShipping ?? 0,
+        percepcionPercent: Math.max(0, manualPct),
+        manual: true,
+      };
     }
     const cfgPct = getIibbRatePercent(provider);
     const cfg: TaxExtra | undefined =

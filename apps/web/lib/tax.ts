@@ -357,6 +357,12 @@ export type OrderPerceptionExtra = {
   percepcionPercent?: number;
   perceptionsUSD?: number;
   perceptionLines?: { label: string; amount: number }[];
+  /**
+   * El % viene de Configuración del distribuidor y pisa todo lo demás, incluida
+   * la percepción que traiga el propio producto del catálogo. Un 0 con esta
+   * marca significa "a este proveedor no le pago percepción".
+   */
+  manual?: boolean;
 };
 
 /** Perc. de la línea: la del producto, o la del pedido (alícuota o prorrateo del total). */
@@ -366,12 +372,21 @@ export function linePerceptionFromOrder(
   extra?: OrderPerceptionExtra | null
 ): TaxLine | null {
   const existing = taxByKind(extractTaxLines(item), "iibb");
-  if (existing && existing.unitAmount > 0.0001) return existing;
-
   const unitNet = parsePrice(item.price);
   const qty = item.qty > 0 ? item.qty : 1;
   const label = extra?.perceptionLines?.[0]?.label || "Percepciones";
   const pct = extra?.percepcionPercent ?? 0;
+
+  // Lo cargado a mano manda: si es 0, no hay percepción aunque el catálogo del
+  // proveedor traiga una.
+  if (extra?.manual) {
+    if (pct > 0 && unitNet > 0) {
+      return { kind: "iibb", label, percent: pct, unitAmount: round4(unitNet * (pct / 100)) };
+    }
+    return null;
+  }
+
+  if (existing && existing.unitAmount > 0.0001) return existing;
   if (pct > 0 && unitNet > 0) {
     return {
       kind: "iibb",

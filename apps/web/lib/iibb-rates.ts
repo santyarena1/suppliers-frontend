@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { getUser, tenantSeesIibbPerceptions } from "@/lib/auth";
+import { cachedMyProviders } from "@/lib/api";
+import { parsePurchasePolicy } from "@/lib/purchase-pricing";
 
 const STORAGE_KEY = "pref_iibb_rates";
 const EVENT = "nodo:iibb-rates";
@@ -106,16 +108,35 @@ function writeFile(file: StoredFile): void {
   }
 }
 
-/** Alícuota de ESTE comercio (carrito o manual). No hay % global por proveedor. */
+/**
+ * Alícuota de ESTE comercio. No hay % global por proveedor.
+ *
+ * El % cargado en Configuración del distribuidor manda sobre todo lo demás,
+ * incluido un 0 explícito: es la forma que tiene el comercio de decir "a este
+ * proveedor no le pago percepción", y tiene que ganarle a lo que cotice el
+ * portal. Recién si no hay nada cargado se usa lo aprendido del carrito.
+ */
 export function getIibbRatePercent(provider: string | null | undefined): number | null {
   if (!provider || !tenantSeesIibbPerceptions()) return null;
+  const manual = manualIibbFor(provider);
+  if (manual != null) return manual;
   const stored = readFile().rates;
   if (Object.prototype.hasOwnProperty.call(stored, provider)) return stored[provider];
   return null;
 }
 
+/** El % manual del proveedor, del cache sincrónico de /my/providers. */
+function manualIibbFor(provider: string): number | null {
+  const cached = cachedMyProviders();
+  if (!cached) return null;
+  const found = cached.find((p) => p.provider === provider);
+  if (!found) return null;
+  return parsePurchasePolicy(found.purchase).manualIibbPercent ?? null;
+}
+
 export function getIibbRateSource(provider: string | null | undefined): IibbRateSource {
   if (!provider || !tenantSeesIibbPerceptions()) return "none";
+  if (manualIibbFor(provider) != null) return "manual";
   const file = readFile();
   if (Object.prototype.hasOwnProperty.call(file.rates, provider)) {
     return file.sources[provider] ?? "manual";
