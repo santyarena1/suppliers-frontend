@@ -23,6 +23,9 @@ function sleep(ms: number) {
 
 const STALE_MS = 15 * 60_000;
 
+/** Tope de seguridad por tienda en una corrida de la segunda fuente. */
+const MAX_HG_PAGES_PER_STORE = 120;
+
 function firstImage(images?: { url?: string }[]): string | null {
   const url = images?.find((i) => i?.url)?.url;
   return url?.trim() || null;
@@ -105,14 +108,11 @@ export class RetailIngestService implements OnModuleInit {
         productsUpserted += await this.saveHardgamersDocs(store.id, first.docs);
 
         const pages = Math.max(1, Math.min(first.pages, Math.ceil(first.total / HG_PAGE_SIZE)));
-        let completo = true;
-        for (let page = 2; page <= pages; page++) {
-          if (budget <= 0) {
-            // Se corta a mitad de tienda: no se marca sincronizada, así la
-            // próxima vuelta la vuelve a tomar primero y termina el trabajo.
-            completo = false;
-            break;
-          }
+        // El presupuesto decide si se ARRANCA otra tienda, no corta una empezada.
+        // Cortarla a mitad la dejaba sin marcar como sincronizada, y al ser la más
+        // vieja volvía a salir primera en la vuelta siguiente: una tienda más
+        // grande que el presupuesto no terminaba nunca y tapaba a las demás.
+        for (let page = 2; page <= pages && page <= MAX_HG_PAGES_PER_STORE; page++) {
           const data = await this.hardgamers.fetchStorePage(slug, page);
           budget -= 1;
           pagesRead += 1;
@@ -120,16 +120,14 @@ export class RetailIngestService implements OnModuleInit {
           productsUpserted += await this.saveHardgamersDocs(store.id, data.docs);
         }
 
-        if (completo) {
-          await this.prisma.retailStore.update({
-            where: { id: store.id },
-            data: { syncedAt: new Date() },
-          });
-          storesDone += 1;
-          this.logger.log(
-            "HardGamers: " + storeName + " (" + slug + ") " + first.total + " productos"
-          );
-        }
+        await this.prisma.retailStore.update({
+          where: { id: store.id },
+          data: { syncedAt: new Date() },
+        });
+        storesDone += 1;
+        this.logger.log(
+          "HardGamers: " + storeName + " (" + slug + ") " + first.total + " productos"
+        );
       } catch (err) {
         skipped.push(slug);
         this.logger.warn(
