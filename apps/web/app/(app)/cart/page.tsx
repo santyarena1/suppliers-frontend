@@ -298,7 +298,7 @@ function CartPageInner() {
     SOLUTION_BOX: sbWarm,
   };
 
-  const invidExtra: TaxExtra | undefined = invidQuoted?.stockOk
+  const invidExtra: TaxExtra | undefined = invidQuoted
     ? { shippingUSD: invidQuoted.shippingCost ?? 0, percepcionPercent: invidQuoted.percepcionPercent ?? 0 }
     : undefined;
   const elitExtra: TaxExtra | undefined = elitQuoted
@@ -338,6 +338,18 @@ function CartPageInner() {
       }
     : undefined;
 
+  const ntQuoted = ntWarm.status === "ready" ? ntWarm.data?.preview ?? null : null;
+  const ntExtra: TaxExtra | undefined = ntQuoted
+    ? {
+        perceptionsUSD: ntQuoted.perceptions ?? 0,
+        perceptionLines:
+          (ntQuoted.perceptions ?? 0) > 0.0005
+            ? [{ label: "Percepciones", amount: ntQuoted.perceptions }]
+            : [],
+        totalUSD: ntQuoted.total,
+      }
+    : undefined;
+
   const sbQuoted = sbWarm.status === "ready" ? sbWarm.data?.preview ?? null : null;
   const sbExtra: TaxExtra | undefined = sbQuoted
     ? {
@@ -359,6 +371,7 @@ function CartPageInner() {
         : provider === "NEW_BYTES" ? nbExtra?.shippingUSD
         : provider === "AIR" ? airExtra?.shippingUSD
         : provider === "SOLUTION_BOX" ? sbExtra?.shippingUSD
+        : provider === "NEW_TREE" ? ntExtra?.shippingUSD
         : undefined;
       return { shippingUSD: quotedShipping ?? 0, percepcionPercent: Math.max(0, manualPct) };
     }
@@ -373,6 +386,7 @@ function CartPageInner() {
     else if (provider === "NEW_BYTES") quoted = nbExtra;
     else if (provider === "AIR") quoted = airExtra;
     else if (provider === "SOLUTION_BOX") quoted = sbExtra;
+    else if (provider === "NEW_TREE") quoted = ntExtra;
     const quotedHasPerc =
       quoted != null &&
       ((quoted.perceptionsUSD ?? 0) > 0.0005 || (quoted.percepcionPercent ?? 0) > 0);
@@ -384,8 +398,8 @@ function CartPageInner() {
   }
 
   useEffect(() => {
-    if (invidQuoted?.stockOk && (invidQuoted.percepcionPercent ?? 0) > 0) {
-      rememberIibbRate("INVID", invidQuoted.percepcionPercent!);
+    if ((invidQuoted?.percepcionPercent ?? 0) > 0) {
+      rememberIibbRate("INVID", invidQuoted!.percepcionPercent!);
     }
   }, [invidQuoted]);
   useEffect(() => {
@@ -412,6 +426,22 @@ function CartPageInner() {
       rememberIibbRate("AIR", (perc / net) * 100);
     }
   }, [airQuoted, airPerc]);
+  useEffect(() => {
+    if (!sbQuoted) return;
+    const perc = sbQuoted.perceptions ?? 0;
+    const net = sbQuoted.subtotal ?? 0;
+    if (perc > 0.0005 && net > 0) {
+      rememberIibbRate("SOLUTION_BOX", (perc / net) * 100);
+    }
+  }, [sbQuoted]);
+  useEffect(() => {
+    if (!ntQuoted) return;
+    const perc = ntQuoted.perceptions ?? 0;
+    const net = ntQuoted.subtotal ?? 0;
+    if (perc > 0.0005 && net > 0) {
+      rememberIibbRate("NEW_TREE", (perc / net) * 100);
+    }
+  }, [ntQuoted]);
 
   const grand = useMemo(() => {
     const tot = totalsFor(viewItems);
