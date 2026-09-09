@@ -342,7 +342,7 @@ export default function ProductCard({
         open={saleOpen}
         onClose={() => setSaleOpen(false)}
         seedQuery={product.name}
-        costUsd={listed.net}
+        costUsd={displayUsd}
       />
     </article>
   );

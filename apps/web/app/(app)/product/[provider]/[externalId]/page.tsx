@@ -374,7 +374,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         El desglose usa tu cotización. IVA y percepciones se eligen por separado
                         {withIva ? "" : " · sin IVA"}
                         {withIibb ? " · con percepciones si se conocen (en esquema también; en offline no)" : " · sin percepciones"}
-                        . El margen vs locales se calcula sobre el costo neto.
+                        . El margen contra locales se calcula sobre tu costo final, porque el precio que publican ellos también es final.
                       </p>
                     </div>
 
@@ -476,7 +476,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
             </div>
 
             {/* Locales: footer separado, siempre debajo de TODO el producto (mobile incluido) */}
-            <LocalesFooter seedQuery={product.name} costUsd={pricing.unitNet} />
+            <LocalesFooter seedQuery={product.name} costUsd={unitDisplayUsd} />
           </>
         )}
       </div>

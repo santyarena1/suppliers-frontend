@@ -254,14 +254,12 @@ export class RetailIngestService implements OnModuleInit {
     );
 
     try {
+      // Se ingestan todos los locales que publica la fuente. El "estado" que
+      // trae es criterio del agregador, no del local: varios marcados como
+      // inactivos siguen publicando precios y nos interesan igual.
       const remoteStores = await this.client.listStores();
-      const activeRemote = remoteStores.filter((s) => {
-        const estado = s.estado?.nombre?.toLowerCase();
-        if (!estado) return true;
-        return estado === "activa" || estado === "activo" || estado === "active";
-      });
 
-      await mapPool(activeRemote, 4, async (store) => {
+      await mapPool(remoteStores, 4, async (store) => {
         await this.upsertStoreMeta(store);
       });
 
@@ -276,7 +274,7 @@ export class RetailIngestService implements OnModuleInit {
       const ordered = await this.prisma.retailStore.findMany({
         where: {
           active: true,
-          externalId: { in: activeRemote.map((s) => s.id) },
+          externalId: { in: remoteStores.map((s) => s.id) },
         },
         orderBy: { syncedAt: "asc" },
         select: { id: true, externalId: true, name: true },
