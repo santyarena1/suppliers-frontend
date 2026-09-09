@@ -111,7 +111,7 @@ export class RetailHardgamersClient {
     const raw = (this.config.get<string>("RETAIL_HG_STORES") || "").trim();
     const list = raw
       ? raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
-      : ["hardcore", "hypergaming", "liontech", "maximus", "fullh4rd", "xt-pc"];
+      : ["hardcore", "hypergaming", "liontech", "maximus", "fullh4rd", "xtpc"];
     return [...new Set(list)];
   }
 

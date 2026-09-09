@@ -478,8 +478,8 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
                             ? `${s.productCount} productos`
                             : s.neverSynced
                               ? "Sin sincronizar"
-                              : "Sin productos"}
-                        {!inProgress && !s.neverSynced && s.productCount > 0
+                              : "La fuente no publica catálogo de este local"}
+                        {!inProgress && !s.neverSynced
                           ? ` · ${new Date(s.syncedAt).toLocaleString("es-AR")}`
                           : ""}
                         {s.priceDivisor > 1 ? ` · ÷${s.priceDivisor}` : ""}
