@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios, { type AxiosInstance } from "axios";
+import { HttpsProxyAgent } from "https-proxy-agent";
 
 /**
  * Segunda fuente de locales.
@@ -65,6 +66,10 @@ export class RetailHardgamersClient {
   /** Pedidos por minuto que nos permitimos, por debajo del límite real (12). */
   private readonly maxPerMinute: number;
   private readonly stamps: number[] = [];
+  private readonly viaProxy: boolean;
+  /** Cortacircuito: si la fuente nos bloquea, dejamos de golpearla un rato. */
+  private blockedUntil = 0;
+  private consecutiveBlocks = 0;
 
   constructor(private readonly config: ConfigService) {
     const baseURL = (config.get<string>("RETAIL_HG_BASE_URL") || DEFAULT_BASE).replace(/\/$/, "");
@@ -72,15 +77,31 @@ export class RetailHardgamersClient {
       1,
       Math.min(11, Number(config.get("RETAIL_HG_MAX_PER_MIN") ?? 8)),
     );
+
+    // Mismo problema que New Tree: el sitio contesta 403 a la IP del datacenter.
+    // Con un proxy configurado salimos por ahí; sin proxy, se intenta igual.
+    const proxyUrl = (config.get<string>("RETAIL_HG_PROXY_URL") || "").trim();
+    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+    this.viaProxy = Boolean(proxyUrl);
+
     this.http = axios.create({
       baseURL,
       timeout: 45_000,
+      ...(agent ? { httpsAgent: agent, httpAgent: agent, proxy: false as const } : {}),
       headers: {
         "User-Agent": USER_AGENT,
-        Accept: "text/html,application/xhtml+xml",
-        "Accept-Language": "es-AR,es;q=0.9",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-AR,es;q=0.9,en;q=0.8",
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
+        Referer: baseURL + "/",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
       },
-      // El 429 lo queremos ver, no que axios lo tire como excepción opaca.
+      // El 403 y el 429 los queremos ver, no que axios los tire como excepción opaca.
       validateStatus: (s) => s < 500,
     });
   }
@@ -92,6 +113,17 @@ export class RetailHardgamersClient {
       ? raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
       : ["hardcore", "hypergaming", "liontech", "maximus", "fullh4rd", "xt-pc"];
     return [...new Set(list)];
+  }
+
+  /** true si la fuente nos está bloqueando y todavía estamos en penitencia. */
+  isBlocked(): boolean {
+    return Date.now() < this.blockedUntil;
+  }
+
+  blockedReason(): string {
+    return this.viaProxy
+      ? "HardGamers bloquea la salida configurada en RETAIL_HG_PROXY_URL."
+      : "HardGamers bloquea la IP del servidor de Nodo. Configurá RETAIL_HG_PROXY_URL para salir por otra IP.";
   }
 
   /** Ventana rodante propia: nunca superamos maxPerMinute pedidos por minuto. */
@@ -108,6 +140,8 @@ export class RetailHardgamersClient {
   }
 
   async fetchStorePage(slug: string, page: number): Promise<HardgamersPage | null> {
+    if (this.isBlocked()) return null;
+
     await this.waitForSlot();
     const url = `/stores/${encodeURIComponent(slug)}?page=${page}&limit=${HG_PAGE_SIZE}`;
     const res = await this.http.get<string>(url, { responseType: "text" });
@@ -118,10 +152,25 @@ export class RetailHardgamersClient {
       await sleep(Math.min(120_000, Math.max(5_000, retry * 1000)));
       return this.fetchStorePage(slug, page);
     }
+
+    if (res.status === 403) {
+      // Golpear una y otra vez una puerta cerrada solo ensucia el log y puede
+      // endurecer el bloqueo: después de tres seguidos, media hora de pausa.
+      this.consecutiveBlocks += 1;
+      if (this.consecutiveBlocks >= 3) {
+        this.blockedUntil = Date.now() + 30 * 60_000;
+        this.consecutiveBlocks = 0;
+        this.logger.warn(`${this.blockedReason()} Pauso la fuente 30 minutos.`);
+      }
+      return null;
+    }
+
     if (res.status !== 200 || typeof res.data !== "string") {
       this.logger.warn(`HardGamers ${res.status} en ${slug} p${page}`);
       return null;
     }
+
+    this.consecutiveBlocks = 0;
 
     // Si el servidor avisa que queda poco margen, frenamos antes de que corte.
     const remaining = Number(res.headers["x-ratelimit-remaining"]);
