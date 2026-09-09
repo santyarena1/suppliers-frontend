@@ -44,6 +44,13 @@ export interface HardgamersPage {
   storeName: string | null;
 }
 
+/** Quita las barras finales para poder concatenar la query sin duplicarlas. */
+function stripTrailingSlash(url: string): string {
+  let out = url;
+  while (out.endsWith("/")) out = out.slice(0, -1);
+  return out;
+}
+
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -67,6 +74,9 @@ export class RetailHardgamersClient {
   private readonly maxPerMinute: number;
   private readonly stamps: number[] = [];
   private readonly viaProxy: boolean;
+  /** Salida por Vercel: la fuente bloquea la IP de Railway pero no la de ahi. */
+  private readonly fetchVia: string;
+  private readonly fetchToken: string;
   /** Cortacircuito: si la fuente nos bloquea, dejamos de golpearla un rato. */
   private blockedUntil = 0;
   private consecutiveBlocks = 0;
@@ -85,6 +95,8 @@ export class RetailHardgamersClient {
     const proxyUrl = (config.get<string>("RETAIL_HG_PROXY_URL") || "").trim();
     const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
     this.viaProxy = Boolean(proxyUrl);
+    this.fetchVia = stripTrailingSlash((config.get<string>("RETAIL_HG_FETCH_VIA_URL") || "").trim());
+    this.fetchToken = (config.get<string>("RETAIL_HG_FETCH_TOKEN") || "").trim();
 
     this.http = axios.create({
       baseURL,
@@ -143,9 +155,10 @@ export class RetailHardgamersClient {
   }
 
   blockedReason(): string {
+    if (this.fetchVia) return "HardGamers bloquea también la salida de RETAIL_HG_FETCH_VIA_URL.";
     return this.viaProxy
       ? "HardGamers bloquea la salida configurada en RETAIL_HG_PROXY_URL."
-      : "HardGamers bloquea la IP del servidor de Nodo. Configurá RETAIL_HG_PROXY_URL para salir por otra IP.";
+      : "HardGamers bloquea la IP del servidor de Nodo. Configurá RETAIL_HG_FETCH_VIA_URL (la ruta /api/retail-fetch del front) o RETAIL_HG_PROXY_URL.";
   }
 
   /** Ventana rodante propia: nunca superamos maxPerMinute pedidos por minuto. */
@@ -165,8 +178,17 @@ export class RetailHardgamersClient {
     if (this.isBlocked()) return null;
 
     await this.waitForSlot();
-    const url = `/stores/${encodeURIComponent(slug)}?page=${page}&limit=${HG_PAGE_SIZE}`;
-    const res = await this.http.get<string>(url, { responseType: "text" });
+    const path = `/stores/${encodeURIComponent(slug)}?page=${page}&limit=${HG_PAGE_SIZE}`;
+    const res = this.fetchVia
+      ? await this.http.get<string>(
+          `${this.fetchVia}?url=${encodeURIComponent(DEFAULT_BASE + path)}`,
+          {
+            responseType: "text",
+            baseURL: "",
+            headers: this.fetchToken ? { "x-nodo-fetch-token": this.fetchToken } : {},
+          }
+        )
+      : await this.http.get<string>(path, { responseType: "text" });
 
     if (res.status === 429) {
       const retry = Number(res.headers["retry-after"] ?? 30);
