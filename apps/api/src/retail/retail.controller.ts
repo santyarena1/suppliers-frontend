@@ -50,6 +50,14 @@ export class RetailController {
     return this.ingest.ingestHardgamersStores(slugs.length ? slugs : undefined);
   }
 
+  /** Dispara la ingesta de Compra Gamer (una sola peticion, catalogo completo). */
+  @UseGuards(RolesGuard)
+  @Roles("ROLE_ADMIN")
+  @Post("admin/retail/compragamer/ingest")
+  triggerCompragamer() {
+    return this.ingest.ingestCompragamer();
+  }
+
   /** Repara precios ÷100 falsos en locales que no son Multiplo (inmediato, sin esperar sync). */
   @UseGuards(RolesGuard)
   @Roles("ROLE_ADMIN")

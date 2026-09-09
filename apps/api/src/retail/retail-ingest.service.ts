@@ -9,6 +9,7 @@ import {
   hardgamersExternalId,
   type HardgamersDoc,
 } from "./retail-hardgamers.client";
+import { RetailCompragamerClient } from "./retail-compragamer.client";
 import { normalizeSearchText } from "./retail-search.util";
 import {
   catalogLooksFalselyDivided,
@@ -66,6 +67,7 @@ export class RetailIngestService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly client: RetailSourceClient,
     private readonly hardgamers: RetailHardgamersClient,
+    private readonly compragamer: RetailCompragamerClient,
     private readonly config: ConfigService
   ) {}
 
@@ -137,6 +139,91 @@ export class RetailIngestService implements OnModuleInit {
     }
 
     return { stores: storesDone, products: productsUpserted, pages: pagesRead, skipped };
+  }
+
+  /**
+   * Tercera fuente: Compra Gamer, que no está ni en el agregador ni en
+   * HardGamers. Publica el catálogo entero en un JSON estático, así que una
+   * corrida es una sola petición y puede ir en cada ciclo sin cuidados.
+   */
+  async ingestCompragamer(): Promise<{ productos: number; total: number } | null> {
+    if (!this.compragamer.enabled()) return null;
+
+    const catalog = await this.compragamer.fetchCatalog();
+    if (!catalog || catalog.length === 0) return null;
+
+    const externalId = hardgamersExternalId("store:compragamer");
+    const store = await this.prisma.retailStore.upsert({
+      where: { externalId },
+      create: {
+        externalId,
+        name: this.compragamer.storeName(),
+        active: true,
+        priceDivisor: 1,
+        raw: { source: "compragamer" } as object,
+        syncedAt: new Date(0),
+      },
+      update: {
+        name: this.compragamer.storeName(),
+        active: true,
+        priceDivisor: 1,
+        raw: { source: "compragamer" } as object,
+      },
+      select: { id: true },
+    });
+
+    let n = 0;
+    for (const item of catalog) {
+      const productExternalId = hardgamersExternalId(item.externalKey);
+      const row = await this.prisma.retailProduct.upsert({
+        where: { externalId: productExternalId },
+        create: {
+          externalId: productExternalId,
+          storeId: store.id,
+          name: item.name,
+          price: new Prisma.Decimal(item.price),
+          searchText: normalizeSearchText(item.name),
+          active: item.inStock,
+          syncedAt: new Date(),
+        },
+        update: {
+          storeId: store.id,
+          name: item.name,
+          price: new Prisma.Decimal(item.price),
+          searchText: normalizeSearchText(item.name),
+          active: item.inStock,
+          syncedAt: new Date(),
+        },
+        select: { id: true },
+      });
+
+      const last = await this.prisma.retailPriceHistory.findFirst({
+        where: { productId: row.id },
+        orderBy: { changedAt: "desc" },
+        select: { price: true },
+      });
+      const previous = last ? Number(last.price) : null;
+      if (previous == null || Math.abs(previous - item.price) > 0.009) {
+        await this.prisma.retailPriceHistory
+          .create({
+            data: {
+              productId: row.id,
+              price: new Prisma.Decimal(item.price),
+              previousPrice: previous == null ? null : new Prisma.Decimal(previous),
+              changedAt: new Date(),
+            },
+          })
+          .catch(() => undefined);
+      }
+      n += 1;
+    }
+
+    await this.prisma.retailStore.update({
+      where: { id: store.id },
+      data: { syncedAt: new Date() },
+    });
+    this.logger.log("Compra Gamer: " + n + " productos de " + catalog.length);
+    return { productos: n, total: catalog.length };
   }
 
   /** Las tiendas más viejas primero; las que nunca se trajeron van al frente. */

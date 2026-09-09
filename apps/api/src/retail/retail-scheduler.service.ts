@@ -70,6 +70,11 @@ export class RetailSchedulerService {
     }
     this.hgRunning = true;
     try {
+      // Compra Gamer es una sola peticion: va primero y no compite por el
+      // presupuesto de paginas de HardGamers.
+      const cg = await this.ingest.ingestCompragamer();
+      if (cg) this.logger.log("Cron Compra Gamer: " + cg.productos + " productos");
+
       const pageBudget = Math.max(4, Number(this.config.get("RETAIL_HG_PAGE_BUDGET") ?? 32));
       const r = await this.ingest.ingestHardgamersStores(undefined, { pageBudget });
       this.logger.log(

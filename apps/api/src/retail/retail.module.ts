@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { RetailSourceClient } from "./retail-source.client";
 import { RetailHardgamersClient } from "./retail-hardgamers.client";
+import { RetailCompragamerClient } from "./retail-compragamer.client";
 import { RetailIngestService } from "./retail-ingest.service";
 import { RetailSearchService } from "./retail-search.service";
 import { RetailSchedulerService } from "./retail-scheduler.service";
@@ -11,6 +12,7 @@ import { RetailController } from "./retail.controller";
   providers: [
     RetailSourceClient,
     RetailHardgamersClient,
+    RetailCompragamerClient,
     RetailIngestService,
     RetailSearchService,
     RetailSchedulerService,
