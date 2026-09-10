@@ -177,31 +177,31 @@ export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
  */
 export const BANNER_SLOT_BENTO: Record<BannerSlot, string> = {
   hero_main:
-    "col-span-2 min-h-[240px] md:col-span-8 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
+    "col-span-2 min-h-[190px] md:col-span-8 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
   hero_side:
-    "col-span-2 min-h-[200px] md:col-span-4 md:row-span-1 md:min-h-0 md:col-start-9 md:row-start-1",
+    "col-span-2 min-h-[150px] md:col-span-4 md:row-span-1 md:min-h-0 md:col-start-9 md:row-start-1",
   tile_4:
-    "col-span-2 min-h-[200px] md:col-span-4 md:row-span-1 md:min-h-0 md:col-start-9 md:row-start-2",
+    "col-span-2 min-h-[150px] md:col-span-4 md:row-span-1 md:min-h-0 md:col-start-9 md:row-start-2",
   strip:
-    "col-span-2 min-h-[120px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
+    "col-span-2 min-h-[96px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
 
   mid_wide:
-    "col-span-2 min-h-[240px] md:col-span-7 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
+    "col-span-2 min-h-[190px] md:col-span-7 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
   mid_a:
-    "col-span-2 min-h-[190px] md:col-span-5 md:row-span-1 md:min-h-0 md:col-start-8 md:row-start-1",
+    "col-span-2 min-h-[145px] md:col-span-5 md:row-span-1 md:min-h-0 md:col-start-8 md:row-start-1",
   mid_b:
-    "col-span-2 min-h-[190px] md:col-span-5 md:row-span-1 md:min-h-0 md:col-start-8 md:row-start-2",
+    "col-span-2 min-h-[145px] md:col-span-5 md:row-span-1 md:min-h-0 md:col-start-8 md:row-start-2",
   mid_strip:
-    "col-span-2 min-h-[110px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
+    "col-span-2 min-h-[92px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
 };
 
 /** Contenedor del bento principal. */
 export const BANNER_BENTO_CONTAINER =
-  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(210px,1fr))_minmax(120px,auto)] md:gap-4";
+  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(158px,1fr))_minmax(96px,auto)] md:gap-3";
 
 /** Segundo módulo de publicidad (debajo del principal). */
 export const BANNER_BENTO_SECONDARY_CONTAINER =
-  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(200px,1fr))_minmax(110px,auto)] md:gap-4";
+  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(150px,1fr))_minmax(92px,auto)] md:gap-3";
 
 /** Medidas recomendadas (px) para que el recorte se vea nítido. */
 export const BANNER_SLOT_RECOMMENDED: Record<

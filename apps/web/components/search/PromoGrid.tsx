@@ -125,13 +125,19 @@ type PromoGridProps = {
   banners: Banner[];
   /** Si true (default), rellena slots vacíos con imágenes de demo. */
   useDemoFill?: boolean;
+  /**
+   * Qué módulo dibujar. Se puede pedir uno solo para intercalar contenido en el
+   * medio: con los dos seguidos arriba, había que bajar demasiado para llegar a
+   * las bajas de precio, que es a lo que la gente entra.
+   */
+  module?: "primary" | "secondary" | "both";
 };
 
 /**
  * Bento de banners: tamaños distintos, gaps uniformes, sin solapes.
  * Cada slot mantiene su posición; si no hay banner real, se muestra uno de demo.
  */
-export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProps) {
+export default function PromoGrid({ banners, useDemoFill = true, module = "both" }: PromoGridProps) {
   const [paid, setPaid] = useState<AdCreative[]>([]);
 
   useEffect(() => {
@@ -179,8 +185,8 @@ export default function PromoGrid({ banners, useDemoFill = true }: PromoGridProp
 
   return (
     <section className="mb-6 space-y-4">
-      {renderModule(primary, BANNER_BENTO_CONTAINER, "primary")}
-      {renderModule(secondary, BANNER_BENTO_SECONDARY_CONTAINER, "secondary")}
+      {module !== "secondary" && renderModule(primary, BANNER_BENTO_CONTAINER, "primary")}
+      {module !== "primary" && renderModule(secondary, BANNER_BENTO_SECONDARY_CONTAINER, "secondary")}
     </section>
   );
 }

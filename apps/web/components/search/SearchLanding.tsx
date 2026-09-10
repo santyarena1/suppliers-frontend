@@ -90,8 +90,7 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
         </div>
       )}
 
-      <PromoGrid banners={banners} />
-      <PartnerCarousel />
+      <PromoGrid banners={banners} module="primary" />
 
       {priceDrops.length > 0 && (
         <section>
@@ -121,6 +120,11 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
           </div>
         </section>
       )}
+
+      {/* El segundo modulo y las marcas van DESPUES de las bajas: con los dos
+          bentos arriba habia que bajar demasiado para llegar a lo util. */}
+      <PartnerCarousel />
+      <PromoGrid banners={banners} module="secondary" />
 
       {priceDrops.length === 0 && (
         <div className="hm__empty">
