@@ -23,24 +23,6 @@ const DEMO: Record<
     title: "ELIT",
     subtitle: "Demo · distribuidor",
   },
-  tile_1: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1587831990711-23ca6441447b?auto=format&fit=crop&w=700&h=520&q=80",
-    title: "Corsair",
-    subtitle: "Demo · marca",
-  },
-  tile_2: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=680&h=500&q=80",
-    title: "Monitores",
-    subtitle: "Demo · categoría",
-  },
-  tile_3: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1547082299-de196ea013d0?auto=format&fit=crop&w=640&h=720&q=80",
-    title: "XPG",
-    subtitle: "Demo · marca",
-  },
   tile_4: {
     imageUrl:
       "https://images.unsplash.com/photo-1555617981-dac3880eac6e?auto=format&fit=crop&w=480&h=960&q=80",
@@ -65,23 +47,11 @@ const DEMO: Record<
     title: "JBL",
     subtitle: "Demo · marca",
   },
-  mid_tall: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=600&h=900&q=80",
-    title: "AIR",
-    subtitle: "Demo · distribuidor",
-  },
   mid_b: {
     imageUrl:
       "https://images.unsplash.com/photo-1616763355548-1b57a304932f?auto=format&fit=crop&w=700&h=420&q=80",
     title: "Notebooks",
     subtitle: "Demo · categoría",
-  },
-  mid_c: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1624705002806-5d0588d4cbf1?auto=format&fit=crop&w=1400&h=400&q=80",
-    title: "INVID",
-    subtitle: "Demo · distribuidor",
   },
   mid_strip: {
     imageUrl:

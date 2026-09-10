@@ -137,17 +137,12 @@ export function brandThemeBootScript(): string {
 export const BANNER_SLOTS = [
   { value: "hero_main", label: "Hero principal (grande)" },
   { value: "hero_side", label: "Hero lateral" },
-  { value: "tile_1", label: "Tile 1" },
-  { value: "tile_2", label: "Tile 2" },
-  { value: "tile_3", label: "Tile 3" },
-  { value: "tile_4", label: "Tile 4" },
+  { value: "tile_4", label: "Tile lateral" },
   { value: "strip", label: "Banda ancha" },
   // Segundo módulo de publicidad (debajo del bento principal)
   { value: "mid_wide", label: "Módulo 2 · ancho" },
-  { value: "mid_tall", label: "Módulo 2 · columna" },
   { value: "mid_a", label: "Módulo 2 · tile A" },
   { value: "mid_b", label: "Módulo 2 · tile B" },
-  { value: "mid_c", label: "Módulo 2 · tile C" },
   { value: "mid_strip", label: "Módulo 2 · banda" },
 ] as const;
 
@@ -160,71 +155,53 @@ export type BannerSlot = (typeof BANNER_SLOTS)[number]["value"];
 export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
   hero_main: "md:col-span-6 md:row-span-2 min-h-[200px] md:min-h-[280px]",
   hero_side: "md:col-span-3 min-h-[140px]",
-  tile_1: "md:col-span-3 min-h-[120px]",
-  tile_2: "md:col-span-3 min-h-[120px]",
-  tile_3: "md:col-span-3 md:row-span-2 min-h-[120px]",
   tile_4: "md:col-span-3 md:row-span-3 min-h-[140px]",
   strip: "md:col-span-12 min-h-[96px]",
   mid_wide: "md:col-span-6 md:row-span-2 min-h-[160px]",
-  mid_tall: "md:col-span-3 md:row-span-2 min-h-[160px]",
   mid_a: "md:col-span-3 min-h-[120px]",
   mid_b: "md:col-span-3 min-h-[120px]",
-  mid_c: "md:col-span-12 min-h-[120px]",
   mid_strip: "md:col-span-12 min-h-[88px]",
 };
 
 /**
  * Bento principal: tamaños distintos, gaps uniformes, sin solapes.
  *
- * Desktop (12 columnas × 4 filas):
- * ┌──────────────┬────────┬────┐
- * │  hero_main   │ hero_s │ t4 │
- * │              ├────────┤    │
- * │              │ tile_3 │    │
- * ├──────┬───────┤        │    │
- * │ t1   │  t2   │        │    │
- * ├──────┴───────┴────────┴────┤
- * │           strip            │
- * └────────────────────────────┘
+ * Desktop (12 columnas × 3 filas):
+ * ┌────────────────────┬───────────┐
+ * │                    │ hero_side │
+ * │     hero_main      ├───────────┤
+ * │                    │  tile_4   │
+ * ├────────────────────┴───────────┤
+ * │             strip              │
+ * └────────────────────────────────┘
  */
 export const BANNER_SLOT_BENTO: Record<BannerSlot, string> = {
   hero_main:
-    "col-span-2 row-span-1 min-h-[180px] md:col-span-6 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
+    "col-span-2 min-h-[240px] md:col-span-8 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
   hero_side:
-    "col-span-1 min-h-[140px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-7 md:row-start-1",
+    "col-span-2 min-h-[200px] md:col-span-4 md:row-span-1 md:min-h-0 md:col-start-9 md:row-start-1",
   tile_4:
-    "col-span-1 min-h-[140px] md:col-span-3 md:row-span-3 md:min-h-0 md:col-start-10 md:row-start-1",
-  tile_1:
-    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
-  tile_2:
-    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-4 md:row-start-3",
-  tile_3:
-    "col-span-2 min-h-[140px] md:col-span-3 md:row-span-2 md:min-h-0 md:col-start-7 md:row-start-2",
+    "col-span-2 min-h-[200px] md:col-span-4 md:row-span-1 md:min-h-0 md:col-start-9 md:row-start-2",
   strip:
-    "col-span-2 min-h-[88px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-4",
+    "col-span-2 min-h-[120px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
 
   mid_wide:
-    "col-span-2 min-h-[160px] md:col-span-6 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
+    "col-span-2 min-h-[240px] md:col-span-7 md:row-span-2 md:min-h-0 md:col-start-1 md:row-start-1",
   mid_a:
-    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-7 md:row-start-1",
-  mid_tall:
-    "col-span-1 min-h-[160px] md:col-span-3 md:row-span-2 md:min-h-0 md:col-start-10 md:row-start-1",
+    "col-span-2 min-h-[190px] md:col-span-5 md:row-span-1 md:min-h-0 md:col-start-8 md:row-start-1",
   mid_b:
-    "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-7 md:row-start-2",
-  // Ancho completo: con 6 columnas dejaba la mitad de la fila 3 vacía.
-  mid_c:
-    "col-span-2 min-h-[120px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
+    "col-span-2 min-h-[190px] md:col-span-5 md:row-span-1 md:min-h-0 md:col-start-8 md:row-start-2",
   mid_strip:
-    "col-span-2 min-h-[80px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-4",
+    "col-span-2 min-h-[110px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
 };
 
 /** Contenedor del bento principal. */
 export const BANNER_BENTO_CONTAINER =
-  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(3,minmax(118px,1fr))_minmax(96px,auto)] md:gap-4";
+  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(210px,1fr))_minmax(120px,auto)] md:gap-4";
 
 /** Segundo módulo de publicidad (debajo del principal). */
 export const BANNER_BENTO_SECONDARY_CONTAINER =
-  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(110px,1fr))_minmax(100px,auto)_minmax(84px,auto)] md:gap-4";
+  "grid grid-cols-2 gap-3 md:grid-cols-12 md:grid-rows-[repeat(2,minmax(200px,1fr))_minmax(110px,auto)] md:gap-4";
 
 /** Medidas recomendadas (px) para que el recorte se vea nítido. */
 export const BANNER_SLOT_RECOMMENDED: Record<
@@ -241,21 +218,6 @@ export const BANNER_SLOT_RECOMMENDED: Record<
     height: 320,
     hint: "Bloque chico arriba, a la derecha del hero.",
   },
-  tile_1: {
-    width: 560,
-    height: 420,
-    hint: "Cuadrado inferior izquierdo.",
-  },
-  tile_2: {
-    width: 560,
-    height: 420,
-    hint: "Cuadrado al lado de tile 1.",
-  },
-  tile_3: {
-    width: 640,
-    height: 720,
-    hint: "Vertical medio: debajo del hero lateral (2 filas).",
-  },
   tile_4: {
     width: 480,
     height: 960,
@@ -271,11 +233,6 @@ export const BANNER_SLOT_RECOMMENDED: Record<
     height: 560,
     hint: "Módulo 2 · bloque ancho izquierdo (2 filas).",
   },
-  mid_tall: {
-    width: 480,
-    height: 640,
-    hint: "Módulo 2 · columna alta derecha.",
-  },
   mid_a: {
     width: 560,
     height: 320,
@@ -286,11 +243,6 @@ export const BANNER_SLOT_RECOMMENDED: Record<
     height: 320,
     hint: "Módulo 2 · tile inferior centro.",
   },
-  mid_c: {
-    width: 1920,
-    height: 300,
-    hint: "Módulo 2 · banda ancha bajo el bloque grande (12 columnas).",
-  },
   mid_strip: {
     width: 1920,
     height: 240,
@@ -298,12 +250,21 @@ export const BANNER_SLOT_RECOMMENDED: Record<
   },
 };
 
+/**
+ * Espacios que se muestran, y en qué orden.
+ *
+ * Antes eran trece y la mayoría medía ~118px de alto por tres columnas: casi
+ * imposible meter una imagen decente ahí. Ahora son ocho, todos de al menos
+ * 200px salvo las dos bandas, que son bandas a propósito. Se retiraron tile_1,
+ * tile_2, tile_3, mid_tall y mid_c; no había ningún creativo cargado en ellos,
+ * así que se eliminaron del todo en vez de dejarlos como opciones muertas.
+ */
 export const BANNER_SLOT_ORDER_PRIMARY: BannerSlot[] = [
-  "hero_main", "hero_side", "tile_4", "tile_1", "tile_2", "tile_3", "strip",
+  "hero_main", "hero_side", "tile_4", "strip",
 ];
 
 export const BANNER_SLOT_ORDER_SECONDARY: BannerSlot[] = [
-  "mid_wide", "mid_a", "mid_tall", "mid_b", "mid_c", "mid_strip",
+  "mid_wide", "mid_a", "mid_b", "mid_strip",
 ];
 
 /** Orden completo (admin / demos). */
