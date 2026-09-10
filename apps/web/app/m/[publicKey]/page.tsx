@@ -27,14 +27,21 @@ export default function PublicBrandLandingPage() {
     ? (landing.blocks as { title?: string; body?: string; url?: string }[])
     : [];
 
+  const customHtml = Boolean(landing?.htmlDocument);
+  const darkShell = missing || !landing || !customHtml;
+
   return (
-    <div className="min-h-screen bg-surface-950 text-white">
-      <header className="border-b border-surface-800 px-4 sm:px-8 py-4 flex items-center justify-between">
+    <div className={darkShell ? "min-h-screen bg-surface-950 text-white" : "min-h-screen bg-white text-slate-900"}>
+      <header
+        className={`px-4 sm:px-8 py-3 flex items-center justify-between border-b ${
+          darkShell ? "border-surface-800" : "border-slate-200"
+        }`}
+      >
         <Link href="/" className="flex items-center gap-2">
           <NodoLogo className="w-6 h-6" />
           <NodoWordmark className="h-3" />
         </Link>
-        <span className="text-[11px] text-surface-500">Marca en NODO</span>
+        <span className={`text-[11px] ${darkShell ? "text-surface-500" : "text-slate-400"}`}>Marca en NODO</span>
       </header>
 
       {missing ? (

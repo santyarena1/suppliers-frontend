@@ -23,6 +23,7 @@ const SLOTS: { name: string; label: string }[] = [
   { name: "materiales", label: "Materiales" },
   { name: "capacitaciones", label: "Capacitaciones" },
   { name: "hablar", label: "Hablar" },
+  { name: "contacto", label: "Contacto" },
   { name: "nombre", label: "Nombre" },
   { name: "logo", label: "Logo" },
   { name: "noticias", label: "Noticias" },
@@ -241,9 +242,9 @@ export default function BrandEspacioPage() {
               <section className="border border-surface-800 rounded-xl p-4 bg-surface-900 flex flex-col gap-3">
                 <h2 className="text-sm font-semibold text-white">HTML propio</h2>
                 <p className="text-[11px] text-surface-500">
-                  Opcional. Sin HTML, Nodo arma la landing completa (hero con fotos, productos, acciones, novedades,
-                  materiales, capacitaciones y contacto). Si pegás HTML, tu diseño va como presentación y los módulos
-                  siguen abajo — o adentro, si usás los huecos. Sin scripts ni iframes.
+                  Opcional. Sin HTML, Nodo arma la landing completa. Si pegás HTML, esa página es la landing: los
+                  módulos (productos, acciones, novedades, etc.) se pintan en los huecos. Los botones de tu diseño
+                  saltan a esos bloques. Sin scripts ni iframes.
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {SLOTS.map((slot) => (
@@ -286,7 +287,7 @@ export default function BrandEspacioPage() {
                 </button>
                 {previewHtml.trim() ? (
                   <p className="text-[11px] text-surface-500">
-                    El HTML se pinta en la landing completa, más abajo en esta página.
+                    La vista previa de abajo es exactamente esa landing, con los módulos adentro del HTML.
                   </p>
                 ) : null}
               </section>
@@ -392,7 +393,7 @@ export default function BrandEspacioPage() {
           )}
         </div>
         {!loading && landing && (
-          <section className="border-t border-surface-800">
+          <section className={`border-t ${previewHtml.trim() ? "border-surface-800 bg-white" : "border-surface-800"}`}>
             <p className="text-[11px] uppercase tracking-widest text-surface-500 px-4 sm:px-6 py-3">
               Así lo ven el comercio y el distro
             </p>
