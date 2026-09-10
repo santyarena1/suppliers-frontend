@@ -61,6 +61,31 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 const STORAGE_KEY = "tgs_cart_v2";
 const LEGACY_KEY = "tgs_cart_v1";
+/**
+ * Marca del carrito del servidor con el que este navegador está sincronizado.
+ *
+ * Sin esto, un carrito remoto vacío es ambiguo: puede ser "nunca hubo carrito"
+ * o "se vació porque se hizo el pedido". Antes se asumía lo primero y se volvía
+ * a subir la copia local, así que los productos ya pedidos reaparecían.
+ */
+const SYNC_KEY = "tgs_cart_sync_at";
+
+function readSyncedAt(): string | null {
+  try {
+    return localStorage.getItem(SYNC_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSyncedAt(value: string | null): void {
+  try {
+    if (value) localStorage.setItem(SYNC_KEY, value);
+    else localStorage.removeItem(SYNC_KEY);
+  } catch {
+    /* sin storage no hay nada que recordar */
+  }
+}
 
 export function cartItemKey(ref: CartRef): string {
   const channel = ref.channel ?? "online";
@@ -144,17 +169,35 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             const remote = await orgCartApi.get();
             const remoteItems = Array.isArray(remote.data.items) ? (remote.data.items as CartItem[]) : [];
             const remoteSchemes = Array.isArray(remote.data.schemes) ? (remote.data.schemes as CartScheme[]) : [];
+            const remoteAt = remote.data.updatedAt ?? null;
             if (remoteItems.length > 0 || remoteSchemes.length > 0) {
               if (!cancelled) {
                 setItems(remoteItems.map((it) => ({ ...it, channel: it.channel === "offline" ? "offline" : "online" })));
                 setSchemes(remoteSchemes);
               }
-            } else if (local.items.length > 0) {
-              if (!cancelled) {
-                setItems(local.items);
-                setSchemes(local.schemes);
+              writeSyncedAt(remoteAt);
+            } else if (local.items.length > 0 || local.schemes.length > 0) {
+              // El remoto está vacío. Si cambió desde la última vez que nos
+              // sincronizamos, lo vaciaron a propósito (un pedido, otra sesión)
+              // y hay que respetarlo. Si no cambió, lo local es una edición
+              // nuestra que todavía no llegó al servidor y se sube.
+              const enSincronia = readSyncedAt() === remoteAt;
+              if (enSincronia) {
+                if (!cancelled) {
+                  setItems(local.items);
+                  setSchemes(local.schemes);
+                }
+                const saved = await orgCartApi.save({ items: local.items, schemes: local.schemes });
+                writeSyncedAt(saved.data?.updatedAt ?? null);
+              } else {
+                if (!cancelled) {
+                  setItems([]);
+                  setSchemes([]);
+                }
+                writeSyncedAt(remoteAt);
               }
-              await orgCartApi.save({ items: local.items, schemes: local.schemes });
+            } else {
+              writeSyncedAt(remoteAt);
             }
           } catch {
             if (!cancelled) {
@@ -187,9 +230,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (tenant?.type !== "RETAILER" || skipPush.current) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      void orgCartApi.save({ items, schemes }).catch(() => {
-        /* si falla, queda el localStorage y se reintenta en el próximo cambio */
-      });
+      void orgCartApi
+        .save({ items, schemes })
+        .then((res) => writeSyncedAt(res.data?.updatedAt ?? null))
+        .catch(() => {
+          /* si falla, queda el localStorage y se reintenta en el próximo cambio */
+        });
     }, 450);
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
