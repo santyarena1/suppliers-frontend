@@ -100,6 +100,12 @@ function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
+  /**
+   * Vista de "todas las bajas de precio". Los resultados no vienen de una
+   * búsqueda, así que los filtros de marca, categoría y distribuidor se aplican
+   * sobre lo que ya está en pantalla en vez de disparar una consulta nueva.
+   */
+  const [dropsView, setDropsView] = useState(false);
   /** En mobile los filtros/controles viven en un panel que se abre/cierra. */
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
@@ -187,6 +193,30 @@ function SearchPage() {
     return Array.isArray(res.data) ? res.data : [];
   }
 
+  /** "Ver todas": las bajas pasan a la grilla de resultados, con sus filtros. */
+  async function showAllPriceDrops() {
+    setError("");
+    setLoading(true);
+    setQuery("");
+    setBrandFilter("");
+    setSelectedBrands(new Set());
+    setSelectedCategories(new Set());
+    setMinPrice("");
+    setMaxPrice("");
+    try {
+      const res = await catalogApi.priceDrops(300);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setResults(data);
+      setSearched(true);
+      setDropsView(true);
+      setActiveQuery("Bajaron de precio");
+    } catch {
+      setError("No se pudieron traer las bajas de precio.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleCategoryClick(category: string, withZero = includeOutOfStock) {
     const nextCats = new Set([category]);
     setSelectedCategories(nextCats);
@@ -219,6 +249,7 @@ function SearchPage() {
   function applyProviders(next: Set<Provider>) {
     setTouchedFilters(true);
     setSelectedProviders(next);
+    if (dropsView) return;
     if (
       query.trim() ||
       selectedBrands.size > 0 ||
@@ -281,6 +312,7 @@ function SearchPage() {
     setError("");
     setLoading(true);
     setSearched(true);
+    setDropsView(false);
     setQuery(q);
     setActiveQuery(q || brandList[0] || categoryList[0] || "");
     const nextBrandFilter = brandFromOpt || (brandList.length > 0 ? brandList[0] : "");
@@ -452,6 +484,25 @@ function SearchPage() {
       ).unitDisplayUsd;
     };
     let arr = results;
+    if (dropsView) {
+      if (selectedProviders.size > 0) {
+        arr = arr.filter((p) => selectedProviders.has(p.provider as Provider));
+      }
+      if (selectedBrands.size > 0) {
+        const wanted = [...selectedBrands].map((b) => b.toLowerCase());
+        arr = arr.filter((p) => {
+          const brand = (productDisplayBrand(p) || "").toLowerCase();
+          return brand ? wanted.some((w) => brand.includes(w) || w.includes(brand)) : false;
+        });
+      }
+      if (selectedCategories.size > 0) {
+        const wanted = [...selectedCategories].map((c) => c.toLowerCase());
+        arr = arr.filter((p) => {
+          const cat = (productDisplayCategory(p) || "").toLowerCase();
+          return cat ? wanted.some((w) => cat.includes(w) || w.includes(cat)) : false;
+        });
+      }
+    }
     if (hideNoImage) arr = arr.filter((p) => !!p.imageUrl);
     if (minPrice) {
       const m = parseFloat(minPrice);
@@ -469,6 +520,7 @@ function SearchPage() {
   }, [
     results, hideNoImage, minPrice, maxPrice, sortBy, priceMode,
     purchasePolicies, withIva, withIibb, iibbEpoch,
+    dropsView, selectedProviders, selectedBrands, selectedCategories,
   ]);
 
   function toggleBrand(brand: string) {
@@ -477,6 +529,8 @@ function SearchPage() {
     setSelectedBrands(next);
     const nextFilter = next.size > 0 ? (next.has(brandFilter) ? brandFilter : [...next][0]) : "";
     setBrandFilter(nextFilter);
+    // En la vista de bajas el filtro es local: no se vuelve a consultar.
+    if (dropsView) return;
     if (query.trim() || next.size > 0 || selectedCategories.size > 0) {
       void runSearch(query, {
         track: false,
@@ -493,6 +547,7 @@ function SearchPage() {
     const next = new Set(selectedCategories);
     next.has(category) ? next.delete(category) : next.add(category);
     setSelectedCategories(next);
+    if (dropsView) return;
     if (query.trim() || selectedBrands.size > 0 || next.size > 0) {
       void runSearch(query, {
         track: false,
@@ -734,6 +789,7 @@ function SearchPage() {
    * viejos restaurados de la sesión anterior.
    */
   const nothingAsked =
+    !dropsView &&
     !query.trim() &&
     !brandFilter.trim() &&
     selectedBrands.size === 0 &&
@@ -1278,7 +1334,10 @@ function SearchPage() {
               )}
 
               {hydrated && !loading && (!searched || nothingAsked) && (
-                <SearchLanding onCategoryClick={handleCategoryClick} />
+                <SearchLanding
+                  onCategoryClick={handleCategoryClick}
+                  onShowAllDrops={() => void showAllPriceDrops()}
+                />
               )}
 
               {hydrated && !loading && !nothingAsked && filtered.length > 0 && <SponsoredStrip />}

@@ -169,7 +169,7 @@ export const BANNER_SLOT_GRID_CLASS: Record<BannerSlot, string> = {
   mid_tall: "md:col-span-3 md:row-span-2 min-h-[160px]",
   mid_a: "md:col-span-3 min-h-[120px]",
   mid_b: "md:col-span-3 min-h-[120px]",
-  mid_c: "md:col-span-6 min-h-[120px]",
+  mid_c: "md:col-span-12 min-h-[120px]",
   mid_strip: "md:col-span-12 min-h-[88px]",
 };
 
@@ -211,8 +211,9 @@ export const BANNER_SLOT_BENTO: Record<BannerSlot, string> = {
     "col-span-1 min-h-[160px] md:col-span-3 md:row-span-2 md:min-h-0 md:col-start-10 md:row-start-1",
   mid_b:
     "col-span-1 min-h-[120px] md:col-span-3 md:row-span-1 md:min-h-0 md:col-start-7 md:row-start-2",
+  // Ancho completo: con 6 columnas dejaba la mitad de la fila 3 vacía.
   mid_c:
-    "col-span-2 min-h-[120px] md:col-span-6 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
+    "col-span-2 min-h-[120px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-3",
   mid_strip:
     "col-span-2 min-h-[80px] md:col-span-12 md:row-span-1 md:min-h-0 md:col-start-1 md:row-start-4",
 };
@@ -286,9 +287,9 @@ export const BANNER_SLOT_RECOMMENDED: Record<
     hint: "Módulo 2 · tile inferior centro.",
   },
   mid_c: {
-    width: 1200,
-    height: 320,
-    hint: "Módulo 2 · banda media bajo el bloque ancho.",
+    width: 1920,
+    height: 300,
+    hint: "Módulo 2 · banda ancha bajo el bloque grande (12 columnas).",
   },
   mid_strip: {
     width: 1920,

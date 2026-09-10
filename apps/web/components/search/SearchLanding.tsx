@@ -23,9 +23,11 @@ import {
 interface SearchLandingProps {
   onCategoryClick: (category: string) => void;
   onSearchSuggestion?: (q: string) => void;
+  /** Pasa las bajas a la grilla de resultados, donde se pueden filtrar. */
+  onShowAllDrops?: () => void;
 }
 
-export default function SearchLanding({ onCategoryClick: _onCategoryClick }: SearchLandingProps) {
+export default function SearchLanding({ onCategoryClick: _onCategoryClick, onShowAllDrops }: SearchLandingProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -40,7 +42,8 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick }: Sea
     let alive = true;
     Promise.all([
       bannersApi.list("search"),
-      catalogApi.priceDrops(24),
+      // La portada muestra bastantes de entrada; "Ver todas" lleva al resto.
+      catalogApi.priceDrops(60),
     ])
       .then(([bRes, drops]) => {
         if (!alive) return;
@@ -97,8 +100,15 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick }: Sea
               <TrendingDown className="w-3 h-3 inline mr-1.5" />
               Bajaron de precio
             </h3>
-            <span className="text-[0.7rem]" style={{ color: "var(--hm-faint)" }}>
-              Descuentos y bajas recientes · varios proveedores
+            <span className="flex items-center gap-3">
+              <span className="text-[0.7rem]" style={{ color: "var(--hm-faint)" }}>
+                Descuentos y bajas recientes · varios proveedores
+              </span>
+              {onShowAllDrops && (
+                <button type="button" className="hm__chip" onClick={onShowAllDrops}>
+                  Ver todas
+                </button>
+              )}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 mt-4">

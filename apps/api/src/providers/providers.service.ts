@@ -1006,7 +1006,9 @@ export class ProvidersService implements OnModuleInit {
   async getFeatured(tenantId: string, take: number, opts: { mixed?: boolean } = {}) {
     const providers = await this.readableProviders(tenantId);
     if (providers.length === 0) return [];
-    const limit = Math.min(Math.max(take, 1), 60);
+    // El tope era 60 porque solo alimentaba una tira de destacados. Ahora la
+    // busqueda vacia deja ver TODAS las bajas, asi que necesita mas margen.
+    const limit = Math.min(Math.max(take, 1), 300);
     const [rules, enrichment] = await Promise.all([
       this.rulesByProvider(tenantId),
       this.catalogEnrichment.getContext(),
