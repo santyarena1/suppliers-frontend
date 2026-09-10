@@ -17,6 +17,24 @@ const DEMO: Record<
     title: "ASUS · Performance",
     subtitle: "Demo · marca · reemplazá en Configuración → Banners",
   },
+  tile_1: {
+    imageUrl:
+      "https://images.unsplash.com/photo-1591488320449-011701bb6704?auto=format&fit=crop&w=880&h=340&q=80",
+    title: "Periféricos",
+    subtitle: "Demo · espacio disponible",
+  },
+  tile_2: {
+    imageUrl:
+      "https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=880&h=340&q=80",
+    title: "Almacenamiento",
+    subtitle: "Demo · espacio disponible",
+  },
+  tile_3: {
+    imageUrl:
+      "https://images.unsplash.com/photo-1587831990711-23ca6441447b?auto=format&fit=crop&w=880&h=340&q=80",
+    title: "Monitores",
+    subtitle: "Demo · espacio disponible",
+  },
   hero_side: {
     imageUrl:
       "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=1000&h=900&q=80",
