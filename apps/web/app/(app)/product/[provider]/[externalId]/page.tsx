@@ -437,11 +437,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   <TrendingUp className="w-3 h-3" />
                   Evolución de precio
                 </h2>
-                {priceHistory.length >= 2 && (
-                  <PriceRefs points={priceHistory} money={money} />
-                )}
                 {priceHistory.length >= 2 ? (
-                  <PriceHistoryChart points={priceHistory} />
+                  <PriceHistoryChart points={priceHistory} format={money} />
                 ) : priceHistory.length === 1 ? (
                   <p className="text-xs text-surface-500 leading-relaxed">
                     Hay un único precio registrado ({money(Number(priceHistory[0].price) || 0)}).
@@ -558,50 +555,6 @@ function LocalesFooter({
   );
 }
 
-/**
- * Máximo, mínimo, valor de hoy y variación del período, en la moneda elegida.
- * Sin esto el gráfico es una línea que zigzaguea sin escala.
- */
-function PriceRefs({
-  points,
-  money,
-}: {
-  points: { capturedAt: string; price?: string | number | null; finalPrice?: string | number | null }[];
-  money: (usd: number) => string;
-}) {
-  const values = points
-    .map((p) => Number(p.finalPrice ?? p.price) || 0)
-    .filter((n) => n > 0);
-  if (values.length < 2) return null;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const first = values[0];
-  const last = values[values.length - 1];
-  const change = first > 0 ? ((last - first) / first) * 100 : 0;
-  return (
-    <div className="ch__refs">
-      <span className="ch__ref">
-        <em>Máximo</em>
-        <b>{money(max)}</b>
-      </span>
-      <span className="ch__ref">
-        <em>Mínimo</em>
-        <b className="is-good">{money(min)}</b>
-      </span>
-      <span className="ch__ref">
-        <em>Hoy</em>
-        <b>{money(last)}</b>
-      </span>
-      <span className="ch__ref">
-        <em>Variación</em>
-        <b className={change < 0 ? "is-good" : change > 0 ? "is-warn" : ""}>
-          {change > 0 ? "+" : ""}
-          {change.toFixed(1)}%
-        </b>
-      </span>
-    </div>
-  );
-}
 
 function ProductFactsGrid({
   product,
