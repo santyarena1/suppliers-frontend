@@ -61,26 +61,8 @@ export function unwrapNbList<T = unknown>(body: unknown): T[] {
   return [];
 }
 
-export function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-export function asString(value: unknown): string | undefined {
-  if (value == null) return undefined;
-  const s = String(value).trim();
-  return s.length > 0 ? s : undefined;
-}
-
-export function asNumber(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    const n = Number(value.replace(",", "."));
-    return Number.isFinite(n) ? n : undefined;
-  }
-  return undefined;
-}
+// Los helpers viven en json-value.ts; acá solo se re-exportan por compatibilidad.
+export { asRecord, asString, asNumber } from "./json-value";
 
 /**
  * Cliente HTTP autenticado contra api.nb.com.ar/v1 — el mismo backend que usa

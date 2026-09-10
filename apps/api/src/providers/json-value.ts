@@ -4,10 +4,40 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * Texto plano de un valor cualquiera del catálogo.
+ *
+ * Los proveedores mandan a veces objetos o listas donde uno espera texto (New
+ * Bytes manda ATRIBUTOS así). Con un String() pelado eso terminaba impreso como
+ * "[object Object]" en la ficha del producto: la cadena no está vacía, así que
+ * pasaba el filtro. Acá se aplanan listas y objetos a algo legible, y lo que no
+ * se puede leer se descarta en vez de mostrar basura.
+ */
 export function asString(value: unknown): string | undefined {
-  if (value == null) return undefined;
-  const s = String(value).trim();
+  const s = plano(value);
   return s.length > 0 ? s : undefined;
+}
+
+function plano(value: unknown, profundidad = 0): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+    return String(value);
+  }
+  if (profundidad >= 2) return "";
+  if (Array.isArray(value)) {
+    return value.map((v) => plano(v, profundidad + 1)).filter(Boolean).join(" · ");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([k, v]) => {
+        const texto = plano(v, profundidad + 1);
+        return texto ? `${k}: ${texto}` : "";
+      })
+      .filter(Boolean)
+      .join(" · ");
+  }
+  return "";
 }
 
 export function asNumber(value: unknown): number | undefined {
