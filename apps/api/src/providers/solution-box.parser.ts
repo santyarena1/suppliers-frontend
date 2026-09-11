@@ -195,7 +195,14 @@ export interface SolutionBoxOrder {
   exchange: number | null;
   invoice: string | null;
   status: string;
-  items: { code: string; qty: number; price: number | null; currency: string | null }[];
+  items: {
+    code: string;
+    /** Descripción, cuando el portal la manda. El listado solo trae el alias. */
+    name: string | null;
+    qty: number;
+    price: number | null;
+    currency: string | null;
+  }[];
 }
 
 /** Fila de /api/pedidos/ordenes/cliente/:id ({ pedidos: [...] }) o de /orden/:nro/:ext. */
@@ -222,8 +229,18 @@ export function mapSolutionBoxOrder(raw: unknown): SolutionBoxOrder | null {
     status: asString(rec.Estado) ?? "",
     items: unwrapList(rec.Items).map((row) => {
       const r = asRecord(row) ?? {};
+      // El alias identifica el producto; la descripción aparece con distinto
+      // nombre según el endpoint y a veces no viene.
+      const descripcion =
+        asString(r.Descripcion) ??
+        asString(r.Detalle) ??
+        asString(r.Producto) ??
+        asString(r.Articulo) ??
+        asString(r.Nombre) ??
+        null;
       return {
         code: asString(r.Alias) ?? "",
+        name: descripcion,
         qty: asNumber(r.Cantidad) ?? 0,
         price: asNumber(r.Precio) ?? null,
         currency: currencyFromSign(undefined, r.Moneda) ?? null,

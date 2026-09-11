@@ -2275,7 +2275,14 @@ export interface SolutionBoxOrder {
   exchange: number | null;
   invoice: string | null;
   status: string;
-  items: { code: string; qty: number; price: number | null; currency: string | null }[];
+  items: {
+    code: string;
+    /** Descripción, cuando el portal la manda. El listado solo trae el alias. */
+    name?: string | null;
+    qty: number;
+    price: number | null;
+    currency: string | null;
+  }[];
 }
 
 export const solutionBoxAccountApi = {

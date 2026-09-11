@@ -3,6 +3,7 @@ import {
   flattenCategories,
   mapSolutionBoxArticle,
   mapSolutionBoxDetail,
+  mapSolutionBoxOrder,
   mapSolutionBoxOrders,
   mapSolutionBoxProforma,
   parseMeasure,
@@ -85,11 +86,27 @@ describe("solution-box parser", () => {
       }],
     });
     expect(orders[0]).toMatchObject({ number: "1316224", extension: "01", date: "2025-12-22", amount: 7508409.12, currency: "ARS", invoice: "FF-0009-00374996" });
-    expect(orders[0].items[0]).toEqual({ code: "SRTG6KXLI", qty: 1, price: 6677321.18, currency: "ARS" });
+    // El listado no manda descripción: el alias es todo lo que hay.
+    expect(orders[0].items[0]).toEqual({ code: "SRTG6KXLI", name: null, qty: 1, price: 6677321.18, currency: "ARS" });
     const c = mapSolutionBoxCustomer({ cliente: { Id: 5768, Cliente: 14652, Email: "a@b.c", Nombre: "A", Apellido: "B", NomCliente: "SOUNDTEC", Cuit: "30-1", Domicilio_facturacion: { Domicilio: "Calle 1", Localidad: "CABA", Codigo_postal: "1416", Codigo_Prov: "C", Pais: "AR", Telefono: "4" }, Domicilio_entrega: { Domicilio: "Calle 1", Localidad: "CABA", Codigo_postal: "1416", Provincia: { Codigo: "C" }, Pais: "AR" }, Condicion_Pago: { Codigo: "70", Descripcion: "CONTADO" }, Tipo_entrega: { Codigo: "1", Descripcion: "RETIRA" }, Cotizacion: 1530 } });
     expect(c).toMatchObject({ userId: 5768, customerId: 14652, companyName: "SOUNDTEC", exchange: 1530, deliveryAddress: { provinceCode: "C" } });
     expect(orderNumberFrom({ Pedido_Nro: 1316225, Pedido_Ext: "01" })).toBe("1316225");
     expect(orderNumberFrom({ pedido: { Numero: "1316226" } })).toBe("1316226");
     expect(orderNumberFrom({ ok: true })).toBeNull();
+  });
+});
+
+describe("descripción del ítem", () => {
+  it("toma la descripción cuando el detalle del pedido la manda", () => {
+    const order = mapSolutionBoxOrder({
+      Pedido_Nro: "1",
+      Items: [{ Alias: "SRTG6KXLI", Descripcion: "NOTEBOOK LENOVO V15", Cantidad: 2, Precio: 100 }],
+    });
+    expect(order?.items[0]).toMatchObject({ code: "SRTG6KXLI", name: "NOTEBOOK LENOVO V15", qty: 2 });
+  });
+
+  it("no inventa nombre cuando no viene ninguno", () => {
+    const order = mapSolutionBoxOrder({ Pedido_Nro: "1", Items: [{ Alias: "X", Cantidad: 1 }] });
+    expect(order?.items[0].name).toBeNull();
   });
 });

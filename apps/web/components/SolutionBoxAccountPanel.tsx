@@ -6,8 +6,9 @@ import { XCircle } from "lucide-react";
 import { solutionBoxAccountApi, solutionBoxCheckoutApi, NodoProviderDraft, SolutionBoxOrder } from "@/lib/api";
 import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
-import AccountRowDetail, { VerMasButton, type AccountDetailItem } from "@/components/account/AccountRowDetail";
+import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
+import { sbOrderItems, sbOrderTotals } from "@/components/account/sbOrderDetail";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import { useAccountHistoryState, useClampPage, usePagedMonthRows } from "@/components/account/useAccountHistory";
 import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
@@ -106,12 +107,17 @@ export default function SolutionBoxAccountPanel() {
   return (
     <>
       {account?.profile && (
-        <p className="text-xs text-surface-400 mb-3 max-w-6xl">
-          {account.profile.name}
-          {account.profile.id ? ` · cliente ${account.profile.id}` : ""}
-          {account.profile.exchange != null ? ` · USD ${account.profile.exchange}` : ""}
-          {account.profile.paymentCondition ? ` · ${account.profile.paymentCondition}` : ""}
-        </p>
+        <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2.5 rounded-xl border border-surface-800 bg-surface-900/40 px-4 py-3 sm:grid-cols-3 lg:grid-cols-6">
+          <ProfileField label="Cliente" value={account.profile.name} />
+          <ProfileField label="N° de cliente" value={account.profile.id} />
+          <ProfileField label="CUIT" value={account.profile.cuit} />
+          <ProfileField label="Condición de pago" value={account.profile.paymentCondition} />
+          <ProfileField label="Entrega" value={account.profile.deliveryType} />
+          <ProfileField
+            label="Cotización"
+            value={account.profile.exchange != null ? `USD ${account.profile.exchange}` : null}
+          />
+        </div>
       )}
 
       <AccountHistoryChrome
@@ -165,13 +171,8 @@ export default function SolutionBoxAccountPanel() {
             { label: "Cotización", value: detail.row.exchange != null ? String(detail.row.exchange) : "" },
             { label: "Importe", value: money(detail.row.amount, detail.row.currency) },
           ]}
-          items={detail.row.items.map((it): AccountDetailItem => ({
-            code: it.code,
-            name: it.code,
-            qty: it.qty,
-            price: it.price ?? undefined,
-            total: it.price != null ? it.price * it.qty : undefined,
-          }))}
+          items={sbOrderItems(detail.row)}
+          totals={sbOrderTotals(detail.row)}
           documents={invoiceHref(detail.row) ? [{ label: `Factura ${detail.row.invoice}`, href: invoiceHref(detail.row), filename: `factura-${detail.row.number}.pdf` }] : []}
           note={detail.row.invoice ? undefined : "Todavía no hay factura para este pedido."}
           onClose={() => setDetail(null)}
@@ -271,6 +272,19 @@ function DraftsTable({ drafts, onOpen }: { drafts: NodoProviderDraft[]; onOpen: 
       {drafts.length === 0 && (
         <p className="text-center text-xs text-surface-500 py-6">Todavía no creaste pedidos de Solution Box desde Nodo.</p>
       )}
+    </div>
+  );
+}
+
+/** Un dato de la ficha del cliente. Se omite si el portal no lo manda. */
+function ProfileField({ label, value }: { label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500">{label}</p>
+      <p className="mt-0.5 truncate text-xs text-surface-200" title={value}>
+        {value}
+      </p>
     </div>
   );
 }
