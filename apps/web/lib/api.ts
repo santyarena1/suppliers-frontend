@@ -1876,6 +1876,8 @@ export const airAccountApi = {
       invoices: Record<string, string>[];
       pending: Record<string, string>[];
       drafts: NodoProviderDraft[];
+      /** Por qué una sección vino vacía, cuando el portal falló o cambió. */
+      warnings?: string[];
       note: string;
     }>("/providers/AIR/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
 };

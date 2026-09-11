@@ -8,7 +8,7 @@ import {
 } from "@/lib/api";
 import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
-import { Wallet, XCircle } from "lucide-react";
+import { AlertTriangle, Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc, type AccountDetailLine } from "@/components/account/AccountRowDetail";
 import { taxBreakdownLines, taxFromLabeledRecord } from "@/components/account/accountTaxBreakdown";
@@ -188,6 +188,21 @@ export default function AirAccountPanel() {
           ) : undefined
         }
       >
+        {/* Decir por qué no hay nada. Una tabla vacía no distingue una cuenta
+            sin movimientos de un portal que dejó de responder. */}
+        {(account?.warnings?.length ?? 0) > 0 && (
+          <div className="mb-3 flex flex-col gap-1.5">
+            {account!.warnings!.map((w) => (
+              <div
+                key={w}
+                className="flex items-start gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-amber-500/8 border border-amber-500/20 text-amber-300"
+              >
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span className="flex-1">{w}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {loading && !ready ? (
           <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
         ) : error ? (
