@@ -6,6 +6,7 @@ import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service"
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
+import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
@@ -38,6 +39,10 @@ export type SyncResult = {
   zeroStockAffected: number;
   runId?: string;
 };
+
+/** Cuántos productos devuelve una búsqueda, y cuántos se miran para elegirlos. */
+const SEARCH_LIMIT = 200;
+const SEARCH_CANDIDATES = 400;
 
 /** Lo que pertenece a la oferta de una organización y no a la ficha del producto. */
 const OFFER_FIELDS = new Set([
@@ -774,12 +779,22 @@ export class ProvidersService implements OnModuleInit {
         }
       : null;
 
+    // Cada palabra tiene que aparecer, pero no pegada a las otras: "monitor msi"
+    // tiene que traer también "MONITOR 24 MSI". La marca entra en el OR porque
+    // hay proveedores que la dejan fuera del nombre.
+    const tokens = searchTokens(q);
+    const tokenClauses = tokens.map((t) => ({
+      OR: [
+        { name: { contains: t, mode: "insensitive" as const } },
+        { brand: { contains: t, mode: "insensitive" as const } },
+      ],
+    }));
+    const buscaPorNombre = (distinctQ || (!brand && q)) && tokenClauses.length > 0;
+
     const productWhere = {
       AND: [
         ...(brandClause ? [brandClause] : []),
-        ...(distinctQ || (!brand && q)
-          ? [{ name: { contains: q, mode: "insensitive" as const } }]
-          : []),
+        ...(buscaPorNombre ? tokenClauses : []),
       ],
     };
 
@@ -795,8 +810,17 @@ export class ProvidersService implements OnModuleInit {
       },
       include: { product: true },
       orderBy: { product: { name: "asc" } },
-      take: 200,
+      take: buscaPorNombre ? SEARCH_CANDIDATES : SEARCH_LIMIT,
     });
+
+    if (buscaPorNombre) {
+      // sort de V8 es estable: a igual puntaje se conserva el orden alfabético.
+      offers.sort(
+        (a, b) =>
+          scoreCatalogMatch(b.product, q, tokens) - scoreCatalogMatch(a.product, q, tokens)
+      );
+      offers.splice(SEARCH_LIMIT);
+    }
 
     const views = brand
       ? offers

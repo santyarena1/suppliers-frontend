@@ -37,6 +37,7 @@ import {
 } from "@/lib/compare-store";
 import ProviderBadge from "@/components/ProviderBadge";
 import Image from "next/image";
+import { matchesSearchTokens, searchTokens } from "@/lib/catalog-search";
 import Link from "next/link";
 import {
   Search, Loader2, X, LayoutGrid,
@@ -340,8 +341,8 @@ function SearchPage() {
         ]);
         data = intersectByKey(brandProducts, catProducts);
         if (distinctQ) {
-          const ql = q.toLowerCase();
-          data = data.filter((p) => p.name?.toLowerCase().includes(ql));
+          const tokens = searchTokens(q);
+          data = data.filter((p) => matchesSearchTokens(p, tokens));
         }
       } else if (brandList.length > 0) {
         if (distinctQ && brandList.length === 1) {
@@ -353,16 +354,16 @@ function SearchPage() {
           data = res.data;
         } else if (distinctQ) {
           data = await fetchByBrands(brandList, withZero, brandProviders);
-          const ql = q.toLowerCase();
-          data = data.filter((p) => p.name?.toLowerCase().includes(ql));
+          const tokens = searchTokens(q);
+          data = data.filter((p) => matchesSearchTokens(p, tokens));
         } else {
           data = await fetchByBrands(brandList, withZero, brandProviders);
         }
       } else if (categoryList.length > 0) {
         data = await fetchByCategories(categoryList, withZero);
         if (distinctQ) {
-          const ql = q.toLowerCase();
-          data = data.filter((p) => p.name?.toLowerCase().includes(ql));
+          const tokens = searchTokens(q);
+          data = data.filter((p) => matchesSearchTokens(p, tokens));
         }
       } else {
         const res = await searchApi.all(q, {
