@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { getUser, tenantSeesIibbPerceptions } from "@/lib/auth";
-import { cachedMyProviders } from "@/lib/api";
+import {
+  cachedMyProviders,
+  myApi,
+  patchCachedPurchase,
+  MY_PROVIDERS_UPDATED,
+  type Provider,
+} from "@/lib/api";
 import { parsePurchasePolicy } from "@/lib/purchase-pricing";
 
 const STORAGE_KEY = "pref_iibb_rates";
@@ -111,18 +117,39 @@ function writeFile(file: StoredFile): void {
 /**
  * Alícuota de ESTE comercio. No hay % global por proveedor.
  *
- * El % cargado en Configuración del distribuidor manda sobre todo lo demás,
- * incluido un 0 explícito: es la forma que tiene el comercio de decir "a este
- * proveedor no le pago percepción", y tiene que ganarle a lo que cotice el
- * portal. Recién si no hay nada cargado se usa lo aprendido del carrito.
+ * El orden es: lo cargado a mano manda sobre lo aprendido, y entre dos valores
+ * aprendidos gana el del servidor.
+ *
+ * 1. El % cargado en Configuración del distribuidor, incluido un 0 explícito: es
+ *    la forma que tiene el comercio de decir "a este proveedor no le pago
+ *    percepción", y tiene que ganarle a lo que cotice el portal.
+ * 2. El % que el comercio escribió a mano en la tabla de alícuotas.
+ * 3. La última percepción que cotizó el portal, recordada por el servidor: la
+ *    escribe cualquier sesión que haya armado un carrito, no solo esta máquina.
+ * 4. Lo aprendido en este navegador, por si el servidor todavía no lo tiene.
  */
 export function getIibbRatePercent(provider: string | null | undefined): number | null {
   if (!provider || !tenantSeesIibbPerceptions()) return null;
-  const manual = manualIibbFor(provider);
-  if (manual != null) return manual;
-  const stored = readFile().rates;
-  if (Object.prototype.hasOwnProperty.call(stored, provider)) return stored[provider];
-  return null;
+  const configurado = manualIibbFor(provider);
+  if (configurado != null) return configurado;
+
+  const file = readFile();
+  const tieneLocal = Object.prototype.hasOwnProperty.call(file.rates, provider);
+  const local = tieneLocal ? file.rates[provider] : null;
+  if (tieneLocal && (file.sources[provider] ?? "manual") === "manual") return local;
+
+  const delServidor = learnedIibbFor(provider);
+  if (delServidor != null) return delServidor;
+  return local;
+}
+
+/** La última percepción que el portal cotizó, recordada por el servidor. */
+function learnedIibbFor(provider: string): number | null {
+  const found = cachedMyProviders()?.find((p) => p.provider === provider);
+  const pct = found?.purchase?.learnedIibbPercent;
+  if (pct == null) return null;
+  const n = Number(pct);
+  return Number.isFinite(n) && n > 0 ? clampRate(n) : null;
 }
 
 /** El % manual del proveedor, del cache sincrónico de /my/providers. */
@@ -137,11 +164,14 @@ function manualIibbFor(provider: string): number | null {
 export function getIibbRateSource(provider: string | null | undefined): IibbRateSource {
   if (!provider || !tenantSeesIibbPerceptions()) return "none";
   if (manualIibbFor(provider) != null) return "manual";
+  // Mismo orden que getIibbRatePercent: si no coincidieran, la tabla diría que
+  // un número es de un lado y el precio saldría del otro.
   const file = readFile();
-  if (Object.prototype.hasOwnProperty.call(file.rates, provider)) {
-    return file.sources[provider] ?? "manual";
-  }
-  return "none";
+  const tieneLocal = Object.prototype.hasOwnProperty.call(file.rates, provider);
+  const fuenteLocal = tieneLocal ? file.sources[provider] ?? "manual" : null;
+  if (fuenteLocal === "manual") return "manual";
+  if (learnedIibbFor(provider) != null) return "cart";
+  return fuenteLocal ?? "none";
 }
 
 export type IibbRateRow = {
@@ -204,6 +234,14 @@ export function setIibbRate(
 
 export function clearIibbRate(provider: string): void {
   if (!provider || !tenantSeesIibbPerceptions()) return;
+  // Vaciar el campo es "olvidate de esto", así que también se olvida lo que el
+  // servidor aprendió: si no, el número volvía a aparecer solo.
+  if (learnedIibbFor(provider) != null) {
+    patchCachedPurchase(provider as Provider, { learnedIibbPercent: null, learnedIibbAt: null });
+    void myApi.recordObservedIibb(provider as Provider, 0).catch(() => {
+      /* sin conexión queda para el próximo intento */
+    });
+  }
   const file = readFile();
   if (!Object.prototype.hasOwnProperty.call(file.rates, provider)) return;
   delete file.rates[provider];
@@ -211,10 +249,28 @@ export function clearIibbRate(provider: string): void {
   writeFile(file);
 }
 
-/** Guarda la alícuota observada en una cotización del carrito. 0 no pisa un valor cargado. */
+/**
+ * Guarda la alícuota observada en una cotización del carrito. 0 no pisa un valor cargado.
+ *
+ * Va también al servidor: el carrito solo cotiza los proveedores que tienen
+ * items adentro, así que si esto viviera solo en el navegador, bastaba pasar
+ * unos días sin armar un carrito de ese proveedor —o entrar desde otra
+ * máquina— para que la percepción desapareciera de la búsqueda.
+ */
 export function rememberIibbRate(provider: string, percent: number): void {
   if (!Number.isFinite(percent) || percent <= 0 || percent > 100) return;
+  const anterior = getIibbRatePercent(provider);
   setIibbRate(provider, percent, "cart");
+  const next = clampRate(percent);
+  if (next == null) return;
+  if (anterior != null && Math.abs(anterior - next) < 0.005) return;
+  patchCachedPurchase(provider as Provider, {
+    learnedIibbPercent: next,
+    learnedIibbAt: new Date().toISOString(),
+  });
+  void myApi.recordObservedIibb(provider as Provider, next).catch(() => {
+    /* si falla, queda lo local y se reintenta en la próxima cotización */
+  });
 }
 
 export function useIibbRatesEpoch(): number {
@@ -222,7 +278,12 @@ export function useIibbRatesEpoch(): number {
   useEffect(() => {
     const onChange = () => setEpoch((e) => e + 1);
     window.addEventListener(EVENT, onChange);
-    return () => window.removeEventListener(EVENT, onChange);
+    // La alícuota también puede venir del servidor, no solo del storage local.
+    window.addEventListener(MY_PROVIDERS_UPDATED, onChange);
+    return () => {
+      window.removeEventListener(EVENT, onChange);
+      window.removeEventListener(MY_PROVIDERS_UPDATED, onChange);
+    };
   }, []);
   return epoch;
 }

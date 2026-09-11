@@ -5,6 +5,7 @@ import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import {
   CreateAccessCodeDto,
+  RecordObservedIibbDto,
   CreateOwnMemberDto,
   RedeemAccessCodeDto,
   SearchSuppliersDto,
@@ -43,6 +44,22 @@ export class MyTenantController {
   @Get("providers")
   providers(@CurrentTenant() tenant: TenantContext) {
     return this.visibility.listFor(commercialId(tenant));
+  }
+
+  /**
+   * El carrito avisa qué percepción le cotizó el portal de un proveedor.
+   *
+   * Se guarda del lado del servidor para que siga estando cuando pase el tiempo
+   * sin consultar el carrito de ese proveedor, y para que valga en cualquier
+   * sesión del comercio, no solo en el navegador donde se cotizó.
+   */
+  @Post("providers/:provider/observed-iibb")
+  recordObservedIibb(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Body() dto: RecordObservedIibbDto
+  ) {
+    return this.visibility.recordObservedIibb(commercialId(tenant), provider, dto.percent);
   }
 
   /** Directorio para conectarse por lista sin crear duplicados. */

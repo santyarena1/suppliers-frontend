@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { isListProviderKey, providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
 import { domainEvents } from "../common/events/domain-events";
 import { PrismaService } from "../prisma/prisma.service";
@@ -8,6 +8,9 @@ export type PurchasePolicyView = {
   priceChannel: "API" | "LIST";
   manualIibbPercent: number | null;
   manualPerceptionsPercent: number | null;
+  /** Última percepción (%) cotizada por el portal, recordada entre consultas. */
+  learnedIibbPercent: number | null;
+  learnedIibbAt: string | null;
   acceptsOffline: boolean;
   acceptsScheme: boolean;
   offlineIvaAdjustment: IvaAdjustment | null;
@@ -45,6 +48,29 @@ export interface VisibleProvider {
 @Injectable()
 export class TenantVisibilityService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Guarda la percepción que el portal del proveedor le cotizó al comercio.
+   *
+   * El carrito es el único lugar donde el sistema pregunta por percepciones, y
+   * solo pregunta por los proveedores que tienen items adentro. Si eso viviera
+   * únicamente en el navegador, bastaba pasar unos días sin armar un carrito de
+   * ese proveedor —o entrar desde otra máquina— para que la percepción
+   * desapareciera de la búsqueda. Se recuerda acá y se pisa cuando el portal
+   * cotiza distinto.
+   */
+  async recordObservedIibb(tenantId: string, provider: string, percent: number): Promise<PurchasePolicyView> {
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+      throw new BadRequestException("Porcentaje de percepción fuera de rango");
+    }
+    const learnedIibbPercent = Math.round(percent * 100) / 100;
+    const config = await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId, provider } },
+      create: { tenantId, provider, learnedIibbPercent, learnedIibbAt: new Date() },
+      update: { learnedIibbPercent, learnedIibbAt: new Date() },
+    });
+    return purchaseFromConfig(provider, config);
+  }
 
   async listFor(tenantId: string): Promise<VisibleProvider[]> {
     const propio = await this.prisma.tenant.findUnique({
@@ -109,6 +135,8 @@ export class TenantVisibilityService {
           priceChannel: true,
           manualIibbPercent: true,
           manualPerceptionsPercent: true,
+          learnedIibbPercent: true,
+          learnedIibbAt: true,
           acceptsOffline: true,
           acceptsScheme: true,
           offlineIvaAdjustment: true,
@@ -271,6 +299,8 @@ const EMPTY_PURCHASE: PurchasePolicyView = {
   priceChannel: "API",
   manualIibbPercent: null,
   manualPerceptionsPercent: null,
+  learnedIibbPercent: null,
+  learnedIibbAt: null,
   acceptsOffline: false,
   acceptsScheme: false,
   offlineIvaAdjustment: null,
@@ -288,6 +318,8 @@ function purchaseFromConfig(
     priceChannel?: string | null;
     manualIibbPercent?: unknown;
     manualPerceptionsPercent?: unknown;
+    learnedIibbPercent?: unknown;
+    learnedIibbAt?: Date | string | null;
     acceptsOffline: boolean;
     acceptsScheme: boolean;
     offlineIvaAdjustment?: string | null;
@@ -302,6 +334,8 @@ function purchaseFromConfig(
     priceChannel,
     manualIibbPercent: config?.manualIibbPercent == null ? null : Number(config.manualIibbPercent),
     manualPerceptionsPercent: config?.manualPerceptionsPercent == null ? null : Number(config.manualPerceptionsPercent),
+    learnedIibbPercent: config?.learnedIibbPercent == null ? null : Number(config.learnedIibbPercent),
+    learnedIibbAt: config?.learnedIibbAt ? new Date(config.learnedIibbAt).toISOString() : null,
   };
   if (!config || !providerHasIvaRate(provider, priceChannel)) return { ...EMPTY_PURCHASE, ...manual };
   const legacy = asAdj(config.ivaAdjustment);

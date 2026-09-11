@@ -67,6 +67,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
 
+### [FEATURE] Percepción aprendida del portal del proveedor
+- **Método**: POST
+- **Ruta**: `/my/providers/:provider/observed-iibb`
+- **Auth**: Bearer usuario con organización
+- **Body / Params**: `{ percent }` (0–100; `0` = el portal no cotiza percepción)
+- **Respuesta esperada**: `PurchasePolicyView` del proveedor, ya con `learnedIibbPercent` y `learnedIibbAt`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El carrito es el único lugar donde el sistema le pregunta la percepción al portal, y solo pregunta por los proveedores que tienen items adentro. Guardarla por comercio en el servidor es lo que hace que la búsqueda la siga mostrando cuando pasa el tiempo sin armar un carrito de ese proveedor, y que valga desde cualquier sesión. El `manualIibbPercent` cargado en Configuración le sigue ganando.
+
 ### [FEATURE] Equipo de la organización (Tipo 1 autónomo)
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `/my/org` · `/my/team` · `/my/team/:membershipId` · `/my/team/:membershipId/password` · `/my/team/:membershipId/managed-brands`

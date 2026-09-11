@@ -834,6 +834,12 @@ model ProviderSyncConfig {
   manualIibbPercent    Decimal?             @db.Decimal(6, 2)
   /// Proveedores que cotizan por lista: otras percepciones (%) sobre el neto, a mano.
   manualPerceptionsPercent Decimal?         @db.Decimal(6, 2)
+  /// Última percepción (%) que el portal del proveedor le cotizó a este comercio.
+  /// Se aprende del carrito y se guarda acá, no en el navegador: entre consultas
+  /// el comercio tiene que seguir viendo la percepción que le corresponde, y desde
+  /// cualquier sesión. El % cargado a mano le sigue ganando a esto.
+  learnedIibbPercent   Decimal?             @db.Decimal(6, 2)
+  learnedIibbAt        DateTime?
   missingProductAction MissingProductAction @default(KEEP)
   zeroStockAction      ZeroStockAction      @default(KEEP)
   priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)

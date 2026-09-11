@@ -304,3 +304,12 @@ export class UpdateOwnClientDto {
   @IsString()
   notes?: string | null;
 }
+
+/** Percepción (%) que el portal del proveedor cotizó en el carrito. */
+export class RecordObservedIibbDto {
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percent!: number;
+}

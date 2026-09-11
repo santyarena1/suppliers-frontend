@@ -343,6 +343,9 @@ export interface VisibleProvider {
     priceChannel?: "API" | "LIST";
     manualIibbPercent?: number | null;
     manualPerceptionsPercent?: number | null;
+    /** Última percepción (%) que cotizó el portal, recordada por el servidor. */
+    learnedIibbPercent?: number | null;
+    learnedIibbAt?: string | null;
     acceptsOffline: boolean;
     acceptsScheme: boolean;
     offlineIvaAdjustment: IvaAdjustment | null;
@@ -399,6 +402,9 @@ export interface RedeemedCode {
 
 export const myApi = {
   providers: () => api.get<VisibleProvider[]>("/my/providers"),
+  /** Avisa qué percepción cotizó el portal, para recordarla entre consultas. */
+  recordObservedIibb: (provider: Provider, percent: number) =>
+    api.post(`/my/providers/${provider}/observed-iibb`, { percent }),
   redeemCode: (code: string) => api.post<RedeemedCode>("/my/redeem-code", { code }),
   org: () => api.get<OwnOrg>("/my/org"),
   updateOrg: (data: Partial<{ contactEmail: string | null; contactPhone: string | null }>) =>
@@ -1014,6 +1020,25 @@ export async function loadLinkedProviders(): Promise<Provider[]> {
 
 export function cachedMyProviders(): VisibleProvider[] | null {
   return visibleProviders?.list ?? null;
+}
+
+/**
+ * Actualiza en el cache lo que ya guardó el servidor, sin volver a pedir la
+ * lista. Se usa al aprender una percepción en el carrito: la búsqueda tiene que
+ * mostrarla en el mismo momento, no en la próxima recarga.
+ */
+export function patchCachedPurchase(
+  provider: Provider,
+  cambios: Partial<NonNullable<VisibleProvider["purchase"]>>
+): void {
+  if (!visibleProviders) return;
+  visibleProviders = {
+    at: visibleProviders.at,
+    list: visibleProviders.list.map((p) =>
+      p.provider === provider && p.purchase ? { ...p, purchase: { ...p.purchase, ...cambios } } : p
+    ),
+  };
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(MY_PROVIDERS_UPDATED));
 }
 
 // --- Credentials ---
