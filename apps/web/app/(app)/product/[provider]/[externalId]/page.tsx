@@ -448,10 +448,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       Sin cambios de precio
                     </p>
                     <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-white">
-                      {money(
-                        Number(priceHistory[0]?.finalPrice ?? priceHistory[0]?.price) ||
-                          unitDisplayUsd,
-                      )}
+                      {/* El mismo número que muestra el encabezado: el precio
+                          del historial es el crudo del proveedor y no siempre
+                          trae el final, así que acá quedaba otra cifra. */}
+                      {money(unitDisplayUsd)}
                     </p>
                     <p className="mt-1.5 text-xs leading-relaxed text-surface-500">
                       El precio se mantiene desde que seguimos este producto. La curva aparece
