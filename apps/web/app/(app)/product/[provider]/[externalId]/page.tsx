@@ -439,16 +439,25 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 </h2>
                 {priceHistory.length >= 2 ? (
                   <PriceHistoryChart points={priceHistory} format={money} />
-                ) : priceHistory.length === 1 ? (
-                  <p className="text-xs text-surface-500 leading-relaxed">
-                    Hay un único precio registrado ({money(Number(priceHistory[0].price) || 0)}).
-                    El gráfico aparece cuando haya al menos un cambio en próximas sincronizaciones.
-                  </p>
                 ) : (
-                  <p className="text-xs text-surface-500 leading-relaxed">
-                    Todavía no hay variación registrada. El gráfico se arma cuando el precio cambie
-                    en próximas sincronizaciones.
-                  </p>
+                  // Solo se guarda una fila cuando el precio cambia, así que un
+                  // producto estable no tiene serie que graficar. Decirlo con el
+                  // precio a la vista es más útil que prometer un gráfico futuro.
+                  <div className="rounded-xl border border-surface-800 bg-surface-950/60 px-4 py-5">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-surface-500">
+                      Sin cambios de precio
+                    </p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-white">
+                      {money(
+                        Number(priceHistory[0]?.finalPrice ?? priceHistory[0]?.price) ||
+                          unitDisplayUsd,
+                      )}
+                    </p>
+                    <p className="mt-1.5 text-xs leading-relaxed text-surface-500">
+                      El precio se mantiene desde que seguimos este producto. La curva aparece
+                      con el primer cambio.
+                    </p>
+                  </div>
                 )}
               </section>
 

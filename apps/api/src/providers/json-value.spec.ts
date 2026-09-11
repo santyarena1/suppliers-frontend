@@ -31,3 +31,21 @@ describe("asString", () => {
     expect(asString({})).toBeUndefined();
   });
 });
+
+describe("asString con envoltorios del proveedor", () => {
+  it("saca el texto de adentro del envoltorio", () => {
+    expect(asString({ type: "plain/text", value: "Auricular inalámbrico" })).toBe(
+      "Auricular inalámbrico",
+    );
+  });
+
+  it("descarta el envoltorio cuando no trae texto", () => {
+    // Era lo que se veía en la ficha: "type: plain/text" y nada más.
+    expect(asString({ type: "plain/text" })).toBeUndefined();
+    expect(asString({ type: "plain/text", value: "   " })).toBeUndefined();
+  });
+
+  it("no confunde metadatos con atributos reales", () => {
+    expect(asString({ formato: "caja", Color: "Blanco" })).toBe("Color: Blanco");
+  });
+});

@@ -836,19 +836,39 @@ export class ProvidersService implements OnModuleInit {
    * el gráfico sigue el precio de venta actual.
    */
   async getPriceHistory(tenantId: string, provider: Provider, externalId: string) {
-    const [points, rules] = await Promise.all([
+    const [points, rules, offer] = await Promise.all([
       this.prisma.productPriceHistory.findMany({
         where: { tenantId, provider, externalId },
         orderBy: { capturedAt: "asc" },
         select: { price: true, finalPrice: true, currency: true, capturedAt: true },
       }),
       this.rulesFor(tenantId, provider),
+      this.prisma.tenantProductOffer.findUnique({
+        where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
+        select: { price: true, finalPrice: true, currency: true, syncedAt: true },
+      }),
     ]);
-    return points.map((point) => ({
+    const serie = points.map((point) => ({
       ...point,
       price: withMarkup(point.price, rules.markupPercent),
       finalPrice: withMarkup(point.finalPrice, rules.markupPercent),
     }));
+
+    // El historial guarda una fila solo cuando el precio cambia, así que la serie
+    // terminaba en el último cambio: un producto que no se movió en un mes no
+    // tenía nada que graficar, y uno que cambió hace dos semanas parecía no tener
+    // precio desde entonces. El precio vigente es el último tramo de la serie.
+    if (offer && (offer.price != null || offer.finalPrice != null)) {
+      const ultimo = serie[serie.length - 1];
+      const hoy = {
+        price: withMarkup(offer.price, rules.markupPercent),
+        finalPrice: withMarkup(offer.finalPrice, rules.markupPercent),
+        currency: offer.currency,
+        capturedAt: offer.syncedAt,
+      };
+      if (!ultimo || ultimo.capturedAt.getTime() < hoy.capturedAt.getTime()) serie.push(hoy);
+    }
+    return serie;
   }
 
   /** Markup y umbral configurados por la organización para un proveedor. */

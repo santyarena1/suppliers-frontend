@@ -224,7 +224,12 @@ export default function PriceHistoryChart({
               strokeOpacity={0.55}
             />
             <Area
-              type="monotone"
+              /*
+               * Escalonada, no curva: el historial guarda un punto cuando el
+               * precio cambia, y entre dos cambios el precio se mantuvo. Una
+               * curva inventaba una subida gradual que nunca existió.
+               */
+              type="stepAfter"
               dataKey="price"
               stroke={strokeColor}
               strokeWidth={2.25}

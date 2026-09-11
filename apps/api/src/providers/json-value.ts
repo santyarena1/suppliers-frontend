@@ -29,7 +29,14 @@ function plano(value: unknown, profundidad = 0): string {
     return value.map((v) => plano(v, profundidad + 1)).filter(Boolean).join(" · ");
   }
   if (typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
+    const entradas = Object.entries(value as Record<string, unknown>);
+    // Un envoltorio del estilo { type: "plain/text", value: "..." } es el texto
+    // que lleva adentro, no una lista de sus campos: sin esto la ficha mostraba
+    // "type: plain/text" en vez de la descripción.
+    const contenido = entradas.find(([k]) => CLAVES_CONTENIDO.has(k.toLowerCase()));
+    if (contenido) return plano(contenido[1], profundidad + 1);
+    return entradas
+      .filter(([k]) => !CLAVES_METADATO.has(k.toLowerCase()))
       .map(([k, v]) => {
         const texto = plano(v, profundidad + 1);
         return texto ? `${k}: ${texto}` : "";
@@ -39,6 +46,37 @@ function plano(value: unknown, profundidad = 0): string {
   }
   return "";
 }
+
+/** Campos que llevan el texto en sí cuando el proveedor lo manda envuelto. */
+const CLAVES_CONTENIDO = new Set([
+  "value",
+  "valor",
+  "text",
+  "texto",
+  "content",
+  "contenido",
+  "description",
+  "descripcion",
+  "descripción",
+  "detalle",
+  "html",
+  "body",
+]);
+
+/** Campos que describen al dato, no el dato: solos no dicen nada. */
+const CLAVES_METADATO = new Set([
+  "type",
+  "tipo",
+  "mime",
+  "mimetype",
+  "format",
+  "formato",
+  "encoding",
+  "charset",
+  "lang",
+  "language",
+  "idioma",
+]);
 
 export function asNumber(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
