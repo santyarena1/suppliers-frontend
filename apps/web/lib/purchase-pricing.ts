@@ -7,6 +7,8 @@
  * los internos sí quedan. Sin alícuota de IVA no se inventa nada.
  */
 
+import { pricedPaymentOptions, type PaymentOption } from "./payment-options";
+
 export const IVA_ADJUSTMENTS = ["REMOVE", "HALF", "FLAT_10_5"] as const;
 export type IvaAdjustment = (typeof IVA_ADJUSTMENTS)[number];
 
@@ -54,6 +56,8 @@ export type PurchasePolicy = {
   manualIibbPercent?: number | null;
   /** Otras percepciones manuales (%) sobre el neto, para proveedores que cotizan por lista. */
   manualPerceptionsPercent?: number | null;
+  /** Formas de pago con descuento o recargo. Solo informativas. */
+  paymentOptions: PaymentOption[];
   acceptsOffline: boolean;
   acceptsScheme: boolean;
   offlineIvaAdjustment: IvaAdjustment | null;
@@ -62,6 +66,7 @@ export type PurchasePolicy = {
 };
 
 export const EMPTY_PURCHASE_POLICY: PurchasePolicy = {
+  paymentOptions: [],
   acceptsOffline: false,
   acceptsScheme: false,
   offlineIvaAdjustment: null,
@@ -205,6 +210,7 @@ export function parsePurchasePolicy(raw: {
   schemeIvaAdjustment?: string | null;
   ivaAdjustment?: string | null;
   schemeDiscountPercent?: number | string | null;
+  paymentOptions?: PaymentOption[] | null;
 } | null | undefined): PurchasePolicy {
   if (!raw) return { ...EMPTY_PURCHASE_POLICY };
   const legacy = asAdj(raw.ivaAdjustment);
@@ -226,5 +232,6 @@ export function parsePurchasePolicy(raw: {
     offlineIvaAdjustment: asAdj(raw.offlineIvaAdjustment) ?? legacy,
     schemeIvaAdjustment: asAdj(raw.schemeIvaAdjustment) ?? legacy,
     schemeDiscountPercent: schemeNum == null || !Number.isFinite(schemeNum) ? null : schemeNum,
+    paymentOptions: pricedPaymentOptions(raw.paymentOptions),
   };
 }

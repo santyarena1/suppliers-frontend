@@ -22,6 +22,7 @@ import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
 import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { purchaseLinePricing } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
+import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options";
 import {
   ArrowLeft,
   Package,
@@ -146,6 +147,15 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     return true;
   });
   const knownIibbPct = getIibbRatePercent(providerName);
+
+  /**
+   * Precio unitario según la forma de pago. Es otra opción de precio, no un
+   * reemplazo: el costo final de arriba no se tacha ni cuando hay recargo.
+   */
+  const payPrices = pricedPaymentOptions(policy?.paymentOptions).map((o) => ({
+    ...o,
+    unitUsd: applyPaymentOption(unitDisplayUsd, o),
+  }));
 
 
   function copyId() {
@@ -377,6 +387,29 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         . El margen contra locales se calcula sobre tu costo final, porque el precio que publican ellos también es final.
                       </p>
                     </div>
+
+                    {payPrices.length > 0 && (
+                      <div className="pp__pay">
+                        <h2 className="pp__sec-title">Formas de pago</h2>
+                        <div className="pp__pay-rows">
+                          {payPrices.map((p) => (
+                            <div key={p.id} className="pp__pay-row">
+                              <span className="pp__pay-label">{p.label}</span>
+                              <span className="pp__pay-delta" data-kind={p.kind}>
+                                {p.kind === "SURCHARGE" ? "+" : "−"}
+                                {p.percent}%
+                              </span>
+                              <span className="pp__pay-amount">{money(p.unitUsd)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="pp__note">
+                          Precio unitario según cómo pagues, para comparar. NODO no elige la forma
+                          de pago ni la manda al confirmar el pedido: la arreglás con el
+                          distribuidor.
+                        </p>
+                      </div>
+                    )}
 
                     <div className="pp__buy">
                       <div className="pp__qty">

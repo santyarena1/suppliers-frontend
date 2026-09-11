@@ -1,5 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
-import { isListProviderKey, providerHasIvaRate, LIST_PROVIDER_PREFIX, type Provider } from "@nodo/shared";
+import {
+  isListProviderKey,
+  parsePaymentOptions,
+  providerHasIvaRate,
+  LIST_PROVIDER_PREFIX,
+  type PaymentOption,
+  type Provider,
+} from "@nodo/shared";
 import type { IvaAdjustment, OfferSource } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
@@ -7,6 +14,7 @@ import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
+import { snapshotJson } from "./json-value";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
@@ -88,6 +96,7 @@ export class ProvidersService implements OnModuleInit {
       priceChannel: (isListProviderKey(provider) ? "LIST" : "API") as "API" | "LIST",
       manualIibbPercent: null as number | null,
       manualPerceptionsPercent: null as number | null,
+      paymentOptions: [] as PaymentOption[],
       missingProductAction: "KEEP" as const,
       zeroStockAction: "KEEP" as const,
       priceMarkupPercent: 0,
@@ -139,7 +148,15 @@ export class ProvidersService implements OnModuleInit {
     if (merged.acceptsScheme && !merged.schemeIvaAdjustment) {
       throw new BadRequestException("Si acepta esquema, hay que elegir cómo tratar el IVA de esquema.");
     }
-    const data = { ...dto, ...merged, priceChannel };
+    const { paymentOptions, ...rest } = dto;
+    const data = {
+      ...rest,
+      ...merged,
+      priceChannel,
+      ...(paymentOptions !== undefined
+        ? { paymentOptions: snapshotJson(parsePaymentOptions(paymentOptions)) }
+        : {}),
+    };
     const saved = await this.prisma.providerSyncConfig.upsert({
       where: { tenantId_provider: { tenantId, provider } },
       create: { tenantId, provider, ...data },
@@ -1555,6 +1572,7 @@ function serializeSyncConfig<T extends object>(c: T) {
     schemeDiscountPercent: row.schemeDiscountPercent == null ? null : Number(row.schemeDiscountPercent),
     manualIibbPercent: row.manualIibbPercent == null ? null : Number(row.manualIibbPercent),
     manualPerceptionsPercent: row.manualPerceptionsPercent == null ? null : Number(row.manualPerceptionsPercent),
+    paymentOptions: parsePaymentOptions(row.paymentOptions),
     acceptsOffline: Boolean(row.acceptsOffline),
     acceptsScheme: Boolean(row.acceptsScheme),
     offlineIvaAdjustment: (row.offlineIvaAdjustment as IvaAdjustment | null | undefined) ?? null,

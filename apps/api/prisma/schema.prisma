@@ -840,6 +840,11 @@ model ProviderSyncConfig {
   /// cualquier sesión. El % cargado a mano le sigue ganando a esto.
   learnedIibbPercent   Decimal?             @db.Decimal(6, 2)
   learnedIibbAt        DateTime?
+  /// Formas de pago del proveedor con su descuento o recargo, tal como las ve
+  /// este comercio. Es información para decidir la compra: NODO no elige la
+  /// forma de pago ni la manda al confirmar el carrito, igual que pasa con
+  /// esquema y offline. Lista de objetos con label, percent, kind y origen.
+  paymentOptions       Json?
   missingProductAction MissingProductAction @default(KEEP)
   zeroStockAction      ZeroStockAction      @default(KEEP)
   priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)

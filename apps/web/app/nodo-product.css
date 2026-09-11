@@ -256,3 +256,41 @@
 @media (prefers-reduced-motion: reduce) {
   .pp * { transition-duration: 0.001ms !important; }
 }
+
+/* Formas de pago: otra opcion de precio, no un reemplazo. Por eso viven en su
+   propio bloque debajo del desglose y nunca tachan el costo final, ni siquiera
+   cuando el medio de pago tiene recargo. */
+.pp__pay {
+  padding: 1.1rem 1.2rem;
+  border-top: 1px solid var(--p-line);
+}
+.pp__pay-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.pp__pay-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.75rem;
+}
+.pp__pay-label {
+  color: var(--p-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pp__pay-delta {
+  font-family: var(--lnd-font-mono), monospace;
+  font-size: 0.65rem;
+  color: var(--p-good);
+}
+.pp__pay-delta[data-kind="SURCHARGE"] { color: var(--p-ember); }
+.pp__pay-amount {
+  font-family: var(--lnd-font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  font-weight: 600;
+}

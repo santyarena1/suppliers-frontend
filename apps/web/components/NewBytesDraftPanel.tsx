@@ -23,6 +23,7 @@ import {
 } from "@/components/checkout/CheckoutForm";
 import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
+import { rememberPaymentOptions } from "@/lib/payment-options";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
 
@@ -90,6 +91,9 @@ export default function NewBytesDraftPanel({
       const preview = warm.data.preview;
       setAddresses(addrs);
       setPayments(pays);
+      // El portal informa el interés de cada medio: se recuerda para poder
+      // mostrar el precio por forma de pago sin tener que abrir el carrito.
+      rememberPaymentOptions("NEW_BYTES", pays);
       const def = addrs.find((a) => a.isDefault) ?? addrs[0];
       if (def) setAddressId(def.id);
       setMetaError(null);

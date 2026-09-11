@@ -1,6 +1,7 @@
 "use client";
 
 import { FileSpreadsheet, Plug } from "lucide-react";
+import PaymentOptionsEditor from "@/components/PaymentOptionsEditor";
 import { isListProvider, type IvaAdjustment, type ProviderConfig } from "@/lib/api";
 import { IVA_ADJUSTMENT_LABELS, IVA_ADJUSTMENTS, providerHasIvaRate, providerPricesFromList } from "@/lib/purchase-pricing";
 
@@ -124,6 +125,11 @@ export default function ProviderPurchaseConfig({
           <p className="text-[11px] text-surface-500">El pedido offline no lleva percepciones; lista y esquema sí.</p>
         </div>
       )}
+
+      <PaymentOptionsEditor
+        options={config.paymentOptions ?? []}
+        onChange={(paymentOptions) => onChange({ ...config, paymentOptions })}
+      />
 
       {/* Offline y esquema */}
       <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">

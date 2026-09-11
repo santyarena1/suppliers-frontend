@@ -1,7 +1,16 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { isListProviderKey, providerHasIvaRate, type IvaAdjustment, type Provider } from "@nodo/shared";
+import {
+  isListProviderKey,
+  mergeLearnedPaymentOptions,
+  parsePaymentOptions,
+  providerHasIvaRate,
+  type IvaAdjustment,
+  type PaymentOption,
+  type Provider,
+} from "@nodo/shared";
 import { domainEvents } from "../common/events/domain-events";
 import { PrismaService } from "../prisma/prisma.service";
+import { snapshotJson } from "../providers/json-value";
 
 export type PurchasePolicyView = {
   /** API o LIST: con LIST los precios salen de una planilla y el carrito solo arma un mensaje. */
@@ -11,6 +20,8 @@ export type PurchasePolicyView = {
   /** Última percepción (%) cotizada por el portal, recordada entre consultas. */
   learnedIibbPercent: number | null;
   learnedIibbAt: string | null;
+  /** Formas de pago con su descuento o recargo. Solo informativas. */
+  paymentOptions: PaymentOption[];
   acceptsOffline: boolean;
   acceptsScheme: boolean;
   offlineIvaAdjustment: IvaAdjustment | null;
@@ -68,6 +79,30 @@ export class TenantVisibilityService {
       where: { tenantId_provider: { tenantId, provider } },
       create: { tenantId, provider, learnedIibbPercent, learnedIibbAt: new Date() },
       update: { learnedIibbPercent, learnedIibbAt: new Date() },
+    });
+    return purchaseFromConfig(provider, config);
+  }
+
+  /** Formas de pago que informó el portal al cotizar. No pisa lo cargado a mano. */
+  async recordObservedPaymentOptions(
+    tenantId: string,
+    provider: string,
+    options: unknown
+  ): Promise<PurchasePolicyView> {
+    const learned = parsePaymentOptions(options).map((o) => ({
+      ...o,
+      source: "cart" as const,
+      at: new Date().toISOString(),
+    }));
+    const current = await this.prisma.providerSyncConfig.findUnique({
+      where: { tenantId_provider: { tenantId, provider } },
+      select: { paymentOptions: true },
+    });
+    const merged = mergeLearnedPaymentOptions(parsePaymentOptions(current?.paymentOptions), learned);
+    const config = await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId, provider } },
+      create: { tenantId, provider, paymentOptions: snapshotJson(merged) },
+      update: { paymentOptions: snapshotJson(merged) },
     });
     return purchaseFromConfig(provider, config);
   }
@@ -137,6 +172,7 @@ export class TenantVisibilityService {
           manualPerceptionsPercent: true,
           learnedIibbPercent: true,
           learnedIibbAt: true,
+          paymentOptions: true,
           acceptsOffline: true,
           acceptsScheme: true,
           offlineIvaAdjustment: true,
@@ -301,6 +337,7 @@ const EMPTY_PURCHASE: PurchasePolicyView = {
   manualPerceptionsPercent: null,
   learnedIibbPercent: null,
   learnedIibbAt: null,
+  paymentOptions: [],
   acceptsOffline: false,
   acceptsScheme: false,
   offlineIvaAdjustment: null,
@@ -320,6 +357,7 @@ function purchaseFromConfig(
     manualPerceptionsPercent?: unknown;
     learnedIibbPercent?: unknown;
     learnedIibbAt?: Date | string | null;
+    paymentOptions?: unknown;
     acceptsOffline: boolean;
     acceptsScheme: boolean;
     offlineIvaAdjustment?: string | null;
@@ -336,6 +374,7 @@ function purchaseFromConfig(
     manualPerceptionsPercent: config?.manualPerceptionsPercent == null ? null : Number(config.manualPerceptionsPercent),
     learnedIibbPercent: config?.learnedIibbPercent == null ? null : Number(config.learnedIibbPercent),
     learnedIibbAt: config?.learnedIibbAt ? new Date(config.learnedIibbAt).toISOString() : null,
+    paymentOptions: parsePaymentOptions(config?.paymentOptions),
   };
   if (!config || !providerHasIvaRate(provider, priceChannel)) return { ...EMPTY_PURCHASE, ...manual };
   const legacy = asAdj(config.ivaAdjustment);

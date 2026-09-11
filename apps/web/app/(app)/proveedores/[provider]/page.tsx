@@ -172,6 +172,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         priceChannel: config.priceChannel,
         manualIibbPercent: config.manualIibbPercent == null ? null : Number(config.manualIibbPercent),
         manualPerceptionsPercent: config.manualPerceptionsPercent == null ? null : Number(config.manualPerceptionsPercent),
+        // Lista completa: lo que se borró en pantalla se borra de verdad. Una fila
+        // sin nombre es una que se agregó y no se llenó, no se guarda.
+        paymentOptions: (config.paymentOptions ?? []).filter((o) => o.label.trim()),
         syncIntervalMinutes: config.syncIntervalMinutes,
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,

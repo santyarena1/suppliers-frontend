@@ -6,6 +6,7 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import {
   CreateAccessCodeDto,
   RecordObservedIibbDto,
+  SavePaymentOptionsDto,
   CreateOwnMemberDto,
   RedeemAccessCodeDto,
   SearchSuppliersDto,
@@ -60,6 +61,21 @@ export class MyTenantController {
     @Body() dto: RecordObservedIibbDto
   ) {
     return this.visibility.recordObservedIibb(commercialId(tenant), provider, dto.percent);
+  }
+
+  /**
+   * Formas de pago que informó el portal al cotizar. No pisan las cargadas a
+   * mano, y son solo informativas: no se eligen ni se mandan al confirmar el
+   * carrito, igual que el precio de esquema o el de offline. Las que el
+   * comercio administra se guardan con el resto de la config del proveedor.
+   */
+  @Post("providers/:provider/observed-payment-options")
+  recordObservedPaymentOptions(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Body() dto: SavePaymentOptionsDto
+  ) {
+    return this.visibility.recordObservedPaymentOptions(commercialId(tenant), provider, dto.options);
   }
 
   /** Directorio para conectarse por lista sin crear duplicados. */

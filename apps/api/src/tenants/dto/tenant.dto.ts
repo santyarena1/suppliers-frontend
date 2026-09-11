@@ -1,5 +1,7 @@
 import { Type } from "class-transformer";
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -12,8 +14,16 @@ import {
   MaxLength,
   Min,
   MinLength,
-  ValidateIf, Matches } from "class-validator";
-import { TENANT_TYPES, type TenantLinkStatus, type TenantRole, type TenantType, PROVIDER_KEY_PATTERN } from "@nodo/shared";
+  ValidateIf, ValidateNested, Matches } from "class-validator";
+import {
+  PAYMENT_OPTION_KINDS,
+  PROVIDER_KEY_PATTERN,
+  TENANT_TYPES,
+  type PaymentOptionKind,
+  type TenantLinkStatus,
+  type TenantRole,
+  type TenantType,
+} from "@nodo/shared";
 
 const TENANT_ROLES = [
   "OWNER",
@@ -312,4 +322,34 @@ export class RecordObservedIibbDto {
   @Min(0)
   @Max(100)
   percent!: number;
+}
+
+/** Formas de pago del proveedor, con su descuento o recargo. */
+export class PaymentOptionDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  id?: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  label!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percent!: number;
+
+  @IsIn(PAYMENT_OPTION_KINDS)
+  kind!: PaymentOptionKind;
+}
+
+export class SavePaymentOptionsDto {
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => PaymentOptionDto)
+  options!: PaymentOptionDto[];
 }

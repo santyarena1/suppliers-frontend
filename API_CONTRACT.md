@@ -76,6 +76,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: El carrito es el único lugar donde el sistema le pregunta la percepción al portal, y solo pregunta por los proveedores que tienen items adentro. Guardarla por comercio en el servidor es lo que hace que la búsqueda la siga mostrando cuando pasa el tiempo sin armar un carrito de ese proveedor, y que valga desde cualquier sesión. El `manualIibbPercent` cargado en Configuración le sigue ganando.
 
+### [FEATURE] Formas de pago con descuento o recargo
+- **Método**: PUT (alta y edición) · POST (aprendizaje)
+- **Ruta**: `/providers/:provider/config` (campo `paymentOptions`) · `POST /my/providers/:provider/observed-payment-options`
+- **Auth**: Bearer usuario con organización
+- **Body / Params**: `paymentOptions: [{ id?, label, percent, kind: "DISCOUNT" | "SURCHARGE" }]` — lista completa, lo que no venga se borra. El POST manda `{ options }` con la misma forma.
+- **Respuesta esperada**: `ProviderConfig` con `paymentOptions` normalizadas · el POST devuelve el `PurchasePolicyView` del proveedor
+- **Estado**: IMPLEMENTADO
+- **Notas**: Son **solo informativas**: NODO no elige la forma de pago ni la manda al confirmar el carrito, igual que el precio de esquema o el de offline. Se muestran como otra opción de precio en las cards y en la ficha; un recargo nunca tacha el precio final. Lo que informa el portal al cotizar entra por el POST y no pisa lo cargado a mano.
+
 ### [FEATURE] Equipo de la organización (Tipo 1 autónomo)
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `/my/org` · `/my/team` · `/my/team/:membershipId` · `/my/team/:membershipId/password` · `/my/team/:membershipId/managed-brands`

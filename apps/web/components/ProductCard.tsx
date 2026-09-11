@@ -17,6 +17,7 @@ import { linePricing, formatAlicuota } from "@/lib/tax";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
+import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options";
 import { displayAmountFromPricing, displayTaxBadge, displayTaxTitle } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import {
@@ -125,6 +126,17 @@ export default function ProductCard({
           return `Esquema ${money(sd.displayUsd)}${disc}`;
         })()
       : null;
+
+  /**
+   * Precios por forma de pago. No tachan el precio de arriba: son otra opción
+   * de compra, no un reemplazo. Un recargo sube y un descuento baja.
+   */
+  const payPrices = pricedPaymentOptions(policy?.paymentOptions).map((o) => ({
+    id: o.id,
+    label: o.label,
+    kind: o.kind,
+    text: `${o.label} ${money(applyPaymentOption(displayUsd, o))} (${o.kind === "SURCHARGE" ? "+" : "−"}${o.percent}%)`,
+  }));
 
   const schemeDiscount =
     showingScheme && policy?.schemeDiscountPercent != null && policy.schemeDiscountPercent > 0
@@ -278,6 +290,18 @@ export default function ProductCard({
           ) : schemeDiscount ? (
             <span className="is-alt">{schemeDiscount}</span>
           ) : null}
+        </p>
+
+        {/* Formas de pago: fila fija, vacía cuando el distribuidor no tiene */}
+        <p className="pc__pay pc-mono" title={payPrices.map((p) => p.text).join(" · ")}>
+          {payPrices.slice(0, 2).map((p) => (
+            <span
+              key={p.id}
+              className={p.kind === "SURCHARGE" ? "is-up" : "is-down"}
+            >
+              {p.text}
+            </span>
+          ))}
         </p>
 
         <div className="pc__flags">

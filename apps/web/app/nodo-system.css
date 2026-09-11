@@ -167,6 +167,7 @@
     1.75rem     /* precio */
     1.05rem     /* desglose */
     1.05rem     /* aviso */
+    1.05rem     /* formas de pago */
     1.5rem      /* estado */
     1fr         /* empuja el pie */
     auto;       /* sincronizacion */
@@ -244,6 +245,26 @@ a.pc__name:hover { color: var(--pc-accent); }
 }
 .pc__aside .is-alt { color: var(--pc-accent); }
 .pc__aside .is-warn { color: var(--pc-warn); }
+
+/* Precios por forma de pago. Van al lado del precio, no lo reemplazan: un
+   recargo tampoco tacha nada, es otra opcion de compra. */
+.pc__pay {
+  align-self: stretch;
+  line-height: 1.05rem;
+  font-size: 0.63rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.pc__pay > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pc__pay .is-down { color: var(--pc-good); }
+.pc__pay .is-up { color: var(--pc-warn); }
 
 /* Estirada, no centrada: una fila de estado vacia colapsa a altura cero y
    dejaria de alinear con las tarjetas que si tienen etiquetas. */
@@ -329,7 +350,7 @@ a.pc__name:hover { color: var(--pc-accent); }
 
 @media (max-width: 380px) {
   .pc__body {
-    grid-template-rows: 2.3rem 1.1rem 1.75rem 1.05rem 1.05rem 2.9rem 1fr auto;
+    grid-template-rows: 2.3rem 1.1rem 1.75rem 1.05rem 1.05rem 1.05rem 2.9rem 1fr auto;
   }
   .pc__flags { flex-wrap: wrap; align-content: center; }
 }

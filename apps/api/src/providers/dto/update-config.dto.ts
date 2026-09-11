@@ -1,6 +1,49 @@
 import { Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, Max, Min, ValidateIf } from "class-validator";
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateIf,
+  ValidateNested,
+} from "class-validator";
 import { IvaAdjustment, MissingProductAction, PriceChannel, ZeroStockAction } from "@prisma/client";
+import { PAYMENT_OPTION_KINDS, type PaymentOptionKind } from "@nodo/shared";
+
+/** Una forma de pago con su descuento o recargo. Solo informativa. */
+export class ProviderPaymentOptionDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  id?: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  label!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percent!: number;
+
+  @IsIn(PAYMENT_OPTION_KINDS)
+  kind!: PaymentOptionKind;
+
+  @IsOptional()
+  @IsIn(["cart", "manual"])
+  source?: "cart" | "manual";
+}
 
 export class UpdateProviderConfigDto {
   @IsOptional()
@@ -74,4 +117,12 @@ export class UpdateProviderConfigDto {
   @Min(0)
   @Max(100)
   schemeDiscountPercent?: number | null;
+
+  /** Lista completa: lo que no venga acá se borra. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => ProviderPaymentOptionDto)
+  paymentOptions?: ProviderPaymentOptionDto[];
 }

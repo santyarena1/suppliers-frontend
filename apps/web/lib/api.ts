@@ -1,5 +1,6 @@
 import axios from "axios";
 import { getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
+import type { PaymentOption } from "./payment-options";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -346,6 +347,8 @@ export interface VisibleProvider {
     /** Última percepción (%) que cotizó el portal, recordada por el servidor. */
     learnedIibbPercent?: number | null;
     learnedIibbAt?: string | null;
+    /** Formas de pago con descuento o recargo. Solo informativas. */
+    paymentOptions?: PaymentOption[];
     acceptsOffline: boolean;
     acceptsScheme: boolean;
     offlineIvaAdjustment: IvaAdjustment | null;
@@ -402,6 +405,9 @@ export interface RedeemedCode {
 
 export const myApi = {
   providers: () => api.get<VisibleProvider[]>("/my/providers"),
+  /** Avisa qué formas de pago informó el portal. No pisan las cargadas a mano. */
+  recordObservedPaymentOptions: (provider: Provider, options: PaymentOption[]) =>
+    api.post(`/my/providers/${provider}/observed-payment-options`, { options }),
   /** Avisa qué percepción cotizó el portal, para recordarla entre consultas. */
   recordObservedIibb: (provider: Provider, percent: number) =>
     api.post(`/my/providers/${provider}/observed-iibb`, { percent }),
@@ -1139,6 +1145,8 @@ export interface ProviderConfig {
   priceChannel: PriceChannel;
   manualIibbPercent: number | null;
   manualPerceptionsPercent: number | null;
+  /** Formas de pago con descuento o recargo, tal como las ve este comercio. */
+  paymentOptions: PaymentOption[];
   syncIntervalMinutes: number;
   missingProductAction: MissingProductAction;
   zeroStockAction: ZeroStockAction;
