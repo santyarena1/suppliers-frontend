@@ -8,3 +8,4 @@ export * from "./seller-order-text";
 export * from "./tgs";
 export * from "./news";
 export * from "./payment-options";
+export * from "./nb-cta-summary";

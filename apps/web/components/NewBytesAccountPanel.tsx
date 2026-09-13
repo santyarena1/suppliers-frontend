@@ -17,6 +17,7 @@ import { draftItems, draftLines, draftTotals } from "@/components/account/draftD
 import { mergeNbOrder, nbOrderAmountLines, nbOrderHeaderLines, nbOrderItems } from "@/components/account/nbOrderDetail";
 import { splitLumpVat, taxBreakdownLines } from "@/components/account/accountTaxBreakdown";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
+import { nbCtaSummary, nbCtaSummaryCards } from "@/components/account/nbCtaSummary";
 import {
   useAccountHistoryState,
   useClampPage,
@@ -198,6 +199,10 @@ export default function NewBytesAccountPanel() {
     return s != null ? formatAccountSum(s, "USD") : null;
   })();
 
+  // Resumen del período: el saldo solo no dice qué pasó este mes.
+  const ctaSummary =
+    section === "cta" ? nbCtaSummary(paged.filtered as NewBytesComprobante[]) : null;
+
   const ready = rowsForSection != null;
   const openOrder = detail?.kind === "order" ? (orderFull ?? detail.row) : null;
   const openAmounts = openOrder ? nbOrderAmountLines(openOrder) : null;
@@ -220,15 +225,37 @@ export default function NewBytesAccountPanel() {
         amountTotal={amountTotal}
         hint="Pedidos y facturas de nb.com.ar. Ver más carga productos e importes del portal. No hay adjuntar pago."
         header={
-          section === "cta" && balance != null ? (
-            <div className="flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-sky-400" />
-              <div>
-                <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
-                <p className={`text-xl font-bold tabular-nums ${balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
-                  {balance.toLocaleString("es-AR", { style: "currency", currency: "USD" })}
-                </p>
-              </div>
+          section === "cta" && (balance != null || ctaSummary) ? (
+            <div className="flex flex-wrap items-end gap-3">
+              {balance != null && (
+                <div className="flex items-center gap-2 min-w-[11rem]">
+                  <Wallet className="w-4 h-4 text-sky-400" />
+                  <div>
+                    <span className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Saldo</span>
+                    <p className={`text-xl font-bold tabular-nums ${balance < 0 ? "text-red-400" : "text-emerald-700 dark:text-emerald-400"}`}>
+                      {balance.toLocaleString("es-AR", { style: "currency", currency: "USD" })}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {ctaSummary && (
+                <div className="flex flex-wrap gap-2">
+                  {nbCtaSummaryCards(ctaSummary).map((c) => (
+                    <div
+                      key={c.label}
+                      className="min-w-[10rem] flex-1 max-w-[15rem] rounded-xl border border-surface-800 bg-surface-900/50 px-3 py-2.5"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 leading-tight">
+                        {c.label}
+                      </p>
+                      <p className="text-[11px] text-surface-500 mt-0.5 leading-snug">{c.hint}</p>
+                      <p className="text-sm font-bold tabular-nums text-white mt-1.5">
+                        {c.value.toLocaleString("es-AR", { style: "currency", currency: "USD" })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ) : undefined
         }
@@ -348,6 +375,12 @@ function nbComprobanteTotals(m: NewBytesComprobante) {
   });
 }
 
+/** Importe en dólares, o un guion cuando el portal no lo manda. */
+function usd(value: number | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `USD ${value.toLocaleString("es-AR", { maximumFractionDigits: 2 })}`;
+}
+
 function MovementsTable({
   rows,
   onOpen,
@@ -364,6 +397,8 @@ function MovementsTable({
             <th className="text-left font-semibold px-2 py-2">Tipo</th>
             <th className="text-left font-semibold px-2 py-2">Número</th>
             <th className="text-left font-semibold px-2 py-2">Detalle</th>
+            <th className="text-right font-semibold px-2 py-2">Neto</th>
+            <th className="text-right font-semibold px-2 py-2">Percep.</th>
             <th className="text-right font-semibold px-2 py-2">Total</th>
             <th></th>
           </tr>
@@ -377,9 +412,11 @@ function MovementsTable({
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{m.invoiceNumber || "—"}</td>
               <td className="px-2 py-2 text-surface-400">{m.invoiceLabel || "—"}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">
-                {m.totalUsd != null ? `USD ${m.totalUsd.toLocaleString("es-AR", { maximumFractionDigits: 2 })}` : "—"}
-              </td>
+              {/* El portal ya manda neto y percepciones en cada comprobante; solo
+                  se mostraba el total, que es donde justamente no se ve el impuesto. */}
+              <td className="px-2 py-2 text-right tabular-nums text-surface-400">{usd(m.subtotalUsd)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-400">{usd(m.perceptions)}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{usd(m.totalUsd)}</td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(m)} /></td>
             </tr>
           ))}
