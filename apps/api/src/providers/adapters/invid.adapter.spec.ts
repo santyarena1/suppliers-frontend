@@ -1,4 +1,4 @@
-import { extractDetailPatch } from "./invid.adapter";
+import { extractDetailPatch, invidIvaPercent } from "./invid.adapter";
 
 describe("extractDetailPatch", () => {
   it("marca stock 0 si la ficha de la tienda dice out of stock", () => {
@@ -31,5 +31,32 @@ describe("extractDetailPatch", () => {
     );
     expect(patch.category).toBe("Electrodomésticos");
     expect(patch.subcategory).toBe("Micrófonos");
+  });
+});
+
+describe("invidIvaPercent", () => {
+  it("acepta la alícuota cuando la planilla manda el porcentaje", () => {
+    expect(invidIvaPercent(100, 21)).toBe(21);
+    expect(invidIvaPercent(100, 10.5)).toBe(10.5);
+    expect(invidIvaPercent(100, 0)).toBe(0);
+  });
+
+  it("deriva la alícuota cuando manda el importe", () => {
+    expect(invidIvaPercent(1000, 210)).toBe(21);
+    expect(invidIvaPercent(1000, 105)).toBe(10.5);
+  });
+
+  it("descarta lo que no puede ser un IVA en vez de inventarlo", () => {
+    // El caso real: la columna venía corrida y traía 80 veces el neto.
+    expect(invidIvaPercent(3.29, 263.67)).toBeUndefined();
+    expect(invidIvaPercent(100, 8014.3)).toBeUndefined();
+    expect(invidIvaPercent(undefined, 8014.3)).toBeUndefined();
+    expect(invidIvaPercent(0, 500)).toBeUndefined();
+  });
+
+  it("sin dato no devuelve nada", () => {
+    expect(invidIvaPercent(100, undefined)).toBeUndefined();
+    expect(invidIvaPercent(100, Number.NaN)).toBeUndefined();
+    expect(invidIvaPercent(100, -5)).toBeUndefined();
   });
 });

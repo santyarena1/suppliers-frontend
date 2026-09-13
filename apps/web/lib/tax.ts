@@ -72,6 +72,22 @@ function amountFromRate(net: number, pctOrAmount: number): { percent: number | n
   };
 }
 
+/**
+ * Tope de credibilidad de una alícuota.
+ *
+ * El IVA argentino más alto es 27% y los internos rara vez pasan de 20. Cuando
+ * una planilla trae la columna corrida, el valor que cae en el lugar del
+ * impuesto puede ser un precio: Invid llegó a informar un "IVA" de 80 veces el
+ * neto, que en el carrito se convertía en un millón de pesos de impuesto
+ * inventado. Un número así no es un impuesto mal calculado, es otro dato.
+ */
+const MAX_TAX_PERCENT = 100;
+
+/** false cuando el número no puede ser una alícuota de nada. */
+function plausibleTaxPercent(percent: number | null): boolean {
+  return percent == null || (Number.isFinite(percent) && percent <= MAX_TAX_PERCENT);
+}
+
 function foldAccents(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -129,11 +145,17 @@ function fromInvidRow(row: unknown[], net: number): TaxLine[] | null {
   const lines: TaxLine[] = [];
   if (iva != null) {
     const t = amountFromRate(net, iva);
-    lines.push({ kind: "iva", label: "IVA", percent: t.percent, unitAmount: t.amount });
+    // Preferimos el producto sin alícuota antes que con una inventada: sin dato
+    // se ve "sin alícuota"; con un dato falso se cobra de más y no se nota.
+    if (plausibleTaxPercent(t.percent)) {
+      lines.push({ kind: "iva", label: "IVA", percent: t.percent, unitAmount: t.amount });
+    }
   }
   if (internos != null && internos !== 0) {
     const t = amountFromRate(net, internos);
-    lines.push({ kind: "internos", label: "Imp. internos", percent: t.percent, unitAmount: t.amount });
+    if (plausibleTaxPercent(t.percent)) {
+      lines.push({ kind: "internos", label: "Imp. internos", percent: t.percent, unitAmount: t.amount });
+    }
   }
   return lines.length ? lines : null;
 }
@@ -156,6 +178,7 @@ function percepcionFromRaw(raw: Record<string, unknown>, net: number): TaxLine |
   if (perc == null || perc === 0) return null;
   const t = amountFromRate(net, perc);
   if (t.amount <= 0.0001) return null;
+  if (!plausibleTaxPercent(t.percent)) return null;
   return { kind: "iibb", label: "Percepciones", percent: t.percent, unitAmount: t.amount };
 }
 

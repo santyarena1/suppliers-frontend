@@ -62,6 +62,8 @@ type Totals = {
   quotedShipping: boolean;
   taxUSD: number;
   totalUSD: number;
+  /** Cuánto más cotizó el portal por encima de nuestro cálculo. */
+  quotedAdjustUSD: number;
   itemCount: number;
   productCount: number;
   perceptionLines: PerceptionLine[];
@@ -84,6 +86,7 @@ const EMPTY_TOTALS: Totals = {
   iibbUSD: 0,
   otherUSD: 0,
   shippingUSD: 0,
+  quotedAdjustUSD: 0,
   quotedShipping: false,
   taxUSD: 0,
   totalUSD: 0,
@@ -250,8 +253,13 @@ function CartPageInner() {
     iibbUSD += shippingIibb;
     if (extra?.perceptionsUSD) iibbUSD += extra.perceptionsUSD;
     const taxUSD = ivaUSD + internosUSD + iibbUSD + otherUSD;
-    let totalUSD = withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD;
+    const calculadoUSD = withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD;
+    let totalUSD = calculadoUSD;
+    // El portal manda la última palabra sobre su propio total. Cuando cotiza más
+    // que nuestro cálculo, la diferencia se muestra en vez de dejar un resumen
+    // cuyos renglones no suman el total que figura al costado.
     if (withIva && extra?.totalUSD != null) totalUSD = Math.max(totalUSD, extra.totalUSD);
+    const quotedAdjustUSD = Math.max(0, totalUSD - calculadoUSD);
     return {
       subtotalUSD,
       ivaUSD,
@@ -262,6 +270,7 @@ function CartPageInner() {
       quotedShipping: extra?.shippingUSD != null,
       taxUSD,
       totalUSD,
+      quotedAdjustUSD,
       itemCount: its.reduce((s, it) => s + it.qty, 0),
       productCount: its.length,
       perceptionLines,
@@ -318,19 +327,21 @@ function CartPageInner() {
         totalUSD: nbQuoted.total,
       }
     : undefined;
+  /**
+   * Percepción de Air: solo la que Air informa.
+   *
+   * Antes, cuando no venía el dato, se tomaba como percepción todo lo que
+   * sobraba de la cotización (total menos neto, IVA e internos). Ahí cae
+   * cualquier cosa que Air cobre y nosotros no descontemos —envío, redondeos,
+   * otro impuesto—, así que aparecían percepciones que no existen; peor todavía,
+   * ese sobrante se aprendía como alícuota del proveedor y después se aplicaba
+   * en la búsqueda. El sobrante ahora se muestra como ajuste del portal, que es
+   * lo que es: una diferencia que no sabemos desarmar.
+   */
   const airPerc =
-    airQuoted == null
-      ? 0
-      : typeof airQuoted.perceptions === "number" && airQuoted.perceptions > 0.0005
-        ? airQuoted.perceptions
-        : Math.max(
-            0,
-            (airQuoted.total ?? 0) -
-              (airQuoted.subtotal ?? 0) -
-              (airQuoted.iva21 ?? 0) -
-              (airQuoted.iva105 ?? 0) -
-              (airQuoted.ii ?? 0)
-          );
+    airQuoted != null && typeof airQuoted.perceptions === "number" && airQuoted.perceptions > 0.0005
+      ? airQuoted.perceptions
+      : 0;
   const airExtra: TaxExtra | undefined = airQuoted
     ? {
         perceptionsUSD: airPerc > 0.0005 ? airPerc : 0,
@@ -463,6 +474,7 @@ function CartPageInner() {
       quotedShipping: acc.quotedShipping || t.quotedShipping,
       taxUSD: acc.taxUSD + t.taxUSD,
       totalUSD: acc.totalUSD + t.totalUSD,
+      quotedAdjustUSD: acc.quotedAdjustUSD + t.quotedAdjustUSD,
       itemCount: acc.itemCount + t.itemCount,
       productCount: acc.productCount + t.productCount,
       perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
@@ -1251,17 +1263,33 @@ function SummaryBar({
                 Internos <span className="tabular-nums text-surface-200">{fmt(totals.internosUSD, 2)}</span>
               </span>
             )}
+            {totals.otherUSD > 0.004 && (
+              <span className="text-surface-500">
+                Otros imp. <span className="tabular-nums text-surface-200">{fmt(totals.otherUSD, 2)}</span>
+              </span>
+            )}
+            {totals.quotedAdjustUSD > 0.004 && (
+              <span className="text-surface-500" title="El portal del distribuidor cotizó más que el cálculo de NODO">
+                Ajuste del portal{" "}
+                <span className="tabular-nums text-surface-200">{fmt(totals.quotedAdjustUSD, 2)}</span>
+              </span>
+            )}
             {totals.iibbUSD > 0.004 && (
               <span className="text-surface-500">
                 {perceptionGroupLabel(totals.perceptionLines.length ? totals.perceptionLines : [{ label: "Percepciones", amount: totals.iibbUSD }])}{" "}
                 <span className="tabular-nums text-surface-200">{fmt(totals.iibbUSD, 2)}</span>
               </span>
             )}
-            {totals.perceptionLines.length > 1 && totals.perceptionLines.map((line, i) => (
-              <span key={`${line.label}-${i}`} className="text-surface-600 text-xs">
-                {line.label} <span className="tabular-nums">{fmt(line.amount, 2)}</span>
-              </span>
-            ))}
+            {/* El desglose se agrupa por concepto. Antes se listaba una línea por
+                cada percepción de cada proveedor: en un carrito de cuatro
+                distribuidores eran ocho renglones diciendo "Percepciones", todos
+                parte del mismo total que ya figura arriba. */}
+            {groupPerceptionLines(totals.perceptionLines).length > 1 &&
+              groupPerceptionLines(totals.perceptionLines).map((line) => (
+                <span key={line.label} className="text-surface-600 text-xs">
+                  {line.label} <span className="tabular-nums">{fmt(line.amount, 2)}</span>
+                </span>
+              ))}
           </>
         )}
         {withIva && showInvidNote && !totals.quotedShipping && (
@@ -1279,6 +1307,25 @@ function SummaryBar({
       </div>
     </div>
   );
+}
+
+/**
+ * Junta las percepciones que dicen lo mismo.
+ *
+ * Cada proveedor aporta su propia línea y varias se llaman igual
+ * ("Percepciones"), así que el desglose del resumen terminaba repitiendo el
+ * mismo rótulo media docena de veces. Se suman por rótulo y se ordena de mayor
+ * a menor, que es el orden en el que se miran.
+ */
+function groupPerceptionLines(lines: PerceptionLine[]): PerceptionLine[] {
+  const porRotulo = new Map<string, number>();
+  for (const line of lines) {
+    if (!(line.amount > 0.0005)) continue;
+    porRotulo.set(line.label, (porRotulo.get(line.label) ?? 0) + line.amount);
+  }
+  return [...porRotulo.entries()]
+    .map(([label, amount]) => ({ label, amount }))
+    .sort((a, b) => b.amount - a.amount);
 }
 
 function ProviderSection({
