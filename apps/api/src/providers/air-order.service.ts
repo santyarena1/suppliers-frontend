@@ -143,7 +143,10 @@ export class AirOrderService {
         .filter((it) => it.codiart)
         .map((it) => ({ code: it.codiart, qty: it.cantidad, name: it.descart || undefined }));
       previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "AIR");
-      const reconciled = reconcilePortalCart(input.items, portalLines, previousSnapshot);
+      // Probado contra el portal: el pedido abierto que devuelve get_pedido("0") no
+      // persiste entre logins (la segunda verificación lo lee vacío). Es por sesión,
+      // como Invid: un canasto vacío es una sesión nueva, no un borrado.
+      const reconciled = reconcilePortalCart(input.items, portalLines, previousSnapshot, { sessionScoped: true });
       items = reconciled.merged;
       sync = reconciled.changes;
       this.logger.log(
