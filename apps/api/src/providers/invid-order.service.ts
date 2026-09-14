@@ -693,7 +693,15 @@ export class InvidOrderService {
       percepcionPercent: prepared.percepcionPercent,
       shipping: quoted.shippingCost,
     });
-    // El carrito del portal queda cargado a propósito: es el espejo del de NODO.
+    // El carrito de Invid es por sesión de login y el portal a veces hereda el
+    // de una sesión vencida: si esta queda cargada, el comercio puede entrar
+    // al portal y encontrarse los productos de NODO sumados a los suyos. Se
+    // deja vacía; el borrador la vuelve a armar al confirmar.
+    try {
+      await this.clearCart(quoted.cookie);
+    } catch (err) {
+      this.logger.warn(`No se pudo vaciar el carrito de Invid después de cotizar: ${String(err)}`);
+    }
     return {
       items: prepared.items,
       sync: prepared.sync,

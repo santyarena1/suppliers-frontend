@@ -260,7 +260,21 @@ export function reconcilePortalCart(
   snapshot: Record<string, number> | null
 ): { merged: CartSyncItem[]; changes: CartSyncChanges } {
   const changes: CartSyncChanges = { removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [] };
-  if (!snapshot) return { merged: nodo.map((i) => ({ code: i.code, qty: i.qty, name: i.name })), changes };
+  const asIs = () => ({ merged: nodo.map((i) => ({ code: i.code, qty: i.qty, name: i.name })), changes });
+  if (!snapshot) return asIs();
+  // El carrito de Invid vive en la sesión de login: un login nuevo suele
+  // arrancar vacío y solo a veces hereda el carrito de una sesión anterior.
+  // Un portal vacío no dice "borraron todo", dice "sesión nueva": se toma el
+  // carrito de NODO tal cual. Solo se concilia cuando el portal trae algo de
+  // lo que NODO dejó (señal de que es el mismo carrito).
+  const sharesSnapshot = portal.some((p) => p.code in snapshot);
+  if (!sharesSnapshot) {
+    for (const item of portal) {
+      if (nodo.some((n) => n.code === item.code)) continue;
+      changes.addedInPortal.push({ code: item.code, qty: item.qty, name: item.name });
+    }
+    return { merged: [...asIs().merged, ...changes.addedInPortal], changes };
+  }
 
   const byNodo = new Map(nodo.map((i) => [i.code, i]));
   const byPortal = new Map(portal.map((i) => [i.code, i]));

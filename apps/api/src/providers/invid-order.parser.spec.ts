@@ -531,6 +531,18 @@ describe("invid-order.parser", () => {
       expect(nextCartSnapshot([{ code: "A", qty: 6 }], settled.changes, { A: 1, B: 1 })).toEqual({ A: 6 });
     });
 
+    it("un portal vacío es una sesión nueva, no un borrado: manda NODO", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 });
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "B", qty: 2 }]);
+      expect(r.changes.removedInPortal).toEqual([]);
+    });
+
+    it("un portal ajeno a la foto solo aporta lo que trae de más", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "P", qty: 2, name: "p" }], { A: 1, B: 2 });
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "P", qty: 2, name: "p" }]);
+      expect(r.changes).toEqual({ removedInPortal: [], addedInPortal: [{ code: "P", qty: 2, name: "p" }], qtyChangedInPortal: [] });
+    });
+
     it("la foto es un mapa código → cantidad", () => {
       expect(cartSnapshotOf([{ code: "A", qty: 2 }, { code: "A", qty: 1 }, { code: "B", qty: 3 }])).toEqual({ A: 3, B: 3 });
     });
