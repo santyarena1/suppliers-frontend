@@ -1,5 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
+import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges } from "./portal-cart-sync";
 import {
   AIR_DELIVERIES,
   AIR_PAYMENTS,
@@ -83,7 +85,10 @@ function deliveryLabel(value: string, transporte?: string) {
 export class AirOrderService {
   private readonly logger = new Logger(AirOrderService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cartSnapshots: PortalCartSnapshotService
+  ) {}
 
   async checkoutOptions(credentials: Record<string, string>) {
     const api = await AirPortalClient.login(credentials);
@@ -106,9 +111,8 @@ export class AirOrderService {
     return row ? mapProviderDraft(row) : null;
   }
 
-  private async syncCanasto(api: AirPortalClient, items: AirCartItems["items"]): Promise<AirCart> {
-    if (items.length === 0) throw new BadRequestException("No hay productos de Air en el pedido");
-    let cart = await api.getPedido("0");
+  private async syncCanasto(api: AirPortalClient, items: AirCartItems["items"], current?: AirCart): Promise<AirCart> {
+    let cart = current ?? await api.getPedido("0");
     for (const existing of [...cart.items]) {
       if (existing.renglon) {
         cart = await api.delItem(existing.renglon, cart.nrocompro);
@@ -120,9 +124,38 @@ export class AirOrderService {
     return cart;
   }
 
-  async preview(credentials: Record<string, string>, input: AirDraftInput) {
+  /**
+   * Con `reconcileFor` (verificación desde el carrito de NODO) el pedido
+   * abierto de la cuenta de Air se lee y se concilia contra la foto de la
+   * última vez: lo que borraron o cambiaron en el portal vuelve a NODO en
+   * `sync`. Sin `reconcileFor` (confirmar) el canasto es lo que NODO manda.
+   */
+  async preview(credentials: Record<string, string>, input: AirDraftInput, reconcileFor?: { tenantId: string }) {
+    if (input.items.length === 0) throw new BadRequestException("No hay productos de Air en el pedido");
     const api = await AirPortalClient.login(credentials);
-    const cart = await this.syncCanasto(api, input.items);
+    let items = input.items;
+    let sync: CartSyncChanges | undefined;
+    let current: AirCart | undefined;
+    let previousSnapshot: Record<string, number> | null = null;
+    if (reconcileFor) {
+      current = await api.getPedido("0");
+      const portalLines = current.items
+        .filter((it) => it.codiart)
+        .map((it) => ({ code: it.codiart, qty: it.cantidad, name: it.descart || undefined }));
+      previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "AIR");
+      const reconciled = reconcilePortalCart(input.items, portalLines, previousSnapshot);
+      items = reconciled.merged;
+      sync = reconciled.changes;
+      this.logger.log(
+        `Air conciliación: portal=${JSON.stringify(portalLines.map((l) => [l.code, l.qty]))} ` +
+        `nodo=${JSON.stringify(input.items.map((i) => [i.code, i.qty]))} foto=${JSON.stringify(previousSnapshot)} ` +
+        `→ ${JSON.stringify(items.map((i) => [i.code, i.qty]))} cambios=${JSON.stringify(sync)}`
+      );
+    }
+    const cart = await this.syncCanasto(api, items, current);
+    if (reconcileFor && sync) {
+      await this.cartSnapshots.save(reconcileFor.tenantId, "AIR", nextCartSnapshot(items, sync, previousSnapshot));
+    }
     if (input.sucursal) await api.setPrefer("sucursal", input.sucursal, cart.nrocompro);
     if (input.vendedor) await api.setPrefer("vendedor", input.vendedor, cart.nrocompro);
     if (input.pago) await api.setPrefer("pago", input.pago, cart.nrocompro);
@@ -132,6 +165,7 @@ export class AirOrderService {
     const refreshed = await api.getPedido(cart.nrocompro);
     return {
       ...publicCart(refreshed),
+      sync,
       options: await api.checkoutOptions(),
       paymentLabel: paymentLabel(input.pago || refreshed.pago),
       deliveryLabel: deliveryLabel(input.entrega || refreshed.entrega, input.transporte || refreshed.transporte),
@@ -239,6 +273,9 @@ export class AirOrderService {
       throw new BadGatewayException(record.errorMessage || "No se pudo enviar el pedido en Air");
     }
 
+    await this.cartSnapshots.clear(author.tenantId, "AIR").catch((err: unknown) =>
+      this.logger.warn(`No se pudo limpiar la foto del carrito de Air: ${String(err)}`)
+    );
     const saved = {
       status: "CREATED",
       invidOrderNumber: cart.nrocompro,

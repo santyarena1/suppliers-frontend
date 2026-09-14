@@ -404,7 +404,7 @@ export class ProvidersController {
       entrega: dto.entrega ?? "01",
       transporte: dto.transporte,
       notes: dto.notes,
-    });
+    }, { tenantId: tenant.tenantId });
   }
 
   @Post("providers/AIR/checkout/draft")

@@ -17,6 +17,8 @@ import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { useBackgroundCheckout } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
+import { usePortalCartSync } from "@/lib/portalCartSync";
+import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -55,6 +57,7 @@ export default function AirCheckoutPanel({
   const submitLock = useRef(false);
   const seeded = useRef<string | null>(null);
   const warm = useCheckoutWarmup("AIR", cartItems);
+  const portalSync = usePortalCartSync("AIR");
   const {
     background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
     openConfirm, acceptResult, leaveInBackground, finishOrder,
@@ -81,6 +84,8 @@ export default function AirCheckoutPanel({
       setEntrega(d.entrega);
       setError(null);
       setLoading(false);
+      // Lo que cambió en el canasto de la cuenta de Air se refleja acá.
+      void portalSync.apply(d.preview.sync, items);
       return;
     }
     if (warm.status === "error" && seeded.current !== cartKey) {
@@ -92,6 +97,8 @@ export default function AirCheckoutPanel({
       setLoading(true);
       setError(null);
     }
+    // seed-once por cartKey: items/portalSync se leen del render en que llega el warm-up
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warm, cartKey]);
 
   const needsTransporte = entrega === "03" || entrega === "04";
@@ -138,6 +145,9 @@ export default function AirCheckoutPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      {portalSync.notice && (
+        <PortalSyncNotice providerLabel="Air" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] gap-3 items-end">
         <CheckoutField label="Sucursal" htmlFor="air-suc">
           <CheckoutSelect id="air-suc" value={sucursal} onChange={(e) => setSucursal(e.target.value)}>

@@ -1847,6 +1847,7 @@ export const grupoNucleoCheckoutApi = {
 };
 
 export interface AirCheckoutPreview {
+  sync?: PortalCartSync;
   nrocompro: string;
   items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
   subtotal: number;
