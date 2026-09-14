@@ -271,7 +271,10 @@ export class InvidOrderService {
     for (let i = 0; i < 50; i++) {
       const cart = await this.request(current, "GET", CART_URL);
       current = cart.cookie;
-      if (!/sacarItemCarrito\(\s*["']?1["']?\s*\)/.test(cart.data)) return current;
+      if (!/sacarItemCarrito\(\s*["']?1["']?\s*\)/.test(cart.data)) {
+        this.logger.log(`Invid clearCart: ${i} filas sacadas; quedan ${parseCartLines(cart.data).length}`);
+        return current;
+      }
       const removed = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
         params: { funcion: "sacar_carrito", indice: 1 },
       });
@@ -386,6 +389,12 @@ export class InvidOrderService {
       const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot);
       items = reconciled.merged;
       sync = reconciled.changes;
+      this.logger.log(
+        `Invid conciliación: portal=${JSON.stringify(portalLines.map((l) => [l.code, l.qty]))} ` +
+        `nodo=${JSON.stringify(requested.map((i) => [i.code, i.qty]))} foto=${JSON.stringify(previousSnapshot)} ` +
+        `→ ${JSON.stringify(items.map((i) => [i.code, i.qty]))} cambios=${JSON.stringify(sync)} ` +
+        `(html ${cart.data.length} bytes, filas item_=${(cart.data.match(/id=["']item_\d+/g) ?? []).length})`
+      );
     }
 
     cookie = await this.clearCart(cookie);
