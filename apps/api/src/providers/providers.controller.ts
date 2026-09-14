@@ -495,7 +495,7 @@ export class ProvidersController {
 
   @Post("providers/ELIT/checkout/preview")
   async elitPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: ElitCheckoutPreviewDto) {
-    return this.elitOrderService.preview(await this.credentialsOf(tenant, "ELIT"), dto);
+    return this.elitOrderService.preview(await this.credentialsOf(tenant, "ELIT"), dto, { tenantId: tenant.tenantId });
   }
 
   @Post("providers/ELIT/checkout/draft")

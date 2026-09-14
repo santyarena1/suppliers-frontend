@@ -532,15 +532,21 @@ describe("invid-order.parser", () => {
     });
 
     it("un portal vacío es una sesión nueva, no un borrado: manda NODO", () => {
-      const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 });
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 }, { sessionScoped: true });
       expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "B", qty: 2 }]);
       expect(r.changes.removedInPortal).toEqual([]);
     });
 
     it("un portal ajeno a la foto solo aporta lo que trae de más", () => {
-      const r = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "P", qty: 2, name: "p" }], { A: 1, B: 2 });
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "P", qty: 2, name: "p" }], { A: 1, B: 2 }, { sessionScoped: true });
       expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "P", qty: 2, name: "p" }]);
       expect(r.changes).toEqual({ removedInPortal: [], addedInPortal: [{ code: "P", qty: 2, name: "p" }], qtyChangedInPortal: [] });
+    });
+
+    it("con carrito por cuenta, vacío sí es borrado", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 });
+      expect(r.merged).toEqual([]);
+      expect(r.changes.removedInPortal).toEqual(["A", "B"]);
     });
 
     it("la foto es un mapa código → cantidad", () => {

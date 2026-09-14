@@ -1,7 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import axios, { type AxiosResponse } from "axios";
-import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
 import { decodeHttpText } from "./http-text";
 import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
 import {
@@ -130,7 +130,10 @@ export interface InvidDraftInput {
 export class InvidOrderService {
   private readonly logger = new Logger(InvidOrderService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cartSnapshots: PortalCartSnapshotService
+  ) {}
 
   private mergeCookies(current: string | undefined, setCookie: string[] | undefined): string {
     const map = new Map<string, string>();
@@ -330,29 +333,6 @@ export class InvidOrderService {
     return { cookie: res.cookie, validation: parsed };
   }
 
-  /** Foto del carrito del portal que NODO dejó en la última verificación, o null si nunca. */
-  private async loadCartSnapshot(tenantId: string): Promise<Record<string, number> | null> {
-    const row = await this.prisma.providerSyncConfig.findUnique({
-      where: { tenantId_provider: { tenantId, provider: "INVID" } },
-      select: { portalCartSnapshot: true },
-    });
-    const snap = row?.portalCartSnapshot;
-    if (!snap || typeof snap !== "object" || Array.isArray(snap)) return null;
-    const out: Record<string, number> = {};
-    for (const [code, qty] of Object.entries(snap as Record<string, unknown>)) {
-      if (typeof qty === "number" && Number.isFinite(qty)) out[code] = qty;
-    }
-    return out;
-  }
-
-  private async saveCartSnapshot(tenantId: string, snapshot: Record<string, number> | null) {
-    await this.prisma.providerSyncConfig.upsert({
-      where: { tenantId_provider: { tenantId, provider: "INVID" } },
-      create: { tenantId, provider: "INVID", portalCartSnapshot: snapshot ?? undefined, portalCartSyncedAt: new Date() },
-      update: { portalCartSnapshot: snapshot ?? Prisma.DbNull, portalCartSyncedAt: new Date() },
-    });
-  }
-
   /**
    * Arma el carrito real del portal con lo que hay que cotizar.
    *
@@ -385,8 +365,8 @@ export class InvidOrderService {
       const cart = await this.request(cookie, "GET", CART_URL);
       cookie = cart.cookie;
       const portalLines = parseCartLines(cart.data);
-      previousSnapshot = await this.loadCartSnapshot(reconcileFor.tenantId);
-      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot);
+      previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "INVID");
+      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot, { sessionScoped: true });
       items = reconciled.merged;
       sync = reconciled.changes;
       this.logger.log(
@@ -451,7 +431,7 @@ export class InvidOrderService {
 
     // Lo que quedó cargado en el portal es la foto para la próxima verificación.
     if (reconcileFor && sync) {
-      await this.saveCartSnapshot(reconcileFor.tenantId, nextCartSnapshot(addedItems, sync, previousSnapshot));
+      await this.cartSnapshots.save(reconcileFor.tenantId, "INVID", nextCartSnapshot(addedItems, sync, previousSnapshot));
     }
 
     const preparedItems = addedItems.map((item, idx) => {
@@ -903,7 +883,7 @@ export class InvidOrderService {
 
     if (created) {
       // El pedido se llevó el carrito del portal: la foto vieja ya no describe nada.
-      await this.saveCartSnapshot(author.tenantId, null).catch((err: unknown) =>
+      await this.cartSnapshots.clear(author.tenantId, "INVID").catch((err: unknown) =>
         this.logger.warn(`No se pudo limpiar la foto del carrito de Invid: ${String(err)}`)
       );
     }

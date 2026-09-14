@@ -1928,6 +1928,7 @@ export const airCheckoutApi = {
 };
 
 export interface ElitCheckoutPreview {
+  sync?: PortalCartSync;
   items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
   warehouses: { id: number; name: string }[];
   shippingMethods: {

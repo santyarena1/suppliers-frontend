@@ -20,6 +20,8 @@ import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { useBackgroundCheckout } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
+import { usePortalCartSync } from "@/lib/portalCartSync";
+import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -55,6 +57,7 @@ export default function ElitCheckoutPanel({
   const seeded = useRef<string | null>(null);
   const hydrated = useRef(false);
   const warm = useCheckoutWarmup("ELIT", cartItems);
+  const portalSync = usePortalCartSync("ELIT");
   const {
     background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
     openConfirm, acceptResult, leaveInBackground, finishOrder,
@@ -63,6 +66,8 @@ export default function ElitCheckoutPanel({
   function publishPreview(data: ElitCheckoutPreview | null) {
     setPreview(data);
     onPreviewed?.(data);
+    // Lo que cambió en el carrito de la cuenta de Elit se refleja acá.
+    if (data) void portalSync.apply(data.sync, items);
   }
 
   useEffect(() => {
@@ -167,6 +172,9 @@ export default function ElitCheckoutPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      {portalSync.notice && (
+        <PortalSyncNotice providerLabel="Elit" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] gap-3 items-end">
         <CheckoutField label="Depósito" htmlFor="elit-wh">
           <CheckoutSelect id="elit-wh" value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>

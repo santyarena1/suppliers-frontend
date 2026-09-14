@@ -1,5 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
+import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges } from "./portal-cart-sync";
 import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 import {
   ElitWebClient,
@@ -97,7 +99,10 @@ function publicSummary(summary: Record<string, unknown>, requested: ElitCartItem
 export class ElitOrderService {
   private readonly logger = new Logger(ElitOrderService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cartSnapshots: PortalCartSnapshotService
+  ) {}
 
   async listDrafts(tenantId: string) {
     const rows = await this.prisma.providerOrder.findMany({
@@ -115,9 +120,15 @@ export class ElitOrderService {
     return row ? mapProviderDraft(row) : null;
   }
 
-  private async syncCart(api: ElitWebClient, items: ElitCartItems["items"]) {
-    if (items.length === 0) throw new BadRequestException("No hay productos de Elit en el pedido");
+  /** Lo que la cuenta de Elit tiene hoy en el carrito (es por cuenta, no por sesión). */
+  private async readCart(api: ElitWebClient) {
     const current = elitData<Record<string, unknown>>(await api.getJson("cart"));
+    return { current, lines: mapElitCartDetails(current.details, []).filter((l) => l.code) };
+  }
+
+  /** Deja el carrito de la cuenta exactamente con `items` (vacía lo que había y carga). */
+  private async syncCart(api: ElitWebClient, items: ElitCartItems["items"], current?: Record<string, unknown>) {
+    if (!current) current = (await this.readCart(api)).current;
     for (const row of unwrapList(current.details)) {
       const rec = asRecord(row) ?? {};
       const code = asNumber(rec.code);
@@ -154,14 +165,43 @@ export class ElitOrderService {
     await api.postJson("cart/option", body);
   }
 
-  async preview(credentials: Record<string, string>, input: ElitCartItems) {
+  /**
+   * Con `reconcileFor` (verificación desde el carrito de NODO) el carrito de
+   * la cuenta de Elit se lee y se concilia contra la foto de la última vez:
+   * lo que borraron o cambiaron en el portal vuelve a NODO en `sync`. Sin
+   * `reconcileFor` (confirmar un pedido) el carrito se arma con lo que NODO
+   * manda, como siempre.
+   */
+  async preview(credentials: Record<string, string>, input: ElitCartItems, reconcileFor?: { tenantId: string }) {
+    if (input.items.length === 0) throw new BadRequestException("No hay productos de Elit en el pedido");
     const api = await ElitWebClient.login(credentials);
-    await this.syncCart(api, input.items);
+    let items = input.items;
+    let sync: CartSyncChanges | undefined;
+    let current: Record<string, unknown> | undefined;
+    let previousSnapshot: Record<string, number> | null = null;
+    if (reconcileFor) {
+      const cart = await this.readCart(api);
+      current = cart.current;
+      previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "ELIT");
+      const reconciled = reconcilePortalCart(input.items, cart.lines, previousSnapshot);
+      items = reconciled.merged;
+      sync = reconciled.changes;
+      this.logger.log(
+        `Elit conciliación: portal=${JSON.stringify(cart.lines.map((l) => [l.code, l.qty]))} ` +
+        `nodo=${JSON.stringify(input.items.map((i) => [i.code, i.qty]))} foto=${JSON.stringify(previousSnapshot)} ` +
+        `→ ${JSON.stringify(items.map((i) => [i.code, i.qty]))} cambios=${JSON.stringify(sync)}`
+      );
+    }
+    await this.syncCart(api, items, current);
+    if (reconcileFor && sync) {
+      await this.cartSnapshots.save(reconcileFor.tenantId, "ELIT", nextCartSnapshot(items, sync, previousSnapshot));
+    }
     let summary = elitData<Record<string, unknown>>(await api.getJson("cart/summary"));
-    await this.applyOptions(api, input, summary);
+    await this.applyOptions(api, { ...input, items }, summary);
     summary = elitData<Record<string, unknown>>(await api.getJson("cart/summary"));
     return {
-      ...publicSummary(summary, input.items),
+      ...publicSummary(summary, items),
+      sync,
       note: "Al confirmar, Elit crea una nota de venta en tu cuenta (POST /cart/process por depósito). No se puede deshacer desde Nodo.",
     };
   }
@@ -250,6 +290,11 @@ export class ElitOrderService {
     const rows = unwrapList(elitData(raw)).length ? unwrapList(elitData(raw)) : unwrapList(raw);
     const first = asRecord(rows[0]) ?? asRecord(elitData(raw)) ?? asRecord(raw) ?? {};
     const orderNumber = asString(first.number) || asString(first.internalNumber);
+    if (orderNumber) {
+      await this.cartSnapshots.clear(author.tenantId, "ELIT").catch((err: unknown) =>
+        this.logger.warn(`No se pudo limpiar la foto del carrito de Elit: ${String(err)}`)
+      );
+    }
     const saved = {
       status: orderNumber ? "CREATED" : "FAILED",
       invidOrderNumber: orderNumber ?? null,

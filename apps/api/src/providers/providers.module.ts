@@ -22,6 +22,7 @@ import { SolutionBoxAccountService } from "./solution-box-account.service";
 import { SolutionBoxOrderService } from "./solution-box-order.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
+import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
 import { NewBytesOrderService } from "./new-bytes-order.service";
 import { GrupoNucleoOrderService } from "./grupo-nucleo-order.service";

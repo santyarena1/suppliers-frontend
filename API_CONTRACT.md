@@ -240,14 +240,14 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: El flag `advertisingEnabled` lo prende el superadmin (cuenta que paga). No lo cambia la org. Descubrimiento cerrado: un distro no vinculado solo aparece con campaña **ACTIVE** en el slot `discovery`. Cupo por espacio (`maxConcurrent`). UI: `/publicidad`, Admin → Publicidad.
 
-### [FEATURE] Carrito recíproco con el portal del distribuidor (Invid)
+### [FEATURE] Carrito recíproco con el portal del distribuidor (Invid, Elit)
 - **Método**: POST
-- **Ruta**: `/providers/INVID/checkout/preview`
+- **Ruta**: `/providers/INVID/checkout/preview` · `/providers/ELIT/checkout/preview`
 - **Auth**: Bearer, organización comercio con cuenta Invid cargada
 - **Body / Params**: igual que antes (`items`, `addressId`, `paymentOption`, `deliveryOption`).
 - **Respuesta esperada**: agrega `sync?: { removedInPortal: string[], addedInPortal: {code, qty, name?}[], qtyChangedInPortal: {code, qty, name?}[] }` con lo que cambió en el carrito del portal desde la última verificación. `items` es el carrito ya conciliado (puede venir vacío si en el portal borraron todo).
 - **Estado**: IMPLEMENTADO
-- **Notas**: El carrito del portal y el de NODO son el mismo. La API guarda en `ProviderSyncConfig.portalCartSnapshot` la foto (`{codigo: cantidad}`) de lo que dejó cargado en el portal; contra esa foto distingue "lo borraron en el portal" (se saca de NODO), "lo borraron en NODO" (se saca del portal), "lo agregaron en el portal" (se trae a NODO por código de catálogo) y "lo agregaron en NODO" (va al portal). Cantidad cambiada en el portal gana. Sin foto (primera vez, o después de confirmar un pedido) manda NODO. La foto no avanza sobre cambios que el frontend todavía no reflejó, así una cotización en segundo plano no los pierde. El portal queda cargado a propósito después de cotizar: es el espejo. El frontend aplica `sync` en `lib/portalCartSync.ts` y avisa con `PortalSyncNotice`. Pendiente replicar en Elit, Air, New Bytes, New Tree y Solution Box.
+- **Notas**: El carrito del portal y el de NODO son el mismo. La API guarda en `ProviderSyncConfig.portalCartSnapshot` la foto (`{codigo: cantidad}`) de lo que dejó cargado en el portal; contra esa foto distingue "lo borraron en el portal" (se saca de NODO), "lo borraron en NODO" (se saca del portal), "lo agregaron en el portal" (se trae a NODO por código de catálogo) y "lo agregaron en NODO" (va al portal). Cantidad cambiada en el portal gana. Sin foto (primera vez, o después de confirmar un pedido) manda NODO. La foto no avanza sobre cambios que el frontend todavía no reflejó, así una cotización en segundo plano no los pierde. **Invid**: el carrito vive en la sesión de login (probado: un login nuevo no ve el carrito del navegador y a veces hereda el de una sesión vencida), así que un portal vacío no cuenta como borrado (`sessionScoped`) y la sesión se vacía al terminar de cotizar para que el comercio no herede los productos de NODO. **Elit**: carrito por cuenta (`GET cart` / `cart/add` / `cart/update`), recíproco completo. Lógica común en `portal-cart-sync.ts` + `PortalCartSnapshotService`; el frontend aplica `sync` en `lib/portalCartSync.ts` y avisa con `PortalSyncNotice`. Pendiente: Air, New Bytes, New Tree y Solution Box.
 
 ### [FEATURE] Detalle de pedidos Invid (productos, TC, impuestos)
 - **Método**: GET
