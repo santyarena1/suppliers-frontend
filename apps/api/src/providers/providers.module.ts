@@ -50,6 +50,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     DiapstoreAdapter,
     NewTreeAdapter,
     SolutionBoxAdapter,
+    PortalCartSnapshotService,
     InvidAccountService,
     InvidOrderService,
     NewBytesAccountService,
