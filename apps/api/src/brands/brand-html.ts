@@ -5,6 +5,7 @@ export const BRAND_HUB_SLOTS = [
   "materiales",
   "capacitaciones",
   "hablar",
+  "contacto",
   "nombre",
   "logo",
   "noticias",
