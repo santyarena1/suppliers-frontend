@@ -12,6 +12,7 @@ import {
   collectFormFields,
   applyInvidOrderRates,
   parseInvidPaymentForm,
+  invidLineFromCumulative,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -419,5 +420,35 @@ describe("invid-order.parser", () => {
     expect(parseQuotedShipping(html, "6")).toBe(12.4);
     expect(parseQuotedShipping(html, "3")).toBe(0);
     expect(parseQuotedShipping(html, "1")).toBe(0);
+  });
+
+  it("saca la línea del acumulado del carrito que devuelve sumar_a_carrito", () => {
+    // Respuestas reales del portal (14/09/2026): un disco al 10,5% y después dos memorias al 10,5%.
+    const first = invidLineFromCumulative(
+      { qty: 0, gross: 0 },
+      { precio: 183.6, monto: 202.88, cantidad: 1 },
+      1
+    );
+    expect(first.line).toEqual({ qty: 1, price: 183.6, subtotal: 183.6, iva: 19.28 });
+    expect(first.next).toEqual({ qty: 1, gross: 202.88 });
+
+    // Sin restar el acumulado, esta línea daba IVA 181.57 sobre un neto de 47.62.
+    const second = invidLineFromCumulative(
+      first.next,
+      { precio: 23.81, monto: 255.5, cantidad: 3 },
+      2
+    );
+    expect(second.line).toEqual({ qty: 2, price: 23.81, subtotal: 47.62, iva: 5 });
+    expect(second.next).toEqual({ qty: 3, gross: 255.5 });
+  });
+
+  it("cae en la cantidad pedida si el XML no trae cantidad", () => {
+    const r = invidLineFromCumulative(
+      { qty: 2, gross: 100 },
+      { precio: 10, monto: 124.2, cantidad: NaN },
+      2
+    );
+    expect(r.line).toEqual({ qty: 2, price: 10, subtotal: 20, iva: 4.2 });
+    expect(r.next).toEqual({ qty: 4, gross: 124.2 });
   });
 });

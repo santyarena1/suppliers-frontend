@@ -153,6 +153,38 @@ export function parseInvidMoney(raw: unknown): number {
   return Number.isFinite(n) ? round2(n) : 0;
 }
 
+/**
+ * `sumar_a_carrito` devuelve en `<cantidad>` y `<monto>` el estado del carrito
+ * completo del portal, no la línea recién agregada. Verificado contra el
+ * portal: con dos productos, el segundo vuelve con la cantidad y el monto del
+ * primero sumados a los suyos. Tomarlo como línea hacía que el segundo ítem
+ * "heredara" el total del primero como IVA (se vieron alícuotas de 2800% y
+ * 15000% en el carrito). La línea es la diferencia contra el acumulado
+ * anterior; como el carrito arranca vacío, la primera coincide con el XML.
+ */
+export interface InvidCartCumulative {
+  qty: number;
+  gross: number;
+}
+
+export function invidLineFromCumulative(
+  prev: InvidCartCumulative,
+  xml: { precio: number; monto: number; cantidad: number },
+  requestedQty: number
+): { line: { qty: number; price: number; subtotal: number; iva: number }; next: InvidCartCumulative } {
+  const cumulativeQty = Number.isFinite(xml.cantidad) && xml.cantidad > 0 ? xml.cantidad : prev.qty + requestedQty;
+  const cumulativeGross = Number.isFinite(xml.monto) ? xml.monto : prev.gross;
+  const deltaQty = cumulativeQty - prev.qty;
+  const qty = deltaQty > 0 ? deltaQty : requestedQty;
+  const lineGross = round2(cumulativeGross - prev.gross);
+  const price = Number.isFinite(xml.precio) && xml.precio > 0 ? xml.precio : round2(lineGross / qty);
+  const subtotal = round2(price * qty);
+  return {
+    line: { qty, price, subtotal, iva: Math.max(0, round2(lineGross - subtotal)) },
+    next: { qty: cumulativeQty, gross: cumulativeGross },
+  };
+}
+
 export function parseXmlCost(xml: string): number {
   return parseInvidMoney(xml.match(/<costo>([^<]*)<\/costo>/i)?.[1]);
 }

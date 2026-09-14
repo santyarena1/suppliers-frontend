@@ -23,7 +23,7 @@ import { providerPricesFromList } from "@/lib/purchase-pricing";
 import { proxyImg, formatUSD, parsePrice } from "@/lib/format";
 import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
-import ProviderBadge from "@/components/ProviderBadge";
+import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import {
   taxByKind,
   formatAlicuota,
@@ -52,6 +52,22 @@ import type { PendingOrderProvider } from "@/lib/pendingOrders";
 
 type PerceptionLine = { label: string; amount: number };
 
+type SummaryComponent = "iva" | "internos" | "iibb" | "envio" | "otros";
+
+/**
+ * Lo que quedó sin conciliar entre el total que cotizó el portal de un
+ * distribuidor y la suma de los renglones del resumen. Se muestra con nombre
+ * y desglose: el comercio tiene que poder ver de dónde sale cada peso.
+ */
+type PortalReconciliation = {
+  provider: string;
+  quotedTotalUSD: number;
+  computedTotalUSD: number;
+  /** Positivo: el portal cobra más de lo que suman los renglones. */
+  diffUSD: number;
+  breakdown: { label: string; amount: number }[];
+};
+
 type Totals = {
   subtotalUSD: number;
   ivaUSD: number;
@@ -62,11 +78,12 @@ type Totals = {
   quotedShipping: boolean;
   taxUSD: number;
   totalUSD: number;
-  /** Cuánto más cotizó el portal por encima de nuestro cálculo. */
-  quotedAdjustUSD: number;
   itemCount: number;
   productCount: number;
   perceptionLines: PerceptionLine[];
+  /** Qué renglones vienen del portal del distribuidor en vez del cálculo de NODO. */
+  portalSources: Partial<Record<SummaryComponent, string[]>>;
+  reconciliations: PortalReconciliation[];
 };
 
 type TaxExtra = {
@@ -75,6 +92,14 @@ type TaxExtra = {
   perceptionsUSD?: number;
   perceptionLines?: PerceptionLine[];
   totalUSD?: number;
+  /**
+   * Desglose que cotizó el portal. Cuando viene, manda sobre el cálculo de
+   * NODO: es lo que el distribuidor efectivamente cobra.
+   */
+  quotedVatUSD?: number;
+  quotedInternosUSD?: number;
+  /** Recargos/descuentos del portal que no son impuestos (New Tree: interés, descuento). */
+  quotedOtherUSD?: number;
   /** El % lo cargó el comercio en Configuración y pisa lo que cotice el portal. */
   manual?: boolean;
 };
@@ -86,14 +111,29 @@ const EMPTY_TOTALS: Totals = {
   iibbUSD: 0,
   otherUSD: 0,
   shippingUSD: 0,
-  quotedAdjustUSD: 0,
   quotedShipping: false,
   taxUSD: 0,
   totalUSD: 0,
   itemCount: 0,
   productCount: 0,
   perceptionLines: [],
+  portalSources: {},
+  reconciliations: [],
 };
+
+/** Diferencias menores a esto son redondeo de centavos entre renglones, no un cargo. */
+const RECONCILE_TOLERANCE_USD = 0.05;
+
+function mergePortalSources(
+  a: Totals["portalSources"],
+  b: Totals["portalSources"]
+): Totals["portalSources"] {
+  const out: Totals["portalSources"] = { ...a };
+  for (const [k, v] of Object.entries(b) as [SummaryComponent, string[]][]) {
+    out[k] = [...(out[k] ?? []), ...v];
+  }
+  return out;
+}
 
 function cartPerception(item: CartItem, siblings: CartItem[], extra?: TaxExtra): TaxLine | null {
   if (item.channel === "offline") return null;
@@ -207,7 +247,7 @@ function CartPageInner() {
     [viewByProvider]
   );
 
-  function totalsFor(its: CartItem[], extra?: TaxExtra): Totals {
+  function totalsFor(its: CartItem[], extra?: TaxExtra, provider?: string): Totals {
     let subtotalUSD = 0, ivaUSD = 0, internosUSD = 0, iibbUSD = 0, otherUSD = 0;
     const perceptionLines: PerceptionLine[] = [...(extra?.perceptionLines ?? [])];
     const quotedLump = (extra?.perceptionsUSD ?? 0) > 0.0005;
@@ -247,19 +287,60 @@ function CartPageInner() {
       }
     }
     const shippingUSD = extra?.shippingUSD ?? 0;
-    const shippingIva = shippingUSD * 0.21;
     const shippingIibb = shippingUSD * ((extra?.percepcionPercent ?? 0) / 100);
-    ivaUSD += shippingIva;
     iibbUSD += shippingIibb;
     if (extra?.perceptionsUSD) iibbUSD += extra.perceptionsUSD;
+
+    // Lo que el portal cotizó reemplaza el cálculo propio, renglón por renglón.
+    // Antes solo se tomaba su total y todo lo que no coincidía (internos que el
+    // producto no traía, redondeos de IVA) terminaba en un "ajuste" sin nombre.
+    const portalSources: Totals["portalSources"] = {};
+    const src = (k: SummaryComponent) => {
+      if (provider) portalSources[k] = [provider];
+    };
+    if (withIva && extra?.quotedVatUSD != null) {
+      ivaUSD = extra.quotedVatUSD;
+      src("iva");
+    } else {
+      ivaUSD += shippingUSD * 0.21;
+    }
+    if (withIva && extra?.quotedInternosUSD != null) {
+      internosUSD = extra.quotedInternosUSD;
+      src("internos");
+    }
+    if (withIva && extra?.quotedOtherUSD) {
+      otherUSD += extra.quotedOtherUSD;
+      src("otros");
+    }
+    if (withIva && (extra?.perceptionsUSD ?? 0) > 0.0005) src("iibb");
+    if (extra?.shippingUSD != null) src("envio");
+
     const taxUSD = ivaUSD + internosUSD + iibbUSD + otherUSD;
     const calculadoUSD = withIva ? subtotalUSD + taxUSD + shippingUSD : subtotalUSD + shippingUSD;
     let totalUSD = calculadoUSD;
-    // El portal manda la última palabra sobre su propio total. Cuando cotiza más
-    // que nuestro cálculo, la diferencia se muestra en vez de dejar un resumen
-    // cuyos renglones no suman el total que figura al costado.
-    if (withIva && extra?.totalUSD != null) totalUSD = Math.max(totalUSD, extra.totalUSD);
-    const quotedAdjustUSD = Math.max(0, totalUSD - calculadoUSD);
+    const reconciliations: PortalReconciliation[] = [];
+    // El total que muestra el carrito es el que cobra el portal. Si sus renglones
+    // no lo explican, la diferencia se muestra con nombre, no se esconde.
+    if (withIva && extra?.totalUSD != null && provider) {
+      totalUSD = extra.totalUSD;
+      const diffUSD = extra.totalUSD - calculadoUSD;
+      if (Math.abs(diffUSD) >= RECONCILE_TOLERANCE_USD) {
+        reconciliations.push({
+          provider,
+          quotedTotalUSD: extra.totalUSD,
+          computedTotalUSD: calculadoUSD,
+          diffUSD,
+          breakdown: [
+            { label: "Neto", amount: subtotalUSD },
+            { label: "Envío", amount: shippingUSD },
+            { label: "IVA", amount: ivaUSD },
+            { label: "Imp. internos", amount: internosUSD },
+            { label: "Percepciones", amount: iibbUSD },
+            { label: "Otros", amount: otherUSD },
+          ].filter((b) => b.amount > 0.0005),
+        });
+      }
+    }
     return {
       subtotalUSD,
       ivaUSD,
@@ -270,10 +351,11 @@ function CartPageInner() {
       quotedShipping: extra?.shippingUSD != null,
       taxUSD,
       totalUSD,
-      quotedAdjustUSD,
       itemCount: its.reduce((s, it) => s + it.qty, 0),
       productCount: its.length,
       perceptionLines,
+      portalSources,
+      reconciliations,
     };
   }
 
@@ -309,14 +391,27 @@ function CartPageInner() {
     SOLUTION_BOX: sbWarm,
   };
 
+  // Un 0 o ausente en el desglose del portal no es "cotizó cero": New Bytes
+  // manda `iva: 0` con un total que sí lo incluye. Solo se toma lo que trae valor.
+  const quotedAmount = (n: number | null | undefined) =>
+    typeof n === "number" && Number.isFinite(n) && n > 0.0005 ? n : undefined;
+
   const invidExtra: TaxExtra | undefined = invidQuoted
-    ? { shippingUSD: invidQuoted.shippingCost ?? 0, percepcionPercent: invidQuoted.percepcionPercent ?? 0 }
+    ? {
+        shippingUSD: invidQuoted.shippingCost ?? 0,
+        percepcionPercent: invidQuoted.percepcionPercent ?? 0,
+        quotedVatUSD: quotedAmount(invidQuoted.iva),
+        quotedInternosUSD: quotedAmount(invidQuoted.impuestos),
+        totalUSD: quotedAmount(invidQuoted.total),
+      }
     : undefined;
   const elitExtra: TaxExtra | undefined = elitQuoted
     ? {
         shippingUSD: elitQuoted.shippingCost ?? 0,
         perceptionsUSD: elitQuoted.perceptions ?? 0,
         perceptionLines: elitQuoted.perceptionLines ?? [],
+        quotedVatUSD: quotedAmount(elitQuoted.vat),
+        quotedInternosUSD: quotedAmount(elitQuoted.internalTax),
         totalUSD: elitQuoted.total,
       }
     : undefined;
@@ -324,6 +419,7 @@ function CartPageInner() {
     ? {
         perceptionsUSD: nbQuoted.perceptions ?? 0,
         perceptionLines: nbQuoted.perceptionLines ?? [],
+        quotedVatUSD: quotedAmount(nbQuoted.iva),
         totalUSD: nbQuoted.total,
       }
     : undefined;
@@ -335,8 +431,9 @@ function CartPageInner() {
    * cualquier cosa que Air cobre y nosotros no descontemos —envío, redondeos,
    * otro impuesto—, así que aparecían percepciones que no existen; peor todavía,
    * ese sobrante se aprendía como alícuota del proveedor y después se aplicaba
-   * en la búsqueda. El sobrante ahora se muestra como ajuste del portal, que es
-   * lo que es: una diferencia que no sabemos desarmar.
+   * en la búsqueda. Ahora se toma el desglose completo de Air (IVA 21 + 10,5,
+   * internos, percepción) y si algo queda afuera se muestra como diferencia
+   * con nombre, no como percepción.
    */
   const airPerc =
     airQuoted != null && typeof airQuoted.perceptions === "number" && airQuoted.perceptions > 0.0005
@@ -347,6 +444,8 @@ function CartPageInner() {
         perceptionsUSD: airPerc > 0.0005 ? airPerc : 0,
         perceptionLines:
           airPerc > 0.0005 ? [{ label: "Percepciones", amount: airPerc }] : [],
+        quotedVatUSD: quotedAmount((airQuoted.iva21 ?? 0) + (airQuoted.iva105 ?? 0)),
+        quotedInternosUSD: quotedAmount(airQuoted.ii),
         totalUSD: airQuoted.total,
       }
     : undefined;
@@ -359,6 +458,9 @@ function CartPageInner() {
           (ntQuoted.perceptions ?? 0) > 0.0005
             ? [{ label: "Percepciones", amount: ntQuoted.perceptions }]
             : [],
+        quotedVatUSD: quotedAmount(ntQuoted.vat),
+        // Recargo por forma de pago menos descuento: no es impuesto, pero está en el total.
+        quotedOtherUSD: (ntQuoted.interest ?? 0) - (ntQuoted.discount ?? 0) || undefined,
         totalUSD: ntQuoted.total,
       }
     : undefined;
@@ -369,6 +471,9 @@ function CartPageInner() {
         shippingUSD: sbQuoted.shippingCost ?? 0,
         perceptionsUSD: sbQuoted.perceptions ?? 0,
         perceptionLines: sbQuoted.perceptionLines ?? [],
+        quotedVatUSD: quotedAmount(sbQuoted.vat),
+        quotedInternosUSD: quotedAmount(sbQuoted.internalTax),
+        totalUSD: quotedAmount(sbQuoted.total),
       }
     : undefined;
 
@@ -462,7 +567,7 @@ function CartPageInner() {
 
   const grand = useMemo(() => {
     const tot = totalsFor(viewItems);
-    const parts = Object.entries(viewByProvider).map(([p, its]) => totalsFor(its, extraFor(p)));
+    const parts = Object.entries(viewByProvider).map(([p, its]) => totalsFor(its, extraFor(p), p));
     if (parts.length === 0) return tot;
     return parts.reduce((acc, t) => ({
       subtotalUSD: acc.subtotalUSD + t.subtotalUSD,
@@ -474,19 +579,20 @@ function CartPageInner() {
       quotedShipping: acc.quotedShipping || t.quotedShipping,
       taxUSD: acc.taxUSD + t.taxUSD,
       totalUSD: acc.totalUSD + t.totalUSD,
-      quotedAdjustUSD: acc.quotedAdjustUSD + t.quotedAdjustUSD,
+      portalSources: mergePortalSources(acc.portalSources, t.portalSources),
+      reconciliations: [...acc.reconciliations, ...t.reconciliations],
       itemCount: acc.itemCount + t.itemCount,
       productCount: acc.productCount + t.productCount,
       perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
     }), { ...EMPTY_TOTALS });
-  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
+  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, ntQuoted, sbQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
     for (const [p, its] of Object.entries(viewByProvider)) {
-      m[p] = totalsFor(its, extraFor(p));
+      m[p] = totalsFor(its, extraFor(p), p);
     }
     return m;
-  }, [viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
+  }, [viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, ntQuoted, sbQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
 
   function fmt(usd: number, digits = currency === "USD" ? 2 : 0) {
     if (currency === "USD") return formatUSD(usd);
@@ -549,6 +655,10 @@ function CartPageInner() {
       if (tot.iibbUSD > 0) {
         const percLabel = perceptionGroupLabel(tot.perceptionLines.length ? tot.perceptionLines : [{ label: "Percepciones", amount: tot.iibbUSD }]);
         lines.push(`${percLabel}: ${fmt(tot.iibbUSD, 2)}`);
+      }
+      if (tot.otherUSD > 0.004) lines.push(`Otros cargos: ${fmt(tot.otherUSD, 2)}`);
+      for (const r of tot.reconciliations) {
+        lines.push(`Diferencia s/portal ${providerLabel(r.provider)}: ${r.diffUSD > 0 ? "+" : "-"}${fmt(Math.abs(r.diffUSD), 2)}`);
       }
     }
     lines.push(`*TOTAL: ${fmt(tot.totalUSD)}*${withIva ? "" : " (sin impuestos)"}`);
@@ -1224,6 +1334,26 @@ function CartPageInner() {
   );
 }
 
+/** Renglón del resumen. Con asterisco cuando el número lo cotizó el portal, no NODO. */
+function SummaryAmount({
+  label, value, fmt, sources,
+}: {
+  label: string;
+  value: number;
+  fmt: (n: number, digits?: number) => string;
+  sources?: string[];
+}) {
+  const title = sources?.length
+    ? `Cotizado por el portal de ${[...new Set(sources)].map((p) => providerLabel(p)).join(", ")}`
+    : undefined;
+  return (
+    <span className="text-surface-500" title={title}>
+      {label}{title ? "*" : ""}{" "}
+      <span className="tabular-nums text-surface-200">{fmt(value, 2)}</span>
+    </span>
+  );
+}
+
 function SummaryBar({
   title, totals, fmt, withIva, currency, showInvidNote, historyHref, historyLabel,
 }: {
@@ -1236,75 +1366,111 @@ function SummaryBar({
   historyHref?: string;
   historyLabel?: string;
 }) {
+  const [explainDiff, setExplainDiff] = useState(false);
+  const diffUSD = totals.reconciliations.reduce((s, r) => s + r.diffUSD, 0);
+  const hasDiff = withIva && totals.reconciliations.length > 0;
   return (
-    <div className="flex items-baseline justify-between gap-6 min-h-8">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm min-w-0">
-        <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider mr-1">{title}</span>
-        {historyHref && historyLabel && (
-          <Link href={historyHref} className="text-[11px] text-surface-500 hover:text-white underline underline-offset-2">
-            {historyLabel}
-          </Link>
-        )}
-        <span className="text-surface-500">
-          Neto <span className="tabular-nums text-surface-200">{fmt(totals.subtotalUSD)}</span>
-        </span>
-        {(totals.quotedShipping || totals.shippingUSD > 0.004) && (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-6 min-h-8">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm min-w-0">
+          <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider mr-1">{title}</span>
+          {historyHref && historyLabel && (
+            <Link href={historyHref} className="text-[11px] text-surface-500 hover:text-white underline underline-offset-2">
+              {historyLabel}
+            </Link>
+          )}
           <span className="text-surface-500">
-            Envío <span className="tabular-nums text-surface-200">{fmt(totals.shippingUSD, 2)}</span>
+            Neto <span className="tabular-nums text-surface-200">{fmt(totals.subtotalUSD)}</span>
           </span>
-        )}
-        {withIva && (
-          <>
-            <span className="text-surface-500">
-              IVA <span className="tabular-nums text-surface-200">{fmt(totals.ivaUSD, 2)}</span>
+          {(totals.quotedShipping || totals.shippingUSD > 0.004) && (
+            <SummaryAmount sources={totals.portalSources.envio} fmt={fmt} label="Envío" value={totals.shippingUSD} />
+          )}
+          {withIva && (
+            <>
+              <SummaryAmount sources={totals.portalSources.iva} fmt={fmt} label="IVA" value={totals.ivaUSD} />
+              {totals.internosUSD > 0.004 && <SummaryAmount sources={totals.portalSources.internos} fmt={fmt} label="Internos" value={totals.internosUSD} />}
+              {totals.otherUSD > 0.004 && <SummaryAmount sources={totals.portalSources.otros} fmt={fmt} label="Otros cargos" value={totals.otherUSD} />}
+              {totals.iibbUSD > 0.004 && (
+                <SummaryAmount
+                  sources={totals.portalSources.iibb}
+                  fmt={fmt}
+                  label={perceptionGroupLabel(totals.perceptionLines.length ? totals.perceptionLines : [{ label: "Percepciones", amount: totals.iibbUSD }])}
+                  value={totals.iibbUSD}
+                />
+              )}
+              {/* El desglose se agrupa por concepto. Antes se listaba una línea por
+                  cada percepción de cada proveedor: en un carrito de cuatro
+                  distribuidores eran ocho renglones diciendo "Percepciones", todos
+                  parte del mismo total que ya figura arriba. */}
+              {groupPerceptionLines(totals.perceptionLines).length > 1 &&
+                groupPerceptionLines(totals.perceptionLines).map((line) => (
+                  <span key={line.label} className="text-surface-600 text-xs">
+                    {line.label} <span className="tabular-nums">{fmt(line.amount, 2)}</span>
+                  </span>
+                ))}
+              {/* Lo que el portal cobra y ningún renglón explica. Nunca se suma en
+                  silencio: se nombra al distribuidor y se muestra la cuenta. */}
+              {hasDiff && (
+                <button
+                  type="button"
+                  onClick={() => setExplainDiff((v) => !v)}
+                  className="inline-flex items-center gap-1 text-amber-400/90 hover:text-amber-300 underline decoration-dotted underline-offset-2"
+                  title="Ver de dónde sale esta diferencia"
+                >
+                  Diferencia s/portal{" "}
+                  <span className="tabular-nums">{diffUSD > 0 ? "+" : "−"}{fmt(Math.abs(diffUSD), 2)}</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${explainDiff ? "rotate-180" : ""}`} />
+                </button>
+              )}
+            </>
+          )}
+          {withIva && showInvidNote && !totals.quotedShipping && (
+            <span className="text-xs text-surface-600">
+              {totals.iibbUSD > 0.004 ? "Envío al validar" : "Perc./envío al validar"}
             </span>
-            {totals.internosUSD > 0.004 && (
-              <span className="text-surface-500">
-                Internos <span className="tabular-nums text-surface-200">{fmt(totals.internosUSD, 2)}</span>
-              </span>
-            )}
-            {totals.otherUSD > 0.004 && (
-              <span className="text-surface-500">
-                Otros imp. <span className="tabular-nums text-surface-200">{fmt(totals.otherUSD, 2)}</span>
-              </span>
-            )}
-            {totals.quotedAdjustUSD > 0.004 && (
-              <span className="text-surface-500" title="El portal del distribuidor cotizó más que el cálculo de NODO">
-                Ajuste del portal{" "}
-                <span className="tabular-nums text-surface-200">{fmt(totals.quotedAdjustUSD, 2)}</span>
-              </span>
-            )}
-            {totals.iibbUSD > 0.004 && (
-              <span className="text-surface-500">
-                {perceptionGroupLabel(totals.perceptionLines.length ? totals.perceptionLines : [{ label: "Percepciones", amount: totals.iibbUSD }])}{" "}
-                <span className="tabular-nums text-surface-200">{fmt(totals.iibbUSD, 2)}</span>
-              </span>
-            )}
-            {/* El desglose se agrupa por concepto. Antes se listaba una línea por
-                cada percepción de cada proveedor: en un carrito de cuatro
-                distribuidores eran ocho renglones diciendo "Percepciones", todos
-                parte del mismo total que ya figura arriba. */}
-            {groupPerceptionLines(totals.perceptionLines).length > 1 &&
-              groupPerceptionLines(totals.perceptionLines).map((line) => (
-                <span key={line.label} className="text-surface-600 text-xs">
-                  {line.label} <span className="tabular-nums">{fmt(line.amount, 2)}</span>
-                </span>
-              ))}
-          </>
-        )}
-        {withIva && showInvidNote && !totals.quotedShipping && (
-          <span className="text-xs text-surface-600">
-            {totals.iibbUSD > 0.004 ? "Envío al validar" : "Perc./envío al validar"}
-          </span>
-        )}
+          )}
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-lg font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
+          {currency === "ARS" && (
+            <p className="text-[11px] text-surface-500 tabular-nums mt-0.5">{formatUSD(totals.totalUSD)}</p>
+          )}
+          {!withIva && <p className="text-[11px] text-surface-500 mt-0.5">sin impuestos</p>}
+        </div>
       </div>
-      <div className="text-right flex-shrink-0">
-        <p className="text-lg font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
-        {currency === "ARS" && (
-          <p className="text-[11px] text-surface-500 tabular-nums mt-0.5">{formatUSD(totals.totalUSD)}</p>
-        )}
-        {!withIva && <p className="text-[11px] text-surface-500 mt-0.5">sin impuestos</p>}
-      </div>
+      {hasDiff && explainDiff && (
+        <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-surface-400 flex flex-col gap-2">
+          {totals.reconciliations.map((r) => (
+            <div key={r.provider}>
+              <p className="text-surface-200">
+                El portal de <span className="font-medium">{providerLabel(r.provider)}</span> cotiza{" "}
+                <span className="tabular-nums">{fmt(r.quotedTotalUSD, 2)}</span> para este pedido.
+                {" "}NODO suma {r.breakdown.map((b) => `${b.label} ${fmt(b.amount, 2)}`).join(" + ")} ={" "}
+                <span className="tabular-nums">{fmt(r.computedTotalUSD, 2)}</span>.
+              </p>
+              <p className="mt-0.5">
+                {r.diffUSD > 0 ? (
+                  <>
+                    Los <span className="tabular-nums text-surface-200">{fmt(r.diffUSD, 2)}</span> de diferencia los cobra el
+                    portal de {providerLabel(r.provider)} y no vienen desglosados en su cotización. No es un cargo de NODO;
+                    el total muestra lo que cobra el distribuidor.
+                  </>
+                ) : (
+                  <>
+                    El portal de {providerLabel(r.provider)} cobra{" "}
+                    <span className="tabular-nums text-surface-200">{fmt(Math.abs(r.diffUSD), 2)}</span> menos de lo que
+                    suman los renglones (probablemente una percepción o impuesto que NODO estima y el portal no aplica).
+                    El total muestra lo que cobra el distribuidor.
+                  </>
+                )}
+              </p>
+            </div>
+          ))}
+          {Object.keys(totals.portalSources).length > 0 && (
+            <p className="text-surface-600">* renglón tomado de la cotización del portal, no del cálculo de NODO.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

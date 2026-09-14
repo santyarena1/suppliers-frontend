@@ -15,6 +15,8 @@ import {
   parseXmlCost,
   parseQuotedShipping,
   collectFormFields,
+  invidLineFromCumulative,
+  type InvidCartCumulative,
   type InvidRadioOption,
 } from "./invid-order.parser";
 
@@ -272,35 +274,30 @@ export class InvidOrderService {
     return current;
   }
 
-  private async addItem(cookie: string, code: string, qty: number) {
+  private async addItem(cookie: string, code: string, qty: number, prev: InvidCartCumulative) {
     const res = await this.request(cookie, "GET", `${SITE_BASE}/servicios.php`, {
       params: { servicio: "sumar_a_carrito", producto: code, cantidad: qty },
     });
     const xml = res.data;
     const field = (tag: string) => xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`))?.[1] ?? "";
     const nombre = decodeEntities(field("nombre"));
-    const unitNet = Number(field("precio"));
-    const lineGross = Number(field("monto"));
-    const lineQty = Number(field("cantidad")) || qty;
+    const monto = Number(field("monto"));
     const xmlError = stripHtmlMessage(field("error") || field("mensaje") || field("msg"));
-    if (!nombre || !Number.isFinite(lineGross)) {
+    if (!nombre || !Number.isFinite(monto)) {
       throw new BadRequestException(
         xmlError || `Invid rechazó el producto ${code} (sin stock o código inválido)`
       );
     }
-    const net = Number.isFinite(unitNet) ? unitNet * lineQty : lineGross;
+    // `cantidad` y `monto` son el acumulado del carrito, no la línea — ver invidLineFromCumulative.
+    const { line, next } = invidLineFromCumulative(
+      prev,
+      { precio: Number(field("precio")), monto, cantidad: Number(field("cantidad")) },
+      qty
+    );
     return {
       cookie: res.cookie,
-      item: {
-        code,
-        qty: lineQty,
-        name: nombre,
-        price: Number.isFinite(unitNet) ? unitNet : lineGross / lineQty,
-        subtotal: net,
-        iva: Math.max(0, lineGross - net),
-        internos: 0,
-        percepciones: 0,
-      },
+      cumulative: next,
+      item: { code, name: nombre, ...line, internos: 0, percepciones: 0 },
     };
   }
 
@@ -341,10 +338,12 @@ export class InvidOrderService {
 
     const addedItems: PreparedCart["items"] = [];
     const itemErrors: PreparedCart["itemErrors"] = [];
+    let cumulative: InvidCartCumulative = { qty: 0, gross: 0 };
     for (const item of items) {
       try {
-        const added = await this.addItem(cookie, item.code, item.qty);
+        const added = await this.addItem(cookie, item.code, item.qty, cumulative);
         cookie = added.cookie;
+        cumulative = added.cumulative;
         addedItems.push(added.item);
       } catch (err) {
         const message = err instanceof BadRequestException
