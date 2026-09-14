@@ -24,6 +24,8 @@ import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
+import { usePortalCartSync } from "@/lib/portalCartSync";
+import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
@@ -60,6 +62,7 @@ export default function InvidDraftPanel({
   const submitLock = useRef(false);
   const leftInBackground = useRef(false);
   const { patchItem } = useCart();
+  const portalSync = usePortalCartSync("INVID");
   const jobs = usePendingOrders();
 
   const itemsKey = useMemo(
@@ -90,7 +93,11 @@ export default function InvidDraftPanel({
   function publishPreview(next: InvidCheckoutPreview | null) {
     setPreview(next);
     onPreviewed?.(next);
-    if (next) applyPreviewToCart(next);
+    if (next) {
+      applyPreviewToCart(next);
+      // Lo que cambió en el portal se refleja acá; eso cambia items y vuelve a cotizar.
+      void portalSync.apply(next.sync, items);
+    }
   }
 
   useEffect(() => {
@@ -285,6 +292,9 @@ export default function InvidDraftPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      {portalSync.notice && (
+        <PortalSyncNotice providerLabel="Invid" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
         <CheckoutField label="Dirección" htmlFor="invid-dir">
           <CheckoutSelect

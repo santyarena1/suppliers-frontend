@@ -1455,8 +1455,19 @@ export interface InvidCheckoutItem {
   internos?: number;
   percepciones?: number;
 }
+/**
+ * Cambios hechos en el carrito del portal del distribuidor desde la última
+ * verificación. El carrito es uno solo: NODO tiene que reflejarlos.
+ */
+export interface PortalCartSync {
+  removedInPortal: string[];
+  addedInPortal: { code: string; qty: number; name?: string }[];
+  qtyChangedInPortal: { code: string; qty: number; name?: string }[];
+}
+
 export interface InvidCheckoutPreview {
   items: InvidCheckoutItem[];
+  sync?: PortalCartSync;
   address: Record<string, string>;
   paymentOption: string;
   paymentLabel: string;

@@ -13,6 +13,10 @@ import {
   applyInvidOrderRates,
   parseInvidPaymentForm,
   invidLineFromCumulative,
+  parseCartLines,
+  reconcilePortalCart,
+  cartSnapshotOf,
+  nextCartSnapshot,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -440,6 +444,96 @@ describe("invid-order.parser", () => {
     );
     expect(second.line).toEqual({ qty: 2, price: 23.81, subtotal: 47.62, iva: 5 });
     expect(second.next).toEqual({ qty: 3, gross: 255.5 });
+  });
+
+  it("lee código y cantidad de cada fila del carrito del portal", () => {
+    // Estructura real de carrito.php (14/09/2026).
+    const html = `
+      <tr class="CartProduct" id="item_1">
+        <td class="CartProductThumb hidden-xs"><img src="x.jpg"></td>
+        <td class="car-nombre" style="max-width:300px">Memoria DDR3 HIKSEMI 8Gb 1600 MHz Hiker 1.35V (7512) <br><small>(C&oacute;d. 0416895)</small></td>
+        <td class="car-precio">US$ 23.81</td>
+        <td class="car-cant"><input type="number" name="cant_1" id="cant_1" value="3" class="cantidades"><input type="hidden" name="pack_1" id="pack_1" value="1"></td>
+        <td class="car-subt" id="subtotal_1" nowrap>US$ 71.43</td>
+        <td class="car-iva" id="iva_1" nowrap>US$ 7.50</td>
+        <td class="car-imi" id="imi_1">US$ 0.00</td>
+        <td class="car-imp" id="subiva_1" nowrap>US$ 78.93</td>
+        <td class="delete"><a href="#" onclick="sacarItemCarrito('1'); return false"><i class="fa fa-trash"></i></a></td>
+      </tr>
+      <tr class="CartProduct" id="item_2">
+        <td class="CartProductThumb hidden-xs"></td>
+        <td class="car-nombre">Teclado Logitech K120 Black 920-004422 (Cód. 0405277)</td>
+        <td class="car-precio">US$ 7.28</td>
+        <td class="car-cant"><input type="number" name="cant_2" id="cant_2" value="1"></td>
+        <td class="delete"><a onclick="sacarItemCarrito('2'); return false"></a></td>
+      </tr>`;
+    expect(parseCartLines(html)).toEqual([
+      { index: 1, code: "0416895", qty: 3, name: "Memoria DDR3 HIKSEMI 8Gb 1600 MHz Hiker 1.35V (7512)" },
+      { index: 2, code: "0405277", qty: 1, name: "Teclado Logitech K120 Black 920-004422" },
+    ]);
+    expect(parseCartLines("<table></table>")).toEqual([]);
+  });
+
+  describe("reconcilePortalCart", () => {
+    it("sin foto manda NODO, como antes", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 2 }], [{ code: "A", qty: 5 }, { code: "Z", qty: 1 }], null);
+      expect(r.merged).toEqual([{ code: "A", qty: 2 }]);
+      expect(r.changes).toEqual({ removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [] });
+    });
+
+    it("lo que borraron en el portal se saca de NODO", () => {
+      const r = reconcilePortalCart(
+        [{ code: "A", qty: 1, name: "a" }, { code: "B", qty: 1, name: "b" }],
+        [{ code: "A", qty: 1 }],
+        { A: 1, B: 1 }
+      );
+      expect(r.merged).toEqual([{ code: "A", qty: 1, name: "a" }]);
+      expect(r.changes.removedInPortal).toEqual(["B"]);
+    });
+
+    it("lo que borraron en NODO se cae del portal", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "A", qty: 1 }, { code: "B", qty: 1 }], { A: 1, B: 1 });
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }]);
+      expect(r.changes.addedInPortal).toEqual([]);
+    });
+
+    it("lo agregado en cada lado se junta", () => {
+      const r = reconcilePortalCart(
+        [{ code: "A", qty: 1 }, { code: "N", qty: 2 }],
+        [{ code: "A", qty: 1 }, { code: "P", qty: 3, name: "del portal" }],
+        { A: 1 }
+      );
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "N", qty: 2 }, { code: "P", qty: 3, name: "del portal" }]);
+      expect(r.changes.addedInPortal).toEqual([{ code: "P", qty: 3, name: "del portal" }]);
+    });
+
+    it("la cantidad cambiada en el portal gana; la cambiada en NODO se conserva", () => {
+      const r = reconcilePortalCart(
+        [{ code: "A", qty: 1 }, { code: "B", qty: 4 }],
+        [{ code: "A", qty: 6 }, { code: "B", qty: 1 }],
+        { A: 1, B: 1 }
+      );
+      expect(r.merged).toEqual([{ code: "A", qty: 6 }, { code: "B", qty: 4 }]);
+      expect(r.changes.qtyChangedInPortal).toEqual([{ code: "A", qty: 6 }]);
+    });
+
+    it("la foto no avanza sobre lo que NODO todavía no reflejó", () => {
+      // Portal borró B y cambió A a 6; NODO sigue con A:1, B:1. Se carga el portal con A:6.
+      const changes = { removedInPortal: ["B"], addedInPortal: [], qtyChangedInPortal: [{ code: "A", qty: 6 }] };
+      expect(nextCartSnapshot([{ code: "A", qty: 6 }], changes, { A: 1, B: 1 })).toEqual({ A: 1, B: 1 });
+      // Si NODO no aplicó el cambio, la verificación siguiente lo detecta otra vez.
+      const again = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 1 }], [{ code: "A", qty: 6 }], { A: 1, B: 1 });
+      expect(again.merged).toEqual([{ code: "A", qty: 6 }]);
+      expect(again.changes.removedInPortal).toEqual(["B"]);
+      // Una vez que NODO coincide con el portal, la foto avanza.
+      const settled = reconcilePortalCart([{ code: "A", qty: 6 }], [{ code: "A", qty: 6 }], { A: 1, B: 1 });
+      expect(settled.changes).toEqual({ removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [] });
+      expect(nextCartSnapshot([{ code: "A", qty: 6 }], settled.changes, { A: 1, B: 1 })).toEqual({ A: 6 });
+    });
+
+    it("la foto es un mapa código → cantidad", () => {
+      expect(cartSnapshotOf([{ code: "A", qty: 2 }, { code: "A", qty: 1 }, { code: "B", qty: 3 }])).toEqual({ A: 3, B: 3 });
+    });
   });
 
   it("cae en la cantidad pedida si el XML no trae cantidad", () => {

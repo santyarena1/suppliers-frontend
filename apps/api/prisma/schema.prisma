@@ -845,6 +845,12 @@ model ProviderSyncConfig {
   /// forma de pago ni la manda al confirmar el carrito, igual que pasa con
   /// esquema y offline. Lista de objetos con label, percent, kind y origen.
   paymentOptions       Json?
+  /// Foto del carrito del portal tal como NODO lo dejó en la última verificación
+  /// (`{ codigo: cantidad }`). El carrito del portal y el de NODO son el mismo:
+  /// con la foto se distingue "lo borraron en el portal" de "lo agregaron en
+  /// NODO" y cada verificación concilia en las dos direcciones.
+  portalCartSnapshot   Json?
+  portalCartSyncedAt   DateTime?
   missingProductAction MissingProductAction @default(KEEP)
   zeroStockAction      ZeroStockAction      @default(KEEP)
   priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)

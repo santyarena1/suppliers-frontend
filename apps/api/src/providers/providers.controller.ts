@@ -188,7 +188,7 @@ export class ProvidersController {
 
   @Post("providers/INVID/checkout/preview")
   async invidCheckoutPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: InvidCheckoutPreviewDto) {
-    return this.invidOrderService.preview(await this.invidCredentials(tenant), dto);
+    return this.invidOrderService.preview(await this.invidCredentials(tenant), dto, { tenantId: tenant.tenantId });
   }
 
   /** Crea el borrador en Invid (pedido pendiente) y guarda una copia en Nodo. */

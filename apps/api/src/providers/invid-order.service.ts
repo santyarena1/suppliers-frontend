@@ -1,5 +1,6 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import axios, { type AxiosResponse } from "axios";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { decodeHttpText } from "./http-text";
 import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
@@ -16,6 +17,10 @@ import {
   parseQuotedShipping,
   collectFormFields,
   invidLineFromCumulative,
+  parseCartLines,
+  reconcilePortalCart,
+  nextCartSnapshot,
+  type CartSyncChanges,
   type InvidCartCumulative,
   type InvidRadioOption,
 } from "./invid-order.parser";
@@ -96,6 +101,8 @@ interface PreparedCart {
   payments: InvidRadioOption[];
   taxLines: { nroItem: string; internos: number; subtotal: number; total: number }[];
   cartHtml: string;
+  /** Cambios hechos en el portal que NODO tiene que reflejar (solo al verificar). */
+  sync?: CartSyncChanges;
 }
 
 export interface InvidDraftInput {
@@ -320,20 +327,67 @@ export class InvidOrderService {
     return { cookie: res.cookie, validation: parsed };
   }
 
+  /** Foto del carrito del portal que NODO dejó en la última verificación, o null si nunca. */
+  private async loadCartSnapshot(tenantId: string): Promise<Record<string, number> | null> {
+    const row = await this.prisma.providerSyncConfig.findUnique({
+      where: { tenantId_provider: { tenantId, provider: "INVID" } },
+      select: { portalCartSnapshot: true },
+    });
+    const snap = row?.portalCartSnapshot;
+    if (!snap || typeof snap !== "object" || Array.isArray(snap)) return null;
+    const out: Record<string, number> = {};
+    for (const [code, qty] of Object.entries(snap as Record<string, unknown>)) {
+      if (typeof qty === "number" && Number.isFinite(qty)) out[code] = qty;
+    }
+    return out;
+  }
+
+  private async saveCartSnapshot(tenantId: string, snapshot: Record<string, number> | null) {
+    await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId, provider: "INVID" } },
+      create: { tenantId, provider: "INVID", portalCartSnapshot: snapshot ?? undefined, portalCartSyncedAt: new Date() },
+      update: { portalCartSnapshot: snapshot ?? Prisma.DbNull, portalCartSyncedAt: new Date() },
+    });
+  }
+
+  /**
+   * Arma el carrito real del portal con lo que hay que cotizar.
+   *
+   * Con `reconcileFor` (verificación desde el carrito de NODO) primero se lee
+   * lo que el portal tiene y se concilia contra la foto de la última vez: lo
+   * que borraron o cambiaron en el portal vuelve a NODO en `sync`, y lo que
+   * se agregó en NODO va al portal. Sin `reconcileFor` (confirmar un pedido)
+   * el portal se arma exactamente con lo que NODO manda.
+   */
   private async prepareCart(
     credentials: Record<string, string>,
-    items: { code: string; qty: number; name?: string }[],
+    requested: { code: string; qty: number; name?: string }[],
     addressId: string,
-    paymentOption: string
+    paymentOption: string,
+    reconcileFor?: { tenantId: string }
   ): Promise<PreparedCart> {
     const { username, password } = credentials;
     if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
-    if (items.length === 0) throw new BadRequestException("No hay productos de Invid en el pedido");
+    if (requested.length === 0) throw new BadRequestException("No hay productos de Invid en el pedido");
     if (!DRAFT_PAYMENT_VALUES.has(paymentOption as typeof INVID_PAYMENT_OPTIONS[number]["value"])) {
       throw new BadRequestException("Esa forma de pago no sirve para un borrador (la tarjeta se cobra en MercadoPago)");
     }
 
     let cookie = await this.login(username, password);
+
+    let items = requested;
+    let sync: CartSyncChanges | undefined;
+    let previousSnapshot: Record<string, number> | null = null;
+    if (reconcileFor) {
+      const cart = await this.request(cookie, "GET", CART_URL);
+      cookie = cart.cookie;
+      const portalLines = parseCartLines(cart.data);
+      previousSnapshot = await this.loadCartSnapshot(reconcileFor.tenantId);
+      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot);
+      items = reconciled.merged;
+      sync = reconciled.changes;
+    }
+
     cookie = await this.clearCart(cookie);
 
     const addedItems: PreparedCart["items"] = [];
@@ -386,6 +440,11 @@ export class InvidOrderService {
     cookie = cart.cookie;
     const checkout = parseCheckoutForm(cart.data);
 
+    // Lo que quedó cargado en el portal es la foto para la próxima verificación.
+    if (reconcileFor && sync) {
+      await this.saveCartSnapshot(reconcileFor.tenantId, nextCartSnapshot(addedItems, sync, previousSnapshot));
+    }
+
     const preparedItems = addedItems.map((item, idx) => {
       const tax = taxLines.find((t) => String(t.nroItem) === String(idx + 1))
         ?? taxLines[idx];
@@ -429,6 +488,7 @@ export class InvidOrderService {
         : this.paymentOptions(),
       taxLines,
       cartHtml: cart.data,
+      sync,
     };
   }
 
@@ -609,16 +669,14 @@ export class InvidOrderService {
    * Arma el carrito real de Invid y devuelve resumen + formas de entrega
    * leídas del HTML autenticado. No crea el pedido.
    */
-  async preview(credentials: Record<string, string>, input: InvidDraftInput) {
-    const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
+  async preview(credentials: Record<string, string>, input: InvidDraftInput, reconcileFor?: { tenantId: string }) {
+    const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption, reconcileFor);
     const delivery = this.resolveDelivery(prepared, input.deliveryOption);
-    const quoted = await this.quoteShipping(
-      prepared.cookie,
-      delivery,
-      prepared.address,
-      input.expresoId,
-      prepared.paymentOption
-    );
+    // Si en el portal borraron todo, no hay nada que cotizar: se devuelve el
+    // carrito vacío con los cambios para que NODO vacíe el suyo.
+    const quoted = prepared.items.length > 0
+      ? await this.quoteShipping(prepared.cookie, delivery, prepared.address, input.expresoId, prepared.paymentOption)
+      : { cookie: prepared.cookie, shippingCost: 0 };
     const totals = computeInvidTotals({
       net: prepared.subtotal,
       ivaProducts: prepared.iva,
@@ -626,18 +684,10 @@ export class InvidOrderService {
       percepcionPercent: prepared.percepcionPercent,
       shipping: quoted.shippingCost,
     });
-    // La cotización no tiene que dejar rastro: el carrito de Invid es de la
-    // cuenta, no de esta sesión. Si queda cargado, el comercio entra al portal
-    // y encuentra los productos sumados a los suyos; como esta cotización corre
-    // cada vez que se abre el carrito de NODO, el pedido se iba duplicando.
-    // El borrador vuelve a armar el carrito desde cero al confirmar.
-    try {
-      await this.clearCart(quoted.cookie);
-    } catch (err) {
-      this.logger.warn(`No se pudo vaciar el carrito de Invid después de cotizar: ${String(err)}`);
-    }
+    // El carrito del portal queda cargado a propósito: es el espejo del de NODO.
     return {
       items: prepared.items,
+      sync: prepared.sync,
       address: prepared.address,
       paymentOption: prepared.paymentOption,
       paymentLabel: prepared.paymentLabel,
@@ -833,6 +883,13 @@ export class InvidOrderService {
     let orderNumber = parsed.orderNumber;
     let webOrderNumber = parsed.webOrderNumber;
     const created = Boolean(parsed.appearsSuccessful && webOrderNumber);
+
+    if (created) {
+      // El pedido se llevó el carrito del portal: la foto vieja ya no describe nada.
+      await this.saveCartSnapshot(author.tenantId, null).catch((err: unknown) =>
+        this.logger.warn(`No se pudo limpiar la foto del carrito de Invid: ${String(err)}`)
+      );
+    }
 
     if (created && webOrderNumber && existingId) {
       try {

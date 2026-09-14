@@ -185,6 +185,149 @@ export function invidLineFromCumulative(
   };
 }
 
+/** Una fila del carrito autenticado del portal (`carrito.php`). */
+export interface InvidCartLine {
+  /** Posición 1-based, la que usa `sacarItemCarrito('N')` / `cant_N`. */
+  index: number;
+  code: string;
+  qty: number;
+  name: string;
+}
+
+/**
+ * Filas `<tr class="CartProduct" id="item_N">` del carrito. El código va en el
+ * nombre como "(Cód. 0416895)" y la cantidad en el input `cant_N`.
+ */
+export function parseCartLines(html: string): InvidCartLine[] {
+  const lines: InvidCartLine[] = [];
+  const rowRe = /<tr\b[^>]*\bid=["']item_(\d+)["'][^>]*>([\s\S]*?)<\/tr>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rowRe.exec(html))) {
+    const index = Number(m[1]);
+    const body = m[2];
+    const nameCell = body.match(/<td\b[^>]*class=["'][^"']*car-nombre[^"']*["'][^>]*>([\s\S]*?)<\/td>/i)?.[1] ?? "";
+    const nameText = stripTags(nameCell);
+    const code = nameText.match(/\(C[oó]d\.?\s*([0-9A-Za-z-]+)\)/i)?.[1]
+      ?? body.match(/[?&]producto=([0-9A-Za-z-]+)/i)?.[1];
+    if (!code) continue;
+    const qtyInput = body.match(new RegExp(`<input\\b[^>]*\\bname=["']cant_${index}["'][^>]*>`, "i"))?.[0];
+    const qty = Number(qtyInput ? attr(qtyInput, "value") : NaN);
+    lines.push({
+      index,
+      code,
+      qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+      name: nameText.replace(/\s*\(C[oó]d\.?[^)]*\)\s*$/i, "").trim(),
+    });
+  }
+  return lines;
+}
+
+export interface CartSyncItem {
+  code: string;
+  qty: number;
+  name?: string;
+}
+
+/** Lo que cambió del lado del portal y NODO tiene que reflejar. */
+export interface CartSyncChanges {
+  removedInPortal: string[];
+  addedInPortal: CartSyncItem[];
+  qtyChangedInPortal: CartSyncItem[];
+}
+
+/**
+ * Concilia el carrito de NODO con el del portal. El carrito es uno solo, se
+ * toque donde se toque: la foto (`snapshot`, `{ codigo: cantidad }`) es lo
+ * que NODO dejó cargado en el portal la última vez, y contra eso se sabe qué
+ * cambió de cada lado.
+ *
+ * - Estaba en la foto y ya no está en el portal → lo borraron en el portal →
+ *   se saca de NODO.
+ * - Estaba en la foto y ya no está en NODO → lo borraron en NODO → se saca
+ *   del portal.
+ * - Está en el portal y no en la foto → lo agregaron en el portal → se trae
+ *   a NODO.
+ * - Está en NODO y no en la foto → lo agregaron en NODO → se carga al portal.
+ * - Cantidades: si el portal difiere de la foto, cambió ahí y gana el portal;
+ *   si no, vale la de NODO.
+ *
+ * Sin foto (primera verificación o después de un pedido) manda NODO, igual
+ * que antes: no hay forma de saber qué se borró dónde. Desde ahí es recíproco.
+ */
+export function reconcilePortalCart(
+  nodo: CartSyncItem[],
+  portal: CartSyncItem[],
+  snapshot: Record<string, number> | null
+): { merged: CartSyncItem[]; changes: CartSyncChanges } {
+  const changes: CartSyncChanges = { removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [] };
+  if (!snapshot) return { merged: nodo.map((i) => ({ code: i.code, qty: i.qty, name: i.name })), changes };
+
+  const byNodo = new Map(nodo.map((i) => [i.code, i]));
+  const byPortal = new Map(portal.map((i) => [i.code, i]));
+  const merged: CartSyncItem[] = [];
+
+  for (const item of nodo) {
+    const inPortal = byPortal.get(item.code);
+    const wasSynced = item.code in snapshot;
+    if (wasSynced && !inPortal) {
+      changes.removedInPortal.push(item.code);
+      continue;
+    }
+    let qty = item.qty;
+    if (inPortal && wasSynced && inPortal.qty !== snapshot[item.code] && inPortal.qty !== item.qty) {
+      qty = inPortal.qty;
+      changes.qtyChangedInPortal.push({ code: item.code, qty, name: item.name });
+    } else if (inPortal && !wasSynced && inPortal.qty !== item.qty) {
+      // Agregado en los dos lados con distinta cantidad: la del portal es la última que se vio.
+      qty = inPortal.qty;
+      changes.qtyChangedInPortal.push({ code: item.code, qty, name: item.name });
+    }
+    merged.push({ code: item.code, qty, name: item.name });
+  }
+
+  for (const item of portal) {
+    if (byNodo.has(item.code)) continue;
+    // Estaba en la foto y NODO ya no lo tiene: lo borraron en NODO. Se cae del portal.
+    if (item.code in snapshot) continue;
+    changes.addedInPortal.push({ code: item.code, qty: item.qty, name: item.name });
+    merged.push({ code: item.code, qty: item.qty, name: item.name });
+  }
+
+  return { merged, changes };
+}
+
+export function cartSnapshotOf(items: CartSyncItem[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const it of items) out[it.code] = (out[it.code] ?? 0) + it.qty;
+  return out;
+}
+
+/**
+ * La foto que se guarda después de conciliar y cargar el portal.
+ *
+ * Es lo que quedó en el portal, salvo lo que cambió allá y NODO todavía no
+ * reflejó: eso conserva el valor viejo. Si la foto avanzara de una, y NODO no
+ * llegara a aplicar el cambio (la cotización también corre en segundo plano),
+ * en la verificación siguiente el producto borrado en el portal parecería
+ * "agregado en NODO" y volvería a cargarse. Con el valor viejo se detecta el
+ * mismo cambio otra vez, hasta que NODO lo aplique y los dos lados coincidan.
+ */
+export function nextCartSnapshot(
+  loaded: CartSyncItem[],
+  changes: CartSyncChanges,
+  previous: Record<string, number> | null
+): Record<string, number> {
+  const next = cartSnapshotOf(loaded);
+  if (!previous) return next;
+  for (const code of changes.removedInPortal) {
+    if (code in previous) next[code] = previous[code];
+  }
+  for (const { code } of changes.qtyChangedInPortal) {
+    if (code in previous) next[code] = previous[code];
+  }
+  return next;
+}
+
 export function parseXmlCost(xml: string): number {
   return parseInvidMoney(xml.match(/<costo>([^<]*)<\/costo>/i)?.[1]);
 }
