@@ -264,7 +264,7 @@ export class InvidOrderService {
     for (let i = 0; i < 50; i++) {
       const cart = await this.request(current, "GET", CART_URL);
       current = cart.cookie;
-      if (!/sacarItemCarrito\('1'\)/.test(cart.data)) return current;
+      if (!/sacarItemCarrito\(\s*["']?1["']?\s*\)/.test(cart.data)) return current;
       const removed = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
         params: { funcion: "sacar_carrito", indice: 1 },
       });
@@ -626,6 +626,16 @@ export class InvidOrderService {
       percepcionPercent: prepared.percepcionPercent,
       shipping: quoted.shippingCost,
     });
+    // La cotización no tiene que dejar rastro: el carrito de Invid es de la
+    // cuenta, no de esta sesión. Si queda cargado, el comercio entra al portal
+    // y encuentra los productos sumados a los suyos; como esta cotización corre
+    // cada vez que se abre el carrito de NODO, el pedido se iba duplicando.
+    // El borrador vuelve a armar el carrito desde cero al confirmar.
+    try {
+      await this.clearCart(quoted.cookie);
+    } catch (err) {
+      this.logger.warn(`No se pudo vaciar el carrito de Invid después de cotizar: ${String(err)}`);
+    }
     return {
       items: prepared.items,
       address: prepared.address,
