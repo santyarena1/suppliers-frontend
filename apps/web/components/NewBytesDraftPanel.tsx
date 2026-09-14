@@ -26,6 +26,8 @@ import { providerOrdersHref } from "@/lib/providerOrders";
 import { rememberPaymentOptions } from "@/lib/payment-options";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
+import { usePortalCartSync } from "@/lib/portalCartSync";
+import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
 
 type Delivery = "pickup" | "shipping";
 
@@ -76,6 +78,7 @@ export default function NewBytesDraftPanel({
   const seeded = useRef<string | null>(null);
   const jobs = usePendingOrders();
   const warm = useCheckoutWarmup("NEW_BYTES", cartItems);
+  const portalSync = usePortalCartSync("NEW_BYTES");
 
   useEffect(() => {
     seeded.current = null;
@@ -113,6 +116,8 @@ export default function NewBytesDraftPanel({
         subtotales: preview.subtotales,
         note: preview.note,
       });
+      // Lo que cambió en el carrito de la cuenta de NewBytes se refleja acá.
+      void portalSync.apply(warm.data.sync, items);
       return;
     }
     if (warm.status === "error" && seeded.current !== cartKey) {
@@ -125,6 +130,8 @@ export default function NewBytesDraftPanel({
       setLoadingMeta(true);
       setMetaError(null);
     }
+    // seed-once por cartKey: items/portalSync se leen del render en que llega el warm-up
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warm, cartKey, onPreviewed]);
 
   const filteredPayments = useMemo(() => {
@@ -281,6 +288,9 @@ export default function NewBytesDraftPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      {portalSync.notice && (
+        <PortalSyncNotice providerLabel="New Bytes" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-[9.5rem_minmax(0,1fr)_auto] gap-3 items-end">
         <CheckoutField label="Entrega">
           <CheckoutSegmented

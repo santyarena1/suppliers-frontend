@@ -21,6 +21,7 @@ import {
   type NewTreeCheckoutPreview,
   solutionBoxCheckoutApi,
   type SolutionBoxCheckoutPreview,
+  type PortalCartSync,
 } from "@/lib/api";
 import { getToken, isTokenExpired } from "@/lib/auth";
 
@@ -52,6 +53,8 @@ export type NewBytesWarmData = {
   addresses: NewBytesAddress[];
   payments: NewBytesPaymentOption[];
   preview: NewBytesCheckoutPreview;
+  /** Lo que cambió en el carrito de la cuenta de NewBytes (lo devuelve el paso `cart`). */
+  sync?: PortalCartSync;
 };
 
 export type ElitWarmData = { preview: ElitCheckoutPreview };
@@ -173,12 +176,13 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
       newBytesCheckoutApi.addresses(),
       newBytesCheckoutApi.payments(),
     ]);
-    await newBytesCheckoutApi.cart({ items });
+    const synced = (await newBytesCheckoutApi.cart({ items })).data;
     const preview = (await newBytesCheckoutApi.preview({ items, delivery: "pickup" })).data;
     return {
       addresses: addrRes.data ?? [],
       payments: payRes.data ?? preview.payments ?? [],
       preview,
+      sync: synced?.sync,
     } satisfies NewBytesWarmData;
   }
 

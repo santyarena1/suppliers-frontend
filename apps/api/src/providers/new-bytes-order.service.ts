@@ -1,5 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
+import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges } from "./portal-cart-sync";
 import {
   asNumber,
   asRecord,
@@ -60,6 +62,8 @@ interface PreparedCart {
   addresses: NbAddress[];
   subtotales: NbSubtotales;
   availability: NbAvailability;
+  /** Cambios hechos en el carrito de la cuenta que NODO tiene que reflejar (solo al verificar). */
+  sync?: CartSyncChanges;
 }
 
 function mapAddress(raw: unknown): NbAddress | null {
@@ -135,7 +139,10 @@ function cartItemsFromBody(
 export class NewBytesOrderService {
   private readonly logger = new Logger(NewBytesOrderService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cartSnapshots: PortalCartSnapshotService
+  ) {}
 
   private async login(credentials: Record<string, string>): Promise<NewBytesApiClient> {
     const creds = parseNbCredentials(credentials);
@@ -194,19 +201,53 @@ export class NewBytesOrderService {
     }
   }
 
-  private async prepareCart(credentials: Record<string, string>, items: NewBytesCartItems["items"]): Promise<PreparedCart> {
-    if (items.length === 0) throw new BadRequestException("No hay productos de NewBytes en el pedido");
+  /**
+   * Con `reconcileFor` (primer paso de la verificación desde NODO) se lee el
+   * carrito activo de la cuenta antes de crear el nuevo, y se concilia contra
+   * la foto: lo que borraron o cambiaron en NewBytes vuelve a NODO en `sync`.
+   */
+  private async prepareCart(
+    credentials: Record<string, string>,
+    requested: NewBytesCartItems["items"],
+    reconcileFor?: { tenantId: string }
+  ): Promise<PreparedCart> {
+    if (requested.length === 0) throw new BadRequestException("No hay productos de NewBytes en el pedido");
     const api = await this.login(credentials);
+
+    let items = requested;
+    let sync: CartSyncChanges | undefined;
+    let previousSnapshot: Record<string, number> | null = null;
+    if (reconcileFor) {
+      const active = await api.get("carrito").catch(() => null);
+      const portalLines = cartItemsFromBody(active, [])
+        .filter((l) => l.code)
+        .map((l) => ({ code: l.code, qty: l.qty, name: l.name }));
+      previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "NEW_BYTES");
+      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot);
+      items = reconciled.merged;
+      sync = reconciled.changes;
+      this.logger.log(
+        `NewBytes conciliación: portal=${JSON.stringify(portalLines.map((l) => [l.code, l.qty]))} ` +
+        `nodo=${JSON.stringify(requested.map((i) => [i.code, i.qty]))} foto=${JSON.stringify(previousSnapshot)} ` +
+        `→ ${JSON.stringify(items.map((i) => [i.code, i.qty]))} cambios=${JSON.stringify(sync)}`
+      );
+    }
+
     await this.ensureCart(api);
 
-    await api.post(
-      "carrito/item",
-      items.map((it) => ({
-        productId: Number(it.code) || it.code,
-        amount: it.qty,
-        type: 0,
-      }))
-    );
+    if (items.length > 0) {
+      await api.post(
+        "carrito/item",
+        items.map((it) => ({
+          productId: Number(it.code) || it.code,
+          amount: it.qty,
+          type: 0,
+        }))
+      );
+    }
+    if (reconcileFor && sync) {
+      await this.cartSnapshots.save(reconcileFor.tenantId, "NEW_BYTES", nextCartSnapshot(items, sync, previousSnapshot));
+    }
 
     const [cartBody, subtotalesRaw, availabilityRaw, paymentsRaw, addressesRaw] = await Promise.all([
       api.get("carrito"),
@@ -223,6 +264,7 @@ export class NewBytesOrderService {
       addresses: unwrapNbList(addressesRaw).map(mapAddress).filter((a): a is NbAddress => a != null),
       subtotales: parseNbSubtotales(subtotalesRaw),
       availability: parseNbAvailability(availabilityRaw),
+      sync,
     };
   }
 
@@ -293,10 +335,11 @@ export class NewBytesOrderService {
   }
 
   /** Arma el carrito en NewBytes (POST /carrito/new + items) y devuelve subtotales reales. */
-  async syncCart(credentials: Record<string, string>, input: NewBytesCartItems) {
-    const prepared = await this.prepareCart(credentials, input.items);
+  async syncCart(credentials: Record<string, string>, input: NewBytesCartItems, reconcileFor?: { tenantId: string }) {
+    const prepared = await this.prepareCart(credentials, input.items, reconcileFor);
     return {
       ...this.publicCart(prepared),
+      sync: prepared.sync,
       pickup: NB_PICKUP_BRANCH,
       note: "Carrito armado en NewBytes. Falta elegir retiro o envío, medio de pago, y confirmar.",
     };
@@ -512,6 +555,11 @@ export class NewBytesOrderService {
     }
 
     const created = Boolean(processResult.orderId || processResult.branch);
+    if (created) {
+      await this.cartSnapshots.clear(author.tenantId, "NEW_BYTES").catch((err: unknown) =>
+        this.logger.warn(`No se pudo limpiar la foto del carrito de NewBytes: ${String(err)}`)
+      );
+    }
     const saved = {
       status: created ? "CREATED" : "FAILED",
       invidOrderNumber: processResult.orderId ?? null,

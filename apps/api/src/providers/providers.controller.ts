@@ -283,7 +283,7 @@ export class ProvidersController {
   /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */
   @Post("providers/NEW_BYTES/checkout/cart")
   async newBytesCheckoutCart(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutCartDto) {
-    return this.newBytesOrderService.syncCart(await this.newBytesCredentials(tenant), dto);
+    return this.newBytesOrderService.syncCart(await this.newBytesCredentials(tenant), dto, { tenantId: tenant.tenantId });
   }
 
   /** GET /carrito/calcularEnvioPara/{cp}/{idDirCli} sobre el carrito armado. */

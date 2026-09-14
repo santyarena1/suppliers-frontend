@@ -73,9 +73,10 @@ describe("NewBytesOrderService", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     }));
-    service = new NewBytesOrderService({
-      providerOrder: { create: createOrder, findMany: jest.fn() },
-    } as never);
+    service = new NewBytesOrderService(
+      { providerOrder: { create: createOrder, findMany: jest.fn() } } as never,
+      { load: jest.fn(async () => null), save: jest.fn(async () => undefined), clear: jest.fn(async () => undefined) } as never
+    );
   });
 
   afterEach(() => {

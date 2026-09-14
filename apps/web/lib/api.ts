@@ -1629,6 +1629,7 @@ export interface NewBytesAvailability {
   issues: { code?: string; message: string }[];
 }
 export interface NewBytesCartSnapshot {
+  sync?: PortalCartSync;
   items: NewBytesCheckoutItem[];
   payments: NewBytesPaymentOption[];
   addresses: NewBytesAddress[];
