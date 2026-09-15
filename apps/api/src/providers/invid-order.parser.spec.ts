@@ -17,6 +17,9 @@ import {
   reconcilePortalCart,
   cartSnapshotOf,
   nextCartSnapshot,
+  parseInvidAddItemXml,
+  parseInvidCartHtmlLines,
+  overlayInvidCartHtml,
 } from "./invid-order.parser";
 
 const CART_HTML = `
@@ -471,6 +474,10 @@ describe("invid-order.parser", () => {
       { index: 1, code: "0416895", qty: 3, name: "Memoria DDR3 HIKSEMI 8Gb 1600 MHz Hiker 1.35V (7512)" },
       { index: 2, code: "0405277", qty: 1, name: "Teclado Logitech K120 Black 920-004422" },
     ]);
+    expect(overlayInvidCartHtml(
+      [{ code: "0416895", qty: 3, price: 23.81, subtotal: 71.43, iva: 999, internos: 0 }],
+      html
+    )[0].iva).toBe(7.5);
     expect(parseCartLines("<table></table>")).toEqual([]);
   });
 
@@ -562,5 +569,72 @@ describe("invid-order.parser", () => {
     );
     expect(r.line).toEqual({ qty: 2, price: 10, subtotal: 20, iva: 4.2 });
     expect(r.next).toEqual({ qty: 4, gross: 124.2 });
+  });
+
+  it("toma el IVA de iva_producto y no del monto acumulado del carrito", () => {
+    const xml = `
+      <respuesta>
+        <error>N</error>
+        <nombre><![CDATA[Mouse Logitech]]></nombre>
+        <cantidad>3</cantidad>
+        <precio>14.89</precio>
+        <precio_producto>14.89</precio_producto>
+        <iva_producto>6.25</iva_producto>
+        <imi_producto>0.00</imi_producto>
+        <monto>255.50</monto>
+      </respuesta>`;
+    const parsed = parseInvidAddItemXml(xml, 2, { qty: 1, gross: 202.88 });
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.item).toMatchObject({
+      name: "Mouse Logitech",
+      qty: 2,
+      price: 14.89,
+      subtotal: 29.78,
+      iva: 6.25,
+      internos: 0,
+    });
+  });
+
+  it("si no hay iva_producto usa la diferencia del acumulado", () => {
+    const xml = `
+      <respuesta>
+        <nombre>Memoria</nombre>
+        <cantidad>3</cantidad>
+        <precio>23.81</precio>
+        <monto>255.5</monto>
+      </respuesta>`;
+    const parsed = parseInvidAddItemXml(xml, 2, { qty: 1, gross: 202.88 });
+    expect(parsed.item?.iva).toBe(5);
+    expect(parsed.item?.subtotal).toBe(47.62);
+  });
+
+  it("lee #iva_N del HTML del carrito y pisa el IVA inventado", () => {
+    const html = `
+      <input id="cant_1" value="2" />
+      <td id="precio_1">US$ 14.89</td>
+      <td id="subtotal_1">US$ 29.78</td>
+      <td id="iva_1">US$ 6.25</td>
+      <td id="imi_1">US$ 0.00</td>
+      <input id="cant_2" value="1" />
+      <td id="precio_2">US$ 50.00</td>
+      <td id="subtotal_2">US$ 50.00</td>
+      <td id="iva_2">US$ 10.50</td>
+      <td id="imi_2">US$ 1.20</td>
+    `;
+    const lines = parseInvidCartHtmlLines(html);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ iva: 6.25, subtotal: 29.78, qty: 2 });
+    expect(lines[1]).toMatchObject({ iva: 10.5, internos: 1.2, subtotal: 50 });
+
+    const overlaid = overlayInvidCartHtml(
+      [
+        { qty: 2, price: 14.89, subtotal: 29.78, iva: 120.22, internos: 0 },
+        { qty: 1, price: 50, subtotal: 50, iva: 163.82, internos: 0 },
+      ],
+      html
+    );
+    expect(overlaid[0].iva).toBe(6.25);
+    expect(overlaid[1].iva).toBe(10.5);
+    expect(overlaid[1].internos).toBe(1.2);
   });
 });

@@ -16,10 +16,11 @@ import {
   parseXmlCost,
   parseQuotedShipping,
   collectFormFields,
-  invidLineFromCumulative,
   parseCartLines,
   reconcilePortalCart,
   nextCartSnapshot,
+  parseInvidAddItemXml,
+  overlayInvidCartHtml,
   type CartSyncChanges,
   type InvidCartCumulative,
   type InvidRadioOption,
@@ -291,26 +292,25 @@ export class InvidOrderService {
     const res = await this.request(cookie, "GET", `${SITE_BASE}/servicios.php`, {
       params: { servicio: "sumar_a_carrito", producto: code, cantidad: qty },
     });
-    const xml = res.data;
-    const field = (tag: string) => xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`))?.[1] ?? "";
-    const nombre = decodeEntities(field("nombre"));
-    const monto = Number(field("monto"));
-    const xmlError = stripHtmlMessage(field("error") || field("mensaje") || field("msg"));
-    if (!nombre || !Number.isFinite(monto)) {
+    const parsed = parseInvidAddItemXml(res.data, qty, prev);
+    if (!parsed.item || !parsed.next) {
       throw new BadRequestException(
-        xmlError || `Invid rechazó el producto ${code} (sin stock o código inválido)`
+        parsed.error || `Invid rechazó el producto ${code} (sin stock o código inválido)`
       );
     }
-    // `cantidad` y `monto` son el acumulado del carrito, no la línea — ver invidLineFromCumulative.
-    const { line, next } = invidLineFromCumulative(
-      prev,
-      { precio: Number(field("precio")), monto, cantidad: Number(field("cantidad")) },
-      qty
-    );
     return {
       cookie: res.cookie,
-      cumulative: next,
-      item: { code, name: nombre, ...line, internos: 0, percepciones: 0 },
+      cumulative: parsed.next,
+      item: {
+        code,
+        qty: parsed.item.qty,
+        name: parsed.item.name ?? code,
+        price: parsed.item.price,
+        subtotal: parsed.item.subtotal,
+        iva: parsed.item.iva,
+        internos: parsed.item.internos,
+        percepciones: 0,
+      },
     };
   }
 
@@ -428,16 +428,17 @@ export class InvidOrderService {
     const cart = await this.request(cookie, "GET", CART_URL);
     cookie = cart.cookie;
     const checkout = parseCheckoutForm(cart.data);
+    const fromHtml = overlayInvidCartHtml(addedItems, cart.data);
 
     // Lo que quedó cargado en el portal es la foto para la próxima verificación.
     if (reconcileFor && sync) {
       await this.cartSnapshots.save(reconcileFor.tenantId, "INVID", nextCartSnapshot(addedItems, sync, previousSnapshot));
     }
 
-    const preparedItems = addedItems.map((item, idx) => {
+    const preparedItems = fromHtml.map((item, idx) => {
       const tax = taxLines.find((t) => String(t.nroItem) === String(idx + 1))
         ?? taxLines[idx];
-      const internos = tax?.internos ?? 0;
+      const internos = tax != null ? (Number(tax.internos) || 0) : item.internos;
       const percepciones = round2(item.subtotal * (percepcionPercent / 100));
       return { ...item, internos, percepciones };
     });
