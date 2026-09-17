@@ -29,6 +29,7 @@ import GrupoNucleoAccountPanel from "@/components/GrupoNucleoAccountPanel";
 import AirAccountPanel from "@/components/AirAccountPanel";
 import NewTreeAccountPanel from "@/components/NewTreeAccountPanel";
 import SolutionBoxAccountPanel from "@/components/SolutionBoxAccountPanel";
+import DistecnaAccountPanel from "@/components/DistecnaAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import {
   AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
@@ -48,10 +49,10 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
-type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account";
+type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account";
 
 const VALID_PROVIDER_TABS: ProviderTab[] = [
-  "lists", "orders", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account",
+  "lists", "orders", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -414,6 +415,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     ...(provider === "AIR" ? [{ key: "air-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
                     ...(provider === "NEW_TREE" ? [{ key: "nt-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
                     ...(provider === "SOLUTION_BOX" ? [{ key: "sb-account" as const, label: "Pedidos y Facturas", shortLabel: "Pedidos" }] : []),
+                    ...(provider === "DISTECNA" ? [{ key: "dt-account" as const, label: "Pedidos y cuenta", shortLabel: "Pedidos" }] : []),
                   ].map(({ key, label, shortLabel }) => (
                     <button
                       key={key}
@@ -819,6 +821,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 {tab === "air-account" && <AirAccountPanel />}
                 {tab === "nt-account" && <NewTreeAccountPanel />}
                 {tab === "sb-account" && <SolutionBoxAccountPanel />}
+                {tab === "dt-account" && <DistecnaAccountPanel />}
               </div>
             </div>
           )}

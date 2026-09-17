@@ -402,15 +402,51 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     ],
   },
   DISTECNA: {
-    title: "Conectar tu cuenta de Distécna",
-    intro: "Distécna tiene API (api@distecna.com) pero la documentación no es pública.",
-    extra: "Pedí acceso a api@distecna.com. Cuando llegue el contrato se arma el adapter sin adivinar campos.",
+    title: "Conectar tu cuenta de Distecna",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
+    extra:
+      "La API Key (Camino A) sincroniza el catálogo. Usuario y contraseña de la API (Camino B) habilitan pedidos, condición de pago y direcciones de entrega. Pedilos a api@distecna.com.",
     portalUrl: "https://www.distecna.com",
     portalLabel: "distecna.com",
     fields: [
-      { key: "user", label: "Usuario", type: "text", required: false, aliases: ["username"], autoComplete: "username" },
-      { key: "password", label: "Contraseña", type: "password", required: false, aliases: ["pass"], autoComplete: "current-password" },
-      { key: "token", label: "Token / API key", type: "password", required: false, aliases: ["apiKey", "api_key"] },
+      {
+        key: "api_key",
+        label: "API Key",
+        type: "password",
+        required: false,
+        placeholder: "x-apikey de catálogo",
+        help: "La manda Sistemas de Distecna. Con esto alcanza para sincronizar precios y stock.",
+        aliases: ["apiKey", "token"],
+      },
+      {
+        key: "user",
+        label: "Usuario API (pedidos)",
+        type: "text",
+        required: false,
+        placeholder: "Usuario JWT de la API V2",
+        help: "Camino B: login para crear pedidos. Distinto de la API Key.",
+        aliases: ["username", "userName"],
+        autoComplete: "username",
+      },
+      {
+        key: "password",
+        label: "Contraseña API (pedidos)",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña JWT",
+        aliases: ["pass"],
+        autoComplete: "current-password",
+      },
+      {
+        key: "environment",
+        label: "Entorno",
+        type: "text",
+        required: false,
+        placeholder: "prod",
+        help: "prod (producción) o qa (homologación). El catálogo V1 siempre va a api.distecna.com.",
+        aliases: ["env"],
+      },
     ],
   },
 };
@@ -510,6 +546,21 @@ export function validateCredentialValues(
       return "Completá usuario y contraseña del portal juntos.";
     }
     return "Cargá las credenciales de la API de New Tree, las del portal, o las dos.";
+  }
+
+  if (provider === "DISTECNA") {
+    const apiKey = (values.api_key ?? values.token ?? "").trim();
+    const user = (values.user ?? values.username ?? "").trim();
+    const password = (values.password ?? "").trim();
+    const env = (values.environment ?? "").trim().toLowerCase();
+    if (env && env !== "prod" && env !== "qa") {
+      return "El entorno tiene que ser prod o qa.";
+    }
+    if ((user || password) && !(user && password)) {
+      return "Cargá usuario y contraseña de pedidos juntos.";
+    }
+    if (apiKey || (user && password)) return null;
+    return "Cargá la API Key de catálogo, o usuario y contraseña de pedidos.";
   }
 
   for (const field of schema.fields) {

@@ -27,6 +27,7 @@ export const PROVIDERS_WITH_IVA_RATE = [
   "AIR",
   "INVID",
   "DIAPSTORE",
+  "DISTECNA",
 ] as const;
 
 export type PriceChannel = "API" | "LIST";

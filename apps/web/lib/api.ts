@@ -193,7 +193,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
 
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
 export const IMPLEMENTED_PROVIDERS: Provider[] = [
-  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX",
+  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX", "DISTECNA",
 ];
 
 export interface ProductDTO {
@@ -2318,6 +2318,99 @@ export const solutionBoxAccountApi = {
     }>("/providers/SOLUTION_BOX/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
   order: (number: string, ext: string) =>
     api.get<SolutionBoxOrder>(`/providers/SOLUTION_BOX/orders/${encodeURIComponent(number)}/${encodeURIComponent(ext)}`),
+};
+
+export interface DistecnaPreviewItem {
+  code: string;
+  type: string | null;
+  qty: number;
+  name: string;
+  price: number | null;
+  currency: string;
+  stock: number | null;
+  ivaPercent: number | null;
+  iiPercent: number | null;
+  subtotal: number | null;
+  vat: number;
+  internals: number;
+  priceChanged: boolean;
+  stockChanged: boolean;
+  error: string | null;
+}
+
+export interface DistecnaPaymentTerm {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface DistecnaAddress {
+  id: string;
+  name: string;
+  street?: string | null;
+  number?: string | null;
+  floor?: string | null;
+  department?: string | null;
+  postalCode?: string | null;
+  jurisdiction?: string | null;
+  country?: string | null;
+}
+
+export interface DistecnaCheckoutPreview {
+  items: DistecnaPreviewItem[];
+  paymentTerm: DistecnaPaymentTerm | null;
+  addresses: DistecnaAddress[];
+  paymentTermId: string | null;
+  deliveryAddressId: string | null;
+  subtotal: number;
+  vat: number;
+  internals: number;
+  perceptions: number;
+  perceptionLines: { label: string; amount: number }[];
+  total: number;
+  currency: string;
+  stockOk: boolean;
+  hasChanges: boolean;
+  note: string;
+}
+
+export interface DistecnaDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  message: string;
+}
+
+export type DistecnaCheckoutPayload = {
+  items: { code: string; qty: number; name?: string; type?: string }[];
+  paymentTermId?: string;
+  deliveryAddressId?: string;
+  notes?: string;
+};
+
+export const distecnaCheckoutApi = {
+  preview: (body: DistecnaCheckoutPayload) =>
+    api.post<DistecnaCheckoutPreview>("/providers/DISTECNA/checkout/preview", body),
+  draft: (body: DistecnaCheckoutPayload & { background?: boolean }) =>
+    api.post<DistecnaDraftResult>("/providers/DISTECNA/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/DISTECNA/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/DISTECNA/drafts/${id}`),
+};
+
+export const distecnaAccountApi = {
+  account: (opts?: { refresh?: boolean }) =>
+    api.get<{
+      paymentTerm: DistecnaPaymentTerm | null;
+      addresses: DistecnaAddress[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/DISTECNA/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
 };
 
 // --- Admin / Users ---

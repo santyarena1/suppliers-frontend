@@ -119,7 +119,7 @@ export function axiosErrorMessage(err: unknown, fallback: string): string {
     const fromBody =
       typeof data === "string"
         ? data
-        : asString(asRecord(data)?.message) || asString(asRecord(data)?.error_desc) || (data ? JSON.stringify(data) : undefined);
+        : asString(asRecord(data)?.message) || asString(asRecord(data)?.error_desc) || asString(asRecord(data)?.error) || (data ? JSON.stringify(data) : undefined);
     return (fromBody || ax.message || fallback).slice(0, 400);
   }
   return (err instanceof Error ? err.message : String(err) || fallback).slice(0, 400);
