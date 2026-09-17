@@ -517,15 +517,14 @@ como DB en vivo). Credenciales (`POST /credentials`): `api_key` (Camino A, heade
 `x-apikey`) para sync de precios/stock, y/o `user` + `password` (Camino B, JWT 1 h)
 para pedidos, condición de pago y direcciones. `environment` opcional: `prod` (default)
 o `qa`. El listado no trae nombre ni fotos: el sync pide `GET /Product/{code}`
-en la misma tanda (8 en paralelo, vía `/api/distecna-fetch`) y guarda nombre,
+en la misma tanda (4 en paralelo, vía `/api/distecna-fetch`) y guarda nombre,
 marca, categoría y foto junto con código/SKU/precio/stock/IVA. La ficha a veces
 trae precio 0: no pisa la oferta del listado.
 
 El certificado TLS de Distecna viene con cadena incompleta: el cliente habla HTTPS
 con verify relajado e IPv4. **Railway no llega a :8096** (timeout). En producción el
 API pide el catálogo vía el front `GET/POST /api/distecna-fetch?url=` (allowlist de
-hosts Distecna, TLS insecure, igual que `/api/retail-fetch` de HardGamers), o por
-`DISTECNA_PROXY_URL` / `NEW_TREE_PROXY_URL`. En local sigue el camino directo.
+hosts Distecna). En local sigue el camino directo.
 El sync usa Camino A (`x-apikey` + `GET /Product`) si hay API Key.
 
 ### `GET /providers/DISTECNA/account?refresh=1`

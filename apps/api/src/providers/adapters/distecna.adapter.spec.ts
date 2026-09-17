@@ -144,8 +144,9 @@ describe("shouldRetryDistecna", () => {
   it("no reintenta canceled/timeout: el front tiene que ver el error, no colgarse", () => {
     expect(shouldRetryDistecna({ code: "ERR_CANCELED", message: "canceled" }, 0)).toBe(false);
     expect(shouldRetryDistecna(new Error("timeout of 20000ms exceeded"), 0)).toBe(false);
-    expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).toMatch(/8096/);
+    expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).toMatch(/no contestó a tiempo/i);
     expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).not.toMatch(/canceled/i);
+    expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).not.toMatch(/NEW_TREE/i);
   });
 });
 
@@ -188,6 +189,15 @@ describe("resolveDistecnaFetchVia / egress", () => {
     const e = resolveDistecnaEgress();
     expect(e.mode).toBe("via");
     expect(e.via).toBe("https://nodo.example.com/api/distecna-fetch");
+  });
+
+  it("no reusa el proxy de New Tree", () => {
+    process.env.RAILWAY_ENVIRONMENT = "production";
+    process.env.NEW_TREE_PROXY_URL = "http://user:pass@proxy.example:3128";
+    process.env.CORS_ORIGIN = "https://nodo.example.com";
+    const e = resolveDistecnaEgress();
+    expect(e.mode).toBe("via");
+    expect(e.proxyUrl).toBe("");
   });
 });
 

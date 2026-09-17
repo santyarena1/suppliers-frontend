@@ -45,7 +45,7 @@ export function resolveDistecnaFetchVia(): string {
 }
 
 function distecnaProxyUrl(): string {
-  return (process.env.DISTECNA_PROXY_URL || process.env.NEW_TREE_PROXY_URL || "").trim();
+  return (process.env.DISTECNA_PROXY_URL || "").trim();
 }
 
 function fetchToken(): string {
@@ -356,7 +356,7 @@ export function shouldRetryDistecna(err: unknown, attempt: number, maxRetries = 
 
 export function distecnaErrorMessage(err: unknown, fallback: string): string {
   if (isDistecnaTimeoutError(err)) {
-    return "Distecna no contestó a tiempo (api.distecna.com:8096). Railway no llega a ese puerto: el sync tiene que salir por el front (`DISTECNA_FETCH_VIA_URL`) o por `DISTECNA_PROXY_URL` / `NEW_TREE_PROXY_URL`.";
+    return "Distecna no contestó a tiempo.";
   }
   const rec = asRecord(
     err && typeof err === "object" && "response" in err
@@ -439,10 +439,11 @@ export class DistecnaClient {
   }
 
   private shouldFailover(err: unknown): boolean {
-    if (isDistecnaTimeoutError(err)) return true;
+    // Un timeout de una ficha no puede tirar el cliente a :8096 ni a un proxy
+    // de otro proveedor. Solo cambiamos de camino si el front rechaza el via.
     if (this.mode !== "via") return false;
     const status = statusOf(err);
-    return status === 401 || status === 403 || status === 404 || status === 502;
+    return status === 401 || status === 403 || status === 404;
   }
 
   private failover(): boolean {
@@ -450,7 +451,7 @@ export class DistecnaClient {
     const next: DistecnaEgressMode[] = [];
     if (this.via) next.push("via");
     if (this.proxyUrl) next.push("proxy");
-    next.push("direct");
+    if (!isRailway()) next.push("direct");
     const pick = next.find((m) => !this.failed.has(m));
     if (!pick) return false;
     this.mode = pick;
@@ -606,6 +607,7 @@ export class DistecnaClient {
       return this.withBackoff(`GET /Product/${code}`, async () => {
         const res = await this.http.get<DistecnaDetail>(`${this.v1Base}/Product/${encoded}`, {
           headers: this.v1Headers(),
+          timeout: 20_000,
         });
         return res.data;
       });
