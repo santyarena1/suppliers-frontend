@@ -115,19 +115,65 @@ export function collectFormFields(html: string, formId = "form_envio"): Record<s
 }
 
 function parseSelectOptions(html: string, id: string): InvidRadioOption[] {
-  const block = html.match(new RegExp(`<select[^>]*\\bid=["']${id}["'][^>]*>([\\s\\S]*?)</select>`, "i"));
-  if (!block) return [];
+  return parseSelectBlock(
+    html.match(new RegExp(`<select[^>]*\\bid=["']${id}["'][^>]*>([\\s\\S]*?)</select>`, "i"))?.[1]
+  );
+}
+
+function parseSelectOptionsByName(html: string, name: string): InvidRadioOption[] {
+  return parseSelectBlock(
+    html.match(new RegExp(`<select\\b[^>]*\\bname=["']${name}["'][^>]*>([\\s\\S]*?)</select>`, "i"))?.[1]
+  );
+}
+
+function parseSelectBlock(inner: string | undefined): InvidRadioOption[] {
+  if (!inner) return [];
   const options: InvidRadioOption[] = [];
   const re = /<option\b([^>]*)>([\s\S]*?)<\/option>/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(block[1]))) {
-    const value = attr(`<x ${m[1]}>`, "value");
-    if (!value) continue;
+  while ((m = re.exec(inner))) {
     const label = stripTags(m[2]);
-    if (!label || /seleccione/i.test(label)) continue;
+    const value = attr(`<x ${m[1]}>`, "value") ?? label;
+    if (!value) continue;
+    if (!label || isBankCaption(label)) continue;
     options.push({ value, label });
   }
   return options;
+}
+
+/** Título del campo («Banco: *»), no el nombre de un banco. */
+function isBankCaption(label: string): boolean {
+  const t = label.replace(/\s+/g, " ").trim();
+  return /^(banco\s*:?\s*\*?|seleccione.*|eleg[ií].*banco.*)$/i.test(t);
+}
+
+const DEFAULT_INVID_BANKS: { value: string; label: string }[] = [
+  { value: "Macro", label: "Macro" },
+  { value: "Galicia", label: "Galicia" },
+  { value: "Mercado Pago", label: "Mercado Pago" },
+];
+
+function findSelectName(html: string, hint: RegExp): string | undefined {
+  const re = /<select\b([^>]*)>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const name = attr(`<x ${m[1]}>`, "name");
+    const id = attr(`<x ${m[1]}>`, "id") ?? "";
+    if (name && (hint.test(name) || hint.test(id))) return name;
+  }
+  return undefined;
+}
+
+function withBankLabels(opts: InvidRadioOption[]): { value: string; label: string }[] {
+  return opts
+    .map((o) => {
+      const value = o.value.trim();
+      const raw = o.label.replace(/\s+/g, " ").trim();
+      const generic = isBankCaption(raw) || /^opci[oó]n\s+/i.test(raw);
+      const label = generic ? value : raw;
+      return { value, label: label || value };
+    })
+    .filter((o) => o.value && !isBankCaption(o.label));
 }
 
 export function pickPickupDelivery(deliveries: InvidRadioOption[]): InvidRadioOption | undefined {
@@ -761,8 +807,15 @@ export function parseInvidPaymentForm(html: string): InvidPaymentForm | null {
   const fields = collectNamedFields(best.body);
   const files = fileFieldNames(best.body);
   const radios = radioNames(best.body);
-  const bankField = radios.find((n) => /banco|bank/i.test(n)) ?? radios[0] ?? "banco";
-  const banks = parseRadios(best.body, bankField);
+  const selectBank = findSelectName(best.body, /banco|bank/i);
+  const bankField = selectBank
+    ?? radios.find((n) => /banco|bank/i.test(n))
+    ?? radios[0]
+    ?? "banco";
+  const banksRaw = selectBank
+    ? parseSelectOptionsByName(best.body, selectBank)
+    : parseRadios(best.body, bankField);
+  const banks = withBankLabels(banksRaw);
   const tas = textareaNames(best.body);
   const notesField = tas.find((t) => /observ|nota|comment|mensaje/i.test(t.name))?.name
     ?? tas[0]?.name
@@ -776,12 +829,7 @@ export function parseInvidPaymentForm(html: string): InvidPaymentForm | null {
     action: attr(`<form ${best.attrs}>`, "action") || "",
     method: (attr(`<form ${best.attrs}>`, "method") || "post").toLowerCase(),
     fields,
-    banks: banks.length > 0
-      ? banks.map((b) => ({ value: b.value, label: b.label }))
-      : [
-          { value: "Macro", label: "Macro" },
-          { value: "Galicia", label: "Galicia" },
-        ],
+    banks: banks.length > 0 ? banks : DEFAULT_INVID_BANKS,
     bankField,
     notesField,
     fileFields: files.slice(0, 3),

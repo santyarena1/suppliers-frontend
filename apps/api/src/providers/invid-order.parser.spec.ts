@@ -331,6 +331,37 @@ describe("invid-order.parser", () => {
     expect(form?.notice).toMatch(/17:00/i);
   });
 
+  it("no usa el título «Banco: *» como nombre del banco", () => {
+    const radios = `
+      <form method="post" enctype="multipart/form-data">
+        <label>Banco: *</label>
+        <input type="radio" name="banco" value="Macro" />
+        <label>Banco: *</label>
+        <input type="radio" name="banco" value="Galicia" />
+        <textarea name="observaciones"></textarea>
+        <input type="file" name="archivo1" />
+      </form>`;
+    expect(parseInvidPaymentForm(radios)?.banks.map((b) => b.label)).toEqual(["Macro", "Galicia"]);
+
+    const select = `
+      <form method="post" enctype="multipart/form-data">
+        <label for="banco">Banco: *</label>
+        <select name="banco" id="banco">
+          <option value="">Banco: *</option>
+          <option value="Macro">Banco Macro</option>
+          <option value="Galicia">Banco Galicia</option>
+          <option value="Mercado Pago">Mercado Pago</option>
+        </select>
+        <textarea name="observaciones"></textarea>
+        <input type="file" name="archivo1" />
+      </form>`;
+    expect(parseInvidPaymentForm(select)?.banks).toEqual([
+      { value: "Macro", label: "Banco Macro" },
+      { value: "Galicia", label: "Banco Galicia" },
+      { value: "Mercado Pago", label: "Mercado Pago" },
+    ]);
+  });
+
   it("conserva hrefs de la cuenta corriente", () => {
     const html = `
       Saldo de Cuenta Corriente: $-12.50

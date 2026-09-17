@@ -4,7 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import {
   CheckoutField,
-  CheckoutSegmented,
+  CheckoutSelect,
   CheckoutSubmit,
 } from "@/components/checkout/CheckoutForm";
 import {
@@ -20,6 +20,7 @@ const FALLBACK_FORM: InvidPaymentForm = {
   banks: [
     { value: "Macro", label: "Macro" },
     { value: "Galicia", label: "Galicia" },
+    { value: "Mercado Pago", label: "Mercado Pago" },
   ],
   bankField: "banco",
   notesField: "observaciones",
@@ -41,7 +42,7 @@ export default function InvidPaymentModal({
 }) {
   const schema = form ?? FALLBACK_FORM;
   const slots = schema.fileFields.length > 0 ? schema.fileFields.slice(0, 3) : FALLBACK_FORM.fileFields;
-  const [bank, setBank] = useState(schema.banks[0]?.value ?? "Macro");
+  const [bank, setBank] = useState("");
   const [notes, setNotes] = useState("");
   const [files, setFiles] = useState<(File | null)[]>(() => slots.map(() => null));
   const [busy, setBusy] = useState(false);
@@ -121,13 +122,17 @@ export default function InvidPaymentModal({
             <p className="text-sm text-emerald-400">Comprobante enviado a Invid.</p>
           ) : (
             <>
-              <CheckoutField label="Banco *">
-                <CheckoutSegmented
-                  ariaLabel="Banco"
+              <CheckoutField label="Banco *" htmlFor="invid-bank">
+                <CheckoutSelect
+                  id="invid-bank"
                   value={bank}
-                  onChange={setBank}
-                  options={schema.banks.map((b) => ({ value: b.value, label: b.label }))}
-                />
+                  onChange={(e) => setBank(e.target.value)}
+                >
+                  <option value="">Elegí el banco</option>
+                  {schema.banks.map((b) => (
+                    <option key={b.value} value={b.value}>{b.label}</option>
+                  ))}
+                </CheckoutSelect>
               </CheckoutField>
 
               <CheckoutField label="Observaciones *" htmlFor="invid-obs">

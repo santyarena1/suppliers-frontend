@@ -254,7 +254,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/providers/INVID/orders`
 - **Auth**: Bearer, organización comercio con cuenta Invid cargada
 - **Body / Params**: `refresh=1` opcional para saltear cache
-- **Respuesta esperada**: `{ orders: InvidOrder[], currentExchangeRate?, paymentForm?, paymentUploads?, note? }`. Cada pedido incluye `items[]` (código, nombre, precio s/IVA, cantidad, total de línea), `totals?`, `exchangeRate?`, `exchangeRateSource`, `amountArs?`, `canAttachPayment?` y `paymentHref?`. `paymentForm` trae banco (Macro/Galicia), observaciones y hasta 3 `fileFields` del HTML real de Invid.
+- **Respuesta esperada**: `{ orders: InvidOrder[], currentExchangeRate?, paymentForm?, paymentUploads?, note? }`. Cada pedido incluye `items[]` (código, nombre, precio s/IVA, cantidad, total de línea), `totals?`, `exchangeRate?`, `exchangeRateSource`, `amountArs?`, `canAttachPayment?` y `paymentHref?`. `paymentForm` trae los bancos del HTML de Invid (Macro, Galicia, Mercado Pago; no el título «Banco: *»), observaciones y hasta 3 `fileFields`.
 - **Estado**: IMPLEMENTADO
 - **Notas**: El HTML del portal a veces pone el estado de línea (Abierto) en una columna: el parser identifica producto / precio / cantidad por contenido, no por posición. No se inventan alícuotas. Si Invid no discrimina IVA/IIBB, `taxes` es el resto entre el neto de las líneas y el total. El TC del HTML del pedido manda; si no viene, se usa la cotización actual de Invid (`traerCotizacionOpcionPago`) y se etiqueta como actual, no histórica.
 
