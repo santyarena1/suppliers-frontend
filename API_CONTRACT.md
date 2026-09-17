@@ -520,11 +520,11 @@ o `qa`. El listado no trae nombre ni fotos: el sync guarda código/SKU/precio/st
 y `enrichDetails` completa la ficha con `GET /Product/{code}` (o V2 si hay JWT).
 
 El certificado TLS de Distecna viene con cadena incompleta: el cliente habla HTTPS
-con verify relajado e IPv4. Timeout 45s; "canceled"/timeout se traducen a un mensaje
-claro (no se reintenta). El sync usa **siempre** Camino A (`x-apikey` + `GET /Product`)
-si hay API Key. No se usa el proxy de New Tree: ese CONNECT abortaba :8096. Si Railway
-no llega al puerto, `DISTECNA_PROXY_URL`. `GET /status` y `/sync/*` no cuentan para el
-throttle. No se loguea la API Key ni el JWT.
+con verify relajado e IPv4. **Railway no llega a :8096** (timeout). En producción el
+API pide el catálogo vía el front `GET/POST /api/distecna-fetch?url=` (allowlist de
+hosts Distecna, TLS insecure, igual que `/api/retail-fetch` de HardGamers), o por
+`DISTECNA_PROXY_URL` / `NEW_TREE_PROXY_URL`. En local sigue el camino directo.
+El sync usa Camino A (`x-apikey` + `GET /Product`) si hay API Key.
 
 ### `GET /providers/DISTECNA/account?refresh=1`
 

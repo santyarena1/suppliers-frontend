@@ -12,6 +12,8 @@ import {
   productTypeFromRaw,
   shouldRetryDistecna,
   distecnaErrorMessage,
+  resolveDistecnaFetchVia,
+  resolveDistecnaEgress,
 } from "../distecna-client";
 
 const LIST = {
@@ -131,6 +133,48 @@ describe("shouldRetryDistecna", () => {
     expect(shouldRetryDistecna(new Error("timeout of 20000ms exceeded"), 0)).toBe(false);
     expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).toMatch(/8096/);
     expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).not.toMatch(/canceled/i);
+  });
+});
+
+describe("resolveDistecnaFetchVia / egress", () => {
+  const keys = [
+    "DISTECNA_FETCH_VIA_URL",
+    "RETAIL_HG_FETCH_VIA_URL",
+    "CORS_ORIGIN",
+    "WEB_ORIGIN",
+    "FRONTEND_URL",
+    "RAILWAY_ENVIRONMENT",
+    "RAILWAY_PROJECT_ID",
+    "DISTECNA_PROXY_URL",
+    "NEW_TREE_PROXY_URL",
+  ];
+  const prev: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const k of keys) {
+      prev[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+
+  afterEach(() => {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  });
+
+  it("arma /api/distecna-fetch desde el fetch de HardGamers", () => {
+    process.env.RETAIL_HG_FETCH_VIA_URL = "https://app.example.com/api/retail-fetch";
+    expect(resolveDistecnaFetchVia()).toBe("https://app.example.com/api/distecna-fetch");
+  });
+
+  it("en Railway usa el front (CORS) para salir a :8096", () => {
+    process.env.RAILWAY_ENVIRONMENT = "production";
+    process.env.CORS_ORIGIN = "https://nodo.example.com";
+    const e = resolveDistecnaEgress();
+    expect(e.mode).toBe("via");
+    expect(e.via).toBe("https://nodo.example.com/api/distecna-fetch");
   });
 });
 
