@@ -58,8 +58,8 @@ function upstream(
   target: URL,
   method: string,
   headers: Record<string, string>,
-  body?: Buffer
-): Promise<{ status: number; contentType: string; body: Buffer }> {
+  body?: Uint8Array
+): Promise<{ status: number; contentType: string; body: Uint8Array }> {
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
@@ -79,7 +79,7 @@ function upstream(
           resolve({
             status: res.statusCode || 502,
             contentType: String(res.headers["content-type"] || "application/json"),
-            body: Buffer.concat(chunks),
+            body: new Uint8Array(Buffer.concat(chunks)),
           })
         );
       }
@@ -100,9 +100,13 @@ async function handle(req: NextRequest) {
 
   try {
     const method = req.method === "POST" || req.method === "PUT" ? req.method : "GET";
-    const rawBody = method === "GET" ? undefined : Buffer.from(await req.arrayBuffer());
+    const rawBody = method === "GET" ? undefined : new Uint8Array(await req.arrayBuffer());
     const up = await upstream(target, method, forwardHeaders(req), rawBody);
-    return new NextResponse(up.body, {
+    // NextResponse/BodyInit (DOM) pide Uint8Array<ArrayBuffer>; Buffer/Uint8Array
+    // de Node queda como ArrayBufferLike y tsc de Vercel lo rechaza.
+    const body = new Uint8Array(up.body.byteLength);
+    body.set(up.body);
+    return new NextResponse(body, {
       status: up.status,
       headers: {
         "content-type": up.contentType,
