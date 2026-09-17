@@ -109,6 +109,8 @@ describe("distecnaTaxPoints / currency / credentials", () => {
     expect(hasDistecnaCatalogAccess(b)).toBe(true);
     expect(hasDistecnaOrderAccess(b)).toBe(false);
     expect(cleanDistecnaCode(".")).toBeUndefined();
+    const both = DistecnaClient.fromCredentials({ api_key: "k", user: "u", password: "p" });
+    expect(both.usesV2Catalog).toBe(false);
   });
 });
 

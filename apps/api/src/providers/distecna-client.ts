@@ -1,20 +1,36 @@
 import { BadGatewayException, BadRequestException } from "@nestjs/common";
 import axios, { AxiosInstance, type AxiosRequestConfig } from "axios";
+import dns from "dns";
 import https from "https";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { asNumber, asRecord, asString, axiosErrorMessage } from "./json-value";
 import type { NormalizedProduct } from "./types";
+
+dns.setDefaultResultOrder("ipv4first");
 
 /**
  * Distecna presenta un certificado incompleto (falta el intermediario): curl y
  * Node fallan el verify de TLS. El canal sigue siendo HTTPS; no se baja a HTTP.
- * `family: 4` evita cuelgues IPv6; `proxy: false` para que axios no ignore el
- * agent si hay HTTP_PROXY en el entorno.
+ * IPv4 forzado. Si Railway no sale a :8096, se usa el mismo proxy que New Tree.
  */
-const TLS = new https.Agent({
-  rejectUnauthorized: false,
-  keepAlive: true,
-  family: 4,
-});
+function distecnaProxyUrl(): string {
+  return (process.env.DISTECNA_PROXY_URL || process.env.NEW_TREE_PROXY_URL || "").trim();
+}
+
+function buildDistecnaAgent(): https.Agent {
+  const proxyUrl = distecnaProxyUrl();
+  if (proxyUrl) {
+    return new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+  }
+  return new https.Agent({
+    rejectUnauthorized: false,
+    keepAlive: false,
+    family: 4,
+    timeout: 12_000,
+  });
+}
+
+const TLS = buildDistecnaAgent();
 
 export const DISTECNA_V1_PROD = "https://api.distecna.com:8096";
 export const DISTECNA_AUTH_PROD = "https://dsaapi.distecna.com:8087";
@@ -284,6 +300,7 @@ export class DistecnaClient {
       httpsAgent: TLS,
       proxy: false,
       timeout: QUERY_TIMEOUT_MS,
+      transitional: { clarifyTimeoutError: true },
       headers: { Accept: "application/json", "User-Agent": "nodo-distecna" },
       validateStatus: (s) => s >= 200 && s < 300,
     });
@@ -307,8 +324,9 @@ export class DistecnaClient {
     return hasDistecnaOrderAccess(this.creds);
   }
 
+  /** Catálogo V2 solo si no hay API Key: el JWT de pedidos no tiene que bloquear el sync. */
   get usesV2Catalog(): boolean {
-    return hasDistecnaOrderAccess(this.creds);
+    return hasDistecnaOrderAccess(this.creds) && !this.creds.apiKey;
   }
 
   private get v1Base(): string {
@@ -391,27 +409,34 @@ export class DistecnaClient {
   async listProducts(opts: { limit: number; offset: number; search?: string }): Promise<DistecnaListResponse> {
     const params: Record<string, string | number> = { limit: opts.limit, offset: opts.offset };
     if (opts.search) params.search = opts.search;
-    if (this.usesV2Catalog) {
-      const data = await this.withBackoff("GET /v2/Product", () =>
-        this.v2Request<DistecnaListResponse>({
-          method: "GET",
-          url: `${this.v2Base}/v2/Product`,
+    if (this.creds.apiKey) {
+      const data = await this.withBackoff("GET /Product", async () => {
+        const res = await this.http.get<DistecnaListResponse>(`${this.v1Base}/Product`, {
           params,
-        })
-      );
+          headers: this.v1Headers(),
+          signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
+        });
+        return res.data;
+      });
       return {
         total: asNumber(data?.total) ?? 0,
         offset: asNumber(data?.offset) ?? opts.offset,
         products: Array.isArray(data?.products) ? data.products : [],
       };
     }
-    const data = await this.withBackoff("GET /Product", async () => {
-      const res = await this.http.get<DistecnaListResponse>(`${this.v1Base}/Product`, {
+    return this.listProductsV2(opts);
+  }
+
+  private async listProductsV2(opts: { limit: number; offset: number; search?: string }): Promise<DistecnaListResponse> {
+    const params: Record<string, string | number> = { limit: opts.limit, offset: opts.offset };
+    if (opts.search) params.search = opts.search;
+    const data = await this.withBackoff("GET /v2/Product", () =>
+      this.v2Request<DistecnaListResponse>({
+        method: "GET",
+        url: `${this.v2Base}/v2/Product`,
         params,
-        headers: this.v1Headers(),
-      });
-      return res.data;
-    });
+      })
+    );
     return {
       total: asNumber(data?.total) ?? 0,
       offset: asNumber(data?.offset) ?? opts.offset,
@@ -421,6 +446,15 @@ export class DistecnaClient {
 
   async getDetail(code: string, type?: string | null): Promise<DistecnaDetail> {
     const encoded = encodeURIComponent(code);
+    if (this.creds.apiKey) {
+      return this.withBackoff(`GET /Product/${code}`, async () => {
+        const res = await this.http.get<DistecnaDetail>(`${this.v1Base}/Product/${encoded}`, {
+          headers: this.v1Headers(),
+          signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
+        });
+        return res.data;
+      });
+    }
     if (this.usesV2Catalog && type) {
       const encodedType = encodeURIComponent(type);
       return this.withBackoff(`GET /v2/Product/${code}`, () =>
@@ -429,14 +463,6 @@ export class DistecnaClient {
           url: `${this.v2Base}/v2/Product/${encoded}/${encodedType}`,
         })
       );
-    }
-    if (this.creds.apiKey) {
-      return this.withBackoff(`GET /Product/${code}`, async () => {
-        const res = await this.http.get<DistecnaDetail>(`${this.v1Base}/Product/${encoded}`, {
-          headers: this.v1Headers(),
-        });
-        return res.data;
-      });
     }
     const resolved = type || (await this.findProductType(code));
     if (!resolved) {
@@ -447,8 +473,8 @@ export class DistecnaClient {
 
   /** El Camino B necesita `type` para armar el pedido; el listado V1 no lo trae. */
   async findProductType(code: string): Promise<string | undefined> {
-    if (!this.usesV2Catalog) return undefined;
-    const page = await this.listProducts({ limit: 10, offset: 0, search: code });
+    if (!hasDistecnaOrderAccess(this.creds)) return undefined;
+    const page = await this.listProductsV2({ limit: 10, offset: 0, search: code });
     const match = page.products.find((p) => (p.code || "").trim() === code);
     return cleanDistecnaCode(match?.type ?? undefined);
   }

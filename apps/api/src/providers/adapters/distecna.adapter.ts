@@ -48,6 +48,7 @@ export class DistecnaAdapter implements ProviderAdapter {
       const page = await client.listProducts({ limit: PAGE_LIMIT, offset });
       total = page.total ?? 0;
       if (offset === 0 && total > 0) await onMeta?.({ expectedTotal: total });
+      if (offset === 0) this.logger.log(`Distecna listado: total ${total}, primera tanda ${page.products?.length ?? 0}`);
       const items = (page.products ?? [])
         .map(mapDistecnaListProduct)
         .filter((p) => p.externalId);

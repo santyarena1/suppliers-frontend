@@ -1122,7 +1122,7 @@ export function summarizeSyncRun(run: Pick<CatalogSyncRun, "processed" | "create
 }
 
 export function catalogSyncKickoff(result: ProviderSyncResult): boolean {
-  return Boolean(result.accepted || result.status === "RUNNING");
+  return Boolean(result.accepted || result.status === "RUNNING" || result.runId);
 }
 
 export interface ProviderStatus {
