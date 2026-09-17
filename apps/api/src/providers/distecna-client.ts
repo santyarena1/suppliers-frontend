@@ -1,4 +1,4 @@
-import { BadGatewayException, BadRequestException } from "@nestjs/common";
+import { BadGatewayException, BadRequestException, Logger } from "@nestjs/common";
 import axios, { AxiosInstance, type AxiosRequestConfig } from "axios";
 import dns from "dns";
 import https from "https";
@@ -8,29 +8,84 @@ import type { NormalizedProduct } from "./types";
 
 dns.setDefaultResultOrder("ipv4first");
 
-/**
- * Distecna presenta un certificado incompleto (falta el intermediario): curl y
- * Node fallan el verify de TLS. El canal sigue siendo HTTPS; no se baja a HTTP.
- * IPv4 forzado. Solo se usa proxy si está DISTECNA_PROXY_URL: el de New Tree es
- * para Cloudflare en :443 y aborta el CONNECT a :8096 (el front ve "canceled").
- */
-function distecnaProxyUrl(): string {
-  return (process.env.DISTECNA_PROXY_URL || "").trim();
+const log = new Logger("DistecnaClient");
+
+const DIRECT_AGENT = new https.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+  family: 4,
+});
+
+type DistecnaEgressMode = "direct" | "proxy" | "via";
+
+function stripSlash(url: string): string {
+  return url.replace(/\/$/, "");
 }
 
-function buildDistecnaAgent(): https.Agent {
-  const proxyUrl = distecnaProxyUrl();
-  if (proxyUrl) {
-    return new HttpsProxyAgent(proxyUrl, { rejectUnauthorized: false });
+function firstPublicWebOrigin(): string {
+  const hg = (process.env.RETAIL_HG_FETCH_VIA_URL || "").trim();
+  if (hg) return stripSlash(hg.replace(/\/api\/retail-fetch\/?$/i, "/api/distecna-fetch"));
+  const raw = (process.env.WEB_ORIGIN || process.env.FRONTEND_URL || process.env.CORS_ORIGIN || "").trim();
+  for (const part of raw.split(",")) {
+    const origin = part.trim().replace(/\/$/, "");
+    if (!origin.startsWith("https://") || origin.includes("*") || /localhost|127\.0\.0\.1/.test(origin)) continue;
+    if (origin.includes("/api/")) return origin;
+    return `${origin}/api/distecna-fetch`;
   }
-  return new https.Agent({
-    rejectUnauthorized: false,
-    keepAlive: true,
-    family: 4,
-  });
+  return "";
 }
 
-const TLS = buildDistecnaAgent();
+export function resolveDistecnaFetchVia(): string {
+  const explicit = (process.env.DISTECNA_FETCH_VIA_URL || "").trim();
+  if (explicit) {
+    if (explicit.includes("/api/")) return stripSlash(explicit);
+    return `${stripSlash(explicit)}/api/distecna-fetch`;
+  }
+  return firstPublicWebOrigin();
+}
+
+function distecnaProxyUrl(): string {
+  return (process.env.DISTECNA_PROXY_URL || process.env.NEW_TREE_PROXY_URL || "").trim();
+}
+
+function fetchToken(): string {
+  return (
+    process.env.DISTECNA_FETCH_TOKEN ||
+    process.env.RETAIL_HG_FETCH_TOKEN ||
+    process.env.RETAIL_FETCH_TOKEN ||
+    ""
+  ).trim();
+}
+
+function isRailway(): boolean {
+  return Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
+}
+
+export function resolveDistecnaEgress(): { mode: DistecnaEgressMode; via: string; proxyUrl: string } {
+  let via = resolveDistecnaFetchVia();
+  const proxyUrl = distecnaProxyUrl();
+  if (isRailway() && !via) {
+    via = "https://suppliers-frontend.vercel.app/api/distecna-fetch";
+  }
+  if (isRailway()) {
+    if (via) return { mode: "via", via, proxyUrl };
+    if (proxyUrl) return { mode: "proxy", via, proxyUrl };
+  }
+  return { mode: "direct", via, proxyUrl };
+}
+
+function isDistecnaAbsoluteUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      u.hostname === "api.distecna.com" ||
+      u.hostname === "dsaapi.distecna.com" ||
+      u.hostname === "qa-apipublica.distecna.com"
+    );
+  } catch {
+    return false;
+  }
+}
 
 export const DISTECNA_V1_PROD = "https://api.distecna.com:8096";
 export const DISTECNA_AUTH_PROD = "https://dsaapi.distecna.com:8087";
@@ -289,7 +344,7 @@ export function shouldRetryDistecna(err: unknown, attempt: number, maxRetries = 
 
 export function distecnaErrorMessage(err: unknown, fallback: string): string {
   if (isDistecnaTimeoutError(err)) {
-    return "Distecna no contestó a tiempo (api.distecna.com:8096). Si el servidor no llega a ese puerto, configurá DISTECNA_PROXY_URL.";
+    return "Distecna no contestó a tiempo (api.distecna.com:8096). Railway no llega a ese puerto: el sync tiene que salir por el front (`DISTECNA_FETCH_VIA_URL`) o por `DISTECNA_PROXY_URL` / `NEW_TREE_PROXY_URL`.";
   }
   const rec = asRecord(
     err && typeof err === "object" && "response" in err
@@ -317,16 +372,79 @@ function jwtExpiryMs(token: string): number | null {
 export class DistecnaClient {
   private token: string | null = null;
   private tokenExpiresAt = 0;
-  private readonly http: AxiosInstance;
+  private http: AxiosInstance;
+  private mode: DistecnaEgressMode;
+  private readonly via: string;
+  private readonly proxyUrl: string;
+  private readonly failed = new Set<DistecnaEgressMode>();
 
   constructor(private readonly creds: DistecnaCredentials) {
-    this.http = axios.create({
-      httpsAgent: TLS,
-      proxy: false,
-      timeout: QUERY_TIMEOUT_MS,
-      headers: { Accept: "application/json", "User-Agent": "nodo-distecna" },
+    const egress = resolveDistecnaEgress();
+    this.via = egress.via;
+    this.proxyUrl = egress.proxyUrl;
+    this.mode = egress.mode;
+    this.http = this.buildHttp(this.mode);
+    log.log(`Distecna HTTP modo=${this.mode}${this.via ? ` via=${this.via}` : ""}${this.proxyUrl ? " proxy=sí" : ""}`);
+  }
+
+  private buildHttp(mode: DistecnaEgressMode): AxiosInstance {
+    const headers = { Accept: "application/json", "User-Agent": "nodo-distecna" };
+    const timeout = mode === "direct" ? 12_000 : QUERY_TIMEOUT_MS;
+    if (mode === "proxy" && this.proxyUrl) {
+      const agent = new HttpsProxyAgent(this.proxyUrl, { rejectUnauthorized: false });
+      return axios.create({
+        httpsAgent: agent,
+        httpAgent: agent,
+        proxy: false,
+        timeout,
+        headers,
+        validateStatus: (s) => s >= 200 && s < 300,
+      });
+    }
+    const http = axios.create({
+      ...(mode === "direct" ? { httpsAgent: DIRECT_AGENT, proxy: false as const } : { proxy: false as const }),
+      timeout,
+      headers,
       validateStatus: (s) => s >= 200 && s < 300,
     });
+    if (mode === "via" && this.via) {
+      const via = this.via;
+      const token = fetchToken();
+      http.interceptors.request.use((config) => {
+        const abs = axios.getUri(config);
+        if (!isDistecnaAbsoluteUrl(abs)) return config;
+        config.baseURL = undefined;
+        config.params = undefined;
+        config.url = `${via}?url=${encodeURIComponent(abs)}`;
+        if (token) {
+          config.headers = config.headers ?? {};
+          config.headers["x-nodo-fetch-token"] = token;
+        }
+        return config;
+      });
+    }
+    return http;
+  }
+
+  private shouldFailover(err: unknown): boolean {
+    if (isDistecnaTimeoutError(err)) return true;
+    if (this.mode !== "via") return false;
+    const status = statusOf(err);
+    return status === 401 || status === 403 || status === 404 || status === 502;
+  }
+
+  private failover(): boolean {
+    this.failed.add(this.mode);
+    const next: DistecnaEgressMode[] = [];
+    if (this.via) next.push("via");
+    if (this.proxyUrl) next.push("proxy");
+    next.push("direct");
+    const pick = next.find((m) => !this.failed.has(m));
+    if (!pick) return false;
+    this.mode = pick;
+    this.http = this.buildHttp(pick);
+    log.warn(`Distecna HTTP failover → ${pick}`);
+    return true;
   }
 
   static fromCredentials(raw: Record<string, string>): DistecnaClient {
@@ -371,6 +489,10 @@ export class DistecnaClient {
         return await fn();
       } catch (err) {
         last = err;
+        if (this.shouldFailover(err) && this.failover()) {
+          attempt = Math.max(0, attempt - 1);
+          continue;
+        }
         if (!shouldRetryDistecna(err, attempt, retries)) {
           throw new BadGatewayException(distecnaErrorMessage(err, `Distecna falló en ${label}`));
         }
