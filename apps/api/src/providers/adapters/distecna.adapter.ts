@@ -11,7 +11,7 @@ import {
 
 const PAGE_LIMIT = 150;
 const PAGE_PAUSE_MS = 80;
-const DETAIL_CONCURRENCY = 8;
+const DETAIL_CONCURRENCY = 4;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
