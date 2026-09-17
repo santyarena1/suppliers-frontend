@@ -516,8 +516,10 @@ Homologación oficial v3.1. El catálogo se replica en Nodo (Distecna no está p
 como DB en vivo). Credenciales (`POST /credentials`): `api_key` (Camino A, header
 `x-apikey`) para sync de precios/stock, y/o `user` + `password` (Camino B, JWT 1 h)
 para pedidos, condición de pago y direcciones. `environment` opcional: `prod` (default)
-o `qa`. El listado no trae nombre ni fotos: el sync guarda código/SKU/precio/stock/IVA/II
-y `enrichDetails` completa la ficha con `GET /Product/{code}` (o V2 si hay JWT).
+o `qa`. El listado no trae nombre ni fotos: el sync pide `GET /Product/{code}`
+en la misma tanda (8 en paralelo, vía `/api/distecna-fetch`) y guarda nombre,
+marca, categoría y foto junto con código/SKU/precio/stock/IVA. La ficha a veces
+trae precio 0: no pisa la oferta del listado.
 
 El certificado TLS de Distecna viene con cadena incompleta: el cliente habla HTTPS
 con verify relajado e IPv4. **Railway no llega a :8096** (timeout). En producción el

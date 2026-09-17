@@ -2,7 +2,7 @@ import { BadGatewayException, Injectable, Logger } from "@nestjs/common";
 import type { CatalogSyncMeta, NormalizedProduct, ProviderAdapter } from "../types";
 import {
   DistecnaClient,
-  detailPatchFromDistecna,
+  applyDistecnaDetail,
   hasDistecnaCatalogAccess,
   mapDistecnaListProduct,
   parseDistecnaCredentials,
@@ -10,9 +10,8 @@ import {
 } from "../distecna-client";
 
 const PAGE_LIMIT = 150;
-const PAGE_PAUSE_MS = 200;
-const DETAIL_PAUSE_MS = 200;
-const DETAIL_CONCURRENCY = 2;
+const PAGE_PAUSE_MS = 80;
+const DETAIL_CONCURRENCY = 8;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -20,8 +19,9 @@ function sleep(ms: number) {
 
 /**
  * Catálogo de Distecna (Camino A por API Key, o V2 si hay usuario/contraseña JWT).
- * El listado solo trae código, SKU, stock, moneda, precio, IVA e II: el nombre,
- * la marca, la categoría y las fotos salen del detalle en background.
+ * El listado solo trae código, SKU, stock, moneda, precio, IVA e II. Nombre,
+ * marca, categoría y fotos salen de GET /Product/{code} en la misma tanda:
+ * si se deja para después, el buscador muestra SKUs a $0 sin foto.
  */
 @Injectable()
 export class DistecnaAdapter implements ProviderAdapter {
@@ -49,9 +49,7 @@ export class DistecnaAdapter implements ProviderAdapter {
       total = page.total ?? 0;
       if (offset === 0 && total > 0) await onMeta?.({ expectedTotal: total });
       if (offset === 0) this.logger.log(`Distecna listado: total ${total}, primera tanda ${page.products?.length ?? 0}`);
-      const items = (page.products ?? [])
-        .map(mapDistecnaListProduct)
-        .filter((p) => p.externalId);
+      const items = await this.withDetails(client, page.products ?? []);
       if (items.length) await onPage(items);
       seen += page.products?.length ?? 0;
       if (!(page.products ?? []).length) break;
@@ -65,35 +63,32 @@ export class DistecnaAdapter implements ProviderAdapter {
     this.logger.log(`Distecna sync: ${seen} productos (total declarado ${Number.isFinite(total) ? total : "?"})`);
   }
 
-  async enrichDetails(
-    credentials: Record<string, string>,
-    codes: string[],
-    onItem: (externalId: string, patch: Partial<NormalizedProduct>) => Promise<void>
-  ): Promise<void> {
-    if (codes.length === 0) return;
-    const client = DistecnaClient.fromCredentials(credentials);
-    const queue = [...codes];
+  /** Pide las fichas de la tanda en paralelo. Si una falla, queda el renglón del listado. */
+  private async withDetails(client: DistecnaClient, rows: Parameters<typeof mapDistecnaListProduct>[0][]): Promise<NormalizedProduct[]> {
+    const mapped = rows.map(mapDistecnaListProduct).filter((p) => p.externalId);
+    if (mapped.length === 0) return mapped;
     let failures = 0;
+    let index = 0;
     const worker = async () => {
-      while (queue.length > 0) {
-        const code = queue.shift();
-        if (!code) return;
+      while (true) {
+        const i = index++;
+        if (i >= mapped.length) return;
+        const item = mapped[i];
         try {
-          const detail = await client.getDetail(code);
-          const patch = detailPatchFromDistecna(detail);
-          if (productTypeFromRaw(detail) || Object.keys(patch).length > 0) {
-            await onItem(code, patch);
-          }
+          const detail = await client.getDetail(item.externalId, productTypeFromRaw(item.raw));
+          mapped[i] = applyDistecnaDetail(item, detail);
         } catch (err) {
           failures++;
           if (failures <= 5) {
-            this.logger.warn(`Distecna ficha ${code}: ${err instanceof Error ? err.message : String(err)}`);
+            this.logger.warn(
+              `Distecna ficha ${item.externalId}: ${err instanceof Error ? err.message : String(err)}`
+            );
           }
         }
-        await sleep(DETAIL_PAUSE_MS);
       }
     };
-    await Promise.all(Array.from({ length: DETAIL_CONCURRENCY }, worker));
-    if (failures > 0) this.logger.warn(`Distecna: ${failures} fichas no se pudieron leer`);
+    await Promise.all(Array.from({ length: Math.min(DETAIL_CONCURRENCY, mapped.length) }, worker));
+    if (failures > 0) this.logger.warn(`Distecna: ${failures}/${mapped.length} fichas de esta tanda no se pudieron leer`);
+    return mapped;
   }
 }

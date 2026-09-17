@@ -249,7 +249,7 @@ export function mapDistecnaListProduct(p: DistecnaListProduct): NormalizedProduc
   const code = (p.code || "").trim();
   const sku = cleanDistecnaCode(p.sku) || undefined;
   const price = asNumber(p.price);
-  const stock = asNumber(p.stock);
+  const stockRaw = asNumber(p.stock);
   return {
     externalId: code,
     sku,
@@ -257,7 +257,7 @@ export function mapDistecnaListProduct(p: DistecnaListProduct): NormalizedProduc
     price,
     currency: normalizeDistecnaCurrency(p.currency),
     ivaPercent: distecnaTaxPoints(asNumber(p.iva)),
-    stock,
+    stock: stockRaw == null ? undefined : Math.round(stockRaw),
     raw: p,
   };
 }
@@ -290,15 +290,27 @@ export function detailPatchFromDistecna(detail: DistecnaDetail): Partial<Normali
   if (tags) patch.tags = tags;
   const sku = cleanDistecnaCode(detail.sku);
   if (sku) patch.sku = sku;
-  const price = asNumber(detail.price);
-  if (price != null) patch.price = price;
-  const stock = asNumber(detail.stock);
-  if (stock != null) patch.stock = stock;
+  // Precio y stock los manda el listado. La ficha a veces trae 0 y no tiene
+  // que pisar la oferta que ya sincronizamos.
   const iva = distecnaTaxPoints(asNumber(detail.iva));
   if (iva != null) patch.ivaPercent = iva;
   const currency = normalizeDistecnaCurrency(detail.currency);
   if (currency) patch.currency = currency;
   return patch;
+}
+
+/** Completa nombre/marca/foto del listado con la ficha, sin tocar precio ni stock. */
+export function applyDistecnaDetail(base: NormalizedProduct, detail: DistecnaDetail): NormalizedProduct {
+  const patch = detailPatchFromDistecna(detail);
+  return {
+    ...base,
+    ...patch,
+    price: base.price,
+    stock: base.stock,
+    ivaPercent: base.ivaPercent ?? patch.ivaPercent,
+    currency: base.currency ?? patch.currency,
+    raw: detail,
+  };
 }
 
 function sleep(ms: number) {

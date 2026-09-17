@@ -1,6 +1,7 @@
 import { DistecnaAdapter } from "./distecna.adapter";
 import {
   DistecnaClient,
+  applyDistecnaDetail,
   cleanDistecnaCode,
   detailPatchFromDistecna,
   distecnaTaxPoints,
@@ -79,12 +80,24 @@ describe("detailPatchFromDistecna", () => {
     expect(patch.ean).toBeUndefined();
     expect(patch.ivaPercent).toBe(10.5);
     expect(patch.currency).toBe("USD");
+    expect(patch.price).toBeUndefined();
+    expect(patch.stock).toBeUndefined();
   });
 
   it("conserva type del detalle V2 para armar el pedido", () => {
     const patch = detailPatchFromDistecna({ ...DETAIL, type: "NWOTRO", ean: "7790000000000" });
     expect(productTypeFromRaw(patch.raw)).toBe("NWOTRO");
     expect(patch.ean).toBe("7790000000000");
+  });
+
+  it("no pisa precio/stock del listado con ceros de la ficha", () => {
+    const base = mapDistecnaListProduct(LIST);
+    const merged = applyDistecnaDetail(base, DETAIL);
+    expect(merged.name).toBe("OptiPlex Micro Form Factor (7020)");
+    expect(merged.brand).toBe("Dell Technologies");
+    expect(merged.imageUrl).toMatch(/·p\.jpg$/);
+    expect(merged.price).toBe(286.85);
+    expect(merged.stock).toBe(17);
   });
 });
 
@@ -191,6 +204,7 @@ describe("DistecnaAdapter.syncAll", () => {
         .fn()
         .mockResolvedValueOnce({ total: 3197, offset: 0, products: [LIST] })
         .mockResolvedValue({ total: 3197, offset: 150, products: [] }),
+      getDetail: jest.fn().mockResolvedValue(DETAIL),
     } as unknown as DistecnaClient);
 
     await adapter.syncAll(
@@ -205,5 +219,27 @@ describe("DistecnaAdapter.syncAll", () => {
 
     expect(order[0]).toBe("total:3197");
     expect(order[1]).toBe("page:1");
+  });
+
+  it("persiste nombre y foto de la ficha en la misma tanda, no el SKU", async () => {
+    const adapter = new DistecnaAdapter();
+    const pages: { name: string; imageUrl?: string; price?: number }[][] = [];
+    jest.spyOn(DistecnaClient, "fromCredentials").mockReturnValue({
+      listProducts: jest
+        .fn()
+        .mockResolvedValueOnce({ total: 1, offset: 0, products: [LIST] })
+        .mockResolvedValue({ total: 1, offset: 150, products: [] }),
+      getDetail: jest.fn().mockResolvedValue(DETAIL),
+    } as unknown as DistecnaClient);
+
+    await adapter.syncAll({ api_key: "k" }, async (items) => {
+      pages.push(items.map((p) => ({ name: p.name, imageUrl: p.imageUrl, price: p.price })));
+    });
+
+    expect(pages[0][0]).toEqual({
+      name: "OptiPlex Micro Form Factor (7020)",
+      imageUrl: DETAIL.images[0],
+      price: 286.85,
+    });
   });
 });
