@@ -240,8 +240,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     try {
       const res = await providersApi.status(provider);
       setStatus(res.data);
+      return res.data;
     } catch {
       if (!opts?.silent) setStatus(null);
+      return null;
     } finally {
       if (!opts?.silent) setLoadingStatus(false);
     }
@@ -289,8 +291,12 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       const res = await providersApi.sync(provider);
       const d = res.data;
       if (d.runId) pendingRunId.current = d.runId;
-      await loadStatus({ silent: true });
-      if (catalogSyncKickoff(d)) {
+      const live = await loadStatus({ silent: true });
+      const liveRun = live?.currentRun;
+      if (!pendingRunId.current && isLiveSyncRun(liveRun) && liveRun) {
+        pendingRunId.current = liveRun.id;
+      }
+      if (catalogSyncKickoff(d) || isLiveSyncRun(liveRun)) {
         setHistoryKey((n) => n + 1);
         return;
       }
@@ -308,6 +314,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setHistoryKey((n) => n + 1);
       setSyncing(false);
     } catch (err: unknown) {
+      const live = await loadStatus({ silent: true });
+      const liveRun = live?.currentRun;
+      if (isLiveSyncRun(liveRun) && liveRun) {
+        pendingRunId.current = liveRun.id;
+        setHistoryKey((n) => n + 1);
+        return;
+      }
       pendingRunId.current = null;
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSyncResult({ ok: false, msg: msg || "Error al sincronizar" });

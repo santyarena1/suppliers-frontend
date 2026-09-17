@@ -209,9 +209,7 @@ export class ProvidersService implements OnModuleInit {
     }
     await progress.touch();
 
-    void this.executeProviderSync(tenantId, provider, adapter, credentials, source, progress).catch((err) => {
-      this.logger.warn(`Sync en background de ${provider} falló: ${errorMessage(err)}`);
-    });
+    this.enqueueManualSync(tenantId, provider, adapter, credentials, source, progress);
 
     return {
       provider,
@@ -224,6 +222,24 @@ export class ProvidersService implements OnModuleInit {
       missingAffected: 0,
       zeroStockAffected: 0,
     };
+  }
+
+  /** Arranca después de mandar el 200, para que el POST no se quede preso del primer GET a Distecna. */
+  private enqueueManualSync(
+    tenantId: string,
+    provider: Provider,
+    adapter: ProviderAdapter,
+    credentials: Record<string, string>,
+    source: CatalogSyncSource,
+    progress: CatalogSyncProgress
+  ) {
+    const start = () => {
+      void this.executeProviderSync(tenantId, provider, adapter, credentials, source, progress).catch((err) => {
+        this.logger.warn(`Sync en background de ${provider} falló: ${errorMessage(err)}`);
+      });
+    };
+    if (typeof setImmediate === "function") setImmediate(start);
+    else setTimeout(start, 0);
   }
 
   private async executeProviderSync(
@@ -433,6 +449,9 @@ export class ProvidersService implements OnModuleInit {
     await progress.touch();
 
     const syncStartedAt = new Date();
+    const beat = setInterval(() => {
+      void progress.touch().catch(() => undefined);
+    }, 5_000);
 
     try {
       await run(
@@ -451,6 +470,8 @@ export class ProvidersService implements OnModuleInit {
         update: { lastSyncError: errorMessage(err) },
       });
       throw err;
+    } finally {
+      clearInterval(beat);
     }
 
     const missingCount = await this.applyMissingProductAction(

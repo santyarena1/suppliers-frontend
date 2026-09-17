@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { SkipThrottle } from "@nestjs/throttler";
 import type { FastifyRequest } from "fastify";
 import { isProviderKey, type Provider } from "@nodo/shared";
 import { CurrentTenant, CurrentTenantOrNone } from "../common/decorators/current-tenant.decorator";
@@ -653,6 +654,7 @@ export class ProvidersController {
     return this.providersService.sync(commercialId(tenant), assertProvider(provider));
   }
 
+  @SkipThrottle()
   @Get("providers/:provider/sync/current")
   getCurrentSync(
     @CurrentTenant() tenant: TenantContext,
@@ -661,6 +663,7 @@ export class ProvidersController {
     return this.providersService.getCurrentSyncRun(commercialId(tenant), assertProvider(provider));
   }
 
+  @SkipThrottle()
   @Get("providers/:provider/sync/runs")
   listSyncRuns(
     @CurrentTenant() tenant: TenantContext,
@@ -674,6 +677,7 @@ export class ProvidersController {
     );
   }
 
+  @SkipThrottle()
   @Get("providers/:provider/sync/runs/:id")
   getSyncRun(
     @CurrentTenant() tenant: TenantContext,
@@ -683,6 +687,7 @@ export class ProvidersController {
     return this.providersService.getSyncRun(commercialId(tenant), assertProvider(provider), id);
   }
 
+  @SkipThrottle()
   @Get("providers/:provider/status")
   status(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
     return this.providersService.status(commercialId(tenant), assertProvider(provider));

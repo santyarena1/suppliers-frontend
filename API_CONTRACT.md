@@ -520,9 +520,11 @@ o `qa`. El listado no trae nombre ni fotos: el sync guarda código/SKU/precio/st
 y `enrichDetails` completa la ficha con `GET /Product/{code}` (o V2 si hay JWT).
 
 El certificado TLS de Distecna viene con cadena incompleta: el cliente habla HTTPS
-con verify relajado, IPv4 (`family: 4`) y `proxy: false`. No se loguea la API Key ni el JWT.
-El sync de catálogo (`POST /providers/DISTECNA/sync`) arranca en background y reporta
-`expectedTotal` con el `total` de `GET /Product`.
+con verify relajado, IPv4 y corte a los 20s (`AbortSignal`). El sync de catálogo
+usa **siempre** Camino A (`x-apikey` + `GET /Product`) si hay API Key; el JWT de
+pedidos no bloquea el listado. `GET /providers/:provider/status` y `/sync/*` no
+cuentan para el throttle (el poll en vivo pasaba las 100 req/min y la barra se
+congelaba). No se loguea la API Key ni el JWT.
 
 ### `GET /providers/DISTECNA/account?refresh=1`
 
