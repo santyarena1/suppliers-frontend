@@ -24,7 +24,9 @@ import { NewTreeAccountService } from "./new-tree-account.service";
 import { NewTreeOrderService } from "./new-tree-order.service";
 import { SolutionBoxAccountService } from "./solution-box-account.service";
 import { SolutionBoxOrderService } from "./solution-box-order.service";
+import { DistecnaOrderService } from "./distecna-order.service";
 import { SolutionBoxCheckoutDraftDto, SolutionBoxCheckoutPreviewDto } from "./dto/solution-box-checkout.dto";
+import { DistecnaCheckoutDraftDto, DistecnaCheckoutPreviewDto } from "./dto/distecna-checkout.dto";
 import { NewTreeCheckoutDraftDto, NewTreeCheckoutPreviewDto } from "./dto/new-tree-checkout.dto";
 import { OrderApprovalService } from "../orders/order-approval.service";
 import type { OrderAuthor } from "./provider-draft";
@@ -71,6 +73,7 @@ export class ProvidersController {
     private readonly newTreeOrderService: NewTreeOrderService,
     private readonly solutionBoxAccountService: SolutionBoxAccountService,
     private readonly solutionBoxOrderService: SolutionBoxOrderService,
+    private readonly distecnaOrderService: DistecnaOrderService,
     private readonly orderApproval: OrderApprovalService,
     private readonly accountCache: AccountPortalCache
   ) {}
@@ -606,6 +609,43 @@ export class ProvidersController {
     const held = await this.hold(tenant, user.userId, "SOLUTION_BOX", dto);
     if (held) return held;
     return this.solutionBoxOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "SOLUTION_BOX"), dto);
+  }
+
+  // ---------- Distecna (API pública V1 catálogo / V2 pedidos) ----------
+  @Get("providers/DISTECNA/drafts")
+  distecnaDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.distecnaOrderService.listDrafts(tenant.tenantId);
+  }
+
+  @Get("providers/DISTECNA/drafts/:id")
+  async distecnaDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.distecnaOrderService.getDraft(tenant.tenantId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
+  @Get("providers/DISTECNA/account")
+  async distecnaAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
+    const key = `${tenant.tenantId}:DISTECNA:account`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.distecnaOrderService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "DISTECNA"))
+    );
+  }
+
+  @Post("providers/DISTECNA/checkout/preview")
+  async distecnaPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: DistecnaCheckoutPreviewDto) {
+    return this.distecnaOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "DISTECNA"), dto);
+  }
+
+  @Post("providers/DISTECNA/checkout/draft")
+  async distecnaDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: DistecnaCheckoutDraftDto
+  ) {
+    const held = await this.hold(tenant, user.userId, "DISTECNA", dto);
+    if (held) return held;
+    return this.distecnaOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "DISTECNA"), dto);
   }
 
   @Post("providers/:provider/sync")

@@ -20,6 +20,8 @@ import { NewTreeOrderService } from "./new-tree-order.service";
 import { SolutionBoxAdapter } from "./adapters/solution-box.adapter";
 import { SolutionBoxAccountService } from "./solution-box-account.service";
 import { SolutionBoxOrderService } from "./solution-box-order.service";
+import { DistecnaAdapter } from "./adapters/distecna.adapter";
+import { DistecnaOrderService } from "./distecna-order.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
@@ -50,6 +52,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     DiapstoreAdapter,
     NewTreeAdapter,
     SolutionBoxAdapter,
+    DistecnaAdapter,
     PortalCartSnapshotService,
     InvidAccountService,
     InvidOrderService,
@@ -64,6 +67,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     NewTreeOrderService,
     SolutionBoxAccountService,
     SolutionBoxOrderService,
+    DistecnaOrderService,
     OrderApprovalService,
   ],
   exports: [
@@ -77,6 +81,7 @@ import { AccountPortalCache } from "./account-portal-cache";
     ElitOrderService,
     NewTreeOrderService,
     SolutionBoxOrderService,
+    DistecnaOrderService,
   ],
 })
 export class ProvidersModule {}

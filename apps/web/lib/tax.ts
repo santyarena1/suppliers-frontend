@@ -219,6 +219,13 @@ function fromNamedRaw(raw: Record<string, unknown>, net: number): TaxLine[] | nu
       });
     }
   }
+  const iiField = asNum(raw.ii ?? raw.II ?? raw.impuestoInterno);
+  if (iiField != null && iiField !== 0 && !taxByKind(lines, "internos")) {
+    const ii = amountFromRate(net, iiField);
+    if (ii.amount > 0.0001) {
+      lines.push({ kind: "internos", label: "Imp. internos", percent: ii.percent, unitAmount: ii.amount });
+    }
+  }
   return appendPercepcion(raw, net, lines);
 }
 

@@ -12,6 +12,7 @@ import NewTreeCheckoutPanel from "@/components/NewTreeCheckoutPanel";
 import SolutionBoxCheckoutPanel from "@/components/SolutionBoxCheckoutPanel";
 import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
+import DistecnaCheckoutPanel from "@/components/DistecnaCheckoutPanel";
 import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
 import { useCart, CartItem, cartItemKey, type CartRef, type CartScheme } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
@@ -39,6 +40,7 @@ import {
   InvidCheckoutPreview,
   NewBytesCartSnapshot,
   AirCheckoutPreview,
+  DistecnaCheckoutPreview,
   ordersApi,
 } from "@/lib/api";
 import {
@@ -174,6 +176,7 @@ function CartPageInner() {
   const [channelTab, setChannelTab] = useState<"online" | "offline">("online");
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
   const [elitPreview, setElitPreview] = useState<ElitCheckoutPreview | null>(null);
+  const [distecnaPreview, setDistecnaPreview] = useState<DistecnaCheckoutPreview | null>(null);
   const [nbSnapshot, setNbSnapshot] = useState<NewBytesCartSnapshot | null>(null);
 
   const [confirmClear, setConfirmClear] = useState<"all" | string | null>(null);
@@ -229,6 +232,7 @@ function CartPageInner() {
   const onBackgroundOrderCreated = useCallback((provider: PendingOrderProvider, message: string) => {
     setNotice(message);
     if (provider === "INVID") setInvidPreview(null);
+    if (provider === "DISTECNA") setDistecnaPreview(null);
     setActiveTab("all");
     clearProvider(provider, "online");
   }, [clearProvider]);
@@ -366,6 +370,7 @@ function CartPageInner() {
   const gnLines = useMemo(() => cartLinesFromItems(onlineByProvider.GRUPO_NUCLEO ?? []), [onlineByProvider.GRUPO_NUCLEO]);
   const ntLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_TREE ?? []), [onlineByProvider.NEW_TREE]);
   const sbLines = useMemo(() => cartLinesFromItems(onlineByProvider.SOLUTION_BOX ?? []), [onlineByProvider.SOLUTION_BOX]);
+  const dtLines = useMemo(() => cartLinesFromItems(onlineByProvider.DISTECNA ?? []), [onlineByProvider.DISTECNA]);
   const warmEnabled = hydrated && channelTab === "online";
   const invidWarm = useCheckoutWarmup("INVID", invidLines, warmEnabled);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines, warmEnabled);
@@ -374,6 +379,7 @@ function CartPageInner() {
   const gnWarm = useCheckoutWarmup("GRUPO_NUCLEO", gnLines, warmEnabled);
   const ntWarm = useCheckoutWarmup("NEW_TREE", ntLines, warmEnabled);
   const sbWarm = useCheckoutWarmup("SOLUTION_BOX", sbLines, warmEnabled);
+  const dtWarm = useCheckoutWarmup("DISTECNA", dtLines, warmEnabled);
   useWarmAllCheckoutCarts(onlineByProvider, warmEnabled);
 
   const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
@@ -389,6 +395,7 @@ function CartPageInner() {
     GRUPO_NUCLEO: gnWarm,
     NEW_TREE: ntWarm,
     SOLUTION_BOX: sbWarm,
+    DISTECNA: dtWarm,
   };
 
   // Un 0 o ausente en el desglose del portal no es "cotizó cero": New Bytes
@@ -477,6 +484,15 @@ function CartPageInner() {
       }
     : undefined;
 
+  const dtQuoted = distecnaPreview ?? (dtWarm.status === "ready" ? dtWarm.data?.preview ?? null : null);
+  const dtExtra: TaxExtra | undefined = dtQuoted
+    ? {
+        quotedVatUSD: quotedAmount(dtQuoted.vat),
+        quotedInternosUSD: quotedAmount(dtQuoted.internals),
+        totalUSD: quotedAmount(dtQuoted.total),
+      }
+    : undefined;
+
   function extraFor(provider: string): TaxExtra | undefined {
     if (channelTab === "offline") return undefined;
     // El % de IIBB cargado en Configuración del distribuidor pisa lo que cotice
@@ -490,6 +506,7 @@ function CartPageInner() {
         : provider === "AIR" ? airExtra?.shippingUSD
         : provider === "SOLUTION_BOX" ? sbExtra?.shippingUSD
         : provider === "NEW_TREE" ? ntExtra?.shippingUSD
+        : provider === "DISTECNA" ? dtExtra?.shippingUSD
         : undefined;
       return {
         shippingUSD: quotedShipping ?? 0,
@@ -509,6 +526,7 @@ function CartPageInner() {
     else if (provider === "AIR") quoted = airExtra;
     else if (provider === "SOLUTION_BOX") quoted = sbExtra;
     else if (provider === "NEW_TREE") quoted = ntExtra;
+    else if (provider === "DISTECNA") quoted = dtExtra;
     const quotedHasPerc =
       quoted != null &&
       ((quoted.perceptionsUSD ?? 0) > 0.0005 || (quoted.percepcionPercent ?? 0) > 0);
@@ -1254,6 +1272,21 @@ function CartPageInner() {
                           setActiveTab("all");
                           clearProvider("AIR", "online");
                         }}
+                      />
+                    </div>
+                  )}
+
+                  {channelTab === "online" && onlineByProvider.DISTECNA?.length > 0 && (activeTab === "all" || activeTab === "DISTECNA") && (
+                    <div className={activeTab === "DISTECNA" ? undefined : "hidden"} aria-hidden={activeTab !== "DISTECNA"}>
+                      <DistecnaCheckoutPanel
+                        items={onlineByProvider.DISTECNA}
+                        onCreated={(message) => {
+                          setDistecnaPreview(null);
+                          setNotice(message || "Pedido creado en Distecna");
+                          setActiveTab("all");
+                          clearProvider("DISTECNA", "online");
+                        }}
+                        onPreviewed={setDistecnaPreview}
                       />
                     </div>
                   )}

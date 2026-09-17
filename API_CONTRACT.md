@@ -507,3 +507,64 @@ Credenciales: `email` + `password`.
 - `POST /providers/SOLUTION_BOX/checkout/preview` body `{ items:[{code,qty,name?}], paymentCondition?, deliveryType? }` → `{ items, paymentConditions, paymentCondition, paymentLabel, deliveryTypes, deliveryType, deliveryLabel, deliveryAddress, subtotal, vat, internalTax, perceptions, perceptionLines, shippingCost, total, totalArs, exchange, currency:"USD", stockOk, note }` (totales de la proforma del sitio; `perceptionLines` trae la percepción de IIBB).
 - `POST /providers/SOLUTION_BOX/checkout/draft` mismo body + `background?` → crea el pedido real (`{ id, status, orderNumber, … }`), con aprobación previa si el comercio la exige.
 - `GET /providers/SOLUTION_BOX/drafts[/:id]` historial desde Nodo.
+
+
+## Distecna — API pública (catálogo V1 + pedidos V2)
+
+Homologación oficial v3.1. El catálogo se replica en Nodo (Distecna no está pensada
+como DB en vivo). Credenciales (`POST /credentials`): `api_key` (Camino A, header
+`x-apikey`) para sync de precios/stock, y/o `user` + `password` (Camino B, JWT 1 h)
+para pedidos, condición de pago y direcciones. `environment` opcional: `prod` (default)
+o `qa`. El listado no trae nombre ni fotos: el sync guarda código/SKU/precio/stock/IVA/II
+y `enrichDetails` completa la ficha con `GET /Product/{code}` (o V2 si hay JWT).
+
+El certificado TLS de Distecna viene con cadena incompleta: el cliente habla HTTPS
+con verify relajado. No se loguea la API Key ni el JWT.
+
+### `GET /providers/DISTECNA/account?refresh=1`
+
+```json
+{
+  "paymentTerm": { "id": "…", "code": "DEP", "name": "(AR-DEP) 00 Deposito …" },
+  "addresses": [{ "id": "…", "name": "Irala 1950 2 - Capital Federal (1837) - Argentina", "street": "Irala", "number": "1950", "floor": "2", "postalCode": "1837", "jurisdiction": "Capital Federal", "country": "Argentina" }],
+  "drafts": ["…ProviderOrder de Nodo…"],
+  "note": "…"
+}
+```
+
+La API de Distecna no publica historial ni cuenta corriente. Sin usuario/contraseña
+de Camino B, `paymentTerm` y `addresses` vienen vacíos.
+
+### `POST /providers/DISTECNA/checkout/preview`
+
+Body: `{ items: [{ code, qty, name?, type? }], paymentTermId?, deliveryAddressId?, notes? }`.
+`code` es el `externalId` (campo `code` de Distecna). Antes de cotizar refresca
+precio/stock just-in-time (`GET /v2/Product/{code}/{type}`). Si el listado V1 no
+trajo `type`, lo busca con `GET /v2/Product?search=`.
+
+```json
+{
+  "items": [{ "code": "COM760249702", "type": "NWOTRO", "qty": 10, "name": "…", "price": 1.82, "currency": "USD", "stock": 104368, "ivaPercent": 10.5, "iiPercent": 0, "subtotal": 18.2, "vat": 1.911, "internals": 0, "priceChanged": false, "stockChanged": false, "error": null }],
+  "paymentTerm": { "id": "…", "code": "DEP", "name": "…" },
+  "addresses": ["…"],
+  "paymentTermId": "…", "deliveryAddressId": "…",
+  "subtotal": 18.2, "vat": 1.911, "internals": 0, "perceptions": 0, "perceptionLines": [],
+  "total": 20.111, "currency": "USD", "stockOk": true, "hasChanges": false, "note": "…"
+}
+```
+
+`items[].error` si falta stock, falta `type` o Distecna rechazó el código (`stockOk: false`).
+`hasChanges` si el JIT difiere del catálogo cacheado.
+
+### `POST /providers/DISTECNA/checkout/draft`
+
+Mismo body + `background?`. Con `background` responde `PENDING` y el pedido se crea
+en segundo plano (`GET /providers/DISTECNA/drafts/:id`). Crea el pedido real con
+`POST /v2/Order` (`productCode`, `productType`, `quantity`; `paymentTermId` y
+`deliveryAddressId` opcionales). Ese POST no se reintenta. Pasa por aprobación
+(`PENDING_APPROVAL`) cuando el comercio lo exige.
+
+### `GET /providers/DISTECNA/drafts` · `GET /providers/DISTECNA/drafts/:id`
+
+Historial de pedidos creados desde Nodo (mismo formato que Elit / New Tree).
+

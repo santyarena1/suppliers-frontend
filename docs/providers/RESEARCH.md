@@ -194,10 +194,15 @@ plano en el repo.
   (`NEW_BYTES, ELIT, GRUPO_NUCLEO, AIR, NEW_TREE, INVID, GC, POLYTECH, ASHIR, HDC,
   SOLUTION_BOX, DISTECNA, CEVEN, DIAPSTORE`). Su propia documentación de API todavía no fue
   enviada por el proveedor ("en proceso de envío") — nada que hacer hasta que llegue.
-- **ASHIR, HDC, DISTECNA, CEVEN, DIAPSTORE**: no están en el panel de AcuStock ni aparecen
+- **ASHIR, HDC**: no están en el panel de AcuStock ni aparecen
   mencionados en ninguno de los dos Word docs oficiales que compartió el usuario. No hay
   ningún dato real (ni endpoint, ni auth, ni campos) del que partir — quedan completamente
   pendientes de relevar directo con cada distribuidor.
+- **DISTECNA**: integrado. API pública v3.1 (Camino A `x-apikey` en
+  `https://api.distecna.com:8096` + Camino B JWT en `dsaapi.distecna.com:8087/8088`).
+  El listado no trae nombre/fotos; el detalle sí. Pedidos con `POST /v2/Order`,
+  condición de pago y direcciones de entrega.
+- **CEVEN, DIAPSTORE**: ya tienen adapter (catálogo público).
 
 ## Próximo paso sugerido
 
@@ -218,4 +223,4 @@ Solution Box y NewTree):
 
 **Sin ningún dato real todavía**: GC (es scrapeable, no necesita credenciales, pero hay que
 mirar la tabla real antes de escribir el parser), PC Arts (proveedor todavía no mandó su doc),
-ASHIR, HDC, DISTECNA, CEVEN, DIAPSTORE (cero información en ninguna fuente disponible).
+ASHIR, HDC.

@@ -11,6 +11,7 @@ import { InvidOrderService, type InvidDraftInput } from "../providers/invid-orde
 import { NewBytesOrderService, type NewBytesDraftInput } from "../providers/new-bytes-order.service";
 import { NewTreeOrderService, type NewTreeCartItems } from "../providers/new-tree-order.service";
 import { SolutionBoxOrderService, type SolutionBoxCartItems } from "../providers/solution-box-order.service";
+import { DistecnaOrderService, type DistecnaCartItems } from "../providers/distecna-order.service";
 import type { OrderAuthor } from "../providers/provider-draft";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -56,6 +57,7 @@ export class OrdersService {
     private readonly elit: ElitOrderService,
     private readonly newTree: NewTreeOrderService,
     private readonly solutionBox: SolutionBoxOrderService,
+    private readonly distecna: DistecnaOrderService,
     @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
@@ -601,6 +603,8 @@ export class OrdersService {
         return this.newTree.approveDraft(author, credentials, input as unknown as NewTreeCartItems, orderId);
       case "SOLUTION_BOX":
         return this.solutionBox.approveDraft(author, credentials, input as unknown as SolutionBoxCartItems, orderId);
+      case "DISTECNA":
+        return this.distecna.approveDraft(author, credentials, input as unknown as DistecnaCartItems, orderId);
       default:
         throw new BadRequestException(`Todavía no se pueden aprobar pedidos de ${provider} desde Nodo`);
     }

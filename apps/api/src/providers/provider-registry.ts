@@ -10,6 +10,7 @@ import { CevenAdapter } from "./adapters/ceven.adapter";
 import { DiapstoreAdapter } from "./adapters/diapstore.adapter";
 import { NewTreeAdapter } from "./adapters/new-tree.adapter";
 import { SolutionBoxAdapter } from "./adapters/solution-box.adapter";
+import { DistecnaAdapter } from "./adapters/distecna.adapter";
 
 @Injectable()
 export class ProviderRegistry {
@@ -24,7 +25,8 @@ export class ProviderRegistry {
     ceven: CevenAdapter,
     diapstore: DiapstoreAdapter,
     newTree: NewTreeAdapter,
-    solutionBox: SolutionBoxAdapter
+    solutionBox: SolutionBoxAdapter,
+    distecna: DistecnaAdapter
   ) {
     this.adapters = {
       ELIT: elit,
@@ -36,6 +38,7 @@ export class ProviderRegistry {
       DIAPSTORE: diapstore,
       NEW_TREE: newTree,
       SOLUTION_BOX: solutionBox,
+      DISTECNA: distecna,
     };
   }
 

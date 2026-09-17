@@ -10,5 +10,6 @@ export const SKU_PREFIX: Record<string, string> = {
   POLYTECH: "PT_",
   NEW_TREE: "NT_",
   SOLUTION_BOX: "SB_",
+  DISTECNA: "DT_",
   GC: "GC_",
 };
