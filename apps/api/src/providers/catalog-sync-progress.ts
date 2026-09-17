@@ -129,6 +129,22 @@ export class CatalogSyncProgress {
     readonly runId: string
   ) {}
 
+  /** Marca la corrida viva antes de la primera página (si no, la UI se queda en 0). */
+  async touch() {
+    await this.prisma.catalogSyncRun.update({
+      where: { id: this.runId },
+      data: { heartbeatAt: new Date() },
+    });
+  }
+
+  async setExpectedTotal(total: number) {
+    if (!Number.isFinite(total) || total <= 0) return;
+    await this.prisma.catalogSyncRun.update({
+      where: { id: this.runId },
+      data: { expectedTotal: Math.floor(total), heartbeatAt: new Date() },
+    });
+  }
+
   record(diffs: CatalogSyncDiff[]) {
     for (const diff of diffs) {
       this.processed += 1;

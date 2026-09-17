@@ -1068,6 +1068,9 @@ export interface ProviderSyncResult {
   missingAffected?: number;
   zeroStockAffected?: number;
   runId?: string;
+  /** El POST volvió al toque: la corrida sigue y hay que pollear `status`. */
+  accepted?: boolean;
+  status?: string;
 }
 
 export type CatalogSyncSource = "manual" | "cron" | "import";
@@ -1116,6 +1119,10 @@ export function summarizeSyncRun(run: Pick<CatalogSyncRun, "processed" | "create
   parts.push(`${run.updated.toLocaleString("es-AR")} actualizados`);
   if (run.unchanged > 0) parts.push(`${run.unchanged.toLocaleString("es-AR")} sin cambios`);
   return parts.join(" · ");
+}
+
+export function catalogSyncKickoff(result: ProviderSyncResult): boolean {
+  return Boolean(result.accepted || result.status === "RUNNING");
 }
 
 export interface ProviderStatus {

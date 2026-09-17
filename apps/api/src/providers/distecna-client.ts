@@ -7,8 +7,14 @@ import type { NormalizedProduct } from "./types";
 /**
  * Distecna presenta un certificado incompleto (falta el intermediario): curl y
  * Node fallan el verify de TLS. El canal sigue siendo HTTPS; no se baja a HTTP.
+ * `family: 4` evita cuelgues IPv6; `proxy: false` para que axios no ignore el
+ * agent si hay HTTP_PROXY en el entorno.
  */
-const TLS = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
+const TLS = new https.Agent({
+  rejectUnauthorized: false,
+  keepAlive: true,
+  family: 4,
+});
 
 export const DISTECNA_V1_PROD = "https://api.distecna.com:8096";
 export const DISTECNA_AUTH_PROD = "https://dsaapi.distecna.com:8087";
@@ -18,7 +24,8 @@ export const DISTECNA_V2_QA = "https://qa-apipublica.distecna.com:8088";
 
 const QUERY_TIMEOUT_MS = 20_000;
 const ORDER_TIMEOUT_MS = 30_000;
-const MAX_RETRIES = 4;
+/** 429/503/504: hasta 3 intentos. Timeout de red: uno solo extra. */
+const MAX_RETRIES = 2;
 const RETRY_STATUSES = new Set([429, 503, 504]);
 
 export type DistecnaEnv = "prod" | "qa";
@@ -235,6 +242,14 @@ function statusOf(err: unknown): number | undefined {
   return undefined;
 }
 
+/** Reintenta 429/503/504; un timeout de red solo una vez. No martilla 5×20s. */
+export function shouldRetryDistecna(err: unknown, attempt: number, maxRetries = MAX_RETRIES): boolean {
+  if (attempt >= maxRetries) return false;
+  const status = statusOf(err);
+  if (status != null) return RETRY_STATUSES.has(status);
+  return attempt === 0;
+}
+
 export function distecnaErrorMessage(err: unknown, fallback: string): string {
   const rec = asRecord(
     err && typeof err === "object" && "response" in err
@@ -267,6 +282,7 @@ export class DistecnaClient {
   constructor(private readonly creds: DistecnaCredentials) {
     this.http = axios.create({
       httpsAgent: TLS,
+      proxy: false,
       timeout: QUERY_TIMEOUT_MS,
       headers: { Accept: "application/json", "User-Agent": "nodo-distecna" },
       validateStatus: (s) => s >= 200 && s < 300,
@@ -314,11 +330,9 @@ export class DistecnaClient {
         return await fn();
       } catch (err) {
         last = err;
-        const status = statusOf(err);
-        if (status != null && !RETRY_STATUSES.has(status)) {
+        if (!shouldRetryDistecna(err, attempt, retries)) {
           throw new BadGatewayException(distecnaErrorMessage(err, `Distecna falló en ${label}`));
         }
-        if (attempt === retries) break;
         await sleep(1000 * 2 ** attempt);
       }
     }

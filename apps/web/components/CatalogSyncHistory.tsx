@@ -179,8 +179,11 @@ export default function CatalogSyncHistory({
                     {SOURCE_LABEL[run.source] ?? run.source}
                   </span>
                   <span className="text-[11px] text-surface-300 tabular-nums truncate">
-                    {run.processed.toLocaleString("es-AR")} · {run.created.toLocaleString("es-AR")} nuevos ·{" "}
-                    {run.updated.toLocaleString("es-AR")} actualizados
+                    {run.status === "RUNNING" && run.processed === 0
+                      ? run.expectedTotal > 0
+                        ? `Conectando… ${run.expectedTotal.toLocaleString("es-AR")} productos`
+                        : "Conectando con el proveedor…"
+                      : `${run.processed.toLocaleString("es-AR")} · ${run.created.toLocaleString("es-AR")} nuevos · ${run.updated.toLocaleString("es-AR")} actualizados`}
                   </span>
                   <span className="ml-auto text-[10px] text-surface-500 flex-shrink-0">
                     {fmtWhen(run.finishedAt ?? run.startedAt)}

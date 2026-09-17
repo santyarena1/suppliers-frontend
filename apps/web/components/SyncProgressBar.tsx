@@ -12,7 +12,8 @@ export default function SyncProgressBar({ run }: { run?: CatalogSyncRun | null }
   const processed = run?.processed ?? 0;
   const expected = run?.expectedTotal ?? 0;
   const hasDenom = expected > 0;
-  const running = run?.status === "RUNNING";
+  const running = !run || run.status === "RUNNING";
+  const connecting = running && processed === 0;
   const pct = hasDenom
     ? Math.min(running ? 99 : 100, Math.round((processed / Math.max(expected, 1)) * 100))
     : null;
@@ -20,7 +21,7 @@ export default function SyncProgressBar({ run }: { run?: CatalogSyncRun | null }
   return (
     <div className="flex flex-col gap-1.5">
       <div className="h-1.5 w-full bg-surface-800 rounded-full overflow-hidden">
-        {pct != null ? (
+        {pct != null && !connecting ? (
           <div
             className="h-full bg-brand-500 rounded-full transition-[width] duration-300"
             style={{ width: `${pct}%` }}
@@ -37,7 +38,12 @@ export default function SyncProgressBar({ run }: { run?: CatalogSyncRun | null }
           </>
         )}
       </div>
-      {run ? (
+      {connecting ? (
+        <p className="text-[11px] text-surface-400 tabular-nums">
+          Conectando con el proveedor…
+          {hasDenom ? ` ${fmt(expected)} productos` : ""}
+        </p>
+      ) : run ? (
         <p className="text-[11px] text-surface-400 tabular-nums">
           {fmt(processed)}
           {hasDenom ? ` de ${fmt(expected)}` : ""} productos

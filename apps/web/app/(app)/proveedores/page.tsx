@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import NodoSpinner from "@/components/NodoSpinner";
@@ -9,7 +9,7 @@ import RedeemAccessCode from "@/components/RedeemAccessCode";
 import LocalPurchaseDashboard from "@/components/insights/LocalPurchaseDashboard";
 import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
-  canSyncProvider, isLiveSyncRun, summarizeSyncRun, isListProvider, listImportsApi, type VisibleProvider
+  canSyncProvider, isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, listImportsApi, type VisibleProvider
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
@@ -28,6 +28,7 @@ export default function ProveedoresPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<Provider | null>(null);
   const [syncResult, setSyncResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const pendingRunId = useRef<Partial<Record<string, string>>>({});
   const [createOpen, setCreateOpen] = useState(false);
   const [enablingOwn, setEnablingOwn] = useState(false);
   const [ownError, setOwnError] = useState<string | null>(null);
@@ -84,6 +85,28 @@ export default function ProveedoresPage() {
     return () => clearInterval(id);
   }, [anyLive, visible, loadStatuses]);
 
+  useEffect(() => {
+    const provider = syncing;
+    if (!provider) return;
+    const id = pendingRunId.current[provider];
+    const run = statuses[provider]?.currentRun;
+    if (!id || !run || run.id !== id || run.status === "RUNNING") return;
+    delete pendingRunId.current[provider];
+    if (run.status === "OK") {
+      setSyncResult((prev) => ({
+        ...prev,
+        [provider]: { ok: true, msg: summarizeSyncRun(run) },
+      }));
+      void load();
+    } else {
+      setSyncResult((prev) => ({
+        ...prev,
+        [provider]: { ok: false, msg: run.errorMessage || "Error al sincronizar" },
+      }));
+    }
+    setSyncing(null);
+  }, [syncing, statuses, load]);
+
   async function handleSync(provider: Provider, e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -92,16 +115,22 @@ export default function ProveedoresPage() {
     try {
       const res = await providersApi.sync(provider);
       const d = res.data;
+      if (d.runId) pendingRunId.current[provider] = d.runId;
+      const linked = visible.filter((p) => p.linked).map((p) => p.provider);
+      await loadStatuses(linked);
+      if (catalogSyncKickoff(d)) return;
+      delete pendingRunId.current[provider];
       const msg =
         d.created != null
           ? `${d.synced.toLocaleString("es-AR")} productos · ${d.created.toLocaleString("es-AR")} nuevos · ${(d.updated ?? 0).toLocaleString("es-AR")} actualizados`
           : `${d.synced.toLocaleString("es-AR")} productos`;
       setSyncResult((prev) => ({ ...prev, [provider]: { ok: true, msg } }));
       await load();
+      setSyncing(null);
     } catch (err: unknown) {
+      delete pendingRunId.current[provider];
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSyncResult((prev) => ({ ...prev, [provider]: { ok: false, msg: msg || "Error al sincronizar" } }));
-    } finally {
       setSyncing(null);
     }
   }
