@@ -11,10 +11,11 @@ dns.setDefaultResultOrder("ipv4first");
 /**
  * Distecna presenta un certificado incompleto (falta el intermediario): curl y
  * Node fallan el verify de TLS. El canal sigue siendo HTTPS; no se baja a HTTP.
- * IPv4 forzado. Si Railway no sale a :8096, se usa el mismo proxy que New Tree.
+ * IPv4 forzado. Solo se usa proxy si está DISTECNA_PROXY_URL: el de New Tree es
+ * para Cloudflare en :443 y aborta el CONNECT a :8096 (el front ve "canceled").
  */
 function distecnaProxyUrl(): string {
-  return (process.env.DISTECNA_PROXY_URL || process.env.NEW_TREE_PROXY_URL || "").trim();
+  return (process.env.DISTECNA_PROXY_URL || "").trim();
 }
 
 function buildDistecnaAgent(): https.Agent {
@@ -24,9 +25,8 @@ function buildDistecnaAgent(): https.Agent {
   }
   return new https.Agent({
     rejectUnauthorized: false,
-    keepAlive: false,
+    keepAlive: true,
     family: 4,
-    timeout: 12_000,
   });
 }
 
@@ -38,9 +38,9 @@ export const DISTECNA_V2_PROD = "https://dsaapi.distecna.com:8088";
 export const DISTECNA_AUTH_QA = "https://qa-apipublica.distecna.com:8086";
 export const DISTECNA_V2_QA = "https://qa-apipublica.distecna.com:8088";
 
-const QUERY_TIMEOUT_MS = 20_000;
+const QUERY_TIMEOUT_MS = 45_000;
 const ORDER_TIMEOUT_MS = 30_000;
-/** 429/503/504: hasta 3 intentos. Timeout de red: uno solo extra. */
+/** 429/503/504: hasta 3 intentos. Timeout/cancel no se reintenta (el front veía "canceled"). */
 const MAX_RETRIES = 2;
 const RETRY_STATUSES = new Set([429, 503, 504]);
 
@@ -258,15 +258,39 @@ function statusOf(err: unknown): number | undefined {
   return undefined;
 }
 
-/** Reintenta 429/503/504; un timeout de red solo una vez. No martilla 5×20s. */
+/** Reintenta 429/503/504. Timeout, abort y "canceled" fallan al toque. */
+export function isDistecnaTimeoutError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const rec = err as { code?: string; name?: string; message?: string };
+  const code = (rec.code || "").toUpperCase();
+  const msg = (rec.message || "").toLowerCase();
+  const name = (rec.name || "").toLowerCase();
+  return (
+    code === "ERR_CANCELED" ||
+    code === "ECONNABORTED" ||
+    code === "ETIMEDOUT" ||
+    code === "UND_ERR_CONNECT_TIMEOUT" ||
+    name.includes("abort") ||
+    name.includes("cancel") ||
+    msg.includes("canceled") ||
+    msg.includes("cancelled") ||
+    msg.includes("timeout") ||
+    msg.includes("aborted")
+  );
+}
+
 export function shouldRetryDistecna(err: unknown, attempt: number, maxRetries = MAX_RETRIES): boolean {
   if (attempt >= maxRetries) return false;
   const status = statusOf(err);
   if (status != null) return RETRY_STATUSES.has(status);
+  if (isDistecnaTimeoutError(err)) return false;
   return attempt === 0;
 }
 
 export function distecnaErrorMessage(err: unknown, fallback: string): string {
+  if (isDistecnaTimeoutError(err)) {
+    return "Distecna no contestó a tiempo (api.distecna.com:8096). Si el servidor no llega a ese puerto, configurá DISTECNA_PROXY_URL.";
+  }
   const rec = asRecord(
     err && typeof err === "object" && "response" in err
       ? (err as { response?: { data?: unknown } }).response?.data
@@ -300,7 +324,6 @@ export class DistecnaClient {
       httpsAgent: TLS,
       proxy: false,
       timeout: QUERY_TIMEOUT_MS,
-      transitional: { clarifyTimeoutError: true },
       headers: { Accept: "application/json", "User-Agent": "nodo-distecna" },
       validateStatus: (s) => s >= 200 && s < 300,
     });
@@ -414,7 +437,6 @@ export class DistecnaClient {
         const res = await this.http.get<DistecnaListResponse>(`${this.v1Base}/Product`, {
           params,
           headers: this.v1Headers(),
-          signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
         });
         return res.data;
       });
@@ -450,7 +472,6 @@ export class DistecnaClient {
       return this.withBackoff(`GET /Product/${code}`, async () => {
         const res = await this.http.get<DistecnaDetail>(`${this.v1Base}/Product/${encoded}`, {
           headers: this.v1Headers(),
-          signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
         });
         return res.data;
       });

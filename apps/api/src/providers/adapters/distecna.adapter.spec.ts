@@ -11,6 +11,7 @@ import {
   parseDistecnaCredentials,
   productTypeFromRaw,
   shouldRetryDistecna,
+  distecnaErrorMessage,
 } from "../distecna-client";
 
 const LIST = {
@@ -125,10 +126,11 @@ describe("shouldRetryDistecna", () => {
     expect(shouldRetryDistecna(http(500), 0)).toBe(false);
   });
 
-  it("en timeout de red solo reintenta el primer intento", () => {
-    const timeout = new Error("timeout of 20000ms exceeded");
-    expect(shouldRetryDistecna(timeout, 0)).toBe(true);
-    expect(shouldRetryDistecna(timeout, 1)).toBe(false);
+  it("no reintenta canceled/timeout: el front tiene que ver el error, no colgarse", () => {
+    expect(shouldRetryDistecna({ code: "ERR_CANCELED", message: "canceled" }, 0)).toBe(false);
+    expect(shouldRetryDistecna(new Error("timeout of 20000ms exceeded"), 0)).toBe(false);
+    expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).toMatch(/8096/);
+    expect(distecnaErrorMessage({ code: "ERR_CANCELED", message: "canceled" }, "x")).not.toMatch(/canceled/i);
   });
 });
 
