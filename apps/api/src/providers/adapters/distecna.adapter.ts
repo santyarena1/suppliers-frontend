@@ -1,5 +1,5 @@
 import { BadGatewayException, Injectable, Logger } from "@nestjs/common";
-import type { NormalizedProduct, ProviderAdapter } from "../types";
+import type { CatalogSyncMeta, NormalizedProduct, ProviderAdapter } from "../types";
 import {
   DistecnaClient,
   detailPatchFromDistecna,
@@ -30,7 +30,8 @@ export class DistecnaAdapter implements ProviderAdapter {
 
   async syncAll(
     credentials: Record<string, string>,
-    onPage: (items: NormalizedProduct[]) => Promise<void>
+    onPage: (items: NormalizedProduct[]) => Promise<void>,
+    onMeta?: (meta: CatalogSyncMeta) => Promise<void>
   ): Promise<void> {
     const creds = parseDistecnaCredentials(credentials);
     if (!hasDistecnaCatalogAccess(creds)) {
@@ -46,6 +47,7 @@ export class DistecnaAdapter implements ProviderAdapter {
     while (offset < total) {
       const page = await client.listProducts({ limit: PAGE_LIMIT, offset });
       total = page.total ?? 0;
+      if (offset === 0 && total > 0) await onMeta?.({ expectedTotal: total });
       const items = (page.products ?? [])
         .map(mapDistecnaListProduct)
         .filter((p) => p.externalId);

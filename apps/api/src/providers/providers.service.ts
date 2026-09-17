@@ -18,7 +18,7 @@ import { snapshotJson } from "./json-value";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
-import type { NormalizedProduct } from "./types";
+import type { NormalizedProduct, ProviderAdapter } from "./types";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 import { diffCatalogItem, type CatalogSyncDiff } from "./catalog-sync-diff";
 import {
@@ -46,6 +46,9 @@ export type SyncResult = {
   missingAffected: number;
   zeroStockAffected: number;
   runId?: string;
+  /** POST manual: la corrida sigue en background; pollear `status.currentRun`. */
+  accepted?: boolean;
+  status?: string;
 };
 
 /** Cuántos productos devuelve una búsqueda, y cuántos se miran para elegirlos. */
@@ -180,18 +183,78 @@ export class ProvidersService implements OnModuleInit {
     }
 
     const credentials = stored ? (JSON.parse(stored.credentialsJson) as Record<string, string>) : {};
-    const syncedExternalIds: string[] = [];
+    const source = opts.source ?? "manual";
 
-    const result = await this.runSync(tenantId, provider, async (onPage) => {
-      await adapter.syncAll(credentials, async (items) => {
-        syncedExternalIds.push(...items.map((i) => i.externalId));
-        await onPage(items);
+    // El cron espera el resultado para loguear. El botón "Sincronizar ahora"
+    // no: si el POST se queda colgado (proxy, 504, catálogo grande) la barra
+    // del front nunca llega a pintar la corrida RUNNING.
+    if (source === "cron") {
+      return this.executeProviderSync(tenantId, provider, adapter, credentials, source);
+    }
+
+    const expectedTotal = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
+    let progress: CatalogSyncProgress;
+    try {
+      progress = await startCatalogSyncRun(this.prisma, {
+        tenantId,
+        provider,
+        source,
+        expectedTotal,
       });
-    }, opts.source ?? "manual");
+    } catch (err) {
+      if (err instanceof CatalogSyncAlreadyRunningError) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    }
+    await progress.touch();
 
-    // Enriquecimiento lento (ej. scrapear ficha por producto) — no bloquea
-    // la respuesta de este sync ni el próximo, corre solo en background y
-    // se salta si ya hay uno corriendo para este proveedor+organización.
+    void this.executeProviderSync(tenantId, provider, adapter, credentials, source, progress).catch((err) => {
+      this.logger.warn(`Sync en background de ${provider} falló: ${errorMessage(err)}`);
+    });
+
+    return {
+      provider,
+      runId: progress.runId,
+      accepted: true,
+      status: "RUNNING",
+      synced: 0,
+      created: 0,
+      updated: 0,
+      missingAffected: 0,
+      zeroStockAffected: 0,
+    };
+  }
+
+  private async executeProviderSync(
+    tenantId: string,
+    provider: Provider,
+    adapter: ProviderAdapter,
+    credentials: Record<string, string>,
+    source: CatalogSyncSource,
+    progress?: CatalogSyncProgress
+  ) {
+    const syncedExternalIds: string[] = [];
+    const result = await this.runSync(
+      tenantId,
+      provider,
+      async (onPage, onMeta) => {
+        await adapter.syncAll(
+          credentials,
+          async (items) => {
+            syncedExternalIds.push(...items.map((i) => i.externalId));
+            await onPage(items);
+          },
+          onMeta
+        );
+      },
+      source,
+      {},
+      progress
+    );
+
+    // Enriquecimiento lento (ficha por producto): no bloquea el próximo sync
+    // y se salta si ya hay uno corriendo para este proveedor+organización.
     if (adapter.enrichDetails) {
       const key = `${tenantId}:${provider}`;
       if (!this.enrichRunning.has(key)) {
@@ -336,36 +399,50 @@ export class ProvidersService implements OnModuleInit {
   private async runSync(
     tenantId: string,
     provider: Provider,
-    run: (onPage: (items: NormalizedProduct[]) => Promise<void>) => Promise<void>,
+    run: (
+      onPage: (items: NormalizedProduct[]) => Promise<void>,
+      onMeta: (meta: { expectedTotal?: number }) => Promise<void>
+    ) => Promise<void>,
     source: CatalogSyncSource = "manual",
-    opts: SyncOptions = {}
+    opts: SyncOptions = {},
+    existingProgress?: CatalogSyncProgress
   ): Promise<SyncResult> {
     const offerSource: OfferSource = opts.offerSource ?? "SYNC";
     const config = await this.getConfig(tenantId, provider);
     const minStock = config.minStockThreshold || 0;
-    const expectedTotal = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
 
     let progress: CatalogSyncProgress;
-    try {
-      progress = await startCatalogSyncRun(this.prisma, {
-        tenantId,
-        provider,
-        source,
-        expectedTotal,
-      });
-    } catch (err) {
-      if (err instanceof CatalogSyncAlreadyRunningError) {
-        throw new BadRequestException(err.message);
+    if (existingProgress) {
+      progress = existingProgress;
+    } else {
+      const expectedTotal = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
+      try {
+        progress = await startCatalogSyncRun(this.prisma, {
+          tenantId,
+          provider,
+          source,
+          expectedTotal,
+        });
+      } catch (err) {
+        if (err instanceof CatalogSyncAlreadyRunningError) {
+          throw new BadRequestException(err.message);
+        }
+        throw err;
       }
-      throw err;
     }
+    await progress.touch();
 
     const syncStartedAt = new Date();
 
     try {
-      await run(async (items) => {
-        await this.upsertPage(tenantId, provider, items, progress, offerSource);
-      });
+      await run(
+        async (items) => {
+          await this.upsertPage(tenantId, provider, items, progress, offerSource);
+        },
+        async (meta) => {
+          if (meta.expectedTotal != null) await progress.setExpectedTotal(meta.expectedTotal);
+        }
+      );
     } catch (err) {
       await progress.fail(errorMessage(err));
       await this.prisma.providerSyncConfig.upsert({

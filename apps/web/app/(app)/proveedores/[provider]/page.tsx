@@ -8,7 +8,7 @@ import {
   IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
   TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders,
-  isLiveSyncRun, summarizeSyncRun, isListProvider, isProviderKey,
+  isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, isProviderKey,
 } from "@/lib/api";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
 import NodoOrdersPanel from "@/components/list-import/NodoOrdersPanel";
@@ -83,6 +83,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [historyKey, setHistoryKey] = useState(0);
   const tabFromQuery = useRef(false);
   const autoTabDone = useRef(false);
+  const pendingRunId = useRef<string | null>(null);
 
   useEffect(() => {
     tabFromQuery.current = false;
@@ -257,6 +258,23 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   }, [liveSync, provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const id = pendingRunId.current;
+    const run = status?.currentRun;
+    if (!id || !run || run.id !== id || run.status === "RUNNING") return;
+    pendingRunId.current = null;
+    if (run.status === "OK") {
+      setSyncResult({
+        ok: true,
+        msg: `Sincronización completa: ${summarizeSyncRun(run)}`,
+      });
+      setHistoryKey((n) => n + 1);
+    } else {
+      setSyncResult({ ok: false, msg: run.errorMessage || "Error al sincronizar" });
+    }
+    setSyncing(false);
+  }, [status?.currentRun]);
+
+  useEffect(() => {
     if (autoTabDone.current || loadingStatus || !status) return;
     if (status.provider !== provider) return;
     autoTabDone.current = true;
@@ -270,6 +288,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     try {
       const res = await providersApi.sync(provider);
       const d = res.data;
+      if (d.runId) pendingRunId.current = d.runId;
+      await loadStatus({ silent: true });
+      if (catalogSyncKickoff(d)) {
+        setHistoryKey((n) => n + 1);
+        return;
+      }
+      pendingRunId.current = null;
       setSyncResult({
         ok: true,
         msg: `Sincronización completa: ${summarizeSyncRun({
@@ -281,10 +306,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       });
       await loadStatus({ silent: true });
       setHistoryKey((n) => n + 1);
+      setSyncing(false);
     } catch (err: unknown) {
+      pendingRunId.current = null;
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setSyncResult({ ok: false, msg: msg || "Error al sincronizar" });
-    } finally {
       setSyncing(false);
     }
   }

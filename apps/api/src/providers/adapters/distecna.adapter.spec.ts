@@ -1,4 +1,6 @@
+import { DistecnaAdapter } from "./distecna.adapter";
 import {
+  DistecnaClient,
   cleanDistecnaCode,
   detailPatchFromDistecna,
   distecnaTaxPoints,
@@ -8,6 +10,7 @@ import {
   normalizeDistecnaCurrency,
   parseDistecnaCredentials,
   productTypeFromRaw,
+  shouldRetryDistecna,
 } from "../distecna-client";
 
 const LIST = {
@@ -106,5 +109,53 @@ describe("distecnaTaxPoints / currency / credentials", () => {
     expect(hasDistecnaCatalogAccess(b)).toBe(true);
     expect(hasDistecnaOrderAccess(b)).toBe(false);
     expect(cleanDistecnaCode(".")).toBeUndefined();
+  });
+});
+
+describe("shouldRetryDistecna", () => {
+  const http = (status: number) => ({ response: { status } });
+
+  it("reintenta 429/503 una vez y no reintenta 401 ni 500", () => {
+    expect(shouldRetryDistecna(http(429), 0)).toBe(true);
+    expect(shouldRetryDistecna(http(503), 1)).toBe(true);
+    expect(shouldRetryDistecna(http(429), 2)).toBe(false);
+    expect(shouldRetryDistecna(http(401), 0)).toBe(false);
+    expect(shouldRetryDistecna(http(500), 0)).toBe(false);
+  });
+
+  it("en timeout de red solo reintenta el primer intento", () => {
+    const timeout = new Error("timeout of 20000ms exceeded");
+    expect(shouldRetryDistecna(timeout, 0)).toBe(true);
+    expect(shouldRetryDistecna(timeout, 1)).toBe(false);
+  });
+});
+
+describe("DistecnaAdapter.syncAll", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("avisa expectedTotal del listado antes de persistir la primera página", async () => {
+    const adapter = new DistecnaAdapter();
+    const order: string[] = [];
+    jest.spyOn(DistecnaClient, "fromCredentials").mockReturnValue({
+      listProducts: jest
+        .fn()
+        .mockResolvedValueOnce({ total: 3197, offset: 0, products: [LIST] })
+        .mockResolvedValue({ total: 3197, offset: 150, products: [] }),
+    } as unknown as DistecnaClient);
+
+    await adapter.syncAll(
+      { api_key: "k" },
+      async (items) => {
+        order.push(`page:${items.length}`);
+      },
+      async (meta) => {
+        if (meta.expectedTotal) order.push(`total:${meta.expectedTotal}`);
+      }
+    );
+
+    expect(order[0]).toBe("total:3197");
+    expect(order[1]).toBe("page:1");
   });
 });

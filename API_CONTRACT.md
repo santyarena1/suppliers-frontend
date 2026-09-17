@@ -181,13 +181,14 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Auth**: Bearer, organización de la sesión (el catálogo se lee/escribe de la org comercial)
 - **Body / Params**: sync sin body · import `multipart` con `file` · runs `?take=` (default 20, máx. 50)
 - **Respuesta esperada**:
-  - POST sync/import: `{ provider, synced, created, updated, unchanged, missingAffected, zeroStockAffected, runId }`
-  - `status.currentRun`: última corrida (`RUNNING` | `OK` | `ERROR`) con contadores en vivo
+  - POST sync (manual): `{ provider, runId, accepted: true, status: "RUNNING", synced: 0, created: 0, updated: 0, missingAffected: 0, zeroStockAffected: 0 }` — la corrida sigue en background
+  - POST import / sync cron: `{ provider, synced, created, updated, unchanged, missingAffected, zeroStockAffected, runId }` al terminar
+  - `status.currentRun`: última corrida (`RUNNING` | `OK` | `ERROR`) con contadores en vivo (`processed`, `expectedTotal`)
   - `sync/current`: igual, o `null` si nunca se sincronizó
   - `sync/runs`: lista de corridas (sin el detalle de productos)
   - `sync/runs/:id`: corrida + `changes[]` (`created` | `updated`, `changedFields`, `before`, `after`)
 - **Estado**: IMPLEMENTADO
-- **Notas**: Vale para **todos** los proveedores con sync (API, cron o Excel). `created` es oferta nueva de esa org; `updated` es cambio de nombre, marca, categoría, SKU, precio, stock o estado; el resto es `unchanged`. El POST sigue bloqueante: el front pollea `status` / `current` en paralelo. Se guardan hasta 500 cambios por corrida. UI: `/proveedores` (barra + contadores) y pestaña Sincronización de cada proveedor (historial y qué cambió).
+- **Notas**: Vale para **todos** los proveedores con sync (API, cron o Excel). `created` es oferta nueva de esa org; `updated` es cambio de nombre, marca, categoría, SKU, precio, stock o estado; el resto es `unchanged`. El POST manual **no espera** el catálogo: crea la corrida `RUNNING` y vuelve; el front pollea `status` / `current` hasta `OK` o `ERROR`. El cron sí espera. Distecna informa `expectedTotal` con el `total` de `GET /Product` antes de persistir la primera página. Se guardan hasta 500 cambios por corrida. UI: `/proveedores` (barra + contadores) y pestaña Sincronización de cada proveedor (historial y qué cambió).
 
 ### [FEATURE] Módulo Catálogo (admin)
 - **Método**: GET | POST | PATCH | PUT | DELETE
@@ -519,7 +520,9 @@ o `qa`. El listado no trae nombre ni fotos: el sync guarda código/SKU/precio/st
 y `enrichDetails` completa la ficha con `GET /Product/{code}` (o V2 si hay JWT).
 
 El certificado TLS de Distecna viene con cadena incompleta: el cliente habla HTTPS
-con verify relajado. No se loguea la API Key ni el JWT.
+con verify relajado, IPv4 (`family: 4`) y `proxy: false`. No se loguea la API Key ni el JWT.
+El sync de catálogo (`POST /providers/DISTECNA/sync`) arranca en background y reporta
+`expectedTotal` con el `total` de `GET /Product`.
 
 ### `GET /providers/DISTECNA/account?refresh=1`
 
