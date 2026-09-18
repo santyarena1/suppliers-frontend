@@ -26,7 +26,7 @@ const MARGIN = 12;
 function inflate(r: Rect, pad = PAD): Rect {
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
-  let top = Math.max(8, r.top - pad);
+  const top = Math.max(8, r.top - pad);
   let left = Math.max(8, r.left - pad);
   let width = Math.min(vw - left - 8, r.width + pad * 2);
   let height = Math.min(vh - top - 8, r.height + pad * 2);

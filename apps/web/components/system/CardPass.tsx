@@ -140,7 +140,7 @@ export default function CardPass({ c }: { c: PassCard }) {
         </p>
 
         {/* Renglón de aviso. Vacío si el producto no tiene ninguno. */}
-        <p className="pc__aside mono">
+        <p className={`pc__aside mono${c.missingIva || c.schemeHint ? "" : " pc--vacant"}`}>
           {c.missingIva ? (
             <span className="is-warn">Sin alícuota de IVA</span>
           ) : c.schemeHint ? (

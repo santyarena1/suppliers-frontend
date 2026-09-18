@@ -414,8 +414,7 @@ a.pc__name:hover { color: var(--pc-accent); }
   }
   .pc__amount { font-size: 1.08rem; }
 
-  .pc__aside:not(:has(*)),
-  .pc__pay:not(:has(*)) { display: none; }
+  .pc--vacant { display: none; }
 
   .pc__flags { flex-wrap: wrap; align-content: center; min-height: 1.35rem; }
 

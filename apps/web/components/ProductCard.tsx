@@ -282,7 +282,15 @@ export default function ProductCard({
         </p>
 
         {/* Un solo renglón de aviso, siempre presente aunque esté vacío */}
-        <p className="pc__aside pc-mono">
+        <p
+          className={`pc__aside pc-mono${
+            (pricing.missingIva && (showingOffline || showingScheme)) ||
+            schemeHint ||
+            schemeDiscount
+              ? ""
+              : " pc--vacant"
+          }`}
+        >
           {pricing.missingIva && (showingOffline || showingScheme) ? (
             <span className="is-warn">Sin alícuota de IVA</span>
           ) : schemeHint ? (
@@ -293,7 +301,10 @@ export default function ProductCard({
         </p>
 
         {/* Formas de pago: fila fija, vacía cuando el distribuidor no tiene */}
-        <p className="pc__pay pc-mono" title={payPrices.map((p) => p.text).join(" · ")}>
+        <p
+          className={`pc__pay pc-mono${payPrices.length ? "" : " pc--vacant"}`}
+          title={payPrices.map((p) => p.text).join(" · ")}
+        >
           {payPrices.slice(0, 2).map((p) => (
             <span
               key={p.id}
