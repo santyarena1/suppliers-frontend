@@ -16,7 +16,7 @@ import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
-import { fillPriceHistoryDays } from "./price-history";
+import { fillPriceHistoryDays, pgDateToYmd } from "./price-history";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct, ProviderAdapter } from "./types";
@@ -1244,21 +1244,21 @@ export class ProvidersService implements OnModuleInit {
             SELECT DISTINCT ON (
               h.provider,
               h."externalId",
-              (timezone('America/Argentina/Buenos_Aires', h."capturedAt"))::date
+              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
             )
               h.provider,
               h."externalId",
               h.price,
               h."finalPrice",
               h."capturedAt",
-              (timezone('America/Argentina/Buenos_Aires', h."capturedAt"))::date AS day
+              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS day
             FROM "ProductPriceHistory" h
             WHERE h."tenantId" = ${tenantId}
               AND h.provider = ANY(${providers}::text[])
             ORDER BY
               h.provider,
               h."externalId",
-              (timezone('America/Argentina/Buenos_Aires', h."capturedAt"))::date,
+              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date,
               h."capturedAt" DESC
           ),
           compared AS (
@@ -1310,21 +1310,21 @@ export class ProvidersService implements OnModuleInit {
             SELECT DISTINCT ON (
               h.provider,
               h."externalId",
-              (timezone('America/Argentina/Buenos_Aires', h."capturedAt"))::date
+              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
             )
               h.provider,
               h."externalId",
               h.price,
               h."finalPrice",
               h."capturedAt",
-              (timezone('America/Argentina/Buenos_Aires', h."capturedAt"))::date AS day
+              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS day
             FROM "ProductPriceHistory" h
             WHERE h."tenantId" = ${tenantId}
               AND h.provider = ANY(${providers}::text[])
             ORDER BY
               h.provider,
               h."externalId",
-              (timezone('America/Argentina/Buenos_Aires', h."capturedAt"))::date,
+              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date,
               h."capturedAt" DESC
           ),
           compared AS (
@@ -1394,7 +1394,7 @@ export class ProvidersService implements OnModuleInit {
         externalId: r.externalId,
         previousPrice: numberOrNull(r.previousPrice),
         previousFinalPrice: numberOrNull(r.previousFinalPrice),
-        droppedOn: r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day).slice(0, 10),
+        droppedOn: pgDateToYmd(r.day),
         offer,
       }];
     });
