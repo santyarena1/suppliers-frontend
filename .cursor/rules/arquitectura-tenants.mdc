@@ -41,26 +41,30 @@ SKUs de distros con semáforo/precio sugerido, materiales y acciones.
 ## Reglas innegociables
 
 1. **Aislamiento por organización.** Toda consulta de datos de negocio se filtra por
-   `tenantId`. Un usuario nunca ve datos de otra organización salvo a través de un
-   `TenantLink` explícito.
+ `tenantId`. Un usuario nunca ve datos de otra organización salvo a través de un
+ `TenantLink` explícito.
 2. **Descubrimiento cerrado.** Un `RETAILER` solo conoce los distribuidores y marcas con
-   los que tiene `TenantLink`. Un proveedor no vinculado **no debe aparecer ni siquiera
-   como existente**. Las únicas excepciones son la publicidad paga y el canje de un
-   `TenantAccessCode`.
+ los que tiene `TenantLink`. Un proveedor no vinculado **no debe aparecer ni siquiera
+ como existente**. Las únicas excepciones son la publicidad paga y el canje de un
+ `TenantAccessCode`.
 3. **Códigos de vinculación anónimos.** El endpoint de canje nunca revela a qué
-   organización pertenece un código antes de canjearlo, ni permite enumerar códigos.
+ organización pertenece un código antes de canjearlo, ni permite enumerar códigos.
 4. **Aprobación de órdenes.** Un `SELLER` de un `RETAILER` arma el carrito pero no
-   confirma: la orden queda en `PENDING_APPROVAL` y solo `OWNER`/`ADMIN` de esa
-   organización la aprueba. Si no hay `SELLER`, la orden nace `NOT_REQUIRED`.
+ confirma: la orden queda en `PENDING_APPROVAL` y solo `OWNER`/`ADMIN` de esa
+ organización la aprueba. Si no hay `SELLER`, la orden nace `NOT_REQUIRED`.
 5. **Alcance del Product Manager.** Un `PRODUCT_MANAGER` opera solo sobre las marcas de
-   su `ProductManagerScope`, y solo dentro de su propio distribuidor.
+ su `ProductManagerScope`, y solo dentro de su propio distribuidor.
 6. **Nada de slugs en la interfaz.** En pantalla siempre nombre normalizado
-   (`Tenant.name`, `BrandAccount.name`). Los slugs y las claves de proveedor
-   (`NEW_BYTES`) son identificadores internos.
+ (`Tenant.name`, `BrandAccount.name`). Los slugs y las claves de proveedor
+ (`NEW_BYTES`) son identificadores internos.
 7. **Noticias.** Un distro no ve artículos de otro distro; una marca no ve los de
-   otra marca. El comercio ve los de sus vinculados y, en hero/feed, los de quien
-   paga publicidad. Los adjuntos comerciales no viajan con la publicidad: solo con
-   `TenantLink`. Plan: `docs/PLAN_NOTICIAS.md`.
+ otra marca. El comercio ve los de sus vinculados y, en hero/feed, los de quien
+ paga publicidad. Los adjuntos comerciales no viajan con la publicidad: solo con
+ `TenantLink`. Plan: `docs/PLAN_NOTICIAS.md`.
+8. **Onboarding de comercio.** Todo usuario de un `RETAILER` (dueño o subusuario) pasa
+ por el recorrido hasta marcar `onboardingCompletedAt`. El alta self-serve obliga a
+ crear el nombre de la organización y entra en plan `FREE` (Mostrador). Detalle:
+ `docs/PLAN_ONBOARDING.md`.
 
 ## Al agregar features
 

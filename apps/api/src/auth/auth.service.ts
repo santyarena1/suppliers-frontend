@@ -88,6 +88,21 @@ export class AuthService {
   }
 
   /**
+   * Emite un JWT fresco para un usuario ya autenticado (p. ej. después de crear
+   * la organización en el onboarding, cuando el token viejo no traía tenant).
+   */
+  async issueTokenForUserId(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException("Usuario no encontrado");
+    if (!user.active) throw new UnauthorizedException("La cuenta está desactivada");
+    if (user.endDate && user.endDate.getTime() < Date.now()) {
+      throw new UnauthorizedException("La cuenta venció");
+    }
+    const token = await this.jwt.signAsync(await this.payloadFor(user));
+    return { token };
+  }
+
+  /**
    * Arma el contenido del token. La organización se resuelve acá, en el momento de
    * emitirlo, para que el resto de la plataforma no tenga que buscarla en cada pedido.
    */

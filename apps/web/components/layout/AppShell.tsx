@@ -7,6 +7,7 @@ import ImpersonationBanner from "../ImpersonationBanner";
 import MobileTopBar from "./MobileTopBar";
 import Sidebar from "./Sidebar";
 import TenantRouteGate from "../org/TenantRouteGate";
+import OnboardingGate from "../onboarding/OnboardingGate";
 import ChatRealtime from "../chat/ChatRealtime";
 import CartFloat from "../CartFloat";
 import SessionKeepAlive from "../SessionKeepAlive";
@@ -23,23 +24,25 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <AuthGuard>
       <SessionKeepAlive />
       <ChatRealtime />
-      <div className="flex h-screen flex-col overflow-hidden">
-        <ImpersonationBanner />
-        <div className="flex flex-1 overflow-hidden">
-          <MobileTopBar onOpen={() => setMobileOpen(true)} />
-          {mobileOpen && (
-            <div
-              onClick={() => setMobileOpen(false)}
-              className="lg:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
-            />
-          )}
-          <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
-          <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
-            <TenantRouteGate>{children}</TenantRouteGate>
+      <OnboardingGate>
+        <div className="flex h-screen flex-col overflow-hidden">
+          <ImpersonationBanner />
+          <div className="flex flex-1 overflow-hidden">
+            <MobileTopBar onOpen={() => setMobileOpen(true)} />
+            {mobileOpen && (
+              <div
+                onClick={() => setMobileOpen(false)}
+                className="lg:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
+              />
+            )}
+            <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+              <TenantRouteGate>{children}</TenantRouteGate>
+            </div>
           </div>
         </div>
-      </div>
-      <CartFloat />
+        <CartFloat />
+      </OnboardingGate>
     </AuthGuard>
   );
 }

@@ -11,7 +11,7 @@ const api = axios.create({ baseURL: BASE_URL });
  * significa que alguien anónimo tocó un endpoint con auth. Nunca redirigimos
  * desde estas rutas.
  */
-const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview"]);
+const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview", "/onboarding"]);
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
@@ -268,6 +268,67 @@ export const authApi = {
   register: (username: string, email: string, password: string) =>
     api.post<RegisterResponse>("/auth/register", { username, email, password }),
   refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
+};
+
+export type TenantPlan = "FREE" | "LOCAL" | "CADENA";
+
+export type OnboardingStepId =
+  | "org"
+  | "plan"
+  | "providers"
+  | "search"
+  | "filters"
+  | "product"
+  | "cart"
+  | "orders"
+  | "team"
+  | "done";
+
+export interface OnboardingStep {
+  id: OnboardingStepId;
+  title: string;
+  body: string;
+  href: string | null;
+  roles?: TenantRole[];
+  requiresTenant: boolean;
+}
+
+export interface OnboardingStatus {
+  needsOnboarding: boolean;
+  completed: boolean;
+  completedAt: string | null;
+  hasTenant: boolean;
+  tenant: {
+    id: string;
+    name: string;
+    type: TenantType;
+    role: TenantRole;
+    plan: TenantPlan;
+    planLabel: string;
+    planDescription: string;
+  } | null;
+  roleLabel: string | null;
+  steps: OnboardingStep[];
+  demo: {
+    seeded: boolean;
+    distributors: { name: string; providerKey: string }[];
+    productCount: number;
+    searchHints: string[];
+  } | null;
+  canBootstrap: boolean;
+}
+
+export const onboardingApi = {
+  status: () => api.get<OnboardingStatus>("/onboarding/status"),
+  bootstrap: (data: { name: string; contactEmail?: string | null; contactPhone?: string | null }) =>
+    api.post<{
+      token: string;
+      org: { id: string; name: string; type: TenantType; plan: TenantPlan; planLabel: string };
+      onboarding: OnboardingStatus;
+    }>("/onboarding/bootstrap", data),
+  complete: () => api.post<OnboardingStatus>("/onboarding/complete", {}),
+  reopen: () => api.post<OnboardingStatus>("/onboarding/reopen", {}),
+  reseedDemo: () => api.post<OnboardingStatus>("/onboarding/reseed-demo", {}),
 };
 
 // --- Search ---
@@ -652,6 +713,8 @@ export interface OwnOrg {
   contactPhone: string | null;
   advertisingEnabled: boolean;
   providerKey: Provider | null;
+  plan?: TenantPlan;
+  demoSeededAt?: string | null;
   tenantRole: TenantRole;
   canManageTeam: boolean;
   canManagePortfolio: boolean;

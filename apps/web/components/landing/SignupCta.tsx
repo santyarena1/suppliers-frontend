@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { authApi } from "@/lib/api";
+import { saveSession, sessionFromToken } from "@/lib/auth";
+import { invalidateMyModules } from "@/lib/permissions";
+import { invalidateTgsEnabled } from "@/lib/tgs";
 import { Button, ICON_STROKE, Reveal, Shell } from "./ui";
 
 export default function SignupCta() {
@@ -30,7 +33,11 @@ export default function SignupCta() {
     setLoading(true);
     try {
       await authApi.register(username.trim(), email.trim(), password);
-      router.push("/login?registrado=1");
+      const res = await authApi.login(username.trim(), password);
+      invalidateMyModules();
+      invalidateTgsEnabled();
+      saveSession(res.data.token, sessionFromToken(res.data.token, username.trim()));
+      router.push("/onboarding");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
       setError(Array.isArray(msg) ? msg.join(" · ") : msg || "No se pudo crear la cuenta. Probá de nuevo.");
@@ -168,7 +175,8 @@ export default function SignupCta() {
               </div>
 
               <p className="lnd-note mt-6 leading-relaxed">
-                Sin tarjeta para empezar. Los distribuidores los conectás vos, cuando quieras.
+                Arrancás en el plan Mostrador, gratis. Después del registro nombrás tu comercio y
+                explorás con catálogo y pedidos de demostración.
               </p>
             </form>
           </Reveal>
