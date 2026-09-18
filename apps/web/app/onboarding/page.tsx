@@ -247,7 +247,7 @@ function OnboardingInner() {
       <div className="ob__layout">
         <aside className="ob__rail">
           <p className="lnd-label">
-            {status?.preview ? "Preview superadmin" : status?.mode === "existing" ? "Repaso" : "Alta · Mostrador"}
+            {status?.preview ? "Preview superadmin" : status?.mode === "existing" ? "Repaso" : "Alta · PRO"}
           </p>
           <h1 className="lnd-display lnd-display--md">
             {status?.hasTenant
@@ -259,7 +259,7 @@ function OnboardingInner() {
               ? "Estás probando el onboarding desde cero. Al terminar volvés a Administración."
               : status?.hasTenant
                 ? "Te guiamos por la app con clics resaltados: proveedores, búsqueda, filtros, carrito y pedidos."
-                : "Plan Mostrador gratis. Nombrás la organización y explorás con catálogo y pedidos de prueba."}
+                : "Plan PRO. Nombrás la organización y explorás con catálogo y pedidos de prueba."}
           </p>
 
           {showExistingCta ? (
@@ -323,7 +323,7 @@ function OnboardingInner() {
               <h2 className="ob__card-title">¿Cómo se llama tu local?</h2>
               <p className="lnd-body">
                 Ese nombre es lo que ven distribuidores y equipo. Entrá al plan{" "}
-                <span style={{ color: "var(--mist)" }}>Mostrador</span> (gratis).
+                <span style={{ color: "var(--mist)" }}>PRO</span>.
               </p>
 
               <label className="ob__field">
@@ -382,7 +382,7 @@ function OnboardingInner() {
 
               {step.id === "plan" && status?.demo && (
                 <ul className="ob__bullets">
-                  <li>Plan Mostrador activo</li>
+                  <li>Plan PRO activo</li>
                   <li>
                     {status.demo.productCount} productos demo ·{" "}
                     {status.demo.distributors.map((d) => d.name).join(" · ")}

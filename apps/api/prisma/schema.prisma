@@ -74,10 +74,10 @@ enum TenantType {
   BRAND // Cliente tipo 3 — marca
 }
 
-/// Plan comercial del comercio. El alta self-serve entra en FREE (Mostrador).
+/// Plan comercial del comercio. El alta self-serve entra en PRO (plan básico).
 /// LOCAL y CADENA quedan listos para cuando se definan precios.
 enum TenantPlan {
-  FREE
+  PRO
   LOCAL
   CADENA
 }
@@ -145,8 +145,8 @@ model Tenant {
   commercialMirrors       Tenant[] @relation("CommercialMirror")
   /// Proveedores por lista: cada cuántos días se espera una lista nueva. `null` = sin cadencia.
   listUpdateDays     Int?
-  /// Plan del comercio. Solo aplica de verdad a RETAILER; distros/marcas quedan en FREE.
-  plan               TenantPlan    @default(FREE)
+  /// Plan del comercio. Solo aplica de verdad a RETAILER; distros/marcas quedan en PRO.
+  plan               TenantPlan    @default(PRO)
   /// Cuándo se sembraron productos/pedidos de demostración para este comercio.
   demoSeededAt       DateTime?
   active             Boolean       @default(true)

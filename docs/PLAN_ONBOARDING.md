@@ -1,7 +1,7 @@
-# Onboarding de comercios (Tipo 1) y plan gratuito
+# Onboarding de comercios (Tipo 1) y plan PRO
 
 Documento vivo. Define el alta self-serve de un comercio, el recorrido guiado con
-spotlight y el plan Mostrador (`FREE`) antes de publicar precios de Local / Cadena.
+spotlight y el plan PRO antes de publicar precios de Local / Cadena.
 
 ## Flujos
 
@@ -9,7 +9,7 @@ spotlight y el plan Mostrador (`FREE`) antes de publicar precios de Local / Cade
 ```
 /register o landing #cuenta → login → /onboarding
   ├─ POST /onboarding/bootstrap (nombre + contacto)
-  │    · Tenant RETAILER plan=FREE + OWNER + demo
+  │    · Tenant RETAILER plan=PRO + OWNER + demo
   └─ pasos setup (plan) → tour interactivo (spotlight) → complete
 ```
 

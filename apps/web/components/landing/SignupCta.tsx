@@ -205,7 +205,7 @@ export default function SignupCta() {
               </div>
 
               <p className="lnd-note mt-6 leading-relaxed">
-                Arrancás en el plan Mostrador, gratis. Después del registro nombrás tu comercio y
+                Arrancás en el plan PRO. Después del registro nombrás tu comercio y
                 explorás con guía interactiva.
               </p>
             </form>

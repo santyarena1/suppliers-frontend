@@ -270,7 +270,7 @@ export const authApi = {
   refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
 };
 
-export type TenantPlan = "FREE" | "LOCAL" | "CADENA";
+export type TenantPlan = "PRO" | "LOCAL" | "CADENA";
 
 export type OnboardingStepId =
   | "org"

@@ -98,9 +98,9 @@ export class OnboardingService {
             name: tenant.tenantName,
             type: tenant.tenantType,
             role: tenant.tenantRole,
-            plan: (plan?.plan ?? "FREE") as TenantPlan,
-            planLabel: TENANT_PLAN_LABELS[(plan?.plan ?? "FREE") as TenantPlan],
-            planDescription: TENANT_PLAN_DESCRIPTIONS[(plan?.plan ?? "FREE") as TenantPlan],
+            plan: (plan?.plan ?? "PRO") as TenantPlan,
+            planLabel: TENANT_PLAN_LABELS[(plan?.plan ?? "PRO") as TenantPlan],
+            planDescription: TENANT_PLAN_DESCRIPTIONS[(plan?.plan ?? "PRO") as TenantPlan],
           }
         : null,
       roleLabel: tenant ? TENANT_ROLE_LABELS[tenant.tenantRole] : null,
@@ -143,7 +143,7 @@ export class OnboardingService {
         data: {
           name,
           type: "RETAILER",
-          plan: "FREE",
+          plan: "PRO",
           contactEmail: dto.contactEmail?.trim() || user.email,
           contactPhone: dto.contactPhone?.trim() || null,
           notes: preview ? "Comercio de preview del onboarding (superadmin)" : null,
@@ -356,7 +356,7 @@ export class OnboardingService {
             contactEmail: demo.contactEmail,
             managedByPlatform: true,
             notes: "Distribuidor de demostración para onboarding de comercios",
-            plan: "FREE",
+            plan: "PRO",
           },
         });
       }

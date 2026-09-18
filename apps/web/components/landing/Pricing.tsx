@@ -14,23 +14,23 @@ type Plan = {
 const RETAIL: Plan[] = [
   {
     n: "01",
-    name: "Mostrador",
-    who: "Un local, plan gratuito",
+    name: "PRO",
+    who: "Un local, plan básico",
+    featured: true,
     items: [
       "Búsqueda unificada sobre tus distribuidores",
       "Comparación con el costo puesto",
       "Carga de listas por planilla",
       "Hasta 3 usuarios · catálogo demo al empezar",
-      "Gratis mientras definimos precios de Local y Cadena",
+      "Plan de entrada mientras definimos precios de Local y Cadena",
     ],
   },
   {
     n: "02",
     name: "Local",
     who: "Un local con equipo",
-    featured: true,
     items: [
-      "Todo lo de Mostrador",
+      "Todo lo de PRO",
       "Compra online donde el distribuidor la permite",
       "Historial de pedidos, cuenta corriente y facturas",
       "Pedido armado por un empleado y aprobado por el dueño",
@@ -87,7 +87,7 @@ export default function Pricing() {
         <SectionHead
           title={<>Planes</>}
           meta="05 · Precios"
-          lead="Mostrador es el plan gratuito con el que entra un comercio nuevo. Local y Cadena ya tienen alcance definido; el precio lo publicamos cuando esté cerrado."
+          lead="PRO es el plan básico con el que entra un comercio nuevo. Local y Cadena ya tienen alcance definido; el precio lo publicamos cuando esté cerrado."
         />
 
         <div

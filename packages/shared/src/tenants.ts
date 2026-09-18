@@ -6,8 +6,8 @@
 
 export type TenantType = "RETAILER" | "DISTRIBUTOR" | "BRAND";
 
-/** Plan del comercio. FREE = Mostrador (gratuito). LOCAL/CADENA: precios a definir. */
-export type TenantPlan = "FREE" | "LOCAL" | "CADENA";
+/** Plan del comercio. PRO = plan básico. LOCAL/CADENA: precios a definir. */
+export type TenantPlan = "PRO" | "LOCAL" | "CADENA";
 
 export type TenantRole =
   | "OWNER"
@@ -21,17 +21,17 @@ export type TenantRole =
 
 export type TenantLinkStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "LIST_CONNECTED";
 
-export const TENANT_PLANS: readonly TenantPlan[] = ["FREE", "LOCAL", "CADENA"] as const;
+export const TENANT_PLANS: readonly TenantPlan[] = ["PRO", "LOCAL", "CADENA"] as const;
 
 /** Nombres de pantalla alineados a la landing. */
 export const TENANT_PLAN_LABELS: Record<TenantPlan, string> = {
-  FREE: "Mostrador",
+  PRO: "PRO",
   LOCAL: "Local",
   CADENA: "Cadena",
 };
 
 export const TENANT_PLAN_DESCRIPTIONS: Record<TenantPlan, string> = {
-  FREE: "Plan gratuito: un local, búsqueda unificada, listas y equipo reducido",
+  PRO: "Plan básico: un local, búsqueda unificada, listas y equipo reducido",
   LOCAL: "Un local con equipo, compra online, pedidos con aprobación y chat",
   CADENA: "Varias sucursales, permisos por rol y reportes entre locales",
 };

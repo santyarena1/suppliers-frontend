@@ -25,8 +25,8 @@ describe("onboarding demo catalog", () => {
     expect(DEMO_SEARCH_HINTS).toEqual(expect.arrayContaining(["monitor", "logitech", "ssd"]));
   });
 
-  it("etiqueta el plan FREE como Mostrador", () => {
-    expect(TENANT_PLAN_LABELS.FREE).toBe("Mostrador");
+  it("etiqueta el plan PRO como PRO", () => {
+    expect(TENANT_PLAN_LABELS.PRO).toBe("PRO");
   });
 });
 

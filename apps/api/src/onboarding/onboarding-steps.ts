@@ -49,8 +49,8 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "plan",
     kind: "setup",
-    title: "Plan Mostrador (gratis)",
-    body: "Entrá con el plan gratuito: búsqueda unificada, listas, pedidos de ejemplo y hasta 3 usuarios. Local y Cadena se habilitan cuando publiquemos precios.",
+    title: "Plan PRO",
+    body: "Entrá con el plan básico: búsqueda unificada, listas, pedidos de ejemplo y hasta 3 usuarios. Local y Cadena se habilitan cuando publiquemos precios.",
     href: null,
     spotlight: null,
     ctaLabel: "Entendido, ver la app",
