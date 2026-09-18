@@ -34,6 +34,8 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   previousFinalPrice?: number | null;
   /** Porcentaje de baja (0–100), si aplica. */
   priceDropPercent?: number | null;
+  /** Día calendario AR de la baja (YYYY-MM-DD). */
+  priceDroppedOn?: string | null;
   /** Foto elegida por Serper / Primera foto (no es la del proveedor). */
   imageAiSelected?: boolean;
 };

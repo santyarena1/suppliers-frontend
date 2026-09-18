@@ -242,6 +242,8 @@ export interface ProductDTO {
   previousPrice?: number | null;
   previousFinalPrice?: number | null;
   priceDropPercent?: number | null;
+  /** Día de la baja (YYYY-MM-DD, Argentina). */
+  priceDroppedOn?: string | null;
   /** Marca/categoría unificada (superadmin). Si falta, usar brand/category crudos. */
   displayBrand?: string | null;
   displayCategory?: string | null;
@@ -2459,9 +2461,11 @@ export const catalogApi = {
     api.get<ProductDTO[]>("/catalog/featured", {
       params: { take, ...(opts.mixed ? { mixed: true } : {}) },
     }),
-  /** Alias semántico: solo bajadas de precio (default del endpoint featured). */
-  priceDrops: (take = 24) =>
-    api.get<ProductDTO[]>("/catalog/featured", { params: { take } }),
+  /** Alias: bajas de precio. Sin `all`, la jornada más reciente; `all=true` es todo el historial. */
+  priceDrops: (take = 24, opts: { all?: boolean } = {}) =>
+    api.get<ProductDTO[]>("/catalog/featured", {
+      params: { take, ...(opts.all ? { all: true } : {}) },
+    }),
   /** Catálogo de uno o varios distribuidores, sin texto ni marca ni categoría. */
   byProvider: (providers: string[], take = 60, opts: { includeOutOfStock?: boolean } = {}) =>
     api.get<ProductDTO[]>("/catalog/by-provider", {

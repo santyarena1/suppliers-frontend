@@ -46,11 +46,15 @@ export default function PriceHistoryChart({
       if (!(price > 0)) continue;
       const d = new Date(p.capturedAt);
       if (Number.isNaN(d.getTime())) continue;
-      const dia = d.toISOString().slice(0, 10);
+      const dia = d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
       porDia.set(dia, {
         capturedAt: p.capturedAt,
         price,
-        label: d.toLocaleDateString("es-AR", { day: "2-digit", month: "short" }),
+        label: d.toLocaleDateString("es-AR", {
+          day: "2-digit",
+          month: "short",
+          timeZone: "America/Argentina/Buenos_Aires",
+        }),
       });
     }
     return [...porDia.values()];
@@ -107,6 +111,7 @@ export default function PriceHistoryChart({
       day: "2-digit",
       month: "long",
       year: "numeric",
+      timeZone: "America/Argentina/Buenos_Aires",
     });
   }
 
