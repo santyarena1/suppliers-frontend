@@ -280,6 +280,151 @@ export function parseXmlCost(xml: string): number {
   return parseInvidMoney(xml.match(/<costo>([^<]*)<\/costo>/i)?.[1]);
 }
 
+function xmlField(xml: string, tag: string): string {
+  const re = new RegExp(`<${tag}>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))</${tag}>`, "i");
+  const m = xml.match(re);
+  return (m?.[1] ?? m?.[2] ?? "").trim();
+}
+
+export type InvidCartLineTaxes = {
+  index?: number;
+  qty: number;
+  price: number;
+  subtotal: number;
+  iva: number;
+  internos: number;
+  name?: string;
+  /** El HTML/XML trajo el nodo de IVA de la línea (aunque el importe sea 0). */
+  hasIva?: boolean;
+  hasImi?: boolean;
+};
+
+const MAX_LINE_IVA_PERCENT = 30;
+
+function ivaLooksLikeLineAmount(amount: number, net: number): boolean {
+  if (!(amount >= 0)) return false;
+  if (!(net > 0)) return amount === 0;
+  return (amount / net) * 100 <= MAX_LINE_IVA_PERCENT;
+}
+
+/**
+ * XML de `sumar_a_carrito`: `cantidad`/`monto` son el carrito acumulado;
+ * `iva_producto` (si viene) es el importe de IVA de esa línea, como en carrito.js.
+ */
+export function parseInvidAddItemXml(
+  xml: string,
+  fallbackQty: number,
+  prev: InvidCartCumulative = { qty: 0, gross: 0 },
+): {
+  error?: string;
+  item?: InvidCartLineTaxes;
+  next?: InvidCartCumulative;
+} {
+  const errorFlag = xmlField(xml, "error");
+  const xmlError = stripHtmlMessage(xmlField(xml, "mensaje") || xmlField(xml, "msg") || xmlField(xml, "error"));
+  if (errorFlag === "S") return { error: xmlError || "Invid rechazó el producto" };
+
+  const name = decodeEntities(xmlField(xml, "nombre"));
+  const precio = parseInvidMoney(xmlField(xml, "precio_producto") || xmlField(xml, "precio"));
+  const monto = parseInvidMoney(xmlField(xml, "monto"));
+  const cantidad = Number(xmlField(xml, "cantidad"));
+  const { line, next } = invidLineFromCumulative(
+    prev,
+    { precio, monto, cantidad },
+    fallbackQty,
+  );
+  const ivaField = xmlField(xml, "iva_producto");
+  const imiField = xmlField(xml, "imi_producto");
+  const hasIvaTag = ivaField !== "";
+  const hasImiTag = imiField !== "";
+  const taggedIva = parseInvidMoney(ivaField);
+  const iva = hasIvaTag && ivaLooksLikeLineAmount(taggedIva, line.subtotal) ? taggedIva : line.iva;
+  if (!name || !(line.price > 0 || line.subtotal > 0 || monto > 0)) {
+    return { error: xmlError || undefined };
+  }
+  return {
+    next,
+    item: {
+      qty: line.qty,
+      price: line.price,
+      subtotal: line.subtotal,
+      iva,
+      internos: hasImiTag ? parseInvidMoney(imiField) : 0,
+      name,
+      hasIva: hasIvaTag && ivaLooksLikeLineAmount(taggedIva, line.subtotal),
+      hasImi: hasImiTag,
+    },
+  };
+}
+
+function htmlValueById(html: string, id: string): string | undefined {
+  const tagRe = new RegExp(`<[^>]*\\bid=["']${id}["'][^>]*>`, "i");
+  const tag = html.match(tagRe)?.[0];
+  if (tag) {
+    const value = attr(tag, "value");
+    if (value != null && value !== "") return value;
+  }
+  const inner = html.match(new RegExp(`id=["']${id}["'][^>]*>([\\s\\S]*?)</(?:td|span|div|p|b|strong|label)>`, "i"));
+  if (inner) return stripTags(inner[1]);
+  const loose = html.match(new RegExp(`id=["']${id}["'][^>]*>([^<]*)`, "i"));
+  return loose?.[1]?.trim();
+}
+
+/** Líneas del carrito autenticado: `#iva_1`, `#subtotal_1`, `#imi_1` como el JS del portal. */
+export function parseInvidCartHtmlLines(html: string): InvidCartLineTaxes[] {
+  const idxs = [...html.matchAll(/id=["'](?:iva|imi|subtotal|precio|cant|subiva)_(\d+)["']/gi)].map((m) => Number(m[1]));
+  const unique = [...new Set(idxs)].filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
+  return unique
+    .map((index) => {
+      const qtyRaw = htmlValueById(html, `cant_${index}`);
+      const qty = Math.max(1, Number(qtyRaw) || 1);
+      const price = parseInvidMoney(htmlValueById(html, `precio_${index}`));
+      const ivaRaw = htmlValueById(html, `iva_${index}`);
+      const imiRaw = htmlValueById(html, `imi_${index}`);
+      const subtotal = parseInvidMoney(htmlValueById(html, `subtotal_${index}`)) || round2(price * qty);
+      const iva = parseInvidMoney(ivaRaw);
+      const internos = parseInvidMoney(imiRaw);
+      return {
+        index,
+        qty,
+        price,
+        subtotal,
+        iva,
+        internos,
+        hasIva: ivaRaw != null && ivaRaw !== "",
+        hasImi: imiRaw != null && imiRaw !== "",
+      };
+    })
+    .filter((line) => line.subtotal > 0 || line.price > 0 || line.iva > 0);
+}
+
+/** Pisa IVA/internos/cantidades con lo que muestra `carrito.php`, nunca con el `monto` total. */
+export function overlayInvidCartHtml<T extends {
+  code?: string;
+  qty: number;
+  price: number;
+  subtotal: number;
+  iva: number;
+  internos: number;
+}>(items: T[], html: string): T[] {
+  const taxLines = parseInvidCartHtmlLines(html);
+  if (taxLines.length === 0) return items;
+  const byCode = parseCartLines(html);
+  return items.map((item, i) => {
+    const row = item.code ? byCode.find((l) => l.code === item.code) : undefined;
+    const line = (row ? taxLines.find((t) => t.index === row.index) : undefined) ?? taxLines[i];
+    if (!line) return item;
+    return {
+      ...item,
+      qty: line.qty > 0 ? line.qty : item.qty,
+      price: line.price > 0 ? line.price : item.price,
+      subtotal: line.subtotal > 0 ? line.subtotal : item.subtotal,
+      iva: line.hasIva ? line.iva : item.iva,
+      internos: line.hasImi ? line.internos : item.internos,
+    };
+  });
+}
+
 /**
  * Precio mostrado en la tabla de entrega del carrito autenticado.
  * 1 RETIRA · 5 Puerta a puerta · 3 EXPRESO · 6 Express 24hs.
