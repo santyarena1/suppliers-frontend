@@ -10,6 +10,8 @@ interface Props {
   variant?: "icon" | "full" | "inline" | "stepper";
   /** Estética del stepper: claro para cards, oscuro para fondos dark. */
   tone?: "light" | "dark";
+  /** Botones más chicos: la tarjeta de 2 columnas no entra el w-9 de mobile. */
+  compact?: boolean;
   channel?: "online" | "offline";
   schemeId?: string | null;
 }
@@ -22,6 +24,7 @@ export default function AddToCartButton({
   product,
   variant = "stepper",
   tone = "light",
+  compact = false,
   channel = "online",
   schemeId = null,
 }: Props) {
@@ -100,6 +103,8 @@ export default function AddToCartButton({
       ? "text-brand-600 hover:text-white hover:bg-brand-500"
       : "text-surface-400 hover:text-white hover:bg-brand-600";
 
+  const tap = compact ? "w-7 h-7" : "w-9 h-9 sm:w-7 sm:h-7";
+
   return (
     <div
       className={`flex items-center gap-0.5 rounded-lg border p-0.5 transition-colors ${shell}`}
@@ -112,14 +117,14 @@ export default function AddToCartButton({
         type="button"
         disabled={qty <= 0}
         onClick={(e) => bump(-1, e)}
-        className={`flex items-center justify-center w-9 h-9 sm:w-7 sm:h-7 rounded-md disabled:opacity-35 disabled:hover:bg-transparent transition-colors ${minusBtn}`}
+        className={`flex items-center justify-center ${tap} rounded-md disabled:opacity-35 disabled:hover:bg-transparent transition-colors ${minusBtn}`}
         aria-label="Quitar uno"
         title="Quitar uno"
       >
         <Minus className="w-3.5 h-3.5" />
       </button>
       <span
-        className={`min-w-[1.75rem] text-center text-xs font-semibold tabular-nums ${qtyText}`}
+        className={`min-w-[1.35rem] sm:min-w-[1.75rem] text-center text-xs font-semibold tabular-nums ${qtyText}`}
         aria-label={`Cantidad en carrito: ${qty}`}
       >
         {qty}
@@ -127,7 +132,7 @@ export default function AddToCartButton({
       <button
         type="button"
         onClick={(e) => bump(1, e)}
-        className={`flex items-center justify-center w-9 h-9 sm:w-7 sm:h-7 rounded-md transition-colors ${plusBtn}`}
+        className={`flex items-center justify-center ${tap} rounded-md transition-colors ${plusBtn}`}
         aria-label="Agregar uno"
         title="Agregar uno"
       >

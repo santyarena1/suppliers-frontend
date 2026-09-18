@@ -269,18 +269,11 @@ export default function ProductCard({
 
         <p className="pc__price">
           <span className="pc__amount pc-mono">{primary}</span>
-          <span
-            className="pc__prev pc-mono"
-            title={prevFormatted ? "Precio de la sincronización anterior" : undefined}
-          >
-            {prevFormatted ? (
-              <>
-                antes <s>{prevFormatted}</s>
-              </>
-            ) : (
-              "\u00a0"
-            )}
-          </span>
+          {prevFormatted ? (
+            <span className="pc__prev pc-mono" title="Precio de la sincronización anterior">
+              antes <s>{prevFormatted}</s>
+            </span>
+          ) : null}
         </p>
 
         <p className="pc__base pc-mono" title={taxTitle}>
@@ -358,13 +351,14 @@ export default function ProductCard({
               product={product}
               variant="stepper"
               tone="light"
+              compact
               channel={showingOffline ? "offline" : "online"}
             />
           </div>
         </div>
 
         <div className="pc__sync pc-mono">
-          <ProductSyncedAt syncedAt={product.syncedAt} className="pc__sync-line" />
+          <ProductSyncedAt syncedAt={product.syncedAt} compact className="pc__sync-line" />
           <ListOverdueHint provider={product.provider} className="pc__sync-warn" />
         </div>
       </div>

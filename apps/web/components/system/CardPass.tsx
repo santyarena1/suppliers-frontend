@@ -126,18 +126,11 @@ export default function CardPass({ c }: { c: PassCard }) {
 
         <p className="pc__price">
           <span className="pc__amount mono">{c.price}</span>
-          <span
-            className="pc__prev mono"
-            title={c.previousPrice ? "Precio de la sincronización anterior" : undefined}
-          >
-            {c.previousPrice ? (
-              <>
-                antes <s>{c.previousPrice}</s>
-              </>
-            ) : (
-              "\u00a0"
-            )}
-          </span>
+          {c.previousPrice ? (
+            <span className="pc__prev mono" title="Precio de la sincronización anterior">
+              antes <s>{c.previousPrice}</s>
+            </span>
+          ) : null}
         </p>
 
         {/* Base e impuestos en renglones fijos, siempre dentro de la tarjeta. */}
