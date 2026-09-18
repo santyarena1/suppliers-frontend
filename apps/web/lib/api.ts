@@ -284,13 +284,19 @@ export type OnboardingStepId =
   | "team"
   | "done";
 
+export type OnboardingStepKind = "setup" | "tour" | "finish";
+
 export interface OnboardingStep {
   id: OnboardingStepId;
+  kind: OnboardingStepKind;
   title: string;
   body: string;
   href: string | null;
+  spotlight: string | null;
+  ctaLabel: string;
   roles?: TenantRole[];
   requiresTenant: boolean;
+  skipIfExisting: boolean;
 }
 
 export interface OnboardingStatus {
@@ -298,6 +304,8 @@ export interface OnboardingStatus {
   completed: boolean;
   completedAt: string | null;
   hasTenant: boolean;
+  mode: "fresh" | "existing" | "preview";
+  preview: boolean;
   tenant: {
     id: string;
     name: string;
@@ -316,6 +324,7 @@ export interface OnboardingStatus {
     searchHints: string[];
   } | null;
   canBootstrap: boolean;
+  canStartTour: boolean;
 }
 
 export const onboardingApi = {
@@ -326,7 +335,10 @@ export const onboardingApi = {
       org: { id: string; name: string; type: TenantType; plan: TenantPlan; planLabel: string };
       onboarding: OnboardingStatus;
     }>("/onboarding/bootstrap", data),
-  complete: () => api.post<OnboardingStatus>("/onboarding/complete", {}),
+  startTour: () => api.post<OnboardingStatus>("/onboarding/start-tour", {}),
+  preview: () => api.post<{ token: string; onboarding: OnboardingStatus }>("/onboarding/preview", {}),
+  exitPreview: () => api.post<{ token: string; onboarding: OnboardingStatus }>("/onboarding/preview/exit", {}),
+  complete: () => api.post<{ token?: string; onboarding?: OnboardingStatus } & OnboardingStatus>("/onboarding/complete", {}),
   reopen: () => api.post<OnboardingStatus>("/onboarding/reopen", {}),
   reseedDemo: () => api.post<OnboardingStatus>("/onboarding/reseed-demo", {}),
 };

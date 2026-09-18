@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, type TenantRole as PrismaTenantRole } from "@prisma/client";
 import {
   TENANT_PLAN_DESCRIPTIONS,
   TENANT_PLAN_LABELS,
@@ -18,103 +18,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenants/tenant-context.service";
 import { DEMO_DISTRIBUTORS, DEMO_PRODUCTS, DEMO_SEARCH_HINTS } from "./onboarding-demo";
 import { BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
-
-export type OnboardingStepId =
-  | "org"
-  | "plan"
-  | "providers"
-  | "search"
-  | "filters"
-  | "product"
-  | "cart"
-  | "orders"
-  | "team"
-  | "done";
-
-export type OnboardingStep = {
-  id: OnboardingStepId;
-  title: string;
-  body: string;
-  href: string | null;
-  /** Solo dueño/admin ven este paso (equipo). */
-  roles?: TenantRole[];
-  /** Requiere haber creado la organización. */
-  requiresTenant: boolean;
-};
-
-const RETAILER_STEPS: OnboardingStep[] = [
-  {
-    id: "org",
-    title: "Nombrá tu comercio",
-    body: "La organización es tu local en NODO. El nombre es lo que van a ver tus distribuidores y tu equipo.",
-    href: null,
-    requiresTenant: false,
-  },
-  {
-    id: "plan",
-    title: "Plan Mostrador (gratis)",
-    body: "Entrá con el plan gratuito: búsqueda unificada, listas, pedidos de ejemplo y hasta 3 usuarios. Los planes Local y Cadena se habilitan cuando publiquemos precios.",
-    href: null,
-    requiresTenant: true,
-  },
-  {
-    id: "providers",
-    title: "Tus distribuidores",
-    body: "Solo ves a quien está vinculado. Dejamos dos distribuidores de demostración con catálogo de prueba. Después los reemplazás canjeando un código real.",
-    href: "/proveedores",
-    requiresTenant: true,
-  },
-  {
-    id: "search",
-    title: "Buscá un producto",
-    body: "Probá buscar «monitor», «logitech» o «ssd». Vas a ver resultados de ambos distros demo en una sola pantalla.",
-    href: "/search?q=monitor",
-    requiresTenant: true,
-  },
-  {
-    id: "filters",
-    title: "Filtros por marca, categoría y proveedor",
-    body: "En la búsqueda podés filtrar por Distribuidora Demo Norte/Sur, por Logitech/Samsung/Redragon/Kingston y por Periféricos, Monitores o Almacenamiento.",
-    href: "/search?q=teclado&marca=Redragon",
-    requiresTenant: true,
-  },
-  {
-    id: "product",
-    title: "Ficha del producto",
-    body: "Abrí un producto: precio y stock son de tu comercio. La ficha (nombre, marca, foto) es global.",
-    href: "/search?q=mouse",
-    requiresTenant: true,
-  },
-  {
-    id: "cart",
-    title: "Armá el carrito",
-    body: "Agregá un ítem demo al carrito de la organización. Es el mismo carrito que ve todo el equipo del local.",
-    href: "/cart",
-    requiresTenant: true,
-  },
-  {
-    id: "orders",
-    title: "Pedidos de ejemplo",
-    body: "En Pedidos hay dos pedidos offline de demostración (uno por distro). Ahí se entiende el historial y, si sumás un vendedor, la aprobación.",
-    href: "/pedidos",
-    requiresTenant: true,
-  },
-  {
-    id: "team",
-    title: "Invitá a tu equipo",
-    body: "Desde Equipo creás compradores o vendedores. Cada persona nueva también pasa por este recorrido la primera vez que entra.",
-    href: "/equipo",
-    roles: ["OWNER", "ADMIN"],
-    requiresTenant: true,
-  },
-  {
-    id: "done",
-    title: "Listo para operar",
-    body: "Cuando quieras, cerrá el recorrido. Podés reabrirlo desde Ayuda. Los productos demo se pueden dejar o limpiar más adelante.",
-    href: null,
-    requiresTenant: true,
-  },
-];
+import { RETAILER_ONBOARDING_STEPS, type OnboardingStep } from "./onboarding-steps";
 
 @Injectable()
 export class OnboardingService {
@@ -132,11 +36,20 @@ export class OnboardingService {
         username: true,
         role: true,
         onboardingCompletedAt: true,
+        onboardingPreviewRestoreTenantId: true,
+        onboardingReplay: true,
       },
     });
     const tenant = await this.tenantContext.forUser(userId);
-    const needsOnboarding = this.needsOnboarding(user, tenant);
-    const steps = this.stepsFor(tenant?.tenantType ?? null, tenant?.tenantRole ?? null, Boolean(tenant));
+    const preview = Boolean(user.onboardingPreviewRestoreTenantId);
+    const mode = this.resolveMode(user, tenant, preview);
+    const needsOnboarding = this.needsOnboarding(user, tenant, preview);
+    const steps = this.stepsFor({
+      type: tenant?.tenantType ?? null,
+      role: tenant?.tenantRole ?? null,
+      hasTenant: Boolean(tenant),
+      mode,
+    });
 
     let demo: {
       seeded: boolean;
@@ -174,9 +87,11 @@ export class OnboardingService {
 
     return {
       needsOnboarding,
-      completed: Boolean(user.onboardingCompletedAt),
+      completed: Boolean(user.onboardingCompletedAt) && !preview,
       completedAt: user.onboardingCompletedAt?.toISOString() ?? null,
       hasTenant: Boolean(tenant),
+      mode,
+      preview,
       tenant: tenant
         ? {
             id: tenant.tenantId,
@@ -191,18 +106,23 @@ export class OnboardingService {
       roleLabel: tenant ? TENANT_ROLE_LABELS[tenant.tenantRole] : null,
       steps,
       demo,
-      canBootstrap: !tenant && user.role === "ROLE_USER",
+      canBootstrap:
+        !tenant && (user.role === "ROLE_USER" || (user.role === "ROLE_ADMIN" && preview)),
+      canStartTour: Boolean(tenant?.tenantType === "RETAILER") || preview,
     };
   }
 
   /**
-   * Alta self-serve de un comercio (tipo 1): crea la organización, pone al
-   * usuario como OWNER, asigna plan FREE y siembra catálogo/pedidos demo.
+   * Alta self-serve de un comercio (tipo 1). También sirve al superadmin en
+   * modo preview (sin membresía activa, con restore guardado).
    */
   async bootstrapRetailer(userId: string, dto: BootstrapRetailerOrgDto) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    if (user.role === "ROLE_ADMIN") {
-      throw new ForbiddenException("El administrador de plataforma no crea comercios desde el onboarding");
+    const preview = Boolean(user.onboardingPreviewRestoreTenantId);
+    if (user.role === "ROLE_ADMIN" && !preview) {
+      throw new ForbiddenException(
+        "Para probar el onboarding como superadmin, iniciá el preview desde la landing"
+      );
     }
     const existing = await this.tenantContext.forUser(userId);
     if (existing) {
@@ -226,6 +146,8 @@ export class OnboardingService {
           plan: "FREE",
           contactEmail: dto.contactEmail?.trim() || user.email,
           contactPhone: dto.contactPhone?.trim() || null,
+          notes: preview ? "Comercio de preview del onboarding (superadmin)" : null,
+          managedByPlatform: preview,
         },
       });
       await tx.tenantMembership.create({
@@ -233,7 +155,7 @@ export class OnboardingService {
           tenantId: created.id,
           userId,
           role: "OWNER",
-          title: "Dueño del local",
+          title: preview ? "Preview onboarding" : "Dueño del local",
         },
       });
       return created;
@@ -256,31 +178,157 @@ export class OnboardingService {
     };
   }
 
+  /**
+   * Comercio ya existente: reabre el recorrido saltando el alta (org/plan) y
+   * asegura el catálogo demo para poder probar filtros y pedidos.
+   */
+  async startTour(userId: string) {
+    const tenant = await this.tenantContext.forUser(userId);
+    if (!tenant || tenant.tenantType !== "RETAILER") {
+      throw new ForbiddenException("El recorrido guiado es para comercios");
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { onboardingCompletedAt: null, onboardingReplay: true },
+    });
+    if (tenant.tenantRole === "OWNER" || tenant.tenantRole === "ADMIN") {
+      await this.seedDemoSandbox(tenant.tenantId, userId);
+    }
+    return this.status(userId);
+  }
+
+  /**
+   * Superadmin desde la landing: guarda Administración, suelta la membresía y
+   * deja al usuario sin org para hacer el onboarding desde cero.
+   */
+  async enterPreview(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.role !== "ROLE_ADMIN") {
+      throw new ForbiddenException("Solo el administrador de plataforma puede abrir el preview");
+    }
+
+    // Si ya estaba en preview a medias, restaurar antes de reiniciar.
+    if (user.onboardingPreviewRestoreTenantId) {
+      await this.exitPreview(userId, { markComplete: false });
+    }
+
+    const current = await this.prisma.tenantMembership.findFirst({
+      where: { userId, active: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!current) {
+      throw new BadRequestException("El superadmin no tiene organización a la que volver");
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          onboardingCompletedAt: null,
+          onboardingReplay: false,
+          onboardingPreviewRestoreTenantId: current.tenantId,
+          onboardingPreviewRestoreRole: current.role,
+        },
+      });
+      await tx.tenantMembership.update({
+        where: { id: current.id },
+        data: { active: false },
+      });
+      // Por si quedó una membresía de un preview anterior.
+      await tx.tenantMembership.updateMany({
+        where: {
+          userId,
+          active: true,
+          tenant: { managedByPlatform: true, type: "RETAILER", notes: { contains: "preview" } },
+        },
+        data: { active: false },
+      });
+    });
+
+    const { token } = await this.auth.issueTokenForUserId(userId);
+    return { token, onboarding: await this.status(userId) };
+  }
+
+  /** Sale del preview y restaura la membresía de Administración. */
+  async exitPreview(userId: string, opts: { markComplete?: boolean } = {}) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const restoreId = user.onboardingPreviewRestoreTenantId;
+    if (!restoreId) {
+      const { token } = await this.auth.issueTokenForUserId(userId);
+      return { token, onboarding: await this.status(userId) };
+    }
+    const restoreRole = (user.onboardingPreviewRestoreRole ?? "OWNER") as PrismaTenantRole;
+
+    await this.prisma.$transaction(async (tx) => {
+      const previewMemberships = await tx.tenantMembership.findMany({
+        where: { userId, tenantId: { not: restoreId } },
+        include: { tenant: { select: { id: true, managedByPlatform: true, notes: true, type: true } } },
+      });
+      for (const membership of previewMemberships) {
+        const isPreview =
+          membership.tenant.managedByPlatform &&
+          membership.tenant.type === "RETAILER" &&
+          (membership.tenant.notes ?? "").toLowerCase().includes("preview");
+        if (isPreview) {
+          await tx.tenantMembership.delete({ where: { id: membership.id } });
+        } else if (membership.active) {
+          await tx.tenantMembership.update({ where: { id: membership.id }, data: { active: false } });
+        }
+      }
+
+      const restore = await tx.tenantMembership.findUnique({
+        where: { tenantId_userId: { tenantId: restoreId, userId } },
+      });
+      if (restore) {
+        await tx.tenantMembership.update({
+          where: { id: restore.id },
+          data: { active: true, role: restoreRole },
+        });
+      } else {
+        await tx.tenantMembership.create({
+          data: { tenantId: restoreId, userId, role: restoreRole, title: "Administración" },
+        });
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          onboardingPreviewRestoreTenantId: null,
+          onboardingPreviewRestoreRole: null,
+          onboardingReplay: false,
+          onboardingCompletedAt: opts.markComplete === false ? null : new Date(),
+        },
+      });
+    });
+
+    const { token } = await this.auth.issueTokenForUserId(userId);
+    return { token, onboarding: await this.status(userId) };
+  }
+
   async complete(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { onboardingPreviewRestoreTenantId: true },
+    });
+    if (user.onboardingPreviewRestoreTenantId) {
+      return this.exitPreview(userId, { markComplete: true });
+    }
     const tenant = await this.tenantContext.forUser(userId);
     if (!tenant) {
       throw new BadRequestException("Creá tu organización antes de cerrar el recorrido");
     }
     await this.prisma.user.update({
       where: { id: userId },
-      data: { onboardingCompletedAt: new Date() },
+      data: { onboardingCompletedAt: new Date(), onboardingReplay: false },
     });
-    return this.status(userId);
+    const { token } = await this.auth.issueTokenForUserId(userId);
+    return { token, onboarding: await this.status(userId) };
   }
 
-  /** Reabre el recorrido (p. ej. desde Ayuda). */
   async reopen(userId: string) {
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { onboardingCompletedAt: null },
-    });
-    return this.status(userId);
+    return this.startTour(userId);
   }
 
-  /**
-   * Vuelve a materializar productos y pedidos demo en un comercio que ya existe
-   * (útil si se borraron ofertas o si un subusuario entra a un local vacío).
-   */
   async reseedDemo(userId: string) {
     const tenant = await this.tenantContext.forUser(userId);
     if (!tenant || tenant.tenantType !== "RETAILER") {
@@ -367,11 +415,7 @@ export class OnboardingService {
           category: product.category,
           subcategory: product.subcategory,
           description: product.description,
-          raw: {
-            demo: true,
-            sku: product.sku,
-            brand: product.brand,
-          },
+          raw: { demo: true, sku: product.sku, brand: product.brand },
         },
         update: {
           sku: product.sku,
@@ -419,79 +463,49 @@ export class OnboardingService {
     }
 
     const existingDemoOrders = await this.prisma.providerOrder.count({
-      where: {
-        tenantId: retailerTenantId,
-        notes: { contains: "[DEMO]" },
-      },
+      where: { tenantId: retailerTenantId, notes: { contains: "[DEMO]" } },
     });
 
     if (existingDemoOrders === 0) {
       const mouse = DEMO_PRODUCTS[0];
       const ssd = DEMO_PRODUCTS[3];
-      await this.prisma.providerOrder.create({
-        data: {
-          userId: actorUserId,
-          tenantId: retailerTenantId,
-          createdByUserId: actorUserId,
-          approvedByUserId: actorUserId,
-          approvalDecidedAt: new Date(),
-          provider: mouse.provider,
-          channel: "OFFLINE",
-          status: "OFFLINE",
-          approvalStatus: "NOT_REQUIRED",
-          paymentOption: "OFFLINE",
-          notes: "[DEMO] Pedido de ejemplo — Distribuidora Demo Norte",
-          subtotal: new Prisma.Decimal(mouse.price),
-          impuestos: new Prisma.Decimal(0),
-          percepciones: new Prisma.Decimal(0),
-          total: new Prisma.Decimal(mouse.price),
-          items: [
-            {
-              externalId: mouse.externalId,
-              sku: mouse.sku,
-              name: mouse.name,
-              quantity: 1,
-              unitPrice: mouse.price,
-              ivaPercent: mouse.ivaPercent,
-              pricingMode: "offline",
-            },
-          ],
-          addressSnapshot: {},
-          draftInput: { demo: true },
-        },
-      });
-      await this.prisma.providerOrder.create({
-        data: {
-          userId: actorUserId,
-          tenantId: retailerTenantId,
-          createdByUserId: actorUserId,
-          approvedByUserId: actorUserId,
-          approvalDecidedAt: new Date(),
-          provider: ssd.provider,
-          channel: "OFFLINE",
-          status: "OFFLINE",
-          approvalStatus: "NOT_REQUIRED",
-          paymentOption: "OFFLINE",
-          notes: "[DEMO] Pedido de ejemplo — Distribuidora Demo Sur",
-          subtotal: new Prisma.Decimal(ssd.price),
-          impuestos: new Prisma.Decimal(0),
-          percepciones: new Prisma.Decimal(0),
-          total: new Prisma.Decimal(ssd.price),
-          items: [
-            {
-              externalId: ssd.externalId,
-              sku: ssd.sku,
-              name: ssd.name,
-              quantity: 2,
-              unitPrice: ssd.price,
-              ivaPercent: ssd.ivaPercent,
-              pricingMode: "offline",
-            },
-          ],
-          addressSnapshot: {},
-          draftInput: { demo: true },
-        },
-      });
+      for (const [product, qty, note] of [
+        [mouse, 1, "[DEMO] Pedido de ejemplo — Distribuidora Demo Norte"],
+        [ssd, 2, "[DEMO] Pedido de ejemplo — Distribuidora Demo Sur"],
+      ] as const) {
+        await this.prisma.providerOrder.create({
+          data: {
+            userId: actorUserId,
+            tenantId: retailerTenantId,
+            createdByUserId: actorUserId,
+            approvedByUserId: actorUserId,
+            approvalDecidedAt: new Date(),
+            provider: product.provider,
+            channel: "OFFLINE",
+            status: "OFFLINE",
+            approvalStatus: "NOT_REQUIRED",
+            paymentOption: "OFFLINE",
+            notes: note,
+            subtotal: new Prisma.Decimal(product.price * qty),
+            impuestos: new Prisma.Decimal(0),
+            percepciones: new Prisma.Decimal(0),
+            total: new Prisma.Decimal(product.price * qty),
+            items: [
+              {
+                externalId: product.externalId,
+                sku: product.sku,
+                name: product.name,
+                quantity: qty,
+                unitPrice: product.price,
+                ivaPercent: product.ivaPercent,
+                pricingMode: "offline",
+              },
+            ],
+            addressSnapshot: {},
+            draftInput: { demo: true },
+          },
+        });
+      }
     }
 
     await this.prisma.tenant.update({
@@ -502,30 +516,53 @@ export class OnboardingService {
     return { distributors: distributors.map((d) => ({ id: d.id, name: d.name, providerKey: d.providerKey })) };
   }
 
+  private resolveMode(
+    user: {
+      role: string;
+      onboardingCompletedAt: Date | null;
+      onboardingReplay?: boolean;
+    },
+    tenant: Awaited<ReturnType<TenantContextService["forUser"]>>,
+    preview: boolean
+  ): "fresh" | "existing" | "preview" {
+    if (preview) return "preview";
+    if (!tenant) return "fresh";
+    if (tenant.tenantType !== "RETAILER") return "existing";
+    if (user.onboardingReplay || user.onboardingCompletedAt) return "existing";
+    return "fresh";
+  }
+
   private needsOnboarding(
-    user: { role: string; onboardingCompletedAt: Date | null },
-    tenant: Awaited<ReturnType<TenantContextService["forUser"]>>
+    user: {
+      role: string;
+      onboardingCompletedAt: Date | null;
+      onboardingReplay?: boolean;
+      onboardingPreviewRestoreTenantId?: string | null;
+    },
+    tenant: Awaited<ReturnType<TenantContextService["forUser"]>>,
+    preview: boolean
   ): boolean {
+    if (preview) return true;
+    if (user.onboardingReplay) return true;
     if (user.role === "ROLE_ADMIN") return false;
     if (!tenant) return true;
     if (tenant.tenantType !== "RETAILER") return false;
     return !user.onboardingCompletedAt;
   }
 
-  private stepsFor(
-    type: TenantType | null,
-    role: TenantRole | null,
-    hasTenant: boolean
-  ): OnboardingStep[] {
-    if (type && type !== "RETAILER") return [];
-    return RETAILER_STEPS.filter((step) => {
-      if (step.id === "org" && hasTenant) return false;
-      if (step.requiresTenant && !hasTenant) return step.id === "org";
-      if (step.roles && role && !step.roles.includes(role)) return false;
-      return true;
-    }).filter((step) => {
-      // Sin org solo mostramos el paso de crear org.
-      if (!hasTenant) return step.id === "org";
+  private stepsFor(opts: {
+    type: TenantType | null;
+    role: TenantRole | null;
+    hasTenant: boolean;
+    mode: "fresh" | "existing" | "preview";
+  }): OnboardingStep[] {
+    if (opts.type && opts.type !== "RETAILER" && opts.mode !== "preview") return [];
+    return RETAILER_ONBOARDING_STEPS.filter((step) => {
+      if (opts.mode === "existing" && step.skipIfExisting) return false;
+      if (step.id === "org" && opts.hasTenant) return false;
+      if (!opts.hasTenant) return step.id === "org";
+      if (step.requiresTenant && !opts.hasTenant) return false;
+      if (step.roles && opts.role && !step.roles.includes(opts.role)) return false;
       return true;
     });
   }

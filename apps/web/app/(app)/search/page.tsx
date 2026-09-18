@@ -838,6 +838,7 @@ function SearchPage() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={brandFilter ? `Productos de ${brandFilter}…` : "Buscar producto..."}
+                  data-tour="search-input"
                   className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-8 py-2 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/20 transition-all"
                 />
                 {query && (
@@ -960,6 +961,7 @@ function SearchPage() {
 
           {/* Filtros: colapsables en mobile, siempre visibles en md+ */}
           <div
+            data-tour="search-filters"
             className={`${filtersOpen ? "block" : "hidden"} md:block flex-shrink-0 border-b border-surface-800 bg-surface-900/80 px-3 sm:px-6 py-2.5`}
           >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

@@ -194,6 +194,17 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         href={item.href}
         title={opts?.collapsed ? item.label : undefined}
         onClick={onNavClick}
+        data-tour={
+          item.id === "cart"
+            ? "nav-cart"
+            : item.href === "/pedidos"
+              ? "nav-pedidos"
+              : item.href === "/equipo"
+                ? "nav-equipo"
+                : item.href === "/proveedores"
+                  ? "nav-proveedores"
+                  : undefined
+        }
         className={`flex items-center gap-2.5 rounded-md text-sm transition-all relative ${
           opts?.collapsed ? "justify-center px-2 py-2" : "px-3 py-2"
         } ${
@@ -239,6 +250,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         >
           <Link
             href={item.href}
+            data-tour="nav-proveedores"
             onClick={() => {
               setProvidersOpen(true);
               localStorage.setItem(PROVIDERS_OPEN_KEY, "1");

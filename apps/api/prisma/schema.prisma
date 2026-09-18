@@ -27,6 +27,12 @@ model User {
   /// Recorrido de onboarding visto y cerrado. Cada persona lo tiene, también
   /// los subusuarios: el dueño crea la org; el resto recorre la guía de su rol.
   onboardingCompletedAt DateTime?
+  /// Durante el preview del superadmin: tenant al que hay que volver al salir.
+  onboardingPreviewRestoreTenantId String?
+  /// Rol que tenía en ese tenant antes del preview.
+  onboardingPreviewRestoreRole     TenantRole?
+  /// Recorrido de repaso: salta org/plan aunque onboardingCompletedAt sea null.
+  onboardingReplay                 Boolean     @default(false)
   endDate      DateTime?
   brandId      String?
   brand        BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])

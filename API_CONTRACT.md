@@ -6,12 +6,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Onboarding comercio (Tipo 1) + plan gratuito
 - **Método**: GET | POST
-- **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`
-- **Auth**: Bearer token requerido. `bootstrap` exige usuario sin membresía (`ROLE_USER`). `reseed-demo`: `OWNER`/`ADMIN` de un `RETAILER`.
+- **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`
+- **Auth**: Bearer token requerido. `bootstrap`: usuario sin membresía (`ROLE_USER`, o `ROLE_ADMIN` en preview). `preview`: solo `ROLE_ADMIN`. `start-tour` / `reseed-demo`: comercio `OWNER`/`ADMIN` (reseed).
 - **Body / Params**: bootstrap `{ name, contactEmail?, contactPhone? }` · el resto `{}`
-- **Respuesta esperada**: status `{ needsOnboarding, completed, hasTenant, tenant?: { id, name, type, role, plan, planLabel, planDescription }, steps[], demo?, canBootstrap }` · bootstrap `{ token, org, onboarding }`
+- **Respuesta esperada**: status `{ needsOnboarding, completed, hasTenant, mode: fresh|existing|preview, preview, tenant?, steps[{ id, kind, title, body, href, spotlight, ctaLabel, skipIfExisting }], demo?, canBootstrap, canStartTour }` · bootstrap/preview/complete `{ token?, org?, onboarding }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Crea `Tenant` RETAILER con `plan=FREE` (Mostrador), membresía `OWNER`, vínculos a Distro Demo Norte/Sur (`LIST_DEMO_*`), 4 ofertas y 2 pedidos `[DEMO]`. Cada usuario tiene `onboardingCompletedAt` (también subusuarios). JWT fresco tras bootstrap. UI: `/onboarding`, coach en app, Configuración → Ayuda. Ver `docs/PLAN_ONBOARDING.md`.
+- **Notas**: Crea `Tenant` RETAILER `plan=FREE`, membresía `OWNER`, distros demo + 4 ofertas + 2 pedidos. `start-tour` salta org/plan (`onboardingReplay`). Preview superadmin: guarda Administración, suelta membresía, onboarding desde 0, al completar restaura. UI landing aesthetic + spotlight `data-tour`. Ver `docs/PLAN_ONBOARDING.md`.
 
 ### [FEATURE] Renovar sesión (JWT)
 - **Método**: POST

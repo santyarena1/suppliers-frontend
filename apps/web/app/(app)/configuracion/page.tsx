@@ -336,7 +336,7 @@ function HelpOnboardingSection({ showToast }: { showToast: (msg: string, ok?: bo
   async function reopen() {
     setBusy(true);
     try {
-      await onboardingApi.reopen();
+      await onboardingApi.startTour();
       router.push("/onboarding");
     } catch {
       showToast("No se pudo reabrir el recorrido", false);

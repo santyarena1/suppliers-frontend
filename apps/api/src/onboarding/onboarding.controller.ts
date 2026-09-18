@@ -20,6 +20,23 @@ export class OnboardingController {
     return this.onboarding.bootstrapRetailer(user.userId, dto);
   }
 
+  /** Comercio ya creado: salta org/plan y arranca el tour interactivo. */
+  @Post("start-tour")
+  startTour(@CurrentUser() user: JwtPayload) {
+    return this.onboarding.startTour(user.userId);
+  }
+
+  /** Superadmin: suelta Administración y hace el onboarding desde cero. */
+  @Post("preview")
+  preview(@CurrentUser() user: JwtPayload) {
+    return this.onboarding.enterPreview(user.userId);
+  }
+
+  @Post("preview/exit")
+  exitPreview(@CurrentUser() user: JwtPayload) {
+    return this.onboarding.exitPreview(user.userId, { markComplete: true });
+  }
+
   @Post("complete")
   complete(@CurrentUser() user: JwtPayload) {
     return this.onboarding.complete(user.userId);

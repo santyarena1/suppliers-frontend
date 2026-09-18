@@ -4,11 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { authApi } from "@/lib/api";
+import { authApi, onboardingApi } from "@/lib/api";
 import { saveSession, sessionFromToken } from "@/lib/auth";
 import { invalidateMyModules } from "@/lib/permissions";
 import { invalidateTgsEnabled } from "@/lib/tgs";
+import { clearTour } from "@/lib/onboarding-tour";
 import { Button, ICON_STROKE, Reveal, Shell } from "./ui";
+
+const PREVIEW_USER = "superadmin";
 
 export default function SignupCta() {
   const router = useRouter();
@@ -19,24 +22,39 @@ export default function SignupCta() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const isPreviewLogin = username.trim().toLowerCase() === PREVIEW_USER;
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password.length < 8) {
       setError("La contraseña necesita al menos 8 caracteres.");
       return;
     }
-    if (password !== confirm) {
+    if (!isPreviewLogin && password !== confirm) {
       setError("Las contraseñas no coinciden.");
       return;
     }
     setError("");
     setLoading(true);
     try {
+      if (isPreviewLogin) {
+        const login = await authApi.login(username.trim(), password);
+        invalidateMyModules();
+        invalidateTgsEnabled();
+        saveSession(login.data.token, sessionFromToken(login.data.token, username.trim()));
+        clearTour();
+        const preview = await onboardingApi.preview();
+        saveSession(preview.data.token, sessionFromToken(preview.data.token, username.trim()));
+        router.push("/onboarding");
+        return;
+      }
+
       await authApi.register(username.trim(), email.trim(), password);
       const res = await authApi.login(username.trim(), password);
       invalidateMyModules();
       invalidateTgsEnabled();
       saveSession(res.data.token, sessionFromToken(res.data.token, username.trim()));
+      clearTour();
       router.push("/onboarding");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -57,17 +75,15 @@ export default function SignupCta() {
               tu primera lista
             </h2>
             <p className="lnd-body mt-6">
-              Creás la cuenta, conectás un distribuidor y ya tenés su catálogo buscable. No hace
-              falta cargar todos el primer día: con uno solo ya se nota la diferencia contra abrir
-              su portal cada vez.
+              Creás la cuenta, nombrás tu comercio y recorrés NODO con catálogo y pedidos de prueba.
+              Los clics van resaltados para que no te pierdas.
             </p>
 
             <hr className="lnd-rule my-8" />
 
             <p className="lnd-body text-[0.85rem]">
               <span className="text-[var(--fg)]">¿Sos distribuidor o marca?</span> Creás la cuenta
-              igual que un comercio y desde NODO te habilitamos el espacio que corresponde, con tu
-              catálogo o tu panel de marca.
+              igual que un comercio y desde NODO te habilitamos el espacio que corresponde.
             </p>
 
             <p className="lnd-note mt-6 leading-relaxed">
@@ -95,6 +111,16 @@ export default function SignupCta() {
                 </div>
               )}
 
+              {isPreviewLogin && (
+                <p
+                  className="lnd-note mb-5 rounded px-3 py-2.5"
+                  style={{ border: "1px solid var(--hair)", background: "rgb(106 108 246 / 0.08)" }}
+                >
+                  Modo preview: con la clave de <span style={{ color: "var(--mist)" }}>superadmin</span>{" "}
+                  hacés el onboarding desde cero y después volvés a Administración.
+                </p>
+              )}
+
               <div className="space-y-4">
                 <div>
                   <label htmlFor="lnd-user" className="lnd-label block mb-2">
@@ -111,23 +137,25 @@ export default function SignupCta() {
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="lnd-mail" className="lnd-label block mb-2">
-                    Mail
-                  </label>
-                  <input
-                    id="lnd-mail"
-                    type="email"
-                    className="lnd-input"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tu@comercio.com"
-                    autoComplete="email"
-                    required
-                  />
-                </div>
+                {!isPreviewLogin && (
+                  <div>
+                    <label htmlFor="lnd-mail" className="lnd-label block mb-2">
+                      Mail
+                    </label>
+                    <input
+                      id="lnd-mail"
+                      type="email"
+                      className="lnd-input"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="tu@comercio.com"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                )}
 
-                <div className="grid sm:grid-cols-2 gap-4">
+                <div className={isPreviewLogin ? "" : "grid sm:grid-cols-2 gap-4"}>
                   <div>
                     <label htmlFor="lnd-pass" className="lnd-label block mb-2">
                       Contraseña
@@ -139,31 +167,33 @@ export default function SignupCta() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Mínimo 8"
-                      autoComplete="new-password"
+                      autoComplete={isPreviewLogin ? "current-password" : "new-password"}
                       required
                     />
                   </div>
-                  <div>
-                    <label htmlFor="lnd-pass2" className="lnd-label block mb-2">
-                      Repetir
-                    </label>
-                    <input
-                      id="lnd-pass2"
-                      type="password"
-                      className="lnd-input"
-                      value={confirm}
-                      onChange={(e) => setConfirm(e.target.value)}
-                      placeholder="La misma"
-                      autoComplete="new-password"
-                      required
-                    />
-                  </div>
+                  {!isPreviewLogin && (
+                    <div>
+                      <label htmlFor="lnd-pass2" className="lnd-label block mb-2">
+                        Repetir
+                      </label>
+                      <input
+                        id="lnd-pass2"
+                        type="password"
+                        className="lnd-input"
+                        value={confirm}
+                        onChange={(e) => setConfirm(e.target.value)}
+                        placeholder="La misma"
+                        autoComplete="new-password"
+                        required
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div className="mt-7 flex items-center gap-4">
                 <Button type="submit" disabled={loading}>
-                  {loading ? "Creando" : "Crear mi cuenta"}
+                  {loading ? "Entrando" : isPreviewLogin ? "Probar onboarding" : "Crear mi cuenta"}
                 </Button>
                 {loading && (
                   <Loader2
@@ -176,7 +206,7 @@ export default function SignupCta() {
 
               <p className="lnd-note mt-6 leading-relaxed">
                 Arrancás en el plan Mostrador, gratis. Después del registro nombrás tu comercio y
-                explorás con catálogo y pedidos de demostración.
+                explorás con guía interactiva.
               </p>
             </form>
           </Reveal>
