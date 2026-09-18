@@ -58,10 +58,17 @@ function stockChip(stock: number | null | undefined, status: string | null | und
   return { text: `${stock} u.`, tone: "yes" as const };
 }
 
+function splitBreakdown(s: string): { base: string; tax: string } {
+  const sep = s.indexOf(" · ");
+  if (sep < 0) return { base: s, tax: "" };
+  return { base: s.slice(0, sep), tax: s.slice(sep + 3) };
+}
+
 export default function CardPass({ c }: { c: PassCard }) {
   const [qty, setQty] = useState(0);
   const [compared, setCompared] = useState(false);
   const chip = stockChip(c.stock, c.stockStatus);
+  const breakdown = splitBreakdown(c.breakdown);
 
   return (
     <article className="pc">
@@ -119,16 +126,24 @@ export default function CardPass({ c }: { c: PassCard }) {
 
         <p className="pc__price">
           <span className="pc__amount mono">{c.price}</span>
-          {c.previousPrice && (
-            <span className="pc__prev mono" title="Precio de la sincronización anterior">
-              antes <s>{c.previousPrice}</s>
-            </span>
-          )}
+          <span
+            className="pc__prev mono"
+            title={c.previousPrice ? "Precio de la sincronización anterior" : undefined}
+          >
+            {c.previousPrice ? (
+              <>
+                antes <s>{c.previousPrice}</s>
+              </>
+            ) : (
+              "\u00a0"
+            )}
+          </span>
         </p>
 
-        {/* Una sola moneda, un solo renglón: de dónde sale el número de arriba. */}
+        {/* Base e impuestos en renglones fijos, siempre dentro de la tarjeta. */}
         <p className="pc__base mono" title={c.breakdownTitle}>
-          {c.breakdown}
+          <span>{breakdown.base}</span>
+          <span>{breakdown.tax || "\u00a0"}</span>
         </p>
 
         {/* Renglón de aviso. Vacío si el producto no tiene ninguno. */}

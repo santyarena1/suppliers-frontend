@@ -153,15 +153,14 @@ export default function ProductCard({
   const taxOpts = { withIva, withIibb: includeIibb, provider: product.provider };
   const taxTitle = displayTaxTitle(taxOpts);
 
-  /* El desglose: de dónde sale el número grande, en la misma moneda y en un
-     solo renglón. Absorbe la pastilla de impuesto, que decía lo mismo. */
-  const breakdown = (() => {
-    const parts = [`Base ${money(listed.net)}`];
-    // El badge arma IVA e internos. La percepción se agrega una sola vez acá,
-    // con su marca de estimada, para no repetirla.
-    parts.push(
+  /* El desglose: de dónde sale el número grande, en la misma moneda.
+     Base e impuestos van en renglones distintos para que no se salgan
+     de la tarjeta ni se coman entre sí. */
+  const breakdownBase = `Base ${money(listed.net)}`;
+  const breakdownTax = (() => {
+    const parts = [
       withIva ? displayTaxBadge(product, { ...taxOpts, withIibb: false }) : "sin imp.",
-    );
+    ];
     if (shown.iibbIncluded) {
       parts.push(
         `IIBB${shown.estimatedIibb ? " est." : ""}${
@@ -270,15 +269,23 @@ export default function ProductCard({
 
         <p className="pc__price">
           <span className="pc__amount pc-mono">{primary}</span>
-          {prevFormatted && (
-            <span className="pc__prev pc-mono" title="Precio de la sincronización anterior">
-              antes <s>{prevFormatted}</s>
-            </span>
-          )}
+          <span
+            className="pc__prev pc-mono"
+            title={prevFormatted ? "Precio de la sincronización anterior" : undefined}
+          >
+            {prevFormatted ? (
+              <>
+                antes <s>{prevFormatted}</s>
+              </>
+            ) : (
+              "\u00a0"
+            )}
+          </span>
         </p>
 
         <p className="pc__base pc-mono" title={taxTitle}>
-          {breakdown}
+          <span>{breakdownBase}</span>
+          <span>{breakdownTax}</span>
         </p>
 
         {/* Un solo renglón de aviso, siempre presente aunque esté vacío */}
