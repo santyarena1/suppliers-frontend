@@ -24,6 +24,15 @@ model User {
   active       Boolean       @default(true)
   /// Usuario creado por la plataforma (dueño placeholder de una marca del catálogo).
   managedByPlatform Boolean  @default(false)
+  /// Recorrido de onboarding visto y cerrado. Cada persona lo tiene, también
+  /// los subusuarios: el dueño crea la org; el resto recorre la guía de su rol.
+  onboardingCompletedAt DateTime?
+  /// Durante el preview del superadmin: tenant al que hay que volver al salir.
+  onboardingPreviewRestoreTenantId String?
+  /// Rol que tenía en ese tenant antes del preview.
+  onboardingPreviewRestoreRole     TenantRole?
+  /// Recorrido de repaso: salta org/plan aunque onboardingCompletedAt sea null.
+  onboardingReplay                 Boolean     @default(false)
   endDate      DateTime?
   brandId      String?
   brand        BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])
@@ -63,6 +72,14 @@ enum TenantType {
   RETAILER // Cliente tipo 1 — comercio / local
   DISTRIBUTOR // Cliente tipo 2 — proveedor / distribuidor
   BRAND // Cliente tipo 3 — marca
+}
+
+/// Plan comercial del comercio. El alta self-serve entra en PRO (plan básico).
+/// LOCAL y CADENA quedan listos para cuando se definan precios.
+enum TenantPlan {
+  PRO
+  LOCAL
+  CADENA
 }
 
 enum TenantRole {
@@ -128,6 +145,10 @@ model Tenant {
   commercialMirrors       Tenant[] @relation("CommercialMirror")
   /// Proveedores por lista: cada cuántos días se espera una lista nueva. `null` = sin cadencia.
   listUpdateDays     Int?
+  /// Plan del comercio. Solo aplica de verdad a RETAILER; distros/marcas quedan en PRO.
+  plan               TenantPlan    @default(PRO)
+  /// Cuándo se sembraron productos/pedidos de demostración para este comercio.
+  demoSeededAt       DateTime?
   active             Boolean       @default(true)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt

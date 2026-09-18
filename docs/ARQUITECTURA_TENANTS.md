@@ -182,7 +182,7 @@ hecho. Esta tabla es el producto, no la migración.
 | 2 | Superadmin: árbol, alta de organizaciones y membresías, seed. | Hecho |
 | 3 | Catálogo por organización, credenciales por organización, JWT con membresía, descubrimiento cerrado. | Hecho |
 | 4 | Pedidos y aprobación en la interfaz del comercio. | Hecho |
-| 5 | Tipo 1 autónomo: el dueño arma su equipo, canjea códigos y carga el contacto, sin pasar por el superadmin. | Hecho |
+| 5 | Tipo 1 autónomo: el dueño arma su equipo, canjea códigos y carga el contacto, sin pasar por el superadmin. Alta self-serve: onboarding crea la org + plan PRO + demo. | Hecho — `docs/PLAN_ONBOARDING.md` |
 | 6 | Tipo 2: panel del distribuidor (cartera por vendedor, códigos, pedidos de clientes, inactivos, alcance del PM). | Hecho |
 | 7 | Tipo 3: org por marca, espacio in-app, mapa de SKUs (semáforo + precio sugerido), materiales, acciones, avisos y chat. | Hecho — `docs/PLAN_TIPO3.md` |
 | 8 | Publicidad paga: espacios, precio, cupo, campañas, impresiones/clicks. El flag `advertisingEnabled` es “esta cuenta paga”. | Hecho |
@@ -191,5 +191,5 @@ hecho. Esta tabla es el producto, no la migración.
 | — | Carrito de la organización en la API (un armado por local, visible al distro). | Hecho — `/cart/org` |
 
 Detalle del Tipo 2: `docs/PLAN_TIPO2.md`. Tipo 3: `docs/PLAN_TIPO3.md`.
-Noticias: `docs/PLAN_NOTICIAS.md`.
+Noticias: `docs/PLAN_NOTICIAS.md`. Onboarding comercio / plan free: `docs/PLAN_ONBOARDING.md`.
 

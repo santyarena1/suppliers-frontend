@@ -11,7 +11,7 @@ const api = axios.create({ baseURL: BASE_URL });
  * significa que alguien anónimo tocó un endpoint con auth. Nunca redirigimos
  * desde estas rutas.
  */
-const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview"]);
+const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview", "/onboarding"]);
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
@@ -268,6 +268,79 @@ export const authApi = {
   register: (username: string, email: string, password: string) =>
     api.post<RegisterResponse>("/auth/register", { username, email, password }),
   refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
+};
+
+export type TenantPlan = "PRO" | "LOCAL" | "CADENA";
+
+export type OnboardingStepId =
+  | "org"
+  | "plan"
+  | "providers"
+  | "search"
+  | "filters"
+  | "product"
+  | "cart"
+  | "orders"
+  | "team"
+  | "done";
+
+export type OnboardingStepKind = "setup" | "tour" | "finish";
+
+export interface OnboardingStep {
+  id: OnboardingStepId;
+  kind: OnboardingStepKind;
+  title: string;
+  body: string;
+  href: string | null;
+  spotlight: string | null;
+  ctaLabel: string;
+  roles?: TenantRole[];
+  requiresTenant: boolean;
+  skipIfExisting: boolean;
+}
+
+export interface OnboardingStatus {
+  needsOnboarding: boolean;
+  completed: boolean;
+  completedAt: string | null;
+  hasTenant: boolean;
+  mode: "fresh" | "existing" | "preview";
+  preview: boolean;
+  tenant: {
+    id: string;
+    name: string;
+    type: TenantType;
+    role: TenantRole;
+    plan: TenantPlan;
+    planLabel: string;
+    planDescription: string;
+  } | null;
+  roleLabel: string | null;
+  steps: OnboardingStep[];
+  demo: {
+    seeded: boolean;
+    distributors: { name: string; providerKey: string }[];
+    productCount: number;
+    searchHints: string[];
+  } | null;
+  canBootstrap: boolean;
+  canStartTour: boolean;
+}
+
+export const onboardingApi = {
+  status: () => api.get<OnboardingStatus>("/onboarding/status"),
+  bootstrap: (data: { name: string; contactEmail?: string | null; contactPhone?: string | null }) =>
+    api.post<{
+      token: string;
+      org: { id: string; name: string; type: TenantType; plan: TenantPlan; planLabel: string };
+      onboarding: OnboardingStatus;
+    }>("/onboarding/bootstrap", data),
+  startTour: () => api.post<OnboardingStatus>("/onboarding/start-tour", {}),
+  preview: () => api.post<{ token: string; onboarding: OnboardingStatus }>("/onboarding/preview", {}),
+  exitPreview: () => api.post<{ token: string; onboarding: OnboardingStatus }>("/onboarding/preview/exit", {}),
+  complete: () => api.post<{ token?: string; onboarding?: OnboardingStatus } & OnboardingStatus>("/onboarding/complete", {}),
+  reopen: () => api.post<OnboardingStatus>("/onboarding/reopen", {}),
+  reseedDemo: () => api.post<OnboardingStatus>("/onboarding/reseed-demo", {}),
 };
 
 // --- Search ---
@@ -652,6 +725,8 @@ export interface OwnOrg {
   contactPhone: string | null;
   advertisingEnabled: boolean;
   providerKey: Provider | null;
+  plan?: TenantPlan;
+  demoSeededAt?: string | null;
   tenantRole: TenantRole;
   canManageTeam: boolean;
   canManagePortfolio: boolean;

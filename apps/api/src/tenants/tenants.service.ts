@@ -680,6 +680,8 @@ export class TenantsService {
       contactPhone: row.contactPhone,
       advertisingEnabled: row.advertisingEnabled,
       providerKey: row.providerKey,
+      plan: row.plan,
+      demoSeededAt: row.demoSeededAt,
       tenantRole: tenant.tenantRole,
       canManageTeam,
       canManagePortfolio,

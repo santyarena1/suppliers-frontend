@@ -201,7 +201,7 @@ export default function ProductCard({
   }
 
   return (
-    <article className="pc group">
+    <article className="pc group" data-tour="product-card">
       <Link href={href} className="pc__shot">
         {product.imageUrl && !imgErr ? (
           <Image

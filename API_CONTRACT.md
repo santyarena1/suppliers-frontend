@@ -4,6 +4,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ## Implementado
 
+### [FEATURE] Onboarding comercio (Tipo 1) + plan PRO
+- **Método**: GET | POST
+- **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`
+- **Auth**: Bearer token requerido. `bootstrap`: usuario sin membresía (`ROLE_USER`, o `ROLE_ADMIN` en preview). `preview`: solo `ROLE_ADMIN`. `start-tour` / `reseed-demo`: comercio `OWNER`/`ADMIN` (reseed).
+- **Body / Params**: bootstrap `{ name, contactEmail?, contactPhone? }` · el resto `{}`
+- **Respuesta esperada**: status `{ needsOnboarding, completed, hasTenant, mode: fresh|existing|preview, preview, tenant?, steps[{ id, kind, title, body, href, spotlight, ctaLabel, skipIfExisting }], demo?, canBootstrap, canStartTour }` · bootstrap/preview/complete `{ token?, org?, onboarding }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Crea `Tenant` RETAILER `plan=PRO`, membresía `OWNER`, distros demo + 4 ofertas + 2 pedidos. `start-tour` salta org/plan (`onboardingReplay`). Preview superadmin: guarda Administración, suelta membresía, onboarding desde 0, al completar restaura. UI landing aesthetic + spotlight `data-tour`. Ver `docs/PLAN_ONBOARDING.md`.
+
 ### [FEATURE] Renovar sesión (JWT)
 - **Método**: POST
 - **Ruta**: `/auth/refresh`
@@ -90,9 +99,9 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/my/org` · `/my/team` · `/my/team/:membershipId` · `/my/team/:membershipId/password` · `/my/team/:membershipId/managed-brands`
 - **Auth**: Bearer, organización de la sesión. Mutaciones: `OWNER` o `ADMIN` interno.
 - **Body / Params**: alta `{ username, email, password?, role, title? }` (sin password la plataforma genera una y la devuelve una vez) · edición `{ role?, title?, active? }`
-- **Respuesta esperada**: org `{ id, name, type, tenantRole, canManageTeam, canManagePortfolio, ... }` · team `{ canManage, members: TenantMember[] }`
+- **Respuesta esperada**: org `{ id, name, type, plan, demoSeededAt?, tenantRole, canManageTeam, canManagePortfolio, ... }` · team `{ canManage, members: TenantMember[] }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: El dueño del comercio (y el del distribuidor) arma su equipo sin el árbol de superadmin. Un `ADMIN` no crea ni toca a un `OWNER`. No se puede quitar al último dueño ni a uno mismo. Contacto de la org: `PUT /my/org`. UI: `/equipo`.
+- **Notas**: El dueño del comercio (y el del distribuidor) arma su equipo sin el árbol de superadmin. Un `ADMIN` no crea ni toca a un `OWNER`. No se puede quitar al último dueño ni a uno mismo. Contacto de la org: `PUT /my/org`. UI: `/equipo`. Alta self-serve del primer OWNER: `docs/PLAN_ONBOARDING.md`.
 
 ### [FEATURE] Cartera y códigos del distribuidor (Tipo 2)
 - **Método**: GET | POST | PUT | DELETE

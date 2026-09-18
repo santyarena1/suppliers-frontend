@@ -54,6 +54,16 @@ export default function LoginPage() {
       invalidateMyModules();
       invalidateTgsEnabled();
       saveSession(token, sessionFromToken(token, username));
+      try {
+        const { onboardingApi } = await import("@/lib/api");
+        const status = await onboardingApi.status();
+        if (status.data.needsOnboarding) {
+          router.push("/onboarding");
+          return;
+        }
+      } catch {
+        // Si falla el status, caemos al destino habitual.
+      }
       router.push("/search");
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };

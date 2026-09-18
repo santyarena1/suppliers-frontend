@@ -4,6 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
+import { saveSession, sessionFromToken } from "@/lib/auth";
+import { invalidateMyModules } from "@/lib/permissions";
+import { invalidateTgsEnabled } from "@/lib/tgs";
 import { ArrowLeft, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
@@ -31,9 +34,12 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await authApi.register(username, email, password);
-      // Con el flag el login puede confirmar que la cuenta quedó creada; sin él
-      // ese mensaje no aparecía nunca.
-      router.push("/login?registrado=1");
+      const res = await authApi.login(username, password);
+      const token = res.data.token;
+      invalidateMyModules();
+      invalidateTgsEnabled();
+      saveSession(token, sessionFromToken(token, username));
+      router.push("/onboarding");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "Error al registrarse. Intentá de nuevo.");

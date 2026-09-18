@@ -6,7 +6,7 @@ import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import IibbRatesEditor from "@/components/IibbRatesEditor";
 import { useTheme, THEME_OPTIONS, type Theme } from "@/lib/theme";
-import { getUser, isAdmin, tenantSeesIibbPerceptions } from "@/lib/auth";
+import { getUser, isAdmin, tenantSeesIibbPerceptions, getTenant } from "@/lib/auth";
 import {
   AppearanceTab,
   BannersTab,
@@ -16,8 +16,10 @@ import {
 import ApiCredentialsPanel from "@/components/admin/ApiCredentialsPanel";
 import {
   Settings, Palette, DollarSign, Receipt, Check, RefreshCw, Sun, Moon, Sparkles,
-  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle, Percent, KeyRound,
+  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle, Percent, KeyRound, Compass,
 } from "lucide-react";
+import { onboardingApi } from "@/lib/api";
+import { useRouter } from "next/navigation";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
   soft: Sparkles,
@@ -296,6 +298,8 @@ function ConfiguracionPageInner() {
                   )}
                 </div>
               </section>
+
+              <HelpOnboardingSection showToast={showToast} />
             </div>
           )}
 
@@ -322,3 +326,70 @@ function ConfiguracionPageInner() {
     </>
   );
 }
+
+function HelpOnboardingSection({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
+  const router = useRouter();
+  const tenant = getTenant();
+  const [busy, setBusy] = useState(false);
+  if (tenant && tenant.type !== "RETAILER") return null;
+
+  async function reopen() {
+    setBusy(true);
+    try {
+      await onboardingApi.startTour();
+      router.push("/onboarding");
+    } catch {
+      showToast("No se pudo reabrir el recorrido", false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reseed() {
+    setBusy(true);
+    try {
+      const res = await onboardingApi.reseedDemo();
+      showToast(
+        `Demo listo: ${res.data.demo?.productCount ?? 0} productos en ${res.data.demo?.distributors.length ?? 0} distribuidores`
+      );
+    } catch {
+      showToast("No se pudo regenerar el catálogo demo", false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Compass className="w-4 h-4 text-brand-400" />
+        <h2 className="text-sm font-semibold text-white">Ayuda y recorrido</h2>
+      </div>
+      <p className="text-xs text-surface-500 mb-4 leading-relaxed">
+        Volvé a ver el onboarding con productos, filtros y pedidos de ejemplo. También podés regenerar el catálogo demo si lo borraste.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void reopen()}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600/20 border border-brand-500/30 px-3 py-2 text-xs font-semibold text-brand-200 hover:bg-brand-600/30 disabled:opacity-50"
+        >
+          {busy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Compass className="w-3.5 h-3.5" />}
+          Reabrir recorrido
+        </button>
+        {(tenant?.role === "OWNER" || tenant?.role === "ADMIN" || !tenant) && (
+          <button
+            type="button"
+            disabled={busy || !tenant}
+            onClick={() => void reseed()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-surface-700 px-3 py-2 text-xs font-medium text-surface-300 hover:border-surface-500 disabled:opacity-50"
+          >
+            Regenerar datos demo
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+

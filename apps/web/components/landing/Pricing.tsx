@@ -14,26 +14,27 @@ type Plan = {
 const RETAIL: Plan[] = [
   {
     n: "01",
-    name: "Mostrador",
-    who: "Un local, una persona comprando",
+    name: "PRO",
+    who: "Un local, plan básico",
+    featured: true,
     items: [
       "Búsqueda unificada sobre tus distribuidores",
       "Comparación con el costo puesto",
       "Carga de listas por planilla",
-      "1 usuario",
+      "Hasta 3 usuarios · catálogo demo al empezar",
+      "Plan de entrada mientras definimos precios de Local y Cadena",
     ],
   },
   {
     n: "02",
     name: "Local",
     who: "Un local con equipo",
-    featured: true,
     items: [
-      "Todo lo de Mostrador",
+      "Todo lo de PRO",
       "Compra online donde el distribuidor la permite",
       "Historial de pedidos, cuenta corriente y facturas",
       "Pedido armado por un empleado y aprobado por el dueño",
-      "Chat con los vendedores",
+      "Chat con los vendedores · precio a definir",
     ],
   },
   {
@@ -45,6 +46,7 @@ const RETAIL: Plan[] = [
       "Varios locales y depósitos",
       "Permisos por rol y por sucursal",
       "Comparación y reportes entre sucursales",
+      "Precio a definir",
     ],
   },
 ];
@@ -85,7 +87,7 @@ export default function Pricing() {
         <SectionHead
           title={<>Planes</>}
           meta="05 · Precios"
-          lead="Los planes están definidos en su alcance, no en su precio. Preferimos publicarlos cuando el número sea el definitivo antes que poner uno que después cambie."
+          lead="PRO es el plan básico con el que entra un comercio nuevo. Local y Cadena ya tienen alcance definido; el precio lo publicamos cuando esté cerrado."
         />
 
         <div
