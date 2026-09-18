@@ -611,6 +611,26 @@ function SearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchable.length, touchedFilters]);
 
+  // Si la URL pedía buscar y los proveedores todavía no habían llegado, la
+  // primera corrida sale vacía. Cuando aparece el listado, se reintenta una vez.
+  useEffect(() => {
+    if (!hydrated || !restoredRef.current) return;
+    if (searchable.length === 0 || loading) return;
+    const urlQ = initialQ.trim();
+    const urlMarca = initialMarca.trim();
+    const urlCategoria = initialCategoria.trim();
+    if (!urlQ && !urlMarca && !urlCategoria) return;
+    if (results.length > 0 || !searched) return;
+    void runSearch(urlQ, {
+      track: false,
+      brand: urlMarca || undefined,
+      brands: urlMarca ? new Set([urlMarca]) : new Set(),
+      categories: urlCategoria ? new Set([urlCategoria]) : new Set(),
+      providers: new Set(searchable.map((p) => p.provider)),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchable.length, hydrated]);
+
   // Restaurar la última búsqueda al volver (producto → atrás, o /search sin q).
   useEffect(() => {
     if (!hydrated || restoredRef.current) return;
