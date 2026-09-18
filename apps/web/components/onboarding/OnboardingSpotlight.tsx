@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, X } from "lucide-react";
 import {
   clearTour,
@@ -17,15 +17,77 @@ import "@/app/onboarding/onboarding.css";
 
 type Rect = { top: number; left: number; width: number; height: number };
 
+const PAD = 8;
+const CARD_W = 340;
+const CARD_H_EST = 210;
+const GAP = 12;
+const MARGIN = 12;
+
+function inflate(r: Rect, pad = PAD): Rect {
+  return {
+    top: r.top - pad,
+    left: r.left - pad,
+    width: r.width + pad * 2,
+    height: r.height + pad * 2,
+  };
+}
+
+/** Coloca la tarjeta sin tapar el hueco resaltado. */
+function placeCard(hole: Rect, vw: number, vh: number): { top: number; left: number } {
+  const cardW = Math.min(CARD_W, vw - MARGIN * 2);
+  const cardH = CARD_H_EST;
+
+  const overlaps = (top: number, left: number) =>
+    !(left + cardW < hole.left || left > hole.left + hole.width || top + cardH < hole.top || top > hole.top + hole.height);
+
+  const clampLeft = (left: number) => Math.min(vw - cardW - MARGIN, Math.max(MARGIN, left));
+  const clampTop = (top: number) => Math.min(vh - cardH - MARGIN, Math.max(MARGIN, top));
+
+  const preferLeft = clampLeft(hole.left);
+  const below = hole.top + hole.height + GAP;
+  const above = hole.top - cardH - GAP;
+
+  if (below + cardH <= vh - MARGIN) {
+    const top = clampTop(below);
+    const left = preferLeft;
+    if (!overlaps(top, left)) return { top, left };
+  }
+  if (above >= MARGIN) {
+    const top = clampTop(above);
+    const left = preferLeft;
+    if (!overlaps(top, left)) return { top, left };
+  }
+
+  // Al costado del hueco
+  const right = hole.left + hole.width + GAP;
+  const leftSide = hole.left - cardW - GAP;
+  if (right + cardW <= vw - MARGIN) {
+    return { top: clampTop(hole.top), left: clampLeft(right) };
+  }
+  if (leftSide >= MARGIN) {
+    return { top: clampTop(hole.top), left: clampLeft(leftSide) };
+  }
+
+  // Esquina opuesta al centro del target
+  const cx = hole.left + hole.width / 2;
+  const cy = hole.top + hole.height / 2;
+  return {
+    top: clampTop(cy < vh / 2 ? vh - cardH - MARGIN : MARGIN),
+    left: clampLeft(cx < vw / 2 ? vw - cardW - MARGIN : MARGIN),
+  };
+}
+
 /**
- * Spotlight del recorrido: oscurece la app y encuadra el control a tocar.
+ * Spotlight del recorrido: una sola capa de sombra con hueco limpio.
  * Vive en el AppShell para acompañar al usuario entre pantallas.
  */
 export default function OnboardingSpotlight() {
   const router = useRouter();
+  const pathname = usePathname();
   const [tour, setTour] = useState<TourState | null>(null);
   const [rect, setRect] = useState<Rect | null>(null);
   const [busy, setBusy] = useState(false);
+  const [viewport, setViewport] = useState({ w: 1200, h: 800 });
 
   const refresh = useCallback(() => {
     setTour(loadTour());
@@ -46,17 +108,21 @@ export default function OnboardingSpotlight() {
   }, [refresh]);
 
   const step = currentTourStep(tour);
+  const onHub = pathname.startsWith("/onboarding");
 
-  useEffect(() => {
-    if (!step?.spotlight || typeof document === "undefined") {
+  useLayoutEffect(() => {
+    if (!step?.spotlight || onHub || typeof document === "undefined") {
       setRect(null);
       return;
     }
+
     let cancelled = false;
     let tries = 0;
+    let raf = 0;
 
     const measure = () => {
       if (cancelled) return;
+      setViewport({ w: window.innerWidth, h: window.innerHeight });
       const el = document.querySelector(step.spotlight!) as HTMLElement | null;
       if (!el) {
         tries += 1;
@@ -64,15 +130,19 @@ export default function OnboardingSpotlight() {
         else setRect(null);
         return;
       }
-      el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
-      const r = el.getBoundingClientRect();
-      setRect({
-        top: r.top + window.scrollY,
-        left: r.left + window.scrollX,
-        width: r.width,
-        height: r.height,
-      });
+      document.querySelectorAll("[data-tour-active]").forEach((n) => n.removeAttribute("data-tour-active"));
       el.setAttribute("data-tour-active", "1");
+      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      raf = window.requestAnimationFrame(() => {
+        if (cancelled) return;
+        const r = el.getBoundingClientRect();
+        if (r.width < 2 && r.height < 2) {
+          tries += 1;
+          if (tries < 40) window.setTimeout(measure, 120);
+          return;
+        }
+        setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+      });
     };
 
     measure();
@@ -81,17 +151,14 @@ export default function OnboardingSpotlight() {
     window.addEventListener("scroll", onResize, true);
     return () => {
       cancelled = true;
+      window.cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", onResize, true);
       document.querySelectorAll("[data-tour-active]").forEach((n) => n.removeAttribute("data-tour-active"));
     };
-  }, [step?.id, step?.spotlight, tour?.stepIndex]);
+  }, [step?.id, step?.spotlight, tour?.stepIndex, onHub, pathname]);
 
-  if (!tour?.active || !step || step.kind === "setup") return null;
-  // En el hub (/onboarding) no tapamos la pantalla: el hub maneja setup/finish.
-  if (typeof window !== "undefined" && window.location.pathname.startsWith("/onboarding")) {
-    return null;
-  }
+  if (!tour?.active || !step || step.kind === "setup" || onHub) return null;
 
   async function advance() {
     if (!tour) return;
@@ -126,56 +193,58 @@ export default function OnboardingSpotlight() {
     router.push("/onboarding");
   }
 
-  const pad = 10;
-  const hole = rect
-    ? {
-        top: Math.max(8, rect.top - pad - (typeof window !== "undefined" ? window.scrollY : 0)),
-        left: Math.max(8, rect.left - pad - (typeof window !== "undefined" ? window.scrollX : 0)),
-        width: rect.width + pad * 2,
-        height: rect.height + pad * 2,
-      }
-    : null;
-
-  // Convert stored absolute coords to viewport for fixed overlay
-  const viewHole = rect
-    ? {
-        top: rect.top - (typeof window !== "undefined" ? window.scrollY : 0) - pad,
-        left: rect.left - (typeof window !== "undefined" ? window.scrollX : 0) - pad,
-        width: rect.width + pad * 2,
-        height: rect.height + pad * 2,
-      }
-    : null;
+  const hole = rect ? inflate(rect) : null;
+  const cardPos = hole ? placeCard(hole, viewport.w, viewport.h) : { top: viewport.h - CARD_H_EST - MARGIN, left: viewport.w - Math.min(CARD_W, viewport.w - MARGIN * 2) - MARGIN };
 
   return (
     <div className="ob-spot" aria-live="polite">
-      <div className="ob-spot__dim" />
-      {viewHole && (
-        <div
-          className="ob-spot__hole"
-          style={{
-            top: viewHole.top,
-            left: viewHole.left,
-            width: viewHole.width,
-            height: viewHole.height,
-          }}
-        />
+      {hole ? (
+        <>
+          {/* Una sola capa: 4 paneles alrededor del hueco (sin dim + box-shadow apilados). */}
+          <div className="ob-spot__shade" style={{ top: 0, left: 0, width: "100%", height: Math.max(0, hole.top) }} />
+          <div
+            className="ob-spot__shade"
+            style={{ top: hole.top, left: 0, width: Math.max(0, hole.left), height: hole.height }}
+          />
+          <div
+            className="ob-spot__shade"
+            style={{
+              top: hole.top,
+              left: hole.left + hole.width,
+              width: Math.max(0, viewport.w - hole.left - hole.width),
+              height: hole.height,
+            }}
+          />
+          <div
+            className="ob-spot__shade"
+            style={{
+              top: hole.top + hole.height,
+              left: 0,
+              width: "100%",
+              height: Math.max(0, viewport.h - hole.top - hole.height),
+            }}
+          />
+          <div
+            className="ob-spot__ring"
+            style={{
+              top: hole.top,
+              left: hole.left,
+              width: hole.width,
+              height: hole.height,
+            }}
+          />
+        </>
+      ) : (
+        <div className="ob-spot__shade ob-spot__shade--full" />
       )}
+
       <div
-        className={`ob-spot__card${viewHole ? " ob-spot__card--anchored" : ""}`}
-        style={
-          viewHole
-            ? {
-                top: Math.min(
-                  (typeof window !== "undefined" ? window.innerHeight : 800) - 220,
-                  Math.max(16, viewHole.top + viewHole.height + 14)
-                ),
-                left: Math.min(
-                  (typeof window !== "undefined" ? window.innerWidth : 1200) - 360,
-                  Math.max(16, viewHole.left)
-                ),
-              }
-            : undefined
-        }
+        className="ob-spot__card"
+        style={{
+          top: cardPos.top,
+          left: cardPos.left,
+          width: Math.min(CARD_W, viewport.w - MARGIN * 2),
+        }}
       >
         <div className="ob-spot__head">
           <p className="ob-spot__eyebrow">
