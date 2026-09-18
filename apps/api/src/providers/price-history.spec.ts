@@ -1,4 +1,4 @@
-import { argentinaDayKey, collapsePriceHistoryByDay, fillPriceHistoryDays } from "./price-history";
+import { argentinaDayKey, collapsePriceHistoryByDay, fillPriceHistoryDays, pgDateToYmd } from "./price-history";
 
 describe("collapsePriceHistoryByDay", () => {
   it("deja un solo punto por día calendario AR, el último", () => {
@@ -19,6 +19,13 @@ describe("collapsePriceHistoryByDay", () => {
     expect(argentinaDayKey(late)).toBe("2026-09-17");
     const morning = new Date("2026-09-18T03:30:00.000Z");
     expect(argentinaDayKey(morning)).toBe("2026-09-18");
+  });
+});
+
+describe("pgDateToYmd", () => {
+  it("lee el DATE de Postgres como calendario UTC, sin corrimiento", () => {
+    expect(pgDateToYmd(new Date("2026-09-17T00:00:00.000Z"))).toBe("2026-09-17");
+    expect(pgDateToYmd("2026-09-17")).toBe("2026-09-17");
   });
 });
 

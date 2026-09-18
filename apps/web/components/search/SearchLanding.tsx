@@ -150,18 +150,22 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
 }
 
 function dropDayLabel(products: ProductDTO[]): string {
-  const day = products.find((p) => p.priceDroppedOn)?.priceDroppedOn;
-  if (!day) return "Un punto por día · varios proveedores";
+  const raw = products.find((p) => p.priceDroppedOn)?.priceDroppedOn;
+  if (!raw) return "Un punto por día · varios proveedores";
+  const day = raw.slice(0, 10);
+  const tz = "America/Argentina/Buenos_Aires";
   const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Argentina/Buenos_Aires",
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
   if (day === today) return "Bajas de hoy";
-  const pretty = new Date(`${day}T12:00:00`).toLocaleDateString("es-AR", {
+  // Mediodía UTC del día calendario → etiqueta estable en AR.
+  const pretty = new Date(`${day}T15:00:00.000Z`).toLocaleDateString("es-AR", {
     day: "numeric",
     month: "short",
+    timeZone: tz,
   });
   return `Sin movimientos hoy · bajas del ${pretty}`;
 }

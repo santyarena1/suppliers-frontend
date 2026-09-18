@@ -1,6 +1,10 @@
 export const PRICE_HISTORY_TZ = "America/Argentina/Buenos_Aires";
 
-/** Día calendario en Argentina (YYYY-MM-DD). */
+/**
+ * Día calendario en Argentina (YYYY-MM-DD).
+ * Prisma guarda `DateTime` como `timestamp without time zone` con reloj UTC:
+ * hay que interpretar el instante en AR, no asumir que el naive ya es local.
+ */
 export function argentinaDayKey(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: PRICE_HISTORY_TZ,
@@ -8,6 +12,23 @@ export function argentinaDayKey(d: Date): string {
     month: "2-digit",
     day: "2-digit",
   }).format(d);
+}
+
+/**
+ * Expresión SQL: día calendario AR para `ProductPriceHistory.capturedAt`.
+ * `timezone('America/Argentina/…', capturedAt)` falla: trata el naive como si
+ * ya fuera hora argentina. Hay que anclarlo a UTC primero.
+ */
+export const SQL_CAPTURED_AT_ARGENTINA_DAY =
+  `((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE '${PRICE_HISTORY_TZ}')::date`;
+
+/** YYYY-MM-DD desde un DATE de Postgres (UTC midnight) o string. */
+export function pgDateToYmd(value: Date | string): string {
+  if (typeof value === "string") return value.slice(0, 10);
+  const y = value.getUTCFullYear();
+  const m = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(value.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 /** Suma días a una fecha YYYY-MM-DD (sin zona horaria). */
