@@ -246,50 +246,52 @@
   font-family: var(--lnd-font-display, ui-sans-serif), system-ui, sans-serif;
 }
 
-.ob-spot__dim {
+/* Una sola capa de sombra: sin dim + box-shadow 9999px apilados. */
+.ob-spot__shade {
   position: absolute;
-  inset: 0;
-  background: rgb(11 13 26 / 0.72);
-  backdrop-filter: blur(1.5px);
+  background: rgb(11 13 26 / 0.48);
   pointer-events: auto;
 }
 
-.ob-spot__hole {
+.ob-spot__shade--full {
+  inset: 0;
+}
+
+.ob-spot__ring {
   position: absolute;
   border-radius: 8px;
   box-shadow:
-    0 0 0 9999px rgb(11 13 26 / 0.72),
-    0 0 0 2px var(--lilac),
-    0 0 28px rgb(106 108 246 / 0.55);
+    0 0 0 2px rgb(106 108 246 / 0.95),
+    0 0 0 6px rgb(191 210 255 / 0.18);
   pointer-events: none;
-  animation: ob-pulse 1.8s var(--ease-in-out) infinite;
-  z-index: 1;
+  animation: ob-pulse 2s var(--ease-in-out) infinite;
 }
 
 @keyframes ob-pulse {
-  0%, 100% { box-shadow: 0 0 0 9999px rgb(11 13 26 / 0.72), 0 0 0 2px var(--lilac), 0 0 22px rgb(106 108 246 / 0.4); }
-  50% { box-shadow: 0 0 0 9999px rgb(11 13 26 / 0.72), 0 0 0 3px var(--mist), 0 0 36px rgb(191 210 255 / 0.45); }
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgb(106 108 246 / 0.9),
+      0 0 0 6px rgb(191 210 255 / 0.14);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgb(191 210 255 / 0.95),
+      0 0 0 8px rgb(106 108 246 / 0.2);
+  }
 }
 
 .ob-spot__card {
   pointer-events: auto;
   position: fixed;
-  bottom: 1.25rem;
-  right: 1.25rem;
-  width: min(360px, calc(100vw - 2rem));
   z-index: 2;
-  padding: 1.1rem 1.15rem 1.2rem;
+  padding: 1rem 1.05rem 1.1rem;
   border: 1px solid var(--hair-strong);
   border-radius: 10px;
-  background: rgb(19 22 43 / 0.94);
-  backdrop-filter: blur(16px);
-  box-shadow: 0 24px 60px rgb(0 0 0 / 0.45);
-  animation: ob-rise 0.35s var(--ease-out) both;
-}
-
-.ob-spot__card--anchored {
-  bottom: auto;
-  right: auto;
+  background: rgb(19 22 43 / 0.96);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.35);
+  animation: ob-rise 0.3s var(--ease-out) both;
+  max-height: min(280px, calc(100vh - 24px));
+  overflow: auto;
 }
 
 .ob-spot__head {
@@ -297,7 +299,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.3rem;
 }
 
 .ob-spot__eyebrow {
@@ -324,18 +326,18 @@
 }
 
 .ob-spot__title {
-  margin: 0 0 0.45rem;
-  font-size: 1.05rem;
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--fg);
 }
 
 .ob-spot__body {
-  margin: 0 0 0.95rem;
+  margin: 0 0 0.85rem;
   color: var(--fg-dim);
-  font-size: 0.88rem;
-  line-height: 1.5;
+  font-size: 0.84rem;
+  line-height: 1.45;
 }
 
 .ob-spot__actions {
@@ -349,7 +351,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.65rem 0.95rem;
+  padding: 0.6rem 0.9rem;
   font-size: 0.68rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -375,13 +377,9 @@
   cursor: not-allowed;
 }
 
+/* El target queda limpio: sin z-index forzado (rompe stacking) ni outline doble. */
 [data-tour-active="1"] {
-  position: relative;
-  z-index: 81 !important;
-  outline: 2px solid var(--lilac);
-  outline-offset: 3px;
   border-radius: 6px;
-  animation: ob-target 1.6s var(--ease-in-out) infinite;
 }
 
 @keyframes ob-target {
@@ -392,7 +390,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ob__card,
   .ob-spot__card,
-  .ob-spot__hole,
+  .ob-spot__ring,
   [data-tour-active="1"] {
     animation: none !important;
   }
