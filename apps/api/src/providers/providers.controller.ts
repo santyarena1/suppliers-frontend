@@ -784,10 +784,12 @@ export class ProvidersController {
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Query("take") take?: string,
     @Query("mixed") mixed?: string,
+    @Query("all") all?: string,
   ) {
     if (!tenant) return [];
     return this.providersService.getFeatured(commercialId(tenant), take ? Number(take) : 24, {
       mixed: mixed === "1" || mixed === "true",
+      all: all === "1" || all === "true",
     });
   }
 

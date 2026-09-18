@@ -205,7 +205,7 @@ function SearchPage() {
     setMinPrice("");
     setMaxPrice("");
     try {
-      const res = await catalogApi.priceDrops(300);
+      const res = await catalogApi.priceDrops(300, { all: true });
       const data = Array.isArray(res.data) ? res.data : [];
       setResults(data);
       setSearched(true);

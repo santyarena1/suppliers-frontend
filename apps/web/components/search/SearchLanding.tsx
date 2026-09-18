@@ -42,7 +42,7 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
     let alive = true;
     Promise.all([
       bannersApi.list("search"),
-      // La portada muestra bastantes de entrada; "Ver todas" lleva al resto.
+      // Portada: bajas de hoy (o última jornada). "Ver todas" pide all=true.
       catalogApi.priceDrops(60),
     ])
       .then(([bRes, drops]) => {
@@ -101,7 +101,7 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
             </h3>
             <span className="flex items-center gap-3">
               <span className="text-[0.7rem]" style={{ color: "var(--hm-faint)" }}>
-                Descuentos y bajas recientes · varios proveedores
+                {dropDayLabel(priceDrops)}
               </span>
               {onShowAllDrops && (
                 <button type="button" className="hm__chip" onClick={onShowAllDrops}>
@@ -147,4 +147,21 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
       </p>
     </div>
   );
+}
+
+function dropDayLabel(products: ProductDTO[]): string {
+  const day = products.find((p) => p.priceDroppedOn)?.priceDroppedOn;
+  if (!day) return "Un punto por día · varios proveedores";
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  if (day === today) return "Bajas de hoy";
+  const pretty = new Date(`${day}T12:00:00`).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "short",
+  });
+  return `Sin movimientos hoy · bajas del ${pretty}`;
 }
