@@ -17,19 +17,30 @@ import "@/app/onboarding/onboarding.css";
 
 type Rect = { top: number; left: number; width: number; height: number };
 
-const PAD = 8;
-const CARD_W = 340;
-const CARD_H_EST = 210;
+const PAD = 10;
+const CARD_W = 300;
+const CARD_H_EST = 190;
 const GAP = 12;
 const MARGIN = 12;
 
 function inflate(r: Rect, pad = PAD): Rect {
-  return {
-    top: r.top - pad,
-    left: r.left - pad,
-    width: r.width + pad * 2,
-    height: r.height + pad * 2,
-  };
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  let top = Math.max(8, r.top - pad);
+  let left = Math.max(8, r.left - pad);
+  let width = Math.min(vw - left - 8, r.width + pad * 2);
+  let height = Math.min(vh - top - 8, r.height + pad * 2);
+  // Si el target es enorme (grilla), limitamos el hueco para no “tragar” toda la UI.
+  const maxH = Math.floor(vh * 0.62);
+  if (height > maxH) {
+    height = maxH;
+  }
+  const maxW = Math.floor(vw * 0.92);
+  if (width > maxW) {
+    width = maxW;
+    left = Math.max(8, Math.min(left, vw - width - 8));
+  }
+  return { top, left, width, height };
 }
 
 /** Coloca la tarjeta sin tapar el hueco resaltado. */

@@ -246,37 +246,38 @@
   font-family: var(--lnd-font-display, ui-sans-serif), system-ui, sans-serif;
 }
 
-/* Una sola capa de sombra: sin dim + box-shadow 9999px apilados. */
+/* Una sola capa de sombra suave: la UI tiene que leerse como el sistema real. */
 .ob-spot__shade {
   position: absolute;
-  background: rgb(11 13 26 / 0.48);
+  background: rgb(11 13 26 / 0.28);
   pointer-events: auto;
 }
 
 .ob-spot__shade--full {
   inset: 0;
+  background: rgb(11 13 26 / 0.32);
 }
 
 .ob-spot__ring {
   position: absolute;
-  border-radius: 8px;
+  border-radius: 10px;
   box-shadow:
-    0 0 0 2px rgb(106 108 246 / 0.95),
-    0 0 0 6px rgb(191 210 255 / 0.18);
+    0 0 0 2px rgb(106 108 246 / 0.85),
+    0 0 0 5px rgb(191 210 255 / 0.12);
   pointer-events: none;
-  animation: ob-pulse 2s var(--ease-in-out) infinite;
+  animation: ob-pulse 2.2s var(--ease-in-out) infinite;
 }
 
 @keyframes ob-pulse {
   0%, 100% {
     box-shadow:
-      0 0 0 2px rgb(106 108 246 / 0.9),
-      0 0 0 6px rgb(191 210 255 / 0.14);
+      0 0 0 2px rgb(106 108 246 / 0.8),
+      0 0 0 5px rgb(191 210 255 / 0.1);
   }
   50% {
     box-shadow:
-      0 0 0 2px rgb(191 210 255 / 0.95),
-      0 0 0 8px rgb(106 108 246 / 0.2);
+      0 0 0 2px rgb(191 210 255 / 0.9),
+      0 0 0 7px rgb(106 108 246 / 0.16);
   }
 }
 
@@ -284,13 +285,13 @@
   pointer-events: auto;
   position: fixed;
   z-index: 2;
-  padding: 1rem 1.05rem 1.1rem;
+  padding: 0.85rem 0.95rem 0.95rem;
   border: 1px solid var(--hair-strong);
   border-radius: 10px;
-  background: rgb(19 22 43 / 0.96);
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.35);
+  background: rgb(19 22 43 / 0.92);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
   animation: ob-rise 0.3s var(--ease-out) both;
-  max-height: min(280px, calc(100vh - 24px));
+  max-height: min(240px, calc(100vh - 24px));
   overflow: auto;
 }
 
@@ -326,18 +327,18 @@
 }
 
 .ob-spot__title {
-  margin: 0 0 0.35rem;
-  font-size: 1rem;
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
   font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--fg);
 }
 
 .ob-spot__body {
-  margin: 0 0 0.85rem;
+  margin: 0 0 0.75rem;
   color: var(--fg-dim);
-  font-size: 0.84rem;
-  line-height: 1.45;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }
 
 .ob-spot__actions {

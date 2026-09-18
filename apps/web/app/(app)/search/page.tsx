@@ -1367,7 +1367,10 @@ function SearchPage() {
 
               {/* Grid */}
               {hydrated && !loading && !nothingAsked && filtered.length > 0 && viewMode === "grid" && (
-                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+                <div
+                  className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4"
+                  data-tour="search-results"
+                >
                   {filtered.map((product, i) => (
                     <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} priceMode={priceMode} />
                   ))}
@@ -1376,7 +1379,9 @@ function SearchPage() {
 
               {/* List */}
               {hydrated && !loading && !nothingAsked && filtered.length > 0 && viewMode === "list" && (
-                <ListView items={filtered} priceMode={priceMode} />
+                <div data-tour="search-results">
+                  <ListView items={filtered} priceMode={priceMode} />
+                </div>
               )}
 
               {/* Grouped */}
