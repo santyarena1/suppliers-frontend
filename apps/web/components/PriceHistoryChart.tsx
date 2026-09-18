@@ -14,6 +14,7 @@ import {
 import { TrendingDown, TrendingUp, Minus } from "lucide-react";
 import type { PricePoint } from "@/lib/api";
 import { parsePrice } from "@/lib/format";
+import { dailyChartPoints } from "@/lib/price-history";
 
 export default function PriceHistoryChart({
   points,
@@ -30,34 +31,17 @@ export default function PriceHistoryChart({
   format?: (usd: number) => string;
 }) {
   /**
-   * Un punto por día, no uno por sincronización.
-   *
-   * El catálogo se sincroniza cada pocos minutos, así que un producto junta
-   * cientos de registros en dos semanas: la línea se convierte en una mancha y
-   * el eje repite la misma fecha muchas veces. Nos quedamos con el último
-   * precio de cada día, que es lo que se compara.
+   * Un punto por cada día calendario (Argentina), no por cada sync.
+   * Si un día no hubo movimiento, se copia el último precio.
    */
   const data = useMemo(() => {
-    const porDia = new Map<string, { capturedAt: string; price: number; label: string }>();
-    for (const p of [...points].sort(
-      (a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime(),
-    )) {
-      const price = parsePrice(p.finalPrice ?? p.price);
-      if (!(price > 0)) continue;
-      const d = new Date(p.capturedAt);
-      if (Number.isNaN(d.getTime())) continue;
-      const dia = d.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
-      porDia.set(dia, {
+    const raw = [...points]
+      .map((p) => ({
         capturedAt: p.capturedAt,
-        price,
-        label: d.toLocaleDateString("es-AR", {
-          day: "2-digit",
-          month: "short",
-          timeZone: "America/Argentina/Buenos_Aires",
-        }),
-      });
-    }
-    return [...porDia.values()];
+        price: parsePrice(p.finalPrice ?? p.price),
+      }))
+      .filter((p) => p.price > 0 && !Number.isNaN(new Date(p.capturedAt).getTime()));
+    return dailyChartPoints(raw);
   }, [points]);
 
   const stats = useMemo(() => {
@@ -239,11 +223,11 @@ export default function PriceHistoryChart({
               stroke={strokeColor}
               strokeWidth={2.25}
               fill={`url(#${fillId})`}
-              dot={
-                data.length <= 12
-                  ? { r: 3, fill: strokeColor, strokeWidth: 0 }
-                  : false
-              }
+              dot={{
+                r: data.length > 40 ? 2 : 3,
+                fill: strokeColor,
+                strokeWidth: 0,
+              }}
               activeDot={{
                 r: 5,
                 strokeWidth: 2,

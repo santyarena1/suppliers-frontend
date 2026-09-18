@@ -470,7 +470,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   <TrendingUp className="w-3 h-3" />
                   Evolución de precio
                 </h2>
-                {priceHistory.length >= 2 ? (
+                {priceHistory.length >= 1 ? (
                   <PriceHistoryChart points={priceHistory} format={money} />
                 ) : (
                   // Solo se guarda una fila cuando el precio cambia, así que un

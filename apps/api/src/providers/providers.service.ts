@@ -16,7 +16,7 @@ import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
-import { collapsePriceHistoryByDay } from "./price-history";
+import { fillPriceHistoryDays } from "./price-history";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct, ProviderAdapter } from "./types";
@@ -1008,7 +1008,7 @@ export class ProvidersService implements OnModuleInit {
       };
       if (!ultimo || ultimo.capturedAt.getTime() < hoy.capturedAt.getTime()) serie.push(hoy);
     }
-    return collapsePriceHistoryByDay(serie);
+    return fillPriceHistoryDays(serie);
   }
 
   /** Markup y umbral configurados por la organización para un proveedor. */
