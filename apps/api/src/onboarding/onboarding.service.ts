@@ -410,20 +410,43 @@ export class OnboardingService {
           provider: product.provider,
           externalId: product.externalId,
           sku: product.sku,
+          partNumber: product.partNumber,
+          ean: product.ean,
           name: product.name,
           brand: product.brand,
           category: product.category,
           subcategory: product.subcategory,
           description: product.description,
-          raw: { demo: true, sku: product.sku, brand: product.brand },
+          longDescription: product.longDescription,
+          imageUrl: product.imageUrl,
+          warranty: product.warranty,
+          raw: {
+            demo: true,
+            sku: product.sku,
+            brand: product.brand,
+            partNumber: product.partNumber,
+            ean: product.ean,
+          },
         },
         update: {
           sku: product.sku,
+          partNumber: product.partNumber,
+          ean: product.ean,
           name: product.name,
           brand: product.brand,
           category: product.category,
           subcategory: product.subcategory,
           description: product.description,
+          longDescription: product.longDescription,
+          imageUrl: product.imageUrl,
+          warranty: product.warranty,
+          raw: {
+            demo: true,
+            sku: product.sku,
+            brand: product.brand,
+            partNumber: product.partNumber,
+            ean: product.ean,
+          },
         },
       });
 
@@ -467,8 +490,8 @@ export class OnboardingService {
     });
 
     if (existingDemoOrders === 0) {
-      const mouse = DEMO_PRODUCTS[0];
-      const ssd = DEMO_PRODUCTS[3];
+      const mouse = DEMO_PRODUCTS.find((p) => p.sku === "LOGI-MX3S")!;
+      const ssd = DEMO_PRODUCTS.find((p) => p.sku === "KING-NV2-1TB")!;
       for (const [product, qty, note] of [
         [mouse, 1, "[DEMO] Pedido de ejemplo — Distribuidora Demo Norte"],
         [ssd, 2, "[DEMO] Pedido de ejemplo — Distribuidora Demo Sur"],

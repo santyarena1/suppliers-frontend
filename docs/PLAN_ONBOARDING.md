@@ -33,8 +33,8 @@ Landing #cuenta → usuario "superadmin" + clave
 ## Spotlight
 
 Cada paso `kind=tour` lleva `spotlight` (selector `data-tour`). El overlay
-`OnboardingSpotlight` oscurece la app y encuadra el control. Estética alineada a
-la landing (`--void`, `--lilac`, Archivo / Chivo Mono en el hub).
+`OnboardingSpotlight` usa una sombra suave (una sola capa) y un hueco limpio
+sobre el control o la grilla. La tarjeta de ayuda se coloca sin tapar el target.
 
 ## Demo
 
@@ -43,7 +43,8 @@ la landing (`--void`, `--lilac`, Archivo / Chivo Mono en el hub).
 | Distribuidora Demo Norte | `LIST_DEMO_NORTE` |
 | Distribuidora Demo Sur | `LIST_DEMO_SUR` |
 
-4 productos + 2 pedidos `[DEMO]`. Regenerar: `POST /onboarding/reseed-demo`.
+~10 productos con foto, part number, EAN y ficha + 2 pedidos `[DEMO]`.
+Regenerar: `POST /onboarding/reseed-demo`.
 
 ## API
 

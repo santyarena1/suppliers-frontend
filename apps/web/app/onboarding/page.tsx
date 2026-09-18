@@ -366,7 +366,7 @@ function OnboardingInner() {
                 <ArrowRight className="w-4 h-4 lnd-btn__arrow" />
               </button>
               <p className="lnd-note">
-                Al crear cargamos 2 distribuidores demo, 4 productos y 2 pedidos para probar filtros y el flujo completo.
+                Al crear cargamos 2 distribuidores demo, ~10 productos con foto y 2 pedidos para probar filtros y el flujo completo.
               </p>
             </form>
           ) : step ? (
