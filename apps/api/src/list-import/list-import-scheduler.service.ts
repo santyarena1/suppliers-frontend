@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
+import { Cron } from "@nestjs/schedule";
 import { isListProviderKey, LIST_PROVIDER_PREFIX } from "@nodo/shared";
+import { CRON_TZ, shouldRunScheduledJob } from "../common/cron-window";
 import { domainEvents } from "../common/events/domain-events";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProvidersService } from "../providers/providers.service";
@@ -36,8 +37,9 @@ export class ListImportSchedulerService implements OnModuleInit, OnModuleDestroy
     this.unsubscribe?.();
   }
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron("*/30 * * * *")
   async rescueStuckImports() {
+    if (!shouldRunScheduledJob()) return;
     try {
       const count = await this.imports.failStuckImports();
       if (count) this.logger.warn(`${count} carga(s) colgadas marcadas como fallidas`);
@@ -47,8 +49,9 @@ export class ListImportSchedulerService implements OnModuleInit, OnModuleDestroy
   }
 
   /** Vínculos creados mientras el proceso estaba caído: se reconcilian cada tanto. */
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron("0 * * * *")
   async reconcileMaterialization() {
+    if (!shouldRunScheduledJob()) return;
     try {
       const providers = await this.prisma.supplierBaseOffer.groupBy({ by: ["provider"], _count: { _all: true } });
       for (const row of providers) {
@@ -72,8 +75,9 @@ export class ListImportSchedulerService implements OnModuleInit, OnModuleDestroy
     }
   }
 
-  @Cron("0 9 * * *")
+  @Cron("0 9 * * *", { timeZone: CRON_TZ })
   async notifyOverdueLists() {
+    if (!shouldRunScheduledJob()) return;
     try {
       const suppliers = await this.prisma.tenant.findMany({
         where: { providerKey: { startsWith: LIST_PROVIDER_PREFIX }, listUpdateDays: { not: null }, active: true },

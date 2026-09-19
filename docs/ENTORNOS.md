@@ -1,16 +1,25 @@
 # Entornos
 
-NODO corre en dos entornos completamente separados. El objetivo de esta separación
-es poder ensayar los cambios de esquema y de modelo de datos del plan multi-tenant
-(`docs/ARQUITECTURA_TENANTS.md`) sin arriesgar los datos reales.
+NODO corre en dos entornos separados. **Staging está dado de baja a propósito**
+(no debe quedar el API 24/7 en Railway: duplicaba crons y el consumo). Si hace
+falta un ensayo, se prende a mano y los crons no corren ahí
+(`RAILWAY_ENVIRONMENT=staging` o `CRON_DISABLED=true`).
 
-| | Producción | Staging |
+| | Producción | Staging (pausado) |
 |---|---|---|
-| Rama de git | `main` | `staging` |
-| API (Railway) | `api-production-f4aa.up.railway.app` | `api-staging-8316.up.railway.app` |
-| Frontend (Vercel) | despliegue de producción | cualquier deploy de preview |
-| Postgres y Redis | propios del entorno | propios del entorno |
-| Datos | reales | organizaciones de ejemplo |
+| Rama de git | `main` | `staging` (no se usa en caliente) |
+| API (Railway) | `api-production-f4aa.up.railway.app` | pausar el servicio `api-staging-*` |
+| Frontend (Vercel) | despliegue de producción | previews puntuales |
+| Postgres y Redis | propios del entorno | propios; no hace falta que estén encendidos |
+| Crons | 06:00–23:00 AR (ver abajo) | **apagados** |
+
+## Crons en producción (hora Argentina)
+
+- **23:00–06:00**: no corre ninguno.
+- Locales + HardGamers / Compra Gamer: cada **15 min**.
+- Catálogo de distribuidores, rescate de listas: cada **30 min**.
+- Fotos Serper: 08:00 y 20:00.
+- Aviso de lista vencida: 09:00.
 
 Ambos entornos viven en el mismo proyecto de Railway (`nodo`) pero en environments
 distintos, cada uno con su propio Postgres, su propio Redis y sus propios secretos.
@@ -19,15 +28,11 @@ credencial cifrada de un entorno no sirve en el otro.
 
 ## Flujo de trabajo
 
-1. Trabajar sobre `staging`. Al pushear, Railway despliega la API de staging y
-   Vercel publica un preview que ya apunta a esa API.
-2. Probar contra el preview. La rama tiene una URL estable:
-   `suppliers-frontend-git-staging-santiagos-projects-c44fd932.vercel.app`.
-3. Cuando el cambio está validado, mergear `staging` en `main`. Eso despliega la
-   API de producción y el frontend de producción.
+1. Desarrollar contra producción con cuidado, o prender staging solo el rato del
+   ensayo (sin crons).
+2. Mergear a `main` despliega la API de producción y el frontend de producción.
 
-Las migraciones de Prisma se aplican solas al arrancar cada contenedor, así que una
-migración se prueba en staging simplemente pusheando a esa rama.
+Las migraciones de Prisma se aplican al arrancar cada contenedor.
 
 ## Cómo apunta cada frontend a su API
 

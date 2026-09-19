@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, Timeout } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
+import { shouldRunScheduledJob } from "../common/cron-window";
 import { RetailIngestService } from "./retail-ingest.service";
-import { isRetailDaytime } from "./retail-time";
 
 @Injectable()
 export class RetailSchedulerService {
@@ -15,19 +15,20 @@ export class RetailSchedulerService {
     private readonly config: ConfigService
   ) {}
 
-  /** Cada 5 minutos, las 24 h. Si el proceso se durmió, el Timeout de boot cubre el hueco. */
-  @Cron("*/5 * * * *")
+  /** Cada 15 minutos, 06:00–23:00 AR. De noche no corre. */
+  @Cron("*/15 * * * *")
   async handleCron() {
     await this.tick("cron");
   }
 
-  /** Al levantar o despertar el API: no esperar al próximo ciclo de 5 minutos. */
+  /** Al levantar el API: no esperar al próximo ciclo, salvo de noche o staging. */
   @Timeout(10_000)
   async handleBoot() {
     await this.tick("boot");
   }
 
   private async tick(source: "cron" | "boot") {
+    if (!shouldRunScheduledJob()) return;
     if (this.config.get("RETAIL_INGEST_DISABLED") === "true") return;
 
     const recovered = await this.ingest.recoverStaleLock();
@@ -39,9 +40,7 @@ export class RetailSchedulerService {
       return;
     }
 
-    const dayBatch = Math.max(1, Number(this.config.get("RETAIL_INGEST_DAY_BATCH") ?? 8));
-    const nightBatch = Math.max(1, Number(this.config.get("RETAIL_INGEST_NIGHT_BATCH") ?? 20));
-    const maxStores = isRetailDaytime() ? dayBatch : nightBatch;
+    const maxStores = Math.max(1, Number(this.config.get("RETAIL_INGEST_DAY_BATCH") ?? 8));
 
     try {
       const result = await this.ingest.runBatchIngest(maxStores);
@@ -54,14 +53,14 @@ export class RetailSchedulerService {
       );
     }
   }
+
   /**
-   * Misma cadencia que el resto de los locales: cada 5 minutos. Lo que cambia
-   * es que el lote se mide en paginas, porque el limite de esta fuente es de
-   * pedidos por minuto. Con el presupuesto por defecto una vuelta completa de
-   * todos los locales toma unos diez minutos.
+   * Misma cadencia que el resto de los locales: cada 15 minutos de día.
+   * El lote se mide en páginas por el límite de pedidos por minuto.
    */
-  @Cron("*/5 * * * *")
+  @Cron("*/15 * * * *")
   async handleHardgamersCron() {
+    if (!shouldRunScheduledJob()) return;
     if (this.config.get("RETAIL_INGEST_DISABLED") === "true") return;
     if (this.config.get("RETAIL_HG_DISABLED") === "true") return;
     if (this.hgRunning) {
@@ -70,8 +69,6 @@ export class RetailSchedulerService {
     }
     this.hgRunning = true;
     try {
-      // Compra Gamer es una sola peticion: va primero y no compite por el
-      // presupuesto de paginas de HardGamers.
       const cg = await this.ingest.ingestCompragamer();
       if (cg) this.logger.log("Cron Compra Gamer: " + cg.productos + " productos");
 

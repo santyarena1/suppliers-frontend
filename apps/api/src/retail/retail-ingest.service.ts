@@ -74,11 +74,9 @@ export class RetailIngestService implements OnModuleInit {
   /**
    * Segunda fuente, con la misma cadencia que el resto de los locales.
    *
-   * El ingest principal corre cada 5 minutos y en cada vuelta toma un lote de
-   * las tiendas más viejas; acá igual, pero el lote se mide en páginas porque
-   * el límite real es de pedidos por minuto, no de tiendas. Con el presupuesto
-   * por defecto una vuelta completa de todos los locales tarda unos diez
-   * minutos, en vez de esperar un batch cada seis horas.
+   * El ingest principal corre cada 15 minutos (06:00–23:00 AR) y en cada vuelta
+   * toma un lote de las tiendas más viejas; acá igual, pero el lote se mide en
+   * páginas porque el límite real es de pedidos por minuto, no de tiendas.
    */
   async ingestHardgamersStores(
     slugs?: string[],
