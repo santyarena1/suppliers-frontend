@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { inferBrandHubTarget, rewriteCssForBrandHost, scrollToBrandSection, appendMissingLandingSlots } from "@/lib/brand-html-nav";
 
-const HOST_CSS = `:host{all:initial;display:block;position:relative;isolation:isolate;overflow:visible;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}.nodo-landing-modules{background:#0b1220;color:#f8fafc;padding:28px 16px 64px;}.nodo-landing-modules>section{display:block;max-width:72rem;margin:0 auto 3.5rem;}`;
+const HOST_CSS = `:host{all:initial;display:block;position:relative;isolation:isolate;overflow:visible;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#0f172a;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:light;color:#0f172a;background:transparent;}.nodo-landing-modules{background:transparent;color:#0f172a;padding:36px 16px 64px;display:flex;flex-direction:column;gap:28px;}.nodo-landing-modules>slot{display:block;}`;
 
 function compileSlots(html: string): string {
   return html
@@ -44,9 +44,8 @@ export default function BrandHtmlCanvas({
   minHeight?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const compiled = appendMissingLandingSlots(
-    rewriteInlineStyles(rewriteStyleTags(compileSlots(stripActiveHtml(html ?? ""))))
-  );
+  const compiledBase = rewriteInlineStyles(rewriteStyleTags(compileSlots(stripActiveHtml(html ?? ""))));
+  const compiled = slots ? appendMissingLandingSlots(compiledBase) : compiledBase;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -59,6 +58,7 @@ export default function BrandHtmlCanvas({
       const path = typeof event.composedPath === "function" ? event.composedPath() : [];
       const node = path.find((n): n is Element => n instanceof Element && (n.tagName === "A" || n.tagName === "BUTTON"));
       if (!node) return;
+      if (node.getRootNode() !== shadow) return;
       const href = node.getAttribute("href");
       const target = inferBrandHubTarget(node.textContent ?? "", href);
       if (!target) return;
@@ -74,10 +74,14 @@ export default function BrandHtmlCanvas({
   if (!compiled.trim()) return null;
 
   return (
-    <div ref={hostRef} className="brand-html-host w-full bg-white" style={minHeight ? { minHeight } : undefined}>
+    <div
+      ref={hostRef}
+      className="brand-html-host w-full bg-white text-slate-900"
+      style={minHeight ? { minHeight } : undefined}
+    >
       {Object.entries(slots ?? {}).map(([name, node]) =>
         node ? (
-          <div key={name} slot={name} className="brand-html-slot">
+          <div key={name} slot={name} className="brand-html-slot text-slate-900 bg-transparent">
             {node}
           </div>
         ) : null
@@ -93,8 +97,8 @@ export function BrandHtmlSlotHole({ label }: { label: string }) {
       onClick={() => scrollToBrandSection(labelToHash(label))}
       style={{
         border: "1px dashed #94a3b8",
-        background: "#0f172a",
-        color: "#e2e8f0",
+        background: "#f8fafc",
+        color: "#0f172a",
         borderRadius: 12,
         padding: "12px 14px",
         font: "600 13px/1.4 system-ui,sans-serif",

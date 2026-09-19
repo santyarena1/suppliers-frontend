@@ -69,5 +69,7 @@ export const BRAND_LANDING_HTML_TEMPLATE = `<style>
   {{materiales}}
   <h2>Capacitaciones</h2>
   {{capacitaciones}}
+  <h2>Contacto</h2>
+  {{contacto}}
 </section>
 `;
