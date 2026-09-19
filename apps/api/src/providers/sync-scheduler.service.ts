@@ -1,11 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Cron, CronExpression } from "@nestjs/schedule";
+import { Cron } from "@nestjs/schedule";
 import type { Provider } from "@nodo/shared";
+import { shouldRunScheduledJob } from "../common/cron-window";
 import { ProvidersService } from "./providers.service";
 
-/** Corre cada 5 minutos, sincroniza los proveedores que cada organización dejó
- * habilitados y cuyo intervalo configurado ya venció. Reemplaza tener que
- * apretar "Sincronizar ahora" a mano. */
+/** Cada 30 minutos (06:00–23:00 AR): sincroniza los proveedores habilitados
+ * cuyo intervalo ya venció. De noche y en staging no corre. */
 @Injectable()
 export class SyncSchedulerService {
   private readonly logger = new Logger(SyncSchedulerService.name);
@@ -13,8 +13,9 @@ export class SyncSchedulerService {
 
   constructor(private readonly providersService: ProvidersService) {}
 
-  @Cron(CronExpression.EVERY_5_MINUTES)
+  @Cron("*/30 * * * *")
   async handleCron() {
+    if (!shouldRunScheduledJob()) return;
     if (this.running) return;
     this.running = true;
     try {

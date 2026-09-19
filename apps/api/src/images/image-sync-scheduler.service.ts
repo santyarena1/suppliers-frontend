@@ -1,9 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
+import { CRON_TZ, shouldRunScheduledJob } from "../common/cron-window";
 import { ImageSyncService } from "./image-sync.service";
-
-const TZ = "America/Argentina/Buenos_Aires";
 
 @Injectable()
 export class ImageSyncSchedulerService {
@@ -14,9 +13,10 @@ export class ImageSyncSchedulerService {
     private readonly config: ConfigService
   ) {}
 
-  /** 8:00 y 20:00 Argentina: hasta 200 faltantes (primero catálogo con stock). */
-  @Cron("0 8,20 * * *", { timeZone: TZ })
+  /** 8:00 y 20:00 Argentina (dentro de 06–23). Staging / noche no corre. */
+  @Cron("0 8,20 * * *", { timeZone: CRON_TZ })
   async tick() {
+    if (!shouldRunScheduledJob()) return;
     if (this.config.get("IMAGE_SYNC_CRON_DISABLED") === "true") return;
     if (this.images.isRunning()) {
       this.logger.debug("Cron imágenes: ya hay una corrida en curso, se salta");
