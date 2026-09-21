@@ -39,10 +39,9 @@ import { ListOverdueHint } from "@/components/list-import/ListFreshnessHints";
  * 1. Una sola moneda, la que el comercio eligió. Nada se muestra en la otra:
  *    ni el importe secundario ni la base sin impuestos.
  *
- * 2. Retícula fija. Cada dato vive siempre en el mismo renglón, tenga o no
- *    contenido, así una grilla se lee en columnas: todos los precios a la misma
- *    altura, todos los estados juntos. Lo que aparece y desaparece sin mover
- *    nada (baja, ubicación, imagen automática) va sobre la foto.
+ * 2. Lo que el producto no tiene no reserva un hueco vacío: el renglón
+ *    desaparece. Precio, impuestos y código bajan de línea en vez de
+ *    recortarse.
  *
  * Solo se muestra lo que el producto tiene: no hay etiquetas para decir que
  * algo no está.
@@ -181,6 +180,15 @@ export default function ProductCard({
           ? { text: product.stockStatus, tone: "none" as const }
           : null;
 
+  const partNumber = product.partNumber?.trim() || "";
+  const externalId = product.externalId?.trim() || "";
+  const codeLabel =
+    partNumber && externalId && partNumber !== externalId
+      ? `${partNumber} · #${externalId}`
+      : externalId
+        ? `#${externalId}`
+        : partNumber || "—";
+
   function addToCompare(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -305,7 +313,7 @@ export default function ProductCard({
           className={`pc__pay pc-mono${payPrices.length ? "" : " pc--vacant"}`}
           title={payPrices.map((p) => p.text).join(" · ")}
         >
-          {payPrices.slice(0, 2).map((p) => (
+          {payPrices.map((p) => (
             <span
               key={p.id}
               className={p.kind === "SURCHARGE" ? "is-up" : "is-down"}
@@ -315,7 +323,11 @@ export default function ProductCard({
           ))}
         </p>
 
-        <div className="pc__flags">
+        <div
+          className={`pc__flags${
+            stockChip || showingOffline || showingScheme ? "" : " pc--vacant"
+          }`}
+        >
           {stockChip && (
             <span className={`pc__flag pc__flag--${stockChip.tone}`}>
               {stockChip.tone === "yes" && <Check className="w-2.5 h-2.5" strokeWidth={2.4} />}
@@ -327,8 +339,8 @@ export default function ProductCard({
         </div>
 
         <div className="pc__foot">
-          <span className="pc__id pc-mono" title="Código del distribuidor">
-            {product.externalId ? `#${product.externalId}` : "—"}
+          <span className="pc__id pc-mono" title="Part number y código del distribuidor">
+            {codeLabel}
           </span>
 
           <div className="pc__acts">
@@ -362,14 +374,13 @@ export default function ProductCard({
               product={product}
               variant="stepper"
               tone="light"
-              compact
               channel={showingOffline ? "offline" : "online"}
             />
           </div>
         </div>
 
         <div className="pc__sync pc-mono">
-          <ProductSyncedAt syncedAt={product.syncedAt} compact className="pc__sync-line" />
+          <ProductSyncedAt syncedAt={product.syncedAt} className="pc__sync-line" />
           <ListOverdueHint provider={product.provider} className="pc__sync-warn" />
         </div>
       </div>
