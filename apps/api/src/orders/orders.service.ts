@@ -102,7 +102,7 @@ export class OrdersService {
         offline: modes.has("offline"),
         scheme: modes.has("scheme"),
         list: modes.has("list"),
-      });
+      }, tenant.userId);
       const items = normalizeOfflineItems(group.items);
       if (items.length === 0) {
         throw new BadRequestException(`No hay productos de ${providerLabel(provider)} en el pedido`);
@@ -553,9 +553,10 @@ export class OrdersService {
   private async assertOfflineAllowed(
     tenantId: string,
     provider: Provider,
-    modes: { offline: boolean; scheme: boolean; list: boolean } = { offline: true, scheme: false, list: false }
+    modes: { offline: boolean; scheme: boolean; list: boolean } = { offline: true, scheme: false, list: false },
+    viewerUserId?: string,
   ) {
-    await this.visibility.assertLinked(tenantId, provider);
+    await this.visibility.assertLinked(tenantId, provider, viewerUserId);
     const config = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
       select: { acceptsOffline: true, acceptsScheme: true, priceChannel: true },

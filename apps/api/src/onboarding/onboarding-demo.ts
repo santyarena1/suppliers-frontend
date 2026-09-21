@@ -19,6 +19,30 @@ export const DEMO_DISTRIBUTORS = [
   },
 ] as const;
 
+const DEMO_PROVIDER_KEYS = new Set<string>(DEMO_DISTRIBUTORS.map((d) => d.providerKey));
+
+/** Distros ficticios del recorrido: no son organizaciones reales de la plataforma. */
+export function isDemoDistributorKey(key: string | null | undefined): boolean {
+  return Boolean(key && DEMO_PROVIDER_KEYS.has(key));
+}
+
+/**
+ * El catálogo Demo Norte/Sur solo existe mientras esa persona está en el
+ * recorrido (alta, repaso o preview). Fuera de eso no aparecen ni en el
+ * directorio ni en proveedores.
+ */
+export function viewerSeesDemoCatalog(user: {
+  role: string;
+  onboardingCompletedAt: Date | null;
+  onboardingReplay: boolean;
+  onboardingPreviewRestoreTenantId: string | null;
+}): boolean {
+  if (user.onboardingPreviewRestoreTenantId) return true;
+  if (user.onboardingReplay) return true;
+  if (user.role === "ROLE_ADMIN") return false;
+  return !user.onboardingCompletedAt;
+}
+
 export type DemoProductSeed = {
   provider: string;
   externalId: string;
@@ -282,4 +306,8 @@ export function demoProductBySku(sku: string): DemoProductSeed {
   const found = DEMO_PRODUCTS.find((p) => p.sku === sku);
   if (!found) throw new Error(`Demo product missing: ${sku}`);
   return found;
+}
+
+export function isDemoOrderNote(notes: string | null | undefined): boolean {
+  return Boolean(notes && notes.includes("[DEMO]"));
 }

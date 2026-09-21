@@ -739,6 +739,7 @@ export class ProvidersController {
     return this.providersService.search(commercialId(tenant), assertProvider(provider), name, {
       includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock),
       brand: brand.trim() || undefined,
+      viewerUserId: tenant.userId,
     });
   }
 
@@ -751,7 +752,8 @@ export class ProvidersController {
     const product = await this.providersService.getProduct(
       commercialId(tenant),
       assertProvider(provider),
-      externalId
+      externalId,
+      tenant.userId
     );
     if (!product) throw new NotFoundException("Producto no encontrado");
     return product;
@@ -770,13 +772,13 @@ export class ProvidersController {
   @Get("catalog/categories")
   getCategories(@CurrentTenantOrNone() tenant: TenantContext | null) {
     if (!tenant) return [];
-    return this.providersService.getCategories(commercialId(tenant));
+    return this.providersService.getCategories(commercialId(tenant), tenant.userId);
   }
 
   @Get("catalog/brands")
   getBrands(@CurrentTenantOrNone() tenant: TenantContext | null) {
     if (!tenant) return [];
-    return this.providersService.getBrands(commercialId(tenant));
+    return this.providersService.getBrands(commercialId(tenant), tenant.userId);
   }
 
   @Get("catalog/featured")
@@ -790,6 +792,7 @@ export class ProvidersController {
     return this.providersService.getFeatured(commercialId(tenant), take ? Number(take) : 24, {
       mixed: mixed === "1" || mixed === "true",
       all: all === "1" || all === "true",
+      viewerUserId: tenant.userId,
     });
   }
 
@@ -806,7 +809,7 @@ export class ProvidersController {
       commercialId(tenant),
       category,
       take ? Number(take) : 60,
-      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock), viewerUserId: tenant.userId }
     );
   }
 
@@ -827,7 +830,7 @@ export class ProvidersController {
       commercialId(tenant),
       providerList,
       take ? Number(take) : 60,
-      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock) }
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock), viewerUserId: tenant.userId }
     );
   }
 
@@ -849,7 +852,7 @@ export class ProvidersController {
       commercialId(tenant),
       brand,
       take ? Number(take) : 60,
-      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock), providers: providerList }
+      { includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock), providers: providerList, viewerUserId: tenant.userId }
     );
   }
 }

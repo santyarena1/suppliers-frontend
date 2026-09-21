@@ -860,10 +860,10 @@ export class ProvidersService implements OnModuleInit {
     tenantId: string,
     provider: Provider,
     name: string,
-    opts: { includeOutOfStock?: boolean; brand?: string } = {}
+    opts: { includeOutOfStock?: boolean; brand?: string; viewerUserId?: string } = {}
   ) {
     if (!(await this.isProviderVisible(provider))) return [];
-    if (!(await this.visibility.isLinked(tenantId, provider))) return [];
+    if (!(await this.visibility.isLinked(tenantId, provider, opts.viewerUserId))) return [];
     const rules = await this.rulesFor(tenantId, provider);
     const stockWhere = catalogStockWhere(
       Boolean(opts.includeOutOfStock),
@@ -952,9 +952,9 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
-  async getProduct(tenantId: string, provider: Provider, externalId: string) {
+  async getProduct(tenantId: string, provider: Provider, externalId: string, viewerUserId?: string) {
     if (!(await this.isProviderVisible(provider))) return null;
-    if (!(await this.visibility.isLinked(tenantId, provider))) return null;
+    if (!(await this.visibility.isLinked(tenantId, provider, viewerUserId))) return null;
     const offer = await this.prisma.tenantProductOffer.findUnique({
       where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
       include: { product: true },
@@ -1099,8 +1099,8 @@ export class ProvidersService implements OnModuleInit {
    * de la organización, y el `groupBy` de Prisma no cruza tablas: la alternativa era
    * traerse el catálogo entero a memoria para contarlo acá.
    */
-  async getCategories(tenantId: string) {
-    const providers = await this.readableProviders(tenantId);
+  async getCategories(tenantId: string, viewerUserId?: string) {
+    const providers = await this.readableProviders(tenantId, viewerUserId);
     if (providers.length === 0) return [];
     const [rows, enrichment] = await Promise.all([
       this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
@@ -1131,8 +1131,8 @@ export class ProvidersService implements OnModuleInit {
    * Marcas distintas con conteo, cruzando proveedores visibles — filtros generales
    * del buscador (no facetas post-resultado).
    */
-  async getBrands(tenantId: string) {
-    const providers = await this.readableProviders(tenantId);
+  async getBrands(tenantId: string, viewerUserId?: string) {
+    const providers = await this.readableProviders(tenantId, viewerUserId);
     if (providers.length === 0) return [];
     const [rows, enrichment] = await Promise.all([
       this.prisma.$queryRaw<{ brand: string; count: bigint }[]>`
@@ -1164,8 +1164,8 @@ export class ProvidersService implements OnModuleInit {
    * Si hoy no hubo movimientos, la última jornada que sí tuvo. `all=true`
    * (Ver todas) trae cualquier producto que haya bajado alguna vez.
    */
-  async getFeatured(tenantId: string, take: number, opts: { mixed?: boolean; all?: boolean } = {}) {
-    const providers = await this.readableProviders(tenantId);
+  async getFeatured(tenantId: string, take: number, opts: { mixed?: boolean; all?: boolean; viewerUserId?: string } = {}) {
+    const providers = await this.readableProviders(tenantId, opts.viewerUserId);
     if (providers.length === 0) return [];
     const limit = Math.min(Math.max(take, 1), 300);
     const [rules, enrichment] = await Promise.all([
@@ -1454,9 +1454,9 @@ export class ProvidersService implements OnModuleInit {
     tenantId: string,
     category: string,
     take: number,
-    opts: { includeOutOfStock?: boolean } = {}
+    opts: { includeOutOfStock?: boolean; viewerUserId?: string } = {}
   ) {
-    const providers = await this.readableProviders(tenantId);
+    const providers = await this.readableProviders(tenantId, opts.viewerUserId);
     if (providers.length === 0) return [];
     const limit = Math.min(Math.max(take, 1), 200);
     const includeOutOfStock = Boolean(opts.includeOutOfStock);
@@ -1526,9 +1526,9 @@ export class ProvidersService implements OnModuleInit {
     tenantId: string,
     providersWanted: string[],
     take: number,
-    opts: { includeOutOfStock?: boolean } = {}
+    opts: { includeOutOfStock?: boolean; viewerUserId?: string } = {}
   ) {
-    const readable = await this.readableProviders(tenantId);
+    const readable = await this.readableProviders(tenantId, opts.viewerUserId);
     const wanted = providersWanted.length ? new Set(providersWanted) : null;
     const providers = wanted ? readable.filter((p) => wanted.has(p)) : readable;
     if (providers.length === 0) return [];
@@ -1583,11 +1583,11 @@ export class ProvidersService implements OnModuleInit {
     tenantId: string,
     brand: string,
     take: number,
-    opts: { includeOutOfStock?: boolean; providers?: string[] } = {}
+    opts: { includeOutOfStock?: boolean; providers?: string[]; viewerUserId?: string } = {}
   ) {
     // Si el comercio filtró por distribuidor, se busca solo ahí: así el tope de
     // resultados no deja afuera a un proveedor cuyos nombres ordenan al final.
-    const readable = await this.readableProviders(tenantId);
+    const readable = await this.readableProviders(tenantId, opts.viewerUserId);
     const wanted = opts.providers?.length ? new Set(opts.providers) : null;
     const providers = wanted ? readable.filter((p) => wanted.has(p)) : readable;
     if (providers.length === 0) return [];
@@ -1689,9 +1689,9 @@ export class ProvidersService implements OnModuleInit {
    * Proveedores de los que esta organización puede leer catálogo: los que tiene
    * vinculados, menos los que el superadmin escondió de toda la plataforma.
    */
-  private async readableProviders(tenantId: string): Promise<string[]> {
+  private async readableProviders(tenantId: string, viewerUserId?: string): Promise<string[]> {
     const [linked, hidden] = await Promise.all([
-      this.visibility.linkedProviderKeys(tenantId),
+      this.visibility.linkedProviderKeys(tenantId, viewerUserId),
       this.hiddenProviders(),
     ]);
     return linked.filter((provider) => !hidden.has(provider));

@@ -44,7 +44,7 @@ export class MyTenantController {
   /** Los proveedores que existen para esta organización. Para el resto, no existen. */
   @Get("providers")
   providers(@CurrentTenant() tenant: TenantContext) {
-    return this.visibility.listFor(commercialId(tenant));
+    return this.visibility.listFor(commercialId(tenant), tenant.userId);
   }
 
   /**

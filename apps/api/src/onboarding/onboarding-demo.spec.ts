@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { TENANT_PLAN_LABELS } from "@nodo/shared";
-import { DEMO_DISTRIBUTORS, DEMO_PRODUCTS, DEMO_SEARCH_HINTS } from "./onboarding-demo";
+import { DEMO_DISTRIBUTORS, DEMO_PRODUCTS, DEMO_SEARCH_HINTS, isDemoDistributorKey, isDemoOrderNote, viewerSeesDemoCatalog } from "./onboarding-demo";
 
 describe("onboarding demo catalog", () => {
   it("tiene un set amplio en 2 distribuidores", () => {
@@ -41,6 +41,40 @@ describe("onboarding demo catalog", () => {
 
   it("etiqueta el plan PRO como PRO", () => {
     expect(TENANT_PLAN_LABELS.PRO).toBe("PRO");
+  });
+});
+
+describe("visibilidad de distros demo", () => {
+  it("reconoce las claves de Demo Norte y Demo Sur", () => {
+    expect(isDemoDistributorKey("LIST_DEMO_NORTE")).toBe(true);
+    expect(isDemoDistributorKey("LIST_DEMO_SUR")).toBe(true);
+    expect(isDemoDistributorKey("NEW_BYTES")).toBe(false);
+    expect(isDemoDistributorKey(null)).toBe(false);
+  });
+
+  it("marca pedidos de ejemplo", () => {
+    expect(isDemoOrderNote("[DEMO] Pedido de ejemplo — Distribuidora Demo Norte")).toBe(true);
+    expect(isDemoOrderNote("Pedido real")).toBe(false);
+  });
+
+  it("solo las muestra durante el recorrido", () => {
+    const base = {
+      role: "ROLE_USER",
+      onboardingCompletedAt: null as Date | null,
+      onboardingReplay: false,
+      onboardingPreviewRestoreTenantId: null as string | null,
+    };
+    expect(viewerSeesDemoCatalog(base)).toBe(true);
+    expect(viewerSeesDemoCatalog({ ...base, onboardingCompletedAt: new Date() })).toBe(false);
+    expect(viewerSeesDemoCatalog({ ...base, onboardingCompletedAt: new Date(), onboardingReplay: true })).toBe(true);
+    expect(viewerSeesDemoCatalog({ ...base, role: "ROLE_ADMIN" })).toBe(false);
+    expect(
+      viewerSeesDemoCatalog({
+        ...base,
+        role: "ROLE_ADMIN",
+        onboardingPreviewRestoreTenantId: "tenant-admin",
+      }),
+    ).toBe(true);
   });
 });
 
