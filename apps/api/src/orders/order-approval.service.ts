@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import type { Prisma, ProviderOrder } from "@prisma/client";
 import { TENANT_ROLES_CAN_APPROVE_ORDERS, TENANT_ROLES_CAN_CONFIRM_ORDERS, TENANT_ROLES_CAN_ORDER, type Provider, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { isDemoDistributorKey, isDemoOrderNote, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { ChatService } from "../chat/chat.service";
@@ -66,7 +67,7 @@ export class OrderApprovalService {
   ): Promise<HeldOrder | null> {
     this.assertCanOrder(tenant);
     if (!this.needsApproval(tenant)) return null;
-    await this.visibility.assertLinked(commercialId(tenant), provider);
+    await this.visibility.assertLinked(commercialId(tenant), provider, tenant.userId);
 
     const items = Array.isArray(draft.items) ? draft.items : [];
     if (items.length === 0) {
@@ -128,7 +129,20 @@ export class OrderApprovalService {
         approvedBy: { select: { id: true, username: true } },
       },
     });
-    return rows.map((row) => this.serialize(row));
+    const viewer = await this.prisma.user.findUnique({
+      where: { id: tenant.userId },
+      select: {
+        role: true,
+        onboardingCompletedAt: true,
+        onboardingReplay: true,
+        onboardingPreviewRestoreTenantId: true,
+      },
+    });
+    const showDemo = Boolean(viewer && viewerSeesDemoCatalog(viewer));
+    const visible = showDemo
+      ? rows
+      : rows.filter((row) => !isDemoDistributorKey(row.provider) && !isDemoOrderNote(row.notes));
+    return visible.map((row) => this.serialize(row));
   }
 
   async getOwn(tenant: TenantContext, id: string) {

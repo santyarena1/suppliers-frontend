@@ -46,6 +46,10 @@ sobre el control o la grilla. La tarjeta de ayuda se coloca sin tapar el target.
 ~10 productos con foto, part number, EAN y ficha + 2 pedidos `[DEMO]`.
 Regenerar: `POST /onboarding/reseed-demo`.
 
+No son organizaciones reales: el Directorio, las relaciones de un usuario y
+`/my/providers` las ocultan salvo que esa persona esté en el recorrido
+(alta, `onboardingReplay` o preview de superadmin).
+
 ## API
 
 Ver `API_CONTRACT.md` → Onboarding comercio (Tipo 1).

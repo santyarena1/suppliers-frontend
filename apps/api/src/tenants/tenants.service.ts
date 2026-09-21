@@ -25,6 +25,7 @@ import {
   UpdateTenantDto,
   UpsertLinkDto,
 } from "./dto/tenant.dto";
+import { isDemoDistributorKey } from "../onboarding/onboarding-demo";
 import { commercialId, type TenantContext } from "./tenant-context.service";
 import { tenantLinkAllowed, tenantLinkRejection } from "./link-sides";
 
@@ -84,7 +85,16 @@ export class TenantsService {
       }),
     ]);
 
-    const nodes = tenants.map((tenant) => ({
+    // Demo Norte/Sur son sandbox del onboarding: no van al directorio.
+    const demoIds = new Set(
+      tenants.filter((tenant) => isDemoDistributorKey(tenant.providerKey)).map((tenant) => tenant.id),
+    );
+    const realTenants = tenants.filter((tenant) => !demoIds.has(tenant.id));
+    const realLinks = links.filter(
+      (link) => !demoIds.has(link.clientTenantId) && !demoIds.has(link.supplierTenantId),
+    );
+
+    const nodes = realTenants.map((tenant) => ({
       id: tenant.id,
       name: tenant.name,
       type: tenant.type,
@@ -114,10 +124,10 @@ export class TenantsService {
         revoked: code.revoked,
         createdAt: code.createdAt,
       })),
-      suppliers: links
+      suppliers: realLinks
         .filter((link) => link.clientTenantId === tenant.id)
         .map((link) => this.serializeLink(link, "supplier")),
-      clients: links
+      clients: realLinks
         .filter((link) => link.supplierTenantId === tenant.id)
         .map((link) => this.serializeLink(link, "client")),
     }));
@@ -135,13 +145,13 @@ export class TenantsService {
             memberships: { include: MEMBERSHIP_INCLUDE },
             supplierLinks: {
               include: {
-                supplierTenant: { select: { id: true, name: true, type: true } },
+                supplierTenant: { select: { id: true, name: true, type: true, providerKey: true } },
                 accountManager: { select: { id: true, username: true, email: true } },
               },
             },
             clientLinks: {
               include: {
-                clientTenant: { select: { id: true, name: true, type: true } },
+                clientTenant: { select: { id: true, name: true, type: true, providerKey: true } },
                 accountManager: { select: { id: true, username: true, email: true } },
               },
             },
@@ -153,14 +163,16 @@ export class TenantsService {
     const managedAccounts = await this.prisma.tenantLink.findMany({
       where: { accountManagerId: userId },
       include: {
-        clientTenant: { select: { id: true, name: true, type: true } },
-        supplierTenant: { select: { id: true, name: true, type: true } },
+        clientTenant: { select: { id: true, name: true, type: true, providerKey: true } },
+        supplierTenant: { select: { id: true, name: true, type: true, providerKey: true } },
         accountManager: { select: { id: true, username: true, email: true } },
       },
     });
 
     return {
-      organizations: memberships.map((membership) => ({
+      organizations: memberships
+        .filter((membership) => !isDemoDistributorKey(membership.tenant.providerKey))
+        .map((membership) => ({
         membershipId: membership.id,
         role: membership.role,
         title: membership.title,
@@ -175,11 +187,21 @@ export class TenantsService {
           .filter((other) => other.userId !== userId)
           .map((other) => this.serializeMember(other)),
         // Organizaciones alcanzables desde la suya (relación indirecta).
-        suppliers: membership.tenant.supplierLinks.map((link) => this.serializeLink(link, "supplier")),
-        clients: membership.tenant.clientLinks.map((link) => this.serializeLink(link, "client")),
+        suppliers: membership.tenant.supplierLinks
+          .filter((link) => !isDemoDistributorKey(link.supplierTenant.providerKey))
+          .map((link) => this.serializeLink(link, "supplier")),
+        clients: membership.tenant.clientLinks
+          .filter((link) => !isDemoDistributorKey(link.clientTenant.providerKey))
+          .map((link) => this.serializeLink(link, "client")),
       })),
       // Cuentas donde este usuario es el vendedor asignado (relación directa).
-      assignedAccounts: managedAccounts.map((link) => ({
+      assignedAccounts: managedAccounts
+        .filter(
+          (link) =>
+            !isDemoDistributorKey(link.clientTenant.providerKey) &&
+            !isDemoDistributorKey(link.supplierTenant.providerKey),
+        )
+        .map((link) => ({
         linkId: link.id,
         status: link.status,
         discountPercent: link.discountPercent,

@@ -9,6 +9,7 @@ import {
   type Provider,
 } from "@nodo/shared";
 import { domainEvents } from "../common/events/domain-events";
+import { isDemoDistributorKey, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { PrismaService } from "../prisma/prisma.service";
 import { snapshotJson } from "../providers/json-value";
 
@@ -107,7 +108,7 @@ export class TenantVisibilityService {
     return purchaseFromConfig(provider, config);
   }
 
-  async listFor(tenantId: string): Promise<VisibleProvider[]> {
+  async listFor(tenantId: string, viewerUserId?: string): Promise<VisibleProvider[]> {
     const propio = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { id: true, name: true, type: true, providerKey: true },
@@ -135,6 +136,7 @@ export class TenantVisibilityService {
       ];
     }
 
+    const includeDemo = await this.viewerSeesDemo(viewerUserId);
     const now = new Date();
     const [links, publicitados, configs] = await Promise.all([
       this.prisma.tenantLink.findMany({
@@ -187,6 +189,7 @@ export class TenantVisibilityService {
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
+      if (isDemoDistributorKey(key) && !includeDemo) continue;
       const selfConnected = link.status === "LIST_CONNECTED";
       visibles.set(key, {
         provider: key,
@@ -210,6 +213,7 @@ export class TenantVisibilityService {
     for (const row of publicitados) {
       const anunciante = row.tenant;
       const key = anunciante.providerKey as Provider;
+      if (isDemoDistributorKey(key) && !includeDemo) continue;
       if (visibles.has(key) || anunciante.id === tenantId) continue;
       visibles.set(key, {
         provider: key,
@@ -233,6 +237,7 @@ export class TenantVisibilityService {
       });
       for (const d of distribuidores) {
         const key = d.providerKey as Provider;
+        if (isDemoDistributorKey(key) && !includeDemo) continue;
         const current = visibles.get(key);
         if (current?.linked || d.id === tenantId) continue;
         visibles.set(key, {
@@ -268,14 +273,28 @@ export class TenantVisibilityService {
     return admin != null;
   }
 
+  private async viewerSeesDemo(userId?: string): Promise<boolean> {
+    if (!userId) return false;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        role: true,
+        onboardingCompletedAt: true,
+        onboardingReplay: true,
+        onboardingPreviewRestoreTenantId: true,
+      },
+    });
+    return Boolean(user && viewerSeesDemoCatalog(user));
+  }
+
   /** Claves de los proveedores cuyo catálogo puede leer esta organización. */
-  async linkedProviderKeys(tenantId: string): Promise<string[]> {
-    const visibles = await this.listFor(tenantId);
+  async linkedProviderKeys(tenantId: string, viewerUserId?: string): Promise<string[]> {
+    const visibles = await this.listFor(tenantId, viewerUserId);
     return visibles.filter((v) => v.linked).map((v) => v.provider);
   }
 
-  async isLinked(tenantId: string, provider: Provider): Promise<boolean> {
-    const visible = (await this.listFor(tenantId)).find((v) => v.provider === provider);
+  async isLinked(tenantId: string, provider: Provider, viewerUserId?: string): Promise<boolean> {
+    const visible = (await this.listFor(tenantId, viewerUserId)).find((v) => v.provider === provider);
     return Boolean(visible?.linked);
   }
 
@@ -285,15 +304,15 @@ export class TenantVisibilityService {
    * Responde 404 y no 403 a propósito: un "no tenés permiso" ya confirmaría que el
    * proveedor existe, que es justamente lo que no se puede filtrar.
    */
-  async assertVisible(tenantId: string, provider: Provider): Promise<VisibleProvider> {
-    const visible = (await this.listFor(tenantId)).find((v) => v.provider === provider);
+  async assertVisible(tenantId: string, provider: Provider, viewerUserId?: string): Promise<VisibleProvider> {
+    const visible = (await this.listFor(tenantId, viewerUserId)).find((v) => v.provider === provider);
     if (!visible) throw new NotFoundException("Proveedor no encontrado");
     return visible;
   }
 
   /** Igual, pero además exige vínculo: ver que existe no alcanza para operar. */
-  async assertLinked(tenantId: string, provider: Provider): Promise<VisibleProvider> {
-    const visible = await this.assertVisible(tenantId, provider);
+  async assertLinked(tenantId: string, provider: Provider, viewerUserId?: string): Promise<VisibleProvider> {
+    const visible = await this.assertVisible(tenantId, provider, viewerUserId);
     if (!visible.linked) {
       throw new ForbiddenException(
         `Todavía no estás vinculado con ${visible.name}. Pedile un código de acceso para conectarte.`
