@@ -23,11 +23,13 @@ import {
   type SolutionBoxCheckoutPreview,
   distecnaCheckoutApi,
   type DistecnaCheckoutPreview,
+  polytechCheckoutApi,
+  type PolytechCheckoutPreview,
   type PortalCartSync,
 } from "@/lib/api";
 import { getToken, isTokenExpired } from "@/lib/auth";
 
-export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX", "DISTECNA"] as const;
+export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX", "DISTECNA", "POLYTECH"] as const;
 export type WarmProvider = (typeof WARM_PROVIDERS)[number];
 
 export type CartLine = { code: string; qty: number; name?: string };
@@ -67,6 +69,8 @@ export type SolutionBoxWarmData = { preview: SolutionBoxCheckoutPreview };
 
 export type DistecnaWarmData = { preview: DistecnaCheckoutPreview };
 
+export type PolytechWarmData = { preview: PolytechCheckoutPreview };
+
 export type GnWarmData = {
   preview: GnCheckoutPreview;
   provinces: { value: number; label: string }[];
@@ -93,6 +97,7 @@ type WarmDataMap = {
   NEW_TREE: NewTreeWarmData;
   SOLUTION_BOX: SolutionBoxWarmData;
   DISTECNA: DistecnaWarmData;
+  POLYTECH: PolytechWarmData;
   GRUPO_NUCLEO: GnWarmData;
   AIR: AirWarmData;
 };
@@ -209,6 +214,11 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
   if (provider === "DISTECNA") {
     const preview = (await distecnaCheckoutApi.preview({ items })).data;
     return { preview } satisfies DistecnaWarmData;
+  }
+
+  if (provider === "POLYTECH") {
+    const preview = (await polytechCheckoutApi.preview({ items })).data;
+    return { preview } satisfies PolytechWarmData;
   }
 
   if (provider === "GRUPO_NUCLEO") {

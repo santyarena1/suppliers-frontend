@@ -193,7 +193,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
 
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
 export const IMPLEMENTED_PROVIDERS: Provider[] = [
-  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX", "DISTECNA",
+  "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX", "DISTECNA", "POLYTECH",
 ];
 
 export interface ProductDTO {
@@ -2495,6 +2495,124 @@ export const distecnaAccountApi = {
       drafts: NodoProviderDraft[];
       note: string;
     }>("/providers/DISTECNA/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
+};
+
+export interface PolytechPreviewItem {
+  code: string;
+  qty: number;
+  name: string;
+  price: number | null;
+  finalPrice: number | null;
+  currency: string;
+  stock: number | null;
+  ivaPercent: number | null;
+  subtotal: number | null;
+  vat: number;
+  priceChanged: boolean;
+  stockChanged: boolean;
+  error: string | null;
+}
+
+export interface PolytechAddress {
+  id: string;
+  address: string;
+  phone: string | null;
+}
+
+export interface PolytechCourier {
+  id: string;
+  name: string;
+}
+
+export interface PolytechPerception {
+  id: string;
+  description: string;
+  percent: number;
+}
+
+export interface PolytechHistoryOrder {
+  id: string;
+  bucket: "pending" | "in_process" | "shipped";
+  createdAt: string | null;
+  total: number | null;
+  currency: string | null;
+}
+
+export interface PolytechCheckoutPreview {
+  items: PolytechPreviewItem[];
+  addresses: PolytechAddress[];
+  couriers: PolytechCourier[];
+  perceptions: PolytechPerception[];
+  shippingService: "delivery" | "pickup";
+  addressId: string | null;
+  courierId: string | null;
+  paymentMethod: "mercadopago" | null;
+  subtotal: number;
+  vat: number;
+  perceptionsAmount: number;
+  perceptionLines: { label: string; amount: number }[];
+  total: number;
+  currency: string;
+  exchangeRate: number | null;
+  stockOk: boolean;
+  hasChanges: boolean;
+  note: string;
+}
+
+export interface PolytechDraftResult {
+  id: string;
+  status: string;
+  orderNumber: string | null;
+  webOrderNumber: string | null;
+  paymentLabel: string | null;
+  deliveryLabel: string | null;
+  total: string | number | null;
+  mercadopagoUrl?: string | null;
+  message: string;
+}
+
+export type PolytechCheckoutPayload = {
+  items: { code: string; qty: number; name?: string }[];
+  shippingService?: "delivery" | "pickup";
+  addressId?: string;
+  courierId?: string;
+  paymentMethod?: "mercadopago";
+  notes?: string;
+};
+
+export const polytechCheckoutApi = {
+  preview: (body: PolytechCheckoutPayload) =>
+    api.post<PolytechCheckoutPreview>("/providers/POLYTECH/checkout/preview", body),
+  draft: (body: PolytechCheckoutPayload & { background?: boolean }) =>
+    api.post<PolytechDraftResult>("/providers/POLYTECH/checkout/draft", body, {
+      timeout: body.background ? 30_000 : 180_000,
+    }),
+  drafts: () => api.get<NodoProviderDraft[]>("/providers/POLYTECH/drafts"),
+  draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/POLYTECH/drafts/${id}`),
+};
+
+export const polytechAccountApi = {
+  account: (opts?: { refresh?: boolean }) =>
+    api.get<{
+      profile: {
+        legalName: string | null;
+        userName: string | null;
+        email: string | null;
+        phone: string | null;
+        showsVat: boolean;
+      } | null;
+      addresses: PolytechAddress[];
+      couriers: PolytechCourier[];
+      perceptions: PolytechPerception[];
+      exchangeRate: number | null;
+      orders: PolytechHistoryOrder[];
+      drafts: NodoProviderDraft[];
+      note: string;
+    }>("/providers/POLYTECH/account", { params: opts?.refresh ? { refresh: 1 } : undefined }),
+  detail: (query: { stateId?: string; salesOrderId?: string }) =>
+    api.get<{
+      items: { sku: string; description: string; quantity: number | null; vat: string | null; total: number | null; currency: string | null }[];
+    }>("/providers/POLYTECH/orders/detail", { params: query }),
 };
 
 // --- Admin / Users ---

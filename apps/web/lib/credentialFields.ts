@@ -236,18 +236,35 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
   },
   POLYTECH: {
     title: "Conectar tu cuenta de Polytech",
-    intro: "API Key de Gestión Resellers (HTTP Basic Auth). Se guarda cifrada y es solo tuya.",
+    intro:
+      "Es la cuenta de tu organización en Gestión Resellers: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Endpoint confirmado: gestionresellers.com.ar/api/extranet/item/search. Falta una respuesta real para mapear campos.",
-    portalUrl: "https://www.gestion-resellers.com.ar",
+      "Usuario y contraseña del portal sincronizan el catálogo (precios netos en USD, IVA y stock) y habilitan pedidos, direcciones y transportes. Si ya tenés la API Key, podés cargarla en lugar del usuario.",
+    portalUrl: "https://beta.gestionresellers.com.ar",
     portalLabel: "Gestión Resellers",
     fields: [
+      {
+        key: "username",
+        label: "Usuario",
+        type: "text",
+        required: false,
+        placeholder: "Usuario del portal",
+        aliases: ["user", "usuario"],
+      },
+      {
+        key: "password",
+        label: "Contraseña",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña del portal",
+      },
       {
         key: "api_key",
         label: "API Key",
         type: "password",
-        required: true,
-        placeholder: "Key de Gestión Resellers",
+        required: false,
+        placeholder: "Opcional, si ya la tenés",
+        help: "La devuelve el portal al iniciar sesión. Si la cargás, no hace falta usuario y contraseña.",
         aliases: ["apiKey", "key", "token"],
       },
     ],
@@ -546,6 +563,17 @@ export function validateCredentialValues(
       return "Completá usuario y contraseña del portal juntos.";
     }
     return "Cargá las credenciales de la API de New Tree, las del portal, o las dos.";
+  }
+
+  if (provider === "POLYTECH") {
+    const user = (values.username ?? values.user ?? "").trim();
+    const password = (values.password ?? "").trim();
+    const apiKey = (values.api_key ?? values.token ?? "").trim();
+    if ((user || password) && !(user && password)) {
+      return "Cargá usuario y contraseña del portal juntos.";
+    }
+    if (apiKey || (user && password)) return null;
+    return "Cargá usuario y contraseña de Gestión Resellers, o la API Key.";
   }
 
   if (provider === "DISTECNA") {

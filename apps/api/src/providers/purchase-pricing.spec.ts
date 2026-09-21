@@ -23,6 +23,7 @@ describe("providerHasIvaRate", () => {
     expect(providerHasIvaRate("ELIT")).toBe(true);
     expect(providerHasIvaRate("NEW_TREE")).toBe(true);
     expect(providerHasIvaRate("DISTECNA")).toBe(true);
+    expect(providerHasIvaRate("POLYTECH")).toBe(true);
     expect(providerHasIvaRate("CEVEN")).toBe(false);
   });
 });

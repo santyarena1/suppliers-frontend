@@ -10,13 +10,14 @@ import {
   newTreeCheckoutApi,
   solutionBoxCheckoutApi,
   distecnaCheckoutApi,
+  polytechCheckoutApi,
 } from "@/lib/api";
 import type { PolledDraft } from "@/lib/providerOrders";
 
 const KEY = "nodo_pending_orders_v1";
 const EVT = "nodo-pending-orders";
 
-export type PendingOrderProvider = "INVID" | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE" | "SOLUTION_BOX" | "DISTECNA";
+export type PendingOrderProvider = "INVID" | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE" | "SOLUTION_BOX" | "DISTECNA" | "POLYTECH";
 
 export type PendingOrderJob = {
   id: string;
@@ -91,6 +92,7 @@ async function fetchDraft(provider: PendingOrderProvider, id: string): Promise<P
   if (provider === "NEW_TREE") return (await newTreeCheckoutApi.draftById(id)).data;
   if (provider === "SOLUTION_BOX") return (await solutionBoxCheckoutApi.draftById(id)).data;
   if (provider === "DISTECNA") return (await distecnaCheckoutApi.draftById(id)).data;
+  if (provider === "POLYTECH") return (await polytechCheckoutApi.draftById(id)).data;
   if (provider === "GRUPO_NUCLEO") return (await grupoNucleoCheckoutApi.draftById(id)).data;
   return (await airCheckoutApi.draftById(id)).data;
 }
