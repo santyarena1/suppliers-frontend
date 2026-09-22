@@ -21,6 +21,7 @@ import {
   reconcilePortalCart,
   nextCartSnapshot,
   type CartSyncChanges,
+  type PortalReconcileFor,
   type InvidCartCumulative,
   type InvidRadioOption,
 } from "./invid-order.parser";
@@ -337,17 +338,16 @@ export class InvidOrderService {
    * Arma el carrito real del portal con lo que hay que cotizar.
    *
    * Con `reconcileFor` (verificación desde el carrito de NODO) primero se lee
-   * lo que el portal tiene y se concilia contra la foto de la última vez: lo
-   * que borraron o cambiaron en el portal vuelve a NODO en `sync`, y lo que
-   * se agregó en NODO va al portal. Sin `reconcileFor` (confirmar un pedido)
-   * el portal se arma exactamente con lo que NODO manda.
+   * lo que el portal tiene y se unifica con NODO: lo compartido se suma y lo
+   * que solo está en Invid queda pendiente en `sync`. Sin `reconcileFor`
+   * (confirmar un pedido) el portal se arma exactamente con lo que NODO manda.
    */
   private async prepareCart(
     credentials: Record<string, string>,
     requested: { code: string; qty: number; name?: string }[],
     addressId: string,
     paymentOption: string,
-    reconcileFor?: { tenantId: string }
+    reconcileFor?: PortalReconcileFor
   ): Promise<PreparedCart> {
     const { username, password } = credentials;
     if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
@@ -366,7 +366,10 @@ export class InvidOrderService {
       cookie = cart.cookie;
       const portalLines = parseCartLines(cart.data);
       previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "INVID");
-      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot, { sessionScoped: true });
+      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot, {
+        sessionScoped: true,
+        dropPortalCodes: reconcileFor.dropPortalCodes,
+      });
       items = reconciled.merged;
       sync = reconciled.changes;
       this.logger.log(
@@ -658,7 +661,7 @@ export class InvidOrderService {
    * Arma el carrito real de Invid y devuelve resumen + formas de entrega
    * leídas del HTML autenticado. No crea el pedido.
    */
-  async preview(credentials: Record<string, string>, input: InvidDraftInput, reconcileFor?: { tenantId: string }) {
+  async preview(credentials: Record<string, string>, input: InvidDraftInput, reconcileFor?: PortalReconcileFor) {
     const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption, reconcileFor);
     const delivery = this.resolveDelivery(prepared, input.deliveryOption);
     // Si en el portal borraron todo, no hay nada que cotizar: se devuelve el

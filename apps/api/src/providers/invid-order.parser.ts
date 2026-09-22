@@ -274,6 +274,7 @@ export {
   nextCartSnapshot,
   type CartSyncItem,
   type CartSyncChanges,
+  type PortalReconcileFor,
 } from "./portal-cart-sync";
 
 export function parseXmlCost(xml: string): number {

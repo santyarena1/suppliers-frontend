@@ -1,7 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
-import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges } from "./portal-cart-sync";
+import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
 import {
   asNumber,
   asRecord,
@@ -202,14 +202,16 @@ export class NewBytesOrderService {
   }
 
   /**
-   * Con `reconcileFor` (primer paso de la verificación desde NODO) se lee el
-   * carrito activo de la cuenta antes de crear el nuevo, y se concilia contra
-   * la foto: lo que borraron o cambiaron en NewBytes vuelve a NODO en `sync`.
+   * Con `reconcileFor` (verificación desde NODO) se lee el carrito activo de
+   * la cuenta antes de crear el nuevo y se unifica: lo compartido se suma,
+   * lo que solo está en NewBytes se conserva y vuelve en `sync` para que el
+   * comercio decida. Sin `reconcileFor` (confirmar) el carrito es exactamente
+   * lo que NODO manda, porque eso es el pedido.
    */
   private async prepareCart(
     credentials: Record<string, string>,
     requested: NewBytesCartItems["items"],
-    reconcileFor?: { tenantId: string }
+    reconcileFor?: PortalReconcileFor
   ): Promise<PreparedCart> {
     if (requested.length === 0) throw new BadRequestException("No hay productos de NewBytes en el pedido");
     const api = await this.login(credentials);
@@ -223,7 +225,9 @@ export class NewBytesOrderService {
         .filter((l) => l.code)
         .map((l) => ({ code: l.code, qty: l.qty, name: l.name }));
       previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "NEW_BYTES");
-      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot);
+      const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot, {
+        dropPortalCodes: reconcileFor.dropPortalCodes,
+      });
       items = reconciled.merged;
       sync = reconciled.changes;
       this.logger.log(
@@ -335,7 +339,7 @@ export class NewBytesOrderService {
   }
 
   /** Arma el carrito en NewBytes (POST /carrito/new + items) y devuelve subtotales reales. */
-  async syncCart(credentials: Record<string, string>, input: NewBytesCartItems, reconcileFor?: { tenantId: string }) {
+  async syncCart(credentials: Record<string, string>, input: NewBytesCartItems, reconcileFor?: PortalReconcileFor) {
     const prepared = await this.prepareCart(credentials, input.items, reconcileFor);
     return {
       ...this.publicCart(prepared),
@@ -345,9 +349,13 @@ export class NewBytesOrderService {
     };
   }
 
-  /** Cotiza envío sobre el carrito ya armado: GET /carrito/calcularEnvioPara/{cp}/{idDirCli}. */
-  async quoteShippingForAddress(credentials: Record<string, string>, input: NewBytesCartItems & { addressId: string }) {
-    const prepared = await this.prepareCart(credentials, input.items);
+  /** Cotiza envío sobre el carrito ya unificado: GET /carrito/calcularEnvioPara/{cp}/{idDirCli}. */
+  async quoteShippingForAddress(
+    credentials: Record<string, string>,
+    input: NewBytesCartItems & { addressId: string },
+    reconcileFor?: PortalReconcileFor
+  ) {
+    const prepared = await this.prepareCart(credentials, input.items, reconcileFor);
     const address = prepared.addresses.find((a) => a.id === input.addressId);
     if (!address) throw new BadRequestException("Esa dirección no está en tu cuenta de NewBytes");
     const quoted = await this.quoteShipping(prepared.api, address);
@@ -358,11 +366,11 @@ export class NewBytesOrderService {
     };
   }
 
-  async preview(credentials: Record<string, string>, input: NewBytesDraftInput) {
+  async preview(credentials: Record<string, string>, input: NewBytesDraftInput, reconcileFor?: PortalReconcileFor) {
     if (input.delivery !== "pickup" && input.delivery !== "shipping") {
       throw new BadRequestException("Elegí retiro en sucursal o envío a domicilio");
     }
-    const prepared = await this.prepareCart(credentials, input.items);
+    const prepared = await this.prepareCart(credentials, input.items, reconcileFor);
     const payments = this.paymentsFor(prepared, input.delivery);
     const payment = this.resolvePayment(payments, input.medioDePagoId, false);
 
@@ -392,6 +400,7 @@ export class NewBytesOrderService {
 
     return {
       ...this.publicCart(prepared),
+      sync: prepared.sync,
       payments,
       delivery: input.delivery,
       pickup: input.delivery === "pickup" ? NB_PICKUP_BRANCH : null,
@@ -475,6 +484,8 @@ export class NewBytesOrderService {
       throw new BadRequestException("El dropshipping de NewBytes solo aplica cuando hay envío, no en retiro");
     }
 
+    // Confirmar arma exactamente el pedido de NODO. Lo que sigue pendiente en el
+    // portal no se pide: la UI no deja confirmar hasta dejarlo o sacarlo.
     const prepared = await this.prepareCart(credentials, input.items);
     const payments = this.paymentsFor(prepared, input.delivery);
     const payment = this.resolvePayment(payments, input.medioDePagoId, true);

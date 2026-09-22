@@ -28,6 +28,7 @@ import {
   type PortalCartSync,
 } from "@/lib/api";
 import { getToken, isTokenExpired } from "@/lib/auth";
+import { readPortalDrops } from "@/lib/portalCartSync";
 
 export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX", "DISTECNA", "POLYTECH"] as const;
 export type WarmProvider = (typeof WARM_PROVIDERS)[number];
@@ -168,6 +169,7 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
       addressId,
       paymentOption,
       deliveryOption,
+      dropPortalCodes: readPortalDrops("INVID"),
     })).data;
     return {
       addresses,
@@ -186,8 +188,9 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
       newBytesCheckoutApi.addresses(),
       newBytesCheckoutApi.payments(),
     ]);
-    const synced = (await newBytesCheckoutApi.cart({ items })).data;
-    const preview = (await newBytesCheckoutApi.preview({ items, delivery: "pickup" })).data;
+    const dropPortalCodes = readPortalDrops("NEW_BYTES");
+    const synced = (await newBytesCheckoutApi.cart({ items, dropPortalCodes })).data;
+    const preview = (await newBytesCheckoutApi.preview({ items, delivery: "pickup", dropPortalCodes })).data;
     return {
       addresses: addrRes.data ?? [],
       payments: payRes.data ?? preview.payments ?? [],
@@ -197,7 +200,7 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
   }
 
   if (provider === "ELIT") {
-    const preview = (await elitCheckoutApi.preview({ items })).data;
+    const preview = (await elitCheckoutApi.preview({ items, dropPortalCodes: readPortalDrops("ELIT") })).data;
     return { preview } satisfies ElitWarmData;
   }
 
@@ -244,6 +247,7 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
     vendedor,
     pago,
     entrega,
+    dropPortalCodes: readPortalDrops("AIR"),
   })).data;
   return {
     sucursales: options.sucursales,

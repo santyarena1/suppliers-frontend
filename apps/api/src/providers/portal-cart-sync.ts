@@ -1,94 +1,128 @@
 /**
  * Conciliación del carrito de NODO con el carrito del portal de un
- * distribuidor. El carrito es uno solo, se toque donde se toque; estas
- * funciones son puras y las usa cada servicio de pedidos.
+ * distribuidor. Estas funciones son puras y las usa cada servicio de pedidos.
+ *
+ * No se reemplaza un carrito por el otro. Lo que está en los dos se suma una
+ * sola vez; lo que solo está en el portal se deja cargado allá y queda
+ * pendiente hasta que el comercio decida dejarlo o sacarlo.
  */
 
 export interface CartSyncItem {
   code: string;
   qty: number;
   name?: string;
+  /** Cantidad que tenía NODO antes de sumar. Solo en `summedInBoth`. */
+  baseQty?: number;
 }
 
-/** Lo que cambió del lado del portal y NODO tiene que reflejar. */
+/** Lo que cambió del lado del portal y NODO tiene que reflejar o preguntar. */
 export interface CartSyncChanges {
   removedInPortal: string[];
+  /**
+   * Estaba solo en el portal. Sigue cargado allá. NODO no lo agrega solo:
+   * el comercio elige dejarlo (entra a NODO) o sacarlo (`dropPortalCodes`).
+   */
   addedInPortal: CartSyncItem[];
   qtyChangedInPortal: CartSyncItem[];
+  /** Mismo producto en los dos carritos, con distinta cantidad: se sumaron. */
+  summedInBoth: CartSyncItem[];
+}
+
+export type PortalReconcileOpts = {
+  /** Invid y Air: un carrito vacío es una sesión nueva, no un borrado. */
+  sessionScoped?: boolean;
+  /** Códigos que el comercio decidió sacar del carrito del distribuidor. */
+  dropPortalCodes?: string[];
+};
+
+export type PortalReconcileFor = {
+  tenantId: string;
+  dropPortalCodes?: string[];
+};
+
+function line(code: string, qty: number, name?: string, baseQty?: number): CartSyncItem {
+  return {
+    code,
+    qty,
+    ...(name ? { name } : {}),
+    ...(baseQty != null ? { baseQty } : {}),
+  };
+}
+
+function emptyChanges(): CartSyncChanges {
+  return { removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [], summedInBoth: [] };
 }
 
 /**
- * Concilia el carrito de NODO con el del portal. El carrito es uno solo, se
- * toque donde se toque: la foto (`snapshot`, `{ codigo: cantidad }`) es lo
- * que NODO dejó cargado en el portal la última vez, y contra eso se sabe qué
- * cambió de cada lado.
+ * Concilia el carrito de NODO con el del portal.
+ *
+ * La foto (`snapshot`, `{ codigo: cantidad }`) es lo que ya se había unificado.
+ * Contra eso se sabe qué cambió de cada lado:
  *
  * - Estaba en la foto y ya no está en el portal → lo borraron en el portal →
  *   se saca de NODO.
  * - Estaba en la foto y ya no está en NODO → lo borraron en NODO → se saca
  *   del portal.
- * - Está en el portal y no en la foto → lo agregaron en el portal → se trae
- *   a NODO.
- * - Está en NODO y no en la foto → lo agregaron en NODO → se carga al portal.
- * - Cantidades: si el portal difiere de la foto, cambió ahí y gana el portal;
- *   si no, vale la de NODO.
+ * - Está en los dos y no en la foto, con distinta cantidad → se suman. La foto
+ *   guarda la cantidad de NODO de antes, así la pasada siguiente no vuelve a
+ *   sumar: ve el total en el portal y lo adopta una vez.
+ * - Está en los dos con la misma cantidad → se adopta esa cantidad.
+ * - Está solo en el portal → se deja en el portal y se informa
+ *   (`addedInPortal`). No entra a la foto hasta que NODO lo tenga: si entrara,
+ *   la pasada siguiente lo leería como "borrado en NODO" y lo sacaría.
+ * - `dropPortalCodes` lo saca del portal sin tocarlo en NODO.
  *
- * Sin foto (primera verificación o después de un pedido) manda NODO, igual
- * que antes: no hay forma de saber qué se borró dónde. Desde ahí es recíproco.
+ * Con carrito por sesión (Invid, Air) un portal vacío, o uno que no comparte
+ * ningún código de la foto, es una sesión nueva: no se borra lo de NODO.
  */
 export function reconcilePortalCart(
   nodo: CartSyncItem[],
   portal: CartSyncItem[],
   snapshot: Record<string, number> | null,
-  opts: { sessionScoped?: boolean } = {}
+  opts: PortalReconcileOpts = {}
 ): { merged: CartSyncItem[]; changes: CartSyncChanges } {
-  const changes: CartSyncChanges = { removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [] };
-  const asIs = () => ({ merged: nodo.map((i) => ({ code: i.code, qty: i.qty, name: i.name })), changes });
-  if (!snapshot) return asIs();
-  // Portales con carrito por sesión de login (Invid): un login nuevo suele
-  // arrancar vacío y solo a veces hereda el carrito de una sesión anterior.
-  // Ahí un portal vacío no dice "borraron todo", dice "sesión nueva": se toma
-  // el carrito de NODO tal cual y solo se concilia cuando el portal trae algo
-  // de lo que NODO dejó (señal de que es el mismo carrito). Con carrito por
-  // cuenta (Elit, New Bytes) vacío sí significa vacío.
-  const sharesSnapshot = !opts.sessionScoped || portal.some((p) => p.code in snapshot);
-  if (!sharesSnapshot) {
-    for (const item of portal) {
-      if (nodo.some((n) => n.code === item.code)) continue;
-      changes.addedInPortal.push({ code: item.code, qty: item.qty, name: item.name });
-    }
-    return { merged: [...asIs().merged, ...changes.addedInPortal], changes };
-  }
+  const drop = new Set((opts.dropPortalCodes ?? []).map((code) => code.trim()).filter(Boolean));
+  const portalKept = portal.filter((item) => item.code && !drop.has(item.code));
+  const changes = emptyChanges();
+  // Sesión nueva: el portal no trae nada de lo que NODO dejó la última vez.
+  const sessionMiss = Boolean(
+    opts.sessionScoped && snapshot && !portalKept.some((item) => item.code in snapshot)
+  );
 
-  const byNodo = new Map(nodo.map((i) => [i.code, i]));
-  const byPortal = new Map(portal.map((i) => [i.code, i]));
+  const byNodo = new Map(nodo.map((item) => [item.code, item]));
+  const byPortal = new Map(portalKept.map((item) => [item.code, item]));
   const merged: CartSyncItem[] = [];
 
   for (const item of nodo) {
     const inPortal = byPortal.get(item.code);
-    const wasSynced = item.code in snapshot;
-    if (wasSynced && !inPortal) {
+    const wasSynced = Boolean(snapshot && item.code in snapshot);
+    if (wasSynced && !inPortal && !sessionMiss && !drop.has(item.code)) {
       changes.removedInPortal.push(item.code);
       continue;
     }
     let qty = item.qty;
-    if (inPortal && wasSynced && inPortal.qty !== snapshot[item.code] && inPortal.qty !== item.qty) {
+    if (
+      inPortal &&
+      wasSynced &&
+      !sessionMiss &&
+      snapshot &&
+      inPortal.qty !== snapshot[item.code] &&
+      inPortal.qty !== item.qty
+    ) {
       qty = inPortal.qty;
-      changes.qtyChangedInPortal.push({ code: item.code, qty, name: item.name });
+      changes.qtyChangedInPortal.push(line(item.code, qty, item.name ?? inPortal.name));
     } else if (inPortal && !wasSynced && inPortal.qty !== item.qty) {
-      // Agregado en los dos lados con distinta cantidad: la del portal es la última que se vio.
-      qty = inPortal.qty;
-      changes.qtyChangedInPortal.push({ code: item.code, qty, name: item.name });
+      qty = item.qty + inPortal.qty;
+      changes.summedInBoth.push(line(item.code, qty, item.name ?? inPortal.name, item.qty));
     }
-    merged.push({ code: item.code, qty, name: item.name });
+    merged.push(line(item.code, qty, item.name));
   }
 
-  for (const item of portal) {
+  for (const item of portalKept) {
     if (byNodo.has(item.code)) continue;
-    // Estaba en la foto y NODO ya no lo tiene: lo borraron en NODO. Se cae del portal.
-    if (item.code in snapshot) continue;
-    changes.addedInPortal.push({ code: item.code, qty: item.qty, name: item.name });
-    merged.push({ code: item.code, qty: item.qty, name: item.name });
+    if (snapshot && item.code in snapshot && !sessionMiss) continue;
+    changes.addedInPortal.push(line(item.code, item.qty, item.name));
+    merged.push(line(item.code, item.qty, item.name));
   }
 
   return { merged, changes };
@@ -103,12 +137,10 @@ export function cartSnapshotOf(items: CartSyncItem[]): Record<string, number> {
 /**
  * La foto que se guarda después de conciliar y cargar el portal.
  *
- * Es lo que quedó en el portal, salvo lo que cambió allá y NODO todavía no
- * reflejó: eso conserva el valor viejo. Si la foto avanzara de una, y NODO no
- * llegara a aplicar el cambio (la cotización también corre en segundo plano),
- * en la verificación siguiente el producto borrado en el portal parecería
- * "agregado en NODO" y volvería a cargarse. Con el valor viejo se detecta el
- * mismo cambio otra vez, hasta que NODO lo aplique y los dos lados coincidan.
+ * No incluye lo que solo está en el portal (`addedInPortal`): todavía no está
+ * en NODO. Una suma guarda la cantidad previa de NODO (`baseQty`), no el
+ * total, para no sumar de nuevo. Lo que cambió en el portal y NODO todavía
+ * no reflejó conserva el valor viejo por la misma razón.
  */
 export function nextCartSnapshot(
   loaded: CartSyncItem[],
@@ -116,13 +148,20 @@ export function nextCartSnapshot(
   previous: Record<string, number> | null
 ): Record<string, number> {
   const next = cartSnapshotOf(loaded);
+  for (const item of changes.addedInPortal ?? []) delete next[item.code];
+  for (const item of changes.summedInBoth ?? []) {
+    if (typeof item.baseQty === "number") next[item.code] = item.baseQty;
+  }
   if (!previous) return next;
-  for (const code of changes.removedInPortal) {
+  for (const code of changes.removedInPortal ?? []) {
     if (code in previous) next[code] = previous[code];
   }
-  for (const { code } of changes.qtyChangedInPortal) {
+  for (const { code } of changes.qtyChangedInPortal ?? []) {
     if (code in previous) next[code] = previous[code];
+  }
+  for (const item of changes.summedInBoth ?? []) {
+    if (item.code in previous) next[item.code] = previous[item.code];
+    else if (typeof item.baseQty === "number") next[item.code] = item.baseQty;
   }
   return next;
 }
-

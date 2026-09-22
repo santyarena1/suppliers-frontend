@@ -37,6 +37,12 @@ export class InvidCheckoutPreviewDto {
   @IsOptional()
   @IsString()
   expresoId?: string;
+
+  /** Códigos que el comercio decidió sacar del carrito de Invid. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dropPortalCodes?: string[];
 }
 
 export class InvidCheckoutDraftDto extends InvidCheckoutPreviewDto {

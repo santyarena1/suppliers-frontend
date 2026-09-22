@@ -24,7 +24,7 @@ import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 import { cartLinesFromItems, useCheckoutWarmup } from "@/lib/checkoutWarmup";
-import { usePortalCartSync } from "@/lib/portalCartSync";
+import { readPortalDrops, usePortalCartSync } from "@/lib/portalCartSync";
 import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -62,7 +62,18 @@ export default function InvidDraftPanel({
   const submitLock = useRef(false);
   const leftInBackground = useRef(false);
   const { patchItem } = useCart();
-  const portalSync = usePortalCartSync("INVID");
+  const portalSync = usePortalCartSync("INVID", async (dropCodes) => {
+    if (!addressId) return undefined;
+    const res = await invidCheckoutApi.preview({
+      items: items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
+      addressId,
+      paymentOption,
+      deliveryOption,
+      expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
+      dropPortalCodes: dropCodes,
+    });
+    return res.data.sync;
+  });
   const jobs = usePendingOrders();
 
   const itemsKey = useMemo(
@@ -157,6 +168,7 @@ export default function InvidDraftPanel({
         paymentOption,
         deliveryOption,
         expresoId: deliveryOption === "3" ? expresoId || undefined : undefined,
+        dropPortalCodes: readPortalDrops("INVID"),
       });
       if (gen !== previewGen.current) return;
       reviewedOnce.current = true;
@@ -263,10 +275,12 @@ export default function InvidDraftPanel({
   }
 
   const reviewedOk = Boolean(preview?.stockOk && (preview.itemErrors?.length ?? 0) === 0);
+  const portalPending = portalSync.pending.length > 0;
   const canConfirm = reviewedOk
     && Boolean(addressId)
     && !previewing
     && !submitting
+    && !portalPending
     && !(deliveryOption === "3" && !expresoId);
 
   const deliveryChoices = deliveries.length ? deliveries : [
@@ -293,7 +307,14 @@ export default function InvidDraftPanel({
   return (
     <div className="flex flex-col gap-3">
       {portalSync.notice && (
-        <PortalSyncNotice providerLabel="Invid" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+        <PortalSyncNotice
+          providerLabel="Invid"
+          notice={portalSync.notice}
+          busyCode={portalSync.busyCode}
+          onKeep={portalSync.keep}
+          onDrop={portalSync.drop}
+          onDismiss={portalSync.dismiss}
+        />
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-3 items-end">
         <CheckoutField label="Dirección" htmlFor="invid-dir">
@@ -356,7 +377,8 @@ export default function InvidDraftPanel({
             onClick={requestConfirm}
             disabled={!canConfirm}
             title={
-              !addressId ? "Elegí una dirección"
+              portalPending ? "Decidí si dejás o sacás lo que ya estaba en el carrito de Invid"
+                : !addressId ? "Elegí una dirección"
                 : deliveryOption === "3" && !expresoId ? "Elegí el expreso"
                 : !reviewedOk ? "Revisá el pedido en Invid primero"
                 : undefined

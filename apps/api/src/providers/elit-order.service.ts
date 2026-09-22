@@ -1,7 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
-import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges } from "./portal-cart-sync";
+import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
 import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 import {
   ElitWebClient,
@@ -167,12 +167,11 @@ export class ElitOrderService {
 
   /**
    * Con `reconcileFor` (verificación desde el carrito de NODO) el carrito de
-   * la cuenta de Elit se lee y se concilia contra la foto de la última vez:
-   * lo que borraron o cambiaron en el portal vuelve a NODO en `sync`. Sin
-   * `reconcileFor` (confirmar un pedido) el carrito se arma con lo que NODO
-   * manda, como siempre.
+   * la cuenta de Elit se lee y se unifica con el de NODO: lo compartido se
+   * suma y lo que solo está en Elit queda pendiente en `sync`. Sin
+   * `reconcileFor` (confirmar un pedido) el carrito es lo que NODO manda.
    */
-  async preview(credentials: Record<string, string>, input: ElitCartItems, reconcileFor?: { tenantId: string }) {
+  async preview(credentials: Record<string, string>, input: ElitCartItems, reconcileFor?: PortalReconcileFor) {
     if (input.items.length === 0) throw new BadRequestException("No hay productos de Elit en el pedido");
     const api = await ElitWebClient.login(credentials);
     let items = input.items;
@@ -183,7 +182,9 @@ export class ElitOrderService {
       const cart = await this.readCart(api);
       current = cart.current;
       previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "ELIT");
-      const reconciled = reconcilePortalCart(input.items, cart.lines, previousSnapshot);
+      const reconciled = reconcilePortalCart(input.items, cart.lines, previousSnapshot, {
+        dropPortalCodes: reconcileFor.dropPortalCodes,
+      });
       items = reconciled.merged;
       sync = reconciled.changes;
       this.logger.log(
