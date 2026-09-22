@@ -1,7 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
-import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges } from "./portal-cart-sync";
+import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
 import {
   AIR_DELIVERIES,
   AIR_PAYMENTS,
@@ -130,7 +130,7 @@ export class AirOrderService {
    * última vez: lo que borraron o cambiaron en el portal vuelve a NODO en
    * `sync`. Sin `reconcileFor` (confirmar) el canasto es lo que NODO manda.
    */
-  async preview(credentials: Record<string, string>, input: AirDraftInput, reconcileFor?: { tenantId: string }) {
+  async preview(credentials: Record<string, string>, input: AirDraftInput, reconcileFor?: PortalReconcileFor) {
     if (input.items.length === 0) throw new BadRequestException("No hay productos de Air en el pedido");
     const api = await AirPortalClient.login(credentials);
     let items = input.items;
@@ -146,7 +146,10 @@ export class AirOrderService {
       // Probado contra el portal: el pedido abierto que devuelve get_pedido("0") no
       // persiste entre logins (la segunda verificación lo lee vacío). Es por sesión,
       // como Invid: un canasto vacío es una sesión nueva, no un borrado.
-      const reconciled = reconcilePortalCart(input.items, portalLines, previousSnapshot, { sessionScoped: true });
+      const reconciled = reconcilePortalCart(input.items, portalLines, previousSnapshot, {
+        sessionScoped: true,
+        dropPortalCodes: reconcileFor.dropPortalCodes,
+      });
       items = reconciled.merged;
       sync = reconciled.changes;
       this.logger.log(

@@ -49,6 +49,12 @@ export class AirCheckoutPreviewDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  /** Códigos que el comercio decidió sacar del canasto de Air. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dropPortalCodes?: string[];
 }
 
 export class AirCheckoutDraftDto extends AirCheckoutPreviewDto {

@@ -26,7 +26,7 @@ import { providerOrdersHref } from "@/lib/providerOrders";
 import { rememberPaymentOptions } from "@/lib/payment-options";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
-import { usePortalCartSync } from "@/lib/portalCartSync";
+import { readPortalDrops, usePortalCartSync } from "@/lib/portalCartSync";
 import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
 
 type Delivery = "pickup" | "shipping";
@@ -78,7 +78,10 @@ export default function NewBytesDraftPanel({
   const seeded = useRef<string | null>(null);
   const jobs = usePendingOrders();
   const warm = useCheckoutWarmup("NEW_BYTES", cartItems);
-  const portalSync = usePortalCartSync("NEW_BYTES");
+  const portalSync = usePortalCartSync("NEW_BYTES", async (dropCodes) => {
+    const synced = (await newBytesCheckoutApi.cart({ items: cartItems, dropPortalCodes: dropCodes })).data;
+    return synced.sync;
+  });
 
   useEffect(() => {
     seeded.current = null;
@@ -165,7 +168,11 @@ export default function NewBytesDraftPanel({
       setQuoting(true);
       setError(null);
       try {
-        const res = await newBytesCheckoutApi.shipping({ items: cartItems, addressId });
+        const res = await newBytesCheckoutApi.shipping({
+          items: cartItems,
+          addressId,
+          dropPortalCodes: readPortalDrops("NEW_BYTES"),
+        });
         if (cancelled) return;
         const next = res.data.quotes ?? [];
         setQuotes(next);
@@ -187,10 +194,12 @@ export default function NewBytesDraftPanel({
   }, [delivery, addressId, cartItems]);
 
   const selectedQuote = quotes.find((q) => q.id === medioDeEnvioId);
+  const portalPending = portalSync.pending.length > 0;
   const canSubmit =
     Boolean(medioDePagoId) &&
     !quoting &&
     !submitting &&
+    !portalPending &&
     (delivery === "pickup" || Boolean(addressId && medioDeEnvioId));
 
   function checkoutPayload() {
@@ -289,7 +298,14 @@ export default function NewBytesDraftPanel({
   return (
     <div className="flex flex-col gap-3">
       {portalSync.notice && (
-        <PortalSyncNotice providerLabel="New Bytes" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+        <PortalSyncNotice
+          providerLabel="New Bytes"
+          notice={portalSync.notice}
+          busyCode={portalSync.busyCode}
+          onKeep={portalSync.keep}
+          onDrop={portalSync.drop}
+          onDismiss={portalSync.dismiss}
+        />
       )}
       <div className="grid grid-cols-1 sm:grid-cols-[9.5rem_minmax(0,1fr)_auto] gap-3 items-end">
         <CheckoutField label="Entrega">
@@ -323,7 +339,9 @@ export default function NewBytesDraftPanel({
           onClick={requestConfirm}
           disabled={!canSubmit}
           title={!canSubmit
-            ? (!medioDePagoId ? "Falta un medio de pago" : quoting ? "Cotizando envío…" : "Completá entrega y pago")
+            ? (portalPending
+              ? "Decidí si dejás o sacás lo que ya estaba en el carrito de New Bytes"
+              : !medioDePagoId ? "Falta un medio de pago" : quoting ? "Cotizando envío…" : "Completá entrega y pago")
             : undefined}
         >
           {delivery === "pickup" ? "Confirmar retiro" : "Confirmar envío"}

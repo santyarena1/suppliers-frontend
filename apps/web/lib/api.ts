@@ -1545,8 +1545,11 @@ export interface InvidCheckoutItem {
  */
 export interface PortalCartSync {
   removedInPortal: string[];
+  /** Solo en el carrito del distribuidor. Sigue allá hasta que el comercio lo deje o lo saque. */
   addedInPortal: { code: string; qty: number; name?: string }[];
   qtyChangedInPortal: { code: string; qty: number; name?: string }[];
+  /** Mismo producto en los dos carritos: `qty` es la suma, `baseQty` la que tenía NODO. */
+  summedInBoth?: { code: string; qty: number; name?: string; baseQty?: number }[];
 }
 
 export interface InvidCheckoutPreview {
@@ -1611,6 +1614,7 @@ export const invidCheckoutApi = {
     paymentOption: string;
     deliveryOption?: string;
     expresoId?: string;
+    dropPortalCodes?: string[];
   }) => api.post<InvidCheckoutPreview>("/providers/INVID/checkout/preview", body),
   draft: (body: {
     items: { code: string; qty: number; name?: string }[];
@@ -1729,6 +1733,7 @@ export interface NewBytesCartSnapshot {
   note: string;
 }
 export interface NewBytesCheckoutPreview {
+  sync?: PortalCartSync;
   items: NewBytesCheckoutItem[];
   payments: NewBytesPaymentOption[];
   addresses: NewBytesAddress[];
@@ -1829,14 +1834,15 @@ export type NewBytesCheckoutPayload = {
   dropShippingClientName?: string;
   dropShippingClientEmail?: string;
   background?: boolean;
+  dropPortalCodes?: string[];
 };
 
 export const newBytesCheckoutApi = {
   addresses: () => api.get<NewBytesAddress[]>("/providers/NEW_BYTES/checkout/addresses"),
   payments: () => api.get<NewBytesPaymentOption[]>("/providers/NEW_BYTES/checkout/payments"),
-  cart: (body: { items: NewBytesCheckoutItemInput[] }) =>
+  cart: (body: { items: NewBytesCheckoutItemInput[]; dropPortalCodes?: string[] }) =>
     api.post<NewBytesCartSnapshot>("/providers/NEW_BYTES/checkout/cart", body),
-  shipping: (body: { items: NewBytesCheckoutItemInput[]; addressId: string }) =>
+  shipping: (body: { items: NewBytesCheckoutItemInput[]; addressId: string; dropPortalCodes?: string[] }) =>
     api.post<{ address: NewBytesAddress; quotes: NewBytesShippingQuote[]; datosBultos: NewBytesDatosBultos | null }>(
       "/providers/NEW_BYTES/checkout/shipping",
       body
@@ -1996,6 +2002,7 @@ export const airCheckoutApi = {
     entrega?: string;
     transporte?: string;
     notes?: string;
+    dropPortalCodes?: string[];
   }) => api.post<AirCheckoutPreview>("/providers/AIR/checkout/preview", body),
   draft: (body: {
     items: { code: string; qty: number; name?: string }[];
@@ -2196,6 +2203,7 @@ export type ElitCheckoutPayload = {
   shippingMethod?: number;
   saleCondition?: number;
   shippingAddress?: string;
+  dropPortalCodes?: string[];
 };
 
 export const elitCheckoutApi = {

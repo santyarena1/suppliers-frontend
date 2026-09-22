@@ -107,12 +107,14 @@ describe("ElitOrderService", () => {
       removedInPortal: ["18636", "555"],
       addedInPortal: [{ code: "111", qty: 2, name: "111" }],
       qtyChangedInPortal: [],
+      summedInBoth: [],
     });
     expect(api.postJson).toHaveBeenCalledWith("cart/add", { code: 111, quantity: 2 });
     expect(api.postJson).not.toHaveBeenCalledWith("cart/add", { code: 18636, quantity: 1 });
     expect(api.postJson).not.toHaveBeenCalledWith("cart/add", { code: 555, quantity: 2 });
-    // La foto conserva lo borrado hasta que NODO refleje el borrado.
-    expect(snapshots.save).toHaveBeenCalledWith("t1", "ELIT", { "18636": 1, "111": 2, "555": 2 });
+    // Lo borrado se conserva en la foto. 111 sigue en el portal pero no entra
+    // a la foto hasta que el comercio lo deje en NODO.
+    expect(snapshots.save).toHaveBeenCalledWith("t1", "ELIT", { "18636": 1, "555": 2 });
   });
 
   it("sin tenant (confirmar pedido) no concilia: el carrito es lo que NODO manda", async () => {

@@ -33,6 +33,12 @@ export class NewBytesCheckoutCartDto {
   @ValidateNested({ each: true })
   @Type(() => NewBytesDraftItemDto)
   items!: NewBytesDraftItemDto[];
+
+  /** Códigos que el comercio decidió sacar del carrito de New Bytes. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dropPortalCodes?: string[];
 }
 
 export class NewBytesCheckoutShippingDto extends NewBytesCheckoutCartDto {

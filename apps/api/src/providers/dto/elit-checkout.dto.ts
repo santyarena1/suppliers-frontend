@@ -41,6 +41,12 @@ export class ElitCheckoutPreviewDto {
   @IsOptional()
   @IsString()
   shippingAddress?: string;
+
+  /** Códigos que el comercio decidió sacar del carrito de Elit. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  dropPortalCodes?: string[];
 }
 
 export class ElitCheckoutDraftDto extends ElitCheckoutPreviewDto {

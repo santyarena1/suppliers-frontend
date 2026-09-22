@@ -57,7 +57,19 @@ export default function AirCheckoutPanel({
   const submitLock = useRef(false);
   const seeded = useRef<string | null>(null);
   const warm = useCheckoutWarmup("AIR", cartItems);
-  const portalSync = usePortalCartSync("AIR");
+  const portalSync = usePortalCartSync("AIR", async (dropCodes) => {
+    const res = await airCheckoutApi.preview({
+      items: cartItems,
+      sucursal,
+      vendedor,
+      pago,
+      entrega,
+      transporte: transporte || undefined,
+      notes: notes.trim() || undefined,
+      dropPortalCodes: dropCodes,
+    });
+    return res.data.sync;
+  });
   const {
     background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
     openConfirm, acceptResult, leaveInBackground, finishOrder,
@@ -102,7 +114,8 @@ export default function AirCheckoutPanel({
   }, [warm, cartKey]);
 
   const needsTransporte = entrega === "03" || entrega === "04";
-  const canSubmit = Boolean(sucursal && vendedor && pago && entrega && !submitting && !loading);
+  const portalPending = portalSync.pending.length > 0;
+  const canSubmit = Boolean(sucursal && vendedor && pago && entrega && !submitting && !loading && !portalPending);
 
   async function handleSubmit() {
     if (submitLock.current) return;
@@ -146,7 +159,14 @@ export default function AirCheckoutPanel({
   return (
     <div className="flex flex-col gap-3">
       {portalSync.notice && (
-        <PortalSyncNotice providerLabel="Air" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+        <PortalSyncNotice
+          providerLabel="Air"
+          notice={portalSync.notice}
+          busyCode={portalSync.busyCode}
+          onKeep={portalSync.keep}
+          onDrop={portalSync.drop}
+          onDismiss={portalSync.dismiss}
+        />
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] gap-3 items-end">
         <CheckoutField label="Sucursal" htmlFor="air-suc">
@@ -160,7 +180,11 @@ export default function AirCheckoutPanel({
             {vendedores.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
           </CheckoutSelect>
         </CheckoutField>
-        <CheckoutSubmit onClick={() => { setError(null); openConfirm(); }} disabled={!canSubmit}>
+        <CheckoutSubmit
+          onClick={() => { setError(null); openConfirm(); }}
+          disabled={!canSubmit}
+          title={portalPending ? "Decidí si dejás o sacás lo que ya estaba en el canasto de Air" : undefined}
+        >
           Enviar a Air
         </CheckoutSubmit>
       </div>

@@ -195,7 +195,10 @@ export class ProvidersController {
 
   @Post("providers/INVID/checkout/preview")
   async invidCheckoutPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: InvidCheckoutPreviewDto) {
-    return this.invidOrderService.preview(await this.invidCredentials(tenant), dto, { tenantId: tenant.tenantId });
+    return this.invidOrderService.preview(await this.invidCredentials(tenant), dto, {
+      tenantId: tenant.tenantId,
+      dropPortalCodes: dto.dropPortalCodes,
+    });
   }
 
   /** Crea el borrador en Invid (pedido pendiente) y guarda una copia en Nodo. */
@@ -290,18 +293,27 @@ export class ProvidersController {
   /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */
   @Post("providers/NEW_BYTES/checkout/cart")
   async newBytesCheckoutCart(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutCartDto) {
-    return this.newBytesOrderService.syncCart(await this.newBytesCredentials(tenant), dto, { tenantId: tenant.tenantId });
+    return this.newBytesOrderService.syncCart(await this.newBytesCredentials(tenant), dto, {
+      tenantId: tenant.tenantId,
+      dropPortalCodes: dto.dropPortalCodes,
+    });
   }
 
   /** GET /carrito/calcularEnvioPara/{cp}/{idDirCli} sobre el carrito armado. */
   @Post("providers/NEW_BYTES/checkout/shipping")
   async newBytesCheckoutShipping(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutShippingDto) {
-    return this.newBytesOrderService.quoteShippingForAddress(await this.newBytesCredentials(tenant), dto);
+    return this.newBytesOrderService.quoteShippingForAddress(await this.newBytesCredentials(tenant), dto, {
+      tenantId: tenant.tenantId,
+      dropPortalCodes: dto.dropPortalCodes,
+    });
   }
 
   @Post("providers/NEW_BYTES/checkout/preview")
   async newBytesCheckoutPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutPreviewDto) {
-    return this.newBytesOrderService.preview(await this.newBytesCredentials(tenant), dto);
+    return this.newBytesOrderService.preview(await this.newBytesCredentials(tenant), dto, {
+      tenantId: tenant.tenantId,
+      dropPortalCodes: dto.dropPortalCodes,
+    });
   }
 
   /** POST /carrito/process: retiro ({ note, medioDePagoId }) o envío (cotización + idDirCli). */
@@ -411,7 +423,7 @@ export class ProvidersController {
       entrega: dto.entrega ?? "01",
       transporte: dto.transporte,
       notes: dto.notes,
-    }, { tenantId: tenant.tenantId });
+    }, { tenantId: tenant.tenantId, dropPortalCodes: dto.dropPortalCodes });
   }
 
   @Post("providers/AIR/checkout/draft")
@@ -502,7 +514,10 @@ export class ProvidersController {
 
   @Post("providers/ELIT/checkout/preview")
   async elitPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: ElitCheckoutPreviewDto) {
-    return this.elitOrderService.preview(await this.credentialsOf(tenant, "ELIT"), dto, { tenantId: tenant.tenantId });
+    return this.elitOrderService.preview(await this.credentialsOf(tenant, "ELIT"), dto, {
+      tenantId: tenant.tenantId,
+      dropPortalCodes: dto.dropPortalCodes,
+    });
   }
 
   @Post("providers/ELIT/checkout/draft")

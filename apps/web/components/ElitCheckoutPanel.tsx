@@ -20,7 +20,7 @@ import OrderConfirmModal from "@/components/checkout/OrderConfirmModal";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import { useBackgroundCheckout } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
-import { usePortalCartSync } from "@/lib/portalCartSync";
+import { readPortalDrops, usePortalCartSync } from "@/lib/portalCartSync";
 import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
 
 function errMessage(err: unknown, fallback: string) {
@@ -57,7 +57,17 @@ export default function ElitCheckoutPanel({
   const seeded = useRef<string | null>(null);
   const hydrated = useRef(false);
   const warm = useCheckoutWarmup("ELIT", cartItems);
-  const portalSync = usePortalCartSync("ELIT");
+  const portalSync = usePortalCartSync("ELIT", async (dropCodes) => {
+    const res = await elitCheckoutApi.preview({
+      items: cartItems,
+      warehouse: warehouse ? Number(warehouse) : undefined,
+      shippingMethod: shippingMethod ? Number(shippingMethod) : undefined,
+      saleCondition: saleCondition ? Number(saleCondition) : undefined,
+      shippingAddress: shippingAddress || undefined,
+      dropPortalCodes: dropCodes,
+    });
+    return res.data.sync;
+  });
   const {
     background, setBackground, result, confirmOpen, jobError, setConfirmOpen,
     openConfirm, acceptResult, leaveInBackground, finishOrder,
@@ -108,7 +118,8 @@ export default function ElitCheckoutPanel({
   const methods = (preview?.shippingMethods ?? []).filter((m) => String(m.warehouse) === warehouse);
   const selectedPay = preview?.saleConditions.find((p) => p.value === saleCondition);
   const selectedShip = methods.find((m) => m.value === shippingMethod) ?? methods[0];
-  const canSubmit = Boolean(warehouse && (selectedShip || shippingMethod) && saleCondition && !submitting && !loading);
+  const portalPending = portalSync.pending.length > 0;
+  const canSubmit = Boolean(warehouse && (selectedShip || shippingMethod) && saleCondition && !submitting && !loading && !portalPending);
 
   function payload() {
     return {
@@ -117,6 +128,7 @@ export default function ElitCheckoutPanel({
       shippingMethod: Number(selectedShip?.value || shippingMethod),
       saleCondition: Number(saleCondition),
       shippingAddress: shippingAddress || undefined,
+      dropPortalCodes: readPortalDrops("ELIT"),
     };
   }
 
@@ -173,7 +185,14 @@ export default function ElitCheckoutPanel({
   return (
     <div className="flex flex-col gap-3">
       {portalSync.notice && (
-        <PortalSyncNotice providerLabel="Elit" notice={portalSync.notice} onDismiss={portalSync.dismiss} />
+        <PortalSyncNotice
+          providerLabel="Elit"
+          notice={portalSync.notice}
+          busyCode={portalSync.busyCode}
+          onKeep={portalSync.keep}
+          onDrop={portalSync.drop}
+          onDismiss={portalSync.dismiss}
+        />
       )}
       <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] gap-3 items-end">
         <CheckoutField label="Depósito" htmlFor="elit-wh">
@@ -192,7 +211,11 @@ export default function ElitCheckoutPanel({
             ))}
           </CheckoutSelect>
         </CheckoutField>
-        <CheckoutSubmit onClick={() => { setError(null); openConfirm(); }} disabled={!canSubmit}>
+        <CheckoutSubmit
+          onClick={() => { setError(null); openConfirm(); }}
+          disabled={!canSubmit}
+          title={portalPending ? "Decidí si dejás o sacás lo que ya estaba en el carrito de Elit" : undefined}
+        >
           Confirmar Elit
         </CheckoutSubmit>
       </div>
