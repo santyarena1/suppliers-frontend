@@ -75,11 +75,18 @@ plano en el repo.
   `ProductDTO.locationAir` ya anticipaba un campo de ubicación propio de este proveedor.
 
 ### POLYTECH
-- **Base real**: en realidad corre sobre la plataforma "Gestión Resellers"
-  (`gestionresellers.com.ar/api/extranet/item/search`).
-- **Auth**: API Key usada como HTTP Basic Auth (`username = API Key`, `password` vacío).
-- **Estado en AcuStock**: **sin configurar** — no tienen key cargada ahí. Hay que conseguir
-  una key propia si se quiere integrar de verdad.
+- **Portal**: `https://beta.gestionresellers.com.ar`. Login `POST /api/auth/login`
+  `{ username, password }` → `api_key`.
+- **Auth de catálogo, cuenta y pedidos**: HTTP Basic, `username = API Key`, `password` vacío.
+- **Catálogo**: `POST /api/products/search` `{ page, results_per_page }` (50 por página;
+  100 responde 502). Sin keywords recorre todo el catálogo. La doc pública
+  (`/api/extranet/item/search`) es el mismo ítem, pero solo por keywords.
+- **Pedidos**: `POST /api/orders/create` con `items[{source_id, quantity}]`,
+  `shipping_service` (`delivery` | `pickup`), `address_id`, `courier_id`, `notes`
+  y opcional `payment_method: "mercadopago"`.
+- **Precio**: `offers[0].price_without_vat` es neto USD; `price` incluye IVA (`vat`).
+  `source_id` es el id de pedido. `ids` con `id_type` 5 = código interno, 3 = EAN.
+- **Rate limit**: 1 request por segundo (503 si se pasa).
 
 ### NEW_TREE
 - **Base real**: es en realidad "GlobalBluePoint" (`ws.globalbluepoint.com/newtree/app_webservices/wserpconnect.asmx`).
@@ -123,21 +130,16 @@ plano en el repo.
   adivinar la forma de la respuesta.
 - **Estado en AcuStock**: sin configurar (sin key cargada).
 
-### POLYTECH — endpoint y auth confirmados en vivo
-- **Base real**: corre sobre la plataforma "Gestión Resellers"
-  (`https://gestionresellers.com.ar/api/extranet/item/search`) — confirmado letra por letra en
-  la pantalla de Configuración de AcuStock (que además tiene una API Key real cargada y
-  funcionando, oculta como password — no se pudo leer el valor por política de seguridad del
-  navegador, pero el campo está activo).
-- **Auth**: HTTP Basic Auth, `username = API Key`, `password` vacío.
-- **SKU**: prefijo `PT_`.
-- **Falta confirmar**: la forma exacta de la respuesta JSON (nombres de campos: nombre,
-  precio, stock, categoría, etc.) — la UI de AcuStock no expone eso, solo el endpoint y el
-  método de auth. Se puede armar el cliente HTTP ya mismo (URL + Basic Auth), pero el
-  `FIELD_MAP` necesita una respuesta real de ejemplo antes de escribirse, para no inventar
-  nombres de campo.
-- **Estado en AcuStock**: configurado con key propia, pero sincronización desactivada
-  ("Sync bloqueada, el stock drop quedó en 0").
+### POLYTECH — integrado
+- **Portal**: `https://beta.gestionresellers.com.ar/api`. Credenciales: usuario y contraseña
+  del portal (el login devuelve `api_key`) o la API Key directa.
+- **Auth**: HTTP Basic, `username = API Key`, `password` vacío.
+- **Catálogo**: `POST /products/search`, paginado. Precio neto USD en
+  `offers[0].price_without_vat`, final con IVA en `price`, alícuota en `vat`, stock en
+  `offers[0].stock`. `externalId` = `source_id`. SKU de pantalla: prefijo `PT_`.
+- **Cuenta y pedidos**: `/account/info` (direcciones y percepciones), `/couriers/list`,
+  `/orders/history`, `/orders/detail`, `/orders/create`.
+- **Rate limit**: 1 request por segundo.
 
 ### NEW_TREE (GlobalBluePoint) — el más documentado de los pendientes
 - **Base real**: `https://ws.globalbluepoint.com/newtree/app_webservices/wserpconnect.asmx`
@@ -213,9 +215,8 @@ nuestro lado).
 **Documentados y listos para construir en cuanto haya una respuesta real de prueba** (con
 credenciales cargadas — el propio usuario ya tiene cuenta en Polytech, hace falta la de
 Solution Box y NewTree):
-- **POLYTECH**: endpoint + auth 100% confirmados, solo falta un llamado real para ver los
-  nombres de campo antes de escribir el `FIELD_MAP` (mismo estándar que se usó para los 5 ya
-  construidos: nunca adivinar nombres de campo).
+- **POLYTECH**: integrado contra el portal de Gestión Resellers (catálogo paginado, cuenta,
+  percepciones, direcciones, transportes y `POST /orders/create`).
 - **NEW_TREE**: protocolo SOAP + auth + script `getArticulos` + semántica de precio/stock ya
   documentados; falta una llamada de prueba para confirmar el XML exacto.
 - **SOLUTION_BOX**: auth (`createToken`) y comportamiento (USD, 2 dep., 2 req/hora) documentados;

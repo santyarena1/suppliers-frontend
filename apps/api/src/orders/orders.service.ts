@@ -12,6 +12,7 @@ import { NewBytesOrderService, type NewBytesDraftInput } from "../providers/new-
 import { NewTreeOrderService, type NewTreeCartItems } from "../providers/new-tree-order.service";
 import { SolutionBoxOrderService, type SolutionBoxCartItems } from "../providers/solution-box-order.service";
 import { DistecnaOrderService, type DistecnaCartItems } from "../providers/distecna-order.service";
+import { PolytechOrderService, type PolytechCartItems } from "../providers/polytech-order.service";
 import type { OrderAuthor } from "../providers/provider-draft";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -58,6 +59,7 @@ export class OrdersService {
     private readonly newTree: NewTreeOrderService,
     private readonly solutionBox: SolutionBoxOrderService,
     private readonly distecna: DistecnaOrderService,
+    private readonly polytech: PolytechOrderService,
     @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
@@ -606,6 +608,8 @@ export class OrdersService {
         return this.solutionBox.approveDraft(author, credentials, input as unknown as SolutionBoxCartItems, orderId);
       case "DISTECNA":
         return this.distecna.approveDraft(author, credentials, input as unknown as DistecnaCartItems, orderId);
+      case "POLYTECH":
+        return this.polytech.approveDraft(author, credentials, input as unknown as PolytechCartItems, orderId);
       default:
         throw new BadRequestException(`Todavía no se pueden aprobar pedidos de ${provider} desde Nodo`);
     }

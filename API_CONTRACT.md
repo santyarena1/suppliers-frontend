@@ -583,3 +583,66 @@ en segundo plano (`GET /providers/DISTECNA/drafts/:id`). Crea el pedido real con
 
 Historial de pedidos creados desde Nodo (mismo formato que Elit / New Tree).
 
+## Polytech — portal Gestión Resellers
+
+Credenciales (`POST /credentials`): `username` + `password` del portal
+`https://beta.gestionresellers.com.ar` (el login devuelve la API Key) o `api_key` directa.
+Auth de todas las llamadas: HTTP Basic con la API Key y password vacío.
+El sync pagina `POST /products/search` (50 por página, 1 request/s). El precio guardado es
+el neto USD (`price_without_vat`); `finalPrice` incluye el IVA de `vat`. `externalId` es
+`source_id`.
+
+### `GET /providers/POLYTECH/account?refresh=1`
+
+```json
+{
+  "profile": { "legalName": "…", "userName": "…", "email": "…", "phone": "", "showsVat": false },
+  "addresses": [{ "id": "…", "address": "…", "phone": "…" }],
+  "couriers": [{ "id": "1", "name": "…" }],
+  "perceptions": [{ "id": "57", "description": "IIBB …", "percent": 3 }],
+  "exchangeRate": 1535,
+  "orders": [{ "id": "…", "bucket": "pending", "createdAt": "…", "total": 10.5, "currency": "USD" }],
+  "drafts": ["…ProviderOrder de Nodo…"],
+  "note": "…"
+}
+```
+
+`orders[].bucket` es `pending`, `in_process` o `shipped`.
+
+### `GET /providers/POLYTECH/orders/detail?stateId=` · `?salesOrderId=`
+
+Pendientes usan `stateId`. En proceso y despachados usan `salesOrderId`.
+
+```json
+{ "items": [{ "sku": "…", "description": "…", "quantity": 1, "vat": "21", "total": 12.5, "currency": "USD" }] }
+```
+
+### `POST /providers/POLYTECH/checkout/preview`
+
+Body: `{ items: [{ code, qty, name? }], shippingService?: "delivery"|"pickup", addressId?, courierId?, paymentMethod?: "mercadopago", notes? }`.
+`code` es el `source_id`. Refresca precio y stock con una búsqueda por ese id.
+
+```json
+{
+  "items": [{ "code": "20484", "qty": 1, "name": "…", "price": 47.47, "finalPrice": 52.45, "currency": "USD", "stock": 10, "ivaPercent": 10.5, "subtotal": 47.47, "vat": 4.984, "priceChanged": false, "stockChanged": false, "error": null }],
+  "addresses": ["…"], "couriers": ["…"],
+  "shippingService": "delivery", "addressId": "…", "courierId": "…", "paymentMethod": null,
+  "subtotal": 47.47, "vat": 4.984, "perceptionsAmount": 1.424, "perceptionLines": [{ "label": "IIBB …", "amount": 1.424 }],
+  "total": 53.878, "currency": "USD", "exchangeRate": 1535, "stockOk": true, "hasChanges": false, "note": "…"
+}
+```
+
+`items[].error` si no hay precio o no alcanza el stock (`stockOk: false`). Con stock 0 y
+`restocking_quantity` > 0 se puede pedir hasta 10, igual que el portal.
+
+### `POST /providers/POLYTECH/checkout/draft`
+
+Mismo body + `background?`. Con `background` responde `PENDING` y el pedido se crea en
+segundo plano. Crea el pedido real con `POST /orders/create`. Ese POST no se reintenta.
+Pasa por aprobación (`PENDING_APPROVAL`) cuando el comercio lo exige. Si `paymentMethod`
+es `mercadopago`, la respuesta puede traer `mercadopagoUrl`.
+
+### `GET /providers/POLYTECH/drafts` · `GET /providers/POLYTECH/drafts/:id`
+
+Historial de pedidos creados desde Nodo.
+

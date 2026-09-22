@@ -26,8 +26,10 @@ import { NewTreeOrderService } from "./new-tree-order.service";
 import { SolutionBoxAccountService } from "./solution-box-account.service";
 import { SolutionBoxOrderService } from "./solution-box-order.service";
 import { DistecnaOrderService } from "./distecna-order.service";
+import { PolytechOrderService } from "./polytech-order.service";
 import { SolutionBoxCheckoutDraftDto, SolutionBoxCheckoutPreviewDto } from "./dto/solution-box-checkout.dto";
 import { DistecnaCheckoutDraftDto, DistecnaCheckoutPreviewDto } from "./dto/distecna-checkout.dto";
+import { PolytechCheckoutDraftDto, PolytechCheckoutPreviewDto } from "./dto/polytech-checkout.dto";
 import { NewTreeCheckoutDraftDto, NewTreeCheckoutPreviewDto } from "./dto/new-tree-checkout.dto";
 import { OrderApprovalService } from "../orders/order-approval.service";
 import type { OrderAuthor } from "./provider-draft";
@@ -75,6 +77,7 @@ export class ProvidersController {
     private readonly solutionBoxAccountService: SolutionBoxAccountService,
     private readonly solutionBoxOrderService: SolutionBoxOrderService,
     private readonly distecnaOrderService: DistecnaOrderService,
+    private readonly polytechOrderService: PolytechOrderService,
     private readonly orderApproval: OrderApprovalService,
     private readonly accountCache: AccountPortalCache
   ) {}
@@ -647,6 +650,54 @@ export class ProvidersController {
     const held = await this.hold(tenant, user.userId, "DISTECNA", dto);
     if (held) return held;
     return this.distecnaOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "DISTECNA"), dto);
+  }
+
+  @Get("providers/POLYTECH/drafts")
+  polytechDrafts(@CurrentTenant() tenant: TenantContext) {
+    return this.polytechOrderService.listDrafts(tenant.tenantId);
+  }
+
+  @Get("providers/POLYTECH/drafts/:id")
+  async polytechDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    const draft = await this.polytechOrderService.getDraft(tenant.tenantId, id);
+    if (!draft) throw new NotFoundException("Pedido no encontrado");
+    return draft;
+  }
+
+  @Get("providers/POLYTECH/account")
+  async polytechAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
+    const key = `${tenant.tenantId}:POLYTECH:account`;
+    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+      this.polytechOrderService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "POLYTECH"))
+    );
+  }
+
+  @Get("providers/POLYTECH/orders/detail")
+  async polytechOrderDetail(
+    @CurrentTenant() tenant: TenantContext,
+    @Query("stateId") stateId?: string,
+    @Query("salesOrderId") salesOrderId?: string
+  ) {
+    return this.polytechOrderService.getOrderDetail(await this.credentialsOf(tenant, "POLYTECH"), {
+      stateId,
+      salesOrderId,
+    });
+  }
+
+  @Post("providers/POLYTECH/checkout/preview")
+  async polytechPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: PolytechCheckoutPreviewDto) {
+    return this.polytechOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "POLYTECH"), dto);
+  }
+
+  @Post("providers/POLYTECH/checkout/draft")
+  async polytechDraft(
+    @CurrentUser() user: { userId: string },
+    @CurrentTenant() tenant: TenantContext,
+    @Body() dto: PolytechCheckoutDraftDto
+  ) {
+    const held = await this.hold(tenant, user.userId, "POLYTECH", dto);
+    if (held) return held;
+    return this.polytechOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "POLYTECH"), dto);
   }
 
   @Post("providers/:provider/sync")

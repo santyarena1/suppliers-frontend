@@ -11,6 +11,7 @@ import { DiapstoreAdapter } from "./adapters/diapstore.adapter";
 import { NewTreeAdapter } from "./adapters/new-tree.adapter";
 import { SolutionBoxAdapter } from "./adapters/solution-box.adapter";
 import { DistecnaAdapter } from "./adapters/distecna.adapter";
+import { PolytechAdapter } from "./adapters/polytech.adapter";
 
 @Injectable()
 export class ProviderRegistry {
@@ -26,7 +27,8 @@ export class ProviderRegistry {
     diapstore: DiapstoreAdapter,
     newTree: NewTreeAdapter,
     solutionBox: SolutionBoxAdapter,
-    distecna: DistecnaAdapter
+    distecna: DistecnaAdapter,
+    polytech: PolytechAdapter
   ) {
     this.adapters = {
       ELIT: elit,
@@ -39,6 +41,7 @@ export class ProviderRegistry {
       NEW_TREE: newTree,
       SOLUTION_BOX: solutionBox,
       DISTECNA: distecna,
+      POLYTECH: polytech,
     };
   }
 

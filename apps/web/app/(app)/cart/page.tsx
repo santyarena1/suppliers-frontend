@@ -13,6 +13,7 @@ import SolutionBoxCheckoutPanel from "@/components/SolutionBoxCheckoutPanel";
 import GrupoNucleoCheckoutPanel from "@/components/GrupoNucleoCheckoutPanel";
 import AirCheckoutPanel from "@/components/AirCheckoutPanel";
 import DistecnaCheckoutPanel from "@/components/DistecnaCheckoutPanel";
+import PolytechCheckoutPanel from "@/components/PolytechCheckoutPanel";
 import PendingOrdersBanner from "@/components/checkout/PendingOrdersBanner";
 import { useCart, CartItem, cartItemKey, type CartRef, type CartScheme } from "@/lib/cart";
 import { usePrefs } from "@/lib/prefs";
@@ -41,6 +42,7 @@ import {
   NewBytesCartSnapshot,
   AirCheckoutPreview,
   DistecnaCheckoutPreview,
+  PolytechCheckoutPreview,
   ordersApi,
 } from "@/lib/api";
 import {
@@ -177,6 +179,7 @@ function CartPageInner() {
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
   const [elitPreview, setElitPreview] = useState<ElitCheckoutPreview | null>(null);
   const [distecnaPreview, setDistecnaPreview] = useState<DistecnaCheckoutPreview | null>(null);
+  const [polytechPreview, setPolytechPreview] = useState<PolytechCheckoutPreview | null>(null);
   const [nbSnapshot, setNbSnapshot] = useState<NewBytesCartSnapshot | null>(null);
 
   const [confirmClear, setConfirmClear] = useState<"all" | string | null>(null);
@@ -233,6 +236,7 @@ function CartPageInner() {
     setNotice(message);
     if (provider === "INVID") setInvidPreview(null);
     if (provider === "DISTECNA") setDistecnaPreview(null);
+    if (provider === "POLYTECH") setPolytechPreview(null);
     setActiveTab("all");
     clearProvider(provider, "online");
   }, [clearProvider]);
@@ -371,6 +375,7 @@ function CartPageInner() {
   const ntLines = useMemo(() => cartLinesFromItems(onlineByProvider.NEW_TREE ?? []), [onlineByProvider.NEW_TREE]);
   const sbLines = useMemo(() => cartLinesFromItems(onlineByProvider.SOLUTION_BOX ?? []), [onlineByProvider.SOLUTION_BOX]);
   const dtLines = useMemo(() => cartLinesFromItems(onlineByProvider.DISTECNA ?? []), [onlineByProvider.DISTECNA]);
+  const ptLines = useMemo(() => cartLinesFromItems(onlineByProvider.POLYTECH ?? []), [onlineByProvider.POLYTECH]);
   const warmEnabled = hydrated && channelTab === "online";
   const invidWarm = useCheckoutWarmup("INVID", invidLines, warmEnabled);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines, warmEnabled);
@@ -380,6 +385,7 @@ function CartPageInner() {
   const ntWarm = useCheckoutWarmup("NEW_TREE", ntLines, warmEnabled);
   const sbWarm = useCheckoutWarmup("SOLUTION_BOX", sbLines, warmEnabled);
   const dtWarm = useCheckoutWarmup("DISTECNA", dtLines, warmEnabled);
+  const ptWarm = useCheckoutWarmup("POLYTECH", ptLines, warmEnabled);
   useWarmAllCheckoutCarts(onlineByProvider, warmEnabled);
 
   const invidQuoted = invidPreview ?? (invidWarm.status === "ready" ? invidWarm.data?.preview ?? null : null);
@@ -396,6 +402,7 @@ function CartPageInner() {
     NEW_TREE: ntWarm,
     SOLUTION_BOX: sbWarm,
     DISTECNA: dtWarm,
+    POLYTECH: ptWarm,
   };
 
   // Un 0 o ausente en el desglose del portal no es "cotizó cero": New Bytes
@@ -493,6 +500,16 @@ function CartPageInner() {
       }
     : undefined;
 
+  const ptQuoted = polytechPreview ?? (ptWarm.status === "ready" ? ptWarm.data?.preview ?? null : null);
+  const ptExtra: TaxExtra | undefined = ptQuoted
+    ? {
+        perceptionsUSD: ptQuoted.perceptionsAmount ?? 0,
+        perceptionLines: ptQuoted.perceptionLines ?? [],
+        quotedVatUSD: quotedAmount(ptQuoted.vat),
+        totalUSD: quotedAmount(ptQuoted.total),
+      }
+    : undefined;
+
   function extraFor(provider: string): TaxExtra | undefined {
     if (channelTab === "offline") return undefined;
     // El % de IIBB cargado en Configuración del distribuidor pisa lo que cotice
@@ -507,6 +524,7 @@ function CartPageInner() {
         : provider === "SOLUTION_BOX" ? sbExtra?.shippingUSD
         : provider === "NEW_TREE" ? ntExtra?.shippingUSD
         : provider === "DISTECNA" ? dtExtra?.shippingUSD
+        : provider === "POLYTECH" ? ptExtra?.shippingUSD
         : undefined;
       return {
         shippingUSD: quotedShipping ?? 0,
@@ -527,6 +545,7 @@ function CartPageInner() {
     else if (provider === "SOLUTION_BOX") quoted = sbExtra;
     else if (provider === "NEW_TREE") quoted = ntExtra;
     else if (provider === "DISTECNA") quoted = dtExtra;
+    else if (provider === "POLYTECH") quoted = ptExtra;
     const quotedHasPerc =
       quoted != null &&
       ((quoted.perceptionsUSD ?? 0) > 0.0005 || (quoted.percepcionPercent ?? 0) > 0);
@@ -566,6 +585,14 @@ function CartPageInner() {
       rememberIibbRate("AIR", (perc / net) * 100);
     }
   }, [airQuoted, airPerc]);
+  useEffect(() => {
+    if (!ptQuoted) return;
+    const perc = ptQuoted.perceptionsAmount ?? 0;
+    const net = ptQuoted.subtotal ?? 0;
+    if (perc > 0.0005 && net > 0) {
+      rememberIibbRate("POLYTECH", (perc / net) * 100);
+    }
+  }, [ptQuoted]);
   useEffect(() => {
     if (!sbQuoted) return;
     const perc = sbQuoted.perceptions ?? 0;
@@ -1287,6 +1314,21 @@ function CartPageInner() {
                           clearProvider("DISTECNA", "online");
                         }}
                         onPreviewed={setDistecnaPreview}
+                      />
+                    </div>
+                  )}
+
+                  {channelTab === "online" && onlineByProvider.POLYTECH?.length > 0 && (activeTab === "all" || activeTab === "POLYTECH") && (
+                    <div className={activeTab === "POLYTECH" ? undefined : "hidden"} aria-hidden={activeTab !== "POLYTECH"}>
+                      <PolytechCheckoutPanel
+                        items={onlineByProvider.POLYTECH}
+                        onCreated={(message) => {
+                          setPolytechPreview(null);
+                          setNotice(message || "Pedido creado en Polytech");
+                          setActiveTab("all");
+                          clearProvider("POLYTECH", "online");
+                        }}
+                        onPreviewed={setPolytechPreview}
                       />
                     </div>
                   )}
