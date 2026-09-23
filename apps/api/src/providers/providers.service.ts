@@ -743,10 +743,11 @@ export class ProvidersService implements OnModuleInit {
           );
 
           // La ficha tiene que existir antes que la oferta: la oferta la referencia.
+          const ownsRaw = offerSource === "SYNC" ? { rawOwnerTenantId: tenantId } : {};
           await this.prisma.providerSyncCache.upsert({
             where: { provider_externalId: { provider, externalId: item.externalId } },
-            create: { provider, externalId: item.externalId, ...ficha },
-            update: { ...ficha, syncedAt: new Date() },
+            create: { provider, externalId: item.externalId, ...ficha, ...ownsRaw },
+            update: { ...ficha, syncedAt: new Date(), ...ownsRaw },
           });
 
           if (keepOwnPrice) return diff;
