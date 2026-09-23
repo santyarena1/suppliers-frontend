@@ -71,8 +71,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const valid = isProviderKey(provider);
   const listBased = isListProvider(provider);
   const hasAdapter = IMPLEMENTED_PROVIDERS.includes(provider);
+  // Ashir, HDC, Gaming City: no hay API. El Excel del comercio es el canal.
+  const spreadsheet = !listBased && !hasAdapter;
 
-  const [tab, setTab] = useState<ProviderTab>(listBased ? "lists" : "sync");
+  const [tab, setTab] = useState<ProviderTab>(listBased || spreadsheet ? "lists" : "sync");
   const [listRefresh, setListRefresh] = useState(0);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
@@ -112,8 +114,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
   const [config, setConfig] = useState<ProviderConfig | null>(null);
   // Cotiza por lista: proveedor sin API, o proveedor con API al que este comercio le carga su Excel.
-  const listPriced = listBased || config?.priceChannel === "LIST";
-  // Usable si tiene adapter, es por lista, o el comercio le eligió canal Lista (ej. Ashir sin integración).
+  const listPriced = listBased || spreadsheet || config?.priceChannel === "LIST";
+  // Usable si tiene adapter o si los precios entran por planilla (Ashir no se queda en el muro).
   const implemented = hasAdapter || listPriced;
 
   // Un proveedor con API al que este comercio le carga su Excel abre en Listas, salvo que la URL pida otra pestaña.
@@ -361,7 +363,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
               <div className="min-w-0">
                 <ProviderBadge provider={provider} variant="inline" size="lg" className="mb-0.5" />
                 <p className="text-xs text-surface-500 hidden sm:block">
-                  {implemented ? "Cargá tu cuenta, sincronizá el catálogo y mirá pedidos" : "Sin integración real todavía"}
+                  {spreadsheet || listBased
+                    ? "Subí la lista de precios de este local"
+                    : implemented
+                      ? "Cargá tu cuenta, sincronizá el catálogo y mirá pedidos"
+                      : "Sin integración real todavía"}
                 </p>
               </div>
             </div>
@@ -439,7 +445,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 <div className="flex border-b border-surface-800 overflow-x-auto scrollbar-none">
                   {[
                     ...(listPriced ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }] : []),
-                    ...(listBased
+                    ...(listBased || spreadsheet
                       ? []
                       : [
                           { key: "credentials" as const, label: "Mi cuenta" },

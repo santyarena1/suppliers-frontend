@@ -1,4 +1,12 @@
-import { mapAirProduct, parseAirCsv, parseAirTermMap, resolveAirTerm } from "./air.adapter";
+import {
+  airLoginRejected,
+  applyAirAccountPrices,
+  mapAirProduct,
+  parseAirCsv,
+  parseAirPrice,
+  parseAirTermMap,
+  resolveAirTerm,
+} from "./air.adapter";
 
 const RUBROS_SAMPLE = [
   { id: 0, name: "Todos los Rubros", hay: 0, grupos: [] },
@@ -81,5 +89,41 @@ describe("parseAirCsv / mapAirProduct", () => {
     const p = mapAirProduct(rows[2], rubros, grupos);
     expect(p.category).toBeUndefined();
     expect(p.brand).toBeUndefined();
+  });
+
+  it("toma el precio de la lista de esta cuenta, no de una columna lista vacía", () => {
+    const csv = `"Codigo","Descripcion","lista1","lista3","Tipo","IVA","ROS","MZA","CBA","LUG","Grupo","Rubro","Part Number"
+"MX9","Mouse","0","1.234,50","A","21","1","0","0","0","63","001-0010","910"
+`;
+    const parsed = parseAirCsv(csv);
+    expect(parsed[0].lista5).toBe("1.234,50");
+    expect(mapAirProduct(parsed[0]).price).toBe(1234.5);
+    expect(mapAirProduct(parsed[0]).stock).toBe(1);
+    expect(mapAirProduct(parsed[0]).ivaPercent).toBe(21);
+  });
+
+  it("pisa el precio del CSV con el precio.lista de la cuenta", () => {
+    const parsed = parseAirCsv(CSV);
+    const applied = applyAirAccountPrices(parsed, new Map([["MX123", 44.2]]));
+    expect(applied).toBe(1);
+    expect(mapAirProduct(parsed[0]).price).toBe(44.2);
+    expect(mapAirProduct(parsed[1]).price).toBe(100);
+  });
+});
+
+describe("parseAirPrice / airLoginRejected", () => {
+  it("lee importes con coma decimal y separador de miles", () => {
+    expect(parseAirPrice("12.5")).toBe(12.5);
+    expect(parseAirPrice("12,50")).toBe(12.5);
+    expect(parseAirPrice("1.234,50")).toBe(1234.5);
+    expect(parseAirPrice("u$s 10")).toBe(10);
+    expect(parseAirPrice("")).toBeUndefined();
+    expect(parseAirPrice("abc")).toBeUndefined();
+  });
+
+  it("detecta un login rechazado y no confunde una sesión iniciada", () => {
+    expect(airLoginRejected(`<meta name="action_state" content="-1">`)).toBe(true);
+    expect(airLoginRejected(`<meta name="cuenta" content="">Inicia sesión con tu cuenta`)).toBe(true);
+    expect(airLoginRejected(`<meta name="cuenta" content="1234">`)).toBe(false);
   });
 });

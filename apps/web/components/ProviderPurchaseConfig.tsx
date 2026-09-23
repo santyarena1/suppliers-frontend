@@ -2,7 +2,7 @@
 
 import { FileSpreadsheet, Plug } from "lucide-react";
 import PaymentOptionsEditor from "@/components/PaymentOptionsEditor";
-import { isListProvider, type IvaAdjustment, type ProviderConfig } from "@/lib/api";
+import { IMPLEMENTED_PROVIDERS, isListProvider, type IvaAdjustment, type ProviderConfig } from "@/lib/api";
 import { IVA_ADJUSTMENT_LABELS, IVA_ADJUSTMENTS, providerHasIvaRate, providerPricesFromList } from "@/lib/purchase-pricing";
 
 const IVA_HELP: Record<IvaAdjustment, string> = {
@@ -52,8 +52,8 @@ export default function ProviderPurchaseConfig({
   config: ProviderConfig;
   onChange: (next: ProviderConfig) => void;
 }) {
-  const listOnly = isListProvider(provider);
-  const channel = config.priceChannel ?? (listOnly ? "LIST" : "API");
+  const listOnly = isListProvider(provider) || !IMPLEMENTED_PROVIDERS.includes(provider);
+  const channel = listOnly ? "LIST" : (config.priceChannel ?? "API");
   const fromList = providerPricesFromList(provider, channel);
   const hasIva = providerHasIvaRate(provider, channel);
 
@@ -65,7 +65,7 @@ export default function ProviderPurchaseConfig({
           <div className="text-sm font-semibold text-white">Canal de precios</div>
           <p className="text-xs text-surface-500 mt-1 leading-relaxed">
             {listOnly
-              ? "Este proveedor no tiene integración: sus precios entran por la lista que subís en la pestaña Listas."
+              ? "Este proveedor no tiene API. Subí el Excel en la pestaña Listas: el precio queda en este local y no se copia a otro."
               : "Por API sincroniza solo con tu cuenta del portal. Por lista, subís vos la planilla que te mandan y el cron no toca este proveedor. Un solo canal activo a la vez."}
           </p>
         </div>

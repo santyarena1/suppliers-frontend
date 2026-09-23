@@ -101,14 +101,22 @@ export class ListImportService {
     if (!supplier || !supplier.active) throw new NotFoundException("Proveedor no encontrado");
     // Un proveedor con API tiene su base en la API: la lista solo vale como precios
     // propios de un comercio (canal LIST). Uno por lista admite base y propios.
-    const acceptsBase = isListProviderKey(provider) && !this.registry.get(provider);
+    const hasAdapter = Boolean(this.registry.get(provider));
+    // Lista base solo en proveedores LIST_ sin API. Ashir y el resto sin adapter
+    // no comparten una base: cada comercio carga su Excel y el precio queda ahí.
+    const acceptsBase = isListProviderKey(provider) && !hasAdapter;
 
     if (actor.isSuperadmin) {
       if (acceptsBase) {
         return { level: "BASE", tenantId: actor.tenant?.tenantId ?? supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name };
       }
-      if (actor.tenant && actor.tenant.tenantType === "RETAILER") {
+      if (actor.tenant && (actor.tenant.tenantType === "RETAILER" || !hasAdapter)) {
         return { level: "TENANT", tenantId: commercialId(actor.tenant), supplierTenantId: supplier.id, supplierName: supplier.name };
+      }
+      if (!hasAdapter) {
+        throw new BadRequestException(
+          `${supplier.name} no tiene API. Entrá con el comercio y subí el Excel: los precios quedan en ese local.`
+        );
       }
       throw new BadRequestException(`${supplier.name} se sincroniza por API: solo un comercio puede cargar su propia lista`);
     }
@@ -118,7 +126,13 @@ export class ListImportService {
       throw new ForbiddenException("Solo dueños, administradores o product managers pueden cargar listas");
     }
     if (tenant.tenantId === supplier.id || tenant.commercialTenantId === supplier.id) {
-      if (!acceptsBase) throw new BadRequestException("Tu catálogo se sincroniza por API: no admite lista base");
+      if (!acceptsBase) {
+        throw new BadRequestException(
+          hasAdapter
+            ? "Tu catálogo se sincroniza por API: no admite lista base"
+            : "Este catálogo no tiene lista base. Cada comercio carga su propio Excel y los precios quedan en ese local."
+        );
+      }
       return { level: "BASE", tenantId: supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name };
     }
     if (tenant.tenantType === "RETAILER") {
