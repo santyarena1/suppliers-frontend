@@ -4,6 +4,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ## Implementado
 
+### [FEATURE] Health del API (pantalla de actualización / caída)
+- **Método**: GET
+- **Ruta**: `/health`
+- **Auth**: no requerido (público, sin throttle)
+- **Body / Params**: ninguno
+- **Respuesta esperada**: `{ status: "ok", uptime: number }` envuelto en `{ success: true, data }`. Durante recovery de Postgres (antes de que Nest levante), `{ success: true, data: { status: "ok", db: "waiting" } }` con HTTP 200; el resto de rutas responde 503 con mensaje de reinicio.
+- **Estado**: IMPLEMENTADO
+- **Notas**: El front (`ApiHealthGate`) sondea `/health` y muestra la pantalla de “actualización / no disponible” si no hay red o `db: "waiting"`. Mantenimiento planificado del front: `MAINTENANCE_MODE=1` redirige a `/actualizacion` (no depende de este endpoint).
+
 ### [FEATURE] Onboarding comercio (Tipo 1) + plan PRO
 - **Método**: GET | POST
 - **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`

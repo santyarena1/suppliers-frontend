@@ -1,6 +1,7 @@
 import axios from "axios";
 import { getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
+import { DB_RESTARTING_HINT, reportSystemUpdating } from "./system-health";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -11,7 +12,7 @@ const api = axios.create({ baseURL: BASE_URL });
  * significa que alguien anónimo tocó un endpoint con auth. Nunca redirigimos
  * desde estas rutas.
  */
-const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview", "/onboarding"]);
+const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview", "/onboarding", "/actualizacion"]);
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
@@ -33,6 +34,17 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    if (typeof window !== "undefined") {
+      const status = error?.response?.status as number | undefined;
+      const message = String(
+        error?.response?.data?.message ?? error?.message ?? ""
+      );
+      // Recovery de Postgres (apps/api recovery-gate): 503 con mensaje fijo.
+      // La caída total del API la confirma ApiHealthGate con /health.
+      if (status === 503 && DB_RESTARTING_HINT.test(message)) {
+        reportSystemUpdating(message);
+      }
+    }
     // Un 401 no siempre es "tu sesión de NODO murió". El carrito calienta
     // checkout de varios portales: si alguno contesta 401 y el JWT nuestro
     // sigue vivo, echar al usuario parece un cierre de sesión al tocar el
