@@ -9,7 +9,7 @@ import RedeemAccessCode from "@/components/RedeemAccessCode";
 import LocalPurchaseDashboard from "@/components/insights/LocalPurchaseDashboard";
 import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
-  canSyncProvider, isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, listImportsApi, type VisibleProvider
+  canSyncProvider, isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, IMPLEMENTED_PROVIDERS, listImportsApi, type VisibleProvider
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
@@ -204,6 +204,7 @@ export default function ProveedoresPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {linked.map(({ provider, name, accountManager, linkId }) => {
                       const s = statuses[provider];
+                      const bySpreadsheet = isListProvider(provider) || !IMPLEMENTED_PROVIDERS.includes(provider);
                       const result = syncResult[provider];
                       const live = isLiveSyncRun(s?.currentRun);
                       const isSyncing = syncing === provider || live;
@@ -214,7 +215,7 @@ export default function ProveedoresPage() {
                         >
                           <Link href={`/proveedores/${provider}`} className="flex items-center justify-between gap-3">
                             <ProviderBadge provider={provider} label={name} variant="inline" size="md" />
-                            {isListProvider(provider) ? (
+                            {bySpreadsheet ? (
                               <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400">
                                 <FileSpreadsheet className="w-3 h-3" /> Por lista
                               </span>
@@ -249,7 +250,7 @@ export default function ProveedoresPage() {
                               Tu vendedor: {accountManager.name} · {accountManager.email}
                             </p>
                           )}
-                          {isListProvider(provider) && <ListFreshnessChip provider={provider} />}
+                          {bySpreadsheet && <ListFreshnessChip provider={provider} />}
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
                             {linkId && (
@@ -263,11 +264,11 @@ export default function ProveedoresPage() {
                               </Link>
                             )}
                             <Link
-                              href={`/proveedores/${provider}?tab=${isListProvider(provider) ? "config" : canSyncProvider(s) ? "sync" : "credentials"}`}
+                              href={`/proveedores/${provider}?tab=${bySpreadsheet ? "config" : canSyncProvider(s) ? "sync" : "credentials"}`}
                               className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-lg py-1.5 transition-all"
                             >
-                              {s?.hasCredentials || isListProvider(provider) ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
-                              {s?.hasCredentials || isListProvider(provider) ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
+                              {s?.hasCredentials || bySpreadsheet ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
+                              {s?.hasCredentials || bySpreadsheet ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
                             </Link>
                             {retailer && providerHasIvaRate(provider) && (
                               <Link
@@ -278,7 +279,7 @@ export default function ProveedoresPage() {
                                 <StickyNote className="w-3.5 h-3.5" />
                               </Link>
                             )}
-                            {isListProvider(provider) ? (
+                            {bySpreadsheet ? (
                               <Link
                                 href={`/proveedores/${provider}?tab=lists`}
                                 className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg py-1.5 transition-all"

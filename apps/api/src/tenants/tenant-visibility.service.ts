@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import {
   isListProviderKey,
   mergeLearnedPaymentOptions,
+  providerHasCatalogAdapter,
   parsePaymentOptions,
   providerHasIvaRate,
   type IvaAdjustment,
@@ -386,7 +387,11 @@ function purchaseFromConfig(
   } | null | undefined
 ): PurchasePolicyView {
   const priceChannel: "API" | "LIST" =
-    config?.priceChannel === "LIST" || (config?.priceChannel == null && isListProviderKey(provider)) ? "LIST" : "API";
+    config?.priceChannel === "LIST" ||
+    isListProviderKey(provider) ||
+    (config?.priceChannel == null && !providerHasCatalogAdapter(provider))
+      ? "LIST"
+      : "API";
   const manual = {
     priceChannel,
     manualIibbPercent: config?.manualIibbPercent == null ? null : Number(config.manualIibbPercent),

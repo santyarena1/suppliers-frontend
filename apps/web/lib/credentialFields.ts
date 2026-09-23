@@ -402,15 +402,15 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     title: "Gaming City",
     intro: "La lista de precios es pública (Google Sites / Apps Script). No pide login.",
     extra:
-      "Solo trae producto y precio (ARS, IVA incluido), sin SKU ni stock. Importá el Excel del listado en Sincronización hasta que esté el scraper de obtenerDatosFinales.",
+      "Solo trae producto y precio (ARS, IVA incluido), sin SKU ni stock. Subí el Excel en la pestaña Listas.",
     portalUrl: "https://sites.google.com/view/gcgremio/lista-general",
     portalLabel: "Lista Gaming City",
     fields: [],
   },
   ASHIR: {
     title: "Conectar tu cuenta de Ashir",
-    intro: "Todavía no hay API documentada. Guardá lo que te dé Ashir para cuando esté el adapter.",
-    extra: "ashir.com.ar es WordPress; no hay endpoint de catálogo público confirmado.",
+    intro: "Ashir no tiene API. El precio de tu local entra por el Excel, en la pestaña Listas.",
+    extra: "La planilla no se comparte con otros comercios: el precio queda en esta organización.",
     portalUrl: "https://ashir.com.ar",
     portalLabel: "ashir.com.ar",
     fields: [

@@ -49,6 +49,16 @@ export function isKnownProvider(value: unknown): value is KnownProvider {
   return typeof value === "string" && (KNOWN_PROVIDERS as readonly string[]).includes(value);
 }
 
+/**
+ * Conocidos que todavía no sincronizan catálogo (no hay adapter).
+ * El precio de cada comercio entra por su Excel, no por una lista base compartida.
+ */
+export const PROVIDERS_WITHOUT_CATALOG_ADAPTER = ["GC", "ASHIR", "HDC"] as const;
+
+export function providerHasCatalogAdapter(provider: string): boolean {
+  return isKnownProvider(provider) && !(PROVIDERS_WITHOUT_CATALOG_ADAPTER as readonly string[]).includes(provider);
+}
+
 export function isListProviderKey(value: unknown): value is Provider {
   return typeof value === "string" && LIST_PROVIDER_KEY_REGEX.test(value);
 }

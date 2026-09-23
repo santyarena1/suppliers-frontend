@@ -94,7 +94,15 @@ export class ProvidersService implements OnModuleInit {
     const config = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
     });
-    return serializeSyncConfig((config ?? this.defaultConfig(tenantId, provider)));
+    const view = serializeSyncConfig(config ?? this.defaultConfig(tenantId, provider));
+    if (!this.registry.get(provider)) return { ...view, priceChannel: "LIST" as const };
+    return view;
+  }
+
+  /** Sin adapter (Ashir, HDC, Gaming City) el precio entra por la planilla de ese local. */
+  private defaultPriceChannel(provider: Provider): "API" | "LIST" {
+    if (isListProviderKey(provider) || !this.registry.get(provider)) return "LIST";
+    return "API";
   }
 
   private defaultConfig(tenantId: string, provider: Provider) {
@@ -104,7 +112,7 @@ export class ProvidersService implements OnModuleInit {
       provider,
       enabled: false,
       syncIntervalMinutes: 60,
-      priceChannel: (isListProviderKey(provider) ? "LIST" : "API") as "API" | "LIST",
+      priceChannel: this.defaultPriceChannel(provider),
       manualIibbPercent: null as number | null,
       manualPerceptionsPercent: null as number | null,
       paymentOptions: [] as PaymentOption[],
@@ -147,7 +155,9 @@ export class ProvidersService implements OnModuleInit {
             ? null
             : Number(current.schemeDiscountPercent),
     };
-    const priceChannel = dto.priceChannel ?? current?.priceChannel ?? (isListProviderKey(provider) ? "LIST" : "API");
+    const priceChannel = this.registry.get(provider)
+      ? (dto.priceChannel ?? current?.priceChannel ?? "API")
+      : "LIST";
     if ((merged.acceptsOffline || merged.acceptsScheme) && !providerHasIvaRate(provider, priceChannel)) {
       throw new BadRequestException(
         "Este distribuidor no informa alícuota de IVA: no se puede configurar pedido offline ni esquema."
@@ -181,7 +191,7 @@ export class ProvidersService implements OnModuleInit {
     const adapter = this.registry.get(provider);
     if (!adapter) {
       throw new BadRequestException(
-        `Todavía no hay integración real para ${provider}. Implementados: ${this.registry.implemented.join(", ")}`
+        `${provider} no tiene API. Los precios entran por el Excel de este comercio, en la pestaña Listas.`
       );
     }
 

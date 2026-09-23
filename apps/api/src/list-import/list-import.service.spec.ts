@@ -58,6 +58,20 @@ describe("ListImportService.resolveAccess", () => {
     await expect(service({ hasAdapter: true }).resolveAccess({ userId: "u", isSuperadmin: true, tenant: null }, "ELIT")).rejects.toThrow(/API/);
   });
 
+  test("sin API, el superadmin con comercio carga el Excel de ese local", async () => {
+    const access = await service({ hasAdapter: false }).resolveAccess(
+      { userId: "u", isSuperadmin: true, tenant: tenant({ tenantType: "RETAILER" }) },
+      "ASHIR"
+    );
+    expect(access).toMatchObject({ level: "TENANT", tenantId: "t1" });
+  });
+
+  test("sin API y sin comercio, el superadmin no puede inventar una lista base", async () => {
+    await expect(
+      service({ hasAdapter: false }).resolveAccess({ userId: "u", isSuperadmin: true, tenant: null }, "ASHIR")
+    ).rejects.toThrow(/Excel/);
+  });
+
   test("proveedor inexistente: 404", async () => {
     await expect(service({ supplier: null }).resolveAccess({ userId: "u", isSuperadmin: true, tenant: null }, "LIST_NADIE")).rejects.toThrow(
       /no encontrado/
