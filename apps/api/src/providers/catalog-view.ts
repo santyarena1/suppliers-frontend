@@ -77,6 +77,32 @@ export function toProductView(
   };
 }
 
+/**
+ * Ficha sola, para un local vinculado que todavía no sincronizó su cuenta.
+ * El producto se ve. Precio y stock no: no hay oferta de esa organización.
+ */
+export function toSheetView(
+  product: ProviderSyncCache,
+  enrichment?: CatalogEnrichmentContext
+): ProductView {
+  const { id: _id, updatedAt: _updatedAt, raw, ...ficha } = product;
+  const display = resolveCatalogDisplay(product, enrichment);
+  return {
+    ...ficha,
+    ...display,
+    raw: fichaRaw(product.provider, raw) as ProviderSyncCache["raw"],
+    price: null,
+    finalPrice: null,
+    currency: null,
+    ivaPercent: null,
+    stock: null,
+    stockStatus: null,
+    active: true,
+    needsResync: false,
+    syncedAt: product.syncedAt,
+  };
+}
+
 function withDiscount(value: unknown, discountPercent: number): number | null {
   if (value == null) return null;
   const price = Number(value);

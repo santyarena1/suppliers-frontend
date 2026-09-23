@@ -1,4 +1,4 @@
-import { fichaRaw, toProductView } from "./catalog-view";
+import { fichaRaw, toProductView, toSheetView } from "./catalog-view";
 import type { ProviderSyncCache, TenantProductOffer } from "@prisma/client";
 
 function ficha(overrides: Partial<ProviderSyncCache> = {}): ProviderSyncCache {
@@ -81,6 +81,20 @@ describe("fichaRaw", () => {
     expect(raw[6]).toBeNull();
     expect(raw[7]).toBe(21);
     expect(raw[9]).toBeNull();
+  });
+});
+
+describe("toSheetView", () => {
+  it("muestra la ficha y deja precio y stock vacíos", () => {
+    const view = toSheetView(ficha({ raw: { nombre: "Mouse", precio: 999, IVA: 21 } }));
+    expect(view.name).toBe("Mouse");
+    expect(view.brand).toBe("Logitech");
+    expect(view.price).toBeNull();
+    expect(view.finalPrice).toBeNull();
+    expect(view.stock).toBeNull();
+    expect(view.stockStatus).toBeNull();
+    expect(view.currency).toBeNull();
+    expect(view.raw).toEqual({ nombre: "Mouse", IVA: 21 });
   });
 });
 

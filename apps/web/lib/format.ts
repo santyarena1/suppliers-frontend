@@ -1,5 +1,10 @@
 import { assetUrl } from "./assets";
 
+/** Hay importe de esta organización. `null` es “todavía no sincronizó”, no cero. */
+export function hasOwnPrice(p: { price?: string | number | null; finalPrice?: string | number | null }): boolean {
+  return p.price != null || p.finalPrice != null;
+}
+
 export function parsePrice(v: string | number | undefined | null): number {
   if (v == null) return 0;
   if (typeof v === "number") return v;

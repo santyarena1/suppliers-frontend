@@ -2,6 +2,7 @@
 
 import { useCart, type CartRef } from "@/lib/cart";
 import { ProductDTO } from "@/lib/api";
+import { hasOwnPrice } from "@/lib/format";
 import { Plus, Minus } from "lucide-react";
 
 interface Props {
@@ -44,6 +45,7 @@ export default function AddToCartButton({
   );
   const qty = item?.qty ?? 0;
   const inCart = has(ref);
+  if (!hasOwnPrice(product)) return null;
 
   function bump(delta: number, e: React.MouseEvent) {
     e.preventDefault();

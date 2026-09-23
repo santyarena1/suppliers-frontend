@@ -7,7 +7,7 @@ import type { ProductDTO } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
-import { formatARS, formatUSD } from "@/lib/format";
+import { formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
@@ -46,6 +46,8 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
       i.externalId === product.externalId &&
       i.channel === "offline"
   );
+
+  if (!hasOwnPrice(product)) return null;
 
   const offlinePricing = purchaseLinePricing(product, policy, "offline", qty);
   const schemePricing = purchaseLinePricing(product, policy, "scheme", qty);
