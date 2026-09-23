@@ -19,8 +19,10 @@ import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from
 import {
   fillPriceHistoryDays,
   argentinaDayKey,
+  addCalendarDay,
   priceHistoryRetentionCutoff,
   pgDateToYmd,
+  PRICE_DROP_LOOKBACK_DAYS,
 } from "./price-history";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
@@ -983,7 +985,8 @@ export class ProvidersService implements OnModuleInit {
     }
     ranked.splice(SEARCH_LIMIT);
 
-    return this.withImageAiFlags(ranked.map((row) => row.view));
+    const flagged = await this.withImageAiFlags(ranked.map((row) => row.view));
+    return this.withPriceDropMeta(tenantId, flagged);
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
@@ -1243,11 +1246,12 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /**
-   * Landing del buscador: por defecto las bajas de **hoy** (un punto por día).
-   * Si hoy no hubo movimientos, la última jornada que sí tuvo. `all=true`
-   * (Ver todas) trae cualquier producto que haya bajado alguna vez.
+   * Landing / “Ver todas”: bajas de los últimos {@link PRICE_DROP_LOOKBACK_DAYS}
+   * días (AR). Prioriza el día más reciente y completa con jornadas anteriores
+   * hasta `take`. `all` queda por compat (misma ventana).
    */
   async getFeatured(tenantId: string, take: number, opts: { mixed?: boolean; all?: boolean; viewerUserId?: string } = {}) {
+    void opts.all;
     const providers = await this.readableProviders(tenantId, opts.viewerUserId);
     if (providers.length === 0) return [];
     const limit = Math.min(Math.max(take, 1), 300);
@@ -1256,9 +1260,7 @@ export class ProvidersService implements OnModuleInit {
       this.catalogEnrichment.getContext(),
     ]);
 
-    const drops = await this.findRecentPriceDrops(tenantId, providers, limit, {
-      allDays: Boolean(opts.all),
-    });
+    const drops = await this.findRecentPriceDrops(tenantId, providers, limit);
 
     const dropViews = drops
       .map((d) => {
@@ -1300,16 +1302,15 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /**
-   * Bajas comparando el último precio de cada día (Argentina) contra el día
-   * anterior con dato. `allDays=false`: solo la jornada más reciente que tuvo
-   * bajas (hoy, o la anterior si hoy no hubo). `allDays=true`: la última baja
-   * de cada producto, de todo el historial.
+   * Bajas (un punto por día AR vs el día anterior con dato) dentro de la
+   * ventana de 7 días. Incluye primero el día más reciente y completa con
+   * jornadas previas hasta `take`. Un producto entra una sola vez (su baja
+   * más reciente en la ventana).
    */
   private async findRecentPriceDrops(
     tenantId: string,
     providers: string[],
     take: number,
-    opts: { allDays?: boolean } = {},
   ) {
     if (take <= 0 || providers.length === 0) return [];
 
@@ -1321,155 +1322,123 @@ export class ProvidersService implements OnModuleInit {
       day: Date;
     };
 
-    const rows = opts.allDays
-      ? await this.prisma.$queryRaw<DropRow[]>`
-          WITH daily AS (
-            SELECT DISTINCT ON (
-              h.provider,
-              h."externalId",
-              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+    const today = argentinaDayKey(new Date());
+    const cutoff = addCalendarDay(today, -(PRICE_DROP_LOOKBACK_DAYS - 1));
+
+    // Pedimos de más para poder completar día a día sin quedarnos cortos
+    // si un mismo SKU aparece en varias jornadas (DISTINCT lo aplana después).
+    const fetchLimit = Math.min(Math.max(take * 4, take), 1200);
+
+    const rows = await this.prisma.$queryRaw<DropRow[]>`
+      WITH daily AS (
+        SELECT DISTINCT ON (
+          h.provider,
+          h."externalId",
+          ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+        )
+          h.provider,
+          h."externalId",
+          h.price,
+          h."finalPrice",
+          h."capturedAt",
+          ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS day
+        FROM "ProductPriceHistory" h
+        WHERE h."tenantId" = ${tenantId}
+          AND h.provider = ANY(${providers}::text[])
+          AND ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+            >= (${cutoff}::date - 14)
+        ORDER BY
+          h.provider,
+          h."externalId",
+          ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date,
+          h."capturedAt" DESC
+      ),
+      compared AS (
+        SELECT
+          d.*,
+          LAG(d.price) OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_price,
+          LAG(d."finalPrice") OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_final
+        FROM daily d
+      ),
+      drops AS (
+        SELECT *
+        FROM compared
+        WHERE
+          day >= ${cutoff}::date
+          AND (
+            (prev_final IS NOT NULL AND "finalPrice" IS NOT NULL AND "finalPrice" < prev_final)
+            OR (
+              prev_final IS NULL AND prev_price IS NOT NULL AND price IS NOT NULL
+              AND price < prev_price
             )
-              h.provider,
-              h."externalId",
-              h.price,
-              h."finalPrice",
-              h."capturedAt",
-              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS day
-            FROM "ProductPriceHistory" h
-            WHERE h."tenantId" = ${tenantId}
-              AND h.provider = ANY(${providers}::text[])
-            ORDER BY
-              h.provider,
-              h."externalId",
-              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date,
-              h."capturedAt" DESC
-          ),
-          compared AS (
-            SELECT
-              d.*,
-              LAG(d.price) OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_price,
-              LAG(d."finalPrice") OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_final
-            FROM daily d
-          ),
-          drops AS (
-            SELECT *
-            FROM compared
-            WHERE
-              (prev_final IS NOT NULL AND "finalPrice" IS NOT NULL AND "finalPrice" < prev_final)
-              OR (
-                prev_final IS NULL AND prev_price IS NOT NULL AND price IS NOT NULL
-                AND price < prev_price
-              )
-          ),
-          picked AS (
-            SELECT DISTINCT ON (provider, "externalId")
-              provider,
-              "externalId",
-              prev_price AS "previousPrice",
-              prev_final AS "previousFinalPrice",
-              day
-            FROM drops
-            ORDER BY provider, "externalId", day DESC
           )
-          SELECT p.*
-          FROM picked p
-          INNER JOIN "TenantProductOffer" o
-            ON o."tenantId" = ${tenantId}
-            AND o.provider = p.provider
-            AND o."externalId" = p."externalId"
-            AND o.active
-            AND o.stock > 0
-          ORDER BY
-            CASE
-              WHEN p."previousFinalPrice" IS NOT NULL AND p."previousFinalPrice" > 0
-                THEN 1
-              ELSE 0
-            END DESC,
-            p.day DESC
-          LIMIT ${take}
-        `
-      : await this.prisma.$queryRaw<DropRow[]>`
-          WITH daily AS (
-            SELECT DISTINCT ON (
-              h.provider,
-              h."externalId",
-              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
-            )
-              h.provider,
-              h."externalId",
-              h.price,
-              h."finalPrice",
-              h."capturedAt",
-              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS day
-            FROM "ProductPriceHistory" h
-            WHERE h."tenantId" = ${tenantId}
-              AND h.provider = ANY(${providers}::text[])
-            ORDER BY
-              h.provider,
-              h."externalId",
-              ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date,
-              h."capturedAt" DESC
-          ),
-          compared AS (
-            SELECT
-              d.*,
-              LAG(d.price) OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_price,
-              LAG(d."finalPrice") OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_final
-            FROM daily d
-          ),
-          drops AS (
-            SELECT *
-            FROM compared
-            WHERE
-              (prev_final IS NOT NULL AND "finalPrice" IS NOT NULL AND "finalPrice" < prev_final)
-              OR (
-                prev_final IS NULL AND prev_price IS NOT NULL AND price IS NOT NULL
-                AND price < prev_price
-              )
-          ),
-          focus AS (
-            SELECT MAX(day) AS day FROM drops
-          )
-          SELECT
-            d.provider,
-            d."externalId",
-            d.prev_price AS "previousPrice",
-            d.prev_final AS "previousFinalPrice",
-            d.day
-          FROM drops d
-          INNER JOIN focus f ON d.day = f.day
-          INNER JOIN "TenantProductOffer" o
-            ON o."tenantId" = ${tenantId}
-            AND o.provider = d.provider
-            AND o."externalId" = d."externalId"
-            AND o.active
-            AND o.stock > 0
-          ORDER BY
-            CASE
-              WHEN d.prev_final IS NOT NULL AND d."finalPrice" IS NOT NULL AND d.prev_final > 0
-                THEN (d.prev_final - d."finalPrice") / d.prev_final
-              WHEN d.prev_price IS NOT NULL AND d.price IS NOT NULL AND d.prev_price > 0
-                THEN (d.prev_price - d.price) / d.prev_price
-              ELSE 0
-            END DESC,
-            d."capturedAt" DESC
-          LIMIT ${take}
-        `;
+      ),
+      scored AS (
+        SELECT
+          d.provider,
+          d."externalId",
+          d.prev_price AS "previousPrice",
+          d.prev_final AS "previousFinalPrice",
+          d.day,
+          CASE
+            WHEN d.prev_final IS NOT NULL AND d."finalPrice" IS NOT NULL AND d.prev_final > 0
+              THEN (d.prev_final - d."finalPrice") / d.prev_final
+            WHEN d.prev_price IS NOT NULL AND d.price IS NOT NULL AND d.prev_price > 0
+              THEN (d.prev_price - d.price) / d.prev_price
+            ELSE 0
+          END AS drop_pct
+        FROM drops d
+        INNER JOIN "TenantProductOffer" o
+          ON o."tenantId" = ${tenantId}
+          AND o.provider = d.provider
+          AND o."externalId" = d."externalId"
+          AND o.active
+          AND o.stock > 0
+      ),
+      -- Una fila por producto: la baja más reciente en la ventana.
+      picked AS (
+        SELECT DISTINCT ON (provider, "externalId")
+          provider,
+          "externalId",
+          "previousPrice",
+          "previousFinalPrice",
+          day,
+          drop_pct
+        FROM scored
+        ORDER BY provider, "externalId", day DESC
+      )
+      SELECT provider, "externalId", "previousPrice", "previousFinalPrice", day
+      FROM picked
+      -- Primero hoy, después ayer, …; dentro del día, mayor %.
+      ORDER BY day DESC, drop_pct DESC
+      LIMIT ${fetchLimit}
+    `;
 
     if (rows.length === 0) return [];
+
+    // Completar hasta `take` respetando el orden día→% (ya viene ordenado).
+    const chosen: DropRow[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const key = `${r.provider}::${r.externalId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      chosen.push(r);
+      if (chosen.length >= take) break;
+    }
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
         tenantId,
         active: true,
-        OR: rows.map((r) => ({ provider: r.provider, externalId: r.externalId })),
+        OR: chosen.map((r) => ({ provider: r.provider, externalId: r.externalId })),
       },
       include: { product: true },
     });
 
     const byKey = new Map(offers.map((o) => [`${o.provider}::${o.externalId}`, o] as const));
 
-    return rows.flatMap((r) => {
+    return chosen.flatMap((r) => {
       const offer = byKey.get(`${r.provider}::${r.externalId}`);
       if (!offer) return [];
       return [{
@@ -1480,6 +1449,149 @@ export class ProvidersService implements OnModuleInit {
         droppedOn: pgDateToYmd(r.day),
         offer,
       }];
+    });
+  }
+
+  /**
+   * Para resultados de búsqueda / catálogo: adjunta baja % si el SKU bajó
+   * en los últimos {@link PRICE_DROP_LOOKBACK_DAYS} días.
+   */
+  private async withPriceDropMeta<
+    T extends {
+      provider: string;
+      externalId: string;
+      price?: number | null;
+      finalPrice?: number | null;
+      previousPrice?: number | null;
+      previousFinalPrice?: number | null;
+      priceDropPercent?: number | null;
+      priceDroppedOn?: string | null;
+    },
+  >(tenantId: string, products: T[]): Promise<T[]> {
+    if (products.length === 0) return products;
+    const keys = products.map((p) => `${p.provider}::${p.externalId}`);
+    const today = argentinaDayKey(new Date());
+    const cutoff = addCalendarDay(today, -(PRICE_DROP_LOOKBACK_DAYS - 1));
+    const rules = await this.rulesByProvider(tenantId);
+
+    type DropRow = {
+      provider: string;
+      externalId: string;
+      previousPrice: unknown;
+      previousFinalPrice: unknown;
+      day: Date;
+      dropPct: unknown;
+    };
+
+    const rows = await this.prisma.$queryRaw<DropRow[]>`
+      WITH daily AS (
+        SELECT DISTINCT ON (
+          h.provider,
+          h."externalId",
+          ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+        )
+          h.provider,
+          h."externalId",
+          h.price,
+          h."finalPrice",
+          h."capturedAt",
+          ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date AS day
+        FROM "ProductPriceHistory" h
+        WHERE h."tenantId" = ${tenantId}
+          AND (h.provider || '::' || h."externalId") = ANY(${keys}::text[])
+          AND ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date
+            >= (${cutoff}::date - 14)
+        ORDER BY
+          h.provider,
+          h."externalId",
+          ((h."capturedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'America/Argentina/Buenos_Aires')::date,
+          h."capturedAt" DESC
+      ),
+      compared AS (
+        SELECT
+          d.*,
+          LAG(d.price) OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_price,
+          LAG(d."finalPrice") OVER (PARTITION BY d.provider, d."externalId" ORDER BY d.day) AS prev_final
+        FROM daily d
+      ),
+      drops AS (
+        SELECT *
+        FROM compared
+        WHERE
+          day >= ${cutoff}::date
+          AND (
+            (prev_final IS NOT NULL AND "finalPrice" IS NOT NULL AND "finalPrice" < prev_final)
+            OR (
+              prev_final IS NULL AND prev_price IS NOT NULL AND price IS NOT NULL
+              AND price < prev_price
+            )
+          )
+      ),
+      picked AS (
+        SELECT DISTINCT ON (provider, "externalId")
+          provider,
+          "externalId",
+          prev_price AS "previousPrice",
+          prev_final AS "previousFinalPrice",
+          day,
+          CASE
+            WHEN prev_final IS NOT NULL AND "finalPrice" IS NOT NULL AND prev_final > 0
+              THEN (prev_final - "finalPrice") / prev_final
+            WHEN prev_price IS NOT NULL AND price IS NOT NULL AND prev_price > 0
+              THEN (prev_price - price) / prev_price
+            ELSE 0
+          END AS "dropPct"
+        FROM drops
+        ORDER BY provider, "externalId", day DESC
+      )
+      SELECT * FROM picked
+    `;
+
+    if (rows.length === 0) {
+      return products.map((p) => ({
+        ...p,
+        previousPrice: null,
+        previousFinalPrice: null,
+        priceDropPercent: null,
+        priceDroppedOn: null,
+      }));
+    }
+
+    const byKey = new Map(
+      rows.map((r) => [
+        `${r.provider}::${r.externalId}`,
+        {
+          previousPrice: numberOrNull(r.previousPrice),
+          previousFinalPrice: numberOrNull(r.previousFinalPrice),
+          droppedOn: pgDateToYmd(r.day),
+          dropPct: numberOrNull(r.dropPct),
+        },
+      ] as const),
+    );
+
+    return products.map((p) => {
+      const drop = byKey.get(`${p.provider}::${p.externalId}`);
+      if (!drop) {
+        return {
+          ...p,
+          previousPrice: null,
+          previousFinalPrice: null,
+          priceDropPercent: null,
+          priceDroppedOn: null,
+        };
+      }
+      const markup = rules.get(p.provider)?.markupPercent ?? 0;
+      const priceDropPercent =
+        drop.dropPct != null && drop.dropPct > 0
+          ? Math.round(drop.dropPct * 1000) / 10
+          : null;
+      return {
+        ...p,
+        previousPrice: withMarkup(drop.previousPrice, markup),
+        previousFinalPrice: withMarkup(drop.previousFinalPrice, markup),
+        priceDropPercent,
+        priceDroppedOn: drop.droppedOn,
+      };
     });
   }
 
@@ -1594,7 +1706,8 @@ export class ProvidersService implements OnModuleInit {
         return isDisplayedInStock(product.stock, 0);
       })
       .slice(0, limit);
-    return this.withImageAiFlags(views);
+    const flagged = await this.withImageAiFlags(views);
+    return this.withPriceDropMeta(tenantId, flagged);
   }
 
   /** Productos de una marca unificada, cruzando proveedores visibles. */
@@ -1666,7 +1779,8 @@ export class ProvidersService implements OnModuleInit {
       });
       views.push(...sheets.map((product) => toSheetView(product, enrichment)));
     }
-    return this.withImageAiFlags(views.slice(0, limit));
+    const flagged = await this.withImageAiFlags(views.slice(0, limit));
+    return this.withPriceDropMeta(tenantId, flagged);
   }
 
   async getByBrand(
@@ -1745,7 +1859,8 @@ export class ProvidersService implements OnModuleInit {
         return isDisplayedInStock(product.stock, 0);
       })
       .slice(0, limit);
-    return this.withImageAiFlags(views);
+    const flagged = await this.withImageAiFlags(views);
+    return this.withPriceDropMeta(tenantId, flagged);
   }
 
   /**

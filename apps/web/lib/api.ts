@@ -2671,7 +2671,7 @@ export const catalogApi = {
     api.get<ProductDTO[]>("/catalog/featured", {
       params: { take, ...(opts.mixed ? { mixed: true } : {}) },
     }),
-  /** Alias: bajas de precio. Sin `all`, la jornada más reciente; `all=true` es todo el historial. */
+  /** Alias: bajas de precio (últimos 7 días AR; completa con jornadas previas hasta `take`). */
   priceDrops: (take = 24, opts: { all?: boolean } = {}) =>
     api.get<ProductDTO[]>("/catalog/featured", {
       params: { take, ...(opts.all ? { all: true } : {}) },

@@ -42,7 +42,7 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
     let alive = true;
     Promise.all([
       bannersApi.list("search"),
-      // Portada: bajas de hoy (o última jornada). "Ver todas" pide all=true.
+      // Portada: hasta 60 bajas de la última semana (completa con días previos).
       catalogApi.priceDrops(60),
     ])
       .then(([bRes, drops]) => {
@@ -150,9 +150,14 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
 }
 
 function dropDayLabel(products: ProductDTO[]): string {
-  const raw = products.find((p) => p.priceDroppedOn)?.priceDroppedOn;
-  if (!raw) return "Un punto por día · varios proveedores";
-  const day = raw.slice(0, 10);
+  const days = [
+    ...new Set(
+      products
+        .map((p) => p.priceDroppedOn?.slice(0, 10))
+        .filter((d): d is string => Boolean(d)),
+    ),
+  ].sort();
+  if (days.length === 0) return "Últimos 7 días · varios proveedores";
   const tz = "America/Argentina/Buenos_Aires";
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
@@ -160,12 +165,14 @@ function dropDayLabel(products: ProductDTO[]): string {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
-  if (day === today) return "Bajas de hoy";
-  // Mediodía UTC del día calendario → etiqueta estable en AR.
-  const pretty = new Date(`${day}T15:00:00.000Z`).toLocaleDateString("es-AR", {
+  if (days.length === 1 && days[0] === today) return "Bajas de hoy";
+  if (days.includes(today) && days.length > 1) {
+    return `Hoy + ${days.length - 1} día${days.length - 1 === 1 ? "" : "s"} previos`;
+  }
+  const oldest = new Date(`${days[0]}T15:00:00.000Z`).toLocaleDateString("es-AR", {
     day: "numeric",
     month: "short",
     timeZone: tz,
   });
-  return `Sin movimientos hoy · bajas del ${pretty}`;
+  return `Última semana · desde ${oldest}`;
 }
