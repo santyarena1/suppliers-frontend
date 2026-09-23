@@ -68,15 +68,16 @@ export default function SignupCta() {
     <section id="cuenta" className="relative py-24 sm:py-36">
       <Shell>
         <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] gap-12 lg:gap-16 items-start">
-          <Reveal>
+          <Reveal className="order-2 lg:order-none">
             <h2 className="lnd-display lnd-display--lg">
-              Empezá con
+              Creá tu cuenta
               <br />
-              tu primera lista
+              y tu comercio
             </h2>
             <p className="lnd-body mt-6">
-              Creás la cuenta, nombrás tu comercio y recorrés NODO con catálogo y pedidos de prueba.
-              Los clics van resaltados para que no te pierdas.
+              Creás la cuenta y nombrás tu comercio. El recorrido usa datos de práctica, con los clics
+              resaltados. Tus distribuidores reales los vincula NODO: después cargás el usuario y la
+              clave de cada portal para ver tus precios.
             </p>
 
             <hr className="lnd-rule my-8" />
@@ -94,7 +95,7 @@ export default function SignupCta() {
             </p>
           </Reveal>
 
-          <Reveal delay={90}>
+          <Reveal delay={90} className="order-1 lg:order-none">
             <form onSubmit={onSubmit} className="lnd-panel p-6 sm:p-8">
               {error && (
                 <div
@@ -206,7 +207,7 @@ export default function SignupCta() {
 
               <p className="lnd-note mt-6 leading-relaxed">
                 Arrancás en el plan PRO. Después del registro nombrás tu comercio y
-                explorás con guía interactiva.
+                seguís la guía. Los precios reales aparecen cuando cargás cada cuenta.
               </p>
             </form>
           </Reveal>

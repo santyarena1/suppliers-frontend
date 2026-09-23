@@ -21,7 +21,7 @@ const RETAIL: Plan[] = [
       "Búsqueda unificada sobre tus distribuidores",
       "Comparación con el costo puesto",
       "Carga de listas por planilla",
-      "Hasta 3 usuarios · catálogo demo al empezar",
+      "Hasta 3 usuarios · recorrido de práctica al empezar",
       "Plan de entrada mientras definimos precios de Local y Cadena",
     ],
   },

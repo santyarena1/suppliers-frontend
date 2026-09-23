@@ -177,7 +177,33 @@ export default function ProveedoresPage() {
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
               <LocalPurchaseDashboard />
-              {retailer && (
+              {retailer && linked.some((p) => {
+                const s = statuses[p.provider];
+                return !isListProvider(p.provider) && s && !s.hasCredentials && !s.publicCatalog;
+              }) && (
+                <div className="border border-brand-500/30 bg-brand-500/10 rounded-xl px-4 py-3 text-sm text-surface-100">
+                  <span className="font-semibold">Cargá la cuenta de cada distribuidor</span>
+                  <span className="block text-xs text-surface-300 mt-0.5">
+                    Usuario y clave del portal, los mismos de siempre. Recién ahí ves tus precios y tu stock.
+                  </span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {linked.filter((p) => {
+                      const s = statuses[p.provider];
+                      return !isListProvider(p.provider) && s && !s.hasCredentials && !s.publicCatalog;
+                    }).map((p) => (
+                      <Link
+                        key={p.provider}
+                        href={`/proveedores/${p.provider}?tab=credentials`}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium border border-brand-400/40 hover:border-brand-300 text-brand-100 rounded-lg px-2.5 py-1.5"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        {p.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {retailer && linked.some((p) => providerHasIvaRate(p.provider)) && (
                 <div className="border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100">
                   <span className="font-semibold">Pedido offline y esquema</span>
                   <span className="block text-xs text-amber-200/80 mt-0.5">
@@ -195,9 +221,10 @@ export default function ProveedoresPage() {
                   </div>
                 ) : linked.length === 0 ? (
                   <div className="border border-surface-800 rounded-xl p-8 text-center flex flex-col gap-2">
-                    <p className="text-sm text-surface-300">Todavía no estás conectado con ningún proveedor.</p>
-                    <p className="text-xs text-surface-500">
-                      Pedile un código de acceso al distribuidor con el que ya trabajás y canjealo acá abajo.
+                    <p className="text-sm text-surface-200">Todavía no tenés distribuidores vinculados.</p>
+                    <p className="text-xs text-surface-400 max-w-md mx-auto leading-relaxed">
+                      Cuando NODO te vincule uno, aparece acá con su nombre. Entrá y tocá Cargar cuenta:
+                      el usuario y la clave del portal. Si te dieron un código, también podés canjearlo más abajo.
                     </p>
                   </div>
                 ) : (

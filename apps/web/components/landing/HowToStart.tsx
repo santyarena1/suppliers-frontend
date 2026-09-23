@@ -7,17 +7,17 @@ const STEPS = [
   {
     n: "01",
     t: "Creás tu cuenta",
-    d: "Usuario, mail y contraseña. No pedimos tarjeta para empezar ni datos de tu contador.",
+    d: "Usuario, mail y contraseña. Nombrás tu comercio. No pedimos tarjeta ni datos de tu contador.",
   },
   {
     n: "02",
-    t: "Conectás tus distribuidores",
-    d: "Con el código de acceso que te da tu vendedor, o cargando la planilla de precios que ya te manda por mail o WhatsApp. Los dos caminos valen.",
+    t: "Te vinculamos los distribuidores",
+    d: "NODO conecta los que ya usás. Hasta ese momento el recorrido es de práctica: dos distribuidores de ejemplo que después desaparecen.",
   },
   {
     n: "03",
-    t: "NODO sincroniza y ordena",
-    d: "Lee el catálogo, detecta la estructura de cada lista y deja precios, stock e impuestos al día. La siguiente lista del mismo proveedor entra sola, con el formato ya aprendido.",
+    t: "Cargás la cuenta de cada portal",
+    d: "En Proveedores, cada distribuidor pide el mismo usuario y la misma clave con los que entrás a su sitio. Con eso se ven tus precios y tu stock.",
   },
   {
     n: "04",
@@ -33,7 +33,7 @@ export default function HowToStart() {
         <SectionHead
           title={<>Cómo<br />empezás</>}
           meta="04 · Puesta en marcha"
-          lead="No hay migración ni integración de la que ocuparse. Lo más pesado, que es cargar la primera lista, lo hace el sistema."
+          lead="Creás la cuenta, nombrás el comercio y recorrés la app con datos de práctica. Tus distribuidores reales los vincula NODO; después cargás la cuenta de cada portal."
         />
 
         <ol className="relative">

@@ -258,8 +258,8 @@ function OnboardingInner() {
             {status?.preview
               ? "Estás probando el onboarding desde cero. Al terminar volvés a Administración."
               : status?.hasTenant
-                ? "Te guiamos por la app con clics resaltados: proveedores, búsqueda, filtros, carrito y pedidos."
-                : "Plan PRO. Nombrás la organización y explorás con catálogo y pedidos de prueba."}
+                ? "Primero practicás con datos de ejemplo. Tus distribuidores reales los vincula NODO y después cargás la cuenta de cada portal."
+                : "Plan PRO. Nombrás el comercio y practicás con catálogo de ejemplo. Los precios reales vienen cuando cargás cada cuenta."}
           </p>
 
           {showExistingCta ? (
@@ -323,7 +323,7 @@ function OnboardingInner() {
               <h2 className="ob__card-title">¿Cómo se llama tu local?</h2>
               <p className="lnd-body">
                 Ese nombre es lo que ven distribuidores y equipo. Entrá al plan{" "}
-                <span style={{ color: "var(--mist)" }}>PRO</span>.
+                <span style={{ color: "var(--mist)" }}>PRO</span>. El recorrido que sigue es de práctica.
               </p>
 
               <label className="ob__field">
@@ -365,8 +365,14 @@ function OnboardingInner() {
                 {step.ctaLabel}
                 <ArrowRight className="w-4 h-4 lnd-btn__arrow" />
               </button>
+              <ol className="ob__sequence">
+                <li><b>01</b> Nombrás el comercio. Eso es esta pantalla.</li>
+                <li><b>02</b> Recorrés la app con Demo Norte y Demo Sur. No son tus proveedores.</li>
+                <li><b>03</b> NODO te vincula los distribuidores que ya usás.</li>
+                <li><b>04</b> En Proveedores tocás Cargar cuenta, con el usuario y la clave de cada portal.</li>
+              </ol>
               <p className="lnd-note">
-                Al crear cargamos 2 distribuidores demo, ~10 productos con foto y 2 pedidos para probar filtros y el flujo completo.
+                Al crear cargamos 2 distribuidores de práctica, unos 10 productos con foto y 2 pedidos. Se van cuando cerrás el recorrido.
               </p>
             </form>
           ) : step ? (
@@ -384,11 +390,21 @@ function OnboardingInner() {
                 <ul className="ob__bullets">
                   <li>Plan PRO activo</li>
                   <li>
-                    {status.demo.productCount} productos demo ·{" "}
+                    Práctica: {status.demo.productCount} productos ·{" "}
                     {status.demo.distributors.map((d) => d.name).join(" · ")}
                   </li>
                   <li>Buscá: {status.demo.searchHints.map((h) => `«${h}»`).join(", ")}</li>
+                  <li>Al terminar, estos datos se van. Tus distribuidores reales los vincula NODO.</li>
                 </ul>
+              )}
+
+              {step.id === "done" && (
+                <ol className="ob__sequence">
+                  <li><b>01</b> Cerrá esta guía. El catálogo de práctica deja de verse.</li>
+                  <li><b>02</b> Cuando te vinculemos un distribuidor, aparece en Proveedores con su nombre.</li>
+                  <li><b>03</b> Entrá y tocá Cargar cuenta. Usuario y clave del portal, los mismos de siempre.</li>
+                  <li><b>04</b> Sincronizá. Ahí están tus precios y tu stock.</li>
+                </ol>
               )}
 
               <div className="ob__actions">

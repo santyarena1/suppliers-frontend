@@ -194,8 +194,9 @@ function RetailerHome() {
             </p>
           ) : myProviders.length === 0 ? (
             <p className="hm__empty">
-              Todavía no estás conectado con ningún proveedor.{" "}
-              <Link href="/proveedores">Canjeá el código que te dieron</Link> para empezar.
+              Todavía no tenés distribuidores vinculados. Cuando aparezcan, entrá a cada uno y tocá Cargar cuenta
+              con el usuario del portal.{" "}
+              <Link href="/proveedores">Ir a Proveedores</Link>
             </p>
           ) : (
             <div className="hm__rail">
