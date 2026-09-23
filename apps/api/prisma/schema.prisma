@@ -518,8 +518,9 @@ model TgsSettings {
 // todos. Lo que cambia entre comercios es cuánto cuesta y cuánto hay, y eso vive
 // en `TenantProductOffer`.
 //
-// `raw` guarda la respuesta cruda completa del proveedor para ese producto, así
-// ningún dato se pierde aunque hoy no lo mostremos en el frontend.
+// `raw` guarda datos del producto que no tienen columna propia (descripción larga,
+// códigos, alícuotas). No es de una cuenta: es la misma ficha para todos los
+// locales de ese distribuidor. Los importes no se leen de acá; viven en la oferta.
 model ProviderSyncCache {
   id              String   @id @default(uuid())
   provider        String
