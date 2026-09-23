@@ -11,7 +11,7 @@ import { Check, DollarSign, GitCompare, ImageOff, MapPin, Package, Sparkles } fr
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { proxyImg, formatARS, formatUSD } from "@/lib/format";
+import { proxyImg, formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { linePricing, formatAlicuota } from "@/lib/tax";
 import { useProviderDisplay } from "@/lib/providerDisplay";
@@ -91,6 +91,7 @@ export default function ProductCard({
   const brand = productDisplayBrand(product);
   const category = productDisplayCategory(product);
 
+  const priced = hasOwnPrice(product);
   const pricing = purchaseLinePricing(product, policy, priceMode);
   const includeIibb = withIibb && pricing.mode !== "offline";
   const shown = displayAmountFromPricing(pricing, {
@@ -110,7 +111,7 @@ export default function ProductCard({
 
   const canScheme = Boolean(policy?.acceptsScheme && policy.schemeIvaAdjustment);
   const schemeHint =
-    priceMode === "list" && canScheme
+    priced && priceMode === "list" && canScheme
       ? (() => {
           const sp = purchaseLinePricing(product, policy, "scheme");
           const sd = displayAmountFromPricing(sp, {
@@ -130,7 +131,7 @@ export default function ProductCard({
    * Precios por forma de pago. No tachan el precio de arriba: son otra opción
    * de compra, no un reemplazo. Un recargo sube y un descuento baja.
    */
-  const payPrices = pricedPaymentOptions(policy?.paymentOptions).map((o) => ({
+  const payPrices = !priced ? [] : pricedPaymentOptions(policy?.paymentOptions).map((o) => ({
     id: o.id,
     label: o.label,
     kind: o.kind,
@@ -276,17 +277,29 @@ export default function ProductCard({
         </p>
 
         <p className="pc__price">
-          <span className="pc__amount pc-mono">{primary}</span>
-          {prevFormatted ? (
-            <span className="pc__prev pc-mono" title="Precio de la sincronización anterior">
-              antes <s>{prevFormatted}</s>
-            </span>
-          ) : null}
+          {priced ? (
+            <>
+              <span className="pc__amount pc-mono">{primary}</span>
+              {prevFormatted ? (
+                <span className="pc__prev pc-mono" title="Precio de la sincronización anterior">
+                  antes <s>{prevFormatted}</s>
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <span className="pc__amount">Sin precio</span>
+          )}
         </p>
 
-        <p className="pc__base pc-mono" title={taxTitle}>
-          <span>{breakdownBase}</span>
-          <span>{breakdownTax}</span>
+        <p className="pc__base pc-mono" title={priced ? taxTitle : undefined}>
+          {priced ? (
+            <>
+              <span>{breakdownBase}</span>
+              <span>{breakdownTax}</span>
+            </>
+          ) : (
+            <span>Precio y stock al cargar la cuenta</span>
+          )}
         </p>
 
         {/* Un solo renglón de aviso, siempre presente aunque esté vacío */}
@@ -370,12 +383,14 @@ export default function ProductCard({
             >
               <DollarSign className="w-3.5 h-3.5" />
             </button>
-            <AddToCartButton
-              product={product}
-              variant="stepper"
-              tone="light"
-              channel={showingOffline ? "offline" : "online"}
-            />
+            {priced && (
+              <AddToCartButton
+                product={product}
+                variant="stepper"
+                tone="light"
+                channel={showingOffline ? "offline" : "online"}
+              />
+            )}
           </div>
         </div>
 

@@ -12,7 +12,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
-import { fichaRaw, NO_RULES, toProductView, type OfferRules } from "./catalog-view";
+import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
@@ -857,9 +857,9 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /**
-   * Un comercio solo ve los productos que él mismo sincronizó con su cuenta: sin
-   * oferta no hay precio que mostrar, y un precio traído con la cuenta de otro no
-   * sería el suyo.
+   * Vinculado, ve la ficha universal del distribuidor. El precio y el stock salen
+   * solo de su oferta: si todavía no sincronizó su cuenta, el producto se lista
+   * igual, sin importe ni stock. Nunca se lee la oferta de otro local.
    */
   async search(
     tenantId: string,
@@ -919,59 +919,96 @@ export class ProvidersService implements OnModuleInit {
       ],
     };
 
-    const offers = await this.prisma.tenantProductOffer.findMany({
-      where: {
-        tenantId,
-        provider,
-        active: true,
-        AND: [
-          ...(Object.keys(stockWhere).length ? [stockWhere] : []),
-          { product: productWhere },
-        ],
-      },
-      include: { product: true },
-      orderBy: { product: { name: "asc" } },
-      take: buscaPorNombre ? SEARCH_CANDIDATES : SEARCH_LIMIT,
-    });
+    const take = buscaPorNombre ? SEARCH_CANDIDATES : SEARCH_LIMIT;
+    const [offers, sheets] = await Promise.all([
+      this.prisma.tenantProductOffer.findMany({
+        where: {
+          tenantId,
+          provider,
+          active: true,
+          AND: [
+            ...(Object.keys(stockWhere).length ? [stockWhere] : []),
+            { product: productWhere },
+          ],
+        },
+        include: { product: true },
+        orderBy: { product: { name: "asc" } },
+        take,
+      }),
+      this.prisma.providerSyncCache.findMany({
+        where: {
+          provider,
+          offers: { none: { tenantId } },
+          AND: productWhere.AND,
+        },
+        orderBy: { name: "asc" },
+        take,
+      }),
+    ]);
+
+    const matchesBrand = (product: {
+      provider: string;
+      name: string;
+      brand: string | null;
+      category: string | null;
+      subcategory: string | null;
+      ean: string | null;
+      partNumber: string | null;
+    }) =>
+      !brand ||
+      this.catalogEnrichment.productMatchesBrand(product, brand, enrichment) ||
+      product.name.toLowerCase().includes(brand.toLowerCase());
+
+    const ranked = [
+      ...offers
+        .filter((offer) => matchesBrand(offer.product))
+        .map((offer) => ({
+          product: offer.product,
+          score: buscaPorNombre ? scoreCatalogMatch(offer.product, q, tokens) : 0,
+          view: toProductView(offer.product, offer, rules, enrichment),
+        })),
+      ...sheets
+        .filter((product) => matchesBrand(product))
+        .map((product) => ({
+          product,
+          score: buscaPorNombre ? scoreCatalogMatch(product, q, tokens) : 0,
+          view: toSheetView(product, enrichment),
+        })),
+    ];
 
     if (buscaPorNombre) {
-      // sort de V8 es estable: a igual puntaje se conserva el orden alfabético.
-      offers.sort(
-        (a, b) =>
-          scoreCatalogMatch(b.product, q, tokens) - scoreCatalogMatch(a.product, q, tokens)
+      ranked.sort(
+        (a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name, "es")
       );
-      offers.splice(SEARCH_LIMIT);
     }
+    ranked.splice(SEARCH_LIMIT);
 
-    const views = brand
-      ? offers
-          .filter((offer) =>
-            this.catalogEnrichment.productMatchesBrand(offer.product, brand!, enrichment) ||
-            // fallback name-contains ya entró por SQL; aceptar esos también
-            (offer.product.name?.toLowerCase().includes(brand!.toLowerCase()) ?? false)
-          )
-          .map((offer) => toProductView(offer.product, offer, rules, enrichment))
-      : offers.map((offer) => toProductView(offer.product, offer, rules, enrichment));
-
-    return this.withImageAiFlags(views);
+    return this.withImageAiFlags(ranked.map((row) => row.view));
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
   async getProduct(tenantId: string, provider: Provider, externalId: string, viewerUserId?: string) {
     if (!(await this.isProviderVisible(provider))) return null;
     if (!(await this.visibility.isLinked(tenantId, provider, viewerUserId))) return null;
-    const offer = await this.prisma.tenantProductOffer.findUnique({
-      where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
-      include: { product: true },
-    });
-    if (!offer) return null;
-    const [rules, enrichment] = await Promise.all([
-      this.rulesFor(tenantId, provider),
+    const [offer, enrichment] = await Promise.all([
+      this.prisma.tenantProductOffer.findUnique({
+        where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
+        include: { product: true },
+      }),
       this.catalogEnrichment.getContext(),
     ]);
-    const [view] = await this.withImageAiFlags([
-      toProductView(offer.product, offer, rules, enrichment),
-    ]);
+    if (offer) {
+      const rules = await this.rulesFor(tenantId, provider);
+      const [view] = await this.withImageAiFlags([
+        toProductView(offer.product, offer, rules, enrichment),
+      ]);
+      return view;
+    }
+    const sheet = await this.prisma.providerSyncCache.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+    });
+    if (!sheet) return null;
+    const [view] = await this.withImageAiFlags([toSheetView(sheet, enrichment)]);
     return view;
   }
 
@@ -1620,9 +1657,16 @@ export class ProvidersService implements OnModuleInit {
         const action = (rules.get(product.provider) ?? NO_RULES).zeroStockAction;
         if (!hidesZeroStockFromCatalog(action)) return true;
         return isDisplayedInStock(product.stock, 0);
-      })
-      .slice(0, limit);
-    return this.withImageAiFlags(views);
+      });
+    if (views.length < limit) {
+      const sheets = await this.prisma.providerSyncCache.findMany({
+        where: { provider: { in: providers }, offers: { none: { tenantId } } },
+        orderBy: { name: "asc" },
+        take: limit - views.length,
+      });
+      views.push(...sheets.map((product) => toSheetView(product, enrichment)));
+    }
+    return this.withImageAiFlags(views.slice(0, limit));
   }
 
   async getByBrand(
