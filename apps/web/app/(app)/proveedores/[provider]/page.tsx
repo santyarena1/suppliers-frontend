@@ -155,6 +155,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         offlineIvaAdjustment: res.data.offlineIvaAdjustment ?? null,
         schemeIvaAdjustment: res.data.schemeIvaAdjustment ?? null,
         schemeDiscountPercent: res.data.schemeDiscountPercent ?? null,
+        hideUnsyncedCatalog: Boolean(res.data.hideUnsyncedCatalog),
       });
     } catch {
       setConfig(null);
@@ -181,6 +182,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         syncIntervalMinutes: config.syncIntervalMinutes,
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,
+        hideUnsyncedCatalog: Boolean(config.hideUnsyncedCatalog),
         priceMarkupPercent: Number(config.priceMarkupPercent) || 0,
         minStockThreshold: Number(config.minStockThreshold) || 0,
         acceptsOffline: Boolean(config.acceptsOffline),
@@ -634,6 +636,24 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="text-sm font-semibold text-white">Manejo de stock y catálogo</div>
+                          <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">
+                            <div>
+                              <p className="text-sm text-surface-200">Ocultar productos sin precio</p>
+                              <p className="text-xs text-surface-500">
+                                Si todavía no sincronizaste este distribuidor, el buscador muestra la ficha sin precio ni stock. Activá esto para ver solo los productos que ya sincronizaste con tu cuenta.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setConfig({ ...config, hideUnsyncedCatalog: !config.hideUnsyncedCatalog })}
+                              className={`w-10 rounded-full relative transition-colors flex-shrink-0 ${config.hideUnsyncedCatalog ? "bg-brand-600" : "bg-surface-600"}`}
+                              style={{ height: 22 }}
+                              aria-pressed={Boolean(config.hideUnsyncedCatalog)}
+                              aria-label="Ocultar productos sin precio"
+                            >
+                              <span className={`absolute top-0.5 bg-white rounded-full transition-all ${config.hideUnsyncedCatalog ? "left-[22px]" : "left-0.5"}`} style={{ width: 18, height: 18 }} />
+                            </button>
+                          </div>
                           <div>
                             <label className="block text-xs font-medium text-surface-400 mb-1.5">Stock mínimo del proveedor</label>
                             <input

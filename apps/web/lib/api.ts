@@ -1234,6 +1234,8 @@ export interface ProviderConfig {
   syncIntervalMinutes: number;
   missingProductAction: MissingProductAction;
   zeroStockAction: ZeroStockAction;
+  /** No listar fichas de este distribuidor que este local todavía no sincronizó. */
+  hideUnsyncedCatalog: boolean;
   priceMarkupPercent: number | string;
   minStockThreshold: number;
   acceptsOffline: boolean;

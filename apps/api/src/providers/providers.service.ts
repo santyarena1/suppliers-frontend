@@ -110,6 +110,7 @@ export class ProvidersService implements OnModuleInit {
       paymentOptions: [] as PaymentOption[],
       missingProductAction: "KEEP" as const,
       zeroStockAction: "KEEP" as const,
+      hideUnsyncedCatalog: false,
       priceMarkupPercent: 0,
       minStockThreshold: 0,
       acceptsOffline: false,
@@ -922,6 +923,7 @@ export class ProvidersService implements OnModuleInit {
     };
 
     const take = buscaPorNombre ? SEARCH_CANDIDATES : SEARCH_LIMIT;
+    const hideSheets = await this.hidesUnsyncedCatalog(tenantId, provider);
     const [offers, sheets] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
@@ -937,15 +939,17 @@ export class ProvidersService implements OnModuleInit {
         orderBy: { product: { name: "asc" } },
         take,
       }),
-      this.prisma.providerSyncCache.findMany({
-        where: {
-          provider,
-          offers: { none: { tenantId } },
-          AND: productWhere.AND,
-        },
-        orderBy: { name: "asc" },
-        take,
-      }),
+      hideSheets
+        ? Promise.resolve([])
+        : this.prisma.providerSyncCache.findMany({
+            where: {
+              provider,
+              offers: { none: { tenantId } },
+              AND: productWhere.AND,
+            },
+            orderBy: { name: "asc" },
+            take,
+          }),
     ]);
 
     const matchesBrand = (product: {
@@ -1011,6 +1015,7 @@ export class ProvidersService implements OnModuleInit {
       where: { provider_externalId: { provider, externalId } },
     });
     if (!sheet) return null;
+    if (await this.hidesUnsyncedCatalog(tenantId, provider)) return null;
     const [view] = await this.withImageAiFlags([toSheetView(sheet, enrichment)]);
     return view;
   }
@@ -1095,6 +1100,21 @@ export class ProvidersService implements OnModuleInit {
       where: { capturedAt: { lt: cutoff } },
     });
     return { deleted: res.count, cutoff };
+  }
+
+  /** Este local eligió no ver fichas de este distribuidor hasta sincronizar su cuenta. */
+  private async hidesUnsyncedCatalog(tenantId: string, provider: string): Promise<boolean> {
+    const hidden = await this.providersHidingUnsynced(tenantId, [provider]);
+    return hidden.has(provider);
+  }
+
+  private async providersHidingUnsynced(tenantId: string, providers: string[]): Promise<Set<string>> {
+    if (providers.length === 0) return new Set();
+    const rows = await this.prisma.providerSyncConfig.findMany({
+      where: { tenantId, provider: { in: providers }, hideUnsyncedCatalog: true },
+      select: { provider: true },
+    });
+    return new Set(rows.map((row) => row.provider));
   }
 
   /** Markup y umbral configurados por la organización para un proveedor. */
@@ -1772,12 +1792,16 @@ export class ProvidersService implements OnModuleInit {
         return isDisplayedInStock(product.stock, 0);
       });
     if (views.length < limit) {
-      const sheets = await this.prisma.providerSyncCache.findMany({
-        where: { provider: { in: providers }, offers: { none: { tenantId } } },
-        orderBy: { name: "asc" },
-        take: limit - views.length,
-      });
-      views.push(...sheets.map((product) => toSheetView(product, enrichment)));
+      const hidden = await this.providersHidingUnsynced(tenantId, providers);
+      const visible = providers.filter((provider) => !hidden.has(provider));
+      if (visible.length > 0) {
+        const sheets = await this.prisma.providerSyncCache.findMany({
+          where: { provider: { in: visible }, offers: { none: { tenantId } } },
+          orderBy: { name: "asc" },
+          take: limit - views.length,
+        });
+        views.push(...sheets.map((product) => toSheetView(product, enrichment)));
+      }
     }
     const flagged = await this.withImageAiFlags(views.slice(0, limit));
     return this.withPriceDropMeta(tenantId, flagged);
@@ -1968,6 +1992,7 @@ function serializeSyncConfig<T extends object>(c: T) {
     manualPerceptionsPercent: row.manualPerceptionsPercent == null ? null : Number(row.manualPerceptionsPercent),
     paymentOptions: parsePaymentOptions(row.paymentOptions),
     acceptsOffline: Boolean(row.acceptsOffline),
+    hideUnsyncedCatalog: Boolean(row.hideUnsyncedCatalog),
     acceptsScheme: Boolean(row.acceptsScheme),
     offlineIvaAdjustment: (row.offlineIvaAdjustment as IvaAdjustment | null | undefined) ?? null,
     schemeIvaAdjustment: (row.schemeIvaAdjustment as IvaAdjustment | null | undefined) ?? null,

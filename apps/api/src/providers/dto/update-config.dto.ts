@@ -83,6 +83,11 @@ export class UpdateProviderConfigDto {
   @IsEnum(ZeroStockAction)
   zeroStockAction?: ZeroStockAction;
 
+  /** No listar fichas de este distribuidor que este local todavía no sincronizó. */
+  @IsOptional()
+  @IsBoolean()
+  hideUnsyncedCatalog?: boolean;
+
   @IsOptional()
   @IsNumber()
   @Min(-50)
