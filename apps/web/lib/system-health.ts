@@ -1,9 +1,9 @@
 /**
  * Estado de disponibilidad del backend.
  *
- * - `ok`: /health responde y no está en recovery de DB
- * - `updating`: health OK pero `db: "waiting"` (Postgres reiniciando / migrando)
- * - `down`: no hay respuesta de red o health falla
+ * - `ok`: /health responde y `db` está ok (o ausente en builds viejos)
+ * - `updating`: API vivo pero Postgres en `waiting` / `down`, o 503 de recovery
+ * - `down`: no hay respuesta de red o health HTTP falla
  */
 
 export type SystemHealthKind = "ok" | "updating" | "down";
@@ -76,14 +76,19 @@ type HealthPayload = {
   db?: string;
 };
 
-function parseHealthBody(body: unknown): { ok: boolean; waitingDb: boolean } {
-  if (!body || typeof body !== "object") return { ok: false, waitingDb: false };
+export function parseHealthBody(body: unknown): {
+  ok: boolean;
+  db: "ok" | "waiting" | "down" | "unknown";
+} {
+  if (!body || typeof body !== "object") return { ok: false, db: "unknown" };
   const raw = body as HealthPayload;
   const data = raw.data && typeof raw.data === "object" ? raw.data : raw;
   const status = data.status;
-  const db = data.db;
+  const dbRaw = data.db;
   const ok = status === "ok" || raw.success === true;
-  return { ok: Boolean(ok), waitingDb: db === "waiting" };
+  const db =
+    dbRaw === "ok" || dbRaw === "waiting" || dbRaw === "down" ? dbRaw : "unknown";
+  return { ok: Boolean(ok), db };
 }
 
 /**
@@ -111,12 +116,19 @@ export async function probeSystemHealth(signal?: AbortSignal): Promise<SystemHea
     } catch {
       body = null;
     }
-    const { ok, waitingDb } = parseHealthBody(body);
-    if (waitingDb) {
+    const { ok, db } = parseHealthBody(body);
+    if (db === "waiting") {
       return {
         kind: "updating",
         checkedAt: Date.now(),
         message: "La base de datos está reiniciando. Volvé en un momento.",
+      };
+    }
+    if (db === "down") {
+      return {
+        kind: "updating",
+        checkedAt: Date.now(),
+        message: "La base de datos no está disponible. Volvé en un momento.",
       };
     }
     if (!ok) {
@@ -126,6 +138,8 @@ export async function probeSystemHealth(signal?: AbortSignal): Promise<SystemHea
         message: "El servidor respondió de forma inesperada.",
       };
     }
+    // `db: "unknown"`: builds viejos del API sin campo db → tratamos como ok
+    // si status es ok (el probe de red ya pasó).
     return { kind: "ok", checkedAt: Date.now() };
   } catch {
     if (signal?.aborted) return snapshot;
@@ -137,5 +151,6 @@ export async function probeSystemHealth(signal?: AbortSignal): Promise<SystemHea
   }
 }
 
-/** Mensaje de 503 de recovery de Postgres (apps/api recovery-gate). */
-export const DB_RESTARTING_HINT = /base de datos está reiniciando|database.*restart/i;
+/** 503 de recovery / outage de Postgres (apps/api recovery-gate). */
+export const DB_OUTAGE_HINT =
+  /base de datos está reiniciando|base de datos no está disponible|database.*(restart|unavailable)/i;

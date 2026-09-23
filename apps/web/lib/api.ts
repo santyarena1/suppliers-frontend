@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
-import { DB_RESTARTING_HINT, reportSystemUpdating } from "./system-health";
+import { DB_OUTAGE_HINT, reportSystemUpdating } from "./system-health";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -39,9 +39,9 @@ api.interceptors.response.use(
       const message = String(
         error?.response?.data?.message ?? error?.message ?? ""
       );
-      // Recovery de Postgres (apps/api recovery-gate): 503 con mensaje fijo.
+      // Outage de Postgres (apps/api recovery-gate / health db): 503 con mensaje fijo.
       // La caída total del API la confirma ApiHealthGate con /health.
-      if (status === 503 && DB_RESTARTING_HINT.test(message)) {
+      if (status === 503 && DB_OUTAGE_HINT.test(message)) {
         reportSystemUpdating(message);
       }
     }
