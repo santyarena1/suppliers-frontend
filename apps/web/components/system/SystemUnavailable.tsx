@@ -97,7 +97,9 @@ export default function SystemUnavailable({
               <RefreshCw className="w-3.5 h-3.5" />
               {retryLabel}
             </button>
-            <p className="sys__hint lnd-mono">Se reintenta solo cada pocos segundos</p>
+            {variant !== "maintenance" && (
+              <p className="sys__hint lnd-mono">Se reintenta solo cada pocos segundos</p>
+            )}
           </div>
         )}
 
