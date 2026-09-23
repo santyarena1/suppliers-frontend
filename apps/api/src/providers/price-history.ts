@@ -1,5 +1,12 @@
 export const PRICE_HISTORY_TZ = "America/Argentina/Buenos_Aires";
 
+/** Cuánto historial guardamos / devolvemos: 12 meses. */
+export const PRICE_HISTORY_RETENTION_DAYS = 365;
+
+export function priceHistoryRetentionCutoff(now = new Date()): Date {
+  return new Date(now.getTime() - PRICE_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+}
+
 /**
  * Día calendario en Argentina (YYYY-MM-DD).
  * Prisma guarda `DateTime` como `timestamp without time zone` con reloj UTC:

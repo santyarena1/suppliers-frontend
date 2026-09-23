@@ -16,7 +16,12 @@ import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules } from 
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
-import { fillPriceHistoryDays, pgDateToYmd } from "./price-history";
+import {
+  fillPriceHistoryDays,
+  argentinaDayKey,
+  priceHistoryRetentionCutoff,
+  pgDateToYmd,
+} from "./price-history";
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct, ProviderAdapter } from "./types";
@@ -1010,13 +1015,40 @@ export class ProvidersService implements OnModuleInit {
   /**
    * Serie de precios real de esta organización (solo puntos donde el precio
    * efectivamente cambió). Se guarda cruda, así que el markup se aplica al leer y
-   * el gráfico sigue el precio de venta actual.
+   * el gráfico sigue el precio de venta actual. Ventana máxima: 12 meses.
    */
-  async getPriceHistory(tenantId: string, provider: Provider, externalId: string) {
-    const [points, rules, offer] = await Promise.all([
+  async getPriceHistory(
+    tenantId: string,
+    provider: Provider,
+    externalId: string,
+    opts: { from?: Date; to?: Date } = {}
+  ) {
+    const now = new Date();
+    const retentionStart = priceHistoryRetentionCutoff(now);
+    const to = opts.to && opts.to.getTime() < now.getTime() ? opts.to : now;
+    const fromRaw = opts.from && !Number.isNaN(opts.from.getTime()) ? opts.from : retentionStart;
+    const from = fromRaw.getTime() < retentionStart.getTime() ? retentionStart : fromRaw;
+
+    const [points, before, rules, offer] = await Promise.all([
       this.prisma.productPriceHistory.findMany({
-        where: { tenantId, provider, externalId },
+        where: {
+          tenantId,
+          provider,
+          externalId,
+          capturedAt: { gte: from, lte: to },
+        },
         orderBy: { capturedAt: "asc" },
+        select: { price: true, finalPrice: true, currency: true, capturedAt: true },
+      }),
+      // Precio vigente al inicio del rango (último cambio anterior).
+      this.prisma.productPriceHistory.findFirst({
+        where: {
+          tenantId,
+          provider,
+          externalId,
+          capturedAt: { lt: from, gte: retentionStart },
+        },
+        orderBy: { capturedAt: "desc" },
         select: { price: true, finalPrice: true, currency: true, capturedAt: true },
       }),
       this.rulesFor(tenantId, provider),
@@ -1025,27 +1057,41 @@ export class ProvidersService implements OnModuleInit {
         select: { price: true, finalPrice: true, currency: true, syncedAt: true },
       }),
     ]);
-    const serie = points.map((point) => ({
-      ...point,
+
+    const raw = before ? [before, ...points] : points;
+    const serie = raw.map((point, idx) => ({
       price: withMarkup(point.price, rules.markupPercent),
       finalPrice: withMarkup(point.finalPrice, rules.markupPercent),
+      currency: point.currency,
+      // El punto “antes del rango” se ancla al inicio para no alargar la serie hacia atrás.
+      capturedAt: before && idx === 0 ? from : point.capturedAt,
     }));
 
-    // El historial guarda una fila solo cuando el precio cambia, así que la serie
-    // terminaba en el último cambio: un producto que no se movió en un mes no
-    // tenía nada que graficar, y uno que cambió hace dos semanas parecía no tener
-    // precio desde entonces. El precio vigente es el último tramo de la serie.
+    // El precio vigente es el último tramo de la serie hasta `to`.
     if (offer && (offer.price != null || offer.finalPrice != null)) {
       const ultimo = serie[serie.length - 1];
+      const vigenteAt = offer.syncedAt.getTime() > to.getTime() ? to : offer.syncedAt;
       const hoy = {
         price: withMarkup(offer.price, rules.markupPercent),
         finalPrice: withMarkup(offer.finalPrice, rules.markupPercent),
         currency: offer.currency,
-        capturedAt: offer.syncedAt,
+        capturedAt: vigenteAt,
       };
       if (!ultimo || ultimo.capturedAt.getTime() < hoy.capturedAt.getTime()) serie.push(hoy);
     }
-    return fillPriceHistoryDays(serie);
+
+    const filled = fillPriceHistoryDays(serie, to);
+    const fromKey = argentinaDayKey(from);
+    return filled.filter((p) => argentinaDayKey(p.capturedAt) >= fromKey);
+  }
+
+  /** Borra historial más viejo que 12 meses. */
+  async purgeOldPriceHistory() {
+    const cutoff = priceHistoryRetentionCutoff();
+    const res = await this.prisma.productPriceHistory.deleteMany({
+      where: { capturedAt: { lt: cutoff } },
+    });
+    return { deleted: res.count, cutoff };
   }
 
   /** Markup y umbral configurados por la organización para un proveedor. */

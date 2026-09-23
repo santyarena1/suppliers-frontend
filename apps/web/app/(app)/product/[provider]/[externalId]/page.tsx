@@ -485,7 +485,12 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                     Todavía no hay precio de tu cuenta para graficar.
                   </p>
                 ) : priceHistory.length >= 1 ? (
-                  <PriceHistoryChart points={priceHistory} format={money} />
+                  <PriceHistoryChart
+                    points={priceHistory}
+                    product={product}
+                    policy={policy}
+                    format={money}
+                  />
                 ) : (
                   // Solo se guarda una fila cuando el precio cambia, así que un
                   // producto estable no tiene serie que graficar. Decirlo con el
