@@ -456,26 +456,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 </aside>
               </div>
 
-              {(product.description || product.longDescription) && (
-                <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-                  <h2 className="pp__sec-title">Descripción</h2>
-                  {product.description && (
-                    <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-                      {product.description}
-                    </p>
-                  )}
-                  {product.longDescription &&
-                    product.longDescription !== product.description && (
-                      <p className="text-sm text-surface-400 leading-relaxed whitespace-pre-wrap mt-3">
-                        {product.longDescription}
-                      </p>
-                    )}
-                </section>
-              )}
-
-              <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
-
-              <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+              {/* Justo debajo del precio en mobile: no queda enterrado tras hechos/descripción. */}
+              <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-3 sm:p-5">
                 <h2 className="pp__sec-title">
                   <TrendingUp className="w-3 h-3" />
                   Evolución de precio
@@ -512,6 +494,25 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   </div>
                 )}
               </section>
+
+              {(product.description || product.longDescription) && (
+                <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+                  <h2 className="pp__sec-title">Descripción</h2>
+                  {product.description && (
+                    <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+                      {product.description}
+                    </p>
+                  )}
+                  {product.longDescription &&
+                    product.longDescription !== product.description && (
+                      <p className="text-sm text-surface-400 leading-relaxed whitespace-pre-wrap mt-3">
+                        {product.longDescription}
+                      </p>
+                    )}
+                </section>
+              )}
+
+              <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
 
               {related.length > 0 && (
                 <section>
