@@ -42,7 +42,7 @@ import Link from "next/link";
 import {
   Search, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight, GitCompare, Check, SlidersHorizontal,
+  ChevronDown, ChevronRight, GitCompare, Check, SlidersHorizontal, TrendingDown,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc" | "name_desc";
@@ -194,7 +194,7 @@ function SearchPage() {
     return Array.isArray(res.data) ? res.data : [];
   }
 
-  /** "Ver todas": las bajas pasan a la grilla de resultados, con sus filtros. */
+  /** "Ver todas": al menos 100 bajas (última semana; completa con días previos). */
   async function showAllPriceDrops() {
     setError("");
     setLoading(true);
@@ -204,12 +204,14 @@ function SearchPage() {
     setSelectedCategories(new Set());
     setMinPrice("");
     setMaxPrice("");
+    setOnlyPriceDrops(false);
     try {
-      const res = await catalogApi.priceDrops(300, { all: true });
+      const res = await catalogApi.priceDrops(100);
       const data = Array.isArray(res.data) ? res.data : [];
       setResults(data);
       setSearched(true);
       setDropsView(true);
+      setSortBy("default");
       setActiveQuery("Bajaron de precio");
     } catch {
       setError("No se pudieron traer las bajas de precio.");
@@ -237,6 +239,8 @@ function SearchPage() {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [hideNoImage, setHideNoImage] = useState(false);
+  /** Solo SKUs que bajaron en la última semana (orden por % de descuento). */
+  const [onlyPriceDrops, setOnlyPriceDrops] = useState(false);
   const [collapsedProviders, setCollapsedProviders] = useState<Set<string>>(new Set());
 
   // Calculate price bounds for filter
@@ -439,6 +443,8 @@ function SearchPage() {
     setMinPrice("");
     setMaxPrice("");
     setHideNoImage(false);
+    setOnlyPriceDrops(false);
+    setDropsView(false);
     setSelectedBrands(new Set());
     setSelectedCategories(new Set());
     setPriceView("list");
@@ -505,6 +511,9 @@ function SearchPage() {
       }
     }
     if (hideNoImage) arr = arr.filter((p) => !!p.imageUrl);
+    if (onlyPriceDrops) {
+      arr = arr.filter((p) => (p.priceDropPercent ?? 0) > 0);
+    }
     if (minPrice) {
       const m = parseFloat(minPrice);
       if (!isNaN(m)) arr = arr.filter((p) => parsePrice(p.price) >= m);
@@ -513,13 +522,24 @@ function SearchPage() {
       const m = parseFloat(maxPrice);
       if (!isNaN(m)) arr = arr.filter((p) => parsePrice(p.price) <= m);
     }
-    if (sortBy === "price_asc") arr = [...arr].sort((a, b) => sortPrice(a) - sortPrice(b));
-    if (sortBy === "price_desc") arr = [...arr].sort((a, b) => sortPrice(b) - sortPrice(a));
-    if (sortBy === "name_asc") arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-    if (sortBy === "name_desc") arr = [...arr].sort((a, b) => (b.name || "").localeCompare(a.name || ""));
+    // “Bajaron de precio”: siempre por % de descuento. En “Ver todas” (dropsView)
+    // el defecto también es %; el usuario puede cambiar a precio/nombre.
+    if (onlyPriceDrops || (dropsView && sortBy === "default")) {
+      arr = [...arr].sort(
+        (a, b) => (b.priceDropPercent ?? 0) - (a.priceDropPercent ?? 0),
+      );
+    } else if (sortBy === "price_asc") {
+      arr = [...arr].sort((a, b) => sortPrice(a) - sortPrice(b));
+    } else if (sortBy === "price_desc") {
+      arr = [...arr].sort((a, b) => sortPrice(b) - sortPrice(a));
+    } else if (sortBy === "name_asc") {
+      arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+    } else if (sortBy === "name_desc") {
+      arr = [...arr].sort((a, b) => (b.name || "").localeCompare(a.name || ""));
+    }
     return arr;
   }, [
-    results, hideNoImage, minPrice, maxPrice, sortBy, priceMode,
+    results, hideNoImage, onlyPriceDrops, minPrice, maxPrice, sortBy, priceMode,
     purchasePolicies, withIva, withIibb, iibbEpoch,
     dropsView, selectedProviders, selectedBrands, selectedCategories,
   ]);
@@ -771,7 +791,7 @@ function SearchPage() {
     return () => el.removeEventListener("scroll", onScroll);
   }, [searched, setUiState]);
 
-  const hasInResultsFilter = Boolean(minPrice || maxPrice || hideNoImage);
+  const hasInResultsFilter = Boolean(minPrice || maxPrice || hideNoImage || onlyPriceDrops);
   const canSearch =
     Boolean(query.trim() || brandFilter.trim() || selectedBrands.size > 0 || selectedCategories.size > 0);
 
@@ -782,6 +802,7 @@ function SearchPage() {
     (includeOutOfStock ? 1 : 0) +
     (priceView !== "list" ? 1 : 0) +
     (hideNoImage ? 1 : 0) +
+    (onlyPriceDrops ? 1 : 0) +
     (minPrice || maxPrice ? 1 : 0);
 
   const categoryOptions = useMemo(
@@ -1131,6 +1152,21 @@ function SearchPage() {
                   >
                     Con imagen
                   </button>
+                  {!dropsView && (
+                    <button
+                      type="button"
+                      onClick={() => setOnlyPriceDrops((v) => !v)}
+                      className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all inline-flex items-center gap-1 ${
+                        onlyPriceDrops
+                          ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
+                          : "border-surface-700 text-surface-500 hover:text-surface-300"
+                      }`}
+                      title="Solo productos que bajaron en la última semana, ordenados por % de descuento"
+                    >
+                      <TrendingDown className="w-3 h-3" />
+                      Bajaron de precio
+                    </button>
+                  )}
                 </>
               )}
 
@@ -1166,6 +1202,7 @@ function SearchPage() {
                           setMinPrice("");
                           setMaxPrice("");
                           setHideNoImage(false);
+                          setOnlyPriceDrops(false);
                         }}
                         className="text-surface-500 hover:text-white flex items-center gap-1"
                       >
@@ -1175,9 +1212,10 @@ function SearchPage() {
                     <div className="flex items-center gap-1">
                       <ArrowUpDown className="w-3 h-3 text-surface-500" />
                       <select
-                        value={sortBy}
+                        value={onlyPriceDrops ? "default" : sortBy}
                         onChange={(e) => setSortBy(e.target.value as SortKey)}
-                        className="bg-transparent text-surface-300 focus:outline-none cursor-pointer max-w-[7.5rem]"
+                        disabled={onlyPriceDrops}
+                        className="bg-transparent text-surface-300 focus:outline-none cursor-pointer max-w-[7.5rem] disabled:opacity-50"
                       >
                         <option value="default">Defecto</option>
                         <option value="price_asc">Precio ↑</option>
@@ -1222,6 +1260,22 @@ function SearchPage() {
                     >
                       Con imagen
                     </button>
+
+                    {!dropsView && (
+                      <button
+                        type="button"
+                        onClick={() => setOnlyPriceDrops((v) => !v)}
+                        className={`text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all inline-flex items-center gap-1 ${
+                          onlyPriceDrops
+                            ? "border-emerald-500 bg-emerald-500/15 text-emerald-300"
+                            : "border-surface-700 text-surface-500 hover:text-surface-300"
+                        }`}
+                        title="Solo productos que bajaron en la última semana, ordenados por % de descuento"
+                      >
+                        <TrendingDown className="w-3 h-3" />
+                        Bajaron de precio
+                      </button>
+                    )}
 
                     <button
                       type="button"
@@ -1282,6 +1336,7 @@ function SearchPage() {
                           setMinPrice("");
                           setMaxPrice("");
                           setHideNoImage(false);
+                          setOnlyPriceDrops(false);
                         }}
                         className="text-[11px] text-surface-500 hover:text-white flex items-center gap-1"
                       >
@@ -1301,9 +1356,10 @@ function SearchPage() {
                     <div className="flex items-center gap-1">
                       <ArrowUpDown className="w-3 h-3 text-surface-500" />
                       <select
-                        value={sortBy}
+                        value={onlyPriceDrops ? "default" : sortBy}
                         onChange={(e) => setSortBy(e.target.value as SortKey)}
-                        className="bg-transparent text-surface-300 focus:outline-none cursor-pointer"
+                        disabled={onlyPriceDrops}
+                        className="bg-transparent text-surface-300 focus:outline-none cursor-pointer disabled:opacity-50"
                       >
                         <option value="default">Defecto</option>
                         <option value="price_asc">Precio ↑</option>

@@ -3,6 +3,12 @@ export const PRICE_HISTORY_TZ = "America/Argentina/Buenos_Aires";
 /** Cuánto historial guardamos / devolvemos: 12 meses. */
 export const PRICE_HISTORY_RETENTION_DAYS = 365;
 
+/**
+ * Ventana de “bajaron de precio” en catálogo / búsqueda: solo cuentan bajas
+ * de los últimos N días calendario (Argentina).
+ */
+export const PRICE_DROP_LOOKBACK_DAYS = 7;
+
 export function priceHistoryRetentionCutoff(now = new Date()): Date {
   return new Date(now.getTime() - PRICE_HISTORY_RETENTION_DAYS * 24 * 60 * 60 * 1000);
 }

@@ -5,6 +5,8 @@ import {
   pgDateToYmd,
   priceHistoryRetentionCutoff,
   PRICE_HISTORY_RETENTION_DAYS,
+  PRICE_DROP_LOOKBACK_DAYS,
+  addCalendarDay,
 } from "./price-history";
 
 describe("priceHistoryRetentionCutoff", () => {
@@ -13,6 +15,13 @@ describe("priceHistoryRetentionCutoff", () => {
     const cutoff = priceHistoryRetentionCutoff(now);
     expect(PRICE_HISTORY_RETENTION_DAYS).toBe(365);
     expect(now.getTime() - cutoff.getTime()).toBe(365 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("PRICE_DROP_LOOKBACK_DAYS", () => {
+  it("es una semana calendario inclusive (hoy + 6 previos)", () => {
+    expect(PRICE_DROP_LOOKBACK_DAYS).toBe(7);
+    expect(addCalendarDay("2026-09-23", -(PRICE_DROP_LOOKBACK_DAYS - 1))).toBe("2026-09-17");
   });
 });
 
