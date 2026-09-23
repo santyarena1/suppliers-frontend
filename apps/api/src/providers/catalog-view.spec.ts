@@ -1,4 +1,4 @@
-import { rawForViewer, toProductView } from "./catalog-view";
+import { fichaRaw, toProductView } from "./catalog-view";
 import type { ProviderSyncCache, TenantProductOffer } from "@prisma/client";
 
 function ficha(overrides: Partial<ProviderSyncCache> = {}): ProviderSyncCache {
@@ -29,12 +29,12 @@ function ficha(overrides: Partial<ProviderSyncCache> = {}): ProviderSyncCache {
     tags: null,
     raw: {
       nombre: "Mouse",
+      marca: "Logitech",
       precio: 999,
       "PRECIO FINAL": 1200,
       price: { finalPrice: 1200, percepcion: 3.5, iva: 21 },
       IVA: 21,
     },
-    rawOwnerTenantId: "local-a",
     syncedAt: new Date("2026-09-23T12:00:00Z"),
     updatedAt: new Date("2026-09-23T12:00:00Z"),
     ...overrides,
@@ -61,33 +61,42 @@ function offer(tenantId: string, price: number): TenantProductOffer {
   };
 }
 
-describe("rawForViewer", () => {
-  const raw = { precio: 10, IVA: 21, marca: "Logitech" };
-
-  it("deja el raw de la cuenta que sincronizó", () => {
-    expect(rawForViewer(raw, "local-a", "local-a")).toEqual(raw);
+describe("fichaRaw", () => {
+  it("deja nombre y alícuota, y saca los importes de la ficha", () => {
+    expect(
+      fichaRaw("ELIT", {
+        nombre: "Mouse",
+        IVA: 21,
+        precio: 999,
+        "PRECIO FINAL": 1200,
+        price: { finalPrice: 1200 },
+      })
+    ).toEqual({ nombre: "Mouse", IVA: 21 });
   });
 
-  it("una ficha sin dueño sigue compartida hasta el próximo sync", () => {
-    expect(rawForViewer(raw, null, "local-b")).toEqual(raw);
-  });
-
-  it("a otro local le saca importes y percepciones, no la ficha", () => {
-    expect(rawForViewer(raw, "local-a", "local-b")).toEqual({ IVA: 21, marca: "Logitech" });
+  it("en Invid vacía las columnas de precio y deja la alícuota", () => {
+    const row = ["1", "Mouse", "Logi", "PN", "EAN", "US$", 80, 21, 0, 96.8, "", "ok"];
+    const raw = fichaRaw("INVID", row) as unknown[];
+    expect(raw[1]).toBe("Mouse");
+    expect(raw[6]).toBeNull();
+    expect(raw[7]).toBe(21);
+    expect(raw[9]).toBeNull();
   });
 });
 
 describe("toProductView", () => {
-  it("el precio que ve cada local es el de su oferta, no el raw del otro", () => {
+  it("los dos locales ven la misma ficha y cada uno su precio", () => {
     const product = ficha();
-    const propio = toProductView(product, offer("local-a", 80));
-    const ajeno = toProductView(product, offer("local-b", 55));
+    const localA = toProductView(product, offer("local-a", 80));
+    const localB = toProductView(product, offer("local-b", 55));
 
-    expect(propio.price).toBe(80);
-    expect(propio.raw).toMatchObject({ precio: 999, IVA: 21 });
-    expect(ajeno.price).toBe(55);
-    expect(ajeno.finalPrice).toBe(66.55);
-    expect(ajeno.raw).toEqual({ nombre: "Mouse", IVA: 21 });
-    expect(ajeno).not.toHaveProperty("rawOwnerTenantId");
+    expect(localA.name).toBe("Mouse");
+    expect(localB.name).toBe("Mouse");
+    expect(localA.raw).toEqual(localB.raw);
+    expect(localA.raw).toEqual({ nombre: "Mouse", marca: "Logitech", IVA: 21 });
+    expect(localA.price).toBe(80);
+    expect(localA.finalPrice).toBe(96.8);
+    expect(localB.price).toBe(55);
+    expect(localB.finalPrice).toBe(66.55);
   });
 });

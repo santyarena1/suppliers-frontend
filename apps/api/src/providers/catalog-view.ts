@@ -17,7 +17,7 @@ export interface OfferRules {
 
 export const NO_RULES: OfferRules = { markupPercent: 0, minStockThreshold: 0, zeroStockAction: "KEEP" };
 
-export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt" | "rawOwnerTenantId"> & {
+export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   price: number | null;
   finalPrice: number | null;
   currency: string | null;
@@ -55,7 +55,7 @@ export function toProductView(
   rules: OfferRules = NO_RULES,
   enrichment?: CatalogEnrichmentContext
 ): ProductView {
-  const { id: _id, updatedAt: _updatedAt, rawOwnerTenantId, raw, ...ficha } = product;
+  const { id: _id, updatedAt: _updatedAt, raw, ...ficha } = product;
   const rawStock = offer.stock;
   const display = resolveCatalogDisplay(product, enrichment);
   const discount = offer.source === "BASE_LIST" ? rules.baseListDiscountPercent ?? 0 : 0;
@@ -63,7 +63,7 @@ export function toProductView(
   return {
     ...ficha,
     ...display,
-    raw: rawForViewer(raw, rawOwnerTenantId, offer.tenantId) as ProviderSyncCache["raw"],
+    raw: fichaRaw(product.provider, raw) as ProviderSyncCache["raw"],
     price: withMarkup(withDiscount(offer.price, discount), rules.markupPercent),
     finalPrice: withMarkup(withDiscount(offer.finalPrice, discount), rules.markupPercent),
     currency: offer.currency,
@@ -98,15 +98,18 @@ function round2(value: number): number {
 }
 
 /**
- * El JSON crudo es de la cuenta que sincronizó. Si es de otro comercio, se le
- * sacan precios y percepciones para que la tarjeta no arme el total con la
- * lista de otro local. Nombre, marca e impuestos de producto quedan.
- *
- * Sin dueño (fichas anteriores a este sello) se deja el raw: hasta el próximo
- * sync no hay forma de saber de quién es.
+ * La ficha es universal. Aunque el proveedor mande importes en el JSON, no
+ * forman parte de la ficha: el precio de cada local está en su oferta.
  */
-export function rawForViewer(raw: unknown, ownerTenantId: string | null | undefined, viewerTenantId: string): unknown {
-  if (!ownerTenantId || ownerTenantId === viewerTenantId) return raw;
+export function fichaRaw(provider: string, raw: unknown): unknown {
+  if (provider === "INVID" && Array.isArray(raw)) {
+    const next = raw.map((cell) => cell);
+    if (next.length > 9) {
+      next[6] = null;
+      next[9] = null;
+    }
+    return next;
+  }
   return stripAccountPrices(raw);
 }
 

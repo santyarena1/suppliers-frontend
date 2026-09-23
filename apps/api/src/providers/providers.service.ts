@@ -12,7 +12,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
-import { NO_RULES, toProductView, type OfferRules } from "./catalog-view";
+import { fichaRaw, NO_RULES, toProductView, type OfferRules } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
 import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
@@ -683,7 +683,7 @@ export class ProvidersService implements OnModuleInit {
             dimensionsUnit: item.dimensionsUnit,
             volume: item.volume,
             tags: item.tags,
-            raw: item.raw as object,
+            raw: fichaRaw(provider, item.raw) as object,
           };
 
           // Una lista es la verdad completa de la oferta: lo que no trae (stock,
@@ -743,11 +743,10 @@ export class ProvidersService implements OnModuleInit {
           );
 
           // La ficha tiene que existir antes que la oferta: la oferta la referencia.
-          const ownsRaw = offerSource === "SYNC" ? { rawOwnerTenantId: tenantId } : {};
           await this.prisma.providerSyncCache.upsert({
             where: { provider_externalId: { provider, externalId: item.externalId } },
-            create: { provider, externalId: item.externalId, ...ficha, ...ownsRaw },
-            update: { ...ficha, syncedAt: new Date(), ...ownsRaw },
+            create: { provider, externalId: item.externalId, ...ficha },
+            update: { ...ficha, syncedAt: new Date() },
           });
 
           if (keepOwnPrice) return diff;
