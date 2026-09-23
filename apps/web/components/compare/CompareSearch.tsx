@@ -139,7 +139,7 @@ export default function CompareSearch({
       </div>
 
       {hasQuery && (
-        <div className="absolute z-30 left-0 right-0 mt-2 max-h-[min(480px,60vh)] overflow-y-auto rounded-xl border border-surface-700 bg-surface-950 shadow-2xl">
+        <div className="absolute z-30 left-0 right-0 mt-2 max-h-[min(480px,60dvh)] overflow-y-auto rounded-xl border border-surface-700 bg-surface-950 shadow-2xl">
           {error && <p className="px-4 py-3 text-sm text-amber-300">{error}</p>}
           {!loading && !error && sortedResults.length === 0 && rankedLocals.length === 0 && (
             <p className="px-4 py-6 text-sm text-surface-500 text-center">

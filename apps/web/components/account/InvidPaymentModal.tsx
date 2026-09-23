@@ -95,7 +95,7 @@ export default function InvidPaymentModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="invid-payment-title"
-        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+        className="relative w-full max-w-lg max-h-[90dvh] overflow-y-auto bg-surface-950 border border-surface-800 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
       >
         <div className="px-5 py-4 border-b border-surface-800 flex items-start justify-between gap-3 sticky top-0 bg-surface-950">
           <div>

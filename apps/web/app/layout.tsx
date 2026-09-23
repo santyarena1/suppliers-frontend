@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="es"
-      className={`h-full ${archivo.variable} ${chivoMono.variable}`}
+      className={`h-dvh ${archivo.variable} ${chivoMono.variable}`}
       data-theme="soft"
       suppressHydrationWarning
     >
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: brandThemeBootScript() }}
         />
       </head>
-      <body className="h-full">
+      <body className="h-dvh">
         <ThemeProvider>
           <BrandingProvider>
             <PrefsProvider>

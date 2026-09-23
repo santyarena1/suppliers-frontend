@@ -103,7 +103,18 @@ body {
   color: rgb(var(--fg));
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   min-height: 100vh;
+  min-height: 100dvh;
   transition: background-color 0.25s, color 0.25s;
+}
+
+/* En una columna de altura fija, el hijo que scrollea tiene que poder
+   achicarse. Si no, el pie queda debajo del viewport y no se llega. */
+@layer base {
+  .flex-1.overflow-y-auto,
+  .flex-1.overflow-auto,
+  .flex-1.overflow-hidden {
+    min-height: 0;
+  }
 }
 
 [data-theme="light"] .text-white { color: rgb(15 23 42); }

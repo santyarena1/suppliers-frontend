@@ -51,7 +51,7 @@ type PriceView = "list" | "offline" | "scheme";
 
 export default function SearchPageWrapper() {
   return (
-    <Suspense fallback={<div className="flex h-screen items-center justify-center text-surface-500 text-sm">Cargando…</div>}>
+    <Suspense fallback={<div className="flex h-full min-h-0 items-center justify-center text-surface-500 text-sm">Cargando…</div>}>
       <SearchPage />
     </Suspense>
   );

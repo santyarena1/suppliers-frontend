@@ -154,7 +154,7 @@ export default function RetailPicker({
         aria-label="Cerrar"
         onClick={onClose}
       />
-      <div className="relative w-full sm:max-w-lg max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl overflow-hidden">
+      <div className="relative w-full sm:max-w-lg max-h-[85dvh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800">
           <div>
             <h3 className="text-sm font-semibold text-white">Elegir local de referencia</h3>

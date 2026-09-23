@@ -331,7 +331,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
     <aside
       className={`flex-shrink-0 border-r border-surface-800 flex flex-col bg-surface-900 transition-all overflow-hidden
         fixed lg:sticky top-0 left-0 z-50 lg:z-auto
-        h-dvh lg:h-screen
+        h-dvh
         ${iconMode ? "lg:w-16" : "w-64 lg:w-56"}
         ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
     >

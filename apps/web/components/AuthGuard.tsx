@@ -21,7 +21,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (authed !== true) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface-950">
+      <div className="min-h-dvh flex items-center justify-center bg-surface-950">
         <div className="w-8 h-8 rounded-full border-2 border-surface-700 border-t-brand-500 animate-spin" />
       </div>
     );

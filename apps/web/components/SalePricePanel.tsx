@@ -601,7 +601,7 @@ export default function SalePricePanel({
       />
 
       {/* min-h-0 + h-full: sin esto flex-1 overflow-y-auto no scrollea */}
-      <aside className="fixed z-50 inset-x-0 bottom-0 h-[88vh] max-h-[88vh] rounded-t-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:h-full md:max-h-none md:w-[420px] md:rounded-none md:border-l md:border-t-0 md:border-b-0">
+      <aside className="fixed z-50 inset-x-0 bottom-0 h-[min(88dvh,100%)] max-h-[88dvh] rounded-t-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col pb-[env(safe-area-inset-bottom)] md:inset-y-0 md:right-0 md:left-auto md:bottom-auto md:h-full md:max-h-none md:w-[420px] md:rounded-none md:border-l md:border-t-0 md:border-b-0 md:pb-0">
         {toolbar}
         {body}
       </aside>
@@ -784,7 +784,7 @@ function RetailDetailModal({
         className="fixed inset-0 z-[60] bg-black/60"
         onClick={onClose}
       />
-      <div className="fixed z-[70] inset-x-3 top-[8vh] bottom-[8vh] md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg md:max-h-[85vh] rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col overflow-hidden">
+      <div className="fixed z-[70] inset-x-3 top-[8dvh] bottom-[8dvh] md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg md:max-h-[85dvh] rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-surface-800 flex-shrink-0">
           <p className="text-sm font-semibold text-white">Detalle de referencia</p>
           <button type="button" onClick={onClose} className="text-surface-500 hover:text-white p-1">

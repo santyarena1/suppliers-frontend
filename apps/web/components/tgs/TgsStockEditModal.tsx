@@ -23,7 +23,7 @@ export default function TgsStockEditModal({ item, onClose, onSaved }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
       <div
-        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-xl border border-surface-700 bg-surface-900 p-4 flex flex-col gap-3"
+        className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto rounded-xl border border-surface-700 bg-surface-900 p-4 flex flex-col gap-3"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-2">
