@@ -329,13 +329,13 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
 
   return (
     <aside
-      className={`flex-shrink-0 border-r border-surface-800 flex flex-col bg-surface-900 transition-all
+      className={`flex-shrink-0 border-r border-surface-800 flex flex-col bg-surface-900 transition-all overflow-hidden
         fixed lg:sticky top-0 left-0 z-50 lg:z-auto
-        h-screen
+        h-dvh lg:h-screen
         ${iconMode ? "lg:w-16" : "w-64 lg:w-56"}
         ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
     >
-      <div className={`py-5 border-b border-surface-800 flex items-center ${iconMode ? "px-2 justify-center" : "px-5 justify-between"}`}>
+      <div className={`shrink-0 py-5 border-b border-surface-800 flex items-center ${iconMode ? "px-2 justify-center" : "px-5 justify-between"}`}>
         <div className={`flex items-center ${iconMode ? "" : "gap-2.5"}`}>
           <NodoLogo className="w-7 h-7" />
           {!iconMode && (
@@ -355,7 +355,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         </button>
       </div>
 
-      <nav className={`flex-1 py-4 flex flex-col gap-0.5 overflow-y-auto ${iconMode ? "px-2" : "px-3"}`}>
+      <nav className={`flex-1 min-h-0 py-4 flex flex-col gap-0.5 overflow-y-auto ${iconMode ? "px-2" : "px-3"}`}>
         {pinned.map((item) => renderLink(item, { collapsed: iconMode }))}
 
         {NAV_SECTIONS.map((section) => {
@@ -395,7 +395,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         })}
       </nav>
 
-      <div className={`py-4 border-t border-surface-800 ${iconMode ? "px-2" : "px-3"}`}>
+      <div className={`shrink-0 border-t border-surface-800 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${iconMode ? "px-2" : "px-3"}`}>
         <button
           type="button"
           onClick={toggleCollapsed}
