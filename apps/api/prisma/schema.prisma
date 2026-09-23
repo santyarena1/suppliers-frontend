@@ -874,6 +874,9 @@ model ProviderSyncConfig {
   portalCartSyncedAt   DateTime?
   missingProductAction MissingProductAction @default(KEEP)
   zeroStockAction      ZeroStockAction      @default(KEEP)
+  /// Si está activo, el buscador no lista fichas de este distribuidor que este
+  /// local todavía no sincronizó (sin precio ni stock propios).
+  hideUnsyncedCatalog  Boolean              @default(false)
   priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)
   // Si el proveedor informa esta cantidad de stock o menos, lo tratamos como
   // sin stock (aplica zeroStockAction). 0 = desactivado. Mismo concepto que
