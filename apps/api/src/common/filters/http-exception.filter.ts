@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import type { ApiFailure, ApiFieldError } from "@nodo/shared";
+import { dbOutageStatus } from "../../prisma/recovery-gate";
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -30,6 +31,12 @@ export class HttpExceptionFilter implements ExceptionFilter {
       }
     } else if (exception instanceof Error) {
       this.logger.error(exception.message, exception.stack);
+      const code = "code" in exception && exception.code != null ? String(exception.code) : "";
+      const outage = dbOutageStatus(`${code} ${exception.message}`);
+      if (outage) {
+        status = outage.status;
+        message = outage.message;
+      }
     } else {
       this.logger.error("Excepción no controlada", String(exception));
     }
