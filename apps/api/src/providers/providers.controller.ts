@@ -829,10 +829,22 @@ export class ProvidersController {
   getPriceHistory(
     @CurrentTenantOrNone() tenant: TenantContext | null,
     @Param("provider") provider: string,
-    @Param("externalId") externalId: string
+    @Param("externalId") externalId: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string
   ) {
     if (!tenant) return [];
-    return this.providersService.getPriceHistory(commercialId(tenant), assertProvider(provider), externalId);
+    const parse = (s?: string) => {
+      if (!s?.trim()) return undefined;
+      const d = new Date(s);
+      return Number.isNaN(d.getTime()) ? undefined : d;
+    };
+    return this.providersService.getPriceHistory(
+      commercialId(tenant),
+      assertProvider(provider),
+      externalId,
+      { from: parse(from), to: parse(to) }
+    );
   }
 
   @Get("catalog/categories")

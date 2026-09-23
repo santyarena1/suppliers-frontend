@@ -598,8 +598,7 @@ model TenantProductOffer {
 }
 
 // Historial real de precio: se graba una fila solo cuando el precio cambia
-// respecto de la última sync (no en cada corrida del cron), para tener un
-// historial genuino de variaciones y poder graficarlo en la ficha del producto.
+// respecto de la última sync (no en cada corrida del cron). Retención: 12 meses.
 model ProductPriceHistory {
   id         String   @id @default(uuid())
   /// El historial es de *tu* precio: cada organización compra con su propia cuenta

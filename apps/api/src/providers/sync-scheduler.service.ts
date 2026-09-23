@@ -38,4 +38,22 @@ export class SyncSchedulerService {
       this.running = false;
     }
   }
+
+  /** 04:15 AR: limpia historial de precios de más de 12 meses. */
+  @Cron("15 4 * * *", { timeZone: "America/Argentina/Buenos_Aires" })
+  async purgePriceHistory() {
+    if (!shouldRunScheduledJob()) return;
+    try {
+      const { deleted, cutoff } = await this.providersService.purgeOldPriceHistory();
+      if (deleted > 0) {
+        this.logger.log(
+          `Historial de precios: borradas ${deleted} filas anteriores a ${cutoff.toISOString()}`
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Purge historial de precios falló: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
 }

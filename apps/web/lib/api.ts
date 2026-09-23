@@ -2654,8 +2654,17 @@ export interface BrandCount {
 export const catalogApi = {
   getProduct: (provider: Provider, externalId: string) =>
     api.get<ProductDTO>(`/providers/${provider}/products/${externalId}`),
-  priceHistory: (provider: Provider, externalId: string) =>
-    api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`),
+  priceHistory: (
+    provider: Provider,
+    externalId: string,
+    opts: { from?: string; to?: string } = {}
+  ) =>
+    api.get<PricePoint[]>(`/providers/${provider}/products/${externalId}/price-history`, {
+      params: {
+        ...(opts.from ? { from: opts.from } : {}),
+        ...(opts.to ? { to: opts.to } : {}),
+      },
+    }),
   categories: () => api.get<CategoryCount[]>("/catalog/categories"),
   brands: () => api.get<BrandCount[]>("/catalog/brands"),
   featured: (take = 24, opts: { mixed?: boolean } = {}) =>

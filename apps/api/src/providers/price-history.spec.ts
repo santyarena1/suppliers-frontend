@@ -1,4 +1,20 @@
-import { argentinaDayKey, collapsePriceHistoryByDay, fillPriceHistoryDays, pgDateToYmd } from "./price-history";
+import {
+  argentinaDayKey,
+  collapsePriceHistoryByDay,
+  fillPriceHistoryDays,
+  pgDateToYmd,
+  priceHistoryRetentionCutoff,
+  PRICE_HISTORY_RETENTION_DAYS,
+} from "./price-history";
+
+describe("priceHistoryRetentionCutoff", () => {
+  it("queda a 365 días atrás", () => {
+    const now = new Date("2026-09-23T12:00:00.000Z");
+    const cutoff = priceHistoryRetentionCutoff(now);
+    expect(PRICE_HISTORY_RETENTION_DAYS).toBe(365);
+    expect(now.getTime() - cutoff.getTime()).toBe(365 * 24 * 60 * 60 * 1000);
+  });
+});
 
 describe("collapsePriceHistoryByDay", () => {
   it("deja un solo punto por día calendario AR, el último", () => {
