@@ -37,14 +37,35 @@ function daysAgo(n: number, from = new Date()): Date {
   return new Date(from.getTime() - n * 24 * 60 * 60 * 1000);
 }
 
-const PRESETS: { id: RangePreset; label: string; days?: number }[] = [
-  { id: "30d", label: "30 días", days: 30 },
-  { id: "90d", label: "90 días", days: 90 },
-  { id: "180d", label: "6 meses", days: 180 },
-  { id: "365d", label: "12 meses", days: 365 },
-  { id: "all", label: "Todo" },
-  { id: "custom", label: "Rango" },
+const PRESETS: { id: RangePreset; label: string; short: string; days?: number }[] = [
+  { id: "30d", label: "30 días", short: "30d", days: 30 },
+  { id: "90d", label: "90 días", short: "90d", days: 90 },
+  { id: "180d", label: "6 meses", short: "6m", days: 180 },
+  { id: "365d", label: "12 meses", short: "12m", days: 365 },
+  { id: "all", label: "Todo", short: "Todo" },
+  { id: "custom", label: "Rango", short: "Rango" },
 ];
+
+function useNarrowViewport(maxWidth = 640) {
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${maxWidth}px)`);
+    const sync = () => setNarrow(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [maxWidth]);
+  return narrow;
+}
+
+/** Tick del eje Y sin “US$” largo: en mobile el ancho importa más que el símbolo. */
+function compactTick(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1000) {
+    return n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+  }
+  return n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+}
 
 export default function PriceHistoryChart({
   points,
@@ -65,6 +86,7 @@ export default function PriceHistoryChart({
 }) {
   const { withIva, withIibb } = usePrefs();
   useIibbRatesEpoch();
+  const narrow = useNarrowViewport();
 
   const seriesBounds = useMemo(() => {
     const times = points
@@ -182,7 +204,7 @@ export default function PriceHistoryChart({
   function formatFullDate(iso: string) {
     return new Date(iso).toLocaleDateString("es-AR", {
       day: "2-digit",
-      month: "long",
+      month: narrow ? "short" : "long",
       year: "numeric",
       timeZone: "America/Argentina/Buenos_Aires",
     });
@@ -214,19 +236,19 @@ export default function PriceHistoryChart({
         fillHeight ? "flex h-full flex-col" : ""
       }`}
     >
-      <div className="flex flex-col gap-3 border-b border-surface-800 px-4 py-3 sm:px-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
+      <div className="flex flex-col gap-3 border-b border-surface-800 px-3 py-3 sm:px-5">
+        <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-3">
+          <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-wide text-surface-500">
               Precio en el rango
             </p>
-            <p className="mt-0.5 text-xl font-semibold tabular-nums tracking-tight text-white">
+            <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-white sm:text-xl">
               {stats ? formatUsd(stats.last) : "—"}
             </p>
             <p className="mt-0.5 text-[11px] text-surface-500">{prefsHint}</p>
           </div>
           {stats && (
-            <div className={`flex items-center gap-1.5 text-sm font-medium ${trendColor}`}>
+            <div className={`flex shrink-0 items-center gap-1 text-sm font-medium ${trendColor}`}>
               <TrendIcon className="h-4 w-4" />
               <span className="tabular-nums">
                 {stats.change >= 0 ? "+" : ""}
@@ -240,25 +262,33 @@ export default function PriceHistoryChart({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Chips en scroll horizontal: en mobile no se apilan en 3 filas. */}
+        <div
+          className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
+          role="tablist"
+          aria-label="Rango del historial"
+        >
           {PRESETS.map((p) => (
             <button
               key={p.id}
               type="button"
+              role="tab"
+              aria-selected={preset === p.id}
               onClick={() => applyPreset(p.id)}
-              className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              className={`shrink-0 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors touch-manipulation ${
                 preset === p.id
                   ? "border-brand-500 bg-brand-600/15 text-brand-300"
                   : "border-surface-700 text-surface-400 hover:border-surface-500 hover:text-surface-200"
               }`}
             >
-              {p.label}
+              <span className="sm:hidden">{p.short}</span>
+              <span className="hidden sm:inline">{p.label}</span>
             </button>
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-surface-400">
-          <label className="flex items-center gap-1.5">
+        <div className="grid grid-cols-2 gap-2 text-xs text-surface-400 sm:flex sm:flex-wrap sm:items-center">
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-1.5">
             <span className="text-surface-500">Desde</span>
             <input
               type="date"
@@ -268,10 +298,10 @@ export default function PriceHistoryChart({
                 setPreset("custom");
                 setFromYmd(e.target.value);
               }}
-              className="rounded-md border border-surface-700 bg-surface-900 px-2 py-1 text-surface-200 focus:border-brand-500 focus:outline-none"
+              className="w-full min-w-0 rounded-md border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none sm:w-auto"
             />
           </label>
-          <label className="flex items-center gap-1.5">
+          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-1.5">
             <span className="text-surface-500">Hasta</span>
             <input
               type="date"
@@ -281,14 +311,14 @@ export default function PriceHistoryChart({
                 setPreset("custom");
                 setToYmd(e.target.value);
               }}
-              className="rounded-md border border-surface-700 bg-surface-900 px-2 py-1 text-surface-200 focus:border-brand-500 focus:outline-none"
+              className="w-full min-w-0 rounded-md border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none sm:w-auto"
             />
           </label>
         </div>
       </div>
 
       {!stats || data.length < 2 ? (
-        <div className="px-4 py-10 text-center sm:px-5">
+        <div className="px-3 py-10 text-center sm:px-5">
           <p className="text-sm text-surface-500">
             No hay suficientes días en ese rango para armar la curva.
           </p>
@@ -296,41 +326,45 @@ export default function PriceHistoryChart({
       ) : (
         <>
           <div className="grid grid-cols-3 divide-x divide-surface-800 border-b border-surface-800 text-center">
-            <div className="px-2 py-2.5">
+            <div className="px-1.5 py-2.5 sm:px-2">
               <p className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-                Mínimo
+                Mín
               </p>
-              <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-400">
+              <p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-emerald-400 sm:text-sm">
                 {formatUsd(stats.min)}
               </p>
             </div>
-            <div className="px-2 py-2.5">
+            <div className="px-1.5 py-2.5 sm:px-2">
               <p className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-                Promedio
+                Prom
               </p>
-              <p className="mt-0.5 text-sm font-semibold tabular-nums text-surface-100">
+              <p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-surface-100 sm:text-sm">
                 {formatUsd(stats.avg)}
               </p>
             </div>
-            <div className="px-2 py-2.5">
+            <div className="px-1.5 py-2.5 sm:px-2">
               <p className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-                Máximo
+                Máx
               </p>
-              <p className="mt-0.5 text-sm font-semibold tabular-nums text-rose-400">
+              <p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-rose-400 sm:text-sm">
                 {formatUsd(stats.max)}
               </p>
             </div>
           </div>
 
           <div
-            className={`w-full px-2 pb-2 pt-4 sm:px-3 ${
-              fillHeight ? "min-h-0 flex-1" : "h-52 sm:h-56"
+            className={`w-full px-1 pb-2 pt-3 sm:px-3 sm:pt-4 ${
+              fillHeight ? "min-h-0 flex-1" : "h-48 sm:h-56"
             }`}
           >
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
                 data={data}
-                margin={{ top: 8, right: 12, left: 4, bottom: 4 }}
+                margin={
+                  narrow
+                    ? { top: 6, right: 4, left: 0, bottom: 2 }
+                    : { top: 8, right: 12, left: 4, bottom: 4 }
+                }
               >
                 <defs>
                   <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
@@ -341,19 +375,21 @@ export default function PriceHistoryChart({
                 <CartesianGrid strokeDasharray="3 6" stroke="#27272a" vertical={false} />
                 <XAxis
                   dataKey="label"
-                  tick={{ fontSize: 11, fill: "#71717a" }}
+                  tick={{ fontSize: narrow ? 10 : 11, fill: "#71717a" }}
                   tickLine={false}
                   axisLine={{ stroke: "#3f3f46" }}
                   interval="preserveStartEnd"
-                  minTickGap={28}
+                  minTickGap={narrow ? 40 : 28}
                 />
                 <YAxis
                   domain={["auto", "auto"]}
-                  tick={{ fontSize: 11, fill: "#71717a" }}
+                  tick={{ fontSize: narrow ? 10 : 11, fill: "#71717a" }}
                   tickLine={false}
                   axisLine={false}
-                  width={82}
-                  tickFormatter={(v: number) => formatUsd(Number(v))}
+                  width={narrow ? 44 : 82}
+                  tickFormatter={(v: number) =>
+                    narrow ? compactTick(Number(v)) : formatUsd(Number(v))
+                  }
                 />
                 <Tooltip
                   content={({ active, payload }) => {
@@ -403,10 +439,12 @@ export default function PriceHistoryChart({
             </ResponsiveContainer>
           </div>
 
-          <p className="border-t border-surface-800 px-4 py-2 text-[11px] text-surface-500 sm:px-5">
+          <p className="border-t border-surface-800 px-3 py-2 text-[11px] leading-relaxed text-surface-500 sm:px-5">
             {data.length} {data.length === 1 ? "día" : "días"} · {formatFullDate(data[0].capturedAt)} →{" "}
             {formatFullDate(data[data.length - 1].capturedAt)}
-            {" · "}línea punteada = promedio · máx. 12 meses
+            <span className="hidden sm:inline">
+              {" · "}línea punteada = promedio · máx. 12 meses
+            </span>
           </p>
         </>
       )}
