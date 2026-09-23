@@ -22,4 +22,4 @@ COPY --from=build /out/node_modules ./node_modules
 COPY --from=build /out/package.json ./package.json
 COPY --from=build /out/prisma ./prisma
 EXPOSE 8080
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/main.js"]
+CMD ["node", "dist/start.js"]
