@@ -10,7 +10,7 @@ import SalePricePanel from "@/components/SalePricePanel";
 import { useResults } from "@/lib/results";
 import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint, productDisplayBrand, productDisplayCategory, productDisplaySubcategory } from "@/lib/api";
-import { proxyImg, formatARS, formatUSD } from "@/lib/format";
+import { proxyImg, formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import ProductSyncedAt from "@/components/ProductSyncedAt";
 import AiImageDisclaimer from "@/components/AiImageDisclaimer";
@@ -122,6 +122,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     } catch { /**/ }
   }
 
+  const unpriced = Boolean(product && !hasOwnPrice(product));
   const pricing = product ? purchaseLinePricing(product, policy, "list", qty) : null;
   const taxLines = pricing?.lines ?? [];
   const shown = pricing
@@ -307,19 +308,28 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   <div className="pp pp__panel">
                     <div className="pp__head">
                       <p className="pp__caption">
-                        {displayTaxTitle({ withIva, withIibb, provider: providerName })}
-                        {qty > 1 ? ` · ${qty} u.` : ""}
+                        {unpriced
+                          ? "Precio de tu cuenta"
+                          : displayTaxTitle({ withIva, withIibb, provider: providerName })}
+                        {!unpriced && qty > 1 ? ` · ${qty} u.` : ""}
                       </p>
-                      <span className="pp__amount">{money(displayUSD)}</span>
-                      {currency === "ARS" && currentRate && (
+                      <span className="pp__amount">{unpriced ? "Sin precio" : money(displayUSD)}</span>
+                      {!unpriced && currency === "ARS" && currentRate && (
                         <p className="pp__sub">
                           Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
                         </p>
                       )}
-                      {qty > 1 && <p className="pp__sub">{money(unitDisplayUsd)} por unidad</p>}
+                      {!unpriced && qty > 1 && <p className="pp__sub">{money(unitDisplayUsd)} por unidad</p>}
                     </div>
 
-                    <div className="pp__rows">
+                    {unpriced && (
+                      <p className="pp__note">
+                        El precio y el stock aparecen cuando cargás la cuenta de este distribuidor.
+                        La ficha es la misma para todos los locales; el importe es el de tu cuenta.
+                      </p>
+                    )}
+
+                    {!unpriced && <div className="pp__rows">
                       <p className="pp__rows-title">Desglose de costo</p>
 
                       <BreakdownRow
@@ -386,9 +396,9 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         {withIibb ? " · con percepciones si se conocen (en esquema también; en offline no)" : " · sin percepciones"}
                         . El margen contra locales se calcula sobre tu costo final, porque el precio que publican ellos también es final.
                       </p>
-                    </div>
+                    </div>}
 
-                    {payPrices.length > 0 && (
+                    {!unpriced && payPrices.length > 0 && (
                       <div className="pp__pay">
                         <h2 className="pp__sec-title">Formas de pago</h2>
                         <div className="pp__pay-rows">
@@ -411,7 +421,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       </div>
                     )}
 
-                    <div className="pp__buy">
+                    {!unpriced && <div className="pp__buy">
                       <div className="pp__qty">
                         <span>Cantidad</span>
                         <span className="pp__step">
@@ -436,7 +446,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       </div>
 
                       <ProductBuyActions product={product} qty={qty} />
-                    </div>
+                    </div>}
                   </div>
 
                   <button type="button" onClick={() => void searchSameName()} className="pp pp__ghost">
@@ -470,7 +480,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   <TrendingUp className="w-3 h-3" />
                   Evolución de precio
                 </h2>
-                {priceHistory.length >= 1 ? (
+                {unpriced ? (
+                  <p className="text-xs leading-relaxed text-surface-500">
+                    Todavía no hay precio de tu cuenta para graficar.
+                  </p>
+                ) : priceHistory.length >= 1 ? (
                   <PriceHistoryChart points={priceHistory} format={money} />
                 ) : (
                   // Solo se guarda una fila cuando el precio cambia, así que un
