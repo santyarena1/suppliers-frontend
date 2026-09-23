@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { catalogApi, type PortalCartSync, type Provider } from "@/lib/api";
 import { useCart, type CartItem } from "@/lib/cart";
 
@@ -75,10 +75,15 @@ export function usePortalCartSync(
   const applied = useRef<string | null>(null);
   const autoRetried = useRef<Set<string>>(new Set());
   const resyncRef = useRef(resync);
-  resyncRef.current = resync;
   const itemsRef = useRef(items);
-  itemsRef.current = items;
   const applyRef = useRef<(sync: PortalCartSync | undefined, scope: CartItem[]) => Promise<void>>(async () => undefined);
+
+  useEffect(() => {
+    resyncRef.current = resync;
+  }, [resync]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   const apply = useCallback(
     async (sync: PortalCartSync | undefined, scope: CartItem[]) => {
@@ -149,7 +154,9 @@ export function usePortalCartSync(
     },
     [provider, remove, setQty]
   );
-  applyRef.current = apply;
+  useEffect(() => {
+    applyRef.current = apply;
+  }, [apply]);
 
   const keep = useCallback(
     async (item: PortalPendingLine) => {
