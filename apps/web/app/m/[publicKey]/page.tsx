@@ -28,7 +28,7 @@ export default function PublicBrandLandingPage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-surface-950 text-white">
+    <div className="min-h-dvh bg-surface-950 text-white">
       <header className="border-b border-surface-800 px-4 sm:px-8 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <NodoLogo className="w-6 h-6" />

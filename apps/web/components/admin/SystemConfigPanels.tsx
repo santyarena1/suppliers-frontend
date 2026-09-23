@@ -410,7 +410,7 @@ export function BannersTab({ showToast }: { showToast: ConfigToast }) {
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-lg max-h-[90dvh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-white">Nuevo banner</h3>
               <button type="button" onClick={() => setShowCreate(false)} className="text-surface-500 hover:text-white"><X className="w-4 h-4" /></button>

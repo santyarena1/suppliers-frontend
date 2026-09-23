@@ -26,7 +26,7 @@ export default function RoleGuard({ allowed, redirectTo = "/search", children }:
 
   if (!ok) {
     return (
-      <div className="flex h-screen items-center justify-center bg-surface-950">
+      <div className="flex h-dvh items-center justify-center bg-surface-950">
         <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
       </div>
     );

@@ -23,7 +23,7 @@ export default function PublicNewsPage() {
   }, [params.publicKey]);
 
   return (
-    <div className="min-h-screen bg-[#f4f1ea] text-[#111] news-paper">
+    <div className="min-h-dvh bg-[#f4f1ea] text-[#111] news-paper">
       <header className="border-b border-[#ddd8cc] px-4 sm:px-8 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 opacity-80 hover:opacity-100">
           <NodoLogo className="w-5 h-5" />

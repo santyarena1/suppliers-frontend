@@ -99,7 +99,7 @@ export default function CreateListProviderDialog({ open, onClose, showPurchaseCo
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-surface-950 border border-surface-800 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="w-full max-w-lg bg-surface-950 border border-surface-800 rounded-2xl shadow-2xl flex flex-col max-h-[90dvh]"
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-surface-800">
           <div>

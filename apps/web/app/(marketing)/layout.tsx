@@ -15,7 +15,7 @@ export const metadata: Metadata = {
  */
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`lnd min-h-screen ${archivo.variable} ${chivoMono.variable}`}>
+    <div className={`lnd min-h-dvh ${archivo.variable} ${chivoMono.variable}`}>
       {/* Sin JS el revelado nunca se dispara: el contenido tiene que verse igual. */}
       <noscript>
         <style>{".lnd-reveal{opacity:1 !important;transform:none !important}"}</style>

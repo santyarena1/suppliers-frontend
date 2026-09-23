@@ -1,6 +1,7 @@
 .ob {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
 }
 
@@ -14,6 +15,7 @@
 
 .ob__boot {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   background: var(--void);
@@ -291,7 +293,7 @@
   background: rgb(19 22 43 / 0.92);
   box-shadow: 0 12px 32px rgb(0 0 0 / 0.28);
   animation: ob-rise 0.3s var(--ease-out) both;
-  max-height: min(240px, calc(100vh - 24px));
+  max-height: min(240px, calc(100dvh - 24px));
   overflow: auto;
 }
 

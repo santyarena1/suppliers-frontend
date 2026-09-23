@@ -1067,7 +1067,7 @@ function CartPageInner() {
               )}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
               <div className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 bg-surface-950">
                 <div className="flex gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:thin]">
                   {tabsToShow.map((tab) => (
@@ -1090,7 +1090,7 @@ function CartPageInner() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 lg:px-8 py-6 flex flex-col gap-8">
+              <div className="flex-1 min-h-0 overflow-y-auto px-5 lg:px-8 py-6 flex flex-col gap-8">
                   {activeTab === "all" ? (
                   sortedProviders.map((prov) => (
                     <ProviderSection
@@ -1123,62 +1123,9 @@ function CartPageInner() {
                     onClearProvider={() => setConfirmClear(activeTab)}
                   />
                 )}
-              </div>
-
-              <footer className="flex-shrink-0 border-t border-white/5 bg-surface-950 pb-[max(1rem,env(safe-area-inset-bottom))]">
-                <div className="px-5 lg:px-8 py-4 flex flex-col gap-4">
-                  <SummaryBar
-                    title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
-                    totals={shownTotals}
-                    fmt={fmt}
-                    withIva={withIva}
-                    currency={currency}
-                    showInvidNote={activeTab === "INVID"}
-                    historyHref={activeTab !== "all" ? providerOrdersHref(activeTab, pricesFromList(activeTab)) : undefined}
-                    historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab, pricesFromList(activeTab)) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
-                  />
-
-                  {currentRate && currency === "ARS" && (
-                    <p className="text-[11px] text-surface-600 -mt-1">
-                      Dólar {dollarLabel(dollarType)} (${currentRate.venta.toLocaleString("es-AR")})
-                    </p>
-                  )}
-
-                  {activeTab === "all" && (
-                    <div className="flex flex-wrap items-center gap-2 min-h-9">
-                      {sortedProviders.map((p) => {
-                        const t = providerTotals[p];
-                        const warming =
-                          (onlineByProvider[p]?.length ?? 0) > 0 &&
-                          (warmSnap[p]?.status === "loading" || warmSnap[p]?.status === "idle");
-                        return (
-                          <div key={p} className="inline-flex h-9 overflow-hidden border border-surface-700 rounded-sm">
-                            <button
-                              onClick={() => setActiveTab(p)}
-                              className="h-9 px-2.5 inline-flex items-center gap-2 text-sm hover:bg-surface-900 transition-colors"
-                            >
-                              <ProviderBadge provider={p} variant="inline" size="sm" />
-                              <span className="tabular-nums text-surface-300">{fmt(t.totalUSD)}</span>
-                              {warming && <Loader2 className="w-3.5 h-3.5 animate-spin text-surface-500" />}
-                            </button>
-                            <Link
-                              href={providerOrdersHref(p, pricesFromList(p))}
-                              title={providerHasOrderHistory(p, pricesFromList(p)) ? "Ver historial de pedidos" : "Ir a la cuenta del proveedor"}
-                              className="h-9 px-2 inline-flex items-center border-l border-surface-700 text-surface-500 hover:text-white"
-                            >
-                              <History className="w-3.5 h-3.5" />
-                            </Link>
-                          </div>
-                        );
-                      })}
-                      <span className="text-sm text-surface-500">
-                        Solo informativo. Confirmá en la pestaña del proveedor.
-                      </span>
-                    </div>
-                  )}
-
+                <div className="flex flex-col gap-4 has-[.cart-action]:border-t has-[.cart-action]:border-surface-800 has-[.cart-action]:pt-6">
                   {activeTab !== "all" && pricesFromList(activeTab) && viewItems.length > 0 && (
-                    <div className="flex flex-col gap-2">
+                    <div className="cart-action flex flex-col gap-2">
                       <p className="text-xs text-sky-200/80">
                         {myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} cotiza por lista: el pedido se guarda en Nodo y el mensaje queda copiado para el vendedor. No se carga en ningún portal.
                       </p>
@@ -1205,7 +1152,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.INVID?.length > 0 && (activeTab === "all" || activeTab === "INVID") && (
-                    <div className={activeTab === "INVID" ? undefined : "hidden"} aria-hidden={activeTab !== "INVID"}>
+                    <div className={activeTab === "INVID" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "INVID"}>
                       <InvidDraftPanel
                         compact
                         items={onlineByProvider.INVID}
@@ -1221,7 +1168,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.NEW_BYTES?.length > 0 && (activeTab === "all" || activeTab === "NEW_BYTES") && (
-                    <div className={activeTab === "NEW_BYTES" ? undefined : "hidden"} aria-hidden={activeTab !== "NEW_BYTES"}>
+                    <div className={activeTab === "NEW_BYTES" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "NEW_BYTES"}>
                       <NewBytesDraftPanel
                         compact
                         items={onlineByProvider.NEW_BYTES}
@@ -1237,7 +1184,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.ELIT?.length > 0 && (activeTab === "all" || activeTab === "ELIT") && (
-                    <div className={activeTab === "ELIT" ? undefined : "hidden"} aria-hidden={activeTab !== "ELIT"}>
+                    <div className={activeTab === "ELIT" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "ELIT"}>
                       <ElitCheckoutPanel
                         items={onlineByProvider.ELIT}
                         onCreated={(message) => {
@@ -1252,7 +1199,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.NEW_TREE?.length > 0 && (activeTab === "all" || activeTab === "NEW_TREE") && (
-                    <div className={activeTab === "NEW_TREE" ? undefined : "hidden"} aria-hidden={activeTab !== "NEW_TREE"}>
+                    <div className={activeTab === "NEW_TREE" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "NEW_TREE"}>
                       <NewTreeCheckoutPanel
                         items={onlineByProvider.NEW_TREE}
                         onCreated={(message) => {
@@ -1265,7 +1212,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.SOLUTION_BOX?.length > 0 && (activeTab === "all" || activeTab === "SOLUTION_BOX") && (
-                    <div className={activeTab === "SOLUTION_BOX" ? undefined : "hidden"} aria-hidden={activeTab !== "SOLUTION_BOX"}>
+                    <div className={activeTab === "SOLUTION_BOX" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "SOLUTION_BOX"}>
                       <SolutionBoxCheckoutPanel
                         items={onlineByProvider.SOLUTION_BOX}
                         onCreated={(message) => {
@@ -1278,7 +1225,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.GRUPO_NUCLEO?.length > 0 && (activeTab === "all" || activeTab === "GRUPO_NUCLEO") && (
-                    <div className={activeTab === "GRUPO_NUCLEO" ? undefined : "hidden"} aria-hidden={activeTab !== "GRUPO_NUCLEO"}>
+                    <div className={activeTab === "GRUPO_NUCLEO" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "GRUPO_NUCLEO"}>
                       <GrupoNucleoCheckoutPanel
                         items={onlineByProvider.GRUPO_NUCLEO}
                         onCreated={(message) => {
@@ -1291,7 +1238,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.AIR?.length > 0 && (activeTab === "all" || activeTab === "AIR") && (
-                    <div className={activeTab === "AIR" ? undefined : "hidden"} aria-hidden={activeTab !== "AIR"}>
+                    <div className={activeTab === "AIR" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "AIR"}>
                       <AirCheckoutPanel
                         items={onlineByProvider.AIR}
                         onCreated={(message) => {
@@ -1304,7 +1251,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.DISTECNA?.length > 0 && (activeTab === "all" || activeTab === "DISTECNA") && (
-                    <div className={activeTab === "DISTECNA" ? undefined : "hidden"} aria-hidden={activeTab !== "DISTECNA"}>
+                    <div className={activeTab === "DISTECNA" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "DISTECNA"}>
                       <DistecnaCheckoutPanel
                         items={onlineByProvider.DISTECNA}
                         onCreated={(message) => {
@@ -1319,7 +1266,7 @@ function CartPageInner() {
                   )}
 
                   {channelTab === "online" && onlineByProvider.POLYTECH?.length > 0 && (activeTab === "all" || activeTab === "POLYTECH") && (
-                    <div className={activeTab === "POLYTECH" ? undefined : "hidden"} aria-hidden={activeTab !== "POLYTECH"}>
+                    <div className={activeTab === "POLYTECH" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "POLYTECH"}>
                       <PolytechCheckoutPanel
                         items={onlineByProvider.POLYTECH}
                         onCreated={(message) => {
@@ -1333,7 +1280,7 @@ function CartPageInner() {
                     </div>
                   )}
                   {channelTab === "offline" && viewItems.length > 0 && !(activeTab !== "all" && pricesFromList(activeTab)) && (
-                    <div className="flex flex-col gap-2">
+                    <div className="cart-action flex flex-col gap-2">
                       <p className="text-xs text-amber-200/80">
                         Se guarda en Nodo como pedido aprobado. No se carga en el portal: el mensaje es para el vendedor. Si después cambia, lo editás en Pedidos.
                       </p>
@@ -1359,9 +1306,62 @@ function CartPageInner() {
                     </div>
                   )}
                   {channelTab === "online" && viewItems.some((it) => it.schemeId) && (
-                    <p className="text-xs text-violet-300/80">
+                    <p className="cart-action text-xs text-violet-300/80">
                       El portal recibe los ítems sueltos, sin agrupar. El esquema es para el vendedor: usá “Mensaje para el vendedor”.
                     </p>
+                  )}
+                </div>
+              </div>
+
+              <footer className="shrink-0 border-t border-white/5 bg-surface-950 max-lg:max-h-[40dvh] max-lg:overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                <div className="px-5 lg:px-8 py-3 lg:py-4 flex flex-col gap-3">
+                  <SummaryBar
+                    title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
+                    totals={shownTotals}
+                    fmt={fmt}
+                    withIva={withIva}
+                    currency={currency}
+                    showInvidNote={activeTab === "INVID"}
+                    historyHref={activeTab !== "all" ? providerOrdersHref(activeTab, pricesFromList(activeTab)) : undefined}
+                    historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab, pricesFromList(activeTab)) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
+                  />
+
+                  {currentRate && currency === "ARS" && (
+                    <p className="text-[11px] text-surface-600 -mt-1">
+                      Dólar {dollarLabel(dollarType)} (${currentRate.venta.toLocaleString("es-AR")})
+                    </p>
+                  )}
+                  {activeTab === "all" && (
+                    <div className="flex items-center gap-2 min-h-9 flex-nowrap overflow-x-auto overscroll-x-contain lg:flex-wrap lg:overflow-visible">
+                      {sortedProviders.map((p) => {
+                        const t = providerTotals[p];
+                        const warming =
+                          (onlineByProvider[p]?.length ?? 0) > 0 &&
+                          (warmSnap[p]?.status === "loading" || warmSnap[p]?.status === "idle");
+                        return (
+                          <div key={p} className="inline-flex h-9 shrink-0 overflow-hidden border border-surface-700 rounded-sm">
+                            <button
+                              onClick={() => setActiveTab(p)}
+                              className="h-9 px-2.5 inline-flex items-center gap-2 text-sm hover:bg-surface-900 transition-colors"
+                            >
+                              <ProviderBadge provider={p} variant="inline" size="sm" />
+                              <span className="tabular-nums text-surface-300">{fmt(t.totalUSD)}</span>
+                              {warming && <Loader2 className="w-3.5 h-3.5 animate-spin text-surface-500" />}
+                            </button>
+                            <Link
+                              href={providerOrdersHref(p, pricesFromList(p))}
+                              title={providerHasOrderHistory(p, pricesFromList(p)) ? "Ver historial de pedidos" : "Ir a la cuenta del proveedor"}
+                              className="h-9 px-2 inline-flex items-center border-l border-surface-700 text-surface-500 hover:text-white"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </Link>
+                          </div>
+                        );
+                      })}
+                      <span className="hidden lg:inline shrink-0 whitespace-nowrap text-sm text-surface-500">
+                        Solo informativo. Confirmá en la pestaña del proveedor.
+                      </span>
+                    </div>
                   )}
                 </div>
               </footer>
@@ -1442,19 +1442,13 @@ function SummaryBar({
   historyLabel?: string;
 }) {
   const [explainDiff, setExplainDiff] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const diffUSD = totals.reconciliations.reduce((s, r) => s + r.diffUSD, 0);
   const hasDiff = withIva && totals.reconciliations.length > 0;
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-6 min-h-8">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm min-w-0">
-          <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider mr-1">{title}</span>
-          {historyHref && historyLabel && (
-            <Link href={historyHref} className="text-[11px] text-surface-500 hover:text-white underline underline-offset-2">
-              {historyLabel}
-            </Link>
-          )}
-          <span className="text-surface-500">
+  function breakdown() {
+    return (
+    <>
+      <span className="text-surface-500">
             Neto <span className="tabular-nums text-surface-200">{fmt(totals.subtotalUSD)}</span>
           </span>
           {(totals.quotedShipping || totals.shippingUSD > 0.004) && (
@@ -1499,11 +1493,35 @@ function SummaryBar({
               )}
             </>
           )}
-          {withIva && showInvidNote && !totals.quotedShipping && (
-            <span className="text-xs text-surface-600">
-              {totals.iibbUSD > 0.004 ? "Envío al validar" : "Perc./envío al validar"}
-            </span>
+      {withIva && showInvidNote && !totals.quotedShipping && (
+        <span className="text-xs text-surface-600">
+          {totals.iibbUSD > 0.004 ? "Envío al validar" : "Perc./envío al validar"}
+        </span>
+      )}
+    </>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-3 min-h-8">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider">{title}</span>
+          {historyHref && historyLabel && (
+            <Link href={historyHref} className="text-[11px] text-surface-500 hover:text-white underline underline-offset-2 shrink-0">
+              {historyLabel}
+            </Link>
           )}
+          <button
+            type="button"
+            className="lg:hidden text-[11px] text-surface-400 underline underline-offset-2 shrink-0"
+            onClick={() => setDetailOpen((v) => !v)}
+            aria-expanded={detailOpen}
+          >
+            {detailOpen ? "Ocultar" : "Desglose"}
+          </button>
+        </div>
+        <div className="hidden lg:flex flex-1 flex-wrap items-baseline gap-x-4 gap-y-1 text-sm min-w-0">
+          {breakdown()}
         </div>
         <div className="text-right flex-shrink-0">
           <p className="text-lg font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
@@ -1513,6 +1531,11 @@ function SummaryBar({
           {!withIva && <p className="text-[11px] text-surface-500 mt-0.5">sin impuestos</p>}
         </div>
       </div>
+      {detailOpen && (
+        <div className="lg:hidden flex flex-col gap-1 text-sm">
+          {breakdown()}
+        </div>
+      )}
       {hasDiff && explainDiff && (
         <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-surface-400 flex flex-col gap-2">
           {totals.reconciliations.map((r) => (

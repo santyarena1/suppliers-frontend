@@ -534,7 +534,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
           >
             <X className="w-5 h-5" />
           </button>
-          <div className="relative w-full h-full max-w-4xl max-h-[90vh] bg-white rounded-xl overflow-hidden">
+          <div className="relative w-full h-full max-w-4xl max-h-[90dvh] bg-white rounded-xl overflow-hidden">
             <Image
               src={proxyImg(product.imageUrl, { trim: false })}
               alt={product.name}

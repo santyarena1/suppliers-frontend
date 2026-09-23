@@ -348,7 +348,7 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
               {people.length === 0 ? (
                 <p className="text-xs text-surface-500 px-4 py-6 text-center">Nadie coincide con la búsqueda.</p>
               ) : (
-                <div className="divide-y divide-surface-800 max-h-[70vh] overflow-y-auto">
+                <div className="divide-y divide-surface-800 max-h-[70dvh] overflow-y-auto">
                   {people.map((row) => {
                     const selected = selection?.kind === "user" && selection.id === row.userId;
                     return (

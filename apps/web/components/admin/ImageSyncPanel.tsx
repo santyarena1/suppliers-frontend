@@ -630,7 +630,7 @@ function SerperPicker({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={onClose}>
       <div
-        className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto p-5"
+        className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-6xl max-h-[90dvh] overflow-y-auto p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">

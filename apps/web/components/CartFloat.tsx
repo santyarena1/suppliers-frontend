@@ -282,7 +282,7 @@ function PreviewTotals({ items }: { items: CartItem[] }) {
   const detail = summary.rows.map((row) => `${row.label} ${fmt(row.amountUsd)}`).join(" · ");
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-surface-800 bg-surface-900 px-3.5 py-2">
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-surface-800 bg-surface-900 px-3.5 py-2">
       <p className="min-w-0 truncate text-[10px] text-surface-500 tabular-nums" title={detail}>
         {detail || (withIva ? "Total" : "Total s/imp.")}
       </p>
@@ -348,10 +348,10 @@ export default function CartFloat() {
   if (hide) return null;
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+    <div className="fixed z-50 flex flex-col items-end gap-2 bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 left-4 sm:left-auto sm:right-5">
       {open && (
-        <div className="w-[min(100vw-2rem,26rem)] overflow-hidden rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl backdrop-blur-md">
-          <div className="flex items-center justify-between gap-2 border-b border-surface-800 px-3.5 py-2.5">
+        <div className="flex w-full max-w-[26rem] max-h-[min(68dvh,32rem)] flex-col self-end overflow-hidden rounded-2xl border border-surface-700 bg-surface-950 shadow-2xl backdrop-blur-md">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-surface-800 px-3.5 py-2.5">
             <div className="min-w-0">
               <p className="text-xs font-semibold text-white">Carrito</p>
               <p className="text-[10px] text-surface-500 tabular-nums">
@@ -371,7 +371,7 @@ export default function CartFloat() {
           </div>
 
           {groups.length > 1 && (
-            <div className="flex gap-1 overflow-x-auto border-b border-surface-800 px-3 py-2 scrollbar-none">
+            <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-surface-800 px-3 py-2 scrollbar-none">
               <button
                 type="button"
                 onClick={() => setFilter("all")}
@@ -408,7 +408,7 @@ export default function CartFloat() {
             </div>
           )}
 
-          <div className="max-h-[min(50vh,20rem)] overflow-y-auto px-3.5">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3.5">
             {visibleGroups.length === 0 ? (
               <p className="py-8 text-center text-xs text-surface-500">
                 Agregá productos desde la búsqueda para verlos acá.
@@ -456,7 +456,7 @@ export default function CartFloat() {
           {lineCount > 0 && (
             <>
               <PreviewTotals items={visibleItems} />
-              <div className="border-t border-surface-800 px-3.5 py-2">
+              <div className="shrink-0 border-t border-surface-800 px-3.5 py-2">
                 <Link
                   href="/cart"
                   onClick={() => setOpen(false)}
