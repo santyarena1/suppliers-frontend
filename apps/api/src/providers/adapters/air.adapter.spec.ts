@@ -1,5 +1,6 @@
 import {
   airLoginRejected,
+  airPortalArticles,
   applyAirAccountPrices,
   mapAirProduct,
   parseAirCsv,
@@ -108,6 +109,15 @@ describe("parseAirCsv / mapAirProduct", () => {
     expect(applied).toBe(1);
     expect(mapAirProduct(parsed[0]).price).toBe(44.2);
     expect(mapAirProduct(parsed[1]).price).toBe(100);
+  });
+
+  it("lee precio.lista aunque el portal envuelva la lista y el código no coincida en mayúsculas", () => {
+    const articles = airPortalArticles({ articulos: [{ codiart: "mx123", precio: { lista: "44,20" } }] });
+    expect(articles).toHaveLength(1);
+    const parsed = parseAirCsv(CSV);
+    const prices = new Map(articles.map((a) => [a.codiart!.trim().toUpperCase(), 44.2]));
+    expect(applyAirAccountPrices(parsed, prices)).toBe(1);
+    expect(mapAirProduct(parsed[0]).price).toBe(44.2);
   });
 });
 

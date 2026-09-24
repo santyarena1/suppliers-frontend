@@ -238,7 +238,7 @@ function columnIndex(headers: string[], names: string[], fallback: number): numb
 export function applyAirAccountPrices(rows: AirCsvRow[], prices: Map<string, number>): number {
   let applied = 0;
   for (const row of rows) {
-    const price = prices.get(row.Codigo.trim());
+    const price = prices.get(row.Codigo.trim().toUpperCase());
     if (price == null || !(price > 0)) continue;
     row.lista5 = String(price);
     applied++;
@@ -251,13 +251,32 @@ interface AirPortalArticle {
   precio?: { lista?: unknown };
 }
 
+/** El portal a veces manda el array pelado y a veces un objeto con la lista adentro. */
+export function airPortalArticles(data: unknown): AirPortalArticle[] {
+  if (typeof data === "string") {
+    try {
+      return airPortalArticles(JSON.parse(data));
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(data)) return data.filter((item) => item && typeof item === "object") as AirPortalArticle[];
+  if (!data || typeof data !== "object") return [];
+  const rec = data as Record<string, unknown>;
+  for (const key of ["data", "articulos", "rows", "items", "result", "productos"]) {
+    if (Array.isArray(rec[key])) return airPortalArticles(rec[key]);
+  }
+  const values = Object.values(rec);
+  if (values.length > 0 && values.every((v) => v && typeof v === "object" && "codiart" in (v as object))) {
+    return values as AirPortalArticle[];
+  }
+  return [];
+}
+
 function pricesFromArticles(data: unknown): Map<string, number> {
-  const list = Array.isArray(data) ? data : [];
   const map = new Map<string, number>();
-  for (const item of list) {
-    if (!item || typeof item !== "object") continue;
-    const article = item as AirPortalArticle;
-    const code = article.codiart?.trim();
+  for (const article of airPortalArticles(data)) {
+    const code = article.codiart?.trim().toUpperCase();
     const raw = article.precio?.lista;
     const price = typeof raw === "number" ? (Number.isFinite(raw) ? raw : undefined) : parseAirPrice(raw == null ? undefined : String(raw));
     if (!code || price == null || !(price > 0)) continue;
@@ -287,7 +306,13 @@ async function postAirCatalog(cookie: string, rubro: string, limit: number): Pro
       seccion_name: "",
     },
     {
-      headers: { Cookie: cookie, "Content-Type": "application/json", Accept: "application/json, text/plain, */*" },
+      headers: {
+        Cookie: cookie,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/plain, */*",
+        Referer: PORTAL_URL,
+        Origin: "https://www.air-intra.com",
+      },
       timeout: 90_000,
       validateStatus: (s) => s === 200 || s === 201,
     }
@@ -308,8 +333,8 @@ async function fetchAirAccountPrices(cookie: string, rubros: Map<string, string>
   try {
     const first = pricesFromArticles(await postAirCatalog(cookie, "", 8000));
     // Más de 500: el portal respetó el límite y ya vino el catálogo. 500 o menos
-    // puede ser el tope viejo de la pantalla: se completa rubro por rubro.
-    if (first.size === 0 || first.size > 500 || rubros.size === 0) return first;
+    // (también 0: la consulta general a veces vuelve vacía) se completa rubro por rubro.
+    if (first.size > 500 || rubros.size === 0) return first;
     for (const rubroId of rubros.keys()) {
       const page = pricesFromArticles(await postAirCatalog(cookie, rubroId, 2000));
       for (const [code, price] of page) first.set(code, price);
