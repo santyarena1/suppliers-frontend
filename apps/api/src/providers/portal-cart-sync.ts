@@ -33,6 +33,11 @@ export type PortalReconcileOpts = {
   sessionScoped?: boolean;
   /** Códigos que el comercio decidió sacar del carrito del distribuidor. */
   dropPortalCodes?: string[];
+  /**
+   * New Bytes abre un carrito nuevo en cada verificación. Que un código no
+   * venga en esa respuesta no significa que lo hayan borrado: lo de NODO se queda.
+   */
+  preserveNodoLines?: boolean;
 };
 
 export type PortalReconcileFor = {
@@ -96,7 +101,7 @@ export function reconcilePortalCart(
   for (const item of nodo) {
     const inPortal = byPortal.get(item.code);
     const wasSynced = Boolean(snapshot && item.code in snapshot);
-    if (wasSynced && !inPortal && !sessionMiss && !drop.has(item.code)) {
+    if (wasSynced && !inPortal && !sessionMiss && !drop.has(item.code) && !opts.preserveNodoLines) {
       changes.removedInPortal.push(item.code);
       continue;
     }
