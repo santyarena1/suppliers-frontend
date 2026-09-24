@@ -320,6 +320,22 @@ export class NewBytesOrderService {
     };
   }
 
+  /**
+   * Lo que la cuenta tiene cargado en el carrito de NewBytes, sin tocarlo.
+   * Hay que leerlo antes de cotizar: cotizar vacía el carrito y lo arma con NODO.
+   */
+  async readPortalCart(credentials: Record<string, string>) {
+    const api = await this.login(credentials);
+    const body = await api.get("carrito").catch(() => null);
+    return {
+      items: mergeNbLines(
+        cartItemsFromBody(body, [])
+          .filter((line) => line.code)
+          .map((line) => ({ code: line.code, qty: line.qty, name: line.name }))
+      ),
+    };
+  }
+
   /** Arma el carrito en NewBytes (POST /carrito/new + items) y devuelve subtotales reales. */
   async syncCart(credentials: Record<string, string>, input: NewBytesCartItems, _reconcileFor?: unknown) {
     const prepared = await this.prepareCart(credentials, input.items);

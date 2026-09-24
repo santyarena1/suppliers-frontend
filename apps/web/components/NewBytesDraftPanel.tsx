@@ -26,6 +26,8 @@ import { providerOrdersHref } from "@/lib/providerOrders";
 import { rememberPaymentOptions } from "@/lib/payment-options";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
+import NbPortalCartNotice from "@/components/checkout/NbPortalCartNotice";
+import { clearNbPortalLines } from "@/lib/nbPortalCart";
 
 type Delivery = "pickup" | "shipping";
 
@@ -273,7 +275,10 @@ export default function NewBytesDraftPanel({
 
   function finishOrder() {
     setConfirmOpen(false);
-    if (result?.status === "CREATED") onCreated(result.message);
+    if (result?.status === "CREATED") {
+      clearNbPortalLines();
+      onCreated(result.message);
+    }
   }
 
   if (loadingMeta) return <CheckoutLoading label="Cargando checkout NewBytes…" />;
@@ -290,6 +295,7 @@ export default function NewBytesDraftPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      <NbPortalCartNotice />
       <div className="grid grid-cols-1 sm:grid-cols-[9.5rem_minmax(0,1fr)_auto] gap-3 items-end">
         <CheckoutField label="Entrega">
           <CheckoutSegmented

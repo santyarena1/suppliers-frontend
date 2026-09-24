@@ -28,6 +28,7 @@ import {
 } from "@/lib/api";
 import { getToken, isTokenExpired } from "@/lib/auth";
 import { readPortalDrops } from "@/lib/portalCartSync";
+import { rememberNbPortalCart } from "@/lib/nbPortalCart";
 
 export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX", "DISTECNA", "POLYTECH"] as const;
 export type WarmProvider = (typeof WARM_PROVIDERS)[number];
@@ -185,6 +186,13 @@ async function fetchWarm(provider: WarmProvider, items: CartLine[]): Promise<War
       newBytesCheckoutApi.addresses(),
       newBytesCheckoutApi.payments(),
     ]);
+    // Primero se mira qué tiene cargado la cuenta: la cotización lo reemplaza por NODO.
+    try {
+      const portal = (await newBytesCheckoutApi.portalCart()).data;
+      rememberNbPortalCart(portal.items ?? [], items);
+    } catch {
+      // Sin lectura del portal igual se puede comprar.
+    }
     const preview = (await newBytesCheckoutApi.preview({ items, delivery: "pickup" })).data;
     return {
       addresses: addrRes.data ?? [],

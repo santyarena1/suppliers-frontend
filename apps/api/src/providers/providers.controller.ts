@@ -290,6 +290,12 @@ export class ProvidersController {
     return draft;
   }
 
+  /** GET /carrito tal cual está en la cuenta. No lo modifica. */
+  @Get("providers/NEW_BYTES/checkout/portal-cart")
+  async newBytesPortalCart(@CurrentTenant() tenant: TenantContext) {
+    return this.newBytesOrderService.readPortalCart(await this.newBytesCredentials(tenant));
+  }
+
   /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */
   @Post("providers/NEW_BYTES/checkout/cart")
   async newBytesCheckoutCart(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutCartDto) {

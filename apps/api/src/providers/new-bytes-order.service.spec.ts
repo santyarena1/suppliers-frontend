@@ -179,6 +179,26 @@ describe("NewBytesOrderService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it("lee el carrito de la cuenta sin vaciarlo ni cargar nada", async () => {
+    api.get.mockImplementation(async (path: string) => {
+      if (path === "carrito") {
+        return [
+          { productId: 999, amount: 2, title: "Solo portal" },
+          { productId: 999, amount: 1, title: "Solo portal" },
+          { productId: 108613, amount: 1, title: "RTX 3070" },
+        ];
+      }
+      return [];
+    });
+    const portal = await service.readPortalCart(CREDS);
+    expect(portal.items).toEqual([
+      { code: "999", qty: 3, name: "Solo portal" },
+      { code: "108613", qty: 1, name: "RTX 3070" },
+    ]);
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it("lo que había solo en el portal no se suma ni queda pendiente", async () => {
     const preview = await service.preview(CREDS, { items: ITEMS, delivery: "pickup" }, { tenantId: "tenant-1" });
     expect(api.post).toHaveBeenCalledWith("carrito/item", [{ productId: 108613, amount: 1, type: 0 }]);
