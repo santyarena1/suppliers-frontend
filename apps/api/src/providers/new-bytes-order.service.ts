@@ -227,6 +227,7 @@ export class NewBytesOrderService {
       previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "NEW_BYTES");
       const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot, {
         dropPortalCodes: reconcileFor.dropPortalCodes,
+        preserveNodoLines: true,
       });
       items = reconciled.merged;
       sync = reconciled.changes;

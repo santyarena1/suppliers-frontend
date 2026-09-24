@@ -632,6 +632,17 @@ describe("invid-order.parser", () => {
       });
     });
 
+    it("New Bytes no borra lo de NODO si el carrito del portal no lo trae", () => {
+      const r = reconcilePortalCart(
+        [{ code: "A", qty: 1 }, { code: "B", qty: 2, name: "b" }],
+        [{ code: "A", qty: 1 }],
+        { A: 1, B: 2 },
+        { preserveNodoLines: true }
+      );
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "B", qty: 2, name: "b" }]);
+      expect(r.changes.removedInPortal).toEqual([]);
+    });
+
     it("con carrito por cuenta, vacío sí es borrado", () => {
       const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 });
       expect(r.merged).toEqual([]);
