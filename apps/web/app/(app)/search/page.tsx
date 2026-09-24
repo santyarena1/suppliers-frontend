@@ -1438,7 +1438,7 @@ function SearchPage() {
 
               {/* List */}
               {hydrated && !loading && !nothingAsked && filtered.length > 0 && viewMode === "list" && (
-                <div className="flex flex-col gap-2" data-tour="search-results">
+                <div className="pl-board" data-tour="search-results">
                   {filtered.map((product, i) => (
                     <ProductCard
                       key={`${product.provider}-${product.externalId}-${i}`}

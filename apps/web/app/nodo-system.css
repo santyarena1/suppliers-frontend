@@ -401,7 +401,23 @@ a.pc__name:hover { color: var(--pc-accent); }
 /* --- Fila compacta ---
  * Misma información que la tarjeta, en horizontal. La foto queda
  * grande (128px) para que el producto se reconozca de un vistazo. */
+.pl-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: stretch;
+}
+@media (min-width: 1024px) {
+  .pl-board {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.65rem;
+  }
+}
+
 .pl {
+  container-type: inline-size;
+  height: 100%;
+  min-width: 0;
   --pc-paper: #ffffff;
   --pc-ink: #14172a;
   --pc-dim: #646c85;
@@ -482,21 +498,34 @@ a.pc__name:hover { color: var(--pc-accent); }
   justify-content: center;
 }
 
-@media (max-width: 767px) {
+/* En el teléfono, o cuando la columna de la grilla de dos queda justa,
+   el precio pasa debajo del texto y la foto sigue a la izquierda. */
+@container (max-width: 36rem) {
   .pl {
     grid-template-columns: 6.25rem minmax(0, 1fr);
-    gap: 0.65rem;
+    grid-template-areas: "shot main" "shot side";
+    gap: 0.45rem 0.65rem;
     padding: 0.55rem;
   }
-  .pl .pc__shot { width: 6.25rem; height: 6.25rem; }
-  .pl__side { grid-column: 1 / -1; align-items: stretch; }
+  .pl .pc__shot {
+    grid-area: shot;
+    width: 6.25rem;
+    height: auto;
+    min-height: 6.25rem;
+    align-self: stretch;
+  }
+  .pl__main { grid-area: main; }
+  .pl__side { grid-area: side; align-items: stretch; }
   .pl .pc__price { align-items: flex-start; text-align: left; }
+  .pl .pc__amount { font-size: 1.05rem; }
   .pl .pc__foot {
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     width: 100%;
   }
+  .pl .pc__acts { flex-wrap: wrap; }
   .pl .pc__id { text-align: left; flex: 1 1 auto; }
   .pl .pc__name { font-size: 0.78rem; }
 }
