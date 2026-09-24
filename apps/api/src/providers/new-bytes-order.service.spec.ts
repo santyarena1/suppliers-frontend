@@ -9,6 +9,8 @@ function stubApi() {
     patch: jest.fn(),
   };
 
+  api.patch.mockImplementation(async () => ({ ok: true }));
+
   api.post.mockImplementation(async (path: string) => {
     if (path === "carrito/new") return { ok: true };
     if (path === "carrito/item") return { ok: true };
@@ -83,15 +85,35 @@ describe("NewBytesOrderService", () => {
     jest.restoreAllMocks();
   });
 
-  it("arma el carrito con POST /carrito/new, no asume retiro", async () => {
+  it("vacía el carrito de la cuenta antes de cargar lo de NODO, no asume retiro", async () => {
     const cart = await service.syncCart(CREDS, { items: ITEMS });
+    expect(api.patch).toHaveBeenCalledWith("carrito/empty");
     expect(api.post).toHaveBeenCalledWith("carrito/new");
     expect(api.post).toHaveBeenCalledWith("carrito/item", [
       { productId: 108613, amount: 1, type: 0 },
     ]);
-    expect(api.patch).not.toHaveBeenCalled();
+    const emptyOrder = api.patch.mock.invocationCallOrder[0];
+    const itemOrder = api.post.mock.invocationCallOrder[api.post.mock.calls.findIndex(([p]) => p === "carrito/item")];
+    expect(emptyOrder).toBeLessThan(itemOrder);
     expect(cart.items[0].code).toBe("108613");
     expect(cart.pickup.postalCode).toBe("C1229ABF");
+  });
+
+  it("el pedido lleva la cantidad de NODO: junta líneas repetidas y no suma lo viejo del portal", async () => {
+    await service.submitDraft(AUTOR, CREDS, {
+      items: [
+        { code: "108613", qty: 2, name: "RTX 3070" },
+        { code: "108613", qty: 1, name: "RTX 3070" },
+        { code: "555", qty: 3 },
+      ],
+      delivery: "pickup",
+      medioDePagoId: 5,
+    });
+    expect(api.patch).toHaveBeenCalledWith("carrito/empty");
+    expect(api.post).toHaveBeenCalledWith("carrito/item", [
+      { productId: 108613, amount: 3, type: 0 },
+      { productId: 555, amount: 3, type: 0 },
+    ]);
   });
 
   it("no cae a retiro si falta medio de envío: hay que elegir entrega", async () => {
@@ -157,57 +179,10 @@ describe("NewBytesOrderService", () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("la primera conciliación suma lo compartido y conserva lo que solo está en NewBytes", async () => {
-    api.get.mockImplementation(async (path: string) => {
-      if (path === "carrito") {
-        return [
-          { productId: 108613, amount: 2, title: "RTX 3070", price: 10, subtotal: 20 },
-          { productId: 999, amount: 1, title: "Solo portal", price: 5, subtotal: 5 },
-        ];
-      }
-      if (path === "carrito/subtotales") return { subTotalDollar: 25, subTotalDollarFinal: 25 };
-      if (path === "carrito/availability") return { available: true };
-      return [];
-    });
-    const save = jest.fn(async () => undefined);
-    service = new NewBytesOrderService(
-      { providerOrder: { create: createOrder, findMany: jest.fn() } } as never,
-      { load: jest.fn(async () => null), save, clear: jest.fn(async () => undefined) } as never
-    );
-    const cart = await service.syncCart(
-      CREDS,
-      { items: [{ code: "108613", qty: 3, name: "RTX 3070" }] },
-      { tenantId: "tenant-1" }
-    );
-    expect(api.post).toHaveBeenCalledWith("carrito/item", [
-      { productId: 108613, amount: 5, type: 0 },
-      { productId: 999, amount: 1, type: 0 },
-    ]);
-    expect(cart.sync?.summedInBoth).toEqual([{ code: "108613", qty: 5, name: "RTX 3070", baseQty: 3 }]);
-    expect(cart.sync?.addedInPortal).toEqual([{ code: "999", qty: 1, name: "Solo portal" }]);
-    expect(save).toHaveBeenCalledWith("tenant-1", "NEW_BYTES", { "108613": 3 });
-  });
-
-  it("el preview concilia y no reemplaza el carrito de la cuenta por el de NODO", async () => {
-    api.get.mockImplementation(async (path: string) => {
-      if (path === "carrito") {
-        return [
-          { productId: 108613, amount: 1, title: "RTX 3070", price: 10, subtotal: 10 },
-          { productId: 999, amount: 4, title: "Solo portal", price: 5, subtotal: 20 },
-        ];
-      }
-      if (path === "carrito/subtotales") return { subTotalDollar: 30, subTotalDollarFinal: 30 };
-      if (path === "carrito/availability") return { available: true };
-      if (path === "carrito/mediosDePago") return [{ payMethodId: 5, description: "Efectivo Caja", interest: 0 }];
-      return [];
-    });
+  it("lo que había solo en el portal no se suma ni queda pendiente", async () => {
     const preview = await service.preview(CREDS, { items: ITEMS, delivery: "pickup" }, { tenantId: "tenant-1" });
-    expect(api.post).toHaveBeenCalledWith("carrito/item", [
-      { productId: 108613, amount: 1, type: 0 },
-      { productId: 999, amount: 4, type: 0 },
-    ]);
-    expect(preview.sync?.addedInPortal).toEqual([{ code: "999", qty: 4, name: "Solo portal" }]);
-    expect(preview.sync?.summedInBoth).toEqual([]);
+    expect(api.post).toHaveBeenCalledWith("carrito/item", [{ productId: 108613, amount: 1, type: 0 }]);
+    expect(preview).not.toHaveProperty("sync");
   });
 
   it("la cotización usa el CP y el idDirCli de la dirección", async () => {
