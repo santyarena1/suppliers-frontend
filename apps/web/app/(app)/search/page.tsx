@@ -4,8 +4,6 @@ import { useState, useCallback, useMemo, useEffect, useRef, Suspense } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import ProductCard from "@/components/ProductCard";
 import PrefsPanel from "@/components/PrefsPanel";
-import PriceTag from "@/components/PriceTag";
-import AddToCartButton from "@/components/AddToCartButton";
 import SearchLanding from "@/components/search/SearchLanding";
 import SearchFilterDropdown from "@/components/search/SearchFilterDropdown";
 import SponsoredStrip from "@/components/ads/SponsoredStrip";
@@ -21,28 +19,21 @@ import {
   type CategoryCount,
 } from "@/lib/api";
 import { useMyProviders } from "@/lib/myProviders";
-import { useIsRetailer, usePurchasePolicies, usePurchasePolicy } from "@/lib/purchase";
+import { useIsRetailer, usePurchasePolicies } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { usePrefs } from "@/lib/prefs";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
-import { hasOwnPrice, parsePrice, proxyImg } from "@/lib/format";
-import {
-  entryKey,
-  loadCompareEntries,
-  newProviderEntry,
-  saveCompareEntries,
-} from "@/lib/compare-store";
+import { hasOwnPrice, parsePrice } from "@/lib/format";
 import ProviderBadge from "@/components/ProviderBadge";
-import Image from "next/image";
 import { matchesSearchTokens, searchTokens } from "@/lib/catalog-search";
 import Link from "next/link";
 import {
   Search, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight, GitCompare, Check, SlidersHorizontal, TrendingDown,
+  ChevronDown, ChevronRight, SlidersHorizontal, TrendingDown,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc" | "name_desc";
@@ -969,14 +960,17 @@ function SearchPage() {
 
               <div className="flex border border-surface-700 rounded-lg overflow-hidden">
                 {([
-                  { mode: "grid" as ViewMode, Icon: LayoutGrid },
-                  { mode: "list" as ViewMode, Icon: List },
-                  { mode: "grouped" as ViewMode, Icon: Filter },
-                ]).map(({ mode, Icon }) => (
+                  { mode: "grid" as ViewMode, Icon: LayoutGrid, label: "Tarjetas" },
+                  { mode: "list" as ViewMode, Icon: List, label: "Lista compacta" },
+                  { mode: "grouped" as ViewMode, Icon: Filter, label: "Por distribuidor" },
+                ]).map(({ mode, Icon, label }) => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => setViewMode(mode)}
+                    title={label}
+                    aria-label={label}
+                    aria-pressed={viewMode === mode}
                     className={`p-2 transition-colors ${viewMode === mode ? "bg-surface-700 text-white" : "text-surface-500 hover:text-surface-300"}`}
                   >
                     <Icon className="w-3.5 h-3.5" />
@@ -1109,14 +1103,17 @@ function SearchPage() {
 
               <div className="flex border border-surface-700 rounded-lg overflow-hidden">
                 {([
-                  { mode: "grid" as ViewMode, Icon: LayoutGrid },
-                  { mode: "list" as ViewMode, Icon: List },
-                  { mode: "grouped" as ViewMode, Icon: Filter },
-                ]).map(({ mode, Icon }) => (
+                  { mode: "grid" as ViewMode, Icon: LayoutGrid, label: "Tarjetas" },
+                  { mode: "list" as ViewMode, Icon: List, label: "Lista compacta" },
+                  { mode: "grouped" as ViewMode, Icon: Filter, label: "Por distribuidor" },
+                ]).map(({ mode, Icon, label }) => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => setViewMode(mode)}
+                    title={label}
+                    aria-label={label}
+                    aria-pressed={viewMode === mode}
                     className={`p-2 transition-colors ${viewMode === mode ? "bg-surface-700 text-white" : "text-surface-500 hover:text-surface-300"}`}
                   >
                     <Icon className="w-3.5 h-3.5" />
@@ -1441,8 +1438,15 @@ function SearchPage() {
 
               {/* List */}
               {hydrated && !loading && !nothingAsked && filtered.length > 0 && viewMode === "list" && (
-                <div data-tour="search-results">
-                  <ListView items={filtered} priceMode={priceMode} />
+                <div className="flex flex-col gap-2" data-tour="search-results">
+                  {filtered.map((product, i) => (
+                    <ProductCard
+                      key={`${product.provider}-${product.externalId}-${i}`}
+                      product={product}
+                      priceMode={priceMode}
+                      layout="row"
+                    />
+                  ))}
                 </div>
               )}
 
@@ -1481,123 +1485,3 @@ function SearchPage() {
   );
 }
 
-function ListRowActions({ product, priceMode }: { product: ProductDTO; priceMode: PriceMode }) {
-  const [compareFlash, setCompareFlash] = useState(false);
-  const policy = usePurchasePolicy(product.provider);
-  const pricing = purchaseLinePricing(product, policy, priceMode);
-  const showingOffline = pricing.adjusted && pricing.mode === "offline";
-
-  function addToCompare(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    const entry = newProviderEntry(product, priceMode);
-    const current = loadCompareEntries();
-    const key = entryKey(entry);
-    if (!current.some((c) => entryKey(c) === key)) {
-      saveCompareEntries([...current, entry]);
-    }
-    setCompareFlash(true);
-    setTimeout(() => setCompareFlash(false), 700);
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("nodo-compare-updated"));
-    }
-  }
-
-  return (
-    <div
-      className="flex items-center justify-end gap-1.5"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-    >
-      <button
-        type="button"
-        title="Agregar al comparador"
-        aria-label="Agregar al comparador"
-        onClick={addToCompare}
-        className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors shadow-sm ${
-          compareFlash
-            ? "border-violet-400 bg-violet-100 text-violet-700"
-            : "border-violet-300/70 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:border-violet-400/60 hover:text-violet-200"
-        }`}
-      >
-        {compareFlash ? <Check className="w-3.5 h-3.5" /> : <GitCompare className="w-3.5 h-3.5" />}
-      </button>
-      <AddToCartButton
-        product={product}
-        variant="stepper"
-        tone="dark"
-        channel={showingOffline ? "offline" : "online"}
-      />
-    </div>
-  );
-}
-
-function ListView({ items, priceMode }: { items: ProductDTO[]; priceMode: PriceMode }) {
-  return (
-    <div className="flex flex-col divide-y divide-surface-800 border border-surface-800 rounded-xl overflow-hidden">
-      <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 px-4 py-2.5 bg-surface-900 text-[10px] font-semibold text-surface-500 uppercase tracking-wider items-center">
-        <span className="w-10" />
-        <span>Producto</span>
-        <span className="text-right w-28">Proveedor</span>
-        <span className="text-right w-36">Precio</span>
-        <span className="w-[7.5rem] text-right">Acciones</span>
-      </div>
-      {items.map((p, i) => {
-        const brand = productDisplayBrand(p);
-        const category = productDisplayCategory(p);
-        return (
-          <div
-            key={`${p.provider}-${p.externalId}-${i}`}
-            className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 items-center px-4 py-3 bg-surface-950 hover:bg-surface-900 transition-colors"
-          >
-            <Link
-              href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
-              className="w-10 h-10 relative flex-shrink-0 bg-surface-800 rounded overflow-hidden"
-            >
-              {p.imageUrl
-                ? <Image src={proxyImg(p.imageUrl)} alt="" fill className="object-contain" unoptimized />
-                : <Package className="w-4 h-4 text-surface-600 absolute inset-0 m-auto" />
-              }
-            </Link>
-            <div className="min-w-0">
-              <Link
-                href={`/product/${encodeURIComponent(p.provider)}/${encodeURIComponent(p.externalId)}`}
-                className="text-sm text-surface-100 font-medium truncate block hover:text-white"
-              >
-                {p.name}
-              </Link>
-              {(brand || category) ? (
-                <p className="text-[11px] text-surface-500 truncate">
-                  {brand && (
-                    <Link href={`/search?marca=${encodeURIComponent(brand)}`} className="hover:text-brand-300">
-                      {brand}
-                    </Link>
-                  )}
-                  {brand && category ? " · " : null}
-                  {category && (
-                    <Link href={`/search?categoria=${encodeURIComponent(category)}`} className="hover:text-brand-300">
-                      {category}
-                    </Link>
-                  )}
-                </p>
-              ) : p.externalId ? (
-                <p className="text-[11px] text-surface-500 font-mono">#{p.externalId}</p>
-              ) : null}
-            </div>
-            <div className="w-28 text-right flex justify-end">
-              <ProviderBadge provider={p.provider} variant="inline" size="sm" />
-            </div>
-            <div className="w-36 text-right">
-              <PriceTag product={p} size="sm" priceMode={priceMode} />
-            </div>
-            <div className="w-[7.5rem]">
-              <ListRowActions product={p} priceMode={priceMode} />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}

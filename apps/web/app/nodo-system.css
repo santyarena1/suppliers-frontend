@@ -55,7 +55,8 @@
 .pc__shot img {
   transition: transform 420ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.pc:hover .pc__shot img { transform: scale(1.035); }
+.pc:hover .pc__shot img,
+.pl:hover .pc__shot img { transform: scale(1.035); }
 .pc__noimg {
   position: absolute;
   inset: 0;
@@ -397,6 +398,109 @@ a.pc__name:hover { color: var(--pc-accent); }
   }
 }
 
+/* --- Fila compacta ---
+ * Misma información que la tarjeta, en horizontal. La foto queda
+ * grande (128px) para que el producto se reconozca de un vistazo. */
+.pl {
+  --pc-paper: #ffffff;
+  --pc-ink: #14172a;
+  --pc-dim: #646c85;
+  --pc-faint: #8d94a8;
+  --pc-line: #e5e7ef;
+  --pc-shot: #f7f8fb;
+  --pc-accent: #4033fc;
+  --pc-good: #0f9d63;
+  --pc-warn: #c2410c;
+
+  position: relative;
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr) minmax(11.5rem, auto);
+  gap: 0.85rem 1rem;
+  align-items: center;
+  padding: 0.7rem 0.85rem;
+  background: var(--pc-paper);
+  border: 1px solid var(--pc-line);
+  border-radius: 10px;
+  color: var(--pc-ink);
+  font-family: var(--lnd-font-display), ui-sans-serif, system-ui, sans-serif;
+  transition:
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.pl:hover {
+  border-color: #cfd4e2;
+  box-shadow: 0 12px 28px -20px rgb(20 23 42 / 0.45);
+}
+.pl .pc-mono {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.pl .pc__shot {
+  width: 8rem;
+  height: 8rem;
+  aspect-ratio: auto;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.pl .pc__noimg { font-size: 0.58rem; gap: 0.25rem; }
+.pl .pc__prov {
+  position: static;
+  max-width: 100%;
+  margin-bottom: 0.15rem;
+}
+.pl__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+.pl__main > * { min-width: 0; }
+.pl .pc__name {
+  font-size: 0.86rem;
+  -webkit-line-clamp: 2;
+}
+.pl .pc__price { align-items: flex-end; text-align: right; }
+.pl .pc__amount { font-size: 1.15rem; }
+.pl .pc__base { flex-direction: row; flex-wrap: wrap; gap: 0.1rem 0.45rem; }
+.pl .pc__base > span { display: inline; width: auto; }
+.pl .pc__foot {
+  margin-top: 0.35rem;
+  padding-top: 0;
+  border-top: 0;
+  width: auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+.pl .pc__id { text-align: right; flex: 0 1 auto; }
+.pl .pc__sync { margin-top: 0.15rem; }
+.pl__side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .pl {
+    grid-template-columns: 6.25rem minmax(0, 1fr);
+    gap: 0.65rem;
+    padding: 0.55rem;
+  }
+  .pl .pc__shot { width: 6.25rem; height: 6.25rem; }
+  .pl__side { grid-column: 1 / -1; align-items: stretch; }
+  .pl .pc__price { align-items: flex-start; text-align: left; }
+  .pl .pc__foot {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+  .pl .pc__id { text-align: left; flex: 1 1 auto; }
+  .pl .pc__name { font-size: 0.78rem; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pc, .pc * { transition-duration: 0.001ms !important; }
+  .pc, .pc *, .pl, .pl * { transition-duration: 0.001ms !important; }
 }
