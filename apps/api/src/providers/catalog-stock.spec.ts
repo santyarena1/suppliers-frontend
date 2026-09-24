@@ -1,4 +1,5 @@
 import {
+  catalogHideEmptyOfferWhere,
   catalogStockWhere,
   displayedStock,
   hidesZeroStockFromCatalog,
@@ -60,6 +61,23 @@ describe("catalogStockWhere", () => {
     });
     expect(catalogStockWhere(false, 5, "DELETE")).toEqual({
       OR: [{ stock: null }, { stock: { gt: 5 } }],
+    });
+  });
+});
+
+describe("catalogHideEmptyOfferWhere", () => {
+  it("exige precio y stock cuando el local oculta lo que el distribuidor mandó vacío", () => {
+    expect(catalogHideEmptyOfferWhere(0, false)).toEqual({
+      AND: [
+        { OR: [{ price: { not: null } }, { finalPrice: { not: null } }] },
+        { stock: { gt: 0 } },
+      ],
+    });
+  });
+
+  it("si piden ver sin stock, igual exige precio", () => {
+    expect(catalogHideEmptyOfferWhere(3, true)).toEqual({
+      OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
     });
   });
 });

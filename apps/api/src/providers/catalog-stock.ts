@@ -40,6 +40,22 @@ export function catalogStockWhere(
   };
 }
 
+/**
+ * Con «Ocultar productos sin precio», el distribuidor puede haber mandado la
+ * oferta igual: sin importe, o sin stock. Esas no se listan. Stock null no es
+ * “no informa”: en este modo es sin stock.
+ */
+export function catalogHideEmptyOfferWhere(
+  minStockThreshold: number,
+  includeOutOfStock: boolean
+): Prisma.TenantProductOfferWhereInput {
+  const withPrice: Prisma.TenantProductOfferWhereInput = {
+    OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
+  };
+  if (includeOutOfStock) return withPrice;
+  return { AND: [withPrice, { stock: { gt: Math.max(minStockThreshold, 0) } }] };
+}
+
 export function parseIncludeOutOfStock(value?: string | string[]): boolean {
   const v = Array.isArray(value) ? value[0] : value;
   return v === "1" || v === "true";

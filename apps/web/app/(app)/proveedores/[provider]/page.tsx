@@ -646,7 +646,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                             <div>
                               <p className="text-sm text-surface-200">Ocultar productos sin precio</p>
                               <p className="text-xs text-surface-500">
-                                Si todavía no sincronizaste este distribuidor, el buscador muestra la ficha sin precio ni stock. Activá esto para ver solo los productos que ya sincronizaste con tu cuenta.
+                                No lista la ficha si todavía no sincronizaste esta cuenta, ni los productos que el distribuidor mandó sin precio o sin stock.
                               </p>
                             </div>
                             <button
