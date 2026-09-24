@@ -28,7 +28,7 @@ import { usePrefs } from "@/lib/prefs";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
-import { parsePrice, proxyImg } from "@/lib/format";
+import { hasOwnPrice, parsePrice, proxyImg } from "@/lib/format";
 import {
   entryKey,
   loadCompareEntries,
@@ -524,18 +524,24 @@ function SearchPage() {
     }
     // “Bajaron de precio”: siempre por % de descuento. En “Ver todas” (dropsView)
     // el defecto también es %; el usuario puede cambiar a precio/nombre.
+    // Sin precio ordena como 0 y queda primero en Precio ↑. Van al final en cualquier orden.
+    const unpricedLast =
+      (cmp: (a: ProductDTO, b: ProductDTO) => number) => (a: ProductDTO, b: ProductDTO) => {
+        const au = !hasOwnPrice(a);
+        const bu = !hasOwnPrice(b);
+        if (au !== bu) return au ? 1 : -1;
+        return cmp(a, b);
+      };
     if (onlyPriceDrops || (dropsView && sortBy === "default")) {
-      arr = [...arr].sort(
-        (a, b) => (b.priceDropPercent ?? 0) - (a.priceDropPercent ?? 0),
-      );
+      arr = [...arr].sort(unpricedLast((a, b) => (b.priceDropPercent ?? 0) - (a.priceDropPercent ?? 0)));
     } else if (sortBy === "price_asc") {
-      arr = [...arr].sort((a, b) => sortPrice(a) - sortPrice(b));
+      arr = [...arr].sort(unpricedLast((a, b) => sortPrice(a) - sortPrice(b)));
     } else if (sortBy === "price_desc") {
-      arr = [...arr].sort((a, b) => sortPrice(b) - sortPrice(a));
+      arr = [...arr].sort(unpricedLast((a, b) => sortPrice(b) - sortPrice(a)));
     } else if (sortBy === "name_asc") {
-      arr = [...arr].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      arr = [...arr].sort(unpricedLast((a, b) => (a.name || "").localeCompare(b.name || "")));
     } else if (sortBy === "name_desc") {
-      arr = [...arr].sort((a, b) => (b.name || "").localeCompare(a.name || ""));
+      arr = [...arr].sort(unpricedLast((a, b) => (b.name || "").localeCompare(a.name || "")));
     }
     return arr;
   }, [
