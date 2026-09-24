@@ -15,7 +15,7 @@ import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
-import { catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
+import { catalogHideEmptyOfferWhere, catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
 import {
   fillPriceHistoryDays,
   argentinaDayKey,
@@ -942,6 +942,9 @@ export class ProvidersService implements OnModuleInit {
           active: true,
           AND: [
             ...(Object.keys(stockWhere).length ? [stockWhere] : []),
+            ...(hideSheets
+              ? [catalogHideEmptyOfferWhere(rules.minStockThreshold, Boolean(opts.includeOutOfStock))]
+              : []),
             { product: productWhere },
           ],
         },
@@ -1124,6 +1127,36 @@ export class ProvidersService implements OnModuleInit {
       select: { provider: true },
     });
     return new Set(rows.map((row) => row.provider));
+  }
+
+  /**
+   * Con el interruptor activo, una oferta que el distribuidor mandó sin precio
+   * o sin stock no entra al listado. El resto de los distribuidores no cambia.
+   */
+  private emptyOfferConstraint(
+    providers: string[],
+    hidden: Set<string>,
+    rules: Map<string, OfferRules>,
+    includeOutOfStock: boolean
+  ) {
+    const strict = providers.filter((provider) => hidden.has(provider));
+    if (strict.length === 0) return [];
+    return [
+      {
+        OR: [
+          { provider: { notIn: strict } },
+          ...strict.map((provider) => ({
+            AND: [
+              { provider },
+              catalogHideEmptyOfferWhere(
+                (rules.get(provider) ?? NO_RULES).minStockThreshold,
+                includeOutOfStock
+              ),
+            ],
+          })),
+        ],
+      },
+    ];
   }
 
   /** Markup y umbral configurados por la organización para un proveedor. */
@@ -1703,6 +1736,7 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
+    const hidden = await this.providersHidingUnsynced(tenantId, providers);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
@@ -1711,6 +1745,7 @@ export class ProvidersService implements OnModuleInit {
         provider: { in: providers },
         AND: [
           ...stockConstraint,
+          ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
           {
             OR: [
               { product: { category: { in: match.rawCategories } } },
@@ -1777,13 +1812,14 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
+    const hidden = await this.providersHidingUnsynced(tenantId, providers);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
         tenantId,
         active: true,
         provider: { in: providers },
-        AND: [...stockConstraint],
+        AND: [...stockConstraint, ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock)],
       },
       include: { product: true },
       orderBy: { product: { name: "asc" } },
@@ -1801,7 +1837,6 @@ export class ProvidersService implements OnModuleInit {
         return isDisplayedInStock(product.stock, 0);
       });
     if (views.length < limit) {
-      const hidden = await this.providersHidingUnsynced(tenantId, providers);
       const visible = providers.filter((provider) => !hidden.has(provider));
       if (visible.length > 0) {
         const sheets = await this.prisma.providerSyncCache.findMany({
@@ -1849,6 +1884,7 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
+    const hidden = await this.providersHidingUnsynced(tenantId, providers);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
@@ -1857,6 +1893,7 @@ export class ProvidersService implements OnModuleInit {
         provider: { in: providers },
         AND: [
           ...stockConstraint,
+          ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
           {
             OR: [
               { product: { brand: { in: match.rawBrands } } },
