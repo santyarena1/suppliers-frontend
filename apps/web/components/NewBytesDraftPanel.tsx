@@ -26,8 +26,8 @@ import { providerOrdersHref } from "@/lib/providerOrders";
 import { rememberPaymentOptions } from "@/lib/payment-options";
 import { trackPendingOrder, usePendingOrders } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
-import { readPortalDrops, usePortalCartSync } from "@/lib/portalCartSync";
-import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
+import NbPortalCartNotice from "@/components/checkout/NbPortalCartNotice";
+import { clearNbPortalLines } from "@/lib/nbPortalCart";
 
 type Delivery = "pickup" | "shipping";
 
@@ -48,8 +48,17 @@ export default function NewBytesDraftPanel({
   compact?: boolean;
 }) {
   const cartKey = items.map((it) => `${it.externalId}:${it.qty}`).join("|");
+  // Online y esquema del mismo producto son una sola línea en New Bytes.
   const cartItems = useMemo(
-    () => items.map((it) => ({ code: it.externalId, qty: it.qty, name: it.name })),
+    () => {
+      const byCode = new Map<string, { code: string; qty: number; name?: string }>();
+      for (const it of items) {
+        const prev = byCode.get(it.externalId);
+        if (prev) prev.qty += it.qty;
+        else byCode.set(it.externalId, { code: it.externalId, qty: it.qty, name: it.name });
+      }
+      return [...byCode.values()];
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [cartKey]
   );
@@ -78,10 +87,6 @@ export default function NewBytesDraftPanel({
   const seeded = useRef<string | null>(null);
   const jobs = usePendingOrders();
   const warm = useCheckoutWarmup("NEW_BYTES", cartItems);
-  const portalSync = usePortalCartSync("NEW_BYTES", async (dropCodes) => {
-    const synced = (await newBytesCheckoutApi.cart({ items: cartItems, dropPortalCodes: dropCodes })).data;
-    return synced.sync;
-  });
 
   useEffect(() => {
     seeded.current = null;
@@ -119,8 +124,6 @@ export default function NewBytesDraftPanel({
         subtotales: preview.subtotales,
         note: preview.note,
       });
-      // Lo que cambió en el carrito de la cuenta de NewBytes se refleja acá.
-      void portalSync.apply(warm.data.sync, items);
       return;
     }
     if (warm.status === "error" && seeded.current !== cartKey) {
@@ -133,8 +136,6 @@ export default function NewBytesDraftPanel({
       setLoadingMeta(true);
       setMetaError(null);
     }
-    // seed-once por cartKey: items/portalSync se leen del render en que llega el warm-up
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [warm, cartKey, onPreviewed]);
 
   const filteredPayments = useMemo(() => {
@@ -168,11 +169,7 @@ export default function NewBytesDraftPanel({
       setQuoting(true);
       setError(null);
       try {
-        const res = await newBytesCheckoutApi.shipping({
-          items: cartItems,
-          addressId,
-          dropPortalCodes: readPortalDrops("NEW_BYTES"),
-        });
+        const res = await newBytesCheckoutApi.shipping({ items: cartItems, addressId });
         if (cancelled) return;
         const next = res.data.quotes ?? [];
         setQuotes(next);
@@ -194,12 +191,10 @@ export default function NewBytesDraftPanel({
   }, [delivery, addressId, cartItems]);
 
   const selectedQuote = quotes.find((q) => q.id === medioDeEnvioId);
-  const portalPending = portalSync.pending.length > 0;
   const canSubmit =
     Boolean(medioDePagoId) &&
     !quoting &&
     !submitting &&
-    !portalPending &&
     (delivery === "pickup" || Boolean(addressId && medioDeEnvioId));
 
   function checkoutPayload() {
@@ -280,7 +275,10 @@ export default function NewBytesDraftPanel({
 
   function finishOrder() {
     setConfirmOpen(false);
-    if (result?.status === "CREATED") onCreated(result.message);
+    if (result?.status === "CREATED") {
+      clearNbPortalLines();
+      onCreated(result.message);
+    }
   }
 
   if (loadingMeta) return <CheckoutLoading label="Cargando checkout NewBytes…" />;
@@ -297,16 +295,7 @@ export default function NewBytesDraftPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      {portalSync.notice && (
-        <PortalSyncNotice
-          providerLabel="New Bytes"
-          notice={portalSync.notice}
-          busyCode={portalSync.busyCode}
-          onKeep={portalSync.keep}
-          onDrop={portalSync.drop}
-          onDismiss={portalSync.dismiss}
-        />
-      )}
+      <NbPortalCartNotice />
       <div className="grid grid-cols-1 sm:grid-cols-[9.5rem_minmax(0,1fr)_auto] gap-3 items-end">
         <CheckoutField label="Entrega">
           <CheckoutSegmented
@@ -339,9 +328,13 @@ export default function NewBytesDraftPanel({
           onClick={requestConfirm}
           disabled={!canSubmit}
           title={!canSubmit
-            ? (portalPending
-              ? "Decidí si dejás o sacás lo que ya estaba en el carrito de New Bytes"
-              : !medioDePagoId ? "Falta un medio de pago" : quoting ? "Cotizando envío…" : "Completá entrega y pago")
+            ? (!medioDePagoId
+              ? "Falta un medio de pago"
+              : quoting
+                ? "Cotizando envío…"
+                : delivery === "shipping" && !medioDeEnvioId
+                  ? "Elegí un medio de envío"
+                  : "Completá entrega y pago")
             : undefined}
         >
           {delivery === "pickup" ? "Confirmar retiro" : "Confirmar envío"}
@@ -379,7 +372,7 @@ export default function NewBytesDraftPanel({
               {quotes.map((q) => (
                 <option key={q.id} value={q.id}>
                   {q.label}
-                  {q.total != null ? ` · ${formatARS(q.total)}` : ""}
+                  {q.total != null ? ` · ${q.total > 0 ? formatARS(q.total) : "sin cargo"}` : ""}
                   {q.plazo ? ` · ${q.plazo}` : ""}
                 </option>
               ))}
@@ -449,12 +442,12 @@ export default function NewBytesDraftPanel({
         provider="NEW_BYTES"
         title="Confirmar pedido"
         warning="Esto crea el pedido real en tu cuenta de New Bytes. No se puede deshacer desde Nodo."
-        items={items.map((it) => ({ name: it.name, qty: it.qty }))}
+        items={cartItems.map((it) => ({ name: it.name ?? it.code, qty: it.qty }))}
         lines={[
           { label: "Entrega", value: delivery === "pickup" ? "Retiro · Av. Jujuy 1039" : (selectedQuote?.label ?? "Envío") },
           { label: "Pago", value: selectedPayment?.label ?? "—" },
           ...(selectedQuote?.total != null ? [{ label: "Costo envío", value: formatARS(selectedQuote.total) }] : []),
-          { label: "Líneas", value: String(items.length) },
+          { label: "Líneas", value: String(cartItems.length) },
         ]}
         confirmLabel={delivery === "pickup" ? "Procesar retiro" : "Procesar envío"}
         loading={submitting}

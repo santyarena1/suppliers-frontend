@@ -1840,6 +1840,9 @@ export type NewBytesCheckoutPayload = {
 };
 
 export const newBytesCheckoutApi = {
+  /** Lo cargado en el carrito de la cuenta de New Bytes, sin modificarlo. */
+  portalCart: () =>
+    api.get<{ items: NewBytesCheckoutItemInput[] }>("/providers/NEW_BYTES/checkout/portal-cart"),
   addresses: () => api.get<NewBytesAddress[]>("/providers/NEW_BYTES/checkout/addresses"),
   payments: () => api.get<NewBytesPaymentOption[]>("/providers/NEW_BYTES/checkout/payments"),
   cart: (body: { items: NewBytesCheckoutItemInput[]; dropPortalCodes?: string[] }) =>

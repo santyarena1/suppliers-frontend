@@ -480,9 +480,13 @@ export function pickBalanceFromClient(client: unknown): number | null {
 
 export const NB_REDIRECT_PAYMENT_IDS = new Set([11, 15]);
 
+/**
+ * Solo Efectivo Caja (id 5) es exclusivo de retiro según la doc de NewBytes.
+ * Buscar "efectivo" en el nombre sacaba de envío medios que sí aceptan.
+ */
 export function isPickupPayment(payMethodId: number, description: string): boolean {
   if (payMethodId === 5) return true;
-  return /caja|efectivo|retiro|sucursal/i.test(description);
+  return /efectivo\s+(en\s+)?caja|solo\s+retiro|pago\s+en\s+sucursal/i.test(description);
 }
 
 export interface NbPaymentOption {
@@ -576,18 +580,54 @@ export function parseDatosBultos(raw: unknown): NbDatosBultos | undefined {
   return { weightKg, sizeCm, amount };
 }
 
+const QUOTE_LIST_KEYS = ["cotizacion", "cotizaciones", "mediosDeEnvio", "mediosEnvio", "opciones", "envios", "data", "result"];
+
+function quoteRows(body: unknown, depth = 0): unknown[] {
+  if (depth > 3 || body == null) return [];
+  if (Array.isArray(body)) {
+    // Algunas respuestas agrupan por empresa: [{ empresa, opciones: [...] }].
+    return body.flatMap((row) => {
+      const rec = asRecord(row);
+      const nested = rec && QUOTE_LIST_KEYS.map((k) => rec[k]).find(Array.isArray);
+      return nested ? quoteRows(nested, depth + 1) : [row];
+    });
+  }
+  const rec = asRecord(body);
+  if (!rec) return [];
+  for (const key of QUOTE_LIST_KEYS) {
+    if (rec[key] != null) return quoteRows(rec[key], depth + 1);
+  }
+  return [];
+}
+
 export function parseShippingQuote(body: unknown): { quotes: NbShippingQuote[]; datosBultos?: NbDatosBultos } {
   const rec = asRecord(body) ?? {};
   const quotes: NbShippingQuote[] = [];
-  for (const row of unwrapNbList(rec.cotizacion ?? rec)) {
+  const seen = new Set<string>();
+  for (const row of quoteRows(body)) {
     const item = asRecord(row) ?? {};
-    const id = asString(item.id);
-    if (!id) continue;
+    const id =
+      asString(item.id) ||
+      asString(item.mediodeEnvioId) ||
+      asString(item.medioDeEnvioId) ||
+      asString(item.idMedioEnvio) ||
+      asString(item.idEnvio) ||
+      asString(item.codigo);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const empresa = asString(item.empresa) || asString(item.transporte) || asString(item.carrier);
+    const label =
+      asString(item.description) ||
+      asString(item.descripcion) ||
+      asString(item.nombre) ||
+      asString(item.name) ||
+      empresa ||
+      `Envío ${id}`;
     quotes.push({
       id,
-      label: asString(item.description) || asString(item.descripcion) || `Envío ${id}`,
-      plazo: asString(item.plazoEntrega),
-      total: asNumber(item.total),
+      label: empresa && !label.toLowerCase().includes(empresa.toLowerCase()) ? `${label} (${empresa})` : label,
+      plazo: asString(item.plazoEntrega) || asString(item.plazo) || asString(item.demora),
+      total: asNumber(item.total) ?? asNumber(item.precio) ?? asNumber(item.importe) ?? asNumber(item.costo),
     });
   }
   return { quotes, datosBultos: parseDatosBultos(rec.datosBulto ?? rec.datosBultos) };

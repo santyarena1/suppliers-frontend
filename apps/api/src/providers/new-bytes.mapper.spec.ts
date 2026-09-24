@@ -286,6 +286,25 @@ describe("new-bytes.mapper", () => {
     expect(parsed.datosBultos).toEqual({ weightKg: 0.6, sizeCm: "12.16x12.16x12.16", amount: 1 });
   });
 
+  it("lee todas las opciones de envío aunque vengan con otros nombres o agrupadas", () => {
+    const parsed = parseShippingQuote({
+      cotizaciones: [
+        { empresa: "Andreani", opciones: [{ idMedioEnvio: 4065, nombre: "A domicilio", precio: "5114,4", plazo: "48 h" }] },
+        { mediodeEnvioId: 3030, descripcion: "Moto (Capital Federal)", importe: 3500 },
+        { id: 7000, description: "Expreso a elección", total: 0 },
+      ],
+    });
+    expect(parsed.quotes.map((q) => q.id)).toEqual(["4065", "3030", "7000"]);
+    expect(parsed.quotes[0]).toMatchObject({ label: "A domicilio", total: 5114.4, plazo: "48 h" });
+    expect(parsed.quotes[2].total).toBe(0);
+  });
+
+  it("solo Efectivo Caja es exclusivo de retiro", () => {
+    expect(mapPaymentOption({ payMethodId: 5, description: "Efectivo Caja" })?.pickupOnly).toBe(true);
+    expect(mapPaymentOption({ payMethodId: 3, description: "Depósito/Efectivo en banco" })?.pickupOnly).toBe(false);
+    expect(mapPaymentOption({ payMethodId: 8, description: "Transferencia sucursal Galicia" })?.pickupOnly).toBe(false);
+  });
+
   it("marca faltantes de availability si NewBytes dice available:false", () => {
     const parsed = parseNbAvailability([{ productId: 108613, available: false, message: "Sin stock" }]);
     expect(parsed.ok).toBe(false);
