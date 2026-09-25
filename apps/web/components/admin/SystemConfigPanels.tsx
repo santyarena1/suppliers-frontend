@@ -7,7 +7,6 @@ import {
   BrandDisplay,
   Banner,
   ALL_PROVIDERS,
-  PROVIDER_LABELS,
 } from "@/lib/api";
 import {
   Loader2, Plus, Trash2, X,
@@ -29,6 +28,7 @@ import { useBranding } from "@/lib/branding";
 import ImageUploadField from "@/components/ImageUploadField";
 import { assetUrl } from "@/lib/assets";
 import { invalidateProviderDisplayCache } from "@/lib/providerDisplay";
+import { providerLabel } from "@/components/ProviderBadge";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
@@ -74,7 +74,7 @@ export function ProvidersTab({ showToast }: { showToast: ConfigToast }) {
             ) : null}
           </div>
           <span className="text-sm font-medium text-surface-200 w-40 flex-shrink-0" style={r.textColor ? { color: r.textColor } : undefined}>
-            {PROVIDER_LABELS[r.provider]}
+            {providerLabel(r.provider, r.name)}
           </span>
           <ImageUploadField
             variant="inline"

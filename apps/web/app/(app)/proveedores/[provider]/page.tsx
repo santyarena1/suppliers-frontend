@@ -82,6 +82,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [chatLinkId, setChatLinkId] = useState<string | null>(null);
   const [chatSeller, setChatSeller] = useState<string | null>(null);
+  const [platformHidden, setPlatformHidden] = useState(false);
 
   const [historyKey, setHistoryKey] = useState(0);
   const tabFromQuery = useRef(false);
@@ -103,6 +104,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       const row = list.find((item) => item.provider === provider && item.linked);
       setChatLinkId(row?.linkId ?? null);
       setChatSeller(row?.accountManager?.name ?? null);
+      setPlatformHidden(Boolean(row?.platformHidden));
     });
   }, [provider]);
 
@@ -484,6 +486,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     </button>
                   ))}
                 </div>
+
+                {platformHidden && (
+                  <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                    El administrador de la plataforma ocultó este proveedor: lo que cargues o sincronices queda guardado,
+                    pero no aparece en el buscador ni en el catálogo hasta que vuelva a estar visible.
+                  </div>
+                )}
 
                 {tab === "orders" && listPriced && <NodoOrdersPanel provider={provider} />}
 

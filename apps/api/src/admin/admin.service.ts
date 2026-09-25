@@ -1,6 +1,15 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
-import { KNOWN_PROVIDERS, LIST_PROVIDER_PREFIX, DEFAULT_MODULES_BY_ROLE, MODULE_KEYS, type ModuleKey, type Provider, type UserRole } from "@nodo/shared";
+import {
+  KNOWN_PROVIDERS,
+  LIST_PROVIDER_PREFIX,
+  DEFAULT_MODULES_BY_ROLE,
+  MODULE_KEYS,
+  providerLabel,
+  type ModuleKey,
+  type Provider,
+  type UserRole,
+} from "@nodo/shared";
 import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -155,11 +164,12 @@ export class AdminService {
       this.prisma.providerDisplayConfig.findMany(),
       this.prisma.tenant.findMany({
         where: { providerKey: { startsWith: LIST_PROVIDER_PREFIX } },
-        select: { providerKey: true },
+        select: { providerKey: true, name: true },
         orderBy: { name: "asc" },
       }),
     ]);
     const byProvider = new Map(configs.map((c) => [c.provider, c]));
+    const listNames = new Map(listSuppliers.map((t) => [t.providerKey ?? "", t.name]));
     const providers: string[] = [
       ...KNOWN_PROVIDERS,
       ...listSuppliers.map((t) => t.providerKey).filter((k): k is string => Boolean(k)),
@@ -168,6 +178,7 @@ export class AdminService {
       const c = byProvider.get(provider);
       return {
         provider,
+        name: providerLabel(provider, listNames.get(provider)),
         visible: c?.visible ?? true,
         logoUrl: c?.logoUrl ?? null,
         textColor: c?.textColor ?? null,

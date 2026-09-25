@@ -47,6 +47,11 @@ export interface VisibleProvider {
   linkId: string | null;
   /** Cómo este comercio compra offline / en esquema a este distribuidor. */
   purchase: PurchasePolicyView;
+  /**
+   * El administrador lo ocultó en toda la plataforma: el vínculo sigue, pero su
+   * catálogo no aparece en el buscador ni en ninguna vista.
+   */
+  platformHidden: boolean;
 }
 
 /**
@@ -115,6 +120,7 @@ export class TenantVisibilityService {
       select: { id: true, name: true, type: true, providerKey: true },
     });
     if (!propio) return [];
+    const hidden = await this.platformHiddenProviders();
 
     // Un distribuidor no le compra a nadie: lo único que ve es su propio catálogo.
     if (propio.type !== "RETAILER") {
@@ -133,6 +139,7 @@ export class TenantVisibilityService {
           discountPercent: null,
           linkId: null,
           purchase: purchaseFromConfig(propio.providerKey, ownConfig),
+          platformHidden: hidden.has(propio.providerKey),
         },
       ];
     }
@@ -186,7 +193,7 @@ export class TenantVisibilityService {
     ]);
     const configByProvider = new Map(configs.map((c) => [c.provider, c]));
 
-    const visibles = new Map<string, VisibleProvider>();
+    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden">>();
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
@@ -255,7 +262,17 @@ export class TenantVisibilityService {
       }
     }
 
-    return [...visibles.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+    return [...visibles.values()]
+      .map((v) => ({ ...v, platformHidden: hidden.has(v.provider) }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }
+
+  private async platformHiddenProviders(): Promise<Set<string>> {
+    const rows = await this.prisma.providerDisplayConfig.findMany({
+      where: { visible: false },
+      select: { provider: true },
+    });
+    return new Set(rows.map((r) => r.provider));
   }
 
   /**
