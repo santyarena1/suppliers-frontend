@@ -18,7 +18,7 @@ import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { SKU_PREFIX } from "@/lib/providerMeta";
-import ProviderBadge from "@/components/ProviderBadge";
+import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
 import CatalogSyncHistory from "@/components/CatalogSyncHistory";
@@ -211,7 +211,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   }
 
   async function handleClearZeroStock() {
-    if (!window.confirm(`¿Borrar ya mismo todos los productos de ${provider.replace(/_/g, " ")} con stock 0? Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Borrar ya mismo todos los productos de ${providerLabel(provider)} con stock 0? Esta acción no se puede deshacer.`)) return;
     setClearingZeroStock(true);
     setDangerResult(null);
     try {
@@ -227,7 +227,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   }
 
   async function handleDeleteAllProducts() {
-    if (!window.confirm(`¿Eliminar TODOS los productos de ${provider.replace(/_/g, " ")} de nuestra base? Esta acción no se puede deshacer. Vas a tener que sincronizar de nuevo para recuperarlos.`)) return;
+    if (!window.confirm(`¿Eliminar TODOS los productos de ${providerLabel(provider)} de nuestra base? Esta acción no se puede deshacer. Vas a tener que sincronizar de nuevo para recuperarlos.`)) return;
     setDeletingAll(true);
     setDangerResult(null);
     try {
@@ -394,7 +394,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
               <Boxes className="w-8 h-8 text-surface-700" />
               <p className="text-sm text-surface-400 max-w-sm">
-                {provider.replace(/_/g, " ")} todavía no tiene integración real construida. Va a
+                {providerLabel(provider)} todavía no tiene integración real construida. Va a
                 sumarse más adelante, uno por uno, con datos reales.
               </p>
             </div>
@@ -525,7 +525,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     )}
                     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                       <p className="text-sm text-surface-400">
-                        Trae el catálogo completo de {provider.replace(/_/g, " ")} y lo guarda en nuestra base.
+                        Trae el catálogo completo de {providerLabel(provider)} y lo guarda en nuestra base.
                         Las búsquedas de los usuarios consultan esta base, no la API del proveedor en vivo.
                       </p>
                       {loadingStatus ? (
@@ -750,13 +750,13 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           Zona de peligro
                         </div>
                         <p className="text-xs text-surface-500">
-                          Estas acciones vacían el catálogo de {provider.replace(/_/g, " ")} para toda tu organización y no se pueden deshacer. Hay que volver a sincronizar para recuperarlo.
+                          Estas acciones vacían el catálogo de {providerLabel(provider)} para toda tu organización y no se pueden deshacer. Hay que volver a sincronizar para recuperarlo.
                         </p>
 
                         <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">
                           <div>
                             <p className="text-sm text-surface-200">Limpiar sin stock</p>
-                            <p className="text-xs text-surface-500">Borra ya los productos con stock 0 de {provider.replace(/_/g, " ")}.</p>
+                            <p className="text-xs text-surface-500">Borra ya los productos con stock 0 de {providerLabel(provider)}.</p>
                           </div>
                           <button
                             type="button"
@@ -772,7 +772,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">
                           <div>
                             <p className="text-sm text-surface-200">Eliminar todo el catálogo</p>
-                            <p className="text-xs text-surface-500">Borra los {(status?.total ?? 0).toLocaleString("es-AR")} productos de {provider.replace(/_/g, " ")} de nuestra base.</p>
+                            <p className="text-xs text-surface-500">Borra los {(status?.total ?? 0).toLocaleString("es-AR")} productos de {providerLabel(provider)} de nuestra base.</p>
                           </div>
                           <button
                             type="button"

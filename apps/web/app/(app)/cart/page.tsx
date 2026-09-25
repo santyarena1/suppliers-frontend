@@ -665,7 +665,7 @@ function CartPageInner() {
       const its = viewByProvider[prov];
       if (!its || its.length === 0) continue;
       const pt = providerTotals[prov];
-      lines.push(`*${prov.replace(/_/g, " ")}*`);
+      lines.push(`*${providerLabel(prov)}*`);
       for (const it of its) {
         const extra = extraFor(prov);
         const pricing = purchaseLinePricing(it, policies[it.provider], priceModeForCartItem(it), it.qty);
@@ -687,7 +687,7 @@ function CartPageInner() {
         lines.push(`  ${fmt(unit, 2)} c/u  →  *${fmt(subtotal, 2)}*`);
         if (taxes) lines.push(`  ${taxes}`);
       }
-      lines.push(`Subtotal ${prov.replace(/_/g, " ")}: *${fmt(pt.totalUSD)}*`);
+      lines.push(`Subtotal ${providerLabel(prov)}: *${fmt(pt.totalUSD)}*`);
       lines.push("");
     }
 
@@ -879,7 +879,7 @@ function CartPageInner() {
     { key: "all", label: "Todos", count: channelTab === "offline" ? offlineCount : onlineCount },
     ...sortedProviders.map((p) => ({
       key: p,
-      label: p.replace(/_/g, " "),
+      label: providerLabel(p),
       count: viewByProvider[p].reduce((s, it) => s + it.qty, 0),
     })),
   ];
@@ -1316,7 +1316,7 @@ function CartPageInner() {
               <footer className="shrink-0 border-t border-white/5 bg-surface-950 max-lg:max-h-[40dvh] max-lg:overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <div className="px-5 lg:px-8 py-3 lg:py-4 flex flex-col gap-3">
                   <SummaryBar
-                    title={activeTab === "all" ? "Resumen" : activeTab.replace(/_/g, " ")}
+                    title={activeTab === "all" ? "Resumen" : providerLabel(activeTab)}
                     totals={shownTotals}
                     fmt={fmt}
                     withIva={withIva}
@@ -1375,14 +1375,14 @@ function CartPageInner() {
               <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
               <div>
                 <h3 className="text-sm font-semibold text-white">
-                  {confirmClear === "all" ? "Vaciar cotización" : `Quitar ${confirmClear.replace(/_/g, " ")}`}
+                  {confirmClear === "all" ? "Vaciar cotización" : `Quitar ${providerLabel(confirmClear)}`}
                 </h3>
                 <p className="text-xs text-surface-400 mt-1">
                   {confirmClear === "all"
                     ? channelTab === "offline"
                       ? "Se eliminan las líneas del pedido offline. El carrito online no se toca."
                       : "Se eliminan las líneas del carrito online. El pedido offline no se toca."
-                    : `Se eliminan las líneas de ${confirmClear.replace(/_/g, " ")} en este carrito.`}
+                    : `Se eliminan las líneas de ${providerLabel(confirmClear)} en este carrito.`}
                 </p>
               </div>
             </div>

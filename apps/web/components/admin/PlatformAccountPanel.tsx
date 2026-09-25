@@ -6,8 +6,6 @@ import {
   BrandDisplay,
   ModuleKey,
   ModulePermission,
-  PROVIDER_LABELS,
-  Provider,
   type AdminUser,
   type UserRole,
 } from "@/lib/api";
@@ -16,6 +14,7 @@ import EnterAsButton from "./EnterAsButton";
 import GeneratedPassword from "./GeneratedPassword";
 import { KeyRound, Loader2, Shield, Trash2 } from "lucide-react";
 
+import { providerLabel as resolveProviderLabel } from "@/components/ProviderBadge";
 type ToastFn = (msg: string, ok?: boolean) => void;
 
 const MODULE_LABELS: Record<ModuleKey, string> = {
@@ -40,7 +39,7 @@ function errMsg(err: unknown, fallback: string) {
 }
 
 function providerLabel(provider: string) {
-  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  return resolveProviderLabel(provider);
 }
 
 function formatDate(value: string | null | undefined) {

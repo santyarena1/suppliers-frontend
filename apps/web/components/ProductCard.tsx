@@ -2,10 +2,8 @@
 
 import {
   ProductDTO,
-  PROVIDER_LABELS,
   productDisplayBrand,
   productDisplayCategory,
-  type Provider,
 } from "@/lib/api";
 import { Check, DollarSign, GitCompare, ImageOff, MapPin, Package, Sparkles } from "lucide-react";
 import Image from "next/image";
@@ -31,6 +29,7 @@ import SalePricePanel from "./SalePricePanel";
 import ProductSyncedAt from "./ProductSyncedAt";
 import { ListOverdueHint } from "@/components/list-import/ListFreshnessHints";
 
+import { providerLabel } from "@/components/ProviderBadge";
 /**
  * Tarjeta de producto.
  *
@@ -51,7 +50,7 @@ function ProviderPill({ provider }: { provider: string }) {
   const display = useProviderDisplay();
   const logoUrl = display.logoUrl(provider);
   const customColor = display.textColor(provider);
-  const name = PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  const name = providerLabel(provider);
   const initials = name.slice(0, 2).toUpperCase();
 
   return (

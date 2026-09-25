@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultUnifyName, selectableUnifyNames, uniquePreserve } from "@/lib/unify-names";
 import {
   catalogEnrichmentApi,
-  PROVIDER_LABELS,
   type CatalogAliasKind,
   type CatalogBoard,
   type CatalogBoardRow,
@@ -12,7 +11,6 @@ import {
   type CatalogPreviewProduct,
   type CatalogTerm,
   type CatalogTermCard,
-  type Provider,
 } from "@/lib/api";
 import {
   Check,
@@ -30,13 +28,14 @@ import CatalogMenuPreview from "./CatalogMenuPreview";
 import SendToMenuDialog, { type MenuTarget } from "./SendToMenuDialog";
 import { aggregateLabelChoices, productCountByTerm } from "@/lib/catalog-menu";
 
+import { providerLabel } from "@/components/ProviderBadge";
 type ListFilter = "unlinked" | "linked";
 
 const NEW_NAME = "__new__";
 const PAGE = 60;
 
 function providerName(provider: string) {
-  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  return providerLabel(provider);
 }
 
 function rowKey(r: { provider: string; rawKey: string }) {
