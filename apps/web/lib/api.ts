@@ -386,6 +386,19 @@ export const searchApi = {
     }
     return { data: merged };
   },
+  /** Catálogo paginado de un distribuidor (sin texto lista todo) con el total. */
+  catalog: (
+    provider: Provider,
+    opts: { q?: string; skip?: number; take?: number; includeOutOfStock?: boolean } = {}
+  ) =>
+    api.get<{ total: number; items: ProductDTO[] }>(`/providers/${provider}/catalog`, {
+      params: {
+        ...(opts.q?.trim() ? { q: opts.q.trim() } : {}),
+        ...(opts.skip ? { skip: opts.skip } : {}),
+        ...(opts.take ? { take: opts.take } : {}),
+        ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+      },
+    }),
   byProvider: (provider: Provider, name: string, opts: { includeOutOfStock?: boolean } = {}) =>
     api.get<ProductDTO[]>(`/search/provider/${provider}`, {
       params: searchParams(name, opts),

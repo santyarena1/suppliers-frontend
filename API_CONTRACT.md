@@ -175,6 +175,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: No cruza locales. No se unifica en automático: el comercio elige. Las claves crudas son el texto que ya guardó cada pedido.
 
+
+### [FEATURE] Catálogo paginado de un distribuidor
+- **Método**: GET
+- **Ruta**: `/providers/:provider/catalog?q=&skip=&take=&includeOutOfStock=`
+- **Auth**: Bearer token requerido (sin organización responde vacío)
+- **Body / Params**: `q` opcional (mismas palabras que la búsqueda; vacío lista todo), `skip` (default 0), `take` (default 50, máx. 200), `includeOutOfStock`.
+- **Respuesta esperada**: `{ total: number, items: ProductDTO[] }` ordenado por nombre.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Pestaña Catálogo de la ficha del proveedor. Mismas reglas que `/search/provider/:provider` (vínculo, visibilidad, stock, precio propio, `hideUnsyncedCatalog`): primero las ofertas del local y después, si corresponde, las fichas sin oferta. `GET /search/provider/:provider` sin `name` ni `brand` sigue devolviendo `[]`.
 ### [FEATURE] Búsqueda de catálogo oculta stock 0
 - **Método**: GET
 - **Ruta**: `/search/provider/:provider` · `/catalog/by-category` · `/catalog/by-brand` · `/catalog/featured` · `/catalog/categories` · `/catalog/brands`

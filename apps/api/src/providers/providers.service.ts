@@ -7,12 +7,12 @@ import {
   type PaymentOption,
   type Provider,
 } from "@nodo/shared";
-import type { IvaAdjustment, OfferSource } from "@prisma/client";
+import type { IvaAdjustment, OfferSource, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
-import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules } from "./catalog-view";
+import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules, type ProductView } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
 import {
@@ -68,6 +68,8 @@ export type SyncResult = {
 /** Cuántos productos devuelve una búsqueda, y cuántos se miran para elegirlos. */
 const SEARCH_LIMIT = 200;
 const SEARCH_CANDIDATES = 400;
+const CATALOG_PAGE = 50;
+const CATALOG_PAGE_MAX = 200;
 
 /** Lo que pertenece a la oferta de una organización y no a la ficha del producto. */
 const OFFER_FIELDS = new Set([
@@ -1014,6 +1016,84 @@ export class ProvidersService implements OnModuleInit {
 
     const flagged = await this.withImageAiFlags(ranked.map((row) => row.view));
     return this.withPriceDropMeta(tenantId, flagged);
+  }
+
+  /**
+   * Catálogo de un distribuidor tal como lo ve este local, paginado y con total:
+   * la pestaña Catálogo de la ficha del proveedor. Sin texto lista todo, por
+   * nombre. Mismas reglas que la búsqueda (stock, precio propio, visibilidad):
+   * primero las ofertas del local y, si corresponde, las fichas sin oferta.
+   */
+  async listCatalog(
+    tenantId: string,
+    provider: Provider,
+    opts: { q?: string; skip?: number; take?: number; includeOutOfStock?: boolean; viewerUserId?: string } = {}
+  ) {
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, opts.viewerUserId))) {
+      return { total: 0, items: [] as ProductView[] };
+    }
+    const skip = Math.max(0, Math.floor(opts.skip ?? 0));
+    const take = Math.min(Math.max(Math.floor(opts.take ?? CATALOG_PAGE), 1), CATALOG_PAGE_MAX);
+    const includeOutOfStock = Boolean(opts.includeOutOfStock);
+    const [rules, enrichment, hidesUnsynced, priced] = await Promise.all([
+      this.rulesFor(tenantId, provider),
+      this.catalogEnrichment.getContext(),
+      this.hidesUnsyncedCatalog(tenantId, provider),
+      this.providersWithOwnPrices(tenantId, [provider]),
+    ]);
+    const stockWhere = catalogStockWhere(includeOutOfStock, rules.minStockThreshold, rules.zeroStockAction);
+    const tokenClauses = searchTokens(opts.q ?? "").map((t) => ({
+      OR: [
+        { name: { contains: t, mode: "insensitive" as const } },
+        { brand: { contains: t, mode: "insensitive" as const } },
+      ],
+    }));
+
+    const offerWhere: Prisma.TenantProductOfferWhereInput = {
+      tenantId,
+      provider,
+      active: true,
+      AND: [
+        ...(Object.keys(stockWhere).length ? [stockWhere] : []),
+        ...(hidesUnsynced ? [catalogHideEmptyOfferWhere(rules.minStockThreshold, includeOutOfStock)] : []),
+        ...catalogPricedOnlyWhere(priced),
+        ...(tokenClauses.length ? [{ product: { AND: tokenClauses } }] : []),
+      ],
+    };
+    const sheetWhere: Prisma.ProviderSyncCacheWhereInput | null =
+      hidesUnsynced || priced.has(provider)
+        ? null
+        : { provider, offers: { none: { tenantId } }, AND: tokenClauses };
+
+    const [offerTotal, sheetTotal] = await Promise.all([
+      this.prisma.tenantProductOffer.count({ where: offerWhere }),
+      sheetWhere ? this.prisma.providerSyncCache.count({ where: sheetWhere }) : Promise.resolve(0),
+    ]);
+
+    const views: ProductView[] = [];
+    if (skip < offerTotal) {
+      const offers = await this.prisma.tenantProductOffer.findMany({
+        where: offerWhere,
+        include: { product: true },
+        orderBy: [{ product: { name: "asc" } }, { externalId: "asc" }],
+        skip,
+        take,
+      });
+      views.push(...offers.map((offer) => toProductView(offer.product, offer, rules, enrichment)));
+    }
+    const remaining = take - views.length;
+    if (sheetWhere && remaining > 0) {
+      const sheets = await this.prisma.providerSyncCache.findMany({
+        where: sheetWhere,
+        orderBy: [{ name: "asc" }, { externalId: "asc" }],
+        skip: Math.max(0, skip - offerTotal),
+        take: remaining,
+      });
+      views.push(...sheets.map((product) => toSheetView(product, enrichment)));
+    }
+
+    const flagged = await this.withImageAiFlags(views);
+    return { total: offerTotal + sheetTotal, items: await this.withPriceDropMeta(tenantId, flagged) };
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */

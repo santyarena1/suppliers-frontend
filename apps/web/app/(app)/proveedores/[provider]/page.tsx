@@ -52,6 +52,8 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
 
 type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account";
 
+const CATALOG_PAGE = 50;
+
 const VALID_PROVIDER_TABS: ProviderTab[] = [
   "lists", "orders", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account",
 ];
@@ -112,6 +114,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [results, setResults] = useState<ProductDTO[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [loadingMore, setLoadingMore] = useState(false);
   const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
 
   const [config, setConfig] = useState<ProviderConfig | null>(null);
@@ -335,18 +340,50 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     }
   }
 
-  async function runCatalogSearch(withZero: boolean) {
+  async function runCatalogSearch(withZero: boolean, q: string = query) {
     setSearching(true);
     setSearched(true);
+    setCatalogQuery(q);
     try {
-      const res = await searchApi.byProvider(provider, query, { includeOutOfStock: withZero });
-      setResults(Array.isArray(res.data) ? res.data : []);
+      const res = await searchApi.catalog(provider, { q, includeOutOfStock: withZero, take: CATALOG_PAGE });
+      setResults(Array.isArray(res.data?.items) ? res.data.items : []);
+      setCatalogTotal(res.data?.total ?? 0);
     } catch {
       setResults([]);
+      setCatalogTotal(0);
     } finally {
       setSearching(false);
     }
   }
+
+  async function loadMoreCatalog() {
+    setLoadingMore(true);
+    try {
+      const res = await searchApi.catalog(provider, {
+        q: catalogQuery,
+        includeOutOfStock,
+        skip: results.length,
+        take: CATALOG_PAGE,
+      });
+      const more = Array.isArray(res.data?.items) ? res.data.items : [];
+      setResults((prev) => [...prev, ...more]);
+      setCatalogTotal(res.data?.total ?? 0);
+    } catch {
+      /* el botón queda para reintentar */
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // La pestaña abre con el catálogo ya listado: no hace falta escribir nada para verlo.
+  const catalogLoadedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (tab !== "catalog" || catalogLoadedFor.current === provider) return;
+    catalogLoadedFor.current = provider;
+    setQuery("");
+    void runCatalogSearch(includeOutOfStock, "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, provider]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -826,7 +863,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           onChange={(e) => {
                             const next = e.target.checked;
                             setIncludeOutOfStock(next);
-                            if (searched && query.trim()) void runCatalogSearch(next);
+                            if (searched) void runCatalogSearch(next, catalogQuery);
                           }}
                           className="rounded border-surface-600 bg-surface-800 text-brand-500 focus:ring-brand-500/30"
                         />
@@ -835,7 +872,12 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     </form>
 
                     {searched && !searching && (
-                      <p className="text-xs text-surface-500">{results.length} resultado{results.length !== 1 ? "s" : ""}</p>
+                      <p className="text-xs text-surface-500">
+                        {catalogTotal === results.length
+                          ? `${catalogTotal.toLocaleString("es-AR")} producto${catalogTotal !== 1 ? "s" : ""}`
+                          : `Mostrando ${results.length.toLocaleString("es-AR")} de ${catalogTotal.toLocaleString("es-AR")} productos`}
+                        {catalogQuery ? ` para “${catalogQuery}”` : ""}
+                      </p>
                     )}
 
                     <div className="border border-surface-800 rounded-xl overflow-hidden">
@@ -867,7 +909,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                 <td className="px-3 py-2 text-surface-400">{p.brand || "—"}</td>
                                 <td className="px-3 py-2 text-surface-400">{p.category || "—"}</td>
                                 <td className="px-3 py-2 text-right text-surface-200 tabular-nums">
-                                  {p.currency ?? "USD"} {parsePrice(p.price).toLocaleString("es-AR", { maximumFractionDigits: 2 })}
+                                  {p.price == null && p.finalPrice == null ? (
+                                    <span className="text-surface-500">Sin precio</span>
+                                  ) : (
+                                    `${p.currency ?? "USD"} ${parsePrice(p.price ?? p.finalPrice).toLocaleString("es-AR", { maximumFractionDigits: 2 })}`
+                                  )}
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums">
                                   <span className={p.stock && p.stock > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}>
@@ -882,8 +928,22 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       {searched && !searching && results.length === 0 && (
                         <p className="text-center text-xs text-surface-500 py-10">Sin resultados.</p>
                       )}
-                      {!searched && (
-                        <p className="text-center text-xs text-surface-500 py-10">Buscá algo para ver el catálogo sincronizado.</p>
+                      {searched && searching && results.length === 0 && (
+                        <p className="text-center text-xs text-surface-500 py-10">
+                          <Loader2 className="w-4 h-4 animate-spin inline" />
+                        </p>
+                      )}
+                      {searched && !searching && results.length < catalogTotal && (
+                        <div className="flex justify-center py-3 border-t border-surface-800">
+                          <button
+                            type="button"
+                            onClick={() => void loadMoreCatalog()}
+                            disabled={loadingMore}
+                            className="text-xs font-medium text-brand-400 hover:text-brand-300 disabled:opacity-50"
+                          >
+                            {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cargar más"}
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
