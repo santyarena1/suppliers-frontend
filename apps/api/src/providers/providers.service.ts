@@ -886,8 +886,7 @@ export class ProvidersService implements OnModuleInit {
     name: string,
     opts: { includeOutOfStock?: boolean; brand?: string; viewerUserId?: string } = {}
   ) {
-    if (!(await this.isProviderVisible(provider))) return [];
-    if (!(await this.visibility.isLinked(tenantId, provider, opts.viewerUserId))) return [];
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, opts.viewerUserId))) return [];
     const rules = await this.rulesFor(tenantId, provider);
     const stockWhere = catalogStockWhere(
       Boolean(opts.includeOutOfStock),
@@ -1019,8 +1018,7 @@ export class ProvidersService implements OnModuleInit {
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
   async getProduct(tenantId: string, provider: Provider, externalId: string, viewerUserId?: string) {
-    if (!(await this.isProviderVisible(provider))) return null;
-    if (!(await this.visibility.isLinked(tenantId, provider, viewerUserId))) return null;
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, viewerUserId))) return null;
     const [offer, enrichment] = await Promise.all([
       this.prisma.tenantProductOffer.findUnique({
         where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
@@ -1249,19 +1247,6 @@ export class ProvidersService implements OnModuleInit {
       if (provider && !rules.has(provider)) rules.set(provider, { ...NO_RULES, baseListDiscountPercent: discount });
     }
     return rules;
-  }
-
-  private async hiddenProviders(): Promise<Set<string>> {
-    const rows = await this.prisma.providerDisplayConfig.findMany({
-      where: { visible: false },
-      select: { provider: true },
-    });
-    return new Set(rows.map((r) => r.provider));
-  }
-
-  private async isProviderVisible(provider: Provider): Promise<boolean> {
-    const row = await this.prisma.providerDisplayConfig.findUnique({ where: { provider } });
-    return row?.visible ?? true;
   }
 
   /**
@@ -2012,14 +1997,11 @@ export class ProvidersService implements OnModuleInit {
 
   /**
    * Proveedores de los que esta organización puede leer catálogo: los que tiene
-   * vinculados, menos los que el superadmin escondió de toda la plataforma.
+   * vinculados, menos los que el superadmin escondió de toda la plataforma
+   * (salvo lo que el comercio cargó con su propia lista).
    */
   private async readableProviders(tenantId: string, viewerUserId?: string): Promise<string[]> {
-    const [linked, hidden] = await Promise.all([
-      this.visibility.linkedProviderKeys(tenantId, viewerUserId),
-      this.hiddenProviders(),
-    ]);
-    return linked.filter((provider) => !hidden.has(provider));
+    return this.visibility.readableCatalogKeys(tenantId, viewerUserId);
   }
 
   /**

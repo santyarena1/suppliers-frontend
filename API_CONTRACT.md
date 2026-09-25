@@ -74,7 +74,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: canje `{ code }`
 - **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent, linkId }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
 - **Estado**: IMPLEMENTADO
-- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Cada fila trae `platformHidden: boolean`: el superadmin lo ocultó en toda la plataforma (`ProviderDisplayConfig.visible=false`); el vínculo sigue pero la búsqueda y el catálogo responden vacío, así que el buscador no lo ofrece como filtro ni lo consulta. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
+- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Cada fila trae `platformHidden: boolean`: el superadmin lo ocultó en toda la plataforma (`ProviderDisplayConfig.visible=false`); el vínculo sigue pero la búsqueda y el catálogo responden vacío, así que el buscador no lo ofrece como filtro ni lo consulta. Nunca es `true` para un proveedor por lista (`LIST_*`) ni para uno que el comercio conectó cargando su propia lista (`selfConnected`): el interruptor global apaga integraciones de la plataforma, no la lista que trajo el comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
 
 ### [FEATURE] Percepción aprendida del portal del proveedor
 - **Método**: POST

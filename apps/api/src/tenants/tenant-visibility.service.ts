@@ -49,7 +49,8 @@ export interface VisibleProvider {
   purchase: PurchasePolicyView;
   /**
    * El administrador lo ocultó en toda la plataforma: el vínculo sigue, pero su
-   * catálogo no aparece en el buscador ni en ninguna vista.
+   * catálogo no aparece en el buscador ni en ninguna vista. Nunca aplica a lo que
+   * el comercio cargó con su propia lista (ver `hiddenForViewer`).
    */
   platformHidden: boolean;
 }
@@ -139,7 +140,7 @@ export class TenantVisibilityService {
           discountPercent: null,
           linkId: null,
           purchase: purchaseFromConfig(propio.providerKey, ownConfig),
-          platformHidden: hidden.has(propio.providerKey),
+          platformHidden: hiddenForViewer(hidden, propio.providerKey, false),
         },
       ];
     }
@@ -263,7 +264,7 @@ export class TenantVisibilityService {
     }
 
     return [...visibles.values()]
-      .map((v) => ({ ...v, platformHidden: hidden.has(v.provider) }))
+      .map((v) => ({ ...v, platformHidden: hiddenForViewer(hidden, v.provider, v.selfConnected) }))
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
   }
 
@@ -309,6 +310,17 @@ export class TenantVisibilityService {
   async linkedProviderKeys(tenantId: string, viewerUserId?: string): Promise<string[]> {
     const visibles = await this.listFor(tenantId, viewerUserId);
     return visibles.filter((v) => v.linked).map((v) => v.provider);
+  }
+
+  /** Vinculados y no ocultos por la plataforma: de estos se puede leer catálogo. */
+  async readableCatalogKeys(tenantId: string, viewerUserId?: string): Promise<string[]> {
+    const visibles = await this.listFor(tenantId, viewerUserId);
+    return visibles.filter((v) => v.linked && !v.platformHidden).map((v) => v.provider);
+  }
+
+  async canReadCatalog(tenantId: string, provider: Provider, viewerUserId?: string): Promise<boolean> {
+    const visible = (await this.listFor(tenantId, viewerUserId)).find((v) => v.provider === provider);
+    return Boolean(visible?.linked && !visible.platformHidden);
   }
 
   async isLinked(tenantId: string, provider: Provider, viewerUserId?: string): Promise<boolean> {
@@ -428,4 +440,16 @@ function purchaseFromConfig(
     schemeDiscountPercent:
       config.schemeDiscountPercent == null ? null : Number(config.schemeDiscountPercent),
   };
+}
+
+/**
+ * El interruptor global de visibilidad sirve para apagar integraciones de la
+ * plataforma. Un proveedor por lista (`LIST_*`) o uno que el comercio conectó
+ * cargando su propio Excel existen porque ese comercio los trajo: ocultarlos
+ * desde el admin le borraba del buscador su propia lista sin decirle nada.
+ */
+export function hiddenForViewer(hidden: Set<string>, provider: string, selfConnected: boolean): boolean {
+  if (!hidden.has(provider)) return false;
+  if (selfConnected || isListProviderKey(provider)) return false;
+  return true;
 }

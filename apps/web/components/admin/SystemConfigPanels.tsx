@@ -7,6 +7,7 @@ import {
   BrandDisplay,
   Banner,
   ALL_PROVIDERS,
+  isListProvider,
 } from "@/lib/api";
 import {
   Loader2, Plus, Trash2, X,
@@ -89,14 +90,24 @@ export function ProvidersTab({ showToast }: { showToast: ConfigToast }) {
             onChange={(e) => update(r.provider, { textColor: e.target.value })}
             className="w-8 h-8 rounded cursor-pointer bg-transparent border border-surface-700"
           />
-          <button
-            onClick={() => update(r.provider, { visible: !r.visible })}
-            className={`text-xs font-medium px-2.5 py-1.5 rounded-md border flex-shrink-0 ${
-              r.visible ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-red-500/10 border-red-500/25 text-red-400"
-            }`}
-          >
-            {r.visible ? "Visible" : "Oculto"}
-          </button>
+          {isListProvider(r.provider) ? (
+            <span
+              className="text-xs text-surface-500 px-2.5 py-1.5 flex-shrink-0"
+              title="Un proveedor por lista lo ve el comercio que lo cargó o se vinculó; no se oculta desde acá."
+            >
+              Por vínculo
+            </span>
+          ) : (
+            <button
+              onClick={() => update(r.provider, { visible: !r.visible })}
+              title="Oculto no afecta a los comercios que cargan su propia lista de este proveedor."
+              className={`text-xs font-medium px-2.5 py-1.5 rounded-md border flex-shrink-0 ${
+                r.visible ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-red-500/10 border-red-500/25 text-red-400"
+              }`}
+            >
+              {r.visible ? "Visible" : "Oculto"}
+            </button>
+          )}
         </div>
       ))}
     </div>
