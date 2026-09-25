@@ -1,5 +1,6 @@
 import {
   catalogHideEmptyOfferWhere,
+  catalogPricedOnlyWhere,
   catalogStockWhere,
   displayedStock,
   hidesZeroStockFromCatalog,
@@ -79,6 +80,24 @@ describe("catalogHideEmptyOfferWhere", () => {
     expect(catalogHideEmptyOfferWhere(3, true)).toEqual({
       OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
     });
+  });
+});
+
+describe("catalogPricedOnlyWhere", () => {
+  it("sin proveedores con precio propio no filtra: se ve la ficha como vista previa", () => {
+    expect(catalogPricedOnlyWhere([])).toEqual([]);
+  });
+
+  it("con precio propio, de ese proveedor solo entra lo que tiene precio", () => {
+    expect(catalogPricedOnlyWhere(new Set(["NEW_BYTES"]))).toEqual([
+      {
+        OR: [
+          { provider: { notIn: ["NEW_BYTES"] } },
+          { price: { not: null } },
+          { finalPrice: { not: null } },
+        ],
+      },
+    ]);
   });
 });
 

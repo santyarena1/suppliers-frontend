@@ -15,7 +15,13 @@ import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
-import { catalogHideEmptyOfferWhere, catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
+import {
+  catalogHideEmptyOfferWhere,
+  catalogPricedOnlyWhere,
+  catalogStockWhere,
+  hidesZeroStockFromCatalog,
+  isDisplayedInStock,
+} from "./catalog-stock";
 import {
   fillPriceHistoryDays,
   argentinaDayKey,
@@ -933,7 +939,11 @@ export class ProvidersService implements OnModuleInit {
     };
 
     const take = buscaPorNombre ? SEARCH_CANDIDATES : SEARCH_LIMIT;
-    const hideSheets = await this.hidesUnsyncedCatalog(tenantId, provider);
+    const [hidesUnsynced, priced] = await Promise.all([
+      this.hidesUnsyncedCatalog(tenantId, provider),
+      this.providersWithOwnPrices(tenantId, [provider]),
+    ]);
+    const hideSheets = hidesUnsynced || priced.has(provider);
     const [offers, sheets] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
@@ -942,9 +952,10 @@ export class ProvidersService implements OnModuleInit {
           active: true,
           AND: [
             ...(Object.keys(stockWhere).length ? [stockWhere] : []),
-            ...(hideSheets
+            ...(hidesUnsynced
               ? [catalogHideEmptyOfferWhere(rules.minStockThreshold, Boolean(opts.includeOutOfStock))]
               : []),
+            ...catalogPricedOnlyWhere(priced),
             { product: productWhere },
           ],
         },
@@ -1129,6 +1140,20 @@ export class ProvidersService implements OnModuleInit {
     return new Set(rows.map((row) => row.provider));
   }
 
+  /** Proveedores de los que esta organización ya tiene al menos un precio propio. */
+  private async providersWithOwnPrices(tenantId: string, providers: string[]): Promise<Set<string>> {
+    if (providers.length === 0) return new Set();
+    const hits = await Promise.all(
+      providers.map((provider) =>
+        this.prisma.tenantProductOffer.findFirst({
+          where: { tenantId, provider, OR: [{ price: { not: null } }, { finalPrice: { not: null } }] },
+          select: { provider: true },
+        })
+      )
+    );
+    return new Set(hits.filter((hit): hit is { provider: string } => hit != null).map((hit) => hit.provider));
+  }
+
   /**
    * Con el interruptor activo, una oferta que el distribuidor mandó sin precio
    * o sin stock no entra al listado. El resto de los distribuidores no cambia.
@@ -1250,6 +1275,7 @@ export class ProvidersService implements OnModuleInit {
   async getCategories(tenantId: string, viewerUserId?: string) {
     const providers = await this.readableProviders(tenantId, viewerUserId);
     if (providers.length === 0) return [];
+    const priced = [...(await this.providersWithOwnPrices(tenantId, providers))];
     const [rows, enrichment] = await Promise.all([
       this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
       SELECT ficha.category AS category, COUNT(*) AS count
@@ -1261,6 +1287,7 @@ export class ProvidersService implements OnModuleInit {
         AND (oferta.stock IS NULL OR oferta.stock > 0)
         AND ficha.category IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
+        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price IS NOT NULL OR oferta."finalPrice" IS NOT NULL)
       GROUP BY ficha.category
       ORDER BY count DESC
       LIMIT 120
@@ -1282,6 +1309,7 @@ export class ProvidersService implements OnModuleInit {
   async getBrands(tenantId: string, viewerUserId?: string) {
     const providers = await this.readableProviders(tenantId, viewerUserId);
     if (providers.length === 0) return [];
+    const priced = [...(await this.providersWithOwnPrices(tenantId, providers))];
     const [rows, enrichment] = await Promise.all([
       this.prisma.$queryRaw<{ brand: string; count: bigint }[]>`
       SELECT ficha.brand AS brand, COUNT(*) AS count
@@ -1293,6 +1321,7 @@ export class ProvidersService implements OnModuleInit {
         AND (oferta.stock IS NULL OR oferta.stock > 0)
         AND ficha.brand IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
+        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price IS NOT NULL OR oferta."finalPrice" IS NOT NULL)
       GROUP BY ficha.brand
       ORDER BY count DESC
       LIMIT 200
@@ -1670,7 +1699,13 @@ export class ProvidersService implements OnModuleInit {
     const batches = await Promise.all(
       providers.map((provider) =>
         this.prisma.tenantProductOffer.findMany({
-          where: { tenantId, provider, active: true, stock: { gt: 0 } },
+          where: {
+            tenantId,
+            provider,
+            active: true,
+            stock: { gt: 0 },
+            OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
+          },
           include: { product: true },
           orderBy: [{ syncedAt: "desc" }, { product: { name: "asc" } }],
           take: perProvider * 2,
@@ -1736,7 +1771,10 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
-    const hidden = await this.providersHidingUnsynced(tenantId, providers);
+    const [hidden, priced] = await Promise.all([
+      this.providersHidingUnsynced(tenantId, providers),
+      this.providersWithOwnPrices(tenantId, providers),
+    ]);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
@@ -1746,6 +1784,7 @@ export class ProvidersService implements OnModuleInit {
         AND: [
           ...stockConstraint,
           ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
+          ...catalogPricedOnlyWhere(priced),
           {
             OR: [
               { product: { category: { in: match.rawCategories } } },
@@ -1812,14 +1851,21 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
-    const hidden = await this.providersHidingUnsynced(tenantId, providers);
+    const [hidden, priced] = await Promise.all([
+      this.providersHidingUnsynced(tenantId, providers),
+      this.providersWithOwnPrices(tenantId, providers),
+    ]);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
         tenantId,
         active: true,
         provider: { in: providers },
-        AND: [...stockConstraint, ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock)],
+        AND: [
+          ...stockConstraint,
+          ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
+          ...catalogPricedOnlyWhere(priced),
+        ],
       },
       include: { product: true },
       orderBy: { product: { name: "asc" } },
@@ -1837,7 +1883,7 @@ export class ProvidersService implements OnModuleInit {
         return isDisplayedInStock(product.stock, 0);
       });
     if (views.length < limit) {
-      const visible = providers.filter((provider) => !hidden.has(provider));
+      const visible = providers.filter((provider) => !hidden.has(provider) && !priced.has(provider));
       if (visible.length > 0) {
         const sheets = await this.prisma.providerSyncCache.findMany({
           where: { provider: { in: visible }, offers: { none: { tenantId } } },
@@ -1884,7 +1930,10 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
-    const hidden = await this.providersHidingUnsynced(tenantId, providers);
+    const [hidden, priced] = await Promise.all([
+      this.providersHidingUnsynced(tenantId, providers),
+      this.providersWithOwnPrices(tenantId, providers),
+    ]);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
@@ -1894,6 +1943,7 @@ export class ProvidersService implements OnModuleInit {
         AND: [
           ...stockConstraint,
           ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
+          ...catalogPricedOnlyWhere(priced),
           {
             OR: [
               { product: { brand: { in: match.rawBrands } } },
