@@ -15,6 +15,7 @@ import {
 } from "@/lib/credentialFields";
 import NodoSpinner from "./NodoSpinner";
 
+import { providerLabel } from "@/components/ProviderBadge";
 export default function ProviderCredentialForm({
   provider,
   onChanged,
@@ -97,7 +98,7 @@ export default function ProviderCredentialForm({
 
   async function handleDelete() {
     const owner = tenant ? tenant.name : "tu organización";
-    if (!window.confirm(`¿Eliminar la cuenta de ${provider.replace(/_/g, " ")} de ${owner}?`)) return;
+    if (!window.confirm(`¿Eliminar la cuenta de ${providerLabel(provider)} de ${owner}?`)) return;
     setDeleting(true);
     setResult(null);
     try {
@@ -131,11 +132,11 @@ export default function ProviderCredentialForm({
           </div>
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-white">
-              {schema?.title ?? `Credenciales de ${provider.replace(/_/g, " ")}`}
+              {schema?.title ?? `Credenciales de ${providerLabel(provider)}`}
             </h2>
             <p className="text-xs text-surface-400 mt-1 leading-relaxed">
               {schema?.intro ??
-                `Credenciales de acceso a la API de ${provider.replace(/_/g, " ")}. Se guardan cifradas y las comparte todo tu equipo.`}
+                `Credenciales de acceso a la API de ${providerLabel(provider)}. Se guardan cifradas y las comparte todo tu equipo.`}
             </p>
             {tenant && (
               <p className="text-xs text-surface-500 mt-2 leading-relaxed">

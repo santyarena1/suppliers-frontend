@@ -7,15 +7,21 @@ import {
   type PaymentOption,
   type Provider,
 } from "@nodo/shared";
-import type { IvaAdjustment, OfferSource } from "@prisma/client";
+import type { IvaAdjustment, OfferSource, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
 import { CredentialsService } from "../credentials/credentials.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
-import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules } from "./catalog-view";
+import { fichaRaw, NO_RULES, toProductView, toSheetView, type OfferRules, type ProductView } from "./catalog-view";
 import { scoreCatalogMatch, searchTokens } from "./catalog-search";
 import { snapshotJson } from "./json-value";
-import { catalogHideEmptyOfferWhere, catalogStockWhere, hidesZeroStockFromCatalog, isDisplayedInStock } from "./catalog-stock";
+import {
+  catalogHideEmptyOfferWhere,
+  catalogPricedOnlyWhere,
+  catalogStockWhere,
+  hidesZeroStockFromCatalog,
+  isDisplayedInStock,
+} from "./catalog-stock";
 import {
   fillPriceHistoryDays,
   argentinaDayKey,
@@ -62,6 +68,8 @@ export type SyncResult = {
 /** Cuántos productos devuelve una búsqueda, y cuántos se miran para elegirlos. */
 const SEARCH_LIMIT = 200;
 const SEARCH_CANDIDATES = 400;
+const CATALOG_PAGE = 50;
+const CATALOG_PAGE_MAX = 200;
 
 /** Lo que pertenece a la oferta de una organización y no a la ficha del producto. */
 const OFFER_FIELDS = new Set([
@@ -880,8 +888,7 @@ export class ProvidersService implements OnModuleInit {
     name: string,
     opts: { includeOutOfStock?: boolean; brand?: string; viewerUserId?: string } = {}
   ) {
-    if (!(await this.isProviderVisible(provider))) return [];
-    if (!(await this.visibility.isLinked(tenantId, provider, opts.viewerUserId))) return [];
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, opts.viewerUserId))) return [];
     const rules = await this.rulesFor(tenantId, provider);
     const stockWhere = catalogStockWhere(
       Boolean(opts.includeOutOfStock),
@@ -933,7 +940,11 @@ export class ProvidersService implements OnModuleInit {
     };
 
     const take = buscaPorNombre ? SEARCH_CANDIDATES : SEARCH_LIMIT;
-    const hideSheets = await this.hidesUnsyncedCatalog(tenantId, provider);
+    const [hidesUnsynced, priced] = await Promise.all([
+      this.hidesUnsyncedCatalog(tenantId, provider),
+      this.providersWithOwnPrices(tenantId, [provider]),
+    ]);
+    const hideSheets = hidesUnsynced || priced.has(provider);
     const [offers, sheets] = await Promise.all([
       this.prisma.tenantProductOffer.findMany({
         where: {
@@ -942,9 +953,10 @@ export class ProvidersService implements OnModuleInit {
           active: true,
           AND: [
             ...(Object.keys(stockWhere).length ? [stockWhere] : []),
-            ...(hideSheets
+            ...(hidesUnsynced
               ? [catalogHideEmptyOfferWhere(rules.minStockThreshold, Boolean(opts.includeOutOfStock))]
               : []),
+            ...catalogPricedOnlyWhere(priced),
             { product: productWhere },
           ],
         },
@@ -1006,10 +1018,87 @@ export class ProvidersService implements OnModuleInit {
     return this.withPriceDropMeta(tenantId, flagged);
   }
 
+  /**
+   * Catálogo de un distribuidor tal como lo ve este local, paginado y con total:
+   * la pestaña Catálogo de la ficha del proveedor. Sin texto lista todo, por
+   * nombre. Mismas reglas que la búsqueda (stock, precio propio, visibilidad):
+   * primero las ofertas del local y, si corresponde, las fichas sin oferta.
+   */
+  async listCatalog(
+    tenantId: string,
+    provider: Provider,
+    opts: { q?: string; skip?: number; take?: number; includeOutOfStock?: boolean; viewerUserId?: string } = {}
+  ) {
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, opts.viewerUserId))) {
+      return { total: 0, items: [] as ProductView[] };
+    }
+    const skip = Math.max(0, Math.floor(opts.skip ?? 0));
+    const take = Math.min(Math.max(Math.floor(opts.take ?? CATALOG_PAGE), 1), CATALOG_PAGE_MAX);
+    const includeOutOfStock = Boolean(opts.includeOutOfStock);
+    const [rules, enrichment, hidesUnsynced, priced] = await Promise.all([
+      this.rulesFor(tenantId, provider),
+      this.catalogEnrichment.getContext(),
+      this.hidesUnsyncedCatalog(tenantId, provider),
+      this.providersWithOwnPrices(tenantId, [provider]),
+    ]);
+    const stockWhere = catalogStockWhere(includeOutOfStock, rules.minStockThreshold, rules.zeroStockAction);
+    const tokenClauses = searchTokens(opts.q ?? "").map((t) => ({
+      OR: [
+        { name: { contains: t, mode: "insensitive" as const } },
+        { brand: { contains: t, mode: "insensitive" as const } },
+      ],
+    }));
+
+    const offerWhere: Prisma.TenantProductOfferWhereInput = {
+      tenantId,
+      provider,
+      active: true,
+      AND: [
+        ...(Object.keys(stockWhere).length ? [stockWhere] : []),
+        ...(hidesUnsynced ? [catalogHideEmptyOfferWhere(rules.minStockThreshold, includeOutOfStock)] : []),
+        ...catalogPricedOnlyWhere(priced),
+        ...(tokenClauses.length ? [{ product: { AND: tokenClauses } }] : []),
+      ],
+    };
+    const sheetWhere: Prisma.ProviderSyncCacheWhereInput | null =
+      hidesUnsynced || priced.has(provider)
+        ? null
+        : { provider, offers: { none: { tenantId } }, AND: tokenClauses };
+
+    const [offerTotal, sheetTotal] = await Promise.all([
+      this.prisma.tenantProductOffer.count({ where: offerWhere }),
+      sheetWhere ? this.prisma.providerSyncCache.count({ where: sheetWhere }) : Promise.resolve(0),
+    ]);
+
+    const views: ProductView[] = [];
+    if (skip < offerTotal) {
+      const offers = await this.prisma.tenantProductOffer.findMany({
+        where: offerWhere,
+        include: { product: true },
+        orderBy: [{ product: { name: "asc" } }, { externalId: "asc" }],
+        skip,
+        take,
+      });
+      views.push(...offers.map((offer) => toProductView(offer.product, offer, rules, enrichment)));
+    }
+    const remaining = take - views.length;
+    if (sheetWhere && remaining > 0) {
+      const sheets = await this.prisma.providerSyncCache.findMany({
+        where: sheetWhere,
+        orderBy: [{ name: "asc" }, { externalId: "asc" }],
+        skip: Math.max(0, skip - offerTotal),
+        take: remaining,
+      });
+      views.push(...sheets.map((product) => toSheetView(product, enrichment)));
+    }
+
+    const flagged = await this.withImageAiFlags(views);
+    return { total: offerTotal + sheetTotal, items: await this.withPriceDropMeta(tenantId, flagged) };
+  }
+
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
   async getProduct(tenantId: string, provider: Provider, externalId: string, viewerUserId?: string) {
-    if (!(await this.isProviderVisible(provider))) return null;
-    if (!(await this.visibility.isLinked(tenantId, provider, viewerUserId))) return null;
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, viewerUserId))) return null;
     const [offer, enrichment] = await Promise.all([
       this.prisma.tenantProductOffer.findUnique({
         where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
@@ -1129,6 +1218,20 @@ export class ProvidersService implements OnModuleInit {
     return new Set(rows.map((row) => row.provider));
   }
 
+  /** Proveedores de los que esta organización ya tiene al menos un precio propio. */
+  private async providersWithOwnPrices(tenantId: string, providers: string[]): Promise<Set<string>> {
+    if (providers.length === 0) return new Set();
+    const hits = await Promise.all(
+      providers.map((provider) =>
+        this.prisma.tenantProductOffer.findFirst({
+          where: { tenantId, provider, OR: [{ price: { not: null } }, { finalPrice: { not: null } }] },
+          select: { provider: true },
+        })
+      )
+    );
+    return new Set(hits.filter((hit): hit is { provider: string } => hit != null).map((hit) => hit.provider));
+  }
+
   /**
    * Con el interruptor activo, una oferta que el distribuidor mandó sin precio
    * o sin stock no entra al listado. El resto de los distribuidores no cambia.
@@ -1226,19 +1329,6 @@ export class ProvidersService implements OnModuleInit {
     return rules;
   }
 
-  private async hiddenProviders(): Promise<Set<string>> {
-    const rows = await this.prisma.providerDisplayConfig.findMany({
-      where: { visible: false },
-      select: { provider: true },
-    });
-    return new Set(rows.map((r) => r.provider));
-  }
-
-  private async isProviderVisible(provider: Provider): Promise<boolean> {
-    const row = await this.prisma.providerDisplayConfig.findUnique({ where: { provider } });
-    return row?.visible ?? true;
-  }
-
   /**
    * Categorías distintas con conteo, cruzando todos los proveedores visibles — para la
    * landing de Búsqueda.
@@ -1250,6 +1340,7 @@ export class ProvidersService implements OnModuleInit {
   async getCategories(tenantId: string, viewerUserId?: string) {
     const providers = await this.readableProviders(tenantId, viewerUserId);
     if (providers.length === 0) return [];
+    const priced = [...(await this.providersWithOwnPrices(tenantId, providers))];
     const [rows, enrichment] = await Promise.all([
       this.prisma.$queryRaw<{ category: string; count: bigint }[]>`
       SELECT ficha.category AS category, COUNT(*) AS count
@@ -1261,6 +1352,7 @@ export class ProvidersService implements OnModuleInit {
         AND (oferta.stock IS NULL OR oferta.stock > 0)
         AND ficha.category IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
+        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price IS NOT NULL OR oferta."finalPrice" IS NOT NULL)
       GROUP BY ficha.category
       ORDER BY count DESC
       LIMIT 120
@@ -1282,6 +1374,7 @@ export class ProvidersService implements OnModuleInit {
   async getBrands(tenantId: string, viewerUserId?: string) {
     const providers = await this.readableProviders(tenantId, viewerUserId);
     if (providers.length === 0) return [];
+    const priced = [...(await this.providersWithOwnPrices(tenantId, providers))];
     const [rows, enrichment] = await Promise.all([
       this.prisma.$queryRaw<{ brand: string; count: bigint }[]>`
       SELECT ficha.brand AS brand, COUNT(*) AS count
@@ -1293,6 +1386,7 @@ export class ProvidersService implements OnModuleInit {
         AND (oferta.stock IS NULL OR oferta.stock > 0)
         AND ficha.brand IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
+        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price IS NOT NULL OR oferta."finalPrice" IS NOT NULL)
       GROUP BY ficha.brand
       ORDER BY count DESC
       LIMIT 200
@@ -1670,7 +1764,13 @@ export class ProvidersService implements OnModuleInit {
     const batches = await Promise.all(
       providers.map((provider) =>
         this.prisma.tenantProductOffer.findMany({
-          where: { tenantId, provider, active: true, stock: { gt: 0 } },
+          where: {
+            tenantId,
+            provider,
+            active: true,
+            stock: { gt: 0 },
+            OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
+          },
           include: { product: true },
           orderBy: [{ syncedAt: "desc" }, { product: { name: "asc" } }],
           take: perProvider * 2,
@@ -1736,7 +1836,10 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
-    const hidden = await this.providersHidingUnsynced(tenantId, providers);
+    const [hidden, priced] = await Promise.all([
+      this.providersHidingUnsynced(tenantId, providers),
+      this.providersWithOwnPrices(tenantId, providers),
+    ]);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
@@ -1746,6 +1849,7 @@ export class ProvidersService implements OnModuleInit {
         AND: [
           ...stockConstraint,
           ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
+          ...catalogPricedOnlyWhere(priced),
           {
             OR: [
               { product: { category: { in: match.rawCategories } } },
@@ -1812,14 +1916,21 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
-    const hidden = await this.providersHidingUnsynced(tenantId, providers);
+    const [hidden, priced] = await Promise.all([
+      this.providersHidingUnsynced(tenantId, providers),
+      this.providersWithOwnPrices(tenantId, providers),
+    ]);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
         tenantId,
         active: true,
         provider: { in: providers },
-        AND: [...stockConstraint, ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock)],
+        AND: [
+          ...stockConstraint,
+          ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
+          ...catalogPricedOnlyWhere(priced),
+        ],
       },
       include: { product: true },
       orderBy: { product: { name: "asc" } },
@@ -1837,7 +1948,7 @@ export class ProvidersService implements OnModuleInit {
         return isDisplayedInStock(product.stock, 0);
       });
     if (views.length < limit) {
-      const visible = providers.filter((provider) => !hidden.has(provider));
+      const visible = providers.filter((provider) => !hidden.has(provider) && !priced.has(provider));
       if (visible.length > 0) {
         const sheets = await this.prisma.providerSyncCache.findMany({
           where: { provider: { in: visible }, offers: { none: { tenantId } } },
@@ -1884,7 +1995,10 @@ export class ProvidersService implements OnModuleInit {
         : []),
     ];
     const stockConstraint = includeOutOfStock || stockOr.length === 0 ? [] : [{ OR: stockOr }];
-    const hidden = await this.providersHidingUnsynced(tenantId, providers);
+    const [hidden, priced] = await Promise.all([
+      this.providersHidingUnsynced(tenantId, providers),
+      this.providersWithOwnPrices(tenantId, providers),
+    ]);
 
     const offers = await this.prisma.tenantProductOffer.findMany({
       where: {
@@ -1894,6 +2008,7 @@ export class ProvidersService implements OnModuleInit {
         AND: [
           ...stockConstraint,
           ...this.emptyOfferConstraint(providers, hidden, rules, includeOutOfStock),
+          ...catalogPricedOnlyWhere(priced),
           {
             OR: [
               { product: { brand: { in: match.rawBrands } } },
@@ -1962,14 +2077,11 @@ export class ProvidersService implements OnModuleInit {
 
   /**
    * Proveedores de los que esta organización puede leer catálogo: los que tiene
-   * vinculados, menos los que el superadmin escondió de toda la plataforma.
+   * vinculados, menos los que el superadmin escondió de toda la plataforma
+   * (salvo lo que el comercio cargó con su propia lista).
    */
   private async readableProviders(tenantId: string, viewerUserId?: string): Promise<string[]> {
-    const [linked, hidden] = await Promise.all([
-      this.visibility.linkedProviderKeys(tenantId, viewerUserId),
-      this.hiddenProviders(),
-    ]);
-    return linked.filter((provider) => !hidden.has(provider));
+    return this.visibility.readableCatalogKeys(tenantId, viewerUserId);
   }
 
   /**

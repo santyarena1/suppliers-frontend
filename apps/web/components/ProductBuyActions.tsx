@@ -14,6 +14,7 @@ import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { SchemePicker } from "@/components/SchemePicker";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 
+import { providerLabel } from "@/components/ProviderBadge";
 /** Una sola moneda: la que el comercio eligio. Antes mostraba las dos. */
 function FinalPriceLine({ usd, className }: { usd: number; className?: string }) {
   const { currency, convert } = usePrefs();
@@ -157,7 +158,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
         <p className="text-[11px] text-surface-400 text-center leading-relaxed">
           Pedido offline y esquema se activan en{" "}
           <Link href={`/proveedores/${product.provider}?tab=config`} className="text-amber-300 hover:text-amber-200 underline">
-            Configuración de {product.provider.replace(/_/g, " ")}
+            Configuración de {providerLabel(product.provider)}
           </Link>
           .
         </p>

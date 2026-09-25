@@ -73,7 +73,8 @@ function SearchPage() {
   const purchasePolicies = usePurchasePolicies();
   const { withIva, withIibb } = usePrefs();
   const iibbEpoch = useIibbRatesEpoch();
-  const searchable = myProviders.filter((p) => p.linked);
+  const searchable = useMemo(() => myProviders.filter((p) => p.linked && !p.platformHidden), [myProviders]);
+  const platformHidden = useMemo(() => myProviders.filter((p) => p.linked && p.platformHidden), [myProviders]);
   const anyOffline = searchable.some((p) => purchasePolicies[p.provider]?.acceptsOffline);
   const anyScheme = searchable.some((p) => purchasePolicies[p.provider]?.acceptsScheme);
   const [priceView, setPriceView] = useState<PriceView>("list");
@@ -1045,6 +1046,13 @@ function SearchPage() {
                 emptyText="Todavía no estás conectado con ningún distribuidor"
               />
             </div>
+            {platformHidden.length > 0 && (
+              <p className="mt-2 text-[11px] text-amber-400/90">
+                {platformHidden.map((p) => p.name).join(", ")}{" "}
+                {platformHidden.length === 1 ? "está oculto" : "están ocultos"} por el administrador de la plataforma
+                y no {platformHidden.length === 1 ? "entra" : "entran"} en la búsqueda.
+              </p>
+            )}
 
             {/* Controles secundarios solo en mobile (en desktop viven en el header / sticky) */}
             <div className="md:hidden mt-2.5 flex flex-wrap items-center gap-2">

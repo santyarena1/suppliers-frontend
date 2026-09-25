@@ -10,6 +10,7 @@ import {
   Play, RotateCcw, Clock, Package, Minus, ChevronDown, ChevronRight
 } from "lucide-react";
 
+import { providerLabel } from "@/components/ProviderBadge";
 type Status = "idle" | "running" | "ok" | "empty" | "error" | "no_cred";
 
 interface ProviderResult {
@@ -306,7 +307,7 @@ function ProviderRow({ provider, result, configured, expanded, onToggle, onTest 
 
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-bold ${PROVIDER_COLOR[provider] || "text-surface-300"}`}>
-            {provider.replace(/_/g, " ")}
+            {providerLabel(provider)}
           </p>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="text-[10px] text-surface-500">{statusLabel}</span>

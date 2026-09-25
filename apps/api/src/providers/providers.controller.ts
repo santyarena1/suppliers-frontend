@@ -815,6 +815,25 @@ export class ProvidersController {
     });
   }
 
+  @Get("providers/:provider/catalog")
+  listCatalog(
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Param("provider") provider: string,
+    @Query("q") q = "",
+    @Query("skip") skip?: string,
+    @Query("take") take?: string,
+    @Query("includeOutOfStock") includeOutOfStock?: string
+  ) {
+    if (!tenant) return { total: 0, items: [] };
+    return this.providersService.listCatalog(commercialId(tenant), assertProvider(provider), {
+      q,
+      skip: Number(skip) || 0,
+      take: Number(take) || undefined,
+      includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock),
+      viewerUserId: tenant.userId,
+    });
+  }
+
   @Get("providers/:provider/products/:externalId")
   async getProduct(
     @CurrentTenant() tenant: TenantContext,

@@ -364,7 +364,7 @@ export const searchApi = {
   all: async (name: string, opts: SearchAllOptions = {}) => {
     // Buscar en un proveedor que no está vinculado no devolvería nada igual; sin la
     // lista, serían catorce pedidos al pedo en cada búsqueda.
-    const providers = opts.providers ?? (await loadLinkedProviders());
+    const providers = opts.providers ?? (await loadSearchableProviders());
     const results = await Promise.allSettled(
       providers.map(async (p) => {
         try {
@@ -386,12 +386,25 @@ export const searchApi = {
     }
     return { data: merged };
   },
+  /** Catálogo paginado de un distribuidor (sin texto lista todo) con el total. */
+  catalog: (
+    provider: Provider,
+    opts: { q?: string; skip?: number; take?: number; includeOutOfStock?: boolean } = {}
+  ) =>
+    api.get<{ total: number; items: ProductDTO[] }>(`/providers/${provider}/catalog`, {
+      params: {
+        ...(opts.q?.trim() ? { q: opts.q.trim() } : {}),
+        ...(opts.skip ? { skip: opts.skip } : {}),
+        ...(opts.take ? { take: opts.take } : {}),
+        ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
+      },
+    }),
   byProvider: (provider: Provider, name: string, opts: { includeOutOfStock?: boolean } = {}) =>
     api.get<ProductDTO[]>(`/search/provider/${provider}`, {
       params: searchParams(name, opts),
     }),
   filtered: async (name: string, filters: Record<string, boolean>, opts: SearchAllOptions = {}) => {
-    const providers = (await loadLinkedProviders()).filter((p) => filters[p]);
+    const providers = (await loadSearchableProviders()).filter((p) => filters[p]);
     return searchApi.all(name, { ...opts, providers });
   },
 };
@@ -409,6 +422,8 @@ export interface VisibleProvider {
   advertised: boolean;
   /** El comercio se conectó solo cargando su lista: sin vendedor ni chat hasta que el proveedor lo reconozca. */
   selfConnected?: boolean;
+  /** El administrador lo ocultó en toda la plataforma: no hay catálogo que buscar. */
+  platformHidden?: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
@@ -1099,6 +1114,11 @@ export function invalidateMyProviders() {
 /** Solo los vinculados: de los publicitados todavía no hay catálogo que traer. */
 export async function loadLinkedProviders(): Promise<Provider[]> {
   return (await loadMyProviders()).filter((p) => p.linked).map((p) => p.provider);
+}
+
+/** Vinculados cuyo catálogo se puede buscar: el oculto por la plataforma responde vacío. */
+export async function loadSearchableProviders(): Promise<Provider[]> {
+  return (await loadMyProviders()).filter((p) => p.linked && !p.platformHidden).map((p) => p.provider);
 }
 
 export function cachedMyProviders(): VisibleProvider[] | null {
@@ -2877,6 +2897,8 @@ export interface AdminUser {
 
 export interface ProviderDisplay {
   provider: Provider;
+  /** Nombre para mostrar (los proveedores por lista no están en PROVIDER_LABELS). */
+  name?: string;
   visible: boolean;
   logoUrl: string | null;
   textColor: string | null;
