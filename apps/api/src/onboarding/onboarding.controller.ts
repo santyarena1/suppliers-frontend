@@ -2,7 +2,9 @@ import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { JwtPayload } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
+import { Roles } from "../common/decorators/roles.decorator";
+import { RolesGuard } from "../common/guards/roles.guard";
+import { AdminCreateRetailerDto, BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
 import { OnboardingService } from "./onboarding.service";
 
 @UseGuards(AuthGuard("jwt"))
@@ -50,5 +52,18 @@ export class OnboardingController {
   @Post("reseed-demo")
   reseed(@CurrentUser() user: JwtPayload) {
     return this.onboarding.reseedDemo(user.userId);
+  }
+}
+
+/** Superadmin: alta de un comercio completo (org PRO + dueño + demo + recorrido). */
+@UseGuards(RolesGuard)
+@Roles("ROLE_ADMIN")
+@Controller("admin/onboarding")
+export class AdminOnboardingController {
+  constructor(private readonly onboarding: OnboardingService) {}
+
+  @Post("retailers")
+  createRetailer(@Body() dto: AdminCreateRetailerDto) {
+    return this.onboarding.createRetailerForAdmin(dto);
   }
 }

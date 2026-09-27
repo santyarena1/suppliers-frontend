@@ -17,7 +17,9 @@ import { AuthService } from "../auth/auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenants/tenant-context.service";
 import { DEMO_DISTRIBUTORS, DEMO_PRODUCTS, DEMO_SEARCH_HINTS } from "./onboarding-demo";
-import { BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
+import * as argon2 from "argon2";
+import { generatePassword } from "../common/generate-password";
+import { AdminCreateRetailerDto, BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
 import { RETAILER_ONBOARDING_STEPS, type OnboardingStep } from "./onboarding-steps";
 
 @Injectable()
@@ -175,6 +177,54 @@ export class OnboardingService {
         planLabel: TENANT_PLAN_LABELS[tenant.plan as TenantPlan],
       },
       onboarding: status,
+    };
+  }
+
+  /**
+   * Superadmin da de alta un comercio con su dueño. Queda igual que un
+   * autoregistro: plan PRO, catálogo demo, y el recorrido guiado arranca solo
+   * la primera vez que el dueño entra (onboardingCompletedAt queda en null).
+   */
+  async createRetailerForAdmin(dto: AdminCreateRetailerDto) {
+    const name = dto.name.trim().replace(/\s+/g, " ");
+    const username = dto.ownerUsername.trim();
+    const email = dto.ownerEmail.trim().toLowerCase();
+
+    const taken = await this.prisma.tenant.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (taken) throw new ConflictException("Ya existe una organización con ese nombre");
+    const clash = await this.prisma.user.findFirst({ where: { OR: [{ username }, { email }] } });
+    if (clash) {
+      throw new ConflictException(clash.username === username ? "El nombre de usuario ya está en uso" : "El email ya está registrado");
+    }
+
+    const password = dto.ownerPassword ?? generatePassword();
+    const passwordHash = await argon2.hash(password);
+    const { tenant, owner } = await this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({
+        data: {
+          name,
+          type: "RETAILER",
+          plan: "PRO",
+          contactEmail: dto.contactEmail?.trim() || email,
+          contactPhone: dto.contactPhone?.trim() || null,
+        },
+      });
+      const owner = await tx.user.create({ data: { username, email, passwordHash, role: "ROLE_USER" } });
+      await tx.tenantMembership.create({
+        data: { tenantId: tenant.id, userId: owner.id, role: "OWNER", title: "Dueño del local" },
+      });
+      return { tenant, owner };
+    });
+
+    await this.seedDemoSandbox(tenant.id, owner.id);
+
+    return {
+      tenant: { id: tenant.id, name: tenant.name, type: tenant.type as TenantType, plan: tenant.plan as TenantPlan },
+      owner: { id: owner.id, username: owner.username, email: owner.email },
+      ...(dto.ownerPassword ? {} : { generatedPassword: password }),
     };
   }
 

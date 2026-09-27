@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   adminApi,
   adminBrandOrgsApi,
+  adminOnboardingApi,
   AdminUser,
   ALL_PROVIDERS,
   BrandDisplay,
@@ -1670,13 +1671,32 @@ function CreateTenantModal({
     brandId: "",
     contactEmail: "",
     contactPhone: "",
+    ownerUsername: "",
+    ownerEmail: "",
+    ownerPassword: "",
   });
   const [saving, setSaving] = useState(false);
+  const [created, setCreated] = useState<{ username: string; password?: string } | null>(null);
+  const isRetailer = form.type === "RETAILER";
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
     try {
+      if (isRetailer) {
+        // Igual que el autoregistro: PRO, dueño, catálogo demo y recorrido guiado.
+        const { data } = await adminOnboardingApi.createRetailer({
+          name: form.name.trim(),
+          contactEmail: form.contactEmail.trim() || undefined,
+          contactPhone: form.contactPhone.trim() || undefined,
+          ownerUsername: form.ownerUsername.trim(),
+          ownerEmail: form.ownerEmail.trim(),
+          ownerPassword: form.ownerPassword.trim() || undefined,
+        });
+        showToast("Comercio creado con su dueño y el catálogo de prueba");
+        setCreated({ username: data.owner.username, password: data.generatedPassword });
+        return;
+      }
       await tenantsApi.create({
         name: form.name.trim(),
         type: form.type,
@@ -1694,9 +1714,31 @@ function CreateTenantModal({
     }
   }
 
+  if (created) {
+    return (
+      <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+        <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm flex flex-col gap-3">
+          <h3 className="text-sm font-semibold text-white">Comercio listo</h3>
+          <p className="text-xs text-surface-400 leading-relaxed">
+            <span className="text-white font-medium">{created.username}</span> es el dueño. La primera vez que entre va a
+            ver el recorrido guiado con el catálogo de prueba.
+          </p>
+          {created.password && <GeneratedPassword password={created.password} onDismiss={onCreated} />}
+          <button
+            type="button"
+            onClick={onCreated}
+            className="bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
+          >
+            Listo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm">
+      <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm max-h-[90dvh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-white">Nueva organización</h3>
           <button onClick={onClose} className="text-surface-500 hover:text-white">
@@ -1758,6 +1800,26 @@ function CreateTenantModal({
             <label className={labelClass}>Teléfono</label>
             <input value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} className={inputClass} />
           </div>
+          {isRetailer && (
+            <fieldset className="border border-surface-800 rounded-lg p-3 flex flex-col gap-3">
+              <legend className="px-1 text-[11px] font-semibold text-surface-300">Dueño del comercio</legend>
+              <div>
+                <label className={labelClass}>Usuario</label>
+                <input required minLength={3} value={form.ownerUsername} onChange={(e) => setForm({ ...form, ownerUsername: e.target.value })} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Email</label>
+                <input required type="email" value={form.ownerEmail} onChange={(e) => setForm({ ...form, ownerEmail: e.target.value })} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Contraseña (vacío = generar una)</label>
+                <input minLength={8} type="text" value={form.ownerPassword} onChange={(e) => setForm({ ...form, ownerPassword: e.target.value })} className={inputClass} />
+              </div>
+              <p className="text-[11px] text-surface-500 leading-relaxed">
+                Queda con plan PRO, catálogo de prueba y el recorrido guiado para su primer ingreso.
+              </p>
+            </fieldset>
+          )}
           <button
             type="submit"
             disabled={saving}

@@ -3452,6 +3452,23 @@ export interface PermissionMatrix {
   canEdit: boolean;
 }
 
+/** Superadmin: alta de un comercio completo (PRO + dueño + demo + recorrido guiado). */
+export const adminOnboardingApi = {
+  createRetailer: (data: {
+    name: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    ownerUsername: string;
+    ownerEmail: string;
+    ownerPassword?: string;
+  }) =>
+    api.post<{
+      tenant: { id: string; name: string; type: TenantType; plan: string };
+      owner: { id: string; username: string; email: string };
+      generatedPassword?: string;
+    }>("/admin/onboarding/retailers", data),
+};
+
 export const tenantsApi = {
   tree: () => api.get<TenantTree>("/admin/tenants"),
   permissions: (tenantId: string) => api.get<PermissionMatrix>(`/admin/tenants/${tenantId}/permissions`),

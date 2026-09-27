@@ -49,6 +49,24 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Un usuario = una cuenta que pertenece a una o más organizaciones con un rol; ese rol define qué puede hacer. Los miembros se crean y asignan por `/admin/tenants/:id/members*`; `POST /admin/users` solo da de alta superadmins (el único usuario sin organización). El nivel de plataforma no se elige a mano: `PUT .../superadmin` lo prende o, al apagarlo, lo recalcula desde la organización (marca → `ROLE_BRAND`, resto → `ROLE_USER`); no deja a la plataforma sin superadmin activo. `GET /me/permissions` devuelve los módulos del nivel de plataforma, sin excepciones por usuario (se quitaron `GET/PUT /admin/permissions/:userId` y las rutas viejas `/user/update-active-status`, `/user/update-end-date`, `/user/delete`). `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse. En la UI vive en el **Directorio** (`/admin`): ficha del usuario (cuenta, superadmin, clave, “Entrar como”, organizaciones).
 
+### [FEATURE] Permisos por organización
+- **Método**: GET | PUT
+- **Ruta**: `/my/permissions`, `/my/team/permissions`, `/my/team/roles/:role/permissions`, `/my/team/members/:membershipId/permissions` · superadmin: `/admin/tenants/:id/permissions`, `/admin/tenants/:id/roles/:role/permissions`, `/admin/tenants/:id/members/:membershipId/permissions`
+- **Auth**: Bearer. Ver la matriz: permiso `team.manage`. Cambiarla: solo el Dueño (o superadmin en `/admin`).
+- **Body / Params**: PUT `{ changes: { "<permiso>": true | false | null } }` (`null` = volver al valor heredado)
+- **Respuesta esperada**: `/my/permissions` → `{ role, permissions: string[] }`. La matriz → `{ type, roles, groups, permissions: [{ key, group, label, description }], defaults, roleOverrides, members: [{ membershipId, userId, username, email, title, role, overrides, effective }], canEdit }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Catálogo en `packages/shared/src/permissions.ts`; diseño en `docs/superpowers/specs/2026-09-26-permisos-por-organizacion-design.md`. El Dueño tiene siempre todo. Resolución: persona > rol > defecto; los defectos reproducen los permisos fijos de antes. Credenciales (`/credentials*`), sync, configuración de proveedor y listas requieren `providers.manage`; sin él, `GET /credentials/me` devuelve `credentialsJson: null`. Cuenta corriente y pagos requieren `providers.account` (abierto por defecto).
+
+### [FEATURE] Alta de comercio desde superadmin
+- **Método**: POST
+- **Ruta**: `/admin/onboarding/retailers`
+- **Auth**: Bearer ROLE_ADMIN
+- **Body / Params**: `{ name, contactEmail?, contactPhone?, ownerUsername, ownerEmail, ownerPassword? }`
+- **Respuesta esperada**: `{ tenant: { id, name, type, plan }, owner: { id, username, email }, generatedPassword? }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Deja el comercio igual que el autoregistro: plan PRO, dueño, catálogo demo; el recorrido guiado arranca en su primer ingreso. Sin `ownerPassword` la plataforma genera una y la devuelve una única vez.
+
 ### [FEATURE] Entrar como otro usuario (suplantación)
 - **Método**: POST
 - **Ruta**: `/admin/users/:id/impersonate`
