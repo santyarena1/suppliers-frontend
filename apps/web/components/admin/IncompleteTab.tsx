@@ -3,17 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   catalogEnrichmentApi,
-  PROVIDER_LABELS,
   type CatalogAliasKind,
   type CatalogIncompleteProduct,
-  type Provider,
 } from "@/lib/api";
 import type { LabelChoice } from "@/lib/catalog-menu";
 import SearchablePick from "./SearchablePick";
 import { Check, Loader2, Search, Sparkles } from "lucide-react";
 
+import { providerLabel } from "@/components/ProviderBadge";
 function providerName(provider: string) {
-  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  return providerLabel(provider);
 }
 
 type MissingFilter = "all" | "brand" | "category";

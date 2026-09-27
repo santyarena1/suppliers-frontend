@@ -8,7 +8,6 @@ import {
   AdminUser,
   ALL_PROVIDERS,
   BrandDisplay,
-  PROVIDER_LABELS,
   Provider,
   TENANT_LINK_STATUS_LABELS,
   TENANT_ROLE_LABELS,
@@ -47,6 +46,7 @@ import {
   X,
 } from "lucide-react";
 
+import { providerLabel as resolveProviderLabel } from "@/components/ProviderBadge";
 type ToastFn = (msg: string, ok?: boolean) => void;
 type BrowseMode = "orgs" | "people";
 type TypeFilter = TenantType | "all";
@@ -91,7 +91,7 @@ function errMsg(err: unknown, fallback: string) {
 }
 
 function providerLabel(provider: string) {
-  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  return resolveProviderLabel(provider);
 }
 
 function decimalToNumber(value: string | number | null): number | null {

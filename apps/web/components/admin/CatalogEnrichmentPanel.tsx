@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   catalogEnrichmentApi,
-  PROVIDER_LABELS,
   type CatalogAliasKind,
   type CatalogBoard,
   type CatalogTerm,
-  type Provider,
 } from "@/lib/api";
 import {
   Layers,
@@ -25,6 +23,7 @@ import IncompleteTab from "./IncompleteTab";
 import MissingBrandsTab from "./MissingBrandsTab";
 import { aggregateLabelChoices } from "@/lib/catalog-menu";
 
+import { providerLabel } from "@/components/ProviderBadge";
 type MainTab = "categories" | "brands" | "missing-brands" | "incomplete" | "config";
 
 export default function CatalogEnrichmentPanel({
@@ -195,7 +194,7 @@ export default function CatalogEnrichmentPanel({
           brandChoices={aggregateLabelChoices(
             (brandBoard?.rows ?? []).map((r) => ({
               ...r,
-              provider: PROVIDER_LABELS[r.provider as Provider] ?? r.provider.replace(/_/g, " "),
+              provider: providerLabel(r.provider),
             })),
             terms.filter((t) => t.kind === "BRAND").map((t) => t.label)
           )}
@@ -209,14 +208,14 @@ export default function CatalogEnrichmentPanel({
           brandChoices={aggregateLabelChoices(
             (brandBoard?.rows ?? []).map((r) => ({
               ...r,
-              provider: PROVIDER_LABELS[r.provider as Provider] ?? r.provider.replace(/_/g, " "),
+              provider: providerLabel(r.provider),
             })),
             terms.filter((t) => t.kind === "BRAND").map((t) => t.label)
           )}
           categoryChoices={aggregateLabelChoices(
             (catBoard?.rows ?? []).map((r) => ({
               ...r,
-              provider: PROVIDER_LABELS[r.provider as Provider] ?? r.provider.replace(/_/g, " "),
+              provider: providerLabel(r.provider),
             })),
             terms.filter((t) => t.kind === "CATEGORY" || t.kind === "SUBCATEGORY").map((t) => t.label)
           )}

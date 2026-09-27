@@ -6,7 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ShoppingCart, ChevronUp, X, Minus, Plus, Package } from "lucide-react";
 import { useCart, type CartItem, type CartRef, cartItemKey } from "@/lib/cart";
-import { PROVIDER_LABELS, type Provider } from "@/lib/api";
+import {  } from "@/lib/api";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { proxyImg, formatUSD, formatARS } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
@@ -17,6 +17,7 @@ import { taxByKind, formatAlicuota, type TaxLine } from "@/lib/tax";
 import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import type { PurchasePolicy } from "@/lib/purchase-pricing";
 
+import { providerLabel } from "@/components/ProviderBadge";
 type BreakdownRow = { key: string; label: string; amountUsd: number };
 
 type LineBreakdown = {
@@ -326,7 +327,7 @@ export default function CartFloat() {
     return [...map.entries()]
       .map(([provider, providerItems]) => ({
         provider,
-        label: PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " "),
+        label: providerLabel(provider),
         items: providerItems.sort((a, b) => cartItemKey(a).localeCompare(cartItemKey(b))),
         qty: providerItems.reduce((s, i) => s + i.qty, 0),
       }))

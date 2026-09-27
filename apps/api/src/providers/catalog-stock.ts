@@ -56,6 +56,30 @@ export function catalogHideEmptyOfferWhere(
   return { AND: [withPrice, { stock: { gt: Math.max(minStockThreshold, 0) } }] };
 }
 
+/**
+ * Un comercio que ya tiene precios de un proveedor (sincronizó su cuenta o cargó
+ * su lista) solo ve lo que su cuenta le vende. Lo que no tiene precio de su lado
+ * —una ficha que trajo la cuenta de otro local, un producto que su propia sync
+ * borró, el lugar que deja la lista de otro comercio— no se puede comprar, y
+ * listarlo "sin precio" hace dudar de todo el resultado.
+ *
+ * Vacío si ningún proveedor está en ese caso: ahí se sigue viendo la ficha
+ * universal como vista previa.
+ */
+export function catalogPricedOnlyWhere(pricedProviders: Iterable<string>): Prisma.TenantProductOfferWhereInput[] {
+  const priced = [...pricedProviders];
+  if (priced.length === 0) return [];
+  return [
+    {
+      OR: [
+        { provider: { notIn: priced } },
+        { price: { not: null } },
+        { finalPrice: { not: null } },
+      ],
+    },
+  ];
+}
+
 export function parseIncludeOutOfStock(value?: string | string[]): boolean {
   const v = Array.isArray(value) ? value[0] : value;
   return v === "1" || v === "true";

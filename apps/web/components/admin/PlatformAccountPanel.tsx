@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { adminApi, PROVIDER_LABELS, Provider, type AdminUser, type UserRole } from "@/lib/api";
+import { adminApi, type AdminUser, type UserRole } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import EnterAsButton from "./EnterAsButton";
 import GeneratedPassword from "./GeneratedPassword";
 import { KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
-
+import { providerLabel as resolveProviderLabel } from "@/components/ProviderBadge";
 type ToastFn = (msg: string, ok?: boolean) => void;
 
 const PLATFORM_ROLE_LABELS: Record<UserRole, string> = {
@@ -20,7 +20,7 @@ function errMsg(err: unknown, fallback: string) {
 }
 
 function providerLabel(provider: string) {
-  return PROVIDER_LABELS[provider as Provider] ?? provider.replace(/_/g, " ");
+  return resolveProviderLabel(provider);
 }
 
 function formatDate(value: string | null | undefined) {
