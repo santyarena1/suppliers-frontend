@@ -73,10 +73,12 @@ function AdminPageInner() {
 
   const currentUser = getUser();
 
-  function showToast(msg: string, ok = true) {
+  // Estable: los paneles la usan como dependencia; si cambiara en cada render,
+  // cada aviso recargaría el Directorio entero y cerraría lo que esté abierto.
+  const showToast = useCallback((msg: string, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 4000);
-  }
+  }, []);
 
   return (
     <>

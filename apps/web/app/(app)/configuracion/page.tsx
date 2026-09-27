@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
@@ -82,10 +82,12 @@ function ConfiguracionPageInner() {
     else if (admin && ADMIN_TAB_KEYS.includes(q)) setTab(q);
   }, [searchParams, admin]);
 
-  function showToast(msg: string, ok = true) {
+  // Estable: los paneles la usan como dependencia de sus cargas. Si cambiara en
+  // cada render, cada aviso recargaría el panel y pisaría lo que se estaba editando.
+  const showToast = useCallback((msg: string, ok = true) => {
     setToast({ msg, ok });
     setTimeout(() => setToast(null), 4000);
-  }
+  }, []);
 
   return (
     <>

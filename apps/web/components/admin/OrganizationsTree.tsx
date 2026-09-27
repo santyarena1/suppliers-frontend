@@ -240,7 +240,8 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
     });
   }
 
-  if (loading) {
+  // Solo la primera carga tapa la pantalla; recargar no desmonta fichas ni modales.
+  if (loading && !tree) {
     return (
       <div className="flex justify-center py-16">
         <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
