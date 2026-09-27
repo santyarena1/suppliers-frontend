@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import type { Prisma, ProviderOrder } from "@prisma/client";
-import { TENANT_ROLES_CAN_APPROVE_ORDERS, TENANT_ROLES_CAN_CONFIRM_ORDERS, TENANT_ROLES_CAN_ORDER, type Provider, providerLabel } from "@nodo/shared";
+import { type Provider, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertPermission, hasPermission } from "../tenants/tenant-roles";
 import { isDemoDistributorKey, isDemoOrderNote, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -40,19 +41,17 @@ export class OrderApprovalService {
     @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
   ) {}
 
-  /** Todo pedido nace de alguien que puede comprar; el rol de solo lectura no compra. */
+  /** Todo pedido nace de alguien con permiso para comprar. */
   assertCanOrder(tenant: TenantContext) {
-    if (!TENANT_ROLES_CAN_ORDER.includes(tenant.tenantRole)) {
-      throw new ForbiddenException(`Tu rol en ${tenant.tenantName} no puede armar pedidos`);
-    }
+    assertPermission(tenant, "orders.create");
   }
 
   needsApproval(tenant: TenantContext) {
-    return !TENANT_ROLES_CAN_CONFIRM_ORDERS.includes(tenant.tenantRole);
+    return !hasPermission(tenant, "orders.confirm");
   }
 
   canApprove(tenant: TenantContext) {
-    return TENANT_ROLES_CAN_APPROVE_ORDERS.includes(tenant.tenantRole);
+    return hasPermission(tenant, "orders.approve");
   }
 
   /**
@@ -153,13 +152,9 @@ export class OrderApprovalService {
     return row;
   }
 
-  /** Solo el dueño o un administrador de la organización aprueban lo de otro. */
+  /** Aprueba lo de otro quien tenga el permiso (por defecto, dueño y administrador). */
   async assertApprovable(tenant: TenantContext, id: string) {
-    if (!this.canApprove(tenant)) {
-      throw new ForbiddenException(
-        `Solo el dueño o un administrador de ${tenant.tenantName} pueden aprobar pedidos`
-      );
-    }
+    assertPermission(tenant, "orders.approve");
     const order = await this.getOwn(tenant, id);
     if (order.approvalStatus !== "PENDING_APPROVAL") {
       throw new BadRequestException("Ese pedido ya no está esperando aprobación");

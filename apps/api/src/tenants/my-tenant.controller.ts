@@ -1,6 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import type { JwtPayload } from "@nodo/shared";
+import type { JwtPayload, TenantRole } from "@nodo/shared";
+import { PermissionChangesDto } from "./dto/permissions.dto";
+import { TenantPermissionsService } from "./tenant-permissions.service";
+import { assertPermission } from "./tenant-roles";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import {
@@ -21,6 +24,13 @@ import { TenantVisibilityService } from "./tenant-visibility.service";
 import { TenantGuard } from "./tenant.guard";
 import { TenantsService } from "./tenants.service";
 
+/** Regla fija: solo el dueño cambia permisos, así nadie se da más de lo que tiene. */
+function assertOwner(tenant: TenantContext) {
+  if (tenant.tenantRole !== "OWNER") {
+    throw new ForbiddenException("Solo el dueño de la organización puede cambiar permisos");
+  }
+}
+
 /** Lo que una organización puede saber y hacer sobre sí misma, sin ser superadmin. */
 @UseGuards(AuthGuard("jwt"), TenantGuard)
 @Controller("my")
@@ -28,12 +38,42 @@ export class MyTenantController {
   constructor(
     private readonly tenants: TenantsService,
     private readonly visibility: TenantVisibilityService,
-    private readonly portfolio: PortfolioService
+    private readonly portfolio: PortfolioService,
+    private readonly permissions: TenantPermissionsService
   ) {}
 
   @Get("org")
   org(@CurrentTenant() tenant: TenantContext) {
     return this.tenants.getOwnOrg(tenant);
+  }
+
+  /** Permisos efectivos de la sesión: el frontend los usa para mostrar u ocultar acciones. */
+  @Get("permissions")
+  myPermissions(@CurrentTenant() tenant: TenantContext) {
+    return { role: tenant.tenantRole, permissions: tenant.permissions };
+  }
+
+  /** Ver la matriz: quien gestiona el equipo. Cambiarla: solo el dueño. */
+  @Get("team/permissions")
+  teamPermissions(@CurrentTenant() tenant: TenantContext) {
+    assertPermission(tenant, "team.manage");
+    return this.permissions.matrix(tenant.tenantId).then((matrix) => ({ ...matrix, canEdit: tenant.tenantRole === "OWNER" }));
+  }
+
+  @Put("team/roles/:role/permissions")
+  setRolePermissions(@CurrentTenant() tenant: TenantContext, @Param("role") role: string, @Body() dto: PermissionChangesDto) {
+    assertOwner(tenant);
+    return this.permissions.setRole(tenant.tenantId, role as TenantRole, dto.changes);
+  }
+
+  @Put("team/members/:membershipId/permissions")
+  setMemberPermissions(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("membershipId") membershipId: string,
+    @Body() dto: PermissionChangesDto
+  ) {
+    assertOwner(tenant);
+    return this.permissions.setMember(tenant.tenantId, membershipId, dto.changes);
   }
 
   @Put("org")

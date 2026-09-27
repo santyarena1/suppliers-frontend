@@ -18,6 +18,7 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { ProvidersService } from "../providers/providers.service";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
+import { assertPermission } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { TenantsService } from "../tenants/tenants.service";
 import { CreateListProviderDto, EnableOwnListDto, SaveImportProfileDto } from "./dto/list-import.dto";
@@ -26,6 +27,12 @@ import { ListImportService, type ImportActor } from "./list-import.service";
 function assertProvider(value: string): Provider {
   if (!isProviderKey(value)) throw new BadRequestException(`Proveedor inválido: ${value}`);
   return value;
+}
+
+/** Subir listas y tocar perfiles es configurar proveedores; el superadmin siempre puede. */
+function assertManagesProviders(user: JwtPayload, tenant: TenantContext | null) {
+  if (user.role === "ROLE_ADMIN" || !tenant) return;
+  assertPermission(tenant, "providers.manage");
 }
 
 function actorOf(user: JwtPayload, tenant: TenantContext | null): ImportActor {
@@ -54,6 +61,7 @@ export class ListImportController {
   ) {
     const isSuperadmin = user.role === "ROLE_ADMIN";
     if (!isSuperadmin && !tenant) throw new BadRequestException("Tu usuario no pertenece a ninguna organización");
+    assertManagesProviders(user, tenant);
     const createdByRetailer = !isSuperadmin && tenant?.tenantType === "RETAILER";
     if (!isSuperadmin && !createdByRetailer) {
       throw new BadRequestException("Un distribuidor o marca habilita su propia lista desde su organización");
@@ -81,6 +89,7 @@ export class ListImportController {
   @Post("providers/enable-own-list")
   async enableOwnList(@CurrentTenantOrNone() tenant: TenantContext | null, @Body() dto: EnableOwnListDto) {
     if (!tenant) throw new BadRequestException("Tu usuario no pertenece a ninguna organización");
+    assertPermission(tenant, "providers.manage");
     const updated = await this.tenants.enableOwnListProvider(tenant.tenantId, dto.listUpdateDays);
     return { id: updated.id, name: updated.name, type: updated.type, providerKey: updated.providerKey, listUpdateDays: updated.listUpdateDays };
   }
@@ -92,6 +101,7 @@ export class ListImportController {
     @Param("provider") provider: string,
     @Req() req: FastifyRequest
   ) {
+    assertManagesProviders(user, tenant);
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();
@@ -101,6 +111,7 @@ export class ListImportController {
   /** Reprocesa la última planilla subida con el perfil vigente, como carga nueva. */
   @Post("providers/:provider/imports/reprocess-latest")
   reprocessLatest(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("provider") provider: string) {
+    assertManagesProviders(user, tenant);
     return this.imports.reprocessLatest(actorOf(user, tenant), assertProvider(provider));
   }
 
@@ -116,16 +127,19 @@ export class ListImportController {
 
   @Post("providers/:provider/imports/:id/apply")
   apply(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("id") id: string) {
+    assertManagesProviders(user, tenant);
     return this.imports.applyImport(id, actorOf(user, tenant));
   }
 
   @Post("providers/:provider/imports/:id/discard")
   discard(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("id") id: string) {
+    assertManagesProviders(user, tenant);
     return this.imports.discard(id, actorOf(user, tenant));
   }
 
   @Post("providers/:provider/imports/:id/revert")
   revert(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("id") id: string) {
+    assertManagesProviders(user, tenant);
     return this.imports.revert(id, actorOf(user, tenant));
   }
 
@@ -141,6 +155,7 @@ export class ListImportController {
     @Param("provider") provider: string,
     @Body() dto: SaveImportProfileDto
   ) {
+    assertManagesProviders(user, tenant);
     return this.imports.saveProfile(actorOf(user, tenant), assertProvider(provider), dto);
   }
 

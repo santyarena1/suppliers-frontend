@@ -5,11 +5,11 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { isChatReactionEmoji, TENANT_ROLE_LABELS, tenantCanWriteChat, type Provider, type TenantRole, type TenantType, providerLabel } from "@nodo/shared";
+import { isChatReactionEmoji, resolvePermissions, TENANT_ROLE_LABELS, type Provider, type TenantRole, type TenantType, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
-import type { TenantContext } from "../tenants/tenant-context.service";
+import { toOverrides, type TenantContext } from "../tenants/tenant-context.service";
+import { assertPermission, hasPermission } from "../tenants/tenant-roles";
 import {
-  canWriteChat,
   chatLinkVisibleTo,
   chatThreadVisibleTo,
   formatChatPeerLine,
@@ -139,7 +139,7 @@ export class ChatService {
       };
     });
 
-    if (canWriteChat(tenant.tenantRole, tenant.tenantType)) {
+    if (hasPermission(tenant, "chat.write")) {
       const peopleCache = new Map<string, Awaited<ReturnType<ChatService["peopleWhoCanChat"]>>>();
       const peopleOf = async (tenantId: string, type: TenantType) => {
         const key = `${type}:${tenantId}`;
@@ -189,7 +189,7 @@ export class ChatService {
       return tb.localeCompare(ta);
     });
     const unreadTotal = items.reduce((sum, item) => sum + item.unreadCount, 0);
-    return { canWrite: canWriteChat(tenant.tenantRole, tenant.tenantType), unreadTotal, threads: items };
+    return { canWrite: hasPermission(tenant, "chat.write"), unreadTotal, threads: items };
   }
 
   async listPeers(tenant: TenantContext, linkId: string) {
@@ -565,13 +565,12 @@ export class ChatService {
       tenantType: tenant.tenantType,
       tenantRole: tenant.tenantRole,
       userId: tenant.userId,
+      permissions: tenant.permissions,
     };
   }
 
   private assertWrite(tenant: TenantContext) {
-    if (!canWriteChat(tenant.tenantRole, tenant.tenantType)) {
-      throw new ForbiddenException("Tu rol es de solo lectura");
-    }
+    assertPermission(tenant, "chat.write");
   }
 
   private async visibleLinks(tenant: TenantContext) {
@@ -708,9 +707,22 @@ export class ChatService {
         role: true,
         title: true,
         user: { select: PERSON_SELECT },
+        permissionOverrides: { select: { permission: true, allowed: true } },
       },
       orderBy: { createdAt: "asc" },
     });
+    // Respeta las excepciones que cargó el dueño de esa organización.
+    const roleRows = await this.prisma.tenantRolePermission.findMany({
+      where: { tenantId, permission: "chat.write" },
+      select: { role: true, permission: true, allowed: true },
+    });
+    const canWrite = (row: (typeof members)[number]) =>
+      resolvePermissions({
+        type,
+        role: row.role as TenantRole,
+        roleOverrides: toOverrides(roleRows.filter((r) => r.role === row.role)),
+        memberOverrides: toOverrides(row.permissionOverrides),
+      }).includes("chat.write");
     const rank: Record<string, number> = {
       OWNER: 0,
       ADMIN: 1,
@@ -721,7 +733,7 @@ export class ChatService {
       PRODUCT_MANAGER: 3,
     };
     return members
-      .filter((row) => tenantCanWriteChat(type, row.role as TenantRole))
+      .filter(canWrite)
       .sort((a, b) => (rank[a.role] ?? 9) - (rank[b.role] ?? 9))
       .map((row) => ({
         ...row.user,
@@ -776,7 +788,7 @@ export class ChatService {
       threadId: thread.id,
       linkId: thread.linkId,
       status: thread.link.status,
-      canWrite: canWriteChat(tenant.tenantRole, tenant.tenantType),
+      canWrite: hasPermission(tenant, "chat.write"),
       peer,
       accountManager: thread.link.accountManager,
       lastReadAt: read?.lastReadAt.toISOString() ?? null,

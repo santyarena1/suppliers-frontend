@@ -1,4 +1,5 @@
 import { ForbiddenException } from "@nestjs/common";
+import { PERMISSION_KEYS } from "@nodo/shared";
 import { TgsAccessService } from "./tgs.access";
 import type { TenantContext } from "../tenants/tenant-context.service";
 
@@ -9,6 +10,8 @@ function tenant(id: string): TenantContext {
     tenantName: "Local",
     tenantType: "RETAILER",
     tenantRole: "OWNER",
+    membershipId: "m1",
+    permissions: [...PERMISSION_KEYS],
     commercialTenantId: id,
   };
 }

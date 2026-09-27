@@ -1,4 +1,4 @@
-import { tenantCanWriteChat, TENANT_ROLE_LABELS, type TenantRole, type TenantType } from "@nodo/shared";
+import { tenantCanWriteChat, TENANT_ROLE_LABELS, type PermissionKey, type TenantRole, type TenantType } from "@nodo/shared";
 import { clientLinkVisibleTo } from "../tenants/portfolio";
 
 export type ChatActor = {
@@ -6,6 +6,7 @@ export type ChatActor = {
   tenantType: TenantType;
   tenantRole: TenantRole;
   userId: string;
+  permissions?: readonly PermissionKey[];
 };
 
 /** Distro o marca: tipos que pueden ser el lado proveedor del TenantLink. */

@@ -1,6 +1,20 @@
 import { ForbiddenException } from "@nestjs/common";
-import { TENANT_ROLE_LABELS, type TenantRole, type TenantType } from "@nodo/shared";
+import { PERMISSIONS, TENANT_ROLE_LABELS, type PermissionKey, type TenantRole, type TenantType } from "@nodo/shared";
 import type { TenantContext } from "./tenant-context.service";
+
+export function hasPermission(tenant: Pick<TenantContext, "permissions">, key: PermissionKey): boolean {
+  return tenant.permissions.includes(key);
+}
+
+/**
+ * Corta si la persona no tiene el permiso dentro de su organización. Los
+ * permisos salen de su rol más las excepciones que cargó el dueño.
+ */
+export function assertPermission(tenant: Pick<TenantContext, "permissions" | "tenantName">, key: PermissionKey) {
+  if (hasPermission(tenant, key)) return;
+  const label = PERMISSIONS.find((permission) => permission.key === key)?.label ?? key;
+  throw new ForbiddenException(`No tenés permiso para “${label}” en ${tenant.tenantName}. Pedíselo al dueño.`);
+}
 
 /**
  * Corta si quien hace el pedido no tiene el rol necesario dentro de su organización.

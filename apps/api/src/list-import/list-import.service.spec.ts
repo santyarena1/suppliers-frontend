@@ -1,3 +1,4 @@
+import { resolvePermissions } from "@nodo/shared";
 import { ListImportService, keyColumnsPresent } from "./list-import.service";
 import type { ImportProfileSpec } from "./types";
 import type { TenantContext } from "../tenants/tenant-context.service";
@@ -12,15 +13,17 @@ function service(overrides: { isLinked?: boolean; supplier?: typeof SUPPLIER | n
 }
 
 function tenant(partial: Partial<TenantContext>): TenantContext {
-  return {
+  const base = {
     userId: "u1",
     tenantId: "t1",
     tenantName: "Comercio",
-    tenantType: "RETAILER",
-    tenantRole: "OWNER",
+    tenantType: "RETAILER" as const,
+    tenantRole: "OWNER" as const,
+    membershipId: "m1",
     commercialTenantId: "t1",
     ...partial,
   };
+  return { permissions: resolvePermissions({ type: base.tenantType, role: base.tenantRole }), ...base };
 }
 
 describe("ListImportService.resolveAccess", () => {

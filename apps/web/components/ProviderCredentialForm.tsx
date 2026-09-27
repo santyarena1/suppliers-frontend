@@ -45,10 +45,9 @@ export default function ProviderCredentialForm({
       try {
         const res = await credentialsApi.getByProvider(provider);
         if (cancelled) return;
-        const parsed =
-          typeof res.data.credentialsJson === "string"
-            ? (JSON.parse(res.data.credentialsJson) as Record<string, string>)
-            : (res.data.credentialsJson as Record<string, string>);
+        const raw: unknown = res.data.credentialsJson;
+        const parsed: Record<string, string> =
+          typeof raw === "string" ? (JSON.parse(raw) as Record<string, string>) : ((raw ?? {}) as Record<string, string>);
         if (currentSchema) {
           setValues(valuesFromSaved(currentSchema, parsed));
         } else {

@@ -1,15 +1,15 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, Optional, forwardRef } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO, type Provider, type TenantRole, providerLabel } from "@nodo/shared";
+import { type Provider, type TenantRole, providerLabel } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import type { UpdateOwnClientDto } from "./dto/tenant.dto";
 import {
-  canEditClientTerms,
   clientIsInactive,
   clientLinkVisibleTo,
   orderMatchesPmScope,
 } from "./portfolio";
 import type { TenantContext } from "./tenant-context.service";
+import { assertPermission, hasPermission } from "./tenant-roles";
 import { ChatService } from "../chat/chat.service";
 
 const LINK_INCLUDE = {
@@ -45,7 +45,7 @@ export class PortfolioService {
     ]);
 
     const visible = links.filter((link) =>
-      clientLinkVisibleTo(link, { tenantRole: tenant.tenantRole, userId: tenant.userId })
+      clientLinkVisibleTo(link, tenant)
     );
     const clientIds = visible.map((link) => link.clientTenantId);
     const [orderStats, brandStats] = await Promise.all([
@@ -64,9 +64,9 @@ export class PortfolioService {
         : [];
 
     return {
-      canManage: TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole),
-      canAssignSeller: TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole),
-      canEditTerms: canEditClientTerms(tenant.tenantRole),
+      canManage: hasPermission(tenant, "portfolio.manage"),
+      canAssignSeller: hasPermission(tenant, "portfolio.manage"),
+      canEditTerms: hasPermission(tenant, "portfolio.edit_terms"),
       isProductManager: tenant.tenantRole === "PRODUCT_MANAGER",
       managedBrands: scopes.map((scope) => scope.brandName),
       sellers: sellers.map((membership) => ({
@@ -102,21 +102,22 @@ export class PortfolioService {
       lastOrderAt: last?.createdAt ?? null,
       lastOrderTotal: last?.total ?? null,
       inactive: clientIsInactive(link.status, last?.createdAt ?? null),
-      canEditTerms: canEditClientTerms(tenant.tenantRole),
-      canAssignSeller: TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole),
+      canEditTerms: hasPermission(tenant, "portfolio.edit_terms"),
+      canAssignSeller: hasPermission(tenant, "portfolio.manage"),
       orders,
     };
   }
 
   async updateClient(tenant: TenantContext, linkId: string, dto: UpdateOwnClientDto) {
     const link = await this.requireClientLink(tenant, linkId);
-    const sellerOnly = tenant.tenantRole === "SELLER";
-    if (sellerOnly) {
-      if (dto.accountManagerId !== undefined || dto.status !== undefined) {
-        throw new ForbiddenException("Un vendedor no reasigna cuentas ni cambia el estado del vínculo");
+    // Reasignar o cambiar el estado es gestionar la cartera; descuento y notas son condiciones.
+    if (dto.accountManagerId !== undefined || dto.status !== undefined) {
+      assertPermission(tenant, "portfolio.manage");
+    }
+    if (dto.discountPercent !== undefined || dto.notes !== undefined) {
+      if (!hasPermission(tenant, "portfolio.edit_terms") && !hasPermission(tenant, "portfolio.manage")) {
+        assertPermission(tenant, "portfolio.edit_terms");
       }
-    } else if (!TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole)) {
-      throw new ForbiddenException("No podés editar la cartera");
     }
 
     if (dto.accountManagerId) {
@@ -190,7 +191,7 @@ export class PortfolioService {
       },
     });
     const visible = links.filter((link) =>
-      clientLinkVisibleTo(link, { tenantRole: tenant.tenantRole, userId: tenant.userId })
+      clientLinkVisibleTo(link, tenant)
     );
     const byClient = new Map(
       visible.map((link) => [
@@ -238,7 +239,7 @@ export class PortfolioService {
     if (!link || link.supplierTenantId !== tenant.tenantId) {
       throw new NotFoundException("Cliente no encontrado");
     }
-    if (!clientLinkVisibleTo(link, { tenantRole: tenant.tenantRole, userId: tenant.userId })) {
+    if (!clientLinkVisibleTo(link, tenant)) {
       throw new NotFoundException("Cliente no encontrado");
     }
     return link;

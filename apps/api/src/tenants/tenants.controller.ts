@@ -1,6 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from "@nestjs/common";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
+import type { TenantRole } from "@nodo/shared";
+import { PermissionChangesDto } from "./dto/permissions.dto";
+import { TenantPermissionsService } from "./tenant-permissions.service";
 import { TenantsService } from "./tenants.service";
 import {
   CreateAccessCodeDto,
@@ -18,7 +21,10 @@ import {
 @Roles("ROLE_ADMIN")
 @Controller("admin/tenants")
 export class TenantsController {
-  constructor(private readonly tenants: TenantsService) {}
+  constructor(
+    private readonly tenants: TenantsService,
+    private readonly permissions: TenantPermissionsService
+  ) {}
 
   @Get()
   tree() {
@@ -33,6 +39,25 @@ export class TenantsController {
   @Post()
   create(@Body() dto: CreateTenantDto) {
     return this.tenants.createTenant(dto);
+  }
+
+  @Get(":id/permissions")
+  permissionsMatrix(@Param("id") id: string) {
+    return this.permissions.matrix(id).then((matrix) => ({ ...matrix, canEdit: true }));
+  }
+
+  @Put(":id/roles/:role/permissions")
+  setRolePermissions(@Param("id") id: string, @Param("role") role: string, @Body() dto: PermissionChangesDto) {
+    return this.permissions.setRole(id, role as TenantRole, dto.changes);
+  }
+
+  @Put(":id/members/:membershipId/permissions")
+  setMemberPermissions(
+    @Param("id") id: string,
+    @Param("membershipId") membershipId: string,
+    @Body() dto: PermissionChangesDto
+  ) {
+    return this.permissions.setMember(id, membershipId, dto.changes);
   }
 
   @Put(":id")

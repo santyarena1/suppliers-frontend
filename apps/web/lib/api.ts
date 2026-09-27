@@ -252,7 +252,8 @@ export interface ProductDTO {
 
 export interface CredentialResponse {
   providerName: Provider;
-  credentialsJson: string;
+  /** `null` si la sesión no tiene "Configurar proveedores": solo se sabe que existe. */
+  credentialsJson: string | null;
 }
 
 export interface RegisterResponse {

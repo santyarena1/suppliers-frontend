@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO } from "@nodo/shared";
+import { assertPermission } from "../tenants/tenant-roles";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { UpdateAdSlotDto, UpsertAdCampaignDto } from "./dto/ads.dto";
@@ -260,9 +260,7 @@ export class AdsService {
 
   private assertCanBuy(tenant: TenantContext) {
     this.assertAdvertiser(tenant);
-    if (!TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole)) {
-      throw new ForbiddenException("Solo el dueño o un administrador contratan publicidad");
-    }
+    assertPermission(tenant, "ads.manage");
   }
 
   private async tenantPays(tenantId: string) {

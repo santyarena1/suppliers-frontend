@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO } from "@nodo/shared";
+import { hasPermission } from "../tenants/tenant-roles";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import type { UpsertBrandResourceDto } from "./dto/brand.dto";
@@ -27,11 +27,7 @@ export class BrandResourcesService {
   }
 
   canWrite(tenant: TenantContext) {
-    return (
-      tenant.tenantRole === "COMMERCIAL" ||
-      tenant.tenantRole === "MARKETING" ||
-      TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole)
-    );
+    return hasPermission(tenant, "brand.manage");
   }
 
   async list(tenant: TenantContext, kind?: "MATERIAL" | "TRAINING") {

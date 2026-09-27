@@ -12,7 +12,6 @@ import {
   Sse,
   UseGuards,
   BadRequestException,
-  ForbiddenException,
 } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { SkipThrottle } from "@nestjs/throttler";
@@ -23,7 +22,7 @@ import { SkipEnvelope } from "../common/decorators/skip-envelope.decorator";
 import { AssetsService } from "../assets/assets.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
-import { canWriteChat } from "./chat.access";
+import { assertPermission } from "../tenants/tenant-roles";
 import { ChatHub } from "./chat.hub";
 import { ChatService } from "./chat.service";
 import {
@@ -153,9 +152,7 @@ export class ChatController {
 
   @Post("upload")
   async upload(@CurrentTenant() tenant: TenantContext, @Req() req: FastifyRequest) {
-    if (!canWriteChat(tenant.tenantRole, tenant.tenantType)) {
-      throw new ForbiddenException("Tu rol es de solo lectura");
-    }
+    assertPermission(tenant, "chat.write");
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();

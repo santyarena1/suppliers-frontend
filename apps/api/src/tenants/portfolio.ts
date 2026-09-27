@@ -1,18 +1,21 @@
-import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO, type TenantRole } from "@nodo/shared";
+import { TENANT_ROLES_CAN_MANAGE_PORTFOLIO, type PermissionKey, type TenantRole } from "@nodo/shared";
 
 /** Un comercio activo sin pedido en 30 días se marca inactivo en la cartera. */
 export const CLIENT_INACTIVE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Un vendedor del distribuidor solo ve las cuentas que le asignaron.
- * Dueño, administrador, PM y visor ven toda la cartera.
+ * Quien no tiene "Ver toda la cartera" solo ve las cuentas que le asignaron.
+ * Por defecto es el caso del vendedor; el dueño puede cambiarlo. Sin permisos
+ * resueltos (usos puros) decide el rol.
  */
 export function clientLinkVisibleTo(
   link: { accountManagerId: string | null },
-  actor: { tenantRole: TenantRole; userId: string }
+  actor: { tenantRole: TenantRole; userId: string; permissions?: readonly PermissionKey[] }
 ): boolean {
-  if (actor.tenantRole === "SELLER") return link.accountManagerId === actor.userId;
-  return true;
+  const seesAll = actor.permissions
+    ? actor.permissions.includes("portfolio.view_all")
+    : actor.tenantRole !== "SELLER";
+  return seesAll || link.accountManagerId === actor.userId;
 }
 
 export function canEditClientTerms(role: TenantRole): boolean {

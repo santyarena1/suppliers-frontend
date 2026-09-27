@@ -154,6 +154,7 @@ model Tenant {
   updatedAt          DateTime      @updatedAt
 
   memberships   TenantMembership[]
+  rolePermissions TenantRolePermission[]
   accessCodes   TenantAccessCode[]
   supplierLinks TenantLink[]          @relation("LinkClient")
   clientLinks   TenantLink[]          @relation("LinkSupplier")
@@ -322,9 +323,34 @@ model TenantMembership {
   active    Boolean    @default(true)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+  permissionOverrides TenantMemberPermission[]
 
   @@unique([tenantId, userId])
   @@index([userId])
+}
+
+/// Excepción que el dueño cargó para un rol de su organización. Solo se guarda
+/// lo que difiere del valor por defecto (packages/shared/src/permissions.ts).
+model TenantRolePermission {
+  tenantId   String
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role       TenantRole
+  permission String
+  allowed    Boolean
+  updatedAt  DateTime   @updatedAt
+
+  @@id([tenantId, role, permission])
+}
+
+/// Excepción para una persona puntual; pisa la de su rol.
+model TenantMemberPermission {
+  membershipId String
+  membership   TenantMembership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  permission   String
+  allowed      Boolean
+  updatedAt    DateTime         @updatedAt
+
+  @@id([membershipId, permission])
 }
 
 /// Única puerta de visibilidad entre organizaciones: un comercio ve a un

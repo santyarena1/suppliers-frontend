@@ -1,5 +1,13 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
-import type { JwtPayload, TenantRole, TenantType } from "@nodo/shared";
+import {
+  isPermissionKey,
+  resolvePermissions,
+  type JwtPayload,
+  type PermissionKey,
+  type PermissionOverrides,
+  type TenantRole,
+  type TenantType,
+} from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 
 export interface TenantContext {
@@ -8,12 +16,25 @@ export interface TenantContext {
   tenantName: string;
   tenantType: TenantType;
   tenantRole: TenantRole;
+  /** `null` solo en el respaldo desde el JWT (sin membresía en la base). */
+  membershipId: string | null;
+  /** Permisos efectivos: defecto del rol + excepciones del rol y de la persona. */
+  permissions: PermissionKey[];
   /**
    * Organización de la que se leen credenciales, vínculos y catálogo.
    * Distinta de `tenantId` cuando esta org espeja a otra (el superadmin de
    * prueba: carrito propio, mismas cuentas que testuser1).
    */
   commercialTenantId: string;
+}
+
+/** Filas de excepción → mapa; descarta claves que ya no están en el catálogo. */
+export function toOverrides(rows: { permission: string; allowed: boolean }[]): PermissionOverrides {
+  const overrides: PermissionOverrides = {};
+  for (const row of rows) {
+    if (isPermissionKey(row.permission)) overrides[row.permission] = row.allowed;
+  }
+  return overrides;
 }
 
 /** Credenciales, vínculos y catálogo. Carrito y pedidos siguen en `tenantId`. */
@@ -40,16 +61,34 @@ export class TenantContextService {
       orderBy: { createdAt: "asc" },
       include: {
         tenant: { select: { id: true, name: true, type: true, mirrorsCommercialFromId: true } },
+        permissionOverrides: { select: { permission: true, allowed: true } },
       },
     });
     if (!membership) return null;
+
+    const tenantType = membership.tenant.type as TenantType;
+    const tenantRole = membership.role as TenantRole;
+    const roleOverrides =
+      tenantRole === "OWNER"
+        ? []
+        : await this.prisma.tenantRolePermission.findMany({
+            where: { tenantId: membership.tenant.id, role: tenantRole },
+            select: { permission: true, allowed: true },
+          });
 
     return {
       userId,
       tenantId: membership.tenant.id,
       tenantName: membership.tenant.name,
-      tenantType: membership.tenant.type as TenantType,
-      tenantRole: membership.role as TenantRole,
+      tenantType,
+      tenantRole,
+      membershipId: membership.id,
+      permissions: resolvePermissions({
+        type: tenantType,
+        role: tenantRole,
+        roleOverrides: toOverrides(roleOverrides),
+        memberOverrides: toOverrides(membership.permissionOverrides),
+      }),
       commercialTenantId: membership.tenant.mirrorsCommercialFromId ?? membership.tenant.id,
     };
   }
@@ -70,6 +109,8 @@ export class TenantContextService {
         tenantName: user.tenantName,
         tenantType: user.tenantType,
         tenantRole: user.tenantRole,
+        membershipId: null,
+        permissions: resolvePermissions({ type: user.tenantType, role: user.tenantRole }),
         commercialTenantId: user.commercialTenantId ?? user.tenantId,
       };
     }

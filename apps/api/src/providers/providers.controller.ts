@@ -8,8 +8,7 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { CredentialsService } from "../credentials/credentials.service";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
-import { TENANT_ROLES_CAN_PURGE_CATALOG } from "@nodo/shared";
-import { assertTenantRole } from "../tenants/tenant-roles";
+import { assertPermission } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { ProvidersService } from "./providers.service";
 import { InvidAccountService } from "./invid-account.service";
@@ -124,6 +123,7 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Query("refresh") refresh?: string
   ) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:INVID:cta`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.invidAccountService.getAccountStatement(await this.invidCredentials(tenant))
@@ -137,6 +137,7 @@ export class ProvidersController {
 
   @Post("providers/INVID/payments/attach")
   async invidPaymentAttach(@CurrentTenant() tenant: TenantContext, @Req() req: FastifyRequest) {
+    assertPermission(tenant, "providers.account");
     const files: { field: string; filename: string; mimetype: string; buffer: Buffer }[] = [];
     const extra: Record<string, string> = {};
     for await (const part of req.parts()) {
@@ -243,6 +244,7 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Query("refresh") refresh?: string
   ) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:NEW_BYTES:cta`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.newBytesAccountService.getAccountStatement(await this.newBytesCredentials(tenant))
@@ -363,6 +365,7 @@ export class ProvidersController {
   /** La API de GN no expone historial/cta cte — devolvemos copias de Nodo. */
   @Get("providers/GRUPO_NUCLEO/account")
   gnAccount(@CurrentTenant() tenant: TenantContext) {
+    assertPermission(tenant, "providers.account");
     return this.grupoNucleoOrderService.getAccount(tenant.tenantId);
   }
 
@@ -408,6 +411,7 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Query("refresh") refresh?: string
   ) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:AIR:account`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.airAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "AIR"))
@@ -460,6 +464,7 @@ export class ProvidersController {
     @CurrentTenant() tenant: TenantContext,
     @Query("refresh") refresh?: string
   ) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:ELIT:account`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.elitAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "ELIT"))
@@ -483,17 +488,20 @@ export class ProvidersController {
 
   @Get("providers/ELIT/payments")
   async elitPayments(@CurrentTenant() tenant: TenantContext) {
+    assertPermission(tenant, "providers.account");
     return this.elitAccountService.getPayments(await this.credentialsOf(tenant, "ELIT"));
   }
 
   /** Bancos y tipos de operación. No usar GET /account/payments?include=options (crea un informe vacío). */
   @Get("providers/ELIT/payments/options")
   async elitPaymentOptions(@CurrentTenant() tenant: TenantContext) {
+    assertPermission(tenant, "providers.account");
     return this.elitAccountService.getPaymentOptions(await this.credentialsOf(tenant, "ELIT"));
   }
 
   @Post("providers/ELIT/payments/operation")
   async elitPaymentOperation(@CurrentTenant() tenant: TenantContext, @Body() dto: ElitPaymentOperationDto) {
+    assertPermission(tenant, "providers.account");
     return this.elitAccountService.createPaymentOperation(await this.credentialsOf(tenant, "ELIT"), dto);
   }
 
@@ -503,6 +511,7 @@ export class ProvidersController {
     @Param("id") id: string,
     @Req() req: FastifyRequest
   ) {
+    assertPermission(tenant, "providers.account");
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();
@@ -515,6 +524,7 @@ export class ProvidersController {
 
   @Post("providers/ELIT/payments/finish")
   async elitPaymentFinish(@CurrentTenant() tenant: TenantContext) {
+    assertPermission(tenant, "providers.account");
     return this.elitAccountService.finishPayment(await this.credentialsOf(tenant, "ELIT"));
   }
 
@@ -557,6 +567,7 @@ export class ProvidersController {
     @Query("from") from?: string,
     @Query("to") to?: string
   ) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:NEW_TREE:account:${from ?? ""}:${to ?? ""}`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.newTreeAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "NEW_TREE"), { from, to })
@@ -604,6 +615,7 @@ export class ProvidersController {
 
   @Get("providers/SOLUTION_BOX/account")
   async solutionBoxAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:SOLUTION_BOX:account`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.solutionBoxAccountService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "SOLUTION_BOX"))
@@ -651,6 +663,7 @@ export class ProvidersController {
 
   @Get("providers/DISTECNA/account")
   async distecnaAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:DISTECNA:account`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.distecnaOrderService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "DISTECNA"))
@@ -687,6 +700,7 @@ export class ProvidersController {
 
   @Get("providers/POLYTECH/account")
   async polytechAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
+    assertPermission(tenant, "providers.account");
     const key = `${tenant.tenantId}:POLYTECH:account`;
     return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.polytechOrderService.getAccount(tenant.tenantId, await this.credentialsOf(tenant, "POLYTECH"))
@@ -723,6 +737,7 @@ export class ProvidersController {
 
   @Post("providers/:provider/sync")
   sync(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    assertPermission(tenant, "providers.manage");
     return this.providersService.sync(commercialId(tenant), assertProvider(provider));
   }
 
@@ -776,6 +791,7 @@ export class ProvidersController {
     @Param("provider") provider: string,
     @Body() dto: UpdateProviderConfigDto
   ) {
+    assertPermission(tenant, "providers.manage");
     return this.providersService.updateConfig(commercialId(tenant), assertProvider(provider), dto);
   }
 
@@ -785,13 +801,13 @@ export class ProvidersController {
 
   @Post("providers/:provider/clear-zero-stock")
   clearZeroStock(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
-    assertTenantRole(tenant, TENANT_ROLES_CAN_PURGE_CATALOG);
+    assertPermission(tenant, "catalog.purge");
     return this.providersService.clearZeroStock(commercialId(tenant), assertProvider(provider));
   }
 
   @Delete("providers/:provider/products")
   deleteAllProducts(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
-    assertTenantRole(tenant, TENANT_ROLES_CAN_PURGE_CATALOG);
+    assertPermission(tenant, "catalog.purge");
     return this.providersService.deleteAllProducts(commercialId(tenant), assertProvider(provider));
   }
 

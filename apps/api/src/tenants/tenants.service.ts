@@ -4,8 +4,6 @@ import { randomBytes } from "node:crypto";
 import { Prisma, UserRole } from "@prisma/client";
 import {
   TENANT_ROLES_BY_TYPE,
-  TENANT_ROLES_CAN_MANAGE_PORTFOLIO,
-  TENANT_ROLES_CAN_MANAGE_TEAM,
   isKnownProvider,
   makeListProviderKey,
   type TenantRole,
@@ -14,6 +12,7 @@ import {
 import { domainEvents } from "../common/events/domain-events";
 import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
+import { assertPermission, hasPermission } from "./tenant-roles";
 import {
   CreateAccessCodeDto,
   CreateMembershipDto,
@@ -692,8 +691,8 @@ export class TenantsService {
 
   async getOwnOrg(tenant: TenantContext) {
     const row = await this.assertTenantExists(tenant.tenantId);
-    const canManageTeam = TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole);
-    const canManagePortfolio = TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole);
+    const canManageTeam = hasPermission(tenant, "team.manage");
+    const canManagePortfolio = hasPermission(tenant, "portfolio.manage");
     return {
       id: row.id,
       name: row.name,
@@ -707,13 +706,13 @@ export class TenantsService {
       tenantRole: tenant.tenantRole,
       canManageTeam,
       canManagePortfolio,
+      /** Permisos efectivos de la sesión (rol + excepciones). */
+      permissions: tenant.permissions,
     };
   }
 
   async updateOwnOrg(tenant: TenantContext, dto: UpdateOwnOrgDto) {
-    if (!TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole)) {
-      throw new BadRequestException("Solo el dueño o un administrador pueden editar la organización");
-    }
+    assertPermission(tenant, "team.manage");
     const row = await this.prisma.tenant.update({
       where: { id: tenant.tenantId },
       data: {
@@ -734,7 +733,7 @@ export class TenantsService {
       where: { tenantId: tenant.tenantId },
     });
     return {
-      canManage: TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole),
+      canManage: hasPermission(tenant, "team.manage"),
       members: members.map((membership) => ({
         ...this.serializeMember(membership),
         managedBrands: scopes.filter((scope) => scope.userId === membership.userId).map((scope) => scope.brandName),
@@ -812,7 +811,7 @@ export class TenantsService {
       orderBy: { createdAt: "desc" },
     });
     return {
-      canManage: TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole),
+      canManage: hasPermission(tenant, "codes.manage"),
       codes,
     };
   }
@@ -835,15 +834,11 @@ export class TenantsService {
     if (tenant.tenantType === "RETAILER") {
       throw new ForbiddenException("Los códigos de vinculación son del distribuidor o la marca");
     }
-    if (!TENANT_ROLES_CAN_MANAGE_PORTFOLIO.includes(tenant.tenantRole)) {
-      throw new ForbiddenException("Solo el dueño o un administrador gestionan los códigos");
-    }
+    assertPermission(tenant, "codes.manage");
   }
 
   private assertCanManageTeam(tenant: TenantContext) {
-    if (!TENANT_ROLES_CAN_MANAGE_TEAM.includes(tenant.tenantRole)) {
-      throw new ForbiddenException("Solo el dueño o un administrador gestionan el equipo");
-    }
+    assertPermission(tenant, "team.manage");
   }
 
   private async assertMembershipInTenant(membershipId: string, tenantId: string) {
