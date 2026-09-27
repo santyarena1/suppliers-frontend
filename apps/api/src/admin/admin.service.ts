@@ -4,8 +4,6 @@ import { KNOWN_PROVIDERS, LIST_PROVIDER_PREFIX, DEFAULT_MODULES_BY_ROLE, MODULE_
 import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { UpdateRoleDto } from "./dto/update-role.dto";
-import { UpdatePermissionsDto } from "./dto/update-permissions.dto";
 import { UpdateProviderDisplayDto } from "./dto/update-provider-display.dto";
 import { UpdateBrandDisplayDto } from "./dto/update-brand-display.dto";
 import { CreateBannerDto, UpdateBannerDto } from "./dto/banner.dto";
@@ -17,6 +15,10 @@ export class AdminService {
 
   // ---------- Usuarios ----------
 
+  /**
+   * Alta de un superadmin. Es el único usuario que existe sin organización:
+   * el resto se crea como miembro de una (`POST /admin/tenants/:id/members/new`).
+   */
   async createUser(dto: CreateUserDto) {
     const existing = await this.prisma.user.findFirst({
       where: { OR: [{ username: dto.username }, { email: dto.email }] },
@@ -26,7 +28,6 @@ export class AdminService {
         existing.username === dto.username ? "El nombre de usuario ya está en uso" : "El email ya está registrado"
       );
     }
-    if (dto.brandId) await this.assertBrandExists(dto.brandId);
     const password = dto.password ?? generatePassword();
     const passwordHash = await argon2.hash(password);
     const user = await this.prisma.user.create({
@@ -34,8 +35,7 @@ export class AdminService {
         username: dto.username,
         email: dto.email,
         passwordHash,
-        role: dto.role,
-        brandId: dto.brandId,
+        role: "ROLE_ADMIN",
         active: dto.active ?? true,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
       },
@@ -60,13 +60,11 @@ export class AdminService {
       const clash = await this.prisma.user.findFirst({ where: { email: dto.email, id: { not: userId } } });
       if (clash) throw new ConflictException("El email ya está registrado");
     }
-    if (dto.brandId) await this.assertBrandExists(dto.brandId);
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...(dto.username ? { username: dto.username } : {}),
         ...(dto.email ? { email: dto.email } : {}),
-        ...(dto.brandId === undefined ? {} : { brandId: dto.brandId }),
       },
       select: { id: true, username: true, email: true, role: true, brandId: true },
     });
@@ -85,18 +83,33 @@ export class AdminService {
     };
   }
 
-  async updateRole(userId: string, dto: UpdateRoleDto) {
+  /**
+   * El nivel de plataforma ya no se elige a mano: se es superadmin o no. Al
+   * quitarlo, el nivel vuelve a salir de la organización (marca → ROLE_BRAND,
+   * cualquier otra → ROLE_USER), igual que al crear un miembro.
+   */
+  async setSuperadmin(userId: string, on: boolean) {
     const existing = await this.assertUserExists(userId);
-    if (existing.role === "ROLE_ADMIN" && dto.role !== "ROLE_ADMIN") {
-      const others = await this.prisma.user.count({
-        where: { role: "ROLE_ADMIN", active: true, id: { not: userId } },
-      });
-      if (others === 0) {
-        throw new BadRequestException("No se puede quitar el rol del último administrador activo");
-      }
+    if (on) {
+      const user = await this.prisma.user.update({ where: { id: userId }, data: { role: "ROLE_ADMIN" } });
+      return { id: user.id, role: user.role };
     }
-    const user = await this.prisma.user.update({ where: { id: userId }, data: { role: dto.role } });
+    if (existing.role === "ROLE_ADMIN") await this.assertNotLastActiveAdmin(userId);
+    const brandMemberships = await this.prisma.tenantMembership.count({
+      where: { userId, active: true, tenant: { type: "BRAND" } },
+    });
+    const role: UserRole = brandMemberships > 0 ? "ROLE_BRAND" : "ROLE_USER";
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { role } });
     return { id: user.id, role: user.role };
+  }
+
+  private async assertNotLastActiveAdmin(userId: string) {
+    const others = await this.prisma.user.count({
+      where: { role: "ROLE_ADMIN", active: true, id: { not: userId } },
+    });
+    if (others === 0) {
+      throw new BadRequestException("No se puede quitar el rol del último administrador activo");
+    }
   }
 
   private async assertUserExists(userId: string) {
@@ -105,47 +118,16 @@ export class AdminService {
     return user;
   }
 
-  private async assertBrandExists(brandId: string) {
-    const brand = await this.prisma.brandAccount.findUnique({ where: { id: brandId } });
-    if (!brand) throw new NotFoundException("Marca no encontrada");
-    return brand;
-  }
+  // ---------- Módulos ----------
 
-  // ---------- Permisos por módulo ----------
-
-  async getPermissions(userId: string) {
-    const user = await this.assertUserExists(userId);
-    const overrides = await this.prisma.userModuleAccess.findMany({ where: { userId } });
-    const overrideMap = new Map(overrides.map((o) => [o.module, o.allowed]));
-    const defaults = DEFAULT_MODULES_BY_ROLE[user.role] ?? [];
-    return MODULE_KEYS.map((module) => ({
-      module,
-      allowed: overrideMap.has(module) ? (overrideMap.get(module) as boolean) : defaults.includes(module as ModuleKey),
-    }));
-  }
-
-  async updatePermissions(userId: string, dto: UpdatePermissionsDto) {
-    await this.assertUserExists(userId);
-    await this.prisma.$transaction(
-      dto.permissions.map((p) =>
-        this.prisma.userModuleAccess.upsert({
-          where: { userId_module: { userId, module: p.module } },
-          create: { userId, module: p.module, allowed: p.allowed },
-          update: { allowed: p.allowed },
-        })
-      )
-    );
-    return this.getPermissions(userId);
-  }
-
-  /** Usado por `GET me/permissions` para cualquier usuario autenticado. */
-  async getEffectivePermissions(userId: string, role: UserRole) {
-    const overrides = await this.prisma.userModuleAccess.findMany({ where: { userId } });
-    const overrideMap = new Map(overrides.map((o) => [o.module, o.allowed]));
+  /**
+   * Usado por `GET me/permissions` para cualquier usuario autenticado. Los
+   * módulos salen solo del nivel de plataforma; lo que cada persona puede hacer
+   * dentro de su organización lo define su rol ahí, no excepciones sueltas.
+   */
+  async getEffectivePermissions(_userId: string, role: UserRole): Promise<ModuleKey[]> {
     const defaults = DEFAULT_MODULES_BY_ROLE[role] ?? [];
-    return MODULE_KEYS.filter((module) =>
-      overrideMap.has(module) ? (overrideMap.get(module) as boolean) : defaults.includes(module as ModuleKey)
-    );
+    return MODULE_KEYS.filter((module) => defaults.includes(module as ModuleKey));
   }
 
   // ---------- Visibilidad / display de proveedores ----------

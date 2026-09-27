@@ -1,8 +1,6 @@
-import { IsBoolean, IsDateString, IsEmail, IsIn, IsOptional, IsString, IsUUID, MinLength } from "class-validator";
-import type { UserRole } from "@nodo/shared";
+import { IsBoolean, IsDateString, IsEmail, IsIn, IsOptional, IsString, MinLength } from "class-validator";
 
-const ROLES: UserRole[] = ["ROLE_USER", "ROLE_ADMIN", "ROLE_BRAND"];
-
+/** Alta de un superadmin: el único usuario que no pertenece a una organización. */
 export class CreateUserDto {
   @IsString()
   @MinLength(3)
@@ -17,12 +15,10 @@ export class CreateUserDto {
   @MinLength(8)
   password?: string;
 
-  @IsIn(ROLES)
-  role!: UserRole;
-
+  /** Se acepta por compatibilidad; el alta siempre es superadmin. */
   @IsOptional()
-  @IsUUID()
-  brandId?: string;
+  @IsIn(["ROLE_ADMIN"])
+  role?: "ROLE_ADMIN";
 
   @IsOptional()
   @IsBoolean()

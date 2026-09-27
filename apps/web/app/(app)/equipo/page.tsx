@@ -75,7 +75,7 @@ export default function EquipoPage() {
         <div>
           <h1 className="text-base font-semibold text-white">Equipo</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            {org ? `${org.name} · ${members.length} ${members.length === 1 ? "persona" : "personas"}` : "Tu organización"}
+            {org ? `${org.name} · ${members.length} ${members.length === 1 ? "usuario" : "usuarios"}` : "Tu organización"}
           </p>
         </div>
         <PrefsPanel />
@@ -109,7 +109,7 @@ export default function EquipoPage() {
               <section className="border border-surface-800 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-semibold text-white flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-surface-400" /> Personas
+                  <Users className="w-3.5 h-3.5 text-surface-400" /> Usuarios
                 </h2>
                 {canManage && (
                   <button
@@ -123,7 +123,7 @@ export default function EquipoPage() {
               </div>
 
               {members.length === 0 ? (
-                <p className="text-xs text-surface-500">Todavía no hay personas.</p>
+                <p className="text-xs text-surface-500">Todavía no hay usuarios.</p>
               ) : (
                 <div className="border border-surface-800 rounded-lg divide-y divide-surface-800">
                   {members.map((member) => (
@@ -153,7 +153,7 @@ export default function EquipoPage() {
           onCreated={async (password) => {
             setShowAdd(false);
             if (password) setGenerated(password);
-            setAviso({ ok: true, text: "Persona agregada" });
+            setAviso({ ok: true, text: "Usuario agregado" });
             await load();
           }}
           onError={(text) => setAviso({ ok: false, text })}
@@ -256,7 +256,7 @@ function MemberRow({
             type="button"
             onClick={() => {
               if (!window.confirm(`¿Quitar a ${member.username} de ${orgName}?`)) return;
-              onRun(() => myApi.removeMember(member.membershipId), "Persona quitada", "No se pudo quitar");
+              onRun(() => myApi.removeMember(member.membershipId), "Usuario quitado", "No se pudo quitar");
             }}
             className="text-surface-500 hover:text-red-400"
           >
@@ -324,7 +324,7 @@ function AddMemberModal({
       });
       await onCreated(res.data.generatedPassword);
     } catch (err) {
-      onError(errMsg(err, "No se pudo agregar la persona"));
+      onError(errMsg(err, "No se pudo agregar el usuario"));
     } finally {
       setSaving(false);
     }
@@ -333,7 +333,7 @@ function AddMemberModal({
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
       <div className="bg-surface-950 border border-surface-800 rounded-2xl p-5 w-full max-w-sm">
-        <h3 className="text-sm font-semibold text-white mb-1">Agregar persona</h3>
+        <h3 className="text-sm font-semibold text-white mb-1">Agregar usuario</h3>
         <p className="text-[11px] text-surface-500 mb-4">
           Se genera una contraseña. Copiala: después no se puede volver a ver.
         </p>

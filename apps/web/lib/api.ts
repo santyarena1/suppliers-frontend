@@ -2628,16 +2628,6 @@ export const polytechAccountApi = {
     }>("/providers/POLYTECH/orders/detail", { params: query }),
 };
 
-// --- Admin / Users ---
-export const userApi = {
-  updateActiveStatus: (userId: string, active: boolean) =>
-    api.put("/user/update-active-status", { userId, active }),
-  updateEndDate: (userId: string, endDate: string) =>
-    api.put("/user/update-end-date", { userId, endDate }),
-  delete: (userId: string) =>
-    api.delete("/user/delete", { data: { userId } }),
-};
-
 // --- Catálogo: producto individual + historial de precio ---
 export interface PricePoint {
   price: string | number | null;
@@ -2891,11 +2881,6 @@ export interface BrandDisplay {
   visible: boolean;
 }
 
-export interface ModulePermission {
-  module: ModuleKey;
-  allowed: boolean;
-}
-
 /** Sesión de otro usuario emitida para el superadmin. */
 export interface ImpersonationSession {
   token: string;
@@ -2910,35 +2895,23 @@ export interface ImpersonationSession {
 }
 
 export const adminApi = {
+  // Los miembros de una organización se crean desde `tenantsApi`; acá solo se
+  // edita la cuenta. Omitir `password` en el reseteo hace que la plataforma
+  // genere una y la devuelva en `generatedPassword` (única vez que se ve).
   listUsers: () => api.get<AdminUser[]>("/admin/users"),
-  // Omitir `password` hace que la plataforma genere una y la devuelva en
-  // `generatedPassword`. Es la única vez que puede leerse.
-  createUser: (data: {
-    username: string;
-    email: string;
-    password?: string;
-    role: UserRole;
-    brandId?: string;
-    active?: boolean;
-    endDate?: string;
-  }) => api.post<AdminUser & { generatedPassword?: string }>("/admin/users", data),
-  updateUser: (userId: string, data: { username?: string; email?: string; brandId?: string | null }) =>
-    api.put<{ id: string; username: string; email: string; role: UserRole; brandId: string | null }>(`/admin/users/${userId}`, data),
+  updateUser: (userId: string, data: { username?: string; email?: string }) =>
+    api.put<{ id: string; username: string; email: string; role: UserRole }>(`/admin/users/${userId}`, data),
   resetPassword: (userId: string, password?: string) =>
     api.put<{ id: string; generatedPassword?: string }>(`/admin/users/${userId}/password`, { password }),
   impersonate: (userId: string) =>
     api.post<ImpersonationSession>(`/admin/users/${userId}/impersonate`, {}),
-  updateRole: (userId: string, role: UserRole) =>
-    api.put<{ id: string; role: UserRole }>(`/admin/users/${userId}/role`, { role }),
+  setSuperadmin: (userId: string, superadmin: boolean) =>
+    api.put<{ id: string; role: UserRole }>(`/admin/users/${userId}/superadmin`, { superadmin }),
   updateActiveStatus: (userId: string, active: boolean) =>
     api.put(`/admin/users/${userId}/active-status`, { active }),
   updateEndDate: (userId: string, endDate: string | null) =>
     api.put(`/admin/users/${userId}/end-date`, { endDate }),
   deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
-
-  getPermissions: (userId: string) => api.get<ModulePermission[]>(`/admin/permissions/${userId}`),
-  updatePermissions: (userId: string, permissions: ModulePermission[]) =>
-    api.put<ModulePermission[]>(`/admin/permissions/${userId}`, { permissions }),
 
   listProviderDisplay: () => api.get<ProviderDisplay[]>("/admin/providers/display"),
   updateProviderDisplay: (provider: Provider, data: Partial<Pick<ProviderDisplay, "visible" | "logoUrl" | "textColor">>) =>

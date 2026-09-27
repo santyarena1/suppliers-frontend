@@ -97,8 +97,6 @@ NEW_BYTES, ELIT, GRUPO_NUCLEO, AIR, NEW_TREE, INVID, GC, POLYTECH, ASHIR, HDC, S
 | GET | /credentials/:providerName | Credencial de un proveedor |
 | POST | /credentials | Guardar credencial |
 | DELETE | /credentials/:providerName | Eliminar credencial |
-| PUT | /user/update-active-status | Admin: activar/desactivar usuario |
-| PUT | /user/update-end-date | Admin: cambiar fecha de vencimiento |
-| DELETE | /user/delete | Admin: eliminar usuario |
+| GET/PUT/DELETE | /admin/users/:id/* | Admin: cuenta, superadmin, estado, vencimiento, borrar (ver `API_CONTRACT.md`) |
 | GET | /sync/invid/:userId | Sincronizar INVID |
 | GET | /sync/invid/search/:title | Buscar en INVID local |

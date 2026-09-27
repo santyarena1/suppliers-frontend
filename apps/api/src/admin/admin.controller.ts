@@ -5,13 +5,11 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { UsersService } from "../users/users.service";
-import { DeleteUserDto } from "../users/dto/delete-user.dto";
 import { AdminService } from "./admin.service";
 import { ProviderMergeService } from "./provider-merge.service";
 import { MergeProvidersDto } from "./dto/merge-providers.dto";
 import { CreateUserDto } from "./dto/create-user.dto";
-import { UpdateRoleDto } from "./dto/update-role.dto";
-import { UpdatePermissionsDto } from "./dto/update-permissions.dto";
+import { SuperadminDto } from "./dto/superadmin.dto";
 import { UpdateProviderDisplayDto } from "./dto/update-provider-display.dto";
 import { UpdateBrandDisplayDto } from "./dto/update-brand-display.dto";
 import { CreateBannerDto, UpdateBannerDto } from "./dto/banner.dto";
@@ -39,16 +37,27 @@ export class AdminController {
     private readonly providerMerge: ProviderMergeService
   ) {}
 
-  // Listar usuarios ya lo expone UsersController en GET /admin/users (se
-  // mantiene ahí para no romper el contrato existente). Acá solo lo que faltaba.
+  // ---------- Usuarios ----------
+  // Única puerta para administrar cuentas. Los miembros de una organización se
+  // crean y asignan desde /admin/tenants/*; acá se edita la cuenta en sí.
+
+  @Get("users")
+  listUsers() {
+    return this.usersService.list();
+  }
+
+  /** Solo da de alta superadmins (el único usuario sin organización). */
   @Post("users")
   createUser(@Body() dto: CreateUserDto) {
     return this.adminService.createUser(dto);
   }
 
-  @Put("users/:id/role")
-  updateRole(@Param("id") id: string, @Body() dto: UpdateRoleDto) {
-    return this.adminService.updateRole(id, dto);
+  @Put("users/:id/superadmin")
+  setSuperadmin(@Param("id") id: string, @Body() dto: SuperadminDto, @CurrentUser() me: JwtPayload) {
+    if (id === me.userId) {
+      throw new BadRequestException("No podés cambiar tu propio superadmin");
+    }
+    return this.adminService.setSuperadmin(id, dto.superadmin);
   }
 
   @Put("users/:id")
@@ -69,12 +78,12 @@ export class AdminController {
 
   @Put("users/:id/active-status")
   updateActiveStatus(@Param("id") id: string, @Body() dto: ActiveStatusBodyDto) {
-    return this.usersService.updateActiveStatus({ userId: id, active: dto.active });
+    return this.usersService.updateActiveStatus(id, dto.active);
   }
 
   @Put("users/:id/end-date")
   updateEndDate(@Param("id") id: string, @Body() dto: EndDateBodyDto) {
-    return this.usersService.updateEndDate({ userId: id, endDate: dto.endDate });
+    return this.usersService.updateEndDate(id, dto.endDate ?? null);
   }
 
   @Delete("users/:id")
@@ -82,18 +91,7 @@ export class AdminController {
     if (id === me.userId) {
       throw new BadRequestException("No podés eliminarte a vos mismo");
     }
-    return this.usersService.delete({ userId: id } as DeleteUserDto);
-  }
-
-  // Permisos por módulo
-  @Get("permissions/:userId")
-  getPermissions(@Param("userId") userId: string) {
-    return this.adminService.getPermissions(userId);
-  }
-
-  @Put("permissions/:userId")
-  updatePermissions(@Param("userId") userId: string, @Body() dto: UpdatePermissionsDto) {
-    return this.adminService.updatePermissions(userId, dto);
+    return this.usersService.delete(id);
   }
 
   // Unificar un proveedor por lista duplicado dentro del real

@@ -1,8 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { UpdateActiveStatusDto } from "./dto/update-active-status.dto";
-import { UpdateEndDateDto } from "./dto/update-end-date.dto";
-import { DeleteUserDto } from "./dto/delete-user.dto";
 
 @Injectable()
 export class UsersService {
@@ -75,34 +72,34 @@ export class UsersService {
     return user;
   }
 
-  async updateActiveStatus(dto: UpdateActiveStatusDto) {
-    const existing = await this.assertExists(dto.userId);
-    if (existing.role === "ROLE_ADMIN" && dto.active === false) {
-      await this.assertNotLastActiveAdmin(dto.userId);
+  async updateActiveStatus(userId: string, active: boolean) {
+    const existing = await this.assertExists(userId);
+    if (existing.role === "ROLE_ADMIN" && active === false) {
+      await this.assertNotLastActiveAdmin(userId);
     }
     const user = await this.prisma.user.update({
-      where: { id: dto.userId },
-      data: { active: dto.active },
+      where: { id: userId },
+      data: { active },
     });
     return { id: user.id, active: user.active };
   }
 
-  async updateEndDate(dto: UpdateEndDateDto) {
-    await this.assertExists(dto.userId);
+  async updateEndDate(userId: string, endDate: string | null) {
+    await this.assertExists(userId);
     const user = await this.prisma.user.update({
-      where: { id: dto.userId },
-      data: { endDate: dto.endDate ? new Date(dto.endDate) : null },
+      where: { id: userId },
+      data: { endDate: endDate ? new Date(endDate) : null },
     });
     return { id: user.id, endDate: user.endDate };
   }
 
-  async delete(dto: DeleteUserDto) {
-    const existing = await this.assertExists(dto.userId);
+  async delete(userId: string) {
+    const existing = await this.assertExists(userId);
     if (existing.role === "ROLE_ADMIN") {
-      await this.assertNotLastActiveAdmin(dto.userId);
+      await this.assertNotLastActiveAdmin(userId);
     }
-    await this.prisma.user.delete({ where: { id: dto.userId } });
-    return { id: dto.userId };
+    await this.prisma.user.delete({ where: { id: userId } });
+    return { id: userId };
   }
 
   private async assertNotLastActiveAdmin(userId: string) {

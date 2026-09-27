@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, IsUUID, MinLength, ValidateIf } from "class-validator";
+import { IsEmail, IsOptional, IsString, MinLength } from "class-validator";
 
 export class UpdateUserDto {
   @IsOptional()
@@ -9,9 +9,4 @@ export class UpdateUserDto {
   @IsOptional()
   @IsEmail()
   email?: string;
-
-  @IsOptional()
-  @ValidateIf((_, value) => value !== null)
-  @IsUUID()
-  brandId?: string | null;
 }

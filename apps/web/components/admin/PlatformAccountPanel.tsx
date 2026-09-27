@@ -1,33 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  adminApi,
-  BrandDisplay,
-  ModuleKey,
-  ModulePermission,
-  PROVIDER_LABELS,
-  Provider,
-  type AdminUser,
-  type UserRole,
-} from "@/lib/api";
+import { adminApi, PROVIDER_LABELS, Provider, type AdminUser, type UserRole } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import EnterAsButton from "./EnterAsButton";
 import GeneratedPassword from "./GeneratedPassword";
-import { KeyRound, Loader2, Shield, Trash2 } from "lucide-react";
+import { KeyRound, Loader2, ShieldCheck, Trash2 } from "lucide-react";
 
 type ToastFn = (msg: string, ok?: boolean) => void;
-
-const MODULE_LABELS: Record<ModuleKey, string> = {
-  search: "Búsqueda",
-  cart: "Carrito",
-  credentials: "Credenciales (en Proveedores)",
-  providers: "Proveedores",
-  brands: "Portal de Marcas",
-  news: "Noticias",
-  diagnostics: "Diagnóstico",
-  admin: "Administración",
-};
 
 const PLATFORM_ROLE_LABELS: Record<UserRole, string> = {
   ROLE_USER: "Usuario",
@@ -49,56 +29,42 @@ function formatDate(value: string | null | undefined) {
 }
 
 /**
- * Cuenta de plataforma: usuario, clave, rol de Nodo, módulos y “Entrar como”.
- * El alcance comercial lo da la membresía, no este bloque.
+ * La cuenta del usuario: datos de acceso, estado, clave y “Entrar como”.
+ * Qué puede hacer lo define su rol en cada organización, no este bloque.
  */
 export default function PlatformAccountPanel({
   user,
-  brands,
   onReload,
   showToast,
   onDeleted,
 }: {
   user: AdminUser;
-  brands: BrandDisplay[];
   onReload: () => void;
   showToast: ToastFn;
   onDeleted?: () => void;
 }) {
   const me = getUser();
   const isSelf = me?.id === user.id;
+  const isSuperadmin = user.role === "ROLE_ADMIN";
   const [username, setUsername] = useState(user.username);
   const [email, setEmail] = useState(user.email);
-  const [brandId, setBrandId] = useState(user.brandId ?? "");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [generated, setGenerated] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [perms, setPerms] = useState<ModulePermission[]>([]);
-  const [loadingPerms, setLoadingPerms] = useState(true);
-  const [savingPerms, setSavingPerms] = useState(false);
+  const [togglingAdmin, setTogglingAdmin] = useState(false);
 
   useEffect(() => {
     setUsername(user.username);
     setEmail(user.email);
-    setBrandId(user.brandId ?? "");
   }, [user]);
-
-  useEffect(() => {
-    setLoadingPerms(true);
-    adminApi
-      .getPermissions(user.id)
-      .then((r) => setPerms(r.data))
-      .catch(() => setPerms([]))
-      .finally(() => setLoadingPerms(false));
-  }, [user.id]);
 
   async function saveProfile() {
     setSaving(true);
     try {
-      await adminApi.updateUser(user.id, { username, email, brandId: brandId || null });
-      showToast("Cuenta de Nodo actualizada");
+      await adminApi.updateUser(user.id, { username, email });
+      showToast("Cuenta actualizada");
       onReload();
     } catch (err) {
       showToast(errMsg(err, "No se pudieron guardar los datos"), false);
@@ -107,13 +73,21 @@ export default function PlatformAccountPanel({
     }
   }
 
-  async function changeRole(role: UserRole) {
+  async function toggleSuperadmin() {
+    const next = !isSuperadmin;
+    const question = next
+      ? `¿Hacer superadmin a ${user.username}? Va a poder administrar toda la plataforma.`
+      : `¿Quitarle el superadmin a ${user.username}?`;
+    if (!window.confirm(question)) return;
+    setTogglingAdmin(true);
     try {
-      await adminApi.updateRole(user.id, role);
-      showToast("Nivel de plataforma actualizado");
+      await adminApi.setSuperadmin(user.id, next);
+      showToast(next ? "Ahora es superadmin" : "Ya no es superadmin");
       onReload();
     } catch (err) {
-      showToast(errMsg(err, "No se pudo cambiar el nivel"), false);
+      showToast(errMsg(err, "No se pudo cambiar"), false);
+    } finally {
+      setTogglingAdmin(false);
     }
   }
 
@@ -150,7 +124,7 @@ export default function PlatformAccountPanel({
     setResetting(true);
     try {
       const { data } = await adminApi.resetPassword(user.id, value);
-      showToast("Contraseña de Nodo reseteada");
+      showToast("Contraseña reseteada");
       setGenerated(data.generatedPassword ?? null);
       setPassword("");
       setPassword2("");
@@ -161,21 +135,9 @@ export default function PlatformAccountPanel({
     }
   }
 
-  async function savePerms() {
-    setSavingPerms(true);
-    try {
-      await adminApi.updatePermissions(user.id, perms);
-      showToast("Permisos de módulos actualizados");
-    } catch (err) {
-      showToast(errMsg(err, "No se pudieron guardar los permisos"), false);
-    } finally {
-      setSavingPerms(false);
-    }
-  }
-
   async function remove() {
     if (isSelf) return;
-    if (!window.confirm(`¿Eliminar a ${user.username}? Se borra la cuenta de Nodo. Esta acción no se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar a ${user.username}? Se borra la cuenta y sale de todas sus organizaciones. No se puede deshacer.`)) return;
     try {
       await adminApi.deleteUser(user.id);
       showToast("Usuario eliminado");
@@ -189,7 +151,7 @@ export default function PlatformAccountPanel({
   return (
     <div className="grid lg:grid-cols-2 gap-4">
       <section className="border border-surface-800 rounded-xl p-4 flex flex-col gap-3">
-        <p className="text-[11px] uppercase tracking-wider text-surface-500 font-semibold">Cuenta Nodo</p>
+        <p className="text-[11px] uppercase tracking-wider text-surface-500 font-semibold">Cuenta</p>
         <label className="flex flex-col gap-1">
           <span className="text-[11px] text-surface-500">Usuario</span>
           <input
@@ -207,37 +169,6 @@ export default function PlatformAccountPanel({
             className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
           />
         </label>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-surface-500">Nivel de plataforma</span>
-            <select
-              value={user.role}
-              onChange={(e) => changeRole(e.target.value as UserRole)}
-              className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
-            >
-              {(Object.keys(PLATFORM_ROLE_LABELS) as UserRole[]).map((role) => (
-                <option key={role} value={role}>
-                  {PLATFORM_ROLE_LABELS[role]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-surface-500">Marca del portal</span>
-            <select
-              value={brandId}
-              onChange={(e) => setBrandId(e.target.value)}
-              className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
-            >
-              <option value="">Sin marca</option>
-              {brands.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col gap-1">
             <span className="text-[11px] text-surface-500">Vence</span>
@@ -263,14 +194,29 @@ export default function PlatformAccountPanel({
             </button>
           </div>
         </div>
-        <p className="text-[11px] text-surface-600">
-          Creado {formatDate(user.createdAt)}
-          {user.tenantName ? ` · ${user.tenantName}` : ""}
-        </p>
-        <p className="text-[11px] text-surface-500 leading-relaxed">
-          El nivel de plataforma no define qué puede hacer en el comercio, el distro o la marca: eso lo da el rol
-          interno de la organización.
-        </p>
+        <label
+          className={`flex items-start gap-2.5 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
+            isSuperadmin ? "border-brand-500/40 bg-brand-600/10" : "border-surface-700 hover:border-surface-600"
+          } ${isSelf || togglingAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
+          title={isSelf ? "No podés cambiar tu propio superadmin" : undefined}
+        >
+          <input
+            type="checkbox"
+            checked={isSuperadmin}
+            disabled={isSelf || togglingAdmin}
+            onChange={toggleSuperadmin}
+            className="mt-0.5 accent-brand-500"
+          />
+          <span className="flex flex-col">
+            <span className="text-xs font-medium text-white flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-brand-400" /> Superadmin
+            </span>
+            <span className="text-[11px] text-surface-500 leading-relaxed">
+              Administra toda la plataforma. Lo que puede hacer dentro de cada organización lo define su rol ahí.
+            </span>
+          </span>
+        </label>
+        <p className="text-[11px] text-surface-600">Creado {formatDate(user.createdAt)}</p>
         <div className="flex gap-2">
           <button
             type="button"
@@ -342,46 +288,6 @@ export default function PlatformAccountPanel({
           </div>
           {generated && <GeneratedPassword password={generated} onDismiss={() => setGenerated(null)} />}
         </form>
-
-        <section className="border border-surface-800 rounded-xl p-4 flex flex-col gap-3">
-          <p className="text-[11px] uppercase tracking-wider text-surface-500 font-semibold flex items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5" /> Módulos de Nodo
-          </p>
-          {loadingPerms ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="w-4 h-4 animate-spin text-brand-500" />
-            </div>
-          ) : (
-            <div className="divide-y divide-surface-800 border border-surface-800 rounded-lg overflow-hidden">
-              {perms.map((p) => (
-                <div key={p.module} className="flex items-center justify-between px-3 py-2">
-                  <span className="text-xs text-surface-200">{MODULE_LABELS[p.module]}</span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPerms((prev) => prev.map((x) => (x.module === p.module ? { ...x, allowed: !x.allowed } : x)))
-                    }
-                    className={`w-10 rounded-full relative transition-colors ${p.allowed ? "bg-brand-600" : "bg-surface-600"}`}
-                    style={{ height: 22 }}
-                  >
-                    <span
-                      className={`absolute top-0.5 bg-white rounded-full transition-all ${p.allowed ? "left-[22px]" : "left-0.5"}`}
-                      style={{ width: 18, height: 18 }}
-                    />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={savePerms}
-            disabled={savingPerms || loadingPerms}
-            className="flex items-center justify-center gap-2 bg-surface-800 hover:bg-surface-700 disabled:opacity-40 text-white text-xs font-semibold rounded-lg py-2 transition-all"
-          >
-            {savingPerms ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Guardar módulos"}
-          </button>
-        </section>
 
         {(user.providers ?? []).length > 0 && (
           <section className="border border-surface-800 rounded-xl p-4">

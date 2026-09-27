@@ -42,12 +42,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Gestión completa de usuarios (admin)
 - **Método**: GET | POST | PUT | DELETE
-- **Ruta**: `/admin/users`, `/admin/users/:id`, `/admin/users/:id/password`, `/admin/users/:id/role`, `/admin/users/:id/active-status`, `/admin/users/:id/end-date`
+- **Ruta**: `/admin/users`, `/admin/users/:id`, `/admin/users/:id/password`, `/admin/users/:id/superadmin`, `/admin/users/:id/active-status`, `/admin/users/:id/end-date`
 - **Auth**: Bearer ROLE_ADMIN
-- **Body / Params**: crear `{ username, email, password?, role, brandId?, active?, endDate? }` · editar `{ username?, email?, brandId? }` · password `{ password? }` (mín. 8)
+- **Body / Params**: crear (solo superadmins) `{ username, email, password?, active?, endDate? }` · editar `{ username?, email? }` · superadmin `{ superadmin: boolean }` · password `{ password? }` (mín. 8)
 - **Respuesta esperada**: lista enriquecida con `brand`, `providers` (nombres, sin secretos), `brandAccesses`
 - **Estado**: IMPLEMENTADO
-- **Notas**: `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse. En la UI de superadmin esto vive en el **Directorio** (`/admin`): ficha de la persona (cuenta Nodo, módulos, “Entrar como”), no en una tab aparte.
+- **Notas**: Un usuario = una cuenta que pertenece a una o más organizaciones con un rol; ese rol define qué puede hacer. Los miembros se crean y asignan por `/admin/tenants/:id/members*`; `POST /admin/users` solo da de alta superadmins (el único usuario sin organización). El nivel de plataforma no se elige a mano: `PUT .../superadmin` lo prende o, al apagarlo, lo recalcula desde la organización (marca → `ROLE_BRAND`, resto → `ROLE_USER`); no deja a la plataforma sin superadmin activo. `GET /me/permissions` devuelve los módulos del nivel de plataforma, sin excepciones por usuario (se quitaron `GET/PUT /admin/permissions/:userId` y las rutas viejas `/user/update-active-status`, `/user/update-end-date`, `/user/delete`). `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse. En la UI vive en el **Directorio** (`/admin`): ficha del usuario (cuenta, superadmin, clave, “Entrar como”, organizaciones).
 
 ### [FEATURE] Entrar como otro usuario (suplantación)
 - **Método**: POST
