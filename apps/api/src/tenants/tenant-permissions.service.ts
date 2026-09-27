@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  PERMISSION_GROUP_LABELS,
   TENANT_ROLES_BY_TYPE,
   defaultAllows,
   isPermissionKey,
@@ -56,6 +57,7 @@ export class TenantPermissionsService {
     return {
       type,
       roles,
+      groups: PERMISSION_GROUP_LABELS,
       permissions,
       defaults,
       roleOverrides,

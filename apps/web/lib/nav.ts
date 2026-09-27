@@ -61,8 +61,10 @@ export interface NavItemDef {
   module?: ModuleKey;
   /** Tipos de organización que ven este ítem. Se ignora si no hay tenant en sesión. */
   tenantTypes?: TenantType[];
-  /** Roles internos. Si falta, cualquier rol de esa organización lo ve. */
+  /** Roles internos. Si falta, cualquier rol de esa organización lo ve. Respaldo de `permission`. */
   tenantRoles?: TenantRole[];
+  /** Permiso de la organización que hace falta; manda sobre `tenantRoles` cuando se conocen. */
+  permission?: string;
   /** Fallback mientras /me no exponga la membresía. */
   roles?: UserRole[];
   badge?: "cart" | "chat";
@@ -147,6 +149,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: QrCode,
     tenantTypes: ["DISTRIBUTOR"],
     tenantRoles: ["OWNER", "ADMIN"],
+    permission: "codes.manage",
     section: "portfolio",
   },
   {
@@ -156,6 +159,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: Megaphone,
     tenantTypes: ["DISTRIBUTOR"],
     tenantRoles: ["OWNER", "ADMIN"],
+    permission: "ads.manage",
     section: "portfolio",
   },
 
@@ -238,6 +242,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: QrCode,
     tenantTypes: ["BRAND"],
     tenantRoles: ["OWNER", "ADMIN"],
+    permission: "codes.manage",
     section: "brands",
   },
   {
@@ -247,6 +252,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     icon: Megaphone,
     tenantTypes: ["BRAND"],
     tenantRoles: ["OWNER", "ADMIN"],
+    permission: "ads.manage",
     section: "brands",
   },
   {
@@ -285,6 +291,8 @@ export interface NavContext {
   /** Presente cuando la sesión conozca la organización activa. */
   tenantType?: TenantType | null;
   tenantRole?: TenantRole | null;
+  /** Permisos efectivos en la organización; `null` si todavía no se conocen. */
+  permissions?: ReadonlySet<string> | null;
   isSuperadmin?: boolean;
   sistemaTgs?: boolean;
 }
@@ -312,6 +320,7 @@ export function canSeeNavItem(item: NavItemDef, ctx: NavContext): boolean {
 
   if (ctx.tenantType && !superadmin) {
     if (item.tenantTypes && !item.tenantTypes.includes(ctx.tenantType)) return false;
+    if (item.permission && ctx.permissions) return ctx.permissions.has(item.permission);
     if (item.tenantRoles && ctx.tenantRole && !item.tenantRoles.includes(ctx.tenantRole)) return false;
     return true;
   }

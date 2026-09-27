@@ -492,6 +492,13 @@ export const myApi = {
   updateOrg: (data: Partial<{ contactEmail: string | null; contactPhone: string | null }>) =>
     api.put<OwnOrg>("/my/org", data),
   team: () => api.get<OwnTeam>("/my/team"),
+  /** Permisos efectivos de la sesión en su organización. */
+  permissions: () => api.get<{ role: TenantRole; permissions: PermissionKey[] }>("/my/permissions"),
+  teamPermissions: () => api.get<PermissionMatrix>("/my/team/permissions"),
+  setRolePermissions: (role: TenantRole, changes: PermissionChanges) =>
+    api.put<PermissionMatrix>(`/my/team/roles/${role}/permissions`, { changes }),
+  setMemberPermissions: (membershipId: string, changes: PermissionChanges) =>
+    api.put<PermissionMatrix>(`/my/team/members/${membershipId}/permissions`, { changes }),
   addMember: (data: { username: string; email: string; password?: string; role: TenantRole; title?: string }) =>
     api.post<TenantMember & { generatedPassword?: string }>("/my/team", data),
   updateMember: (membershipId: string, data: Partial<{ role: TenantRole; title: string | null; active: boolean }>) =>
@@ -3409,8 +3416,49 @@ export interface TenantUserRelations {
   }[];
 }
 
+// --- Permisos por organización ---
+/** Clave de permiso (catálogo en packages/shared/src/permissions.ts). */
+export type PermissionKey = string;
+/** `true`/`false` fija el valor; `null` vuelve a heredar. */
+export type PermissionChanges = Record<PermissionKey, boolean | null>;
+
+export interface PermissionDefinition {
+  key: PermissionKey;
+  group: string;
+  label: string;
+  description: string;
+}
+
+export interface PermissionMember {
+  membershipId: string;
+  userId: string;
+  username: string;
+  email: string;
+  title: string | null;
+  role: TenantRole;
+  overrides: Record<PermissionKey, boolean>;
+  effective: PermissionKey[];
+}
+
+export interface PermissionMatrix {
+  type: TenantType;
+  roles: TenantRole[];
+  groups: Record<string, string>;
+  permissions: PermissionDefinition[];
+  defaults: Partial<Record<TenantRole, Record<PermissionKey, boolean>>>;
+  roleOverrides: Partial<Record<TenantRole, Record<PermissionKey, boolean>>>;
+  members: PermissionMember[];
+  /** Solo el dueño (o el superadmin) cambia permisos. */
+  canEdit: boolean;
+}
+
 export const tenantsApi = {
   tree: () => api.get<TenantTree>("/admin/tenants"),
+  permissions: (tenantId: string) => api.get<PermissionMatrix>(`/admin/tenants/${tenantId}/permissions`),
+  setRolePermissions: (tenantId: string, role: TenantRole, changes: PermissionChanges) =>
+    api.put<PermissionMatrix>(`/admin/tenants/${tenantId}/roles/${role}/permissions`, { changes }),
+  setMemberPermissions: (tenantId: string, membershipId: string, changes: PermissionChanges) =>
+    api.put<PermissionMatrix>(`/admin/tenants/${tenantId}/members/${membershipId}/permissions`, { changes }),
   userRelations: (userId: string) => api.get<TenantUserRelations>(`/admin/tenants/users/${userId}/relations`),
 
   create: (data: {

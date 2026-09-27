@@ -1,6 +1,6 @@
 # Permisos configurables por organización
 
-Estado: propuesta (2026-09-26), pendiente de aprobación del dueño del producto.
+Estado: implementado (2026-09-27). Los permisos de precios quedan para una segunda etapa.
 
 ## Problema
 
@@ -34,30 +34,29 @@ organización a los que aplica.
 | Pedidos | `orders.create` | Armar carrito y enviar pedidos | Comercio, Distribuidor |
 | Pedidos | `orders.confirm` | Confirmar sin aprobación de otro | Comercio, Distribuidor |
 | Pedidos | `orders.approve` | Aprobar pedidos armados por otros | Comercio, Distribuidor |
-| Precios | `prices.view_cost` | Ver precio de compra / costo | Comercio, Distribuidor |
-| Precios | `prices.edit_sale` | Editar precios de venta y márgenes | Comercio, Distribuidor |
-| Proveedores | `providers.manage` | Credenciales, alta/baja, configuración y sync | Comercio, Distribuidor |
+| Proveedores | `providers.manage` | Credenciales, alta/baja, listas, configuración (incluye márgenes) y sync | Todos |
 | Proveedores | `providers.account` | Cuenta corriente y pagos con proveedores | Comercio, Distribuidor |
 | Proveedores | `catalog.purge` | Vaciar catálogo de un proveedor | Comercio, Distribuidor |
 | Equipo | `team.manage` | Invitar, quitar y cambiar rol de miembros | Todos |
-| Equipo | `codes.manage` | Códigos de vinculación | Todos |
+| Equipo | `codes.manage` | Códigos de vinculación | Distribuidor, Marca |
 | Chat | `chat.write` | Escribir en el chat con proveedores/clientes | Todos |
 | Cartera | `portfolio.view_all` | Ver toda la cartera (si no, solo sus cuentas) | Distribuidor, Marca |
 | Cartera | `portfolio.manage` | Asignar vendedor, suspender vínculos | Distribuidor, Marca |
 | Cartera | `portfolio.edit_terms` | Condiciones comerciales de un cliente | Distribuidor |
-| Marca | `brand.manage` | Acciones, catálogo y recursos de marca | Marca |
+| Marca | `brand.manage` | Acciones, catálogo y recursos de marca (defecto: también Marketing y Comercial) | Marca |
 | Publicidad | `ads.manage` | Prender y gestionar publicidad | Todos |
 
 ### Valores por defecto (= hoy)
 
 - **Dueño / Administrador**: todos.
-- **Comercio · Comprador**: `orders.create`, `orders.confirm`, `chat.write`, `prices.view_cost`.
-- **Comercio · Vendedor**: `orders.create`, `prices.view_cost`.
-- **Distribuidor · Vendedor**: `orders.create`, `chat.write`, `portfolio.edit_terms`, `prices.view_cost` (cartera: solo sus cuentas).
-- **Distribuidor · Product Manager**: `chat.write`, `prices.view_cost`.
-- **Marca · Marketing / Comercial**: `chat.write` (Comercial: solo su cuenta asignada).
-- **Solo lectura**: `prices.view_cost`.
-- `providers.manage` y `providers.account`: solo Dueño y Administrador (hoy nadie los chequea; es el arreglo del agujero de credenciales).
+- **Comercio · Comprador**: `orders.create`, `orders.confirm`, `chat.write`.
+- **Comercio · Vendedor**: `orders.create`.
+- **Distribuidor · Vendedor**: `orders.create`, `chat.write`, `portfolio.edit_terms` (cartera: solo sus cuentas).
+- **Distribuidor · Product Manager**: `chat.write`.
+- **Marca · Marketing / Comercial**: `chat.write`, `brand.manage` (Comercial: chat solo con su cuenta asignada, regla fija).
+- `providers.manage`: solo Dueño y Administrador (antes nadie lo chequeaba: arreglo del agujero de credenciales).
+- `providers.account`: todos los roles (como antes); el dueño puede restringirlo.
+- Test de equivalencia en `apps/api/src/tenants/permissions.spec.ts`.
 
 ## Modelo de datos
 
@@ -91,8 +90,6 @@ rol" borra la fila.
   códigos, cartera, marca, publicidad, chat).
 - Se agrega el chequeo que falta en credenciales, proveedores por lista y
   configuración/sync de proveedores (`providers.manage`).
-- `prices.view_cost`: sin el permiso, la búsqueda, la ficha y el carrito devuelven el
-  costo en `null` (se recorta en el servidor, no solo se oculta en pantalla).
 - Endpoints:
   - `GET /my/permissions` → claves efectivas de la sesión.
   - `GET /my/team/permissions` → catálogo aplicable + matriz rol × permiso + excepciones por miembro.
@@ -117,6 +114,12 @@ rol" borra la fila.
 - Por cada punto migrado: un test que corte sin el permiso y pase con él.
 - Test de equivalencia: con cero excepciones, cada rol de cada tipo resuelve
   exactamente lo que devolvían las constantes viejas.
+
+## Segunda etapa
+
+- `prices.view_cost`: sin el permiso, búsqueda, ficha, carrito y pedidos devuelven el
+  costo en `null` (recortado en el servidor). No se muestra en la matriz hasta que
+  esté aplicado.
 
 ## Fuera de alcance
 

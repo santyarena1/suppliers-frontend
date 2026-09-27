@@ -7,7 +7,7 @@ import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, X } from "lucide-react"
 import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
 import { useChatUnread } from "@/lib/chat-unread";
 import { useCart } from "@/lib/cart";
-import { invalidateMyModules, useMyModules } from "@/lib/permissions";
+import { invalidateMyModules, useMyModules, useMyPermissions } from "@/lib/permissions";
 import { invalidateTgsEnabled, useTgsEnabled } from "@/lib/tgs";
 import { useResults } from "@/lib/results";
 import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
@@ -70,6 +70,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const chatUnread = useChatUnread();
   const providerCount = Object.keys(byProvider).length;
   const myModules = useMyModules();
+  const myPermissions = useMyPermissions();
   const sistemaTgs = useTgsEnabled();
   const { clearResults } = useResults();
   const { providers: myProviders } = useMyProviders();
@@ -109,10 +110,11 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         modules: myModules,
         tenantType: tenant?.type ?? null,
         tenantRole: tenant?.role ?? null,
+        permissions: myPermissions,
         isSuperadmin: user?.role === "ROLE_ADMIN",
         sistemaTgs,
       }),
-    [user?.role, myModules, tenant?.type, tenant?.role, sistemaTgs],
+    [user?.role, myModules, myPermissions, tenant?.type, tenant?.role, sistemaTgs],
   );
 
   const pinned = items.filter((item) => !item.section);

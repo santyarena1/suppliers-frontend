@@ -7,13 +7,14 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
-  TENANT_ROLES_CAN_PURGE_CATALOG, invalidateMyProviders, loadMyProviders,
+  invalidateMyProviders, loadMyProviders,
   isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, isProviderKey,
 } from "@/lib/api";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
 import NodoOrdersPanel from "@/components/list-import/NodoOrdersPanel";
 import { freshnessLabel, useListFreshness } from "@/lib/listFreshness";
-import { getTenant, isAdmin } from "@/lib/auth";
+import { isAdmin } from "@/lib/auth";
+import { useCan } from "@/lib/permissions";
 import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { parsePrice, proxyImg } from "@/lib/format";
@@ -136,13 +137,16 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [deletingAll, setDeletingAll] = useState(false);
   const [dangerResult, setDangerResult] = useState<{ ok: boolean; msg: string } | null>(null);
   // Vacía el catálogo de toda la organización, no solo el de quien lo pide.
-  const [canPurge, setCanPurge] = useState(false);
+  const purgeAllowed = useCan("catalog.purge");
+  // `null` = todavía no se sabe: no se esconde nada; el servidor igual corta.
+  const manageAllowed = useCan("providers.manage");
+  const [superadmin, setSuperadmin] = useState(false);
+  const canPurge = superadmin || purgeAllowed === true;
+  const canManage = superadmin || manageAllowed !== false;
   const [isRetailer, setIsRetailer] = useState(() => isRetailerSession());
 
   useEffect(() => {
-    const tenant = getTenant();
-    const role = tenant?.role;
-    setCanPurge(isAdmin() || (!!role && TENANT_ROLES_CAN_PURGE_CATALOG.includes(role)));
+    setSuperadmin(isAdmin());
     setIsRetailer(isRetailerSession());
   }, []);
 
@@ -499,7 +503,11 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 )}
 
                 {tab === "credentials" && !listBased && (
-                  <ProviderCredentialForm provider={provider} onChanged={loadStatus} />
+                  canManage ? (
+                    <ProviderCredentialForm provider={provider} onChanged={loadStatus} />
+                  ) : (
+                    <NoPermissionNote text="Las credenciales de proveedores las carga quien tiene el permiso “Configurar proveedores”." />
+                  )
                 )}
 
                 {tab === "sync" && (
@@ -537,7 +545,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       )}
                       <button
                         onClick={handleSync}
-                        disabled={syncing || isLiveSyncRun(status?.currentRun) || loadingStatus || !canSyncProvider(status)}
+                        disabled={!canManage || syncing || isLiveSyncRun(status?.currentRun) || loadingStatus || !canSyncProvider(status)}
+                        title={canManage ? undefined : "Necesitás el permiso “Configurar proveedores”"}
                         className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                       >
                         {syncing || isLiveSyncRun(status?.currentRun) ? <NodoSpinner className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
@@ -715,7 +724,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                         <button
                           type="submit"
-                          disabled={savingConfig}
+                          disabled={savingConfig || !canManage}
+                          title={canManage ? undefined : "Necesitás el permiso “Configurar proveedores”"}
                           className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                         >
                           {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -919,5 +929,13 @@ function StatCard({ label, value, icon: Icon, loading, accent }: {
         <span className="text-xl font-bold text-white tabular-nums">{(value ?? 0).toLocaleString("es-AR")}</span>
       )}
     </div>
+  );
+}
+
+function NoPermissionNote({ text }: { text: string }) {
+  return (
+    <p className="max-w-xl text-xs text-surface-400 border border-surface-800 rounded-lg px-3 py-2.5">
+      {text} Pedíselo al dueño de tu organización.
+    </p>
   );
 }

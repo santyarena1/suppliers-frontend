@@ -13,7 +13,8 @@ import {
   type TenantRole,
 } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
-import { KeyRound, Loader2, Plus, Trash2, Users, Building2, Megaphone } from "lucide-react";
+import { KeyRound, Loader2, Plus, Trash2, Users, Building2, Megaphone, ShieldCheck } from "lucide-react";
+import PermissionsMatrix, { type PermissionsSource } from "@/components/team/PermissionsMatrix";
 
 const inputClass =
   "w-full bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500";
@@ -35,6 +36,17 @@ export default function EquipoPage() {
   const [aviso, setAviso] = useState<{ ok: boolean; text: string } | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [generated, setGenerated] = useState<string | null>(null);
+  const [tab, setTab] = useState<"users" | "permissions">("users");
+
+  const permissionsSource = useMemo<PermissionsSource>(
+    () => ({
+      load: () => myApi.teamPermissions().then((res) => res.data),
+      saveRole: (role, changes) => myApi.setRolePermissions(role, changes).then((res) => res.data),
+      saveMember: (membershipId, changes) => myApi.setMemberPermissions(membershipId, changes).then((res) => res.data),
+    }),
+    []
+  );
+  const onPermissionsMessage = useCallback((ok: boolean, text: string) => setAviso({ ok, text }), []);
 
   const load = useCallback(async () => {
     const [orgRes, teamRes] = await Promise.all([myApi.org(), myApi.team()]);
@@ -82,7 +94,7 @@ export default function EquipoPage() {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-4">
+        <div className={`${tab === "permissions" ? "max-w-5xl" : "max-w-3xl"} mx-auto px-4 sm:px-6 py-5 flex flex-col gap-4`}>
           {aviso && (
             <p className={`text-xs rounded-md px-3 py-2 ${aviso.ok ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
               {aviso.text}
@@ -96,6 +108,34 @@ export default function EquipoPage() {
             </div>
           ) : (
             <>
+              {canManage && (
+                <div className="flex rounded-lg border border-surface-800 overflow-hidden self-start" role="tablist">
+                  {(
+                    [
+                      { key: "users" as const, label: "Usuarios", icon: <Users className="w-3.5 h-3.5" /> },
+                      { key: "permissions" as const, label: "Permisos", icon: <ShieldCheck className="w-3.5 h-3.5" /> },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      role="tab"
+                      aria-selected={tab === option.key}
+                      onClick={() => setTab(option.key)}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
+                        tab === option.key ? "bg-brand-600 text-white" : "text-surface-400 hover:text-white hover:bg-surface-800"
+                      }`}
+                    >
+                      {option.icon}
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {tab === "permissions" && canManage ? (
+                <PermissionsMatrix source={permissionsSource} onMessage={onPermissionsMessage} />
+              ) : (
+              <>
               {canManage && org && (
                 <OrgProfile
                   org={org}
@@ -140,6 +180,8 @@ export default function EquipoPage() {
                 </div>
               )}
             </section>
+              </>
+              )}
             </>
           )}
         </div>

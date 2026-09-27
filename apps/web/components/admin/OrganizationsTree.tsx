@@ -24,6 +24,7 @@ import {
 import GeneratedPassword from "./GeneratedPassword";
 import EnterAsButton from "./EnterAsButton";
 import PlatformAccountPanel, { PLATFORM_ROLE_LABELS } from "./PlatformAccountPanel";
+import PermissionsMatrix, { type PermissionsSource } from "../team/PermissionsMatrix";
 import {
   Building2,
   ChevronRight,
@@ -871,7 +872,40 @@ function TenantPanel({
       />
 
       {isSupplierSide && <AccessCodesSection tenant={tenant} onChanged={onChanged} showToast={showToast} />}
+
+      <TenantPermissionsSection key={tenant.id} tenantId={tenant.id} showToast={showToast} />
     </div>
+  );
+}
+
+/** Los mismos permisos que ve el dueño en Equipo; el superadmin puede editarlos. */
+function TenantPermissionsSection({ tenantId, showToast }: { tenantId: string; showToast: ToastFn }) {
+  const [open, setOpen] = useState(false);
+  const source = useMemo<PermissionsSource>(
+    () => ({
+      load: () => tenantsApi.permissions(tenantId).then((res) => res.data),
+      saveRole: (role, changes) => tenantsApi.setRolePermissions(tenantId, role, changes).then((res) => res.data),
+      saveMember: (membershipId, changes) =>
+        tenantsApi.setMemberPermissions(tenantId, membershipId, changes).then((res) => res.data),
+    }),
+    [tenantId]
+  );
+  const onMessage = useCallback((ok: boolean, text: string) => showToast(text, ok), [showToast]);
+
+  return (
+    <section className="border border-surface-800 rounded-xl p-4">
+      <button type="button" onClick={() => setOpen((prev) => !prev)} className="w-full flex items-center justify-between">
+        <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-surface-400" /> Permisos
+        </span>
+        <ChevronRight className={`w-3.5 h-3.5 text-surface-500 transition-transform ${open ? "rotate-90" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-4">
+          <PermissionsMatrix source={source} onMessage={onMessage} />
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -110,14 +110,13 @@ export class PortfolioService {
 
   async updateClient(tenant: TenantContext, linkId: string, dto: UpdateOwnClientDto) {
     const link = await this.requireClientLink(tenant, linkId);
+    // Piso: sin ningún permiso de cartera no se edita nada, aunque el pedido venga vacío.
+    if (!hasPermission(tenant, "portfolio.edit_terms") && !hasPermission(tenant, "portfolio.manage")) {
+      assertPermission(tenant, "portfolio.edit_terms");
+    }
     // Reasignar o cambiar el estado es gestionar la cartera; descuento y notas son condiciones.
     if (dto.accountManagerId !== undefined || dto.status !== undefined) {
       assertPermission(tenant, "portfolio.manage");
-    }
-    if (dto.discountPercent !== undefined || dto.notes !== undefined) {
-      if (!hasPermission(tenant, "portfolio.edit_terms") && !hasPermission(tenant, "portfolio.manage")) {
-        assertPermission(tenant, "portfolio.edit_terms");
-      }
     }
 
     if (dto.accountManagerId) {
