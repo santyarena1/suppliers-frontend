@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
-import { ProductDTO } from "@/lib/api";
+import { MY_PROVIDERS_UPDATED, ProductDTO } from "@/lib/api";
+import { SESSION_EVENT, getUser } from "@/lib/auth";
 
 const RESULTS_KEY = "tgs_last_results";
 const UI_KEY = "tgs_search_ui_v1";
@@ -35,8 +36,10 @@ function readStoredResults(): { q: string; r: ProductDTO[] } | null {
   try {
     const raw = sessionStorage.getItem(RESULTS_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as { q?: string; r?: ProductDTO[] };
+    const parsed = JSON.parse(raw) as { q?: string; r?: ProductDTO[]; u?: string | null };
     if (!parsed?.q || !Array.isArray(parsed.r)) return null;
+    // Los resultados (con sus precios) son de quien buscó: otra sesión no los ve.
+    if ((parsed.u ?? null) !== (getUser()?.id ?? null)) return null;
     return { q: parsed.q, r: parsed.r };
   } catch {
     return null;
@@ -72,7 +75,7 @@ export function ResultsProvider({ children }: { children: React.ReactNode }) {
     setQuery(q);
     setResultsState(r);
     try {
-      sessionStorage.setItem(RESULTS_KEY, JSON.stringify({ q, r }));
+      sessionStorage.setItem(RESULTS_KEY, JSON.stringify({ q, r, u: getUser()?.id ?? null }));
     } catch { /**/ }
   }, []);
 
@@ -84,6 +87,16 @@ export function ResultsProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.removeItem(UI_KEY);
     } catch { /**/ }
   }, []);
+
+  // Cambió la sesión o los proveedores que ve: la última búsqueda ya no vale.
+  useEffect(() => {
+    window.addEventListener(SESSION_EVENT, clearResults);
+    window.addEventListener(MY_PROVIDERS_UPDATED, clearResults);
+    return () => {
+      window.removeEventListener(SESSION_EVENT, clearResults);
+      window.removeEventListener(MY_PROVIDERS_UPDATED, clearResults);
+    };
+  }, [clearResults]);
 
   const find = useCallback((provider: string, externalId: string) => {
     let arr = results;
