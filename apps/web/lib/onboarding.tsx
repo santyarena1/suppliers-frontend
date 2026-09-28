@@ -102,8 +102,12 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       writePaused(false);
       // Se guarda sin esperar: si falla, al recargar retoma el último paso guardado.
       void onboardingApi.setStep(id).catch(() => undefined);
-      if (target.href && !isOnStepPage(target, pathname)) router.push(target.href);
-      else if (target.href?.includes("?") && pathname === target.href.split("?")[0]) router.push(target.href);
+      // Solo navega si la URL cambia: dos pasos seguidos en la misma búsqueda no
+      // suman entradas al historial ni recargan la pantalla.
+      const here = typeof window === "undefined" ? pathname : `${window.location.pathname}${window.location.search}`;
+      if (target.href && here !== target.href) {
+        if (!isOnStepPage(target, pathname) || target.href.includes("?")) router.push(target.href);
+      }
     },
     [steps, pathname, router]
   );

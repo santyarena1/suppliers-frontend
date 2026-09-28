@@ -27,8 +27,9 @@ function overlaps(a: Rect, b: Rect): boolean {
 export function placeCard(hole: Rect | null, card: { width: number; height: number }, vw: number, vh: number): Placement {
   const clampLeft = (x: number) => Math.min(vw - card.width - MARGIN, Math.max(MARGIN, x));
   const clampTop = (y: number) => Math.min(vh - card.height - MARGIN, Math.max(MARGIN, y));
-  const bottomCenter: Placement = { top: vh - card.height - MARGIN * 1.5, left: (vw - card.width) / 2, side: "center" };
-  if (!hole) return { top: (vh - card.height) / 2, left: (vw - card.width) / 2, side: "center" };
+  // Una tarjeta más alta que la pantalla arranca arriba y scrollea por dentro (max-height en CSS).
+  const bottomCenter: Placement = { top: Math.max(MARGIN, vh - card.height - MARGIN * 1.5), left: (vw - card.width) / 2, side: "center" };
+  if (!hole) return { top: Math.max(MARGIN, (vh - card.height) / 2), left: (vw - card.width) / 2, side: "center" };
 
   const alignedLeft = clampLeft(hole.left + hole.width / 2 - card.width / 2);
   const alignedTop = clampTop(hole.top + hole.height / 2 - card.height / 2);

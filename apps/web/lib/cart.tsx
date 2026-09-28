@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { orgCartApi, ProductDTO } from "@/lib/api";
-import { getTenant, getUser } from "@/lib/auth";
+import { SESSION_EVENT, getImpersonator, getTenant, getUser } from "@/lib/auth";
 import { subscribeChatEvents } from "@/components/chat/ChatRealtime";
 import { extractTaxLines } from "@/lib/tax";
 
@@ -59,20 +59,57 @@ interface CartContextValue {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-const STORAGE_KEY = "tgs_cart_v2";
+/** Claves viejas, compartidas por todo el navegador. Solo se leen una vez para migrar. */
+const SHARED_STORAGE_KEY = "tgs_cart_v2";
 const LEGACY_KEY = "tgs_cart_v1";
+const SHARED_SYNC_KEY = "tgs_cart_sync_at";
+
 /**
- * Marca del carrito del servidor con el que este navegador está sincronizado.
+ * El carrito local es de cada usuario. Antes era uno solo por navegador: al
+ * "Entrar como" otra cuenta se veía el carrito propio y, en un comercio, podía
+ * terminar subido al carrito compartido de la otra organización.
+ */
+function userScope(): string {
+  return getUser()?.id ?? "anon";
+}
+
+function storageKey(): string {
+  return `${SHARED_STORAGE_KEY}:${userScope()}`;
+}
+
+function syncKey(): string {
+  return `${SHARED_SYNC_KEY}:${userScope()}`;
+}
+
+/**
+ * Carrito local del usuario. La copia vieja compartida se migra una sola vez a
+ * la primera sesión propia que la abra; nunca a una sesión de "Entrar como".
+ */
+function readLocalCart(): string | null {
+  const own = localStorage.getItem(storageKey());
+  if (own !== null || getImpersonator()) return own;
+  const shared = localStorage.getItem(SHARED_STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
+  if (shared !== null) {
+    localStorage.setItem(storageKey(), shared);
+    const sharedSync = localStorage.getItem(SHARED_SYNC_KEY);
+    if (sharedSync) localStorage.setItem(syncKey(), sharedSync);
+    localStorage.removeItem(SHARED_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_KEY);
+    localStorage.removeItem(SHARED_SYNC_KEY);
+  }
+  return shared;
+}
+/**
+ * Marca del carrito del servidor con el que este navegador está sincronizado
+ * (por usuario, ver `syncKey`).
  *
  * Sin esto, un carrito remoto vacío es ambiguo: puede ser "nunca hubo carrito"
  * o "se vació porque se hizo el pedido". Antes se asumía lo primero y se volvía
  * a subir la copia local, así que los productos ya pedidos reaparecían.
  */
-const SYNC_KEY = "tgs_cart_sync_at";
-
 function readSyncedAt(): string | null {
   try {
-    return localStorage.getItem(SYNC_KEY);
+    return localStorage.getItem(syncKey());
   } catch {
     return null;
   }
@@ -80,8 +117,8 @@ function readSyncedAt(): string | null {
 
 function writeSyncedAt(value: string | null): void {
   try {
-    if (value) localStorage.setItem(SYNC_KEY, value);
-    else localStorage.removeItem(SYNC_KEY);
+    if (value) localStorage.setItem(syncKey(), value);
+    else localStorage.removeItem(syncKey());
   } catch {
     /* sin storage no hay nada que recordar */
   }
@@ -156,13 +193,38 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const skipPush = useRef(true);
   const saveTimer = useRef<number | null>(null);
+  // El carrito es de quien está logueado: si cambia la sesión sin recargar la
+  // página, se descarta el de la sesión anterior y se carga el de la nueva.
+  const [sessionUserId, setSessionUserId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : getUser()?.id ?? null
+  );
+
+  useEffect(() => {
+    const sync = () => setSessionUserId(getUser()?.id ?? null);
+    sync();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "user" || event.key === null) sync();
+    };
+    window.addEventListener(SESSION_EVENT, sync);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(SESSION_EVENT, sync);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    // Hasta terminar de cargar el carrito de esta sesión no se guarda ni se sube nada.
+    skipPush.current = true;
+    setHydrated(false);
+    setItems([]);
+    setSchemes([]);
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
     async function boot() {
       const tenant = getTenant();
       try {
-        const stored = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_KEY);
+        const stored = readLocalCart();
         const local = stored ? migrateLegacy(JSON.parse(stored)) : { items: [] as CartItem[], schemes: [] as CartScheme[] };
         if (tenant?.type === "RETAILER") {
           try {
@@ -187,6 +249,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                   setItems(local.items);
                   setSchemes(local.schemes);
                 }
+                // Si mientras tanto cambió la sesión, no se sube nada con el token nuevo.
+                if (cancelled) return;
                 const saved = await orgCartApi.save({ items: local.items, schemes: local.schemes });
                 writeSyncedAt(saved.data?.updatedAt ?? null);
               } else {
@@ -221,11 +285,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [sessionUserId]);
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ items, schemes }));
+    localStorage.setItem(storageKey(), JSON.stringify({ items, schemes }));
     const tenant = getTenant();
     if (tenant?.type !== "RETAILER" || skipPush.current) return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);

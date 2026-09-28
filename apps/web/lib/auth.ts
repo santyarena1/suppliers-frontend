@@ -134,10 +134,18 @@ export function getUser(): SessionUser | null {
   try { return JSON.parse(raw); } catch { return null; }
 }
 
+/** Evento de ventana cuando cambia la sesión (login, logout, "Entrar como"). */
+export const SESSION_EVENT = "nodo:session";
+
+function announceSession() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
 export function saveSession(token: string, user: SessionUser) {
   localStorage.setItem("token", token);
   localStorage.setItem("user", JSON.stringify(user));
   persistAuthCookie(token);
+  announceSession();
 }
 
 export function clearSession() {
@@ -146,6 +154,7 @@ export function clearSession() {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
   localStorage.removeItem(ADMIN_USER_KEY);
   deleteCookie(COOKIE);
+  announceSession();
 }
 
 // ---------- Suplantación ----------
