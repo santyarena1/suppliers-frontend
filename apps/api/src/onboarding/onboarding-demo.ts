@@ -76,7 +76,7 @@ const IMG = {
   headset:
     "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&h=800&q=80",
   webcam:
-    "https://images.unsplash.com/photo-1587825140708-dfaf72ae4b04?auto=format&fit=crop&w=800&h=800&q=80",
+    "https://images.unsplash.com/photo-1623949556303-b0d17d198863?auto=format&fit=crop&w=800&h=800&q=80",
   notebook:
     "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?auto=format&fit=crop&w=800&h=800&q=80",
   router:
