@@ -82,7 +82,7 @@ const IMG = {
   router:
     "https://images.unsplash.com/photo-1606904825846-647eb07f5be2?auto=format&fit=crop&w=800&h=800&q=80",
   chair:
-    "https://images.unsplash.com/photo-1580480055273-228ff5388bd8?auto=format&fit=crop&w=800&h=800&q=80",
+    "https://images.unsplash.com/photo-1592078615290-033ee584e267?auto=format&fit=crop&w=800&h=800&q=80",
   ups: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?auto=format&fit=crop&w=800&h=800&q=80",
 } as const;
 
@@ -295,6 +295,50 @@ export const DEMO_PRODUCTS: DemoProductSeed[] = [
     finalPrice: 112.0,
     ivaPercent: 21,
     stock: 9,
+    currency: "USD",
+  },
+  // Los mismos productos en los dos distros, con otro precio y stock: así la
+  // búsqueda del recorrido muestra cómo NODO compara distribuidores.
+  {
+    provider: "LIST_DEMO_SUR",
+    externalId: "DEMO-SUR-MOUSE-001",
+    sku: "LOGI-MX3S",
+    partNumber: "910-006559",
+    ean: "097855165665",
+    name: "Mouse Logitech MX Master 3S Grafito",
+    brand: "Logitech",
+    category: "Periféricos",
+    subcategory: "Mouse",
+    description: "Inalámbrico silencioso, MagSpeed, USB-C, multi-device.",
+    longDescription:
+      "Sensor 8K DPI, rueda MagSpeed electromagnética y clic silencioso. Conectá hasta 3 equipos por Bluetooth o Logi Bolt. Batería de hasta 70 días con una carga.",
+    imageUrl: IMG.mouse,
+    warranty: "12 meses",
+    price: 94.9,
+    finalPrice: 94.9,
+    ivaPercent: 21,
+    stock: 6,
+    currency: "USD",
+  },
+  {
+    provider: "LIST_DEMO_SUR",
+    externalId: "DEMO-SUR-MON-027",
+    sku: "SAM-ODYSSEY-27",
+    partNumber: "LS27CG510ELXZS",
+    ean: "8806094889017",
+    name: "Monitor Samsung Odyssey G5 27 pulgadas",
+    brand: "Samsung",
+    category: "Monitores",
+    subcategory: "Gaming",
+    description: "QHD 165 Hz, VA curvo 1000R, FreeSync.",
+    longDescription:
+      "Panel VA 2560×1440, 1 ms MPRT, curvatura 1000R y AMD FreeSync. Ideal para gaming y diseño. Entradas HDMI y DisplayPort.",
+    imageUrl: IMG.monitor,
+    warranty: "24 meses",
+    price: 299.0,
+    finalPrice: 299.0,
+    ivaPercent: 21,
+    stock: 15,
     currency: "USD",
   },
 ];

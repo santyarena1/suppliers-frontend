@@ -1068,7 +1068,7 @@ function CartPageInner() {
             </div>
           ) : (
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden min-w-0">
-              <div className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 bg-surface-950">
+              <div className="flex-shrink-0 border-b border-surface-800 px-5 lg:px-8 bg-surface-950" data-tour="cart-list">
                 <div className="flex gap-0 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:thin]">
                   {tabsToShow.map((tab) => (
                     <button

@@ -1,5 +1,11 @@
 import { IsEmail, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from "class-validator";
 
+export class OnboardingStepDto {
+  @IsString()
+  @MaxLength(40)
+  step!: string;
+}
+
 /** Superadmin: alta de un comercio con su dueño, igual que el autoregistro. */
 export class AdminCreateRetailerDto {
   @IsString()

@@ -33,6 +33,8 @@ model User {
   onboardingPreviewRestoreRole     TenantRole?
   /// Recorrido de repaso: salta org/plan aunque onboardingCompletedAt sea null.
   onboardingReplay                 Boolean     @default(false)
+  /// Paso del recorrido en el que quedó. Única fuente de verdad: la app lo lee y lo guarda acá.
+  onboardingStep                   String?
   endDate      DateTime?
   brandId      String?
   brand        BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])

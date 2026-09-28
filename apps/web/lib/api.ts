@@ -275,13 +275,12 @@ export type TenantPlan = "PRO" | "LOCAL" | "CADENA";
 
 export type OnboardingStepId =
   | "org"
-  | "plan"
-  | "providers"
+  | "welcome"
   | "search"
-  | "filters"
-  | "product"
+  | "add-to-cart"
   | "cart"
   | "orders"
+  | "providers"
   | "team"
   | "done";
 
@@ -295,6 +294,8 @@ export interface OnboardingStep {
   href: string | null;
   spotlight: string | null;
   ctaLabel: string;
+  /** La app da el paso por hecho sola cuando detecta esto. */
+  completeWhen?: "cart-has-items";
   roles?: TenantRole[];
   requiresTenant: boolean;
   skipIfExisting: boolean;
@@ -318,6 +319,8 @@ export interface OnboardingStatus {
   } | null;
   roleLabel: string | null;
   steps: OnboardingStep[];
+  /** Paso en el que quedó (guardado en el servidor). */
+  currentStep: OnboardingStepId | null;
   demo: {
     seeded: boolean;
     distributors: { name: string; providerKey: string }[];
@@ -341,6 +344,7 @@ export const onboardingApi = {
   exitPreview: () => api.post<{ token: string; onboarding: OnboardingStatus }>("/onboarding/preview/exit", {}),
   complete: () => api.post<{ token?: string; onboarding?: OnboardingStatus } & OnboardingStatus>("/onboarding/complete", {}),
   reopen: () => api.post<OnboardingStatus>("/onboarding/reopen", {}),
+  setStep: (step: OnboardingStepId) => api.post<{ currentStep: OnboardingStepId }>("/onboarding/step", { step }),
   reseedDemo: () => api.post<OnboardingStatus>("/onboarding/reseed-demo", {}),
 };
 

@@ -151,6 +151,7 @@ export default function ProveedoresPage() {
           {canCreateListProvider && (
             <button
               type="button"
+              data-tour="add-provider"
               onClick={() => setCreateOpen(true)}
               className="flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-brand-500 text-surface-200 hover:text-white rounded-lg px-3 py-1.5 transition-all"
             >

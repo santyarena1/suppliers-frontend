@@ -1,23 +1,31 @@
 /**
- * Pasos del recorrido de comercio. `setup` = alta inicial (se salta si ya hay org).
- * `tour` = guía interactiva con spotlight en la app.
+ * Pasos del recorrido de comercio.
+ *
+ * `setup` = alta de la organización (solo si todavía no tiene una).
+ * `tour` = guía dentro de la app: resalta un elemento (`spotlight`) en `href`.
+ * `finish` = cierre.
+ *
+ * Cada paso pide una sola cosa. Los que se completan haciendo la acción
+ * (`completeWhen`) avanzan solos cuando la persona la hace.
  */
 
 import type { TenantRole } from "@nodo/shared";
 
 export type OnboardingStepId =
   | "org"
-  | "plan"
-  | "providers"
+  | "welcome"
   | "search"
-  | "filters"
-  | "product"
+  | "add-to-cart"
   | "cart"
   | "orders"
+  | "providers"
   | "team"
   | "done";
 
 export type OnboardingStepKind = "setup" | "tour" | "finish";
+
+/** Condición que la app detecta para dar el paso por hecho sin tocar "Siguiente". */
+export type OnboardingCompletion = "cart-has-items";
 
 export type OnboardingStep = {
   id: OnboardingStepId;
@@ -25,9 +33,10 @@ export type OnboardingStep = {
   title: string;
   body: string;
   href: string | null;
-  /** Selector CSS del elemento a resaltar en la app (`data-tour="…"`). */
+  /** Selector CSS del elemento a resaltar (`data-tour="…"`). Sin selector, la tarjeta va centrada. */
   spotlight: string | null;
   ctaLabel: string;
+  completeWhen?: OnboardingCompletion;
   roles?: TenantRole[];
   requiresTenant: boolean;
   /** Si ya tiene organización, no se muestra (configuración inicial). */
@@ -47,90 +56,81 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     skipIfExisting: true,
   },
   {
-    id: "plan",
-    kind: "setup",
-    title: "Plan PRO",
-    body: "Entrá con el plan básico: búsqueda unificada, listas, pedidos de ejemplo y hasta 3 usuarios. Local y Cadena se habilitan cuando publiquemos precios.",
-    href: null,
-    spotlight: null,
-    ctaLabel: "Entendido, ver la app",
-    requiresTenant: true,
-    skipIfExisting: true,
-  },
-  {
-    id: "providers",
+    id: "welcome",
     kind: "tour",
-    title: "Tus distribuidores",
-    body: "Solo ves a quien está vinculado. Tocá Proveedores: ahí están Demo Norte y Demo Sur. Después los reemplazás canjeando un código real.",
-    href: "/proveedores",
-    spotlight: '[data-tour="nav-proveedores"]',
-    ctaLabel: "Mostrame proveedores",
+    title: "Bienvenido a NODO",
+    body: "Te cargamos dos distribuidores de prueba con productos reales para que pruebes sin miedo: nada de esto se le manda a nadie. Son 2 minutos.",
+    href: "/",
+    spotlight: null,
+    ctaLabel: "Empezar",
     requiresTenant: true,
     skipIfExisting: false,
   },
   {
     id: "search",
     kind: "tour",
-    title: "Buscá un producto",
-    body: "Escribí «monitor», «logitech» o «ssd». Vas a ver tarjetas con foto, precio y stock de ambos distros demo.",
-    href: "/search?q=monitor",
-    spotlight: '[data-tour="search-input"]',
-    ctaLabel: "Probar la búsqueda",
-    requiresTenant: true,
-    skipIfExisting: false,
-  },
-  {
-    id: "filters",
-    kind: "tour",
-    title: "Filtros por marca, categoría y proveedor",
-    body: "Usá los filtros de categoría, marca y distribuidor. Probá Redragon o Kingston para achicar el resultado.",
-    href: "/search?q=teclado&marca=Redragon",
-    spotlight: '[data-tour="search-filters"]',
-    ctaLabel: "Ver filtros",
-    requiresTenant: true,
-    skipIfExisting: false,
-  },
-  {
-    id: "product",
-    kind: "tour",
-    title: "Grilla de productos",
-    body: "Mirá las tarjetas: foto, marca, precio y stock de tu comercio. Abrí una para ver la ficha completa.",
+    title: "Buscá una vez, te responden todos",
+    body: "Una búsqueda consulta a todos tus distribuidores a la vez. Fijate que el mismo mouse aparece en Demo Norte y Demo Sur con distinto precio y stock.",
     href: "/search?q=logitech",
     spotlight: '[data-tour="search-results"]',
-    ctaLabel: "Ver resultados",
+    ctaLabel: "Siguiente",
+    requiresTenant: true,
+    skipIfExisting: false,
+  },
+  {
+    id: "add-to-cart",
+    kind: "tour",
+    title: "Sumá un producto al carrito",
+    body: "Tocá + en cualquier tarjeta. Apenas lo agregues, seguimos.",
+    href: "/search?q=logitech",
+    spotlight: '[data-tour="add-to-cart"]',
+    ctaLabel: "Ya lo agregué",
+    completeWhen: "cart-has-items",
     requiresTenant: true,
     skipIfExisting: false,
   },
   {
     id: "cart",
     kind: "tour",
-    title: "Armá el carrito",
-    body: "Sumá unidades y mirá el carrito de la organización: es el mismo para todo el equipo del local.",
+    title: "Tu carrito, separado por distribuidor",
+    body: "Cada distribuidor tiene su pedido con precios, IVA y percepciones. El carrito es del local: lo ve todo tu equipo.",
     href: "/cart",
-    spotlight: '[data-tour="nav-cart"]',
-    ctaLabel: "Ir al carrito",
+    spotlight: '[data-tour="cart-list"]',
+    ctaLabel: "Siguiente",
     requiresTenant: true,
     skipIfExisting: false,
   },
   {
     id: "orders",
     kind: "tour",
-    title: "Pedidos de ejemplo",
-    body: "En Pedidos hay dos offline de demostración (uno por distro). Ahí se entiende el historial y la aprobación si sumás un vendedor.",
+    title: "Tus pedidos",
+    body: "Acá queda el historial de todo lo que pediste. Te dejamos dos pedidos de ejemplo para que veas cómo se ven.",
     href: "/pedidos",
-    spotlight: '[data-tour="nav-pedidos"]',
-    ctaLabel: "Ver pedidos",
+    spotlight: '[data-tour="orders-list"]',
+    ctaLabel: "Siguiente",
+    requiresTenant: true,
+    skipIfExisting: false,
+  },
+  {
+    id: "providers",
+    kind: "tour",
+    title: "Conectá tus distribuidores reales",
+    body: "Cuando quieras operar de verdad, agregá tus distribuidores con tu usuario de cada uno o subí su lista de precios.",
+    href: "/proveedores",
+    spotlight: '[data-tour="add-provider"]',
+    ctaLabel: "Siguiente",
+    roles: ["OWNER", "ADMIN"],
     requiresTenant: true,
     skipIfExisting: false,
   },
   {
     id: "team",
     kind: "tour",
-    title: "Invitá a tu equipo",
-    body: "Desde Equipo creás compradores o vendedores. Cada persona nueva también pasa por este recorrido la primera vez.",
+    title: "Sumá a tu equipo",
+    body: "Agregá compradores y vendedores. En Permisos decidís qué puede hacer cada uno.",
     href: "/equipo",
-    spotlight: '[data-tour="nav-equipo"]',
-    ctaLabel: "Abrir equipo",
+    spotlight: '[data-tour="team-add"]',
+    ctaLabel: "Siguiente",
     roles: ["OWNER", "ADMIN"],
     requiresTenant: true,
     skipIfExisting: false,
@@ -139,10 +139,10 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     id: "done",
     kind: "finish",
     title: "Listo para operar",
-    body: "Cerrá el recorrido cuando quieras. Podés reabrirlo desde Configuración → Ayuda. El catálogo demo se puede regenerar.",
+    body: "Ya sabés lo básico. Podés repetir este recorrido cuando quieras desde Configuración → Ayuda.",
     href: null,
     spotlight: null,
-    ctaLabel: "Terminar recorrido",
+    ctaLabel: "Terminar",
     requiresTenant: true,
     skipIfExisting: false,
   },

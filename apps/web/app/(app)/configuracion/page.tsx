@@ -1,5 +1,7 @@
 "use client";
 
+import { useOnboarding } from "@/lib/onboarding";
+
 import { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { usePrefs, DollarType } from "@/lib/prefs";
@@ -331,6 +333,7 @@ function ConfiguracionPageInner() {
 
 function HelpOnboardingSection({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
   const router = useRouter();
+  const onboarding = useOnboarding();
   const tenant = getTenant();
   const [busy, setBusy] = useState(false);
   if (tenant && tenant.type !== "RETAILER") return null;
@@ -339,7 +342,9 @@ function HelpOnboardingSection({ showToast }: { showToast: (msg: string, ok?: bo
     setBusy(true);
     try {
       await onboardingApi.startTour();
-      router.push("/onboarding");
+      // La guía corre dentro de la app: se recarga el estado y arranca en el primer paso.
+      await onboarding.refresh();
+      router.push("/");
     } catch {
       showToast("No se pudo reabrir el recorrido", false);
     } finally {

@@ -6,12 +6,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Onboarding comercio (Tipo 1) + plan PRO
 - **Método**: GET | POST
-- **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`
+- **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/step` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`
 - **Auth**: Bearer token requerido. `bootstrap`: usuario sin membresía (`ROLE_USER`, o `ROLE_ADMIN` en preview). `preview`: solo `ROLE_ADMIN`. `start-tour` / `reseed-demo`: comercio `OWNER`/`ADMIN` (reseed).
-- **Body / Params**: bootstrap `{ name, contactEmail?, contactPhone? }` · el resto `{}`
-- **Respuesta esperada**: status `{ needsOnboarding, completed, hasTenant, mode: fresh|existing|preview, preview, tenant?, steps[{ id, kind, title, body, href, spotlight, ctaLabel, skipIfExisting }], demo?, canBootstrap, canStartTour }` · bootstrap/preview/complete `{ token?, org?, onboarding }`
+- **Body / Params**: bootstrap `{ name, contactEmail?, contactPhone? }` · step `{ step }` · el resto `{}`
+- **Respuesta esperada**: status `{ needsOnboarding, completed, hasTenant, mode: fresh|existing|preview, preview, tenant?, steps[{ id, kind, title, body, href, spotlight, ctaLabel, completeWhen?, skipIfExisting }], currentStep, demo?, canBootstrap, canStartTour }` · step `{ currentStep }` · bootstrap/preview/complete `{ token?, org?, onboarding }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Crea `Tenant` RETAILER `plan=PRO`, membresía `OWNER`, distros demo + ~10 ofertas con foto/ficha + 2 pedidos. `start-tour` salta org/plan (`onboardingReplay`). Preview superadmin: guarda Administración, suelta membresía, onboarding desde 0, al completar restaura. Demo Norte/Sur solo se ven durante el recorrido (alta, repaso o preview): no entran al Directorio ni a `/my/providers` de quien ya terminó. UI landing aesthetic + spotlight `data-tour`. Ver `docs/PLAN_ONBOARDING.md`.
+- **Notas**: Crea `Tenant` RETAILER `plan=PRO`, membresía `OWNER`, distros demo + ~10 ofertas con foto/ficha + 2 pedidos. `currentStep` (guardado en `User.onboardingStep` con `POST /onboarding/step`) es la única fuente de verdad del paso; `start-tour` y `complete` lo limpian. `start-tour` salta el alta (`onboardingReplay`). Preview superadmin: guarda Administración, suelta membresía, onboarding desde 0, al completar restaura. Demo Norte/Sur solo se ven durante el recorrido (alta, repaso o preview): no entran al Directorio ni a `/my/providers` de quien ya terminó. `/onboarding` solo crea el comercio; la guía corre dentro de la app sin bloquear (spotlight `data-tour`). Ver `docs/PLAN_ONBOARDING.md`.
 
 ### [FEATURE] Renovar sesión (JWT)
 - **Método**: POST

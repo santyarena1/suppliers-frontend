@@ -255,7 +255,7 @@ function RetailerPedidosPage() {
               {filtered.length === 0 ? (
                 <EmptyState filter={filter} hasAny={orders.length > 0} />
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3" data-tour="orders-list">
                   {(filter === "all"
                     ? [...esperando, ...orders.filter((o) => o.approvalStatus !== "PENDING_APPROVAL")]
                     : filtered

@@ -1,40 +1,56 @@
 # Onboarding de comercios (Tipo 1) y plan PRO
 
-Documento vivo. Define el alta self-serve de un comercio, el recorrido guiado con
-spotlight y el plan PRO antes de publicar precios de Local / Cadena.
+Documento vivo. Alta self-serve de un comercio y recorrido guiado dentro de la app.
 
 ## Flujos
 
 ### Alta nueva
 ```
-/register o landing #cuenta → login → /onboarding
-  ├─ POST /onboarding/bootstrap (nombre + contacto)
-  │    · Tenant RETAILER plan=PRO + OWNER + demo
-  └─ pasos setup (plan) → tour interactivo (spotlight) → complete
+/register o landing #cuenta → login → /onboarding (solo el nombre del comercio)
+  └─ POST /onboarding/bootstrap → Tenant RETAILER plan=PRO + OWNER + demo
+     └─ entra a la app: la guía arranca sola en "welcome"
 ```
 
-### Comercio ya existente
-```
-Configuración → Ayuda → Reabrir  ·  o  POST /onboarding/start-tour
-  · marca onboardingReplay, salta org/plan
-  · asegura catálogo demo
-  · tour con clics resaltados
-```
+### Alta desde superadmin
+`POST /admin/onboarding/retailers` crea comercio + dueño + demo. El recorrido arranca en el
+primer ingreso del dueño.
 
-### Superadmin desde la landing
-```
-Landing #cuenta → usuario "superadmin" + clave
-  · login + POST /onboarding/preview
-  · guarda Administración, suelta membresía
-  · onboarding desde 0 (crear org + tour)
-  · complete / preview/exit restaura Administración
-```
+### Repetir el recorrido
+Configuración → Ayuda → Repetir (`POST /onboarding/start-tour`): borra el paso guardado,
+asegura la demo y la guía vuelve a empezar.
 
-## Spotlight
+### Superadmin desde la landing (preview)
+Login + `POST /onboarding/preview`: suelta Administración y hace el alta desde cero.
+"Salir del preview" / terminar restaura Administración.
 
-Cada paso `kind=tour` lleva `spotlight` (selector `data-tour`). El overlay
-`OnboardingSpotlight` usa una sombra suave (una sola capa) y un hueco limpio
-sobre el control o la grilla. La tarjeta de ayuda se coloca sin tapar el target.
+## Una sola fuente de verdad
+
+El paso en el que va cada persona vive en `User.onboardingStep` y viaja en
+`GET /onboarding/status` como `currentStep`. La app lo guarda con `POST /onboarding/step`
+cada vez que avanza. Lo único local es si la guía está pausada (preferencia de pantalla).
+Antes había dos estados (hub y spotlight) que se desincronizaban y entraban en loop.
+
+## Pasos (`apps/api/src/onboarding/onboarding-steps.ts`)
+
+| Paso | Pantalla | Resalta | Avanza |
+|---|---|---|---|
+| welcome | / | — (tarjeta centrada) | Empezar |
+| search | /search?q=logitech | `search-results` | Siguiente |
+| add-to-cart | /search?q=logitech | `add-to-cart` | solo, al sumar un producto |
+| cart | /cart | `cart-list` | Siguiente |
+| orders | /pedidos | `orders-list` | Siguiente |
+| providers (dueño/admin) | /proveedores | `add-provider` | Siguiente |
+| team (dueño/admin) | /equipo | `team-add` | Siguiente |
+| done | — | — | Terminar |
+
+## Guía (`components/onboarding`)
+
+- `OnboardingCoach`: resalta sin bloquear (el oscurecido no captura clics), ubica la tarjeta
+  con su tamaño real para no tapar lo señalado, hoja inferior en celular. Atrás / Pausar /
+  Siguiente, Esc pausa, ← → navegan. Fuera de la pantalla del paso muestra un aviso chico
+  "Ir al paso" en vez de arrastrar a la persona.
+- `OnboardingChecklist`: con la guía pausada, píldora "Primeros pasos x/y" con la lista:
+  retomar, saltar a cualquier paso o "No mostrar más".
 
 ## Demo
 
@@ -43,12 +59,12 @@ sobre el control o la grilla. La tarjeta de ayuda se coloca sin tapar el target.
 | Distribuidora Demo Norte | `LIST_DEMO_NORTE` |
 | Distribuidora Demo Sur | `LIST_DEMO_SUR` |
 
-~10 productos con foto, part number, EAN y ficha + 2 pedidos `[DEMO]`.
+~12 productos con foto; el mouse Logitech y el monitor Samsung están en los dos distros con
+distinto precio/stock para mostrar la comparación. 2 pedidos `[DEMO]`.
 Regenerar: `POST /onboarding/reseed-demo`.
 
-No son organizaciones reales: el Directorio, las relaciones de un usuario y
-`/my/providers` las ocultan salvo que esa persona esté en el recorrido
-(alta, `onboardingReplay` o preview de superadmin).
+No son organizaciones reales: solo las ve quien está en el recorrido (alta, repaso o
+preview). Como son proveedores por lista, el ocultamiento global de proveedores no las tapa.
 
 ## API
 

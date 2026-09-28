@@ -63,6 +63,7 @@ export default function AddToCartButton({
     return (
       <button
         type="button"
+        data-tour="add-to-cart"
         onClick={(e) => bump(1, e)}
         className={`w-full flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 transition-all ${
           inCart
@@ -109,6 +110,7 @@ export default function AddToCartButton({
 
   return (
     <div
+      data-tour="add-to-cart"
       className={`flex items-center gap-0.5 rounded-lg border p-0.5 transition-colors ${shell}`}
       onClick={(e) => {
         e.preventDefault();

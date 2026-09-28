@@ -4,7 +4,7 @@ import type { JwtPayload } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
-import { AdminCreateRetailerDto, BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
+import { AdminCreateRetailerDto, BootstrapRetailerOrgDto, OnboardingStepDto } from "./dto/onboarding.dto";
 import { OnboardingService } from "./onboarding.service";
 
 @UseGuards(AuthGuard("jwt"))
@@ -37,6 +37,12 @@ export class OnboardingController {
   @Post("preview/exit")
   exitPreview(@CurrentUser() user: JwtPayload) {
     return this.onboarding.exitPreview(user.userId, { markComplete: true });
+  }
+
+  /** Guarda el paso del recorrido en el que está la persona. */
+  @Post("step")
+  step(@CurrentUser() user: JwtPayload, @Body() dto: OnboardingStepDto) {
+    return this.onboarding.setStep(user.userId, dto.step);
   }
 
   @Post("complete")

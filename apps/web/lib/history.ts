@@ -1,4 +1,15 @@
-const KEY = "tgs_search_history_v1";
+import { getUser } from "./auth";
+
+const BASE_KEY = "tgs_search_history_v1";
+
+/**
+ * Una por usuario: en una misma computadora (o al "Entrar como") cada persona
+ * ve solo sus búsquedas.
+ */
+function historyKey(): string {
+  const id = getUser()?.id;
+  return id ? `${BASE_KEY}:${id}` : BASE_KEY;
+}
 
 export interface SearchEntry {
   query: string;
@@ -11,7 +22,7 @@ export function trackSearch(query: string) {
   const q = query.trim();
   if (!q) return;
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(historyKey());
     const arr: SearchEntry[] = raw ? JSON.parse(raw) : [];
     const idx = arr.findIndex((e) => e.query.toLowerCase() === q.toLowerCase());
     if (idx >= 0) {
@@ -20,14 +31,14 @@ export function trackSearch(query: string) {
       arr.push({ query: q, count: 1, lastAt: Date.now() });
     }
     if (arr.length > 100) arr.splice(0, arr.length - 100);
-    localStorage.setItem(KEY, JSON.stringify(arr));
+    localStorage.setItem(historyKey(), JSON.stringify(arr));
   } catch { /**/ }
 }
 
 export function getHistory(): SearchEntry[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(historyKey());
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
@@ -42,5 +53,5 @@ export function getTopSearches(limit = 8): SearchEntry[] {
 
 export function clearHistory() {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(KEY);
+  localStorage.removeItem(historyKey());
 }

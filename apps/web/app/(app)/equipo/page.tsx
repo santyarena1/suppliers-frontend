@@ -154,6 +154,7 @@ export default function EquipoPage() {
                 {canManage && (
                   <button
                     type="button"
+                    data-tour="team-add"
                     onClick={() => setShowAdd(true)}
                     className="flex items-center gap-1.5 text-xs font-medium text-brand-400 hover:text-brand-300"
                   >

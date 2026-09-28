@@ -40,6 +40,7 @@ export class OnboardingService {
         onboardingCompletedAt: true,
         onboardingPreviewRestoreTenantId: true,
         onboardingReplay: true,
+        onboardingStep: true,
       },
     });
     const tenant = await this.tenantContext.forUser(userId);
@@ -107,11 +108,23 @@ export class OnboardingService {
         : null,
       roleLabel: tenant ? TENANT_ROLE_LABELS[tenant.tenantRole] : null,
       steps,
+      /** Paso en el que quedó; si el guardado ya no aplica a su recorrido, el primero. */
+      currentStep: steps.find((step) => step.id === user.onboardingStep)?.id ?? steps[0]?.id ?? null,
       demo,
       canBootstrap:
         !tenant && (user.role === "ROLE_USER" || (user.role === "ROLE_ADMIN" && preview)),
       canStartTour: Boolean(tenant?.tenantType === "RETAILER") || preview,
     };
+  }
+
+  /** Guarda en qué paso va. La app lo lee de acá: no hay otra fuente de verdad. */
+  async setStep(userId: string, stepId: string) {
+    const status = await this.status(userId);
+    if (!status.steps.some((step) => step.id === stepId)) {
+      throw new BadRequestException("Ese paso no es parte de tu recorrido");
+    }
+    await this.prisma.user.update({ where: { id: userId }, data: { onboardingStep: stepId } });
+    return { currentStep: stepId };
   }
 
   /**
@@ -239,7 +252,7 @@ export class OnboardingService {
     }
     await this.prisma.user.update({
       where: { id: userId },
-      data: { onboardingCompletedAt: null, onboardingReplay: true },
+      data: { onboardingCompletedAt: null, onboardingReplay: true, onboardingStep: null },
     });
     if (tenant.tenantRole === "OWNER" || tenant.tenantRole === "ADMIN") {
       await this.seedDemoSandbox(tenant.tenantId, userId);
@@ -369,7 +382,7 @@ export class OnboardingService {
     }
     await this.prisma.user.update({
       where: { id: userId },
-      data: { onboardingCompletedAt: new Date(), onboardingReplay: false },
+      data: { onboardingCompletedAt: new Date(), onboardingReplay: false, onboardingStep: null },
     });
     const { token } = await this.auth.issueTokenForUserId(userId);
     return { token, onboarding: await this.status(userId) };

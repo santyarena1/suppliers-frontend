@@ -8,7 +8,6 @@ import { authApi, onboardingApi } from "@/lib/api";
 import { saveSession, sessionFromToken } from "@/lib/auth";
 import { invalidateMyModules } from "@/lib/permissions";
 import { invalidateTgsEnabled } from "@/lib/tgs";
-import { clearTour } from "@/lib/onboarding-tour";
 import { Button, ICON_STROKE, Reveal, Shell } from "./ui";
 
 const PREVIEW_USER = "superadmin";
@@ -42,7 +41,6 @@ export default function SignupCta() {
         invalidateMyModules();
         invalidateTgsEnabled();
         saveSession(login.data.token, sessionFromToken(login.data.token, username.trim()));
-        clearTour();
         const preview = await onboardingApi.preview();
         saveSession(preview.data.token, sessionFromToken(preview.data.token, username.trim()));
         router.push("/onboarding");
@@ -54,7 +52,6 @@ export default function SignupCta() {
       invalidateMyModules();
       invalidateTgsEnabled();
       saveSession(res.data.token, sessionFromToken(res.data.token, username.trim()));
-      clearTour();
       router.push("/onboarding");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
