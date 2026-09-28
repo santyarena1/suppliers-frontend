@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
+import { SESSION_EVENT, getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -1121,6 +1121,12 @@ export function invalidateMyProviders() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(MY_PROVIDERS_UPDATED));
   }
+}
+
+// Los proveedores visibles son de la sesión: al cambiarla (login, logout,
+// "Entrar como") no puede quedar la lista de la anterior.
+if (typeof window !== "undefined") {
+  window.addEventListener(SESSION_EVENT, invalidateMyProviders);
 }
 
 /** Solo los vinculados: de los publicitados todavía no hay catálogo que traer. */

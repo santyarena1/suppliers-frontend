@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { onboardingApi, type OnboardingStatus, type OnboardingStep, type OnboardingStepId } from "./api";
+import { invalidateMyProviders, onboardingApi, type OnboardingStatus, type OnboardingStep, type OnboardingStepId } from "./api";
 import { getUser, saveSession, sessionFromToken } from "./auth";
 import { invalidateMyModules } from "./permissions";
 
@@ -71,10 +71,15 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [current, setCurrent] = useState<OnboardingStepId | null>(null);
   const [paused, setPaused] = useState(false);
   const [busy, setBusy] = useState(false);
+  const lastNeeds = useRef<boolean | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const res = await onboardingApi.status();
+      // Los distribuidores de prueba solo existen durante el recorrido: si cambió
+      // si está pendiente, la lista de proveedores en caché ya no sirve.
+      if (lastNeeds.current !== null && lastNeeds.current !== res.data.needsOnboarding) invalidateMyProviders();
+      lastNeeds.current = res.data.needsOnboarding;
       setStatus(res.data);
       setCurrent(res.data.currentStep);
       setPaused(readPaused());
