@@ -32,6 +32,8 @@ const NORTE = "LIST_DEMO_NORTE";
 const SUR = "LIST_DEMO_SUR";
 /** Una por categoría, en el orden en que conviene mostrarlas. */
 const CATEGORY_HINTS = ["monitor", "ssd", "teclado", "notebook", "router", "auricular", "webcam", "memoria", "placa de video"];
+/** Preferencia para el producto que se compara entre los dos distros. */
+const PAIR_HINTS = ["mouse", "monitor", "auricular", "teclado", "ssd", "notebook", "webcam", "router"];
 const MIN_PRODUCTS = 6;
 const MAX_PRODUCTS = 10;
 
@@ -91,14 +93,17 @@ export function pickRealDemo(candidates: RealDemoCandidate[]): RealDemo | null {
     if (!key) continue;
     byKey.set(key, [...(byKey.get(key) ?? []), c]);
   }
+  // Para mostrar la comparación conviene algo vistoso (mouse, monitor…) antes que un pendrive.
+  const hintRank = (c: RealDemoCandidate) => {
+    const i = PAIR_HINTS.findIndex((hint) => norm(c.name).includes(hint));
+    return i === -1 ? PAIR_HINTS.length : i;
+  };
   let pair: [RealDemoCandidate, RealDemoCandidate] | null = null;
   for (const group of byKey.values()) {
     const first = group[0];
     const other = group.find((c) => c.provider !== first.provider);
-    if (other && first.brand) {
-      pair = [first, other];
-      break;
-    }
+    if (!other || !first.brand) continue;
+    if (!pair || hintRank(first) < hintRank(pair[0])) pair = [first, other];
   }
   if (!pair) return null;
 

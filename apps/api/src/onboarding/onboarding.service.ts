@@ -634,13 +634,17 @@ export class OnboardingService {
         where: { tenantId, active: true, provider: { in: DEMO_DISTRIBUTORS.map((d) => d.providerKey) } },
         select: { provider: true, product: { select: { brand: true } } },
       });
-      const providersByBrand = new Map<string, Set<string>>();
+      // Cada distribuidor escribe la marca a su manera ("LEXAR" / "Lexar").
+      const byBrand = new Map<string, { label: string; providers: Set<string> }>();
       for (const offer of offers) {
-        const brand = offer.product.brand?.trim();
-        if (!brand) continue;
-        providersByBrand.set(brand, (providersByBrand.get(brand) ?? new Set()).add(offer.provider));
+        const label = offer.product.brand?.trim();
+        if (!label) continue;
+        const key = label.toLowerCase();
+        const entry = byBrand.get(key) ?? { label, providers: new Set<string>() };
+        entry.providers.add(offer.provider);
+        byBrand.set(key, entry);
       }
-      for (const [brand, providers] of providersByBrand) if (providers.size > 1) return brand;
+      for (const entry of byBrand.values()) if (entry.providers.size > 1) return entry.label;
       return null;
     } catch {
       return null;

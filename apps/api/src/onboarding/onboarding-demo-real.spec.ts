@@ -71,3 +71,14 @@ describe("pickRealDemo", () => {
     expect(pickRealDemo(catalog.slice(0, 3))).toBeNull();
   });
 });
+
+describe("pickRealDemo · qué se compara", () => {
+  it("prefiere un producto vistoso a un pendrive para la comparación", () => {
+    const withPendrive = [
+      offer({ provider: "ELIT", ean: "7790009999999", name: "Pen Drive Lexar 32GB", brand: "LEXAR", stock: 99 }),
+      offer({ provider: "AIR", ean: "7790009999999", name: "Lexar V40 32GB", brand: "Lexar", stock: 50 }),
+      ...catalog,
+    ];
+    expect(pickRealDemo(withPendrive)!.comparisonQuery.toLowerCase()).toBe("logitech");
+  });
+});
