@@ -70,7 +70,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     id: "search",
     kind: "tour",
     title: "Buscá una vez, te responden todos",
-    body: "Una búsqueda consulta a todos tus distribuidores a la vez. Fijate que el mismo mouse aparece en Demo Norte y Demo Sur con distinto precio y stock.",
+    body: "Una búsqueda consulta a todos tus distribuidores a la vez. Fijate que el mismo producto aparece en Demo Norte y Demo Sur con distinto precio y stock: son precios reales.",
     href: "/search?q=logitech",
     spotlight: '[data-tour="search-results"]',
     ctaLabel: "Siguiente",

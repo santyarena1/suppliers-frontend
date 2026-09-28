@@ -17,6 +17,7 @@ import { AuthService } from "../auth/auth.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantContextService } from "../tenants/tenant-context.service";
 import { DEMO_DISTRIBUTORS, DEMO_PRODUCTS, DEMO_SEARCH_HINTS } from "./onboarding-demo";
+import { pickRealDemo, type RealDemo } from "./onboarding-demo-real";
 import * as argon2 from "argon2";
 import { generatePassword } from "../common/generate-password";
 import { AdminCreateRetailerDto, BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
@@ -54,6 +55,7 @@ export class OnboardingService {
       mode,
     });
 
+    let demoQuery: string | null = null;
     let demo: {
       seeded: boolean;
       distributors: { name: string; providerKey: string }[];
@@ -73,13 +75,21 @@ export class OnboardingService {
           active: true,
         },
       });
+      demoQuery = await this.demoSearchQuery(tenant.tenantId);
       demo = {
         seeded: Boolean(org?.demoSeededAt) || productCount > 0,
         distributors: DEMO_DISTRIBUTORS.map((d) => ({ name: d.name, providerKey: d.providerKey })),
         productCount,
-        searchHints: [...DEMO_SEARCH_HINTS],
+        searchHints: demoQuery ? [demoQuery] : [...DEMO_SEARCH_HINTS],
       };
     }
+
+    // La búsqueda del recorrido apunta a lo que hay en la demo de este comercio.
+    const tourSteps = demoQuery
+      ? steps.map((step) =>
+          step.href?.startsWith("/search") ? { ...step, href: `/search?q=${encodeURIComponent(demoQuery!)}` } : step
+        )
+      : steps;
 
     const plan = tenant
       ? await this.prisma.tenant.findUnique({
@@ -107,7 +117,7 @@ export class OnboardingService {
           }
         : null,
       roleLabel: tenant ? TENANT_ROLE_LABELS[tenant.tenantRole] : null,
-      steps,
+      steps: tourSteps,
       /** Paso en el que quedó; si el guardado ya no aplica a su recorrido, el primero. */
       currentStep: steps.find((step) => step.id === user.onboardingStep)?.id ?? steps[0]?.id ?? null,
       demo,
@@ -453,18 +463,33 @@ export class OnboardingService {
           priceChannel: "LIST",
           acceptsOffline: true,
           acceptsScheme: false,
+          // Solo las ofertas de esta demo: no fichas sueltas de demos de otros comercios.
+          hideUnsyncedCatalog: true,
           offlineIvaAdjustment: "REMOVE",
           manualIibbPercent: new Prisma.Decimal(0),
         },
         update: {
           priceChannel: "LIST",
+          hideUnsyncedCatalog: true,
           acceptsOffline: true,
           offlineIvaAdjustment: "REMOVE",
         },
       });
     }
 
-    for (const product of DEMO_PRODUCTS) {
+    const real = await this.loadRealDemo();
+    const products = real?.products ?? DEMO_PRODUCTS;
+    // Lo que quedó de una demo anterior (otra selección) deja de verse.
+    await this.prisma.tenantProductOffer.updateMany({
+      where: {
+        tenantId: retailerTenantId,
+        provider: { in: DEMO_DISTRIBUTORS.map((d) => d.providerKey) },
+        externalId: { notIn: products.map((p) => p.externalId) },
+      },
+      data: { active: false },
+    });
+
+    for (const product of products) {
       await this.prisma.providerSyncCache.upsert({
         where: {
           provider_externalId: { provider: product.provider, externalId: product.externalId },
@@ -553,11 +578,11 @@ export class OnboardingService {
     });
 
     if (existingDemoOrders === 0) {
-      const mouse = DEMO_PRODUCTS.find((p) => p.sku === "LOGI-MX3S")!;
-      const ssd = DEMO_PRODUCTS.find((p) => p.sku === "KING-NV2-1TB")!;
+      const norte = products.find((p) => p.provider === "LIST_DEMO_NORTE")!;
+      const sur = [...products].reverse().find((p) => p.provider === "LIST_DEMO_SUR")!;
       for (const [product, qty, note] of [
-        [mouse, 1, "[DEMO] Pedido de ejemplo — Distribuidora Demo Norte"],
-        [ssd, 2, "[DEMO] Pedido de ejemplo — Distribuidora Demo Sur"],
+        [norte, 1, "[DEMO] Pedido de ejemplo — Distribuidora Demo Norte"],
+        [sur, 2, "[DEMO] Pedido de ejemplo — Distribuidora Demo Sur"],
       ] as const) {
         await this.prisma.providerOrder.create({
           data: {
@@ -600,6 +625,80 @@ export class OnboardingService {
     });
 
     return { distributors: distributors.map((d) => ({ id: d.id, name: d.name, providerKey: d.providerKey })) };
+  }
+
+  /** Marca de un producto de la demo que está en los dos distribuidores demo. */
+  private async demoSearchQuery(tenantId: string): Promise<string | null> {
+    try {
+      const offers = await this.prisma.tenantProductOffer.findMany({
+        where: { tenantId, active: true, provider: { in: DEMO_DISTRIBUTORS.map((d) => d.providerKey) } },
+        select: { provider: true, product: { select: { brand: true } } },
+      });
+      const providersByBrand = new Map<string, Set<string>>();
+      for (const offer of offers) {
+        const brand = offer.product.brand?.trim();
+        if (!brand) continue;
+        providersByBrand.set(brand, (providersByBrand.get(brand) ?? new Set()).add(offer.provider));
+      }
+      for (const [brand, providers] of providersByBrand) if (providers.size > 1) return brand;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Catálogo real para la demo: las ofertas del comercio espejo del superadmin
+   * (el que tiene las credenciales reales de los distribuidores). Si no hay o no
+   * alcanza, `null` y se usa la demo fija.
+   */
+  private async loadRealDemo(): Promise<RealDemo | null> {
+    try {
+      const admin = await this.prisma.tenantMembership.findFirst({
+        where: { active: true, user: { role: "ROLE_ADMIN", active: true }, tenant: { active: true } },
+        orderBy: { createdAt: "asc" },
+        select: { tenant: { select: { id: true, mirrorsCommercialFromId: true } } },
+      });
+      if (!admin) return null;
+      const sourceTenantId = admin.tenant.mirrorsCommercialFromId ?? admin.tenant.id;
+      const offers = await this.prisma.tenantProductOffer.findMany({
+        where: {
+          tenantId: sourceTenantId,
+          active: true,
+          stock: { gt: 0 },
+          price: { gt: 0 },
+          provider: { notIn: DEMO_DISTRIBUTORS.map((d) => d.providerKey) },
+          product: { imageUrl: { not: null } },
+        },
+        include: { product: true },
+        orderBy: { stock: "desc" },
+        take: 4000,
+      });
+      return pickRealDemo(
+        offers.map((o) => ({
+          provider: o.provider,
+          externalId: o.externalId,
+          sku: o.product.sku,
+          partNumber: o.product.partNumber,
+          ean: o.product.ean,
+          name: o.product.name,
+          brand: o.product.brand,
+          category: o.product.category,
+          subcategory: o.product.subcategory,
+          description: o.product.description,
+          longDescription: o.product.longDescription,
+          imageUrl: o.product.imageUrl,
+          warranty: o.product.warranty,
+          price: Number(o.price),
+          finalPrice: o.finalPrice === null ? null : Number(o.finalPrice),
+          ivaPercent: o.ivaPercent === null ? null : Number(o.ivaPercent),
+          stock: o.stock ?? 0,
+          currency: o.currency,
+        }))
+      );
+    } catch {
+      return null;
+    }
   }
 
   private resolveMode(
