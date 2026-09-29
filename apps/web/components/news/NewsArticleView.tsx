@@ -149,16 +149,16 @@ function BrandSpaceLinks({
   const own = hubPath === "/marca";
   const links = own
     ? [
-        { href: "/marca/productos", label: "Semáforo y productos" },
-        { href: "/marca/acciones", label: "Acciones" },
+        { href: "/marca/productos", label: "Semáforo de stock" },
+        { href: "/marca/acciones", label: "Promociones" },
         { href: "/noticias", label: "Novedades" },
-        { href: "/marca/landing", label: "Espacio" },
+        { href: "/marca/landing", label: "Mi página" },
       ]
     : [
-        { href: `${hubPath}#productos`, label: "Productos y semáforo" },
-        { href: `${hubPath}#acciones`, label: "Acciones" },
+        { href: `${hubPath}#productos`, label: "Semáforo de stock" },
+        { href: `${hubPath}#acciones`, label: "Promociones" },
         { href: `${hubPath}#novedades`, label: "Novedades" },
-        { href: hubPath, label: `Espacio de ${brandName}` },
+        { href: hubPath, label: `Página de ${brandName}` },
       ];
   return (
     <nav className={`flex flex-wrap gap-2 mb-8 ${paper ? "" : ""}`}>

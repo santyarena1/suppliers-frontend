@@ -55,8 +55,8 @@ export default function DistributorHome() {
                 <HomeLink href="/pedidos" icon={ClipboardList} title="Pedidos" subtitle="Lo que pidieron tus comercios" />
                 <HomeLink href="/mensajes" icon={MessageSquare} title="Mensajes" subtitle="El hilo de cada cuenta" />
                 <HomeLink href="/marcas" icon={Building2} title="Marcas" subtitle="Las marcas con las que estás vinculado" />
-                <HomeLink href="/avisos" icon={Bell} title="Avisos" subtitle="Lo que te mandan las marcas" />
-                <HomeLink href="/noticias" icon={Newspaper} title="Noticias" subtitle="Novedades de tu red y las tuyas" />
+                <HomeLink href="/avisos" icon={Bell} title="Notificaciones" subtitle="Lo que te mandan las marcas" />
+                <HomeLink href="/noticias" icon={Newspaper} title="Novedades" subtitle="De tu red y las tuyas" />
                 {org?.canManagePortfolio && (
                   <HomeLink href="/codigos" icon={QrCode} title="Códigos" subtitle="Vincular un comercio nuevo" />
                 )}

@@ -28,8 +28,8 @@ export function BrandUpcoming({
   return (
     <section id="lanzamientos" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <div className="mb-5">
-        <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">Lo que viene</h2>
-        <p className="text-sm text-surface-400 mt-1">Lanzamientos y eventos de {name}.</p>
+        <h2 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">Lanzamientos y eventos</h2>
+        <p className="text-sm text-surface-400 mt-1">Productos que están por llegar y eventos de {name}.</p>
       </div>
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         {launches.length > 0 && (

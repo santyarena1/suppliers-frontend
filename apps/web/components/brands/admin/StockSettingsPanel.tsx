@@ -123,20 +123,20 @@ export function StockSettingsPanel({
           disabled={!canWrite || draft.mode === "MANUAL"}
           onChange={(v) => setDraft({ ...draft, brandSeesExact: v })}
           label="Ver las unidades exactas en este panel"
-          hint="Solo lo ves vos. Comercios y el link público siempre ven rangos."
+          hint="Solo lo ves vos. Los comercios y tu página pública siempre ven alto / medio / bajo."
         />
         <Toggle
           checked={draft.publicStock}
           disabled={!canWrite}
           onChange={(v) => setDraft({ ...draft, publicStock: v })}
-          label="Mostrar el semáforo en el link público"
-          hint="Para quien no usa NODO. Si lo apagás, el link muestra solo nombre e imagen."
+          label="Mostrar el semáforo en mi página pública"
+          hint="La ve cualquiera con el link, aunque no use NODO. Si lo apagás, muestra solo nombre e imagen de cada producto."
         />
       </div>
 
       {publicUrl && (
         <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-surface-700 px-3 py-2">
-          <span className="text-[11px] uppercase tracking-wide text-surface-500">Link para compartir</span>
+          <span className="text-[11px] uppercase tracking-wide text-surface-500">Compartir mi página</span>
           <code className="text-xs text-surface-200 truncate max-w-full">{publicUrl}</code>
           <button
             type="button"

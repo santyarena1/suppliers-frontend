@@ -469,8 +469,8 @@ export class NewsService {
         toTenantId,
         fromTenantId: tenant.tenantId,
         kind: "NEWS",
-        title: `Nueva nota: ${article.title}`,
-        body: `${tenant.tenantName} publicó una novedad.`,
+        title: `${tenant.tenantName}: ${article.title}`,
+        body: `${tenant.tenantName} publicó una novedad. Abrila en Novedades.`,
         landingKey: article.isPublic ? article.publicKey : null,
       })),
     });

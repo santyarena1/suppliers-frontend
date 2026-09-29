@@ -19,13 +19,13 @@ const inputClass =
 const SLOTS: { name: string; label: string }[] = [
   { name: "productos", label: "Mapa / semáforos" },
   { name: "semaforos", label: "Semáforos (alias)" },
-  { name: "acciones", label: "Acciones" },
+  { name: "acciones", label: "Promociones" },
   { name: "materiales", label: "Materiales" },
   { name: "capacitaciones", label: "Capacitaciones" },
   { name: "hablar", label: "Hablar" },
   { name: "nombre", label: "Nombre" },
   { name: "logo", label: "Logo" },
-  { name: "noticias", label: "Noticias" },
+  { name: "noticias", label: "Novedades" },
   { name: "novedades", label: "Novedades (alias)" },
 ];
 
@@ -76,7 +76,7 @@ export default function BrandEspacioPage() {
 
   useEffect(() => {
     load().catch((err) => {
-      setAviso({ ok: false, text: errMsg(err, "No se pudo cargar el espacio") });
+      setAviso({ ok: false, text: errMsg(err, "No se pudo cargar tu página") });
       setLoading(false);
     });
   }, [load]);
@@ -95,7 +95,7 @@ export default function BrandEspacioPage() {
     try {
       const res = await brandApi.saveLanding(patch);
       setLanding(res.data);
-      setAviso({ ok: true, text: "Espacio guardado" });
+      setAviso({ ok: true, text: "Página guardada" });
     } catch (err) {
       setAviso({ ok: false, text: errMsg(err, "No se pudo guardar") });
     } finally {
@@ -132,7 +132,7 @@ export default function BrandEspacioPage() {
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold text-white">Espacio</h1>
+          <h1 className="text-base font-semibold text-white">Mi página</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
             La landing ya arma productos, acciones, novedades, materiales, capacitaciones y contacto. El HTML propio es
             opcional: va como presentación, con huecos si querés meter los módulos adentro.
@@ -234,7 +234,7 @@ export default function BrandEspacioPage() {
                   <p className="text-lg font-bold mt-1" style={{ color: landing.primaryColor || undefined }}>
                     {landing.headline || landing.name}
                   </p>
-                  <p className="text-sm opacity-80 mt-1">{landing.about || "Así se va a sentir el espacio in-app."}</p>
+                  <p className="text-sm opacity-80 mt-1">{landing.about || "Así se ve tu página en NODO."}</p>
                 </div>
               </section>
 
@@ -352,7 +352,7 @@ export default function BrandEspacioPage() {
               <section className="border border-dashed border-surface-700 rounded-xl p-4 bg-surface-900/50 flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-white">Link público</h2>
+                    <h2 className="text-sm font-semibold text-white">Compartir mi página</h2>
                     <p className="text-[11px] text-surface-500 mt-0.5">
                       Para compartir con cualquiera, use NODO o no: tu página, productos y semáforo. La URL es opaca.
                     </p>

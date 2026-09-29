@@ -102,7 +102,7 @@ export function PublicLinkCta({ publicKey, brandName, accent }: { publicKey: str
   } else if (view.value.state === "LINKED") {
     body = (
       <>
-        <Copy title={`Ya trabajás con ${brandName} en NODO`} text="Abrí su espacio para ver stock, acciones y material." />
+        <Copy title={`Ya trabajás con ${brandName} en NODO`} text="Abrí su página para ver stock, promociones y material." />
         <Link
           href={`/marcas/${view.value.linkId}`}
           className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-black"

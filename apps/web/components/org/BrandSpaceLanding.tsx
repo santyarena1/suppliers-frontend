@@ -42,7 +42,7 @@ import {
 
 const SECTIONS: { href: string; icon: typeof Package; label: string; module?: BrandModuleId }[] = [
   { href: "#productos", icon: Package, label: "Productos", module: "products" },
-  { href: "#acciones", icon: Target, label: "Acciones", module: "actions" },
+  { href: "#acciones", icon: Target, label: "Promociones", module: "actions" },
   { href: "#novedades", icon: Newspaper, label: "Novedades" },
   { href: "#materiales", icon: Download, label: "Materiales", module: "materials" },
   { href: "#capacitaciones", icon: GraduationCap, label: "Capacitaciones", module: "trainings" },
@@ -435,7 +435,7 @@ function Hero({
               href={noticesHref}
               className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 border border-white/20 bg-white/5 text-white hover:bg-white/10"
             >
-              <Bell className="w-4 h-4" /> Avisos
+              <Bell className="w-4 h-4" /> Notificaciones
             </Link>
           )}
         </div>
@@ -497,7 +497,7 @@ export function ProductsSection({
   return (
     <section id="productos" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <SectionHead
-        title={hub ? "Mapa comercial" : "Productos"}
+        title={hub ? "Semáforo de stock" : "Productos"}
         hint={hub ? BRAND_MODULE_HINT.products : "Nombre e imagen. El precio y el semáforo quedan para el espacio vinculado."}
         ready={ready}
         count={products.length}
@@ -649,7 +649,7 @@ export function ActionsSection({
   return (
     <section id="acciones" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
       <SectionHead
-        title="Acciones vigentes"
+        title="Promociones vigentes"
         hint={hub ? BRAND_MODULE_HINT.actions : "Título y vigencia. El progreso se ve en el espacio vinculado."}
         ready={ready}
         count={actions.length}
@@ -732,7 +732,7 @@ export function NewsSection({
   const rest = items.slice(1);
   return (
     <section id="novedades" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead title="Novedades" hint="Notas que publica la marca para el canal" ready={ready} count={items.length} />
+      <SectionHead title="Novedades" hint="Lo que publica la marca: lanzamientos, eventos y avisos" ready={ready} count={items.length} />
       {!ready ? (
         <Pending text={`${name} todavía no publicó notas. Cuando salga un lanzamiento o una promo, aparece acá.`} />
       ) : (

@@ -69,7 +69,7 @@ export default function BrandHome() {
         <div>
           <h1 className="text-base font-semibold text-white">{org?.name ?? "Marca"}</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Mapa de SKUs en distros, semáforos, materiales y el espacio que ven las cuentas vinculadas
+            Semáforo de stock, novedades, promociones y tu página: lo que ven los comercios vinculados
           </p>
         </div>
         <PrefsPanel />
@@ -83,7 +83,7 @@ export default function BrandHome() {
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Stat label="SKUs en el mapa" value={String(signalCount)} />
+                <Stat label="Productos en el semáforo" value={String(signalCount)} />
                 <Stat label="Comercios vinculados" value={String(retailers)} />
                 <Stat label="Distros vinculados" value={String(linkedDistros)} />
                 <Stat label="Acciones activas" value={String(active.length)} />
@@ -99,38 +99,38 @@ export default function BrandHome() {
               >
                 <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-widest text-white/80 mb-2">
                   <Sparkles className="w-3.5 h-3.5" />
-                  Espacio in-app
+                  Tu página en NODO
                 </div>
                 <h2 className="text-xl font-bold text-white mb-1">{landing?.headline || org?.name}</h2>
                 <p className="text-sm text-white/70 max-w-xl">
                   {landing?.about ||
-                    "Elegí productos reales de los distros, armá el semáforo y el precio sugerido. El comercio vinculado entra acá, no a una landing afuera."}
+                    "Cargá tus productos en el semáforo de stock, publicá novedades y compartí tu página: los comercios vinculados ven todo acá."}
                 </p>
                 <div className="flex flex-wrap gap-2 mt-4">
                   <Link
                     href="/marca/productos"
                     className="text-xs font-semibold bg-white text-surface-900 rounded-lg px-3 py-1.5 hover:bg-white/90"
                   >
-                    Armar el mapa
+                    Cargar el semáforo
                   </Link>
                   <Link
                     href="/marca/landing"
                     className="text-xs font-semibold border border-white/30 text-white rounded-lg px-3 py-1.5 hover:bg-white/10"
                   >
-                    Editar espacio
+                    Editar mi página
                   </Link>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <HomeLink href="/marca/productos" icon={CircleDot} title="Productos" subtitle="SKUs de distros, semáforo y precio sugerido" />
+                <HomeLink href="/marca/productos" icon={CircleDot} title="Semáforo de stock" subtitle="Tus productos en cada distribuidor, con stock y precio de referencia" />
                 <HomeLink href="/marca/materiales" icon={FolderOpen} title="Materiales" subtitle="Fichas, banners y catálogos para el canal" />
                 <HomeLink href="/marca/capacitaciones" icon={GraduationCap} title="Capacitaciones" subtitle="Videos, cursos y argumentarios" />
-                <HomeLink href="/marca/acciones" icon={ClipboardList} title="Acciones" subtitle="Unidades, USD o rebate con vigencia" />
-                <HomeLink href="/marca/cuentas" icon={Handshake} title="Cuentas" subtitle="Comercios y distribuidores en alcance" />
+                <HomeLink href="/marca/acciones" icon={ClipboardList} title="Promociones" subtitle="Objetivos de compra y rebates con vigencia" />
+                <HomeLink href="/marca/cuentas" icon={Handshake} title="Comercios vinculados" subtitle="Quiénes trabajan con tu marca en NODO" />
                 <HomeLink href="/mensajes" icon={MessageSquare} title="Mensajes" subtitle="Hablá con cada cuenta vinculada" />
-                <HomeLink href="/noticias" icon={Newspaper} title="Noticias" subtitle="Novedades con foto y HTML propio" />
-                <HomeLink href="/marca/landing" icon={Palette} title="Espacio" subtitle="Estética, HTML y huecos nativos" />
+                <HomeLink href="/noticias" icon={Newspaper} title="Novedades" subtitle="Lanzamientos, eventos y avisos para tus comercios" />
+                <HomeLink href="/marca/landing" icon={Palette} title="Mi página" subtitle="Tu página en NODO y el link para compartir" />
                 {org?.canManagePortfolio && (
                   <HomeLink href="/codigos" icon={QrCode} title="Códigos" subtitle="El comercio o el distro canjea en /marcas" />
                 )}

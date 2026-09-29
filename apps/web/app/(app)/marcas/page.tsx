@@ -85,7 +85,7 @@ export default function MarcasHomePage() {
               <Stat label="Pendientes" value={String(pending)} tone={pending ? "amber" : undefined} />
               <Link href="/avisos" className="bg-surface-900 border border-surface-800 rounded-xl p-4 hover:border-surface-600 transition-colors">
                 <p className="text-[10px] font-semibold text-surface-500 uppercase tracking-wider flex items-center gap-1">
-                  <Bell className="w-3 h-3" /> Avisos
+                  <Bell className="w-3 h-3" /> Notificaciones
                 </p>
                 <p className="text-2xl font-bold text-white tabular-nums mt-1">{unread}</p>
                 <p className="text-[11px] text-surface-500 mt-1">Sin leer</p>

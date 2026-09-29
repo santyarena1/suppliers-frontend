@@ -141,9 +141,9 @@ export default function BrandProductosPage() {
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-base font-semibold text-white">Productos y stock</h1>
+          <h1 className="text-base font-semibold text-white">Semáforo de stock</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Asociá tus productos a los códigos de cada distribuidor y mostrá un semáforo en vez de PDFs.
+            Tus productos en cada distribuidor: cuánto stock hay (alto, medio, bajo) y el precio de referencia. Reemplaza los PDFs de stock.
           </p>
         </div>
         <PrefsPanel />

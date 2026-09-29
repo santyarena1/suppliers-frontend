@@ -95,7 +95,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "news",
     href: "/noticias",
-    label: "Noticias",
+    label: "Novedades",
     icon: Newspaper,
     module: "news",
     tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"],
@@ -145,7 +145,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "codes",
     href: "/codigos",
-    label: "Códigos",
+    label: "Códigos de invitación",
     icon: QrCode,
     tenantTypes: ["DISTRIBUTOR"],
     tenantRoles: ["OWNER", "ADMIN"],
@@ -174,7 +174,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "notices",
     href: "/avisos",
-    label: "Avisos",
+    label: "Notificaciones",
     icon: Bell,
     tenantTypes: ["RETAILER", "DISTRIBUTOR"],
     section: "brands",
@@ -182,7 +182,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brands-panel",
     href: "/marca",
-    label: "Panel",
+    label: "Inicio",
     icon: Building2,
     tenantTypes: ["BRAND"],
     section: "brands",
@@ -190,7 +190,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brand-products",
     href: "/marca/productos",
-    label: "Productos",
+    label: "Semáforo de stock",
     icon: CircleDot,
     tenantTypes: ["BRAND"],
     section: "brands",
@@ -222,7 +222,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brand-actions",
     href: "/marca/acciones",
-    label: "Acciones",
+    label: "Promociones",
     icon: Target,
     tenantTypes: ["BRAND"],
     section: "brands",
@@ -230,7 +230,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brand-landing",
     href: "/marca/landing",
-    label: "Espacio",
+    label: "Mi página",
     icon: Palette,
     tenantTypes: ["BRAND"],
     section: "brands",
@@ -238,7 +238,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brand-accounts",
     href: "/marca/cuentas",
-    label: "Cuentas",
+    label: "Comercios vinculados",
     icon: Handshake,
     tenantTypes: ["BRAND"],
     section: "brands",

@@ -9,6 +9,7 @@ import { NEWS_HTML_STARTER, NEWS_KIND_LABELS, NEWS_KIND_ORDER } from "@/lib/news
 import NewsHtmlBody from "./NewsHtmlBody";
 import NewsPhoto from "./NewsPhoto";
 import { NewsEventFields, NewsLaunchProductField, type EventDraft } from "./NewsEventFields";
+import { NewsAudienceBox } from "./NewsAudienceBox";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
@@ -389,18 +390,13 @@ export default function NewsEditor({ article, seed }: { article?: NewsDetail | n
             <NewsLaunchProductField value={draft.brandItemId} onChange={(id) => set("brandItemId", id)} />
           )}
 
-          <label className="flex items-start gap-2 text-sm text-surface-300">
-            <input type="checkbox" checked={draft.isPublic} onChange={(e) => set("isPublic", e.target.checked)} />
-            Enlace público (`/n/…`). La lista de precios no viaja con el link.
-          </label>
-          <label className="flex items-start gap-2 text-sm text-surface-300">
-            <input
-              type="checkbox"
-              checked={draft.notifyOnPublish}
-              onChange={(e) => set("notifyOnPublish", e.target.checked)}
-            />
-            Avisar a las cuentas vinculadas al publicar
-          </label>
+          <NewsAudienceBox
+            isBrand={isBrand}
+            notify={draft.notifyOnPublish}
+            onNotify={(v) => set("notifyOnPublish", v)}
+            isPublic={draft.isPublic}
+            onPublic={(v) => set("isPublic", v)}
+          />
 
           <div>
             <p className="text-[10px] uppercase tracking-[0.16em] text-surface-500 mb-2">Adjuntos</p>

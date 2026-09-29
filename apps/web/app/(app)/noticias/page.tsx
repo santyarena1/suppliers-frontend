@@ -61,9 +61,9 @@ export default function NoticiasPage() {
     <div className="flex-1 flex flex-col min-h-0 bg-surface-950">
       <header className="flex-shrink-0 border-b border-surface-800 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div>
-          <h1 className="news-serif text-xl text-white tracking-tight">Noticias</h1>
+          <h1 className="news-serif text-xl text-white tracking-tight">Novedades</h1>
           <p className="text-[11px] text-surface-500 hidden sm:block">
-            Novedades de tu red. Cada nota es de quien la publica.
+            Lanzamientos, eventos y avisos de las marcas y distribuidores con los que trabajás.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -74,7 +74,7 @@ export default function NoticiasPage() {
           )}
           {canWrite && (
             <Link href="/noticias/nueva" className="text-[13px] text-white border border-surface-600 px-3 py-1.5 hover:bg-white hover:text-black">
-              Nueva nota
+              Publicar novedad
             </Link>
           )}
           <PrefsPanel />

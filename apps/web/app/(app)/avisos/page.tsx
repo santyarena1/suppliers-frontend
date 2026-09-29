@@ -37,9 +37,9 @@ export default function AvisosPage() {
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold text-white">Avisos</h1>
+          <h1 className="text-base font-semibold text-white">Notificaciones</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Lo que te mandan las organizaciones vinculadas. No cruza con otras cuentas.
+            Lo que te mandan las marcas y distribuidores con los que trabajás: novedades nuevas, promociones y mensajes.
           </p>
         </div>
         <PrefsPanel />

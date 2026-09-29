@@ -166,7 +166,7 @@ export default function BrandActionsPage() {
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold text-white">Acciones de marca</h1>
+          <h1 className="text-base font-semibold text-white">Promociones</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
             Objetivos medibles sobre pedidos reales. Si un ítem no trae marca, no se cuenta.
           </p>
