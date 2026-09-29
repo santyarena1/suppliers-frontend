@@ -85,6 +85,12 @@ export class OrdersController {
     return this.orders.updateOffline(tenant, id, dto);
   }
 
+  /** Precio de hoy del proveedor para un pedido retenido, antes de aprobarlo. */
+  @Post(":id/approval-quote")
+  approvalQuote(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.orders.approvalQuote(tenant, id);
+  }
+
   @Post(":id/approve")
   approve(
     @CurrentTenant() tenant: TenantContext,

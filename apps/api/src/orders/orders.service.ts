@@ -38,6 +38,7 @@ import {
   type CatalogStats,
 } from "./purchase-analytics";
 import { indexOpsAliases, isAliasable, parseOpsGroupKey, type OpsAliasKind } from "./purchase-ops-aliases";
+import { normalizeApprovalQuote } from "./approval-quote";
 
 /**
  * Aprobar un pedido online es mandarlo al proveedor con los mismos datos con los
@@ -88,6 +89,22 @@ export class OrdersService {
     const resultado = await this.send(provider, author, credentials, input, order.id);
     await this.approval.markApproved(order.id, userId);
     return resultado;
+  }
+
+  /**
+   * Cotiza en vivo un pedido retenido, sin enviarlo: quien aprueba ve el precio
+   * de hoy del proveedor (puede haber cambiado desde que se armó).
+   */
+  async approvalQuote(tenant: TenantContext, id: string) {
+    const order = await this.approval.assertApprovable(tenant, id);
+    if (isOfflineChannel(order.channel)) {
+      throw new BadRequestException("Este pedido se gestiona en Nodo y no se cotiza en el portal del proveedor.");
+    }
+    const provider = order.provider as Provider;
+    const credentials = await this.credentialsOf(tenant, provider);
+    const input = order.draftInput as Record<string, unknown>;
+    const preview = await this.previewFor(provider, order.tenantId, credentials, input);
+    return { orderId: order.id, provider, quotedAt: new Date().toISOString(), ...normalizeApprovalQuote(preview) };
   }
 
   async createOffline(tenant: TenantContext, userId: string, dto: CreateOfflineOrdersDto) {
@@ -581,6 +598,36 @@ export class OrdersService {
       throw new BadRequestException(
         `${providerLabel(provider)} se compra desde su portal: el pedido por mensaje es solo para proveedores que cotizan por lista.`
       );
+    }
+  }
+
+  private previewFor(
+    provider: Provider,
+    tenantId: string,
+    credentials: Record<string, string>,
+    input: Record<string, unknown>
+  ): Promise<unknown> {
+    switch (provider) {
+      case "INVID":
+        return this.invid.preview(credentials, input as unknown as InvidDraftInput);
+      case "NEW_BYTES":
+        return this.newBytes.preview(credentials, input as unknown as NewBytesDraftInput);
+      case "GRUPO_NUCLEO":
+        return this.grupoNucleo.preview(credentials, input as unknown as GnDraftInput);
+      case "AIR":
+        return this.air.preview(credentials, input as unknown as AirDraftInput);
+      case "ELIT":
+        return this.elit.preview(credentials, input as unknown as ElitCartItems);
+      case "NEW_TREE":
+        return this.newTree.preview(tenantId, credentials, input as unknown as NewTreeCartItems);
+      case "SOLUTION_BOX":
+        return this.solutionBox.preview(tenantId, credentials, input as unknown as SolutionBoxCartItems);
+      case "DISTECNA":
+        return this.distecna.preview(tenantId, credentials, input as unknown as DistecnaCartItems);
+      case "POLYTECH":
+        return this.polytech.preview(tenantId, credentials, input as unknown as PolytechCartItems);
+      default:
+        throw new BadRequestException(`Todavía no se pueden cotizar pedidos de ${provider} desde Nodo`);
     }
   }
 

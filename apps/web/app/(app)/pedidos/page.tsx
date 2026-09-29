@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import DistributorOrders from "@/components/org/DistributorOrders";
-import { chatApi, ordersApi, type TenantOrder } from "@/lib/api";
+import { chatApi, ordersApi, type ApprovalQuote, type TenantOrder } from "@/lib/api";
+import { ApprovalQuotePanel } from "@/components/orders/ApprovalQuotePanel";
 import { getTenant } from "@/lib/auth";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -411,6 +412,22 @@ function OrderCard({
   const [sharing, setSharing] = useState(false);
   const [notes, setNotes] = useState(order.notes ?? "");
   const [draft, setDraft] = useState(order.items);
+  const [quote, setQuote] = useState<ApprovalQuote | null>(null);
+  const [quoting, setQuoting] = useState(false);
+
+  async function requote() {
+    setQuoting(true);
+    onAviso(null);
+    try {
+      const res = await ordersApi.approvalQuote(order.id);
+      setQuote(res.data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      onAviso({ ok: false, text: msg || `No se pudo cotizar con ${order.providerName}` });
+    } finally {
+      setQuoting(false);
+    }
+  }
 
   useEffect(() => {
     if (!editing) {
@@ -928,6 +945,8 @@ function OrderCard({
           </p>
         )}
 
+        {esperando && canApprove && quote && <ApprovalQuotePanel quote={quote} heldNet={totals.net} />}
+
         {/* Acciones */}
         <div className="flex items-center gap-2 flex-wrap">
           {esperando && canApprove ? (
@@ -940,15 +959,27 @@ function OrderCard({
               >
                 Rechazar
               </button>
-              <button
-                type="button"
-                onClick={onApprove}
-                disabled={working}
-                className="flex-[1.4] h-10 inline-flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold transition-colors"
-              >
-                {working && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {working ? "Enviando…" : "Aprobar y enviar"}
-              </button>
+              {quote ? (
+                <button
+                  type="button"
+                  onClick={onApprove}
+                  disabled={working}
+                  className="flex-[1.4] h-10 inline-flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold transition-colors"
+                >
+                  {working && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {working ? "Enviando…" : "Aprobar y enviar"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void requote()}
+                  disabled={working || quoting}
+                  className="flex-[1.4] h-10 inline-flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold transition-colors"
+                >
+                  {quoting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {quoting ? "Cotizando…" : "Ver precio de hoy"}
+                </button>
+              )}
             </>
           ) : esperando ? (
             <p className="text-[11px] text-surface-500 py-2 leading-relaxed">

@@ -1082,6 +1082,8 @@ export const ordersApi = {
     }[];
   }) => api.patch<TenantOrder>(`/orders/${id}`, body),
   approve: (id: string) => api.post<{ id: string; status: string; message: string }>(`/orders/${id}/approve`, {}),
+  /** Precio de hoy del proveedor para un pedido retenido (no lo envía). */
+  approvalQuote: (id: string) => api.post<ApprovalQuote>(`/orders/${id}/approval-quote`, {}),
   reject: (id: string, reason?: string) => api.post<TenantOrder>(`/orders/${id}/reject`, { reason }),
 };
 
@@ -3931,6 +3933,17 @@ export const brandStatsApi = {
     api.get<BrandPurchaseStats>(`/my/brands/${linkId}/stats`, { params: { months } }),
   mine: (months: number) => api.get<BrandPanelStats>("/my/brand/stats", { params: { months } }),
 };
+
+export interface ApprovalQuote {
+  orderId: string;
+  provider: string;
+  quotedAt: string;
+  lines: { code: string; name: string; qty: number; price: number | null; subtotal: number | null }[];
+  subtotal: number | null;
+  total: number | null;
+  currency: string;
+  problems: { code: string; message: string }[];
+}
 
 export const brandApi = {
   landing: () => api.get<BrandLanding>("/my/brand/landing"),
