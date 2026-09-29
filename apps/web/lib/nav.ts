@@ -180,14 +180,6 @@ export const NAV_ITEMS: NavItemDef[] = [
     section: "brands",
   },
   {
-    id: "brands-panel",
-    href: "/marca",
-    label: "Inicio",
-    icon: Building2,
-    tenantTypes: ["BRAND"],
-    section: "brands",
-  },
-  {
     id: "brand-products",
     href: "/marca/productos",
     label: "Semáforo de stock",
@@ -246,7 +238,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   {
     id: "brand-codes",
     href: "/codigos",
-    label: "Códigos",
+    label: "Códigos de invitación",
     icon: QrCode,
     tenantTypes: ["BRAND"],
     tenantRoles: ["OWNER", "ADMIN"],

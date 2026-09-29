@@ -5,6 +5,13 @@ import Link from "next/link";
 import { Bell, Globe, Users } from "lucide-react";
 import { brandApi } from "@/lib/api";
 
+function audienceLabel(retailers: number, distributors: number) {
+  const shops =
+    retailers === 0 ? "ningún comercio vinculado todavía" : retailers === 1 ? "tu comercio vinculado" : `tus ${retailers} comercios vinculados`;
+  if (distributors === 0) return shops;
+  return `${shops} y ${distributors === 1 ? "tu distribuidor vinculado" : `tus ${distributors} distribuidores vinculados`}`;
+}
+
 /**
  * Qué pasa al publicar una novedad, dicho sin vueltas: quién la ve siempre,
  * a quién le llega una notificación (opcional) y si tiene link para cualquiera.
@@ -38,11 +45,7 @@ export function NewsAudienceBox({
   }, [isBrand]);
 
   const who = counts
-    ? `tus ${counts.retailers} ${counts.retailers === 1 ? "comercio vinculado" : "comercios vinculados"}${
-        counts.distributors > 0
-          ? ` y ${counts.distributors} ${counts.distributors === 1 ? "distribuidor" : "distribuidores"}`
-          : ""
-      }`
+    ? audienceLabel(counts.retailers, counts.distributors)
     : isBrand
       ? "tus comercios y distribuidores vinculados"
       : "tus comercios vinculados";
