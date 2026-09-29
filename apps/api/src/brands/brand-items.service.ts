@@ -256,10 +256,21 @@ export class BrandItemsService {
       select: { supplierTenantId: true },
     });
     if (!link) throw new NotFoundException("Esa marca no está vinculada");
-    const mine = await this.visibility.listFor(commercialId(tenant), tenant.userId);
-    const yourProviders = new Set(mine.filter((p) => p.linked).map((p) => p.provider));
-    const settings = await this.settingsFor(link.supplierTenantId);
-    const items = await this.availability(link.supplierTenantId, settings, { kind: "client", yourProviders });
+    return this.clientViewFor(tenant, link.supplierTenantId);
+  }
+
+  /**
+   * Disponibilidad para un cliente ya validado contra el vínculo (el hub lo valida).
+   * Solo un comercio tiene "sus distribuidores"; un distro cliente de la marca ve el mapa sin marcar.
+   */
+  async clientViewFor(tenant: TenantContext, brandId: string) {
+    const yourProviders = new Set<string>();
+    if (tenant.tenantType === "RETAILER") {
+      const mine = await this.visibility.listFor(commercialId(tenant), tenant.userId);
+      for (const p of mine) if (p.linked) yourProviders.add(p.provider);
+    }
+    const settings = await this.settingsFor(brandId);
+    const items = await this.availability(brandId, settings, { kind: "client", yourProviders });
     return { mode: settings.mode, items };
   }
 

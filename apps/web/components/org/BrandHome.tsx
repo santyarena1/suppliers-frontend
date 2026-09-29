@@ -6,6 +6,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import LatestNewsStrip from "@/components/news/LatestNewsStrip";
 import {
   brandApi,
+  brandItemsApi,
   myApi,
   type BrandAction,
   type BrandLanding,
@@ -47,14 +48,14 @@ export default function BrandHome() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([myApi.org(), brandApi.landing(), brandApi.actions(), brandApi.accounts(), brandApi.signals()])
+    Promise.all([myApi.org(), brandApi.landing(), brandApi.actions(), brandApi.accounts(), brandItemsApi.list()])
       .then(([orgRes, landingRes, actionsRes, accountsRes, signalsRes]) => {
         setOrg(orgRes.data);
         setLanding(landingRes.data);
         setActions(actionsRes.data.actions);
         setRetailers(accountsRes.data.retailers.length);
         setLinkedDistros(accountsRes.data.linkedDistributors?.length ?? 0);
-        setSignalCount(signalsRes.data.signals.length);
+        setSignalCount(signalsRes.data.items.length);
       })
       .finally(() => setLoading(false));
   }, []);

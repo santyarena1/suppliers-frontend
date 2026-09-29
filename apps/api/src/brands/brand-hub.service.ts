@@ -1,16 +1,19 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { type Provider, providerLabel } from "@nodo/shared";
+import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { compileBrandHtml } from "./brand-html";
 import { BrandActionsService } from "./brand-actions.service";
+import { BrandItemsService } from "./brand-items.service";
 import { brandPresence, hasBrandContact, hasBrandSpace } from "./brand-presence";
 
 @Injectable()
 export class BrandHubService {
+  private readonly logger = new Logger(BrandHubService.name);
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly actions: BrandActionsService
+    private readonly actions: BrandActionsService,
+    private readonly items: BrandItemsService
   ) {}
 
   async getForClient(tenant: TenantContext, linkId: string) {
@@ -38,7 +41,7 @@ export class BrandHubService {
     const brandId = link.supplierTenant.id;
     const landing = link.supplierTenant.brandLanding;
     const now = new Date();
-    const [actionRows, signals, resources, news] = await Promise.all([
+    const [actionRows, availability, resources, news] = await Promise.all([
       this.prisma.brandAction.findMany({
         where: {
           tenantId: brandId,
@@ -48,9 +51,10 @@ export class BrandHubService {
         },
         include: { scopes: true },
       }),
-      this.prisma.brandSkuSignal.findMany({
-        where: { tenantId: brandId },
-        orderBy: [{ light: "asc" }, { name: "asc" }],
+      // El semáforo no puede tumbar el espacio de la marca: si falla, se muestra sin productos.
+      this.items.clientViewFor(tenant, brandId).catch((err: unknown) => {
+        this.logger.error(`Disponibilidad de la marca ${brandId} para ${tenant.tenantId}: ${String(err)}`);
+        return { mode: "AUTO" as const, items: [] };
       }),
       this.prisma.brandResource.findMany({
         where: { tenantId: brandId },
@@ -85,7 +89,7 @@ export class BrandHubService {
     const trainings = resources.filter((r) => r.kind === "TRAINING");
     const compiled = compileBrandHtml(landing?.html ?? "");
     const presence = brandPresence({
-      signalCount: signals.length,
+      signalCount: availability.items.length,
       actionCount: withP.length,
       materialCount: materials.length,
       trainingCount: trainings.length,
@@ -118,20 +122,8 @@ export class BrandHubService {
       htmlSlots: compiled.slots,
       htmlParts: compiled.parts,
       actions: withP,
-      signals: signals.map((row) => ({
-        id: row.id,
-        provider: row.provider,
-        providerName: providerLabel(row.provider as Provider) ?? row.provider,
-        externalId: row.externalId,
-        name: row.name,
-        sku: row.sku,
-        imageUrl: row.imageUrl,
-        light: row.light,
-        suggestedPrice: row.suggestedPrice == null ? null : Number(row.suggestedPrice),
-        qtyEstimate: row.qtyEstimate,
-        incomingAt: row.incomingAt?.toISOString() ?? null,
-        notes: row.notes,
-      })),
+      availability: availability.items,
+      stockMode: availability.mode,
       materials,
       trainings,
       news: news.map((row) => ({

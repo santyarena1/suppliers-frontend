@@ -187,9 +187,9 @@ export class BrandActionsService {
     const [signalCounts, resourceCounts, unreadCounts, actions] = await Promise.all([
       emptyIds
         ? Promise.resolve([] as { tenantId: string; _count: { _all: number } }[])
-        : this.prisma.brandSkuSignal.groupBy({
+        : this.prisma.brandItem.groupBy({
             by: ["tenantId"],
-            where: { tenantId: { in: brandIds } },
+            where: { tenantId: { in: brandIds }, active: true },
             _count: { _all: true },
           }),
       emptyIds

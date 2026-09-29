@@ -10,8 +10,11 @@ import type {
   BrandModuleId,
   BrandPresence,
   BrandResource,
+  BrandAvailabilityItem,
   BrandSkuSignal,
 } from "@/lib/api";
+import { BrandAvailabilityGrid, StockLegend } from "@/components/brands/BrandAvailability";
+import { isAvailabilityList } from "@/lib/brand-stock";
 import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
 import { BRAND_MODULE_HINT } from "@/lib/brand-presence";
 import { collectBrandVisuals, isVisualAsset } from "@/lib/brand-visuals";
@@ -46,6 +49,9 @@ const SECTIONS: { href: string; icon: typeof Package; label: string; module?: Br
 function img(ref?: string | null) {
   return assetUrl(ref);
 }
+
+/** Productos de la landing: semáforo por distribuidor (nuevo), señales viejas o recorte público. */
+type LandingProducts = BrandAvailabilityItem[] | BrandSkuSignal[] | PublicProduct[];
 
 type ExtraBlock = { title?: string; body?: string; url?: string };
 
@@ -96,7 +102,7 @@ export function BrandSpaceLanding({
     supportEmail: string | null;
     supportPhone: string | null;
   };
-  products?: BrandSkuSignal[] | PublicProduct[];
+  products?: LandingProducts;
   actions?: BrandAction[] | PublicAction[];
   news?: BrandHub["news"] | PublicNews[];
   materials?: BrandResource[] | PublicFile[];
@@ -230,7 +236,7 @@ function LandingModules({
   presence,
 }: {
   name: string;
-  products: BrandSkuSignal[] | PublicProduct[];
+  products: LandingProducts;
   actions: BrandAction[] | PublicAction[];
   news: BrandHub["news"] | PublicNews[];
   materials: BrandResource[] | PublicFile[];
@@ -461,7 +467,7 @@ export function ProductsSection({
   ready,
 }: {
   name: string;
-  products: BrandSkuSignal[] | PublicProduct[];
+  products: LandingProducts;
   retailer: boolean;
   searchHref?: string;
   hub: boolean;
@@ -497,16 +503,31 @@ export function ProductsSection({
         </Pending>
       ) : (
         <>
-          {hub && isSignalList(products) && <LightLegend />}
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-            {list.map((row, i) =>
-              isSignal(row) ? (
-                <SignalCard key={row.id} row={row} retailer={retailer} />
-              ) : (
-                <PublicProductCard key={`${row.name}-${i}`} row={row} />
-              )
-            )}
-          </div>
+          {isAvailabilityList(products) ? (
+            <>
+              <div className="mb-4">
+                <StockLegend />
+              </div>
+              <BrandAvailabilityGrid
+                items={products}
+                audience={hub ? "client" : "public"}
+                limit={showAll ? undefined : 12}
+              />
+            </>
+          ) : (
+            <>
+              {hub && isSignalList(products) && <LightLegend />}
+              <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+                {(list as Array<BrandSkuSignal | PublicProduct>).map((row, i) =>
+                  isSignal(row) ? (
+                    <SignalCard key={row.id} row={row} retailer={retailer} />
+                  ) : (
+                    <PublicProductCard key={`${row.name}-${i}`} row={row} />
+                  )
+                )}
+              </div>
+            </>
+          )}
           {products.length > 12 && (
             <button
               type="button"
@@ -522,11 +543,11 @@ export function ProductsSection({
   );
 }
 
-function isSignal(row: BrandSkuSignal | PublicProduct): row is BrandSkuSignal {
+function isSignal(row: BrandAvailabilityItem | BrandSkuSignal | PublicProduct): row is BrandSkuSignal {
   return "light" in row && "id" in row;
 }
 
-function isSignalList(rows: BrandSkuSignal[] | PublicProduct[]): rows is BrandSkuSignal[] {
+function isSignalList(rows: LandingProducts): rows is BrandSkuSignal[] {
   return rows.length > 0 && isSignal(rows[0]);
 }
 
@@ -941,7 +962,7 @@ export function landingModuleSlots({
   logoUrl,
 }: {
   name: string;
-  products: BrandSkuSignal[] | PublicProduct[];
+  products: LandingProducts;
   actions: BrandAction[] | PublicAction[];
   news: BrandHub["news"] | PublicNews[];
   materials: BrandResource[] | PublicFile[];
@@ -1023,7 +1044,7 @@ export function landingModuleSlots({
 export function brandHubSlotModules({ hub, retailer = false }: { hub: BrandHub; retailer?: boolean }) {
   return landingModuleSlots({
     name: hub.name,
-    products: hub.signals,
+    products: hub.availability,
     actions: hub.actions,
     news: hub.news ?? [],
     materials: hub.materials,

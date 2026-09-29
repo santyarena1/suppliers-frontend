@@ -5,7 +5,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import ImageUploadField from "@/components/ImageUploadField";
 import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
 import { BrandSpaceLanding, landingModuleSlots } from "@/components/org/BrandSpaceLanding";
-import { brandApi, newsApi, type BrandAction, type BrandLanding, type BrandResource, type BrandSkuSignal, type NewsCard } from "@/lib/api";
+import { brandApi, brandItemsApi, newsApi, type BrandAction, type BrandAvailabilityItem, type BrandLanding, type BrandResource, type NewsCard } from "@/lib/api";
 import { BRAND_LANDING_HTML_TEMPLATE } from "@/lib/brand-visuals";
 import { Copy, Globe, Loader2 } from "lucide-react";
 
@@ -47,17 +47,17 @@ export default function BrandEspacioPage() {
   const [previewHtml, setPreviewHtml] = useState("");
 
   const [preview, setPreview] = useState<{
-    signals: BrandSkuSignal[];
+    products: BrandAvailabilityItem[];
     actions: BrandAction[];
     materials: BrandResource[];
     trainings: BrandResource[];
     news: NewsCard[];
-  }>({ signals: [], actions: [], materials: [], trainings: [], news: [] });
+  }>({ products: [], actions: [], materials: [], trainings: [], news: [] });
 
   const load = useCallback(async () => {
     const [landingRes, signalsRes, actionsRes, resourcesRes, newsRes] = await Promise.all([
       brandApi.landing(),
-      brandApi.signals().catch(() => ({ data: { signals: [] as BrandSkuSignal[] } })),
+      brandItemsApi.list().catch(() => ({ data: { items: [] as BrandAvailabilityItem[] } })),
       brandApi.actions().catch(() => ({ data: { actions: [] as BrandAction[] } })),
       brandApi.resources().catch(() => ({ data: { resources: [] as BrandResource[] } })),
       newsApi.mine().catch(() => ({ data: { items: [] as NewsCard[] } })),
@@ -65,7 +65,7 @@ export default function BrandEspacioPage() {
     setLanding(landingRes.data);
     const resources = resourcesRes.data.resources ?? [];
     setPreview({
-      signals: signalsRes.data.signals ?? [],
+      products: signalsRes.data.items ?? [],
       actions: (actionsRes.data.actions ?? []).filter((a) => a.status === "ACTIVE"),
       materials: resources.filter((r) => r.kind === "MATERIAL"),
       trainings: resources.filter((r) => r.kind === "TRAINING"),
@@ -411,7 +411,7 @@ function LandingEditorPreview({
 }: {
   landing: BrandLanding;
   preview: {
-    signals: BrandSkuSignal[];
+    products: BrandAvailabilityItem[];
     actions: BrandAction[];
     materials: BrandResource[];
     trainings: BrandResource[];
@@ -445,7 +445,7 @@ function LandingEditorPreview({
         supportEmail: landing.supportEmail,
         supportPhone: landing.supportPhone,
       }}
-      products={preview.signals}
+      products={preview.products}
       actions={preview.actions}
       news={news}
       materials={preview.materials}
@@ -457,7 +457,7 @@ function LandingEditorPreview({
             html={html}
             slots={landingModuleSlots({
               name: landing.name,
-              products: preview.signals,
+              products: preview.products,
               actions: preview.actions,
               news,
               materials: preview.materials,

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { publicBrandApi, type PublicBrandLanding } from "@/lib/api";
+import { brandItemsApi, publicBrandApi, type BrandAvailabilityItem, type PublicBrandLanding } from "@/lib/api";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
@@ -14,6 +14,7 @@ export default function PublicBrandLandingPage() {
   const params = useParams<{ publicKey: string }>();
   const [landing, setLanding] = useState<PublicBrandLanding | null>(null);
   const [missing, setMissing] = useState(false);
+  const [availability, setAvailability] = useState<BrandAvailabilityItem[]>([]);
 
   useEffect(() => {
     if (!params.publicKey) return;
@@ -21,7 +22,14 @@ export default function PublicBrandLandingPage() {
       .get(params.publicKey)
       .then((res) => setLanding(res.data))
       .catch(() => setMissing(true));
+    // El semáforo es opcional: si la marca lo ocultó o falla, queda la lista de productos.
+    brandItemsApi
+      .forPublic(params.publicKey)
+      .then((res) => setAvailability(res.data.hidden ? [] : res.data.items))
+      .catch(() => setAvailability([]));
   }, [params.publicKey]);
+
+  const products = availability.length > 0 ? availability : (landing?.products ?? []);
 
   const blocks = Array.isArray(landing?.blocks)
     ? (landing.blocks as { title?: string; body?: string; url?: string }[])
@@ -62,7 +70,7 @@ export default function PublicBrandLandingPage() {
             supportEmail: landing.supportEmail,
             supportPhone: landing.supportPhone,
           }}
-          products={landing.products ?? []}
+          products={products}
           actions={landing.actions ?? []}
           news={landing.news ?? []}
           materials={landing.materials ?? []}
@@ -74,7 +82,7 @@ export default function PublicBrandLandingPage() {
                 html={landing.htmlDocument}
                 slots={landingModuleSlots({
                   name: landing.name,
-                  products: landing.products ?? [],
+                  products,
                   actions: landing.actions ?? [],
                   news: landing.news ?? [],
                   materials: landing.materials ?? [],

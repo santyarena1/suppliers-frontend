@@ -59,10 +59,10 @@ export class BrandLandingService {
     const brandId = landing.tenantId;
     const now = new Date();
     const [signals, actions, news, resources] = await Promise.all([
-      this.prisma.brandSkuSignal.findMany({
-        where: { tenantId: brandId },
+      this.prisma.brandItem.findMany({
+        where: { tenantId: brandId, active: true },
         select: { name: true, imageUrl: true },
-        orderBy: { name: "asc" },
+        orderBy: [{ position: "asc" }, { name: "asc" }],
         take: 24,
       }),
       this.prisma.brandAction.findMany({

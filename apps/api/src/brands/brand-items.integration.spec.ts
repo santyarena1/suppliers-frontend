@@ -8,7 +8,8 @@ const url = process.env.INTEGRATION_DB;
 const d = url ? describe : describe.skip;
 
 d("BrandItemsService contra Postgres", () => {
-  const prisma = new PrismaClient({ datasources: { db: { url } } });
+  // El cliente no conecta hasta la primera consulta: sin INTEGRATION_DB la suite se salta.
+  const prisma = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://skip@localhost/skip" } } });
   const visibility = { listFor: jest.fn(async () => [{ provider: "ELIT", linked: true }]) };
   const service = new BrandItemsService(prisma as never, visibility as never);
   const brand = {
@@ -17,6 +18,9 @@ d("BrandItemsService contra Postgres", () => {
   };
 
   beforeAll(async () => {
+    // Idempotente: arranca sin productos ni configuración de corridas anteriores.
+    await prisma.brandItem.deleteMany({ where: { tenantId: "brand-int" } });
+    await prisma.brandStockSettings.deleteMany({ where: { tenantId: "brand-int" } });
     await prisma.tenant.upsert({ where: { id: "brand-int" }, create: { id: "brand-int", name: "Logitech", type: "BRAND" }, update: {} });
     await prisma.tenant.upsert({ where: { id: "shop-int" }, create: { id: "shop-int", name: "Local", type: "RETAILER" }, update: {} });
     for (const [provider, externalId, ean, stock] of [["ELIT", "e1", "097855000001", 40], ["AIR", "a1", "97855000001", 3], ["INVID", "i1", null, 0]] as const) {

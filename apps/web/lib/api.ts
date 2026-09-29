@@ -3757,7 +3757,9 @@ export interface BrandHub {
   htmlSlots: string[];
   htmlParts: BrandHubHtmlPart[];
   actions: BrandAction[];
-  signals: BrandSkuSignal[];
+  /** Semáforo por distribuidor de los productos de la marca. */
+  availability: BrandAvailabilityItem[];
+  stockMode: "AUTO" | "MANUAL";
   materials: BrandResource[];
   trainings: BrandResource[];
   news: { id: string; publicKey: string; title: string; excerpt: string; kind: string; coverUrl: string | null; isPublic: boolean; publishedAt: string | null }[];
@@ -3800,6 +3802,84 @@ export interface OrgNotice {
   createdAt: string;
   fromTenant: { id: string; name: string; type: TenantType } | null;
 }
+
+// --- Marcas: productos y semáforo por distribuidor ---
+// Diseño: docs/superpowers/specs/2026-09-29-marcas-semaforo-design.md
+export type BrandStockLevel = "NONE" | "LOW" | "MEDIUM" | "HIGH";
+export type BrandItemState = "INCOMING" | "DISCONTINUED";
+export type BrandSemaphoreStatus = BrandStockLevel | BrandItemState | "UNKNOWN";
+
+export interface BrandStockSettings {
+  mode: "AUTO" | "MANUAL";
+  lowBelow: number;
+  highFrom: number;
+  brandSeesExact: boolean;
+  publicStock: boolean;
+}
+
+export interface BrandAvailabilityDistributor {
+  provider: string;
+  label: string;
+  status: BrandSemaphoreStatus;
+  /** Solo para la marca que eligió ver el stock exacto. */
+  stock?: number | null;
+  /** Para un comercio: es uno de sus distribuidores. */
+  yours?: boolean;
+  linkId?: string;
+  manualLevel?: BrandStockLevel | null;
+}
+
+export interface BrandAvailabilityItem {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  partNumber: string | null;
+  ean: string | null;
+  referencePrice: number | null;
+  currency: string;
+  state: BrandItemState | null;
+  incomingAt: string | null;
+  notes: string | null;
+  distributors: BrandAvailabilityDistributor[];
+}
+
+export interface BrandItemsView {
+  settings: BrandStockSettings;
+  canWrite: boolean;
+  items: BrandAvailabilityItem[];
+}
+
+export interface BrandSuggestedItem {
+  name: string;
+  ean: string | null;
+  partNumber: string | null;
+  imageUrl: string | null;
+  skus: { provider: string; externalId: string; name: string; label: string }[];
+}
+
+export const brandItemsApi = {
+  list: () => api.get<BrandItemsView>("/my/brand/items"),
+  suggestions: () => api.get<{ items: BrandSuggestedItem[] }>("/my/brand/items/suggestions"),
+  create: (items: { name: string; ean?: string | null; partNumber?: string | null; imageUrl?: string | null; skus: { provider: string; externalId: string }[] }[]) =>
+    api.post<BrandItemsView>("/my/brand/items", { items }),
+  update: (
+    id: string,
+    data: Partial<{ name: string; referencePrice: number | null; currency: string; state: BrandItemState | null; incomingAt: string | null; notes: string | null; active: boolean }>
+  ) => api.put<BrandItemsView>(`/my/brand/items/${id}`, data),
+  remove: (id: string) => api.delete<BrandItemsView>(`/my/brand/items/${id}`),
+  addLink: (id: string, sku: { provider: string; externalId: string }) =>
+    api.post<BrandItemsView>(`/my/brand/items/${id}/links`, sku),
+  setManualLevel: (linkId: string, manualLevel: BrandStockLevel | null) =>
+    api.put<BrandItemsView>(`/my/brand/item-links/${linkId}`, { manualLevel }),
+  removeLink: (linkId: string) => api.delete<BrandItemsView>(`/my/brand/item-links/${linkId}`),
+  saveSettings: (data: Partial<BrandStockSettings>) => api.put<BrandStockSettings>("/my/brand/stock-settings", data),
+  /** Comercio o distribuidor vinculado. */
+  forLink: (linkId: string) =>
+    api.get<{ mode: "AUTO" | "MANUAL"; items: BrandAvailabilityItem[] }>(`/my/brands/${linkId}/availability`),
+  /** Link público. */
+  forPublic: (publicKey: string) =>
+    api.get<{ mode: "AUTO" | "MANUAL"; items: BrandAvailabilityItem[]; hidden: boolean }>(`/public/brands/${publicKey}/availability`),
+};
 
 export const brandApi = {
   landing: () => api.get<BrandLanding>("/my/brand/landing"),
