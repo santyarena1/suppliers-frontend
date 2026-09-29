@@ -1,3 +1,4 @@
+import { incompleteSyncMessage, missingActionIsSafe, shouldUnhideOnConfigChange } from "./missing-guard";
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import {
   isListProviderKey,
@@ -192,6 +193,12 @@ export class ProvidersService implements OnModuleInit {
       create: { tenantId, provider, ...data },
       update: data,
     });
+    if (shouldUnhideOnConfigChange(current, saved)) {
+      await this.prisma.tenantProductOffer.updateMany({
+        where: { tenantId, provider, active: false },
+        data: { active: true },
+      });
+    }
     return serializeSyncConfig(saved);
   }
 
@@ -475,6 +482,10 @@ export class ProvidersService implements OnModuleInit {
     }
     await progress.touch();
 
+    const sourceFilter = offerSource === "SYNC" ? {} : { source: offerSource };
+    const offersBefore = await this.prisma.tenantProductOffer.count({
+      where: { tenantId, provider, active: true, ...sourceFilter },
+    });
     const syncStartedAt = new Date();
     const beat = setInterval(() => {
       void progress.touch().catch(() => undefined);
@@ -501,13 +512,18 @@ export class ProvidersService implements OnModuleInit {
       clearInterval(beat);
     }
 
-    const missingCount = await this.applyMissingProductAction(
-      tenantId,
-      provider,
-      syncStartedAt,
-      config.missingProductAction,
-      offerSource
-    );
+    // Freno: una sincronización que trajo mucho menos no da de baja faltantes.
+    const offersSeen = await this.prisma.tenantProductOffer.count({
+      where: { tenantId, provider, syncedAt: { gte: syncStartedAt }, ...sourceFilter },
+    });
+    const missingSafe = missingActionIsSafe(offersBefore, offersSeen);
+    // Queda como aviso en el panel (lastSyncError) en vez de limpiarse al terminar.
+    const syncWarning =
+      !missingSafe && config.missingProductAction !== "KEEP" ? incompleteSyncMessage(offersBefore, offersSeen) : null;
+    if (syncWarning) this.logger.warn(`${provider} (${tenantId}): ${syncWarning}`);
+    const missingCount = missingSafe
+      ? await this.applyMissingProductAction(tenantId, provider, syncStartedAt, config.missingProductAction, offerSource)
+      : 0;
     const zeroStockCount = await this.applyZeroStockAction(
       tenantId,
       provider,
@@ -527,8 +543,8 @@ export class ProvidersService implements OnModuleInit {
 
     await this.prisma.providerSyncConfig.upsert({
       where: { tenantId_provider: { tenantId, provider } },
-      create: { tenantId, provider, lastSyncedAt: new Date(), lastSyncError: null, lastSyncCreated: created, lastSyncUpdated: updated },
-      update: { lastSyncedAt: new Date(), lastSyncError: null, lastSyncCreated: created, lastSyncUpdated: updated },
+      create: { tenantId, provider, lastSyncedAt: new Date(), lastSyncError: syncWarning, lastSyncCreated: created, lastSyncUpdated: updated },
+      update: { lastSyncedAt: new Date(), lastSyncError: syncWarning, lastSyncCreated: created, lastSyncUpdated: updated },
     });
 
     this.logger.log(

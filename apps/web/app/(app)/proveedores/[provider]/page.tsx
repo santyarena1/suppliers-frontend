@@ -157,10 +157,15 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     setIsRetailer(isRetailerSession());
   }, []);
 
+  // Formas de pago que había al abrir el formulario: las que aparezcan después
+  // (aprendidas del carrito mientras tanto) no se pisan al guardar.
+  const loadedPaymentIds = useRef<Set<string>>(new Set());
+
   async function loadConfig() {
     setLoadingConfig(true);
     try {
       const res = await providersApi.getConfig(provider);
+      loadedPaymentIds.current = new Set((res.data.paymentOptions ?? []).map((o) => o.id));
       setConfig({
         ...res.data,
         acceptsOffline: Boolean(res.data.acceptsOffline),
@@ -184,6 +189,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     setConfigSaved(false);
     setConfigError(null);
     try {
+      const fresh = await providersApi.getConfig(provider).catch(() => null);
+      const learnedMeanwhile = (fresh?.data.paymentOptions ?? []).filter((o) => !loadedPaymentIds.current.has(o.id));
       const res = await providersApi.updateConfig(provider, {
         enabled: config.enabled,
         priceChannel: config.priceChannel,
@@ -191,7 +198,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         manualPerceptionsPercent: config.manualPerceptionsPercent == null ? null : Number(config.manualPerceptionsPercent),
         // Lista completa: lo que se borró en pantalla se borra de verdad. Una fila
         // sin nombre es una que se agregó y no se llenó, no se guarda.
-        paymentOptions: (config.paymentOptions ?? []).filter((o) => o.label.trim()),
+        paymentOptions: [...(config.paymentOptions ?? []).filter((o) => o.label.trim()), ...learnedMeanwhile],
         syncIntervalMinutes: config.syncIntervalMinutes,
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,
@@ -208,6 +215,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
             : Number(config.schemeDiscountPercent),
       });
       setConfig(res.data);
+      loadedPaymentIds.current = new Set((res.data.paymentOptions ?? []).map((o) => o.id));
       invalidateMyProviders();
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 3000);
@@ -666,6 +674,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                                 <option key={o.minutes} value={o.minutes}>{o.label}</option>
                               ))}
                             </select>
+                            <p className="text-[11px] text-surface-500 mt-1.5 leading-relaxed">
+                              La sincronización automática corre entre las 6:00 y las 23:00 (hora Argentina) y se revisa cada
+                              30 minutos. De noche no se sincroniza sola; si necesitás precios al momento, usá “Sincronizar ahora”.
+                            </p>
                           </div>
 
                           <div>

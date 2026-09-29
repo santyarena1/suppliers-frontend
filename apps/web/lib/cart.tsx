@@ -336,9 +336,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (idx >= 0) {
         const next = [...prev];
         const current = next[idx];
+        // Precio y datos del producto, los de ahora (pudo cambiar el precio o la
+        // configuración). Los impuestos ya cotizados se conservan si el producto
+        // nuevo no trae los suyos (una tarjeta de búsqueda puede no traerlos).
         result = {
           ...current,
-          ...(current.taxes?.length ? {} : compact),
+          ...compact,
+          taxes: compact.taxes?.length ? compact.taxes : current.taxes,
           qty: current.qty + qty,
           channel: ref.channel,
           schemeId: ref.schemeId,
