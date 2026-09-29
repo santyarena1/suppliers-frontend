@@ -11,7 +11,7 @@ function errMsg(err: unknown, fallback: string) {
 export function formatEventWhen(startsAt: string, endsAt: string | null) {
   const start = new Date(startsAt);
   const day = start.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
-  const time = (d: Date) => d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  const time = (d: Date) => d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false });
   if (!endsAt) return `${day}, ${time(start)} h`;
   const end = new Date(endsAt);
   const sameDay = end.toDateString() === start.toDateString();

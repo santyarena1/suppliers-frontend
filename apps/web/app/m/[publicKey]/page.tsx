@@ -57,15 +57,17 @@ export default function PublicBrandLandingPage() {
         </div>
       ) : (
         <>
-          {landing.allowLink !== false && (
-            <PublicLinkCta
-              publicKey={landing.publicKey}
-              brandName={landing.name}
-              accent={landing.primaryColor || "#22c55e"}
-            />
-          )}
           <BrandSpaceLanding
             variant="public"
+            heroCta={
+              landing.allowLink !== false ? (
+                <PublicLinkCta
+                  publicKey={landing.publicKey}
+                  brandName={landing.name}
+                  accent={landing.primaryColor || "#22c55e"}
+                />
+              ) : null
+            }
             name={landing.name}
             accent={landing.primaryColor || "#22c55e"}
             theme={{

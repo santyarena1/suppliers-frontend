@@ -81,7 +81,7 @@ export function PublicLinkCta({ publicKey, brandName, accent }: { publicKey: str
           <Link
             href={hasSession ? "/onboarding" : "/register"}
             onClick={remember}
-            className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-black"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white"
             style={{ backgroundColor: accent }}
           >
             {hasSession ? "Terminar mi alta y vincular" : "Crear cuenta y vincular"}
@@ -105,7 +105,7 @@ export function PublicLinkCta({ publicKey, brandName, accent }: { publicKey: str
         <Copy title={`Ya trabajás con ${brandName} en NODO`} text="Abrí su página para ver stock, promociones y material." />
         <Link
           href={`/marcas/${view.value.linkId}`}
-          className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-black"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white"
           style={{ backgroundColor: accent }}
         >
           Abrir en NODO
@@ -124,7 +124,7 @@ export function PublicLinkCta({ publicKey, brandName, accent }: { publicKey: str
           type="button"
           onClick={link}
           disabled={busy}
-          className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-black disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-60"
           style={{ backgroundColor: accent }}
         >
           {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
@@ -137,11 +137,11 @@ export function PublicLinkCta({ publicKey, brandName, accent }: { publicKey: str
   }
 
   return (
-    <aside className="max-w-6xl mx-auto w-full px-4 sm:px-6 mt-6">
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur px-4 py-4 sm:px-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <aside className="max-w-xl">
+      <div className="flex flex-col gap-3 rounded-xl bg-surface-950/60 px-4 py-4 ring-1 ring-white/10 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
         {body}
       </div>
-      {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
+      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
     </aside>
   );
 }

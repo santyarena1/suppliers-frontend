@@ -31,32 +31,40 @@ export default function NewsArticleView({
 
   return (
     <article>
-      <header className="relative">
-        <div className="relative h-[52vh] min-h-[340px] max-h-[640px] bg-black">
-          <NewsPhoto src={article.coverUrl} alt={article.title} className="absolute inset-0" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
-        </div>
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 -mt-28 relative z-10">
-          <NewsKindMark kind={article.kind} light />
-          <h1 className="news-serif text-4xl sm:text-5xl font-semibold text-white tracking-tight leading-[1.08] mt-2 text-balance">
+      <header>
+        {article.coverUrl && (
+          <div className="relative h-[42vh] min-h-[260px] max-h-[520px] overflow-hidden bg-surface-900">
+            {/* Fondo desenfocado de la misma foto + la foto entera: no se estira ni se pixela. */}
+            <NewsPhoto src={article.coverUrl} alt="" className="absolute inset-0 scale-110 blur-2xl opacity-50" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={assetUrl(article.coverUrl)}
+              alt={article.title}
+              className="relative mx-auto h-full w-auto max-w-full object-contain py-6"
+            />
+          </div>
+        )}
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-8">
+          <NewsKindMark kind={article.kind} light={!paper} />
+          <h1 className={`news-serif text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.08] mt-2 text-balance ${ink}`}>
             {article.title}
           </h1>
           {article.excerpt && (
-            <p className="mt-4 text-lg text-white/75 leading-relaxed">{article.excerpt}</p>
+            <p className={`mt-4 text-lg leading-relaxed ${paper ? "text-[#3d3d3d]" : "text-white/75"}`}>{article.excerpt}</p>
           )}
           <div className="flex items-center gap-3 mt-6 pb-8">
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-white/10 border border-white/15">
+            <div className={`w-10 h-10 rounded-full overflow-hidden ${paper ? "bg-black/5 border border-black/10" : "bg-white/10 border border-white/15"}`}>
               {logo ? (
                 <NewsPhoto src={logo} alt="" className="object-contain bg-white" />
               ) : (
-                <span className="w-full h-full flex items-center justify-center text-xs text-white/70">
+                <span className={`w-full h-full flex items-center justify-center text-xs ${mute}`}>
                   {article.author.name.slice(0, 1)}
                 </span>
               )}
             </div>
             <div>
-              <p className="text-sm text-white">{article.author.name}</p>
-              <p className="text-[12px] text-white/55">
+              <p className={`text-sm ${ink}`}>{article.author.name}</p>
+              <p className={`text-[12px] ${mute}`}>
                 {authorTypeLabel(article.author.type)}
                 {article.publishedAt ? ` · ${formatNewsDate(article.publishedAt)}` : ""}
                 {article.author.advertised ? " · Publicidad" : ""}

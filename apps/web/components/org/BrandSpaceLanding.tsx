@@ -7,7 +7,6 @@ import { formatUSD } from "@/lib/format";
 import type {
   BrandAction,
   BrandHub,
-  BrandModuleId,
   BrandPresence,
   BrandResource,
   BrandAvailabilityItem,
@@ -15,39 +14,16 @@ import type {
   BrandUpcomingEvent,
   BrandSkuSignal,
 } from "@/lib/api";
-import { BrandAvailabilityGrid, StockLegend } from "@/components/brands/BrandAvailability";
 import { BrandUpcoming } from "@/components/brands/BrandUpcoming";
-import { isAvailabilityList } from "@/lib/brand-stock";
-import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
-import { BRAND_MODULE_HINT } from "@/lib/brand-presence";
-import { collectBrandVisuals, isVisualAsset } from "@/lib/brand-visuals";
+import { BrandHero, type HeroStat } from "@/components/brands/landing/BrandHero";
+import { BrandSection, CountTag, SectionEmpty, SURFACE } from "@/components/brands/landing/Section";
+import { StockMatrix } from "@/components/brands/landing/StockMatrix";
+import { bestStatus, isAvailabilityList } from "@/lib/brand-stock";
+import { SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
+import { NEWS_KIND_LABELS, formatNewsDate } from "@/lib/news";
+import { isVisualAsset } from "@/lib/brand-visuals";
 import { scrollToBrandSection } from "@/lib/brand-html-nav";
-import {
-  Bell,
-  Building2,
-  Check,
-  Clock,
-  Download,
-  ExternalLink,
-  Globe,
-  GraduationCap,
-  Mail,
-  MessageSquare,
-  Newspaper,
-  Package,
-  Phone,
-  Search,
-  Target,
-} from "lucide-react";
-
-const SECTIONS: { href: string; icon: typeof Package; label: string; module?: BrandModuleId }[] = [
-  { href: "#productos", icon: Package, label: "Productos", module: "products" },
-  { href: "#acciones", icon: Target, label: "Promociones", module: "actions" },
-  { href: "#novedades", icon: Newspaper, label: "Novedades" },
-  { href: "#materiales", icon: Download, label: "Materiales", module: "materials" },
-  { href: "#capacitaciones", icon: GraduationCap, label: "Capacitaciones", module: "trainings" },
-  { href: "#contacto", icon: Mail, label: "Contacto", module: "contact" },
-];
+import { ArrowUpRight, Check, Clock, FileText, Globe, GraduationCap, Mail, MessageSquare, Package, Phone } from "lucide-react";
 
 function img(ref?: string | null) {
   return assetUrl(ref);
@@ -65,10 +41,28 @@ type PublicNews = {
   publicKey?: string;
   title: string;
   excerpt?: string;
+  kind?: string;
   coverUrl: string | null;
   publishedAt?: string | null;
 };
 type PublicFile = { title: string; description: string | null };
+type Contact = { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
+
+type SectionKey = "productos" | "lanzamientos" | "acciones" | "novedades" | "materiales" | "capacitaciones" | "contacto";
+
+const SECTION_LABEL: Record<SectionKey, string> = {
+  productos: "Semáforo de stock",
+  lanzamientos: "Lanzamientos y eventos",
+  acciones: "Promociones",
+  novedades: "Novedades",
+  materiales: "Materiales",
+  capacitaciones: "Capacitaciones",
+  contacto: "Contacto",
+};
+
+function hasContact(c: Contact) {
+  return Boolean(c.supportEmail || c.supportPhone || c.websiteUrl);
+}
 
 export function BrandSpaceLanding({
   name,
@@ -83,7 +77,6 @@ export function BrandSpaceLanding({
   materials = [],
   trainings = [],
   html,
-  htmlSlots: _htmlSlots,
   presence,
   connectedAt,
   status,
@@ -94,6 +87,7 @@ export function BrandSpaceLanding({
   variant,
   extraBlocks = [],
   insights,
+  heroCta,
 }: {
   name: string;
   accent?: string;
@@ -103,11 +97,7 @@ export function BrandSpaceLanding({
     headline: string | null;
     about: string | null;
   };
-  contact: {
-    websiteUrl: string | null;
-    supportEmail: string | null;
-    supportPhone: string | null;
-  };
+  contact: Contact;
   products?: LandingProducts;
   launches?: BrandLaunch[];
   events?: BrandUpcomingEvent[];
@@ -128,14 +118,27 @@ export function BrandSpaceLanding({
   extraBlocks?: ExtraBlock[];
   /** Bloque propio de quien mira (p. ej. sus compras de la marca), antes de los módulos. */
   insights?: ReactNode;
+  /** Llamado dentro de la portada (p. ej. "Vincular con la marca" en el link público). */
+  heroCta?: ReactNode;
 }) {
   const hub = variant === "hub";
-  const visuals = collectBrandVisuals({
-    heroUrl: theme.heroUrl,
-    products: products.map((p) => ({ imageUrl: p.imageUrl })),
-    news: news.map((n) => ({ coverUrl: n.coverUrl })),
-    materials: materials as Array<{ type?: string; fileUrl?: string | null; contentUrl?: string | null }>,
-  }).map(img).filter(Boolean);
+  const filled: Record<SectionKey, boolean> = {
+    productos: products.length > 0,
+    lanzamientos: launches.length > 0 || events.length > 0,
+    acciones: actions.length > 0,
+    novedades: news.length > 0,
+    materiales: materials.length > 0,
+    capacitaciones: trainings.length > 0,
+    contacto: hasContact(contact),
+  };
+  // En el espacio vinculado se ven todos los módulos (los vacíos, como pendientes);
+  // en el link público, solo los que tienen contenido.
+  const visible = (Object.keys(SECTION_LABEL) as SectionKey[]).filter(
+    (k) => filled[k] || (hub && k !== "lanzamientos")
+  );
+  const indexOf = (k: SectionKey) => visible.indexOf(k) + 1;
+
+  const stats = heroStats(products, launches, events, actions);
 
   function onLandingClick(e: React.MouseEvent) {
     const a = (e.target as HTMLElement).closest("a");
@@ -148,334 +151,147 @@ export function BrandSpaceLanding({
 
   return (
     <div className="bg-surface-950 text-white" onClick={onLandingClick}>
-      <Hero
+      <BrandHero
         name={name}
         accent={accent}
-        theme={theme}
-        visuals={visuals}
-        presence={presence}
+        logoUrl={theme.logoUrl}
+        heroUrl={theme.heroUrl}
+        headline={theme.headline}
+        about={theme.about}
         connectedAt={connectedAt}
-        retailer={retailer}
-        searchHref={searchHref}
+        badge={hub && presence ? <PresenceBadge presence={presence} /> : null}
+        stats={stats}
+        searchHref={retailer ? searchHref : undefined}
         chatHref={chatHref}
         noticesHref={noticesHref}
-        hub={hub}
+        cta={heroCta}
       />
 
       {status === "SUSPENDED" && (
-        <p className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 text-xs rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/30 text-amber-200">
-          El vínculo está en pausa. Podés mirar el espacio, pero las operaciones pueden estar limitadas.
-        </p>
-      )}
-      {hub && presence?.pending && (
-        <p className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 text-sm rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-100">
-          <span className="font-semibold">Pendiente de contenido.</span> Ya estás conectado con {name}. Todavía no
-          publicó productos, promociones ni materiales: cada bloque aparece abajo para que sepas qué va a haber.
+        <p className="mx-auto mt-6 max-w-6xl px-4 sm:px-6">
+          <span className="block rounded-lg bg-amber-500/10 px-4 py-3 text-sm text-amber-200 ring-1 ring-amber-500/30">
+            El vínculo está en pausa. Podés mirar la página, pero algunas operaciones pueden estar limitadas.
+          </span>
         </p>
       )}
 
-      <nav className="sticky top-0 z-20 border-b border-surface-800 bg-surface-950/90 backdrop-blur">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex gap-1 overflow-x-auto">
-          {SECTIONS.map((s) => {
-            const ready = s.module
-              ? presence
-                ? presence.modules[s.module].ready
-                : sectionHasContent(s.module, products, actions, materials, trainings, contact)
-              : news.length > 0;
-            const Icon = s.icon;
-            return (
+      {visible.length > 1 && (
+        <nav aria-label="Secciones" className="sticky top-0 z-20 border-b border-white/[0.06] bg-surface-950/85 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2 sm:px-6">
+            {visible.map((k) => (
               <a
-                key={s.href}
-                href={s.href}
+                key={k}
+                href={`#${k}`}
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  scrollToBrandSection(s.href);
+                  scrollToBrandSection(`#${k}`);
                 }}
-                className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap border ${
-                  ready
-                    ? "border-surface-700 text-surface-200 hover:border-surface-500"
-                    : "border-dashed border-amber-500/30 text-amber-300/80"
-                }`}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-surface-300 transition-colors hover:bg-white/[0.05] hover:text-white"
               >
-                <Icon className="w-3 h-3" />
-                {s.label}
-                {!ready && hub && <Clock className="w-3 h-3" />}
+                {SECTION_LABEL[k]}
+                {!filled[k] && hub && <Clock className="h-3.5 w-3.5 text-amber-300/80" aria-label="Pendiente" />}
               </a>
-            );
-          })}
-        </div>
-      </nav>
+            ))}
+          </div>
+        </nav>
+      )}
 
       {insights}
 
       {html ? (
         html
       ) : (
-        <LandingModules
-          name={name}
-          products={products}
-          launches={launches}
-          events={events}
-          actions={actions}
-          news={news}
-          materials={materials}
-          trainings={trainings}
-          extraBlocks={extraBlocks}
-          contact={contact}
-          chatHref={chatHref}
-          searchHref={searchHref}
-          retailer={retailer}
-          hub={hub}
-          presence={presence}
-        />
-      )}
-    </div>
-  );
-}
-
-function LandingModules({
-  name,
-  products,
-  launches,
-  events,
-  actions,
-  news,
-  materials,
-  trainings,
-  extraBlocks,
-  contact,
-  chatHref,
-  searchHref,
-  retailer,
-  hub,
-  presence,
-}: {
-  name: string;
-  products: LandingProducts;
-  launches: BrandLaunch[];
-  events: BrandUpcomingEvent[];
-  actions: BrandAction[] | PublicAction[];
-  news: BrandHub["news"] | PublicNews[];
-  materials: BrandResource[] | PublicFile[];
-  trainings: BrandResource[] | PublicFile[];
-  extraBlocks: ExtraBlock[];
-  contact: { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
-  chatHref?: string;
-  searchHref?: string;
-  retailer: boolean;
-  hub: boolean;
-  presence?: BrandPresence;
-}) {
-  return (
-    <div className="py-8 flex flex-col gap-14">
-      <ProductsSection
-        name={name}
-        products={products}
-        retailer={retailer}
-        searchHref={searchHref}
-        hub={hub}
-        ready={presence?.modules.products.ready ?? products.length > 0}
-      />
-      <BrandUpcoming name={name} launches={launches} events={events} />
-      <ActionsSection
-        name={name}
-        actions={actions}
-        hub={hub}
-        ready={presence?.modules.actions.ready ?? actions.length > 0}
-      />
-      <NewsSection name={name} items={news} hub={hub} />
-      <FilesSection
-        id="materiales"
-        title="Materiales"
-        module="materials"
-        items={materials}
-        pendingText={`${name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
-        hub={hub}
-      />
-      <FilesSection
-        id="capacitaciones"
-        title="Capacitaciones"
-        module="trainings"
-        items={trainings}
-        pendingText={`${name} todavía no cargó cursos ni argumentarios. El bloque queda visible para cuando publique.`}
-        hub={hub}
-      />
-      {extraBlocks.length > 0 && (
-        <section className="grid gap-4 sm:grid-cols-2 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-          {extraBlocks.map((block, i) => (
-            <article key={i} className="rounded-2xl border border-surface-800 bg-surface-900 p-5">
-              {block.title && <h2 className="text-sm font-semibold text-white mb-2">{block.title}</h2>}
-              {block.body && <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">{block.body}</p>}
-              {block.url && (
-                <a href={block.url} className="inline-flex items-center gap-1 text-xs text-brand-400 mt-3" target="_blank" rel="noreferrer">
-                  <Globe className="w-3 h-3" /> Más info
-                </a>
-              )}
-            </article>
-          ))}
-        </section>
-      )}
-      <ContactSection
-        name={name}
-        contact={contact}
-        chatHref={chatHref}
-        hub={hub}
-        ready={presence?.modules.contact.ready ?? Boolean(contact.supportEmail || contact.supportPhone || contact.websiteUrl)}
-      />
-    </div>
-  );
-}
-
-function sectionHasContent(
-  module: BrandModuleId,
-  products: unknown[],
-  actions: unknown[],
-  materials: unknown[],
-  trainings: unknown[],
-  contact: { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null }
-) {
-  if (module === "products") return products.length > 0;
-  if (module === "actions") return actions.length > 0;
-  if (module === "materials") return materials.length > 0;
-  if (module === "trainings") return trainings.length > 0;
-  if (module === "contact") return Boolean(contact.supportEmail || contact.supportPhone || contact.websiteUrl);
-  return true;
-}
-
-function Hero({
-  name,
-  accent,
-  theme,
-  visuals,
-  presence,
-  connectedAt,
-  retailer,
-  searchHref,
-  chatHref,
-  noticesHref,
-  hub,
-}: {
-  name: string;
-  accent: string;
-  theme: { logoUrl: string | null; heroUrl: string | null; headline: string | null; about: string | null };
-  visuals: string[];
-  presence?: BrandPresence;
-  connectedAt?: string;
-  retailer: boolean;
-  searchHref?: string;
-  chatHref?: string;
-  noticesHref?: string;
-  hub: boolean;
-}) {
-  const connected = connectedAt
-    ? new Date(connectedAt).toLocaleDateString("es-AR", { day: "numeric", month: "long", year: "numeric" })
-    : null;
-  return (
-    <section className="relative overflow-hidden min-h-[22rem] sm:min-h-[28rem] border-b border-surface-800">
-      <HeroVisuals urls={visuals} accent={accent} />
-      <div className="absolute inset-0 bg-gradient-to-t from-surface-950 via-surface-950/75 to-black/35" />
-      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 flex flex-col gap-8">
-        <div className="flex flex-col sm:flex-row sm:items-end gap-5">
-          {theme.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={img(theme.logoUrl)}
-              alt=""
-              className="w-24 h-24 rounded-3xl object-contain bg-white/10 border border-white/15 shadow-2xl backdrop-blur"
+        <div className="pb-10">
+          {visible.includes("productos") && (
+            <ProductsSection
+              name={name}
+              products={products}
+              retailer={retailer}
+              searchHref={searchHref}
+              hub={hub}
+              ready={filled.productos}
+              index={indexOf("productos")}
             />
-          ) : (
-            <div className="w-24 h-24 rounded-3xl bg-surface-800/80 border border-white/10 flex items-center justify-center">
-              <Building2 className="w-10 h-10 text-white/70" />
-            </div>
           )}
-          <div className="min-w-0 flex-1">
-            {hub && presence && (
-              <div className="flex items-center gap-2 flex-wrap mb-2">
-                {presence.pending ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 border border-amber-500/30 bg-amber-500/15 text-amber-300">
-                    <Clock className="w-3 h-3" /> Pendiente de contenido
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 border border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
-                    <Check className="w-3 h-3" /> Conectada
-                  </span>
-                )}
-                <span className="text-[11px] text-white/60">
-                  {presence.readyCount}/{presence.total} módulos publicados
-                </span>
-              </div>
-            )}
-            <p className="text-[11px] uppercase tracking-[0.2em] text-white/70 mb-1">{name}</p>
-            <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-balance">{theme.headline || name}</h1>
-            {theme.about && <p className="mt-3 text-sm sm:text-base text-white/80 max-w-2xl leading-relaxed">{theme.about}</p>}
-            {connected && <p className="text-[11px] text-white/50 mt-3">Vinculada desde {connected}</p>}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {retailer && searchHref && (
-            <Link
-              href={searchHref}
-              className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 text-black"
-              style={{ background: accent }}
-            >
-              <Search className="w-4 h-4" /> Comprar en mis distros
-            </Link>
+          <BrandUpcoming name={name} launches={launches} events={events} index={indexOf("lanzamientos") || undefined} />
+          {visible.includes("acciones") && (
+            <ActionsSection name={name} actions={actions} hub={hub} ready={filled.acciones} index={indexOf("acciones")} />
           )}
-          {chatHref && (
-            <Link
-              href={chatHref}
-              className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 border border-white/20 bg-white/5 text-white hover:bg-white/10"
-            >
-              <MessageSquare className="w-4 h-4" /> Hablar con {name}
-            </Link>
+          {visible.includes("novedades") && <NewsSection name={name} items={news} hub={hub} index={indexOf("novedades")} />}
+          {visible.includes("materiales") && (
+            <FilesSection
+              id="materiales"
+              title="Materiales"
+              module="materials"
+              items={materials}
+              pendingText={`${name} todavía no subió fichas ni catálogos. Cuando lo haga, aparecen acá para bajarlos.`}
+              hub={hub}
+              index={indexOf("materiales")}
+            />
           )}
-          {noticesHref && (
-            <Link
-              href={noticesHref}
-              className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl px-4 py-2.5 border border-white/20 bg-white/5 text-white hover:bg-white/10"
-            >
-              <Bell className="w-4 h-4" /> Notificaciones
-            </Link>
+          {visible.includes("capacitaciones") && (
+            <FilesSection
+              id="capacitaciones"
+              title="Capacitaciones"
+              module="trainings"
+              items={trainings}
+              pendingText={`${name} todavía no cargó cursos ni argumentarios.`}
+              hub={hub}
+              index={indexOf("capacitaciones")}
+            />
+          )}
+          {extraBlocks.length > 0 && <ExtraBlocks blocks={extraBlocks} />}
+          {visible.includes("contacto") && (
+            <ContactSection
+              name={name}
+              contact={contact}
+              chatHref={chatHref}
+              hub={hub}
+              ready={filled.contacto}
+              index={indexOf("contacto")}
+            />
           )}
         </div>
-      </div>
-    </section>
-  );
-}
-
-function HeroVisuals({ urls, accent }: { urls: string[]; accent: string }) {
-  if (urls.length === 0) {
-    return (
-      <div
-        className="absolute inset-0"
-        style={{ background: `radial-gradient(ellipse at top left, ${accent}88, transparent 55%), #0b1220` }}
-      />
-    );
-  }
-  if (urls.length === 1) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={urls[0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
-    );
-  }
-  const lead = urls[0];
-  const rest = urls.slice(1, 5);
-  return (
-    <div className="absolute inset-0 grid grid-cols-2 sm:grid-cols-4 grid-rows-2 gap-0.5 bg-black">
-      <div className="col-span-2 row-span-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={lead} alt="" className="w-full h-full object-cover" />
-      </div>
-      {rest.map((src) => (
-        <div key={src} className="hidden sm:block">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={src} alt="" className="w-full h-full object-cover" />
-        </div>
-      ))}
+      )}
     </div>
   );
 }
+
+function heroStats(
+  products: LandingProducts,
+  launches: BrandLaunch[],
+  events: BrandUpcomingEvent[],
+  actions: unknown[]
+): HeroStat[] {
+  if (!isAvailabilityList(products)) return [];
+  const inStock = products.filter((p) => ["LOW", "MEDIUM", "HIGH"].includes(bestStatus(p))).length;
+  const third =
+    launches.length > 0
+      ? { value: launches.length, label: "Por llegar" }
+      : events.length > 0
+        ? { value: events.length, label: "Eventos" }
+        : { value: actions.length, label: "Promociones" };
+  return [
+    { value: products.length, label: "Productos" },
+    { value: inStock, label: "Con stock hoy" },
+    third,
+  ];
+}
+
+function PresenceBadge({ presence }: { presence: BrandPresence }) {
+  return presence.pending ? (
+    <span className="inline-flex items-center gap-1 text-amber-300">
+      <Clock className="h-3.5 w-3.5" /> Pendiente de contenido
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-emerald-300">
+      <Check className="h-3.5 w-3.5" /> Conectada
+    </span>
+  );
+}
+
+// ---------- Semáforo de stock ----------
 
 export function ProductsSection({
   name,
@@ -484,6 +300,7 @@ export function ProductsSection({
   searchHref,
   hub,
   ready,
+  index,
 }: {
   name: string;
   products: LandingProducts;
@@ -491,263 +308,192 @@ export function ProductsSection({
   searchHref?: string;
   hub: boolean;
   ready: boolean;
+  index?: number;
 }) {
+  const availability = isAvailabilityList(products);
+  return (
+    <BrandSection
+      id="productos"
+      index={index}
+      title={availability ? "Semáforo de stock" : "Productos"}
+      description={
+        availability
+          ? `Cuánto stock hay de cada producto de ${name} en cada distribuidor, y su precio de referencia.`
+          : `Productos de ${name}.`
+      }
+      aside={ready ? <CountTag n={products.length} label="productos" /> : null}
+    >
+      {!ready ? (
+        <SectionEmpty>
+          {name} todavía no cargó su semáforo de stock.{" "}
+          {retailer && searchHref && (
+            <Link href={searchHref} className="font-medium text-brand-400 hover:text-brand-300">
+              Buscar sus productos en tus distribuidores →
+            </Link>
+          )}
+        </SectionEmpty>
+      ) : availability ? (
+        <StockMatrix items={products} audience={hub ? "client" : "public"} />
+      ) : (
+        <LegacyProducts products={products as Array<BrandSkuSignal | PublicProduct>} />
+      )}
+    </BrandSection>
+  );
+}
+
+/** Señales viejas o recorte público sin semáforo: grilla simple de nombre e imagen. */
+function LegacyProducts({ products }: { products: Array<BrandSkuSignal | PublicProduct> }) {
   const [showAll, setShowAll] = useState(false);
   const list = showAll ? products : products.slice(0, 12);
   return (
-    <section id="productos" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead
-        title={hub ? "Semáforo de stock" : "Productos"}
-        hint={hub ? BRAND_MODULE_HINT.products : "Nombre e imagen. El precio y el semáforo quedan para el espacio vinculado."}
-        ready={ready}
-        count={products.length}
-      />
-      {!ready ? (
-        <Pending
-          text={
-            hub
-              ? `${name} todavía no armó el mapa de SKUs. ${
-                  retailer
-                    ? "Igual podés buscarla en el catálogo de tus distribuidores: el vínculo ya está."
-                    : "Cuando publique semáforos, se ven acá."
-                }`
-              : `${name} todavía no mostró productos en esta página.`
-          }
-        >
-          {retailer && searchHref && (
-            <Link href={searchHref} className="text-xs font-semibold text-brand-400">
-              Abrir búsqueda filtrada →
-            </Link>
-          )}
-        </Pending>
-      ) : (
-        <>
-          {isAvailabilityList(products) ? (
-            <>
-              <div className="mb-4">
-                <StockLegend />
-              </div>
-              <BrandAvailabilityGrid
-                items={products}
-                audience={hub ? "client" : "public"}
-                limit={showAll ? undefined : 12}
-              />
-            </>
-          ) : (
-            <>
-              {hub && isSignalList(products) && <LightLegend />}
-              <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-                {(list as Array<BrandSkuSignal | PublicProduct>).map((row, i) =>
-                  isSignal(row) ? (
-                    <SignalCard key={row.id} row={row} retailer={retailer} />
-                  ) : (
-                    <PublicProductCard key={`${row.name}-${i}`} row={row} />
-                  )
+    <>
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {list.map((row, i) => {
+          const signal = "light" in row ? row : null;
+          return (
+            <li key={signal?.id ?? `${row.name}-${i}`} className={`${SURFACE} overflow-hidden`}>
+              <div className="aspect-square bg-white">
+                {row.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={img(row.imageUrl)} alt={row.name} className="h-full w-full object-contain p-3" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-surface-800">
+                    <Package className="h-6 w-6 text-surface-500" />
+                  </div>
                 )}
               </div>
-            </>
-          )}
-          {products.length > 12 && (
-            <button
-              type="button"
-              onClick={() => setShowAll((v) => !v)}
-              className="mt-4 text-xs font-semibold text-brand-400"
-            >
-              {showAll ? "Ver menos" : `Ver los ${products.length} productos`}
-            </button>
-          )}
-        </>
+              <div className="p-3">
+                <p className="line-clamp-2 text-sm text-white">{row.name}</p>
+                {signal && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-xs text-surface-400">
+                    <span className={`h-2 w-2 rounded-full ${SIGNAL_LIGHT_DOT[signal.light]}`} />
+                    {SIGNAL_LIGHT_LABELS[signal.light]}
+                    {signal.suggestedPrice != null ? ` · ${formatUSD(signal.suggestedPrice)}` : ""}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {products.length > 12 && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-4 text-sm font-medium text-brand-400 hover:text-brand-300"
+        >
+          {showAll ? "Ver menos" : `Ver los ${products.length} productos`}
+        </button>
       )}
-    </section>
-  );
-}
-
-function isSignal(row: BrandAvailabilityItem | BrandSkuSignal | PublicProduct): row is BrandSkuSignal {
-  return "light" in row && "id" in row;
-}
-
-function isSignalList(rows: LandingProducts): rows is BrandSkuSignal[] {
-  return rows.length > 0 && isSignal(rows[0]);
-}
-
-function SignalCard({ row, retailer }: { row: BrandSkuSignal; retailer: boolean }) {
-  const inner = (
-    <>
-      <div className="relative aspect-square bg-black/40 overflow-hidden">
-        {row.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={img(row.imageUrl)} alt="" className="w-full h-full object-contain p-3" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Package className="w-8 h-8 text-white/25" />
-          </div>
-        )}
-        <span className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-black/40 ${SIGNAL_LIGHT_DOT[row.light]}`} />
-      </div>
-      <div className="p-3">
-        <p className="text-sm font-medium text-white line-clamp-2 min-h-[2.5rem]">{row.name}</p>
-        <p className="text-[11px] text-surface-400 mt-1">{SIGNAL_LIGHT_LABELS[row.light]}</p>
-        <p className="text-[11px] text-surface-300 mt-0.5">
-          {row.suggestedPrice != null ? `Sugerido ${formatUSD(row.suggestedPrice)}` : "Sin precio sugerido"}
-        </p>
-      </div>
     </>
   );
-  const cls = `block rounded-2xl overflow-hidden border ${SIGNAL_LIGHT_CARD[row.light]} hover:brightness-110`;
-  if (retailer) {
-    return (
-      <Link href={`/product/${row.provider}/${encodeURIComponent(row.externalId)}`} className={cls}>
-        {inner}
-      </Link>
-    );
-  }
-  return <div className={cls}>{inner}</div>;
 }
 
-function PublicProductCard({ row }: { row: PublicProduct }) {
-  return (
-    <article className="rounded-2xl overflow-hidden border border-surface-800 bg-surface-900">
-      <div className="aspect-square bg-black/40">
-        {row.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={img(row.imageUrl)} alt="" className="w-full h-full object-contain p-3" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Package className="w-8 h-8 text-white/25" />
-          </div>
-        )}
-      </div>
-      <p className="p-3 text-sm font-medium text-white line-clamp-2">{row.name}</p>
-    </article>
-  );
-}
-
-function LightLegend() {
-  return (
-    <div className="flex flex-wrap gap-3 mb-4 text-[11px] text-surface-400">
-      {(Object.keys(SIGNAL_LIGHT_LABELS) as Array<keyof typeof SIGNAL_LIGHT_LABELS>).map((k) => (
-        <span key={k} className="inline-flex items-center gap-1.5">
-          <span className={`w-2 h-2 rounded-full ${SIGNAL_LIGHT_DOT[k]}`} />
-          {SIGNAL_LIGHT_LABELS[k]}
-        </span>
-      ))}
-    </div>
-  );
-}
+// ---------- Promociones ----------
 
 export function ActionsSection({
   name,
   actions,
   hub,
   ready,
+  index,
 }: {
   name: string;
   actions: BrandAction[] | PublicAction[];
   hub: boolean;
   ready: boolean;
+  index?: number;
 }) {
   return (
-    <section id="acciones" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead
-        title="Promociones vigentes"
-        hint={hub ? BRAND_MODULE_HINT.actions : "Título y vigencia. El progreso se ve en el espacio vinculado."}
-        ready={ready}
-        count={actions.length}
-      />
+    <BrandSection
+      id="acciones"
+      index={index}
+      title="Promociones"
+      description={
+        hub
+          ? `Objetivos de compra y rebates de ${name}. Tu avance se mide con tus pedidos por NODO.`
+          : `Promociones vigentes de ${name}.`
+      }
+      aside={ready ? <CountTag n={actions.length} label="vigentes" /> : null}
+    >
       {!ready ? (
-        <Pending
-          text={
-            hub
-              ? `${name} no tiene promociones vigentes. Cuando lance una (objetivo de compra o rebate), tu avance se mide acá con tus pedidos.`
-              : `${name} no tiene promociones publicadas en esta página.`
-          }
-        />
+        <SectionEmpty>{name} no tiene promociones vigentes. Cuando lance una, tu avance se mide acá.</SectionEmpty>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {actions.map((action, i) =>
-            isHubAction(action) ? (
-              <ActionRow key={action.id} action={action} />
-            ) : (
-              <li key={`${action.title}-${i}`} className="rounded-2xl border border-surface-800 bg-surface-900 px-4 py-4">
-                <p className="text-sm font-medium text-white">{action.title}</p>
-                {action.description && <p className="text-xs text-surface-400 mt-1">{action.description}</p>}
-                <p className="text-[11px] text-surface-500 mt-2">Hasta {new Date(action.endsAt).toLocaleDateString("es-AR")}</p>
-              </li>
-            )
-          )}
+        <ul className={`${SURFACE} divide-y divide-white/[0.06]`}>
+          {actions.map((action, i) => (
+            <ActionRow key={"id" in action ? action.id : `${action.title}-${i}`} action={action} />
+          ))}
         </ul>
       )}
-    </section>
+    </BrandSection>
   );
 }
 
-function isHubAction(action: BrandAction | PublicAction): action is BrandAction {
-  return "progress" in action && "id" in action;
-}
-
-function ActionRow({ action }: { action: BrandAction }) {
-  const unit = action.kind === "PURCHASE_AMOUNT" ? "USD" : "u.";
-  const current =
-    action.kind === "PURCHASE_AMOUNT" ? formatUSD(action.progress.current) : String(action.progress.current);
-  const target =
-    action.progress.target == null
-      ? "—"
-      : action.kind === "PURCHASE_AMOUNT"
-        ? formatUSD(action.progress.target)
-        : String(action.progress.target);
-  const ends = new Date(action.endsAt).toLocaleDateString("es-AR");
+function ActionRow({ action }: { action: BrandAction | PublicAction }) {
+  const ends = new Date(action.endsAt).toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+  const progress = "progress" in action ? action : null;
+  const amount = progress?.kind === "PURCHASE_AMOUNT";
+  const fmt = (n: number) => (amount ? formatUSD(n) : `${n} u.`);
   return (
-    <li className="rounded-2xl border border-surface-800 bg-surface-900 px-4 py-4">
-      <div className="flex items-start justify-between gap-3">
+    <li className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_16rem] sm:items-center sm:gap-6">
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-white">{action.title}</p>
+        {action.description && <p className="mt-1 max-w-2xl text-sm text-surface-400">{action.description}</p>}
+        <p className="mt-1.5 text-xs text-surface-500">Vigente hasta el {ends}</p>
+      </div>
+      {progress && (
         <div>
-          <p className="text-sm font-medium text-white">{action.title}</p>
-          {action.description && <p className="text-xs text-surface-400 mt-0.5">{action.description}</p>}
-          <p className="text-[11px] text-surface-500 mt-1">Hasta {ends}</p>
+          <div className="flex items-baseline justify-between text-xs">
+            <span className="text-surface-400">Tu avance</span>
+            <span className="tabular-nums text-white">
+              {fmt(progress.progress.current)}
+              {progress.progress.target != null ? ` / ${fmt(progress.progress.target)}` : ""}
+            </span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+            <div
+              className={`h-full rounded-full ${progress.progress.met ? "bg-emerald-400" : "bg-brand-500"}`}
+              style={{ width: `${Math.round(Math.min(1, progress.progress.ratio) * 100)}%` }}
+            />
+          </div>
         </div>
-        <span className="text-[11px] tabular-nums text-surface-300">
-          {current} / {target} {action.kind === "PURCHASE_AMOUNT" ? "" : unit}
-        </span>
-      </div>
-      <div className="h-1.5 rounded-full bg-surface-800 overflow-hidden mt-2">
-        <div
-          className={`h-full ${action.progress.met ? "bg-emerald-500" : "bg-brand-500"}`}
-          style={{ width: `${Math.round(Math.min(1, action.progress.ratio) * 100)}%` }}
-        />
-      </div>
+      )}
     </li>
   );
 }
+
+// ---------- Novedades ----------
 
 export function NewsSection({
   name,
   items,
   hub,
+  index,
 }: {
   name: string;
   items: BrandHub["news"] | PublicNews[];
   hub: boolean;
+  index?: number;
 }) {
   const ready = items.length > 0;
-  const featured = items[0];
-  const rest = items.slice(1);
   return (
-    <section id="novedades" className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead title="Novedades" hint="Lo que publica la marca: lanzamientos, eventos y avisos" ready={ready} count={items.length} />
+    <BrandSection
+      id="novedades"
+      index={index}
+      title="Novedades"
+      description={`Lo que publica ${name}: lanzamientos, eventos y avisos.`}
+      aside={ready ? <CountTag n={items.length} label={items.length === 1 ? "nota" : "notas"} /> : null}
+    >
       {!ready ? (
-        <Pending text={`${name} todavía no publicó notas. Cuando salga un lanzamiento o una promo, aparece acá.`} />
+        <SectionEmpty>{name} todavía no publicó novedades.</SectionEmpty>
       ) : (
-        <div className="flex flex-col gap-4">
-          {featured && <NewsFeatured item={featured} hub={hub} />}
-          {rest.length > 0 && (
-            <div className="grid sm:grid-cols-3 gap-4">
-              {rest.map((item) => (
-                <NewsCard key={item.id} item={item} hub={hub} />
-              ))}
-            </div>
-          )}
-        </div>
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => (
+            <NewsCard key={item.id} item={item} hub={hub} />
+          ))}
+        </ul>
       )}
-    </section>
+    </BrandSection>
   );
 }
 
@@ -757,51 +503,46 @@ function newsHref(item: PublicNews, hub: boolean) {
   return null;
 }
 
-function NewsFeatured({ item, hub }: { item: PublicNews; hub: boolean }) {
-  const href = newsHref(item, hub);
-  const body = (
-    <article className="grid sm:grid-cols-2 gap-0 rounded-2xl overflow-hidden border border-surface-800 bg-surface-900 group">
-      <div className="aspect-[16/10] sm:aspect-auto sm:min-h-[220px] bg-black/40">
-        {item.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={img(item.coverUrl)} alt="" className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform" />
-        ) : (
-          <div className="w-full h-full min-h-[180px] flex items-center justify-center">
-            <Newspaper className="w-10 h-10 text-white/20" />
-          </div>
-        )}
-      </div>
-      <div className="p-5 sm:p-6 flex flex-col justify-center">
-        <p className="text-[11px] uppercase tracking-widest text-surface-500 mb-2">Destacada</p>
-        <h3 className="text-xl font-semibold text-white leading-snug group-hover:opacity-80">{item.title}</h3>
-        {item.excerpt && <p className="text-sm text-surface-400 mt-2 line-clamp-3">{item.excerpt}</p>}
-      </div>
-    </article>
-  );
-  if (!href) return body;
-  return <Link href={href}>{body}</Link>;
-}
-
 function NewsCard({ item, hub }: { item: PublicNews; hub: boolean }) {
   const href = newsHref(item, hub);
+  const kind = item.kind && item.kind in NEWS_KIND_LABELS ? NEWS_KIND_LABELS[item.kind as keyof typeof NEWS_KIND_LABELS] : null;
   const body = (
-    <article className="block group rounded-2xl overflow-hidden border border-surface-800 bg-surface-900">
-      <div className="aspect-[16/10] bg-black/40 overflow-hidden">
+    <article className={`${SURFACE} group flex h-full flex-col overflow-hidden transition-colors hover:ring-white/15`}>
+      <div className="relative aspect-[16/9] overflow-hidden bg-surface-800">
         {item.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={img(item.coverUrl)} alt="" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform" />
+          <>
+            {/* Fondo desenfocado + imagen entera: las fotos de producto no se estiran ni se pixelan. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={img(item.coverUrl)} alt="" aria-hidden className="absolute inset-0 h-full w-full scale-110 object-cover opacity-40 blur-xl" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={img(item.coverUrl)} alt={item.title} className="relative h-full w-full object-contain p-3" />
+          </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Newspaper className="w-7 h-7 text-white/20" />
+          <div className="flex h-full w-full items-center justify-center">
+            <FileText className="h-7 w-7 text-surface-600" />
           </div>
         )}
       </div>
-      <p className="p-3 text-sm text-white leading-snug group-hover:opacity-80 line-clamp-2">{item.title}</p>
+      <div className="flex flex-1 flex-col p-4">
+        <p className="text-xs text-surface-500">
+          {kind}
+          {kind && item.publishedAt ? " · " : ""}
+          {item.publishedAt ? formatNewsDate(item.publishedAt) : ""}
+        </p>
+        <h3 className="mt-1.5 line-clamp-2 text-base font-semibold leading-snug text-white">{item.title}</h3>
+        {item.excerpt && <p className="mt-1.5 line-clamp-2 text-sm text-surface-400">{item.excerpt}</p>}
+        {href && (
+          <span className="mt-auto inline-flex items-center gap-1 pt-3 text-sm font-medium text-brand-400 group-hover:text-brand-300">
+            Leer <ArrowUpRight className="h-3.5 w-3.5" />
+          </span>
+        )}
+      </div>
     </article>
   );
-  if (!href) return body;
-  return <Link href={href}>{body}</Link>;
+  return <li>{href ? <Link href={href} className="block h-full">{body}</Link> : body}</li>;
 }
+
+// ---------- Materiales y capacitaciones ----------
 
 export function FilesSection({
   id,
@@ -810,6 +551,7 @@ export function FilesSection({
   items,
   pendingText,
   hub,
+  index,
 }: {
   id: string;
   title: string;
@@ -817,62 +559,90 @@ export function FilesSection({
   items: BrandResource[] | PublicFile[];
   pendingText: string;
   hub: boolean;
+  index?: number;
 }) {
+  const Icon = module === "trainings" ? GraduationCap : FileText;
   return (
-    <section id={id} className="scroll-mt-16 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead title={title} hint={BRAND_MODULE_HINT[module]} ready={items.length > 0} count={items.length} />
+    <BrandSection
+      id={id}
+      index={index}
+      title={title}
+      description={
+        module === "trainings"
+          ? "Cursos, videos y argumentarios para vender mejor."
+          : "Fichas, catálogos y piezas de venta para descargar."
+      }
+      aside={items.length > 0 ? <CountTag n={items.length} label={items.length === 1 ? "archivo" : "archivos"} /> : null}
+    >
       {items.length === 0 ? (
-        <Pending text={pendingText} />
+        <SectionEmpty>{pendingText}</SectionEmpty>
       ) : (
-        <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <ul className={`${SURFACE} divide-y divide-white/[0.06]`}>
           {items.map((item, i) => {
-            const res = isResource(item) ? item : null;
+            const res = "id" in item && "kind" in item ? (item as BrandResource) : null;
             const href = hub && res ? (res.fileUrl ? img(res.fileUrl) : res.contentUrl) : null;
             const visual = res && isVisualAsset(res.type, res.fileUrl || res.contentUrl) ? img(res.fileUrl || res.contentUrl) : null;
             const inner = (
               <>
-                {visual ? (
-                  <div className="aspect-[16/10] bg-black/40 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={visual} alt="" className="w-full h-full object-cover" />
-                  </div>
-                ) : null}
-                <div className="flex items-start gap-3 px-4 py-3">
-                  <Download className="w-4 h-4 text-brand-400 mt-0.5 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm text-white truncate">{item.title}</p>
-                    {item.description && <p className="text-[11px] text-surface-400 line-clamp-2">{item.description}</p>}
-                  </div>
-                  {href && <ExternalLink className="w-3.5 h-3.5 text-surface-600 ml-auto flex-shrink-0" />}
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/[0.05] ring-1 ring-white/10">
+                  {visual ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={visual} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <Icon className="h-5 w-5 text-surface-300" />
+                  )}
                 </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-white">{item.title}</p>
+                  {item.description && <p className="mt-0.5 line-clamp-1 text-sm text-surface-400">{item.description}</p>}
+                </div>
+                {href ? (
+                  <ArrowUpRight className="h-4 w-4 flex-shrink-0 text-surface-500 transition-colors group-hover:text-white" />
+                ) : (
+                  !hub && <span className="flex-shrink-0 text-xs text-surface-500">Para comercios vinculados</span>
+                )}
               </>
             );
+            const cls = "group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-white/[0.03]";
             return (
               <li key={res?.id ?? `${item.title}-${i}`}>
                 {href ? (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-2xl border border-surface-800 bg-surface-900 overflow-hidden hover:border-surface-600"
-                  >
+                  <a href={href} target="_blank" rel="noreferrer" className={cls}>
                     {inner}
                   </a>
                 ) : (
-                  <div className="rounded-2xl border border-surface-800 bg-surface-900 overflow-hidden">{inner}</div>
+                  <div className={cls}>{inner}</div>
                 )}
               </li>
             );
           })}
         </ul>
       )}
+    </BrandSection>
+  );
+}
+
+function ExtraBlocks({ blocks }: { blocks: ExtraBlock[] }) {
+  return (
+    <section className="border-t border-white/[0.06] py-10">
+      <div className="mx-auto grid max-w-6xl gap-4 px-4 sm:grid-cols-2 sm:px-6">
+        {blocks.map((block, i) => (
+          <article key={i} className={`${SURFACE} p-5`}>
+            {block.title && <h2 className="text-base font-semibold text-white">{block.title}</h2>}
+            {block.body && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-surface-300">{block.body}</p>}
+            {block.url && (
+              <a href={block.url} className="mt-3 inline-flex items-center gap-1 text-sm text-brand-400" target="_blank" rel="noreferrer">
+                <Globe className="h-3.5 w-3.5" /> Más info
+              </a>
+            )}
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
 
-function isResource(item: BrandResource | PublicFile): item is BrandResource {
-  return "id" in item && "kind" in item;
-}
+// ---------- Contacto ----------
 
 export function ContactSection({
   name,
@@ -880,87 +650,45 @@ export function ContactSection({
   chatHref,
   hub,
   ready,
+  index,
 }: {
   name: string;
-  contact: { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
+  contact: Contact;
   chatHref?: string;
   hub: boolean;
   ready: boolean;
+  index?: number;
 }) {
+  const item = "inline-flex items-center gap-2 rounded-lg bg-white/[0.05] px-4 py-2.5 text-sm text-white ring-1 ring-white/10 transition-colors hover:bg-white/10";
   return (
-    <section id="contacto" className="scroll-mt-16 pb-8 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-      <SectionHead title="Contacto" hint={BRAND_MODULE_HINT.contact} ready={ready} />
-      {!ready ? (
-        <Pending
-          text={
-            hub
-              ? `${name} no publicó mail, teléfono ni web. Mientras tanto, el canal es el chat de Nodo.`
-              : `¿Sos un comercio y querés trabajar con ${name}? Pedí un código de vinculación. En NODO la marca no se descubre sola.`
-          }
-        >
-          {chatHref && (
-            <Link href={chatHref} className="text-xs font-semibold text-brand-400">
-              Abrir chat →
+    <BrandSection id="contacto" index={index} title="Contacto" description={`Cómo hablar con ${name}.`}>
+      {!ready && !chatHref ? (
+        <SectionEmpty>{name} no publicó mail, teléfono ni web.</SectionEmpty>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {hub && chatHref && (
+            <Link href={chatHref} className={item}>
+              <MessageSquare className="h-4 w-4 text-surface-300" /> Chat en NODO
             </Link>
           )}
-        </Pending>
-      ) : (
-        <div className="rounded-2xl border border-surface-800 bg-surface-900 divide-y divide-surface-800">
           {contact.supportEmail && (
-            <a href={`mailto:${contact.supportEmail}`} className="flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-surface-800/60">
-              <Mail className="w-4 h-4 text-brand-400" /> {contact.supportEmail}
+            <a href={`mailto:${contact.supportEmail}`} className={item}>
+              <Mail className="h-4 w-4 text-surface-300" /> {contact.supportEmail}
             </a>
           )}
           {contact.supportPhone && (
-            <a href={`tel:${contact.supportPhone}`} className="flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-surface-800/60">
-              <Phone className="w-4 h-4 text-brand-400" /> {contact.supportPhone}
+            <a href={`tel:${contact.supportPhone}`} className={item}>
+              <Phone className="h-4 w-4 text-surface-300" /> {contact.supportPhone}
             </a>
           )}
           {contact.websiteUrl && (
-            <a href={contact.websiteUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-4 py-3 text-sm text-white hover:bg-surface-800/60">
-              <Globe className="w-4 h-4 text-brand-400" /> {contact.websiteUrl}
+            <a href={contact.websiteUrl} target="_blank" rel="noreferrer" className={item}>
+              <Globe className="h-4 w-4 text-surface-300" /> {contact.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
             </a>
           )}
         </div>
       )}
-    </section>
-  );
-}
-
-function SectionHead({
-  title,
-  hint,
-  ready,
-  count,
-}: {
-  title: string;
-  hint: string;
-  ready: boolean;
-  count?: number;
-}) {
-  return (
-    <div className="flex items-end justify-between gap-3 mb-4">
-      <div>
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <p className="text-[11px] text-surface-500">{hint}</p>
-      </div>
-      {ready ? (
-        <span className="text-[11px] text-emerald-400 tabular-nums">{count != null ? count : "Listo"}</span>
-      ) : (
-        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
-          <Clock className="w-3 h-3" /> Pendiente
-        </span>
-      )}
-    </div>
-  );
-}
-
-function Pending({ text, children }: { text: string; children?: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-amber-500/25 bg-amber-500/5 px-4 py-5">
-      <p className="text-sm text-surface-300">{text}</p>
-      {children && <div className="mt-2">{children}</div>}
-    </div>
+    </BrandSection>
   );
 }
 
@@ -990,7 +718,7 @@ export function landingModuleSlots({
   news: BrandHub["news"] | PublicNews[];
   materials: BrandResource[] | PublicFile[];
   trainings: BrandResource[] | PublicFile[];
-  contact: { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
+  contact: Contact;
   retailer?: boolean;
   searchHref?: string;
   chatHref?: string;
@@ -1000,29 +728,13 @@ export function landingModuleSlots({
 }) {
   const productsReady = presence?.modules.products.ready ?? products.length > 0;
   const actionsReady = presence?.modules.actions.ready ?? actions.length > 0;
-  const contactReady =
-    presence?.modules.contact.ready ?? Boolean(contact.supportEmail || contact.supportPhone || contact.websiteUrl);
+  const contactReady = presence?.modules.contact.ready ?? hasContact(contact);
+  const productsSection = (
+    <ProductsSection name={name} products={products} retailer={retailer} searchHref={searchHref} hub={hub} ready={productsReady} />
+  );
   return {
-    productos: (
-      <ProductsSection
-        name={name}
-        products={products}
-        retailer={retailer}
-        searchHref={searchHref}
-        hub={hub}
-        ready={productsReady}
-      />
-    ),
-    semaforos: (
-      <ProductsSection
-        name={name}
-        products={products}
-        retailer={retailer}
-        searchHref={searchHref}
-        hub={hub}
-        ready={productsReady}
-      />
-    ),
+    productos: productsSection,
+    semaforos: productsSection,
     lanzamientos: <BrandUpcoming name={name} launches={launches} events={events} />,
     acciones: <ActionsSection name={name} actions={actions} hub={hub} ready={actionsReady} />,
     materiales: (
@@ -1047,9 +759,7 @@ export function landingModuleSlots({
     ),
     novedades: <NewsSection name={name} items={news} hub={hub} />,
     noticias: <NewsSection name={name} items={news} hub={hub} />,
-    contacto: (
-      <ContactSection name={name} contact={contact} chatHref={chatHref} hub={hub} ready={contactReady} />
-    ),
+    contacto: <ContactSection name={name} contact={contact} chatHref={chatHref} hub={hub} ready={contactReady} />,
     hablar: chatHref ? (
       <Link href={chatHref} className="text-sm underline text-white">
         Hablar con {name}
