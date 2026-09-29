@@ -86,7 +86,7 @@ export default function BrandHome() {
                 <Stat label="Productos en el semáforo" value={String(signalCount)} />
                 <Stat label="Comercios vinculados" value={String(retailers)} />
                 <Stat label="Distros vinculados" value={String(linkedDistros)} />
-                <Stat label="Acciones activas" value={String(active.length)} />
+                <Stat label="Promociones vigentes" value={String(active.length)} />
               </div>
 
               <div
