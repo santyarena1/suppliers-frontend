@@ -4018,6 +4018,8 @@ export interface NewsAuthor {
   linked?: boolean;
   advertised?: boolean;
   hubPath?: string | null;
+  /** Página pública de la marca (/m/…), si está publicada. */
+  publicPath?: string | null;
 }
 
 export interface NewsCard {

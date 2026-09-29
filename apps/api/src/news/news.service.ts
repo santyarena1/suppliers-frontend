@@ -505,7 +505,7 @@ export class NewsService {
       type: true,
       providerKey: true,
       brand: { select: { logoUrl: true } },
-      brandLanding: { select: { logoUrl: true, primaryColor: true } },
+      brandLanding: { select: { logoUrl: true, primaryColor: true, publicKey: true, published: true } },
     };
   }
 
@@ -562,7 +562,7 @@ export class NewsService {
         type: TenantType | string;
         providerKey?: string | null;
         brand?: { logoUrl: string | null } | null;
-        brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null;
+        brandLanding?: { logoUrl: string | null; primaryColor?: string | null; publicKey?: string; published?: boolean } | null;
       };
     },
     logos?: Map<string, string | null>
@@ -574,6 +574,11 @@ export class NewsService {
       logoUrl: logos?.get(row.tenant.id) ?? row.tenant.brandLanding?.logoUrl ?? row.tenant.brand?.logoUrl ?? null,
       primaryColor: row.tenant.brandLanding?.primaryColor ?? null,
       providerKey: row.tenant.providerKey ?? null,
+      /** Página pública de la marca, si está publicada (para volver desde la nota). */
+      publicPath:
+        row.tenant.brandLanding?.published && row.tenant.brandLanding.publicKey
+          ? `/m/${row.tenant.brandLanding.publicKey}`
+          : null,
     };
   }
 
@@ -599,7 +604,7 @@ export class NewsService {
         type: string;
         providerKey?: string | null;
         brand?: { logoUrl: string | null } | null;
-        brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null;
+        brandLanding?: { logoUrl: string | null; primaryColor?: string | null; publicKey?: string; published?: boolean } | null;
       };
     },
     linked: boolean,
@@ -665,7 +670,7 @@ export class NewsService {
         active: boolean;
         providerKey?: string | null;
         brand?: { logoUrl: string | null } | null;
-        brandLanding?: { logoUrl: string | null; primaryColor?: string | null } | null;
+        brandLanding?: { logoUrl: string | null; primaryColor?: string | null; publicKey?: string; published?: boolean } | null;
       };
       images: { id: string; url: string; caption: string | null; sortOrder: number }[];
       attachments: {

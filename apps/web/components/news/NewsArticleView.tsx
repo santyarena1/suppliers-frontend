@@ -46,7 +46,7 @@ export default function NewsArticleView({
         )}
         <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-8">
           <NewsKindMark kind={article.kind} light={!paper} />
-          <h1 className={`news-serif text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.08] mt-2 text-balance ${ink}`}>
+          <h1 className={`text-3xl sm:text-4xl font-semibold tracking-tight leading-[1.12] mt-2 text-balance ${ink}`}>
             {article.title}
           </h1>
           {article.excerpt && (
