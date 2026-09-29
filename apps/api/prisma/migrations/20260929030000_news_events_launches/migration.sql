@@ -1,6 +1,3 @@
--- AlterEnum
-ALTER TYPE "NewsKind" ADD VALUE 'EVENT';
-
 -- AlterTable
 ALTER TABLE "NewsArticle" ADD COLUMN     "brandItemId" TEXT,
 ADD COLUMN     "eventEndsAt" TIMESTAMP(3),

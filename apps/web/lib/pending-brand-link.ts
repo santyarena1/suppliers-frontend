@@ -3,9 +3,10 @@
  * Se guarda antes de mandarlo a entrar o crear la cuenta, y la app se lo ofrece
  * cuando ya tiene un comercio (o una distribuidora).
  */
+/** Se borra también al cerrar sesión (lib/auth clearSession). */
 const KEY = "nodo.pendingBrandLink";
-/** Una semana: después ya no es "lo que venía haciendo". */
-const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** Dos días: después ya no es "lo que venía haciendo". */
+const MAX_AGE_MS = 2 * 24 * 60 * 60 * 1000;
 
 export interface PendingBrandLink {
   publicKey: string;

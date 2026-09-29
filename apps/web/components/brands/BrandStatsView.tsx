@@ -108,6 +108,11 @@ export function PurchaseStatsBody({ stats, showAccounts }: { stats: BrandPurchas
   const ticket = stats.totals.orders > 0 ? stats.totals.spendUsd / stats.totals.orders : 0;
   return (
     <div className="flex flex-col gap-3">
+      {stats.truncated && (
+        <p className="text-xs rounded-md px-3 py-2 bg-amber-500/10 text-amber-200">
+          Hay más pedidos de los que se pueden sumar de una vez: los números pueden estar por debajo. Probá con un período más corto.
+        </p>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatTile label="Comprado" value={formatUSD(stats.totals.spendUsd)} hint={`Últimos ${stats.months} meses`} />
         <StatTile label="Unidades" value={String(stats.totals.units)} />

@@ -8,6 +8,7 @@ import { brandMatchNames } from "./brand-names";
 import { buildSkuIndex, summarizeBrandPurchases, type BrandLine, type BrandSkuIndex } from "./brand-stats";
 
 const MONTH_OPTIONS = [3, 6, 12] as const;
+const MAX_CATALOG_SKUS = 10000;
 
 export function statsMonths(raw: unknown): number {
   const n = Number(raw);
@@ -47,11 +48,15 @@ export class BrandStatsService {
     const now = new Date();
     const from = fromDate(months, now);
     const buyerId = commercialId(tenant);
-    const [index, lines] = await Promise.all([
+    const [index, found] = await Promise.all([
       this.skuIndex(link.supplierTenantId),
       this.lines([buyerId], from),
     ]);
-    return { months, ...summarizeBrandPurchases(lines, index, { from, now }) };
+    return {
+      months,
+      truncated: found.truncated || index.truncated,
+      ...summarizeBrandPurchases(found.lines, index.index, { from, now }),
+    };
   }
 
   async forBrand(tenant: TenantContext, months: number) {
@@ -63,7 +68,7 @@ export class BrandStatsService {
     const accountNames = new Map(links.map((l) => [l.clientTenant.id, l.clientTenant.name]));
     const now = new Date();
     const from = fromDate(months, now);
-    const [index, lines, view] = await Promise.all([
+    const [index, found, view] = await Promise.all([
       this.skuIndex(tenant.tenantId),
       this.lines([...accountNames.keys()], from),
       this.items.brandView(tenant),
@@ -74,12 +79,14 @@ export class BrandStatsService {
         retailers: links.filter((l) => l.clientTenant.type === "RETAILER").length,
         distributors: links.filter((l) => l.clientTenant.type === "DISTRIBUTOR").length,
       },
-      ...summarizeBrandPurchases(lines, index, { from, now, accountNames }),
+      /** Se llegó al tope de pedidos o de códigos: los números pueden estar por debajo. */
+      truncated: found.truncated || index.truncated,
+      ...summarizeBrandPurchases(found.lines, index.index, { from, now, accountNames }),
       presence: presenceByDistributor(view.items),
     };
   }
 
-  private async skuIndex(brandId: string): Promise<BrandSkuIndex> {
+  private async skuIndex(brandId: string): Promise<{ index: BrandSkuIndex; truncated: boolean }> {
     const names = await brandMatchNames(this.prisma, brandId);
     const [linked, catalog] = await Promise.all([
       this.prisma.brandItemLink.findMany({
@@ -91,17 +98,20 @@ export class BrandStatsService {
         : this.prisma.providerSyncCache.findMany({
             where: { OR: names.map((name) => ({ brand: { equals: name, mode: "insensitive" as const } })) },
             select: { provider: true, externalId: true },
-            take: 10000,
+            take: MAX_CATALOG_SKUS,
           }),
     ]);
-    return buildSkuIndex(
-      linked.map((l) => ({ provider: l.provider, externalId: l.externalId, itemId: l.item.id, itemName: l.item.name })),
-      catalog
-    );
+    return {
+      index: buildSkuIndex(
+        linked.map((l) => ({ provider: l.provider, externalId: l.externalId, itemId: l.item.id, itemName: l.item.name })),
+        catalog
+      ),
+      truncated: catalog.length >= MAX_CATALOG_SKUS,
+    };
   }
 
-  private async lines(tenantIds: string[], from: Date): Promise<BrandLine[]> {
-    if (tenantIds.length === 0) return [];
+  private async lines(tenantIds: string[], from: Date): Promise<{ lines: BrandLine[]; truncated: boolean }> {
+    if (tenantIds.length === 0) return { lines: [], truncated: false };
     const orders = await this.prisma.providerOrder.findMany({
       where: {
         tenantId: { in: tenantIds },
@@ -112,7 +122,7 @@ export class BrandStatsService {
       orderBy: { createdAt: "desc" },
       take: MAX_INSIGHT_ORDERS,
     });
-    return orders.flatMap((order) =>
+    const lines = orders.flatMap((order) =>
       extractOrderLines(order).map((l) => ({
         tenantId: order.tenantId,
         orderId: l.orderId,
@@ -124,6 +134,7 @@ export class BrandStatsService {
         spendUsd: l.spendUsd,
       }))
     );
+    return { lines, truncated: orders.length >= MAX_INSIGHT_ORDERS };
   }
 }
 

@@ -3901,6 +3901,8 @@ export interface BrandRankRow {
 
 export interface BrandPurchaseStats {
   months: number;
+  /** Se llegó al tope de pedidos o de códigos: los números pueden estar por debajo. */
+  truncated?: boolean;
   totals: { spendUsd: number; units: number; orders: number; accounts: number };
   byProvider: BrandRankRow[];
   topProducts: (BrandRankRow & { itemId: string | null })[];

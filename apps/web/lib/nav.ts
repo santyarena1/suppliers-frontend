@@ -1,5 +1,5 @@
 import {
-  Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
+  Home, Search, ShoppingCart, Boxes, Building2, ClipboardList,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
   Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3,
 } from "lucide-react";
@@ -48,7 +48,6 @@ export type NavItemId =
   | "brand-ads"
   | "notices"
   | "news"
-  | "brands-admin"
   | "settings"
   | "admin"
   | "sistema-tgs";
@@ -262,15 +261,6 @@ export const NAV_ITEMS: NavItemDef[] = [
     tenantTypes: ["BRAND"],
     tenantRoles: ["OWNER", "ADMIN"],
     permission: "ads.manage",
-    section: "brands",
-  },
-  {
-    id: "brands-admin",
-    href: "/admin/marcas",
-    label: "Marcas (legado)",
-    icon: Shield,
-    module: "admin",
-    roles: ["ROLE_ADMIN"],
     section: "brands",
   },
 

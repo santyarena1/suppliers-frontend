@@ -153,6 +153,8 @@ export function clearSession() {
   localStorage.removeItem("user");
   localStorage.removeItem(ADMIN_TOKEN_KEY);
   localStorage.removeItem(ADMIN_USER_KEY);
+  // El vínculo con una marca pedido desde su link no pasa a la próxima persona que entre.
+  localStorage.removeItem("nodo.pendingBrandLink");
   deleteCookie(COOKIE);
   announceSession();
 }
