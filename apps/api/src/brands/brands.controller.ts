@@ -22,6 +22,14 @@ import { BrandNotificationsService } from "./brand-notifications.service";
 import { BrandCatalogService } from "./brand-catalog.service";
 import { BrandResourcesService } from "./brand-resources.service";
 import { BrandHubService } from "./brand-hub.service";
+import { BrandItemsService } from "./brand-items.service";
+import {
+  BrandSkuRefDto,
+  CreateBrandItemsDto,
+  UpdateBrandItemDto,
+  UpdateBrandItemLinkDto,
+  UpdateBrandStockSettingsDto,
+} from "./dto/brand-items.dto";
 import {
   CreateBrandActionStatusDto,
   ImportBrandSignalsDto,
@@ -40,8 +48,56 @@ export class BrandPanelController {
     private readonly actions: BrandActionsService,
     private readonly notes: BrandNotificationsService,
     private readonly catalog: BrandCatalogService,
-    private readonly resources: BrandResourcesService
+    private readonly resources: BrandResourcesService,
+    private readonly items: BrandItemsService
   ) {}
+
+  // ---------- Productos y semáforo ----------
+
+  @Get("items")
+  listItems(@CurrentTenant() tenant: TenantContext) {
+    return this.items.brandView(tenant);
+  }
+
+  @Get("items/suggestions")
+  itemSuggestions(@CurrentTenant() tenant: TenantContext) {
+    return this.items.suggestions(tenant);
+  }
+
+  @Post("items")
+  createItems(@CurrentTenant() tenant: TenantContext, @Body() dto: CreateBrandItemsDto) {
+    return this.items.createItems(tenant, dto.items);
+  }
+
+  @Put("items/:id")
+  updateItem(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() dto: UpdateBrandItemDto) {
+    return this.items.updateItem(tenant, id, dto);
+  }
+
+  @Delete("items/:id")
+  deleteItem(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.items.deleteItem(tenant, id);
+  }
+
+  @Post("items/:id/links")
+  addItemLink(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() dto: BrandSkuRefDto) {
+    return this.items.addLink(tenant, id, dto);
+  }
+
+  @Put("item-links/:linkId")
+  updateItemLink(@CurrentTenant() tenant: TenantContext, @Param("linkId") linkId: string, @Body() dto: UpdateBrandItemLinkDto) {
+    return this.items.updateLink(tenant, linkId, dto.manualLevel);
+  }
+
+  @Delete("item-links/:linkId")
+  removeItemLink(@CurrentTenant() tenant: TenantContext, @Param("linkId") linkId: string) {
+    return this.items.removeLink(tenant, linkId);
+  }
+
+  @Put("stock-settings")
+  updateStockSettings(@CurrentTenant() tenant: TenantContext, @Body() dto: UpdateBrandStockSettingsDto) {
+    return this.items.updateSettings(tenant, dto);
+  }
 
   @Get("landing")
   getLanding(@CurrentTenant() tenant: TenantContext) {
@@ -147,12 +203,19 @@ export class BrandPanelController {
 export class RetailerBrandsController {
   constructor(
     private readonly actions: BrandActionsService,
-    private readonly hub: BrandHubService
+    private readonly hub: BrandHubService,
+    private readonly items: BrandItemsService
   ) {}
 
   @Get()
   list(@CurrentTenant() tenant: TenantContext) {
     return this.actions.visibleToClient(tenant);
+  }
+
+  /** Semáforo de la marca para quien está vinculado: primero sus distribuidores. */
+  @Get(":linkId/availability")
+  availability(@CurrentTenant() tenant: TenantContext, @Param("linkId") linkId: string) {
+    return this.items.clientView(tenant, linkId);
   }
 
   @Get(":linkId")

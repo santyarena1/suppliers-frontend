@@ -177,6 +177,8 @@ model Tenant {
   brandActions  BrandAction[]
   brandResources BrandResource[]
   brandSignals   BrandSkuSignal[]
+  brandItems     BrandItem[]
+  brandStockSettings BrandStockSettings?
   notificationsFrom OrgNotification[] @relation("NotifFrom")
   notificationsTo   OrgNotification[] @relation("NotifTo")
   newsArticles      NewsArticle[]
@@ -1173,6 +1175,81 @@ model BrandSkuSignal {
 
   @@unique([tenantId, provider, externalId])
   @@index([tenantId, light])
+  @@index([provider, externalId])
+}
+
+/// Cómo arma la marca su semáforo de stock. Una fila por marca.
+enum BrandStockMode {
+  AUTO
+  MANUAL
+}
+
+/// Nivel de stock de un producto en un distribuidor.
+enum BrandStockLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+}
+
+/// Estado que pone la marca a un producto; pisa el semáforo.
+enum BrandItemState {
+  INCOMING
+  DISCONTINUED
+}
+
+model BrandStockSettings {
+  tenantId       String         @id
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mode           BrandStockMode @default(AUTO)
+  /// Por debajo de esto (y mayor a 0) es Bajo.
+  lowBelow       Int            @default(5)
+  /// Desde esto es Alto.
+  highFrom       Int            @default(20)
+  /// La marca ve las unidades exactas; comercios y link público ven siempre el rango.
+  brandSeesExact Boolean        @default(false)
+  /// El link público muestra el semáforo.
+  publicStock    Boolean        @default(true)
+  updatedAt      DateTime       @updatedAt
+}
+
+/// Producto de la marca. Agrupa sus códigos en cada distribuidor.
+/// Diseño: docs/superpowers/specs/2026-09-29-marcas-semaforo-design.md
+model BrandItem {
+  id             String          @id @default(uuid())
+  tenantId       String
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name           String
+  partNumber     String?
+  ean            String?
+  imageUrl       String?
+  referencePrice Decimal?        @db.Decimal(14, 4)
+  currency       String          @default("USD")
+  state          BrandItemState?
+  incomingAt     DateTime?
+  notes          String?
+  position       Int             @default(0)
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  links          BrandItemLink[]
+
+  @@index([tenantId, active, position])
+}
+
+/// Ese producto en un distribuidor (su código allá).
+model BrandItemLink {
+  id          String           @id @default(uuid())
+  brandItemId String
+  item        BrandItem        @relation(fields: [brandItemId], references: [id], onDelete: Cascade)
+  provider    String
+  externalId  String
+  /// Luz que pone la marca en modo manual.
+  manualLevel BrandStockLevel?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([brandItemId, provider, externalId])
   @@index([provider, externalId])
 }
 

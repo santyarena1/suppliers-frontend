@@ -7,6 +7,7 @@ import { BrandNotificationsService } from "./brand-notifications.service";
 import { BrandCatalogService } from "./brand-catalog.service";
 import { BrandResourcesService } from "./brand-resources.service";
 import { BrandHubService } from "./brand-hub.service";
+import { BrandItemsService } from "./brand-items.service";
 import {
   AdminBrandsController,
   BrandPanelController,
@@ -32,6 +33,7 @@ import { PublicBrandsController } from "./public-brands.controller";
     BrandCatalogService,
     BrandResourcesService,
     BrandHubService,
+    BrandItemsService,
   ],
   exports: [BrandOrgsService, BrandNotificationsService],
 })
