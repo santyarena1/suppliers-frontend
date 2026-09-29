@@ -9,6 +9,7 @@ import { BrandSpaceLanding, brandHubSlotModules } from "@/components/org/BrandSp
 import { getTenant } from "@/lib/auth";
 import { brandApi, type BrandHub } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import { ClientBrandStats } from "@/components/brands/ClientBrandStats";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
@@ -67,6 +68,7 @@ function HubLanding({ hub, retailer }: { hub: BrandHub; retailer: boolean }) {
       theme={hub.theme}
       contact={hub.contact}
       products={hub.availability}
+      insights={retailer ? <ClientBrandStats linkId={hub.linkId} brandName={hub.name} /> : null}
       launches={hub.launches ?? []}
       events={hub.events ?? []}
       actions={hub.actions}

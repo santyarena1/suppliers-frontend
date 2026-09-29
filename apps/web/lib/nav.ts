@@ -1,7 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList, Shield,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
-  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper,
+  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -39,6 +39,7 @@ export type NavItemId =
   | "brands-panel"
   | "brand-actions"
   | "brand-products"
+  | "brand-stats"
   | "brand-materials"
   | "brand-trainings"
   | "brand-landing"
@@ -192,6 +193,14 @@ export const NAV_ITEMS: NavItemDef[] = [
     href: "/marca/productos",
     label: "Productos",
     icon: CircleDot,
+    tenantTypes: ["BRAND"],
+    section: "brands",
+  },
+  {
+    id: "brand-stats",
+    href: "/marca/estadisticas",
+    label: "Estadísticas",
+    icon: BarChart3,
     tenantTypes: ["BRAND"],
     section: "brands",
   },

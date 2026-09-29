@@ -10,6 +10,7 @@ import { BrandHubService } from "./brand-hub.service";
 import { BrandItemsService } from "./brand-items.service";
 import { BrandPublicLinkService } from "./brand-public-link.service";
 import { BrandLaunchesService } from "./brand-launches.service";
+import { BrandStatsService } from "./brand-stats.service";
 import {
   AdminBrandsController,
   BrandPanelController,
@@ -38,6 +39,7 @@ import { PublicBrandsController } from "./public-brands.controller";
     BrandItemsService,
     BrandPublicLinkService,
     BrandLaunchesService,
+    BrandStatsService,
   ],
   exports: [BrandOrgsService, BrandNotificationsService],
 })

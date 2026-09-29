@@ -175,6 +175,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Un evento no se publica sin fecha de inicio. El link público nunca lleva el link de la reunión ni inscripción. Lanzamiento = producto de la marca en "Próximo ingreso" + la última nota publicada que lo presenta (en el link público solo notas `isPublic`). Eventos listados: los que no terminaron (sin fin, durante el día en que empiezan). Hueco nuevo `{{lanzamientos}}` en el HTML de la marca (se agrega al final si falta). "Presentar el lanzamiento" en `/marca/productos` abre `/noticias/nueva?tipo=LAUNCH&producto=<id>`.
 
+### [FEATURE] Estadísticas de la marca
+- **Método**: GET
+- **Ruta**: `GET /my/brands/:linkId/stats?months=3|6|12` (comercio) · `GET /my/brand/stats?months=3|6|12` (marca)
+- **Auth**: Bearer. Comercio vinculado con permiso `orders.create` (ve montos). Marca: cualquier miembro.
+- **Body / Params**: `months` (por defecto 12).
+- **Respuesta esperada**: `{ months, totals: { spendUsd, units, orders, accounts }, byProvider: Rank[], topProducts: (Rank & { itemId })[], byAccount: Rank[], monthly: [{ month: "AAAA-MM", spendUsd, units }] }` con `Rank = { key, label, spendUsd, units, orders, share }`. La marca agrega `linkedAccounts: { retailers, distributors }` y `presence: { products, distributors: [{ provider, label, products, inStock, none, unknown, coverage }] }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Cuenta pedidos `CREATED` y `OFFLINE` hechos por NODO (hasta 5000 por consulta). Una línea es de la marca si su código está asociado a un producto de la marca (y entonces se agrupa en él) o si el distribuidor lo publica con esa marca. El comercio solo ve sus propias compras; `byAccount` es solo para la marca y solo de cuentas vinculadas. UI: sección "Tus compras de {marca}" en `/marcas/:linkId` y `/marca/estadisticas`.
+
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
 - **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/insights`, `/orders/:id/approve`, `/orders/:id/reject`

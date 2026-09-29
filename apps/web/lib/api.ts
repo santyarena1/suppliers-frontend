@@ -3889,6 +3889,47 @@ export const brandItemsApi = {
     api.get<{ mode: "AUTO" | "MANUAL"; items: BrandAvailabilityItem[]; hidden: boolean }>(`/public/brands/${publicKey}/availability`),
 };
 
+/** Compras de una marca (comercio: las propias; marca: sus cuentas vinculadas). */
+export interface BrandRankRow {
+  key: string;
+  label: string;
+  spendUsd: number;
+  units: number;
+  orders: number;
+  share: number;
+}
+
+export interface BrandPurchaseStats {
+  months: number;
+  totals: { spendUsd: number; units: number; orders: number; accounts: number };
+  byProvider: BrandRankRow[];
+  topProducts: (BrandRankRow & { itemId: string | null })[];
+  byAccount: BrandRankRow[];
+  monthly: { month: string; spendUsd: number; units: number }[];
+}
+
+export interface BrandPanelStats extends BrandPurchaseStats {
+  linkedAccounts: { retailers: number; distributors: number };
+  presence: {
+    products: number;
+    distributors: {
+      provider: string;
+      label: string;
+      products: number;
+      inStock: number;
+      none: number;
+      unknown: number;
+      coverage: number;
+    }[];
+  };
+}
+
+export const brandStatsApi = {
+  forLink: (linkId: string, months: number) =>
+    api.get<BrandPurchaseStats>(`/my/brands/${linkId}/stats`, { params: { months } }),
+  mine: (months: number) => api.get<BrandPanelStats>("/my/brand/stats", { params: { months } }),
+};
+
 export const brandApi = {
   landing: () => api.get<BrandLanding>("/my/brand/landing"),
   saveLanding: (data: Partial<BrandLanding>) => api.put<BrandLanding>("/my/brand/landing", data),

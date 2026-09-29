@@ -24,6 +24,7 @@ import { BrandResourcesService } from "./brand-resources.service";
 import { BrandHubService } from "./brand-hub.service";
 import { BrandItemsService } from "./brand-items.service";
 import { BrandPublicLinkService, assertPublicKey } from "./brand-public-link.service";
+import { BrandStatsService, statsMonths } from "./brand-stats.service";
 import {
   BrandSkuRefDto,
   CreateBrandItemsDto,
@@ -50,8 +51,15 @@ export class BrandPanelController {
     private readonly notes: BrandNotificationsService,
     private readonly catalog: BrandCatalogService,
     private readonly resources: BrandResourcesService,
-    private readonly items: BrandItemsService
+    private readonly items: BrandItemsService,
+    private readonly stats: BrandStatsService
   ) {}
+
+  /** Compras de las cuentas vinculadas por NODO y presencia de stock por distribuidor. */
+  @Get("stats")
+  brandStats(@CurrentTenant() tenant: TenantContext, @Query("months") months?: string) {
+    return this.stats.forBrand(tenant, statsMonths(months));
+  }
 
   // ---------- Productos y semáforo ----------
 
@@ -206,7 +214,8 @@ export class RetailerBrandsController {
     private readonly actions: BrandActionsService,
     private readonly hub: BrandHubService,
     private readonly items: BrandItemsService,
-    private readonly publicLink: BrandPublicLinkService
+    private readonly publicLink: BrandPublicLinkService,
+    private readonly stats: BrandStatsService
   ) {}
 
   @Get()
@@ -229,6 +238,12 @@ export class RetailerBrandsController {
   }
 
   /** Semáforo de la marca para quien está vinculado: primero sus distribuidores. */
+  /** Mis compras de esta marca: cuánto, dónde y qué. */
+  @Get(":linkId/stats")
+  myStats(@CurrentTenant() tenant: TenantContext, @Param("linkId") linkId: string, @Query("months") months?: string) {
+    return this.stats.forClient(tenant, linkId, statsMonths(months));
+  }
+
   @Get(":linkId/availability")
   availability(@CurrentTenant() tenant: TenantContext, @Param("linkId") linkId: string) {
     return this.items.clientView(tenant, linkId);

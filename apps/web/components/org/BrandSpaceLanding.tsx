@@ -93,6 +93,7 @@ export function BrandSpaceLanding({
   noticesHref,
   variant,
   extraBlocks = [],
+  insights,
 }: {
   name: string;
   accent?: string;
@@ -125,6 +126,8 @@ export function BrandSpaceLanding({
   noticesHref?: string;
   variant: "hub" | "public";
   extraBlocks?: ExtraBlock[];
+  /** Bloque propio de quien mira (p. ej. sus compras de la marca), antes de los módulos. */
+  insights?: ReactNode;
 }) {
   const hub = variant === "hub";
   const visuals = collectBrandVisuals({
@@ -203,6 +206,8 @@ export function BrandSpaceLanding({
           })}
         </div>
       </nav>
+
+      {insights}
 
       {html ? (
         html
