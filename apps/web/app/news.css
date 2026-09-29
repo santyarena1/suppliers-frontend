@@ -23,6 +23,9 @@
 .news-prose img { width: 100%; height: auto; display: block; margin: 1.75em 0; }
 .news-prose a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
 .news-prose ul, .news-prose ol { padding-left: 1.2em; margin: 0 0 1.15em; }
+.news-prose ul { list-style: disc; }
+.news-prose ol { list-style: decimal; }
+.news-prose li { margin: 0.2em 0; }
 .news-prose blockquote {
   margin: 1.5em 0;
   padding: 0 0 0 1em;
