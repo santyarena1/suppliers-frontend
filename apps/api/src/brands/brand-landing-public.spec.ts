@@ -52,7 +52,7 @@ describe("pickPublicLandingModules", () => {
     expect(out.actions[0]).not.toHaveProperty("progress");
   });
 
-  it("parte materiales y capacitaciones sin URLs", () => {
+  it("materiales públicos con enlace; los de solo vinculados sin enlace", () => {
     const out = pickPublicLandingModules({
       signals: [],
       actions: [],
@@ -67,12 +67,16 @@ describe("pickPublicLandingModules", () => {
         },
       ],
       resources: [
-        { kind: "MATERIAL", title: "Catálogo", description: "PDF" },
-        { kind: "TRAINING", title: "Curso", description: null },
+        { kind: "MATERIAL", type: "PDF", title: "Catálogo", description: "PDF", fileUrl: "/assets/cat.pdf", isPublic: true },
+        { kind: "MATERIAL", type: "PRICE_LIST", title: "Lista", description: null, fileUrl: "/assets/l.xlsx", isPublic: false },
+        { kind: "TRAINING", type: "VIDEO", title: "Curso", description: null, contentUrl: "https://video.test/x" },
       ],
     });
     expect(out.news[0]).toMatchObject({ publicKey: "abc", coverUrl: "https://img.test/cover.jpg" });
-    expect(out.materials).toEqual([{ title: "Catálogo", description: "PDF" }]);
-    expect(out.trainings).toEqual([{ title: "Curso", description: null }]);
+    expect(out.materials).toEqual([
+      { title: "Catálogo", description: "PDF", type: "PDF", fileUrl: "/assets/cat.pdf", contentUrl: null, restricted: false },
+      { title: "Lista", description: null, type: "PRICE_LIST", fileUrl: null, contentUrl: null, restricted: true },
+    ]);
+    expect(out.trainings[0]).toMatchObject({ title: "Curso", contentUrl: "https://video.test/x", restricted: false });
   });
 });

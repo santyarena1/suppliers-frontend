@@ -107,7 +107,7 @@ export class BrandLandingService {
       }),
       this.prisma.brandResource.findMany({
         where: { tenantId: brandId },
-        select: { kind: true, title: true, description: true },
+        select: { kind: true, type: true, title: true, description: true, fileUrl: true, contentUrl: true, isPublic: true },
         orderBy: { createdAt: "desc" },
         take: 24,
       }),

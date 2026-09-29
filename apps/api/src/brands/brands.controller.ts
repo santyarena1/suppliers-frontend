@@ -38,6 +38,7 @@ import {
   PostBrandNoteDto,
   UpsertBrandActionDto,
   UpsertBrandResourceDto,
+  BrandResourceVisibilityDto,
   UpsertBrandSignalDto,
   UpdateBrandLandingDto,
 } from "./dto/brand.dto";
@@ -156,6 +157,15 @@ export class BrandPanelController {
   @Post("resources")
   createResource(@CurrentTenant() tenant: TenantContext, @Body() dto: UpsertBrandResourceDto) {
     return this.resources.create(tenant, dto);
+  }
+
+  @Put("resources/:id/visibility")
+  setResourceVisibility(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("id") id: string,
+    @Body() dto: BrandResourceVisibilityDto
+  ) {
+    return this.resources.setVisibility(tenant, id, dto.isPublic);
   }
 
   @Delete("resources/:id")

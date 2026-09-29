@@ -54,6 +54,7 @@ export default function BrandResourcesEditor({
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);
 
   const load = useCallback(async () => {
     const res = await brandApi.resources(kind);
@@ -93,6 +94,7 @@ export default function BrandResourcesEditor({
         description: description.trim() || null,
         fileUrl,
         contentUrl: contentUrl.trim() || null,
+        isPublic,
       });
       setTitle("");
       setDescription("");
@@ -105,6 +107,17 @@ export default function BrandResourcesEditor({
       setAviso({ ok: false, text: errMsg(err, "No se pudo publicar") });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function toggleVisibility(item: BrandResource) {
+    if (!canWrite) return;
+    const next = item.isPublic === false;
+    try {
+      await brandApi.setResourceVisibility(item.id, next);
+      setItems((prev) => prev.map((row) => (row.id === item.id ? { ...row, isPublic: next } : row)));
+    } catch (err) {
+      setAviso({ ok: false, text: errMsg(err, "No se pudo cambiar") });
     }
   }
 
@@ -125,8 +138,8 @@ export default function BrandResourcesEditor({
           <h1 className="text-base font-semibold text-white">{training ? "Capacitaciones" : "Materiales"}</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
             {training
-              ? "Cursos, videos y argumentarios para el local o el distro vinculado. Aparecen en el espacio de la marca."
-              : "Banners, fichas y catálogos para quien está vinculado. No es un catálogo de productos."}
+              ? "Cursos, videos y argumentarios. Elegí si cada uno se ve desde tu página pública o solo lo ven los comercios vinculados."
+              : "Fichas, catálogos y piezas de venta. Elegí si cada uno se descarga desde tu página pública o solo lo ven los comercios vinculados."}
           </p>
         </div>
         <PrefsPanel />
@@ -190,6 +203,10 @@ export default function BrandResourcesEditor({
                       />
                     </label>
                     {fileName && <span className="text-[11px] text-emerald-400 truncate">{fileName}</span>}
+                    <label className="flex items-center gap-2 text-xs text-surface-300">
+                      <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+                      Se puede descargar desde mi página pública
+                    </label>
                     <button
                       type="button"
                       disabled={saving || !title.trim() || (!fileUrl && !contentUrl.trim())}
@@ -222,6 +239,19 @@ export default function BrandResourcesEditor({
                             {item.description ? ` · ${item.description}` : ""}
                           </p>
                         </div>
+                        <button
+                          type="button"
+                          disabled={!canWrite}
+                          onClick={() => void toggleVisibility(item)}
+                          title="Cambiar quién lo puede descargar"
+                          className={`flex-shrink-0 rounded-md px-2 py-1 text-[11px] ring-1 ${
+                            item.isPublic === false
+                              ? "text-surface-300 ring-white/10"
+                              : "text-emerald-300 ring-emerald-500/30"
+                          }`}
+                        >
+                          {item.isPublic === false ? "Solo vinculados" : "Público"}
+                        </button>
                         {href && (
                           <a
                             href={href}

@@ -45,7 +45,14 @@ type PublicNews = {
   coverUrl: string | null;
   publishedAt?: string | null;
 };
-type PublicFile = { title: string; description: string | null };
+type PublicFile = {
+  title: string;
+  description: string | null;
+  type?: string | null;
+  fileUrl?: string | null;
+  contentUrl?: string | null;
+  restricted?: boolean;
+};
 type Contact = { websiteUrl: string | null; supportEmail: string | null; supportPhone: string | null };
 
 type SectionKey = "productos" | "lanzamientos" | "acciones" | "novedades" | "materiales" | "capacitaciones" | "contacto";
@@ -580,8 +587,11 @@ export function FilesSection({
         <ul className={`${SURFACE} divide-y divide-white/[0.06]`}>
           {items.map((item, i) => {
             const res = "id" in item && "kind" in item ? (item as BrandResource) : null;
-            const href = hub && res ? (res.fileUrl ? img(res.fileUrl) : res.contentUrl) : null;
-            const visual = res && isVisualAsset(res.type, res.fileUrl || res.contentUrl) ? img(res.fileUrl || res.contentUrl) : null;
+            const file = item as PublicFile;
+            const url = res ? res.fileUrl || res.contentUrl : file.fileUrl || file.contentUrl || null;
+            const fileRef = res ? res.fileUrl : file.fileUrl;
+            const href = url ? (fileRef ? img(fileRef) : url) : null;
+            const visual = url && isVisualAsset(res?.type ?? file.type ?? "", url) ? img(url) : null;
             const inner = (
               <>
                 <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white/[0.05] ring-1 ring-white/10">
@@ -599,7 +609,7 @@ export function FilesSection({
                 {href ? (
                   <ArrowUpRight className="h-4 w-4 flex-shrink-0 text-surface-500 transition-colors group-hover:text-white" />
                 ) : (
-                  !hub && <span className="flex-shrink-0 text-xs text-surface-500">Para comercios vinculados</span>
+                  !hub && <span className="flex-shrink-0 text-xs text-surface-500">Solo para comercios vinculados</span>
                 )}
               </>
             );

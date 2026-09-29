@@ -52,8 +52,21 @@ export class BrandResourcesService {
         description: dto.description?.trim() || null,
         fileUrl: dto.fileUrl?.trim() || null,
         contentUrl: dto.contentUrl?.trim() || null,
+        isPublic: dto.isPublic ?? true,
       },
     });
+  }
+
+  /** Si el archivo se descarga desde el link público o queda solo para vinculados. */
+  async setVisibility(tenant: TenantContext, id: string, isPublic: boolean) {
+    this.assertBrand(tenant);
+    if (!this.canWrite(tenant)) throw new ForbiddenException("No podés editar archivos");
+    const updated = await this.prisma.brandResource.updateMany({
+      where: { id, tenantId: tenant.tenantId },
+      data: { isPublic },
+    });
+    if (updated.count === 0) throw new NotFoundException("Archivo no encontrado");
+    return this.prisma.brandResource.findUnique({ where: { id } });
   }
 
   async remove(tenant: TenantContext, id: string) {

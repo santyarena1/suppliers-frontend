@@ -3654,6 +3654,12 @@ export interface PublicBrandNews {
 export interface PublicBrandFile {
   title: string;
   description: string | null;
+  type?: string | null;
+  /** Enlace de descarga si la marca lo habilitó en el link público. */
+  fileUrl?: string | null;
+  contentUrl?: string | null;
+  /** Solo para comercios vinculados. */
+  restricted?: boolean;
 }
 
 export interface PublicBrandLanding {
@@ -3716,6 +3722,8 @@ export interface BrandResource {
   description: string | null;
   fileUrl: string | null;
   contentUrl: string | null;
+  /** Se descarga desde el link público (si no, solo vinculados). */
+  isPublic?: boolean;
   createdAt: string;
 }
 
@@ -3971,7 +3979,10 @@ export const brandApi = {
     description?: string | null;
     fileUrl?: string | null;
     contentUrl?: string | null;
+    isPublic?: boolean;
   }) => api.post<BrandResource>("/my/brand/resources", data),
+  setResourceVisibility: (id: string, isPublic: boolean) =>
+    api.put<BrandResource>(`/my/brand/resources/${id}/visibility`, { isPublic }),
   removeResource: (id: string) => api.delete<{ ok: true }>(`/my/brand/resources/${id}`),
   actions: () => api.get<{ canWrite: boolean; actions: BrandAction[] }>("/my/brand/actions"),
   createAction: (data: UpsertBrandAction) => api.post<BrandAction>("/my/brand/actions", data),

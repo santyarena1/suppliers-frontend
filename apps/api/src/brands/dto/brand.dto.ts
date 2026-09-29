@@ -238,6 +238,15 @@ export class UpsertBrandResourceDto {
   @IsString()
   @MaxLength(500)
   contentUrl?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
+}
+
+export class BrandResourceVisibilityDto {
+  @IsBoolean()
+  isPublic!: boolean;
 }
 
 export class PostBrandNoteDto {
