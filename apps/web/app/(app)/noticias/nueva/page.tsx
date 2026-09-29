@@ -1,15 +1,28 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
-import NewsEditor from "@/components/news/NewsEditor";
+import NewsEditor, { type NewsDraftSeed } from "@/components/news/NewsEditor";
+import type { NewsKind } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
-import { canWriteNews } from "@/lib/news";
+import { NEWS_KIND_ORDER, canWriteNews } from "@/lib/news";
 import "@/app/news.css";
 
 export default function NuevaNoticiaPage() {
   const tenant = getTenant();
   const canWrite = canWriteNews(tenant);
+  // ?tipo=LAUNCH&producto=<id>: "Crear lanzamiento" desde los productos de la marca.
+  const [seed, setSeed] = useState<NewsDraftSeed | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const kind = params.get("tipo") as NewsKind | null;
+    setSeed({
+      kind: kind && NEWS_KIND_ORDER.includes(kind) ? kind : undefined,
+      brandItemId: params.get("producto") ?? undefined,
+    });
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-surface-950">
@@ -20,7 +33,7 @@ export default function NuevaNoticiaPage() {
         <PrefsPanel />
       </header>
       {canWrite ? (
-        <NewsEditor />
+        seed && <NewsEditor seed={seed} />
       ) : (
         <p className="text-sm text-surface-400 px-6 py-10">Las noticias las publican marcas y distribuidores.</p>
       )}

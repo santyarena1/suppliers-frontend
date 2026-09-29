@@ -8,11 +8,15 @@ import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { NewsTrackDto, UpsertNewsDto } from "./dto/news.dto";
 import { NewsService } from "./news.service";
+import { NewsRsvpService } from "./news-rsvp.service";
 
 @UseGuards(AuthGuard("jwt"), TenantGuard)
 @Controller("news")
 export class NewsFeedController {
-  constructor(private readonly news: NewsService) {}
+  constructor(
+    private readonly news: NewsService,
+    private readonly rsvps: NewsRsvpService
+  ) {}
 
   @Get("hero")
   hero(@CurrentTenant() tenant: TenantContext) {
@@ -34,6 +38,22 @@ export class NewsFeedController {
   @Get(":id")
   getOne(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
     return this.news.getOne(tenant, id);
+  }
+
+  /** Evento: cuántos van y si me anoté (el autor ve además quiénes). */
+  @Get(":id/rsvp")
+  rsvp(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.rsvps.summary(tenant, id);
+  }
+
+  @Post(":id/rsvp")
+  join(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.rsvps.join(tenant, id);
+  }
+
+  @Delete(":id/rsvp")
+  leave(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.rsvps.leave(tenant, id);
   }
 
   @Post(":id/track")

@@ -129,6 +129,35 @@ export class UpsertNewsDto {
   @Type(() => NewsSkuDto)
   relatedSkus?: NewsSkuDto[];
 
+  /** Evento (kind EVENT). */
+  @IsOptional()
+  @IsDateString()
+  eventStartsAt?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  eventEndsAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  eventLocation?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  eventUrl?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  rsvpEnabled?: boolean;
+
+  /** Lanzamiento de un producto de la marca. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  brandItemId?: string | null;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(12)

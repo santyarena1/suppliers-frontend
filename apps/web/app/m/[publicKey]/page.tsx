@@ -80,6 +80,8 @@ export default function PublicBrandLandingPage() {
               supportPhone: landing.supportPhone,
             }}
             products={products}
+            launches={landing.launches ?? []}
+            events={landing.events ?? []}
             actions={landing.actions ?? []}
             news={landing.news ?? []}
             materials={landing.materials ?? []}
@@ -92,6 +94,8 @@ export default function PublicBrandLandingPage() {
                   slots={landingModuleSlots({
                     name: landing.name,
                     products,
+                    launches: landing.launches ?? [],
+                    events: landing.events ?? [],
                     actions: landing.actions ?? [],
                     news: landing.news ?? [],
                     materials: landing.materials ?? [],

@@ -10,6 +10,7 @@ import { AdsService } from "../ads/ads.service";
 import { NewsVisibilityService } from "./news-visibility.service";
 import { resolveAuthorLogo, visibleNewsAttachments } from "./news-visibility";
 import type { UpsertNewsDto } from "./dto/news.dto";
+import { assertEventPublishable, eventPatch, serializeEvent } from "./news-event";
 
 function liveWhere(now = new Date()): Prisma.NewsArticleWhereInput {
   return {
@@ -203,7 +204,12 @@ export class NewsService {
     await this.assertPmScope(tenant, dto.scopeBrandName);
     if (!dto.title?.trim()) throw new BadRequestException("La nota necesita un título");
     const status = dto.status ?? "DRAFT";
-    if (status === "PUBLISHED") this.assertPublishable(dto);
+    const event = eventPatch(dto);
+    if (status === "PUBLISHED") {
+      this.assertPublishable(dto);
+      assertEventPublishable({ kind: dto.kind ?? "OTHER", eventStartsAt: event.eventStartsAt ?? null });
+    }
+    const brandItemId = await this.ownBrandItem(tenant, dto.brandItemId);
     const row = await this.prisma.newsArticle.create({
       data: {
         tenantId: tenant.tenantId,
@@ -220,6 +226,8 @@ export class NewsService {
         publishedAt: status === "PUBLISHED" ? this.parseDate(dto.publishedAt) ?? new Date() : this.parseDate(dto.publishedAt),
         expiresAt: this.parseDate(dto.expiresAt),
         relatedSkus: (dto.relatedSkus ?? []) as unknown as Prisma.InputJsonValue,
+        ...event,
+        brandItemId: brandItemId ?? null,
         createdByUserId: tenant.userId,
         attachments: { create: this.attachmentCreates(dto.attachments) },
         images: { create: this.imageCreates(dto.images) },
@@ -246,7 +254,15 @@ export class NewsService {
       coverUrl: dto.coverUrl === undefined ? existing.coverUrl : dto.coverUrl,
       bodyHtml: dto.bodyHtml === undefined ? existing.bodyHtml : dto.bodyHtml,
     };
-    if (nextStatus === "PUBLISHED") this.assertPublishable(merged);
+    const event = eventPatch(dto, existing);
+    if (nextStatus === "PUBLISHED") {
+      this.assertPublishable(merged);
+      assertEventPublishable({
+        kind: dto.kind ?? existing.kind,
+        eventStartsAt: event.eventStartsAt !== undefined ? event.eventStartsAt : existing.eventStartsAt,
+      });
+    }
+    const brandItemId = await this.ownBrandItem(tenant, dto.brandItemId);
     const becomingPublic = existing.status !== "PUBLISHED" && nextStatus === "PUBLISHED";
     const row = await this.prisma.$transaction(async (tx) => {
       if (dto.attachments) {
@@ -272,6 +288,8 @@ export class NewsService {
             : { publishedAt: this.parseDate(dto.publishedAt) ?? (becomingPublic ? new Date() : existing.publishedAt) }),
           ...(dto.expiresAt === undefined ? {} : { expiresAt: this.parseDate(dto.expiresAt) }),
           ...(dto.relatedSkus === undefined ? {} : { relatedSkus: dto.relatedSkus as unknown as Prisma.InputJsonValue }),
+          ...event,
+          ...(brandItemId === undefined ? {} : { brandItemId }),
           ...(dto.attachments ? { attachments: { create: this.attachmentCreates(dto.attachments) } } : {}),
           ...(dto.images ? { images: { create: this.imageCreates(dto.images) } } : {}),
         },
@@ -285,6 +303,18 @@ export class NewsService {
     return this.withStats(
       this.serializeDetail(row, { linked: true, advertised: false, viewerType: tenant.tenantType, logos })
     );
+  }
+
+  /** El producto de un lanzamiento tiene que ser de la marca que publica. undefined = no vino. */
+  private async ownBrandItem(tenant: TenantContext, brandItemId: string | null | undefined) {
+    if (brandItemId === undefined) return undefined;
+    if (!brandItemId) return null;
+    const item = await this.prisma.brandItem.findFirst({
+      where: { id: brandItemId, tenantId: tenant.tenantId },
+      select: { id: true },
+    });
+    if (!item) throw new BadRequestException("Ese producto no es de tu marca");
+    return item.id;
   }
 
   async remove(tenant: TenantContext, id: string) {
@@ -558,6 +588,11 @@ export class NewsService {
       isPublic: boolean;
       publishedAt: Date | null;
       expiresAt: Date | null;
+      eventStartsAt: Date | null;
+      eventEndsAt: Date | null;
+      eventLocation: string | null;
+      eventUrl: string | null;
+      rsvpEnabled: boolean;
       tenant: {
         id: string;
         name: string;
@@ -580,6 +615,7 @@ export class NewsService {
       isPublic: row.isPublic,
       publishedAt: row.publishedAt?.toISOString() ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
+      event: serializeEvent(row),
       author: this.authorOf(row, logos),
       linked,
     };
@@ -615,6 +651,12 @@ export class NewsService {
       publishedAt: Date | null;
       expiresAt: Date | null;
       relatedSkus: Prisma.JsonValue;
+      eventStartsAt: Date | null;
+      eventEndsAt: Date | null;
+      eventLocation: string | null;
+      eventUrl: string | null;
+      rsvpEnabled: boolean;
+      brandItemId: string | null;
       createdAt: Date;
       tenant: {
         id: string;
@@ -674,6 +716,8 @@ export class NewsService {
       scopeBrandName: row.scopeBrandName,
       publishedAt: row.publishedAt?.toISOString() ?? null,
       expiresAt: row.expiresAt?.toISOString() ?? null,
+      event: serializeEvent(row, opts.publicView),
+      brandItemId: opts.publicView ? null : row.brandItemId,
       createdAt: row.createdAt.toISOString(),
       author: {
         ...this.authorOf(row, opts.logos),

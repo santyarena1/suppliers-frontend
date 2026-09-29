@@ -9,6 +9,7 @@ import { useProviderDisplay } from "@/lib/providerDisplay";
 import NewsHtmlBody from "./NewsHtmlBody";
 import NewsKindMark from "./NewsKindMark";
 import NewsPhoto from "./NewsPhoto";
+import NewsEventCard from "./NewsEventCard";
 
 export default function NewsArticleView({
   article,
@@ -68,6 +69,9 @@ export default function NewsArticleView({
       <div className={`max-w-3xl mx-auto px-4 sm:px-6 ${paper ? "py-2" : "pb-10"}`}>
         {article.author.hubPath && (
           <BrandSpaceLinks hubPath={article.author.hubPath} brandName={article.author.name} paper={paper} />
+        )}
+        {article.event && (
+          <NewsEventCard articleId={article.id} event={article.event} interactive={Boolean(trackViews)} paper={paper} />
         )}
         <NewsHtmlBody html={article.bodyHtml} paper={paper} />
 

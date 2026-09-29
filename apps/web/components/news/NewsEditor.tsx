@@ -8,12 +8,14 @@ import { assetsApi, newsApi, type NewsDetail, type NewsKind, type UpsertNewsPayl
 import { NEWS_HTML_STARTER, NEWS_KIND_LABELS, NEWS_KIND_ORDER } from "@/lib/news";
 import NewsHtmlBody from "./NewsHtmlBody";
 import NewsPhoto from "./NewsPhoto";
+import { NewsEventFields, NewsLaunchProductField, type EventDraft } from "./NewsEventFields";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
 }
 
-type Draft = {
+type Draft = EventDraft & {
+  brandItemId: string;
   title: string;
   excerpt: string;
   bodyHtml: string;
@@ -43,13 +45,25 @@ function toLocalInput(iso?: string | null) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function fromExisting(article?: NewsDetail | null): Draft {
+/** Para una nota nueva: tipo y producto que vienen del link (p. ej. "Crear lanzamiento"). */
+export interface NewsDraftSeed {
+  kind?: NewsKind;
+  brandItemId?: string;
+}
+
+function fromExisting(article?: NewsDetail | null, seed?: NewsDraftSeed): Draft {
   return {
+    eventStartsAt: toLocalInput(article?.event?.startsAt),
+    eventEndsAt: toLocalInput(article?.event?.endsAt),
+    eventLocation: article?.event?.location ?? "",
+    eventUrl: article?.event?.url ?? "",
+    rsvpEnabled: article?.event?.rsvpEnabled ?? true,
+    brandItemId: article?.brandItemId ?? seed?.brandItemId ?? "",
     title: article?.title ?? "",
     excerpt: article?.excerpt ?? "",
     bodyHtml: article?.bodyRaw || article?.bodyHtml || NEWS_HTML_STARTER,
     coverUrl: article?.coverUrl ?? "",
-    kind: article?.kind ?? "OTHER",
+    kind: article?.kind ?? seed?.kind ?? "OTHER",
     isPublic: article?.isPublic ?? false,
     notifyOnPublish: article?.notifyOnPublish ?? false,
     publishedAt: toLocalInput(article?.publishedAt),
@@ -80,6 +94,8 @@ function payloadOf(draft: Draft, status: UpsertNewsPayload["status"]): UpsertNew
     publishedAt: draft.publishedAt ? new Date(draft.publishedAt).toISOString() : null,
     expiresAt: draft.expiresAt ? new Date(draft.expiresAt).toISOString() : null,
     scopeBrandName: draft.scopeBrandName.trim() || null,
+    ...eventPayload(draft),
+    brandItemId: draft.brandItemId || null,
     images: draft.images.filter((img) => img.url).map((img) => ({ url: img.url, caption: img.caption || null })),
     attachments: draft.attachments
       .filter((a) => a.title.trim() && (a.fileUrl || a.contentUrl))
@@ -94,14 +110,28 @@ function payloadOf(draft: Draft, status: UpsertNewsPayload["status"]): UpsertNew
   };
 }
 
+function eventPayload(draft: Draft): Partial<UpsertNewsPayload> {
+  if (draft.kind !== "EVENT") {
+    return { eventStartsAt: null, eventEndsAt: null, eventLocation: null, eventUrl: null, rsvpEnabled: false };
+  }
+  return {
+    eventStartsAt: draft.eventStartsAt ? new Date(draft.eventStartsAt).toISOString() : null,
+    eventEndsAt: draft.eventEndsAt ? new Date(draft.eventEndsAt).toISOString() : null,
+    eventLocation: draft.eventLocation.trim() || null,
+    eventUrl: draft.eventUrl.trim() || null,
+    rsvpEnabled: draft.rsvpEnabled,
+  };
+}
+
 const field =
   "w-full bg-transparent border-0 border-b border-surface-700 rounded-none px-0 py-2 text-white placeholder-surface-600 focus:outline-none focus:border-white/50";
 
-export default function NewsEditor({ article }: { article?: NewsDetail | null }) {
+export default function NewsEditor({ article, seed }: { article?: NewsDetail | null; seed?: NewsDraftSeed }) {
   const router = useRouter();
   const tenant = getTenant();
   const isPm = tenant?.role === "PRODUCT_MANAGER";
-  const [draft, setDraft] = useState<Draft>(() => fromExisting(article));
+  const [draft, setDraft] = useState<Draft>(() => fromExisting(article, seed));
+  const isBrand = tenant?.type === "BRAND";
   const [tab, setTab] = useState<"write" | "html">("html");
   const [saving, setSaving] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -351,6 +381,13 @@ export default function NewsEditor({ article }: { article?: NewsDetail | null })
               />
             </label>
           </div>
+
+          {draft.kind === "EVENT" && (
+            <NewsEventFields value={draft} onChange={(patch) => setDraft((prev) => ({ ...prev, ...patch }))} />
+          )}
+          {isBrand && (draft.kind === "LAUNCH" || draft.kind === "INCOMING") && (
+            <NewsLaunchProductField value={draft.brandItemId} onChange={(id) => set("brandItemId", id)} />
+          )}
 
           <label className="flex items-start gap-2 text-sm text-surface-300">
             <input type="checkbox" checked={draft.isPublic} onChange={(e) => set("isPublic", e.target.checked)} />

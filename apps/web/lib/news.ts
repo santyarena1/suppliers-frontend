@@ -2,6 +2,7 @@ import type { NewsKind, TenantType } from "@/lib/api";
 
 export const NEWS_KIND_LABELS: Record<NewsKind, string> = {
   LAUNCH: "Lanzamiento",
+  EVENT: "Evento",
   INCOMING: "Próximo ingreso",
   PRICE_LIST: "Lista de precios",
   PROMO: "Promo",
@@ -12,6 +13,7 @@ export const NEWS_KIND_LABELS: Record<NewsKind, string> = {
 
 export const NEWS_KIND_ORDER: NewsKind[] = [
   "LAUNCH",
+  "EVENT",
   "INCOMING",
   "PRICE_LIST",
   "PROMO",

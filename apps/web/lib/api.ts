@@ -3659,6 +3659,8 @@ export interface PublicBrandLanding {
   name: string;
   /** Se puede pedir vincularse desde este link. */
   allowLink?: boolean;
+  launches?: BrandLaunch[];
+  events?: BrandUpcomingEvent[];
   headline: string | null;
   about: string | null;
   logoUrl: string | null;
@@ -3763,6 +3765,8 @@ export interface BrandHub {
   actions: BrandAction[];
   /** Semáforo por distribuidor de los productos de la marca. */
   availability: BrandAvailabilityItem[];
+  launches: BrandLaunch[];
+  events: BrandUpcomingEvent[];
   stockMode: "AUTO" | "MANUAL";
   materials: BrandResource[];
   trainings: BrandResource[];
@@ -3945,7 +3949,7 @@ export const brandLinkApi = {
     api.post<{ linkId: string; brandName: string; created: boolean }>(`/my/brands/by-landing/${publicKey}/link`, {}),
 };
 
-export type NewsKind = "LAUNCH" | "INCOMING" | "PRICE_LIST" | "PROMO" | "CATALOG" | "NOTICE" | "OTHER";
+export type NewsKind = "LAUNCH" | "EVENT" | "INCOMING" | "PRICE_LIST" | "PROMO" | "CATALOG" | "NOTICE" | "OTHER";
 export type NewsStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 
 export interface NewsAuthor {
@@ -3974,6 +3978,24 @@ export interface NewsCard {
   linked: boolean;
   status?: NewsStatus;
   stats?: { views: number; attachmentClicks: number };
+  event?: NewsEventInfo | null;
+}
+
+/** Datos de un evento (nota de tipo EVENT). */
+export interface NewsEventInfo {
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  url: string | null;
+  rsvpEnabled: boolean;
+}
+
+export interface NewsRsvpSummary {
+  enabled: boolean;
+  count: number;
+  mine: boolean;
+  /** Solo para el autor. */
+  attendees?: { tenantId: string; name: string; people: number }[];
 }
 
 export interface NewsHeroSlide extends NewsCard {
@@ -4014,6 +4036,9 @@ export interface NewsDetail {
   relatedSkus: { provider: string; externalId: string; name: string }[];
   publicPath: string | null;
   stats?: { views: number; attachmentClicks: number };
+  event: NewsEventInfo | null;
+  /** Lanzamiento de un producto de la marca. */
+  brandItemId: string | null;
 }
 
 export interface UpsertNewsPayload {
@@ -4029,6 +4054,12 @@ export interface UpsertNewsPayload {
   publishedAt?: string | null;
   expiresAt?: string | null;
   relatedSkus?: { provider: string; externalId: string; name: string }[];
+  eventStartsAt?: string | null;
+  eventEndsAt?: string | null;
+  eventLocation?: string | null;
+  eventUrl?: string | null;
+  rsvpEnabled?: boolean;
+  brandItemId?: string | null;
   attachments?: {
     kind: NewsAttachmentView["kind"];
     title: string;
@@ -4050,7 +4081,36 @@ export const newsApi = {
   create: (data: UpsertNewsPayload) => api.post<NewsDetail>("/my/news", data),
   update: (id: string, data: UpsertNewsPayload) => api.put<NewsDetail>(`/my/news/${id}`, data),
   remove: (id: string) => api.delete<{ ok: true }>(`/my/news/${id}`),
+  rsvp: (id: string) => api.get<NewsRsvpSummary>(`/news/${id}/rsvp`),
+  join: (id: string) => api.post<NewsRsvpSummary>(`/news/${id}/rsvp`, {}),
+  leave: (id: string) => api.delete<NewsRsvpSummary>(`/news/${id}/rsvp`),
 };
+
+/** Producto de la marca en próximo ingreso, con la nota que lo presenta. */
+export interface BrandLaunch {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  partNumber: string | null;
+  referencePrice: number | null;
+  currency: string;
+  incomingAt: string | null;
+  note: { id: string; title: string; excerpt: string; path: string } | null;
+}
+
+export interface BrandUpcomingEvent {
+  id: string;
+  title: string;
+  excerpt: string;
+  coverUrl: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  location: string | null;
+  url: string | null;
+  rsvpEnabled: boolean;
+  attending: number;
+  path: string;
+}
 
 export const publicNewsApi = {
   get: (publicKey: string) => api.get<NewsDetail>(`/public/news/${publicKey}`),

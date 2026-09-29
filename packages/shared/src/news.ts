@@ -1,5 +1,6 @@
 export const NEWS_KINDS = [
   "LAUNCH",
+  "EVENT",
   "INCOMING",
   "PRICE_LIST",
   "PROMO",
@@ -12,6 +13,7 @@ export type NewsKind = (typeof NEWS_KINDS)[number];
 
 export const NEWS_KIND_LABELS: Record<NewsKind, string> = {
   LAUNCH: "Lanzamiento",
+  EVENT: "Evento",
   INCOMING: "Próximo ingreso",
   PRICE_LIST: "Lista de precios",
   PROMO: "Promo",

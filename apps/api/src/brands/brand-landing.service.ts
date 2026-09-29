@@ -6,12 +6,16 @@ import { newPublicKey } from "./brand-orgs";
 import { compileBrandHtml, sanitizeBrandHtml } from "./brand-html";
 import { pickPublicLandingModules } from "./brand-landing-public";
 import { UpdateBrandLandingDto } from "./dto/brand.dto";
+import { BrandLaunchesService } from "./brand-launches.service";
 
 const LANDING_WRITERS = ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL"] as const;
 
 @Injectable()
 export class BrandLandingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly launches: BrandLaunchesService
+  ) {}
 
   async getMine(tenant: TenantContext) {
     this.assertBrand(tenant);
@@ -109,6 +113,10 @@ export class BrandLandingService {
       }),
     ]);
     const modules = pickPublicLandingModules({ signals, actions, news, resources });
+    const [launches, events] = await Promise.all([
+      this.launches.launchesFor(brandId, "public"),
+      this.launches.eventsFor(brandId, "public"),
+    ]);
     return {
       publicKey: landing.publicKey,
       name: landing.tenant.name,
@@ -126,6 +134,8 @@ export class BrandLandingService {
       /** Se puede pedir vincularse desde este link. */
       allowLink: landing.allowPublicLink,
       ...modules,
+      launches,
+      events,
     };
   }
 

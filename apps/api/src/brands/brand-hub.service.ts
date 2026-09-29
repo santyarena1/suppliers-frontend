@@ -4,6 +4,7 @@ import type { TenantContext } from "../tenants/tenant-context.service";
 import { compileBrandHtml } from "./brand-html";
 import { BrandActionsService } from "./brand-actions.service";
 import { BrandItemsService } from "./brand-items.service";
+import { BrandLaunchesService } from "./brand-launches.service";
 import { brandPresence, hasBrandContact, hasBrandSpace } from "./brand-presence";
 
 @Injectable()
@@ -13,7 +14,8 @@ export class BrandHubService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly actions: BrandActionsService,
-    private readonly items: BrandItemsService
+    private readonly items: BrandItemsService,
+    private readonly launches: BrandLaunchesService
   ) {}
 
   async getForClient(tenant: TenantContext, linkId: string) {
@@ -96,6 +98,17 @@ export class BrandHubService {
       hasContact: hasBrandContact(landing ?? {}),
       hasSpace: hasBrandSpace(landing ?? {}),
     });
+    // Lanzamientos y eventos son un extra del espacio: si fallan, el espacio igual abre.
+    const [launches, events] = await Promise.all([
+      this.launches.launchesFor(brandId, "client").catch((err: unknown) => {
+        this.logger.error(`Lanzamientos de la marca ${brandId}: ${String(err)}`);
+        return [];
+      }),
+      this.launches.eventsFor(brandId, "client").catch((err: unknown) => {
+        this.logger.error(`Eventos de la marca ${brandId}: ${String(err)}`);
+        return [];
+      }),
+    ]);
     return {
       linkId: link.id,
       tenantId: brandId,
@@ -123,6 +136,8 @@ export class BrandHubService {
       htmlParts: compiled.parts,
       actions: withP,
       availability: availability.items,
+      launches,
+      events,
       stockMode: availability.mode,
       materials,
       trainings,

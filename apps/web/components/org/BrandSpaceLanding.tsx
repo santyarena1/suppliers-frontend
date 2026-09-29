@@ -11,9 +11,12 @@ import type {
   BrandPresence,
   BrandResource,
   BrandAvailabilityItem,
+  BrandLaunch,
+  BrandUpcomingEvent,
   BrandSkuSignal,
 } from "@/lib/api";
 import { BrandAvailabilityGrid, StockLegend } from "@/components/brands/BrandAvailability";
+import { BrandUpcoming } from "@/components/brands/BrandUpcoming";
 import { isAvailabilityList } from "@/lib/brand-stock";
 import { SIGNAL_LIGHT_CARD, SIGNAL_LIGHT_DOT, SIGNAL_LIGHT_LABELS } from "@/lib/brand-lights";
 import { BRAND_MODULE_HINT } from "@/lib/brand-presence";
@@ -73,6 +76,8 @@ export function BrandSpaceLanding({
   theme,
   contact,
   products = [],
+  launches = [],
+  events = [],
   actions = [],
   news = [],
   materials = [],
@@ -103,6 +108,8 @@ export function BrandSpaceLanding({
     supportPhone: string | null;
   };
   products?: LandingProducts;
+  launches?: BrandLaunch[];
+  events?: BrandUpcomingEvent[];
   actions?: BrandAction[] | PublicAction[];
   news?: BrandHub["news"] | PublicNews[];
   materials?: BrandResource[] | PublicFile[];
@@ -203,6 +210,8 @@ export function BrandSpaceLanding({
         <LandingModules
           name={name}
           products={products}
+          launches={launches}
+          events={events}
           actions={actions}
           news={news}
           materials={materials}
@@ -223,6 +232,8 @@ export function BrandSpaceLanding({
 function LandingModules({
   name,
   products,
+  launches,
+  events,
   actions,
   news,
   materials,
@@ -237,6 +248,8 @@ function LandingModules({
 }: {
   name: string;
   products: LandingProducts;
+  launches: BrandLaunch[];
+  events: BrandUpcomingEvent[];
   actions: BrandAction[] | PublicAction[];
   news: BrandHub["news"] | PublicNews[];
   materials: BrandResource[] | PublicFile[];
@@ -259,6 +272,7 @@ function LandingModules({
         hub={hub}
         ready={presence?.modules.products.ready ?? products.length > 0}
       />
+      <BrandUpcoming name={name} launches={launches} events={events} />
       <ActionsSection
         name={name}
         actions={actions}
@@ -949,6 +963,8 @@ function Pending({ text, children }: { text: string; children?: React.ReactNode 
 export function landingModuleSlots({
   name,
   products,
+  launches = [],
+  events = [],
   actions,
   news,
   materials,
@@ -963,6 +979,8 @@ export function landingModuleSlots({
 }: {
   name: string;
   products: LandingProducts;
+  launches?: BrandLaunch[];
+  events?: BrandUpcomingEvent[];
   actions: BrandAction[] | PublicAction[];
   news: BrandHub["news"] | PublicNews[];
   materials: BrandResource[] | PublicFile[];
@@ -1000,6 +1018,7 @@ export function landingModuleSlots({
         ready={productsReady}
       />
     ),
+    lanzamientos: <BrandUpcoming name={name} launches={launches} events={events} />,
     acciones: <ActionsSection name={name} actions={actions} hub={hub} ready={actionsReady} />,
     materiales: (
       <FilesSection
@@ -1045,6 +1064,8 @@ export function brandHubSlotModules({ hub, retailer = false }: { hub: BrandHub; 
   return landingModuleSlots({
     name: hub.name,
     products: hub.availability,
+    launches: hub.launches ?? [],
+    events: hub.events ?? [],
     actions: hub.actions,
     news: hub.news ?? [],
     materials: hub.materials,

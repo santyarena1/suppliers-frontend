@@ -166,6 +166,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: El link público es la puerta de entrada: quien lo recibió vincula su organización sin código (comercio → marca, o distro → marca). Solo si la landing está publicada y `allowPublicLink` (por defecto sí). Un vínculo que la marca revocó no se reabre desde el link (ahí hace falta código). Sin sesión, `/m/:publicKey` guarda el pedido en el navegador (`nodo.pendingBrandLink`, 7 días) y manda a crear cuenta o entrar; al volver, la app muestra "¿Vinculamos tu organización con la marca?".
 
+### [FEATURE] Eventos y lanzamientos de la marca
+- **Método**: GET | POST | PUT | DELETE
+- **Ruta**: `POST|PUT /my/news` (campos nuevos) · `GET|POST|DELETE /news/:id/rsvp` · `GET /my/brands/:linkId` y `GET /public/brands/:publicKey` (agregan `launches` y `events`)
+- **Auth**: Bearer con organización (anotarse: quien ve la nota; el autor no se anota a su propio evento). Landing pública: sin auth.
+- **Body / Params**: nota `{ kind: "EVENT", eventStartsAt, eventEndsAt?, eventLocation?, eventUrl?, rsvpEnabled? }` · lanzamiento `{ kind: "LAUNCH"|"INCOMING", brandItemId }` (producto de la propia marca).
+- **Respuesta esperada**: nota `{ ..., event: { startsAt, endsAt, location, url, rsvpEnabled } | null, brandItemId }` · inscripción `{ enabled, count, mine, attendees?: [{ tenantId, name, people }] }` (`attendees` solo para el autor) · `launches: [{ id, name, imageUrl, partNumber, referencePrice, currency, incomingAt, note: { id, title, excerpt, path } | null }]` · `events: [{ id, title, excerpt, coverUrl, startsAt, endsAt, location, url, rsvpEnabled, attending, path }]`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Un evento no se publica sin fecha de inicio. El link público nunca lleva el link de la reunión ni inscripción. Lanzamiento = producto de la marca en "Próximo ingreso" + la última nota publicada que lo presenta (en el link público solo notas `isPublic`). Eventos listados: los que no terminaron (sin fin, durante el día en que empiezan). Hueco nuevo `{{lanzamientos}}` en el HTML de la marca (se agrega al final si falta). "Presentar el lanzamiento" en `/marca/productos` abre `/noticias/nueva?tipo=LAUNCH&producto=<id>`.
+
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
 - **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/insights`, `/orders/:id/approve`, `/orders/:id/reject`

@@ -1,6 +1,7 @@
 export const BRAND_HUB_SLOTS = [
   "productos",
   "semaforos",
+  "lanzamientos",
   "acciones",
   "materiales",
   "capacitaciones",
@@ -263,7 +264,7 @@ export function rewriteCssForShadow(css: string): string {
  */
 export function inferBrandHubTarget(text: string, href?: string | null): string | null {
   const h = (href ?? "").trim();
-  if (/^#(productos|semaforos|acciones|novedades|noticias|materiales|capacitaciones|contacto|hablar)$/i.test(h)) {
+  if (/^#(productos|lanzamientos|semaforos|acciones|novedades|noticias|materiales|capacitaciones|contacto|hablar)$/i.test(h)) {
     const key = h.toLowerCase();
     if (key === "#hablar") return "#contacto";
     if (key === "#noticias" || key === "#semaforos") return key === "#semaforos" ? "#productos" : "#novedades";
@@ -476,7 +477,7 @@ export function compileBrandHtml(raw: string): { html: string; slots: BrandHubSl
   return { html: rewriteStyleTagsForShadow(html), slots, parts };
 }
 
-const LANDING_MODULE_SLOTS = ["productos", "acciones", "novedades", "materiales", "capacitaciones", "contacto"] as const;
+const LANDING_MODULE_SLOTS = ["productos", "lanzamientos", "acciones", "novedades", "materiales", "capacitaciones", "contacto"] as const;
 
 export function appendMissingLandingSlots(html: string): string {
   const found = new Set<string>();

@@ -1235,6 +1235,7 @@ model BrandItem {
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   links          BrandItemLink[]
+  launches       NewsArticle[]
 
   @@index([tenantId, active, position])
 }
@@ -1312,6 +1313,7 @@ model OrgNotification {
 
 enum NewsKind {
   LAUNCH
+  EVENT
   INCOMING
   PRICE_LIST
   PROMO
@@ -1356,6 +1358,15 @@ model NewsArticle {
   publishedAt     DateTime?
   expiresAt       DateTime?
   relatedSkus     Json       @default("[]")
+  /// Evento (kind EVENT): cuándo, dónde o link, y si se puede anotar.
+  eventStartsAt   DateTime?
+  eventEndsAt     DateTime?
+  eventLocation   String?
+  eventUrl        String?
+  rsvpEnabled     Boolean    @default(false)
+  /// Lanzamiento de un producto de la marca (kind LAUNCH / INCOMING).
+  brandItemId     String?
+  brandItem       BrandItem? @relation(fields: [brandItemId], references: [id], onDelete: SetNull)
   createdByUserId String?
   createdBy       User?      @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt       DateTime   @default(now())
@@ -1364,6 +1375,7 @@ model NewsArticle {
   attachments NewsAttachment[]
   images      NewsImage[]
   events      NewsEvent[]
+  rsvps       NewsRsvp[]
   campaigns   AdCampaign[]
 
   @@index([tenantId, status, publishedAt])
@@ -1394,6 +1406,19 @@ model NewsImage {
   sortOrder Int         @default(0)
 
   @@index([articleId, sortOrder])
+}
+
+/// Quién se anotó a un evento: una persona de una organización.
+model NewsRsvp {
+  id        String      @id @default(uuid())
+  articleId String
+  article   NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tenantId  String
+  userId    String
+  createdAt DateTime    @default(now())
+
+  @@unique([articleId, userId])
+  @@index([articleId])
 }
 
 model NewsEvent {

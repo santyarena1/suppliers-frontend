@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Loader2, Package, Plus, Search, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { ChevronDown, Loader2, Megaphone, Package, Plus, Search, Trash2, X } from "lucide-react";
 import { assetUrl } from "@/lib/assets";
 import {
   brandApi,
@@ -200,6 +201,15 @@ function ItemEditor({
             </Field>
           )}
         </div>
+        {item.state === "INCOMING" && (
+          <Link
+            href={`/noticias/nueva?tipo=LAUNCH&producto=${item.id}`}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-sky-300 hover:text-sky-200"
+          >
+            <Megaphone className="w-3.5 h-3.5" />
+            Presentar el lanzamiento (fotos, material, aviso)
+          </Link>
+        )}
         <Field label="Nota interna">
           <textarea
             className={`${input} min-h-[60px]`}

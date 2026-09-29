@@ -1,7 +1,7 @@
 /** Destino nativo cuando el HTML de la marca tiene un botón muerto (href="#", <button>, onclick sanitizado). */
 export function inferBrandHubTarget(text: string, href?: string | null): string | null {
   const h = (href ?? "").trim();
-  if (/^#(productos|semaforos|acciones|novedades|noticias|materiales|capacitaciones|contacto|hablar)$/i.test(h)) {
+  if (/^#(productos|lanzamientos|semaforos|acciones|novedades|noticias|materiales|capacitaciones|contacto|hablar)$/i.test(h)) {
     const key = h.toLowerCase();
     if (key === "#hablar") return "#contacto";
     if (key === "#noticias") return "#novedades";
@@ -53,7 +53,7 @@ export function rewriteCssForBrandHost(css: string): string {
     .replace(/min-height\s*:\s*auto\b/gi, "min-height:0");
 }
 
-const LANDING_MODULE_SLOTS = ["productos", "acciones", "novedades", "materiales", "capacitaciones", "contacto"] as const;
+const LANDING_MODULE_SLOTS = ["productos", "lanzamientos", "acciones", "novedades", "materiales", "capacitaciones", "contacto"] as const;
 
 export function slotsDeclaredInBrandHtml(html: string): Set<string> {
   const found = new Set<string>();
