@@ -170,7 +170,7 @@ export function BrandSpaceLanding({
       {hub && presence?.pending && (
         <p className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 text-sm rounded-xl px-4 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-100">
           <span className="font-semibold">Pendiente de contenido.</span> Ya estás conectado con {name}. Todavía no
-          publicó mapa, acciones ni materiales: cada bloque aparece abajo para que sepas qué va a haber.
+          publicó productos, promociones ni materiales: cada bloque aparece abajo para que sepas qué va a haber.
         </p>
       )}
 
@@ -658,8 +658,8 @@ export function ActionsSection({
         <Pending
           text={
             hub
-              ? `${name} no tiene acciones vigentes. Cuando lance una (unidades, USD o rebate), se mide acá sobre tus pedidos.`
-              : `${name} no tiene acciones publicadas en esta página.`
+              ? `${name} no tiene promociones vigentes. Cuando lance una (objetivo de compra o rebate), tu avance se mide acá con tus pedidos.`
+              : `${name} no tiene promociones publicadas en esta página.`
           }
         />
       ) : (

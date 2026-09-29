@@ -57,7 +57,7 @@ export default function MarcasHomePage() {
           <p className="text-xs text-surface-500 hidden sm:block">
             {distro
               ? "Espacio de cada marca vinculada con este distribuidor."
-              : "Todo lo que podés hacer con las marcas de este local: productos, acciones, materiales y hablar."}
+              : "Todo lo que podés hacer con las marcas de este local: stock, promociones, novedades, materiales y chat."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ function BrandCard({ brand, distro }: { brand: RetailerBrandView; distro: boolea
 
         {pending ? (
           <p className="text-xs text-amber-200/80 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
-            El vínculo ya está. {brand.name} todavía no cargó productos, materiales ni acciones. Entras igual: lo
+            El vínculo ya está. {brand.name} todavía no cargó productos, materiales ni promociones. Entras igual: lo
             que falte se ve como pendiente.
           </p>
         ) : (
