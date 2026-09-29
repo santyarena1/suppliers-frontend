@@ -117,9 +117,19 @@ rol" borra la fila.
 
 ## Segunda etapa
 
-- `prices.view_cost`: sin el permiso, búsqueda, ficha, carrito y pedidos devuelven el
-  costo en `null` (recortado en el servidor). No se muestra en la matriz hasta que
-  esté aplicado.
+- `prices.view_cost`: **descartado por ahora (2026-09-29)**. Nadie lo pidió y el costo
+  viaja por muchos caminos; un recorte parcial daría falsa seguridad. Si se retoma:
+  - Dónde viaja el costo: catálogo, búsqueda y ficha (`toProductView` / `toSheetView`
+    en `apps/api/src/providers/catalog-view.ts`, más `withPriceDropMeta` y
+    `getFeatured`), historial de precios, sync runs e importaciones de listas (diffs
+    de precio), carrito (`/cart/org` y el evento `cart_updated` por websocket),
+    pedidos (`OrderApprovalService.serialize`), analítica (`/orders/insights`),
+    checkout y borradores por proveedor, y mensajes de chat de tipo pedido.
+  - Decisión pendiente: qué ve quien no ve costo pero arma pedidos. Lo más simple
+    sería un recálculo del carrito: se muestra el precio con el margen del comercio
+    (`ProviderSyncConfig.priceMarkupPercent`) en lugar del costo.
+  - En el front, un precio `null` hoy significa "sin sincronizar" y bloquea la compra:
+    usar una bandera explícita (`costHidden`) en lugar de `null`.
 
 ## Fuera de alcance
 
