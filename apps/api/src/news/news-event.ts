@@ -7,6 +7,9 @@ export interface NewsEventInput {
   eventLocation?: string | null;
   eventUrl?: string | null;
   rsvpEnabled?: boolean;
+  eventCapacity?: number | null;
+  rsvpDeadline?: string | null;
+  eventReminder?: boolean;
 }
 
 export interface NewsEventRow {
@@ -16,6 +19,9 @@ export interface NewsEventRow {
   eventLocation: string | null;
   eventUrl: string | null;
   rsvpEnabled: boolean;
+  eventCapacity?: number | null;
+  rsvpDeadline?: Date | null;
+  eventReminder?: boolean;
 }
 
 function date(value: string | null | undefined, field: string): Date | null {
@@ -48,6 +54,15 @@ export function eventPatch(input: NewsEventInput, existing?: Pick<NewsEventRow, 
   if (input.eventLocation !== undefined) patch.eventLocation = input.eventLocation?.trim() || null;
   if (input.eventUrl !== undefined) patch.eventUrl = httpsUrl(input.eventUrl);
   if (input.rsvpEnabled !== undefined) patch.rsvpEnabled = input.rsvpEnabled;
+  if (input.rsvpDeadline !== undefined) patch.rsvpDeadline = date(input.rsvpDeadline, "límite de confirmación");
+  if (input.eventReminder !== undefined) patch.eventReminder = input.eventReminder;
+  if (input.eventCapacity !== undefined) {
+    const cap = input.eventCapacity;
+    if (cap != null && (!Number.isInteger(cap) || cap < 1)) {
+      throw new BadRequestException("El cupo tiene que ser un número entero mayor a 0");
+    }
+    patch.eventCapacity = cap ?? null;
+  }
 
   const starts = patch.eventStartsAt !== undefined ? patch.eventStartsAt : existing?.eventStartsAt ?? null;
   const ends = patch.eventEndsAt !== undefined ? patch.eventEndsAt : existing?.eventEndsAt ?? null;
@@ -73,5 +88,8 @@ export function serializeEvent(row: NewsEventRow, publicView = false) {
     location: row.eventLocation,
     url: publicView ? null : row.eventUrl,
     rsvpEnabled: publicView ? false : row.rsvpEnabled,
+    capacity: row.eventCapacity ?? null,
+    rsvpDeadline: row.rsvpDeadline?.toISOString() ?? null,
+    reminder: row.eventReminder ?? true,
   };
 }

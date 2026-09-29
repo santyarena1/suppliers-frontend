@@ -1,0 +1,12 @@
+-- AlterTable
+ALTER TABLE "NewsArticle" ADD COLUMN     "eventCapacity" INTEGER,
+ADD COLUMN     "eventReminder" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN     "reminderSentAt" TIMESTAMP(3),
+ADD COLUMN     "rsvpDeadline" TIMESTAMP(3);
+
+-- AlterTable
+ALTER TABLE "NewsRsvp" ADD COLUMN     "note" TEXT,
+ADD COLUMN     "people" INTEGER NOT NULL DEFAULT 1,
+ADD COLUMN     "status" TEXT NOT NULL DEFAULT 'GOING',
+ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+

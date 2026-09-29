@@ -1364,6 +1364,13 @@ model NewsArticle {
   eventLocation   String?
   eventUrl        String?
   rsvpEnabled     Boolean    @default(false)
+  /// Cupo: personas que pueden confirmar. Sin cupo, null.
+  eventCapacity   Int?
+  /// Hasta cuándo se puede confirmar asistencia.
+  rsvpDeadline    DateTime?
+  /// Recordatorio automático 24 h antes a quienes confirmaron.
+  eventReminder   Boolean    @default(true)
+  reminderSentAt  DateTime?
   /// Lanzamiento de un producto de la marca (kind LAUNCH / INCOMING).
   brandItemId     String?
   brandItem       BrandItem? @relation(fields: [brandItemId], references: [id], onDelete: SetNull)
@@ -1415,7 +1422,13 @@ model NewsRsvp {
   article   NewsArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
   tenantId  String
   userId    String
+  /// GOING (voy) o NOT_GOING (no voy).
+  status    String      @default("GOING")
+  /// Cuántas personas van (la persona y sus acompañantes del comercio).
+  people    Int         @default(1)
+  note      String?
   createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
 
   @@unique([articleId, userId])
   @@index([articleId])

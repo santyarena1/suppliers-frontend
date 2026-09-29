@@ -175,6 +175,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Un evento no se publica sin fecha de inicio. El link público nunca lleva el link de la reunión ni inscripción. Lanzamiento = producto de la marca en "Próximo ingreso" + la última nota publicada que lo presenta (en el link público solo notas `isPublic`). Eventos listados: los que no terminaron (sin fin, durante el día en que empiezan). Hueco nuevo `{{lanzamientos}}` en el HTML de la marca (se agrega al final si falta). "Presentar el lanzamiento" en `/marca/productos` abre `/noticias/nueva?tipo=LAUNCH&producto=<id>`.
 
+### [FEATURE] Eventos: confirmación de asistencia, cupo y avisos
+- **Método**: GET | POST | DELETE
+- **Ruta**: `POST /news/:id/rsvp` (responder) · `GET /news/:id/rsvp` · `DELETE /news/:id/rsvp` · `GET /my/news/:id/attendees` · `POST /my/news/:id/remind`
+- **Auth**: Bearer. Responder: quien ve la nota (no el autor). Lista y avisos: la organización autora.
+- **Body / Params**: responder `{ status: GOING|NOT_GOING, people?: 1..20, note? }` · aviso `{ audience: "going"|"linked", message? }` · nota: `eventCapacity?`, `rsvpDeadline?`, `eventReminder?` (por defecto sí).
+- **Respuesta esperada**: resumen `{ enabled, count (personas que van), notGoing, mine, myResponse, capacity, spotsLeft, deadline, closedReason, attendees? }` · lista `{ items: [{ organization, person, email, status, people, note, answeredAt }] }` · aviso `{ sent }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: No se puede confirmar después de la fecha límite ni con el evento empezado; con cupo, se rechaza si no alcanza. Recordatorio automático (cron cada 30 min) a quienes confirmaron, 24 h antes, una sola vez (`reminderSentAt`, reclamado con updateMany para varias réplicas). Los avisos llegan a Notificaciones de cada organización (`OrgNotification` kind NEWS). La galería de la nota muestra las imágenes enteras (flyers).
+
 ### [FEATURE] Estadísticas de la marca
 - **Método**: GET
 - **Ruta**: `GET /my/brands/:linkId/stats?months=3|6|12` (comercio) · `GET /my/brand/stats?months=3|6|12` (marca)

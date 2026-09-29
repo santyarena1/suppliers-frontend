@@ -87,9 +87,11 @@ export default function NewsArticleView({
           <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-3">
             {article.images.map((img) => (
               <figure key={img.id} className="m-0">
-                <div className="aspect-[4/3] overflow-hidden bg-black/20">
-                  <NewsPhoto src={img.url} alt={img.caption || article.title} />
-                </div>
+                {/* Entera, sin recortar: suelen ser flyers o piezas con texto. */}
+                <a href={assetUrl(img.url)} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg bg-black/20">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={assetUrl(img.url)} alt={img.caption || article.title} className="block h-auto w-full" />
+                </a>
                 {img.caption && <figcaption className={`text-[12px] mt-2 ${mute}`}>{img.caption}</figcaption>}
               </figure>
             ))}

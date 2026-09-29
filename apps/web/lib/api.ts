@@ -4046,14 +4046,40 @@ export interface NewsEventInfo {
   location: string | null;
   url: string | null;
   rsvpEnabled: boolean;
+  /** Cupo en personas; null = sin cupo. */
+  capacity?: number | null;
+  /** Hasta cuándo se puede confirmar. */
+  rsvpDeadline?: string | null;
+  /** Recordatorio automático 24 h antes a quienes confirmaron. */
+  reminder?: boolean;
 }
+
+export type RsvpStatus = "GOING" | "NOT_GOING";
 
 export interface NewsRsvpSummary {
   enabled: boolean;
+  /** Personas que confirmaron que van. */
   count: number;
+  notGoing: number;
   mine: boolean;
+  myResponse: { status: RsvpStatus; people: number; note: string | null } | null;
+  capacity: number | null;
+  spotsLeft: number | null;
+  deadline: string | null;
+  /** Por qué no se puede confirmar ahora (empezó, cerró), o null. */
+  closedReason: string | null;
   /** Solo para el autor. */
   attendees?: { tenantId: string; name: string; people: number }[];
+}
+
+export interface NewsAttendee {
+  organization: string;
+  person: string;
+  email: string | null;
+  status: RsvpStatus;
+  people: number;
+  note: string | null;
+  answeredAt: string;
 }
 
 export interface NewsHeroSlide extends NewsCard {
@@ -4117,6 +4143,9 @@ export interface UpsertNewsPayload {
   eventLocation?: string | null;
   eventUrl?: string | null;
   rsvpEnabled?: boolean;
+  eventCapacity?: number | null;
+  rsvpDeadline?: string | null;
+  eventReminder?: boolean;
   brandItemId?: string | null;
   attachments?: {
     kind: NewsAttachmentView["kind"];
@@ -4140,8 +4169,12 @@ export const newsApi = {
   update: (id: string, data: UpsertNewsPayload) => api.put<NewsDetail>(`/my/news/${id}`, data),
   remove: (id: string) => api.delete<{ ok: true }>(`/my/news/${id}`),
   rsvp: (id: string) => api.get<NewsRsvpSummary>(`/news/${id}/rsvp`),
-  join: (id: string) => api.post<NewsRsvpSummary>(`/news/${id}/rsvp`, {}),
+  respond: (id: string, body: { status: RsvpStatus; people?: number; note?: string | null }) =>
+    api.post<NewsRsvpSummary>(`/news/${id}/rsvp`, body),
   leave: (id: string) => api.delete<NewsRsvpSummary>(`/news/${id}/rsvp`),
+  attendees: (id: string) => api.get<{ items: NewsAttendee[] }>(`/my/news/${id}/attendees`),
+  remind: (id: string, audience: "going" | "linked", message?: string | null) =>
+    api.post<{ sent: number }>(`/my/news/${id}/remind`, { audience, message }),
 };
 
 /** Producto de la marca en próximo ingreso, con la nota que lo presenta. */

@@ -6,7 +6,7 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
-import { NewsTrackDto, UpsertNewsDto } from "./dto/news.dto";
+import { NewsRemindDto, NewsRsvpDto, NewsTrackDto, UpsertNewsDto } from "./dto/news.dto";
 import { NewsService } from "./news.service";
 import { NewsRsvpService } from "./news-rsvp.service";
 
@@ -46,9 +46,10 @@ export class NewsFeedController {
     return this.rsvps.summary(tenant, id);
   }
 
+  /** Confirmar asistencia: va o no va, cuántos y un comentario. */
   @Post(":id/rsvp")
-  join(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
-    return this.rsvps.join(tenant, id);
+  respond(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() dto: NewsRsvpDto) {
+    return this.rsvps.respond(tenant, id, dto);
   }
 
   @Delete(":id/rsvp")
@@ -65,7 +66,22 @@ export class NewsFeedController {
 @UseGuards(AuthGuard("jwt"), TenantGuard)
 @Controller("my/news")
 export class MyNewsController {
-  constructor(private readonly news: NewsService) {}
+  constructor(
+    private readonly news: NewsService,
+    private readonly rsvps: NewsRsvpService
+  ) {}
+
+  /** Lista de asistencia de un evento propio. */
+  @Get(":id/attendees")
+  attendees(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
+    return this.rsvps.attendees(tenant, id);
+  }
+
+  /** Aviso del organizador a quienes confirmaron o a todas sus cuentas vinculadas. */
+  @Post(":id/remind")
+  remind(@CurrentTenant() tenant: TenantContext, @Param("id") id: string, @Body() dto: NewsRemindDto) {
+    return this.rsvps.remind(tenant, id, dto.audience, dto.message);
+  }
 
   @Get()
   mine(@CurrentTenant() tenant: TenantContext) {

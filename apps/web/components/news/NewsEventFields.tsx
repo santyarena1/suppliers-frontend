@@ -11,6 +11,9 @@ export interface EventDraft {
   eventLocation: string;
   eventUrl: string;
   rsvpEnabled: boolean;
+  eventCapacity: string;
+  rsvpDeadline: string;
+  eventReminder: boolean;
 }
 
 /** Cuándo y dónde es el evento, y si los vinculados se pueden anotar. */
@@ -71,12 +74,59 @@ export function NewsEventFields({
       <label className="flex items-start gap-2 text-sm text-surface-300">
         <input
           type="checkbox"
+          className="mt-1"
           checked={value.rsvpEnabled}
           onChange={(e) => onChange({ rsvpEnabled: e.target.checked })}
         />
-        Que los vinculados se puedan anotar (ves quiénes van)
+        <span>
+          Pedir confirmación de asistencia
+          <span className="block text-[11px] text-surface-500">
+            Cada comercio vinculado responde si va o no, cuántas personas y un comentario. Vos ves la lista completa.
+          </span>
+        </span>
       </label>
-      <p className="text-[11px] text-surface-500">El link de la reunión solo lo ven los vinculados, nunca el link público.</p>
+      {value.rsvpEnabled && (
+        <div className="grid grid-cols-2 gap-4 pl-6">
+          <label className="text-[12px] text-surface-500">
+            Cupo (personas)
+            <input
+              type="number"
+              min={1}
+              className={input}
+              placeholder="Sin límite"
+              value={value.eventCapacity}
+              onChange={(e) => onChange({ eventCapacity: e.target.value })}
+            />
+          </label>
+          <label className="text-[12px] text-surface-500">
+            Confirmar hasta
+            <input
+              type="datetime-local"
+              className={input}
+              value={value.rsvpDeadline}
+              onChange={(e) => onChange({ rsvpDeadline: e.target.value })}
+            />
+          </label>
+          <label className="col-span-2 flex items-start gap-2 text-sm text-surface-300">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={value.eventReminder}
+              onChange={(e) => onChange({ eventReminder: e.target.checked })}
+            />
+            <span>
+              Recordatorio automático 24 h antes
+              <span className="block text-[11px] text-surface-500">
+                Les llega una notificación en NODO a quienes confirmaron que van.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
+      <p className="text-[11px] text-surface-500">
+        El flyer: subilo como foto de portada o en la galería de fotos; se muestra entero. El link de la reunión solo
+        lo ven los vinculados, nunca el link público.
+      </p>
     </fieldset>
   );
 }

@@ -5,6 +5,9 @@ import {
   IsBoolean,
   IsDateString,
   IsIn,
+  IsInt,
+  Max,
+  Min,
   IsOptional,
   IsString,
   MaxLength,
@@ -152,6 +155,21 @@ export class UpsertNewsDto {
   @IsBoolean()
   rsvpEnabled?: boolean;
 
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsInt()
+  @Min(1)
+  @Max(100000)
+  eventCapacity?: number | null;
+
+  @IsOptional()
+  @IsDateString()
+  rsvpDeadline?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  eventReminder?: boolean;
+
   /** Lanzamiento de un producto de la marca. */
   @IsOptional()
   @IsString()
@@ -171,6 +189,32 @@ export class UpsertNewsDto {
   @ValidateNested({ each: true })
   @Type(() => NewsImageDto)
   images?: NewsImageDto[];
+}
+
+export class NewsRsvpDto {
+  @IsIn(["GOING", "NOT_GOING"])
+  status!: "GOING" | "NOT_GOING";
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  people?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string | null;
+}
+
+export class NewsRemindDto {
+  @IsIn(["going", "linked"])
+  audience!: "going" | "linked";
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  message?: string | null;
 }
 
 export class NewsTrackDto {

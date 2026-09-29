@@ -59,6 +59,9 @@ function fromExisting(article?: NewsDetail | null, seed?: NewsDraftSeed): Draft 
     eventLocation: article?.event?.location ?? "",
     eventUrl: article?.event?.url ?? "",
     rsvpEnabled: article?.event?.rsvpEnabled ?? true,
+    eventCapacity: article?.event?.capacity != null ? String(article.event.capacity) : "",
+    rsvpDeadline: toLocalInput(article?.event?.rsvpDeadline),
+    eventReminder: article?.event?.reminder ?? true,
     brandItemId: article?.brandItemId ?? seed?.brandItemId ?? "",
     title: article?.title ?? "",
     excerpt: article?.excerpt ?? "",
@@ -113,14 +116,26 @@ function payloadOf(draft: Draft, status: UpsertNewsPayload["status"]): UpsertNew
 
 function eventPayload(draft: Draft): Partial<UpsertNewsPayload> {
   if (draft.kind !== "EVENT") {
-    return { eventStartsAt: null, eventEndsAt: null, eventLocation: null, eventUrl: null, rsvpEnabled: false };
+    return {
+      eventStartsAt: null,
+      eventEndsAt: null,
+      eventLocation: null,
+      eventUrl: null,
+      rsvpEnabled: false,
+      eventCapacity: null,
+      rsvpDeadline: null,
+    };
   }
+  const capacity = Number.parseInt(draft.eventCapacity, 10);
   return {
     eventStartsAt: draft.eventStartsAt ? new Date(draft.eventStartsAt).toISOString() : null,
     eventEndsAt: draft.eventEndsAt ? new Date(draft.eventEndsAt).toISOString() : null,
     eventLocation: draft.eventLocation.trim() || null,
     eventUrl: draft.eventUrl.trim() || null,
     rsvpEnabled: draft.rsvpEnabled,
+    eventCapacity: draft.rsvpEnabled && Number.isFinite(capacity) && capacity > 0 ? capacity : null,
+    rsvpDeadline: draft.rsvpEnabled && draft.rsvpDeadline ? new Date(draft.rsvpDeadline).toISOString() : null,
+    eventReminder: draft.eventReminder,
   };
 }
 
