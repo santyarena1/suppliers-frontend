@@ -29,6 +29,7 @@ export class BrandLandingService {
       where: { tenantId: tenant.tenantId },
       data: {
         ...(dto.published !== undefined ? { published: dto.published } : {}),
+        ...(dto.allowPublicLink !== undefined ? { allowPublicLink: dto.allowPublicLink } : {}),
         ...(dto.headline !== undefined ? { headline: dto.headline?.trim() || tenant.tenantName } : {}),
         ...(dto.about !== undefined ? { about: dto.about?.trim() || null } : {}),
         ...(dto.logoUrl !== undefined ? { logoUrl: dto.logoUrl?.trim() || null } : {}),
@@ -122,6 +123,8 @@ export class BrandLandingService {
       blocks: landing.blocks,
       htmlDocument: compiled.html,
       htmlSlots: compiled.slots,
+      /** Se puede pedir vincularse desde este link. */
+      allowLink: landing.allowPublicLink,
       ...modules,
     };
   }
@@ -146,6 +149,7 @@ export class BrandLandingService {
     landing: {
       publicKey: string;
       published: boolean;
+      allowPublicLink: boolean;
       headline: string | null;
       about: string | null;
       logoUrl: string | null;
@@ -167,6 +171,7 @@ export class BrandLandingService {
       publicKey: landing.publicKey,
       publicPath: `/m/${landing.publicKey}`,
       published: landing.published,
+      allowPublicLink: landing.allowPublicLink,
       headline: landing.headline,
       about: landing.about,
       logoUrl: landing.logoUrl,

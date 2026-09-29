@@ -352,9 +352,9 @@ export default function BrandEspacioPage() {
               <section className="border border-dashed border-surface-700 rounded-xl p-4 bg-surface-900/50 flex flex-col gap-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-white">Página pública (opcional)</h2>
+                    <h2 className="text-sm font-semibold text-white">Link público</h2>
                     <p className="text-[11px] text-surface-500 mt-0.5">
-                      Marketing afuera de NODO. No es el producto: el trabajo real es el espacio in-app. La URL es opaca.
+                      Para compartir con cualquiera, use NODO o no: tu página, productos y semáforo. La URL es opaca.
                     </p>
                   </div>
                   <label className="flex items-center gap-2 text-sm text-surface-200">
@@ -366,6 +366,20 @@ export default function BrandEspacioPage() {
                     Publicada
                   </label>
                 </div>
+                <label className="flex items-start gap-2 text-xs text-surface-200">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={landing.allowPublicLink}
+                    onChange={(e) => save({ allowPublicLink: e.target.checked })}
+                  />
+                  <span>
+                    Quien recibe el link puede vincular su comercio con la marca
+                    <span className="block text-[11px] text-surface-500">
+                      Sin código: entra a NODO (o se crea la cuenta) y queda vinculado. Si lo apagás, solo con código.
+                    </span>
+                  </span>
+                </label>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm text-white truncate font-mono">{landing.publicPath}</p>
                   <div className="flex gap-2 flex-shrink-0">

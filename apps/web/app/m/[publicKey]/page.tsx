@@ -8,6 +8,7 @@ import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 import BrandHtmlCanvas from "@/components/org/BrandHtmlCanvas";
 import { BrandSpaceLanding, landingModuleSlots } from "@/components/org/BrandSpaceLanding";
+import { PublicLinkCta } from "@/components/brands/PublicLinkCta";
 import { Loader2 } from "lucide-react";
 
 export default function PublicBrandLandingPage() {
@@ -55,50 +56,59 @@ export default function PublicBrandLandingPage() {
           <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
         </div>
       ) : (
-        <BrandSpaceLanding
-          variant="public"
-          name={landing.name}
-          accent={landing.primaryColor || "#22c55e"}
-          theme={{
-            logoUrl: landing.logoUrl,
-            heroUrl: landing.heroUrl,
-            headline: landing.headline,
-            about: landing.about,
-          }}
-          contact={{
-            websiteUrl: landing.websiteUrl,
-            supportEmail: landing.supportEmail,
-            supportPhone: landing.supportPhone,
-          }}
-          products={products}
-          actions={landing.actions ?? []}
-          news={landing.news ?? []}
-          materials={landing.materials ?? []}
-          trainings={landing.trainings ?? []}
-          extraBlocks={blocks}
-          html={
-            landing.htmlDocument ? (
-              <BrandHtmlCanvas
-                html={landing.htmlDocument}
-                slots={landingModuleSlots({
-                  name: landing.name,
-                  products,
-                  actions: landing.actions ?? [],
-                  news: landing.news ?? [],
-                  materials: landing.materials ?? [],
-                  trainings: landing.trainings ?? [],
-                  contact: {
-                    websiteUrl: landing.websiteUrl,
-                    supportEmail: landing.supportEmail,
-                    supportPhone: landing.supportPhone,
-                  },
-                  hub: false,
-                  logoUrl: landing.logoUrl,
-                })}
-              />
-            ) : null
-          }
-        />
+        <>
+          {landing.allowLink !== false && (
+            <PublicLinkCta
+              publicKey={landing.publicKey}
+              brandName={landing.name}
+              accent={landing.primaryColor || "#22c55e"}
+            />
+          )}
+          <BrandSpaceLanding
+            variant="public"
+            name={landing.name}
+            accent={landing.primaryColor || "#22c55e"}
+            theme={{
+              logoUrl: landing.logoUrl,
+              heroUrl: landing.heroUrl,
+              headline: landing.headline,
+              about: landing.about,
+            }}
+            contact={{
+              websiteUrl: landing.websiteUrl,
+              supportEmail: landing.supportEmail,
+              supportPhone: landing.supportPhone,
+            }}
+            products={products}
+            actions={landing.actions ?? []}
+            news={landing.news ?? []}
+            materials={landing.materials ?? []}
+            trainings={landing.trainings ?? []}
+            extraBlocks={blocks}
+            html={
+              landing.htmlDocument ? (
+                <BrandHtmlCanvas
+                  html={landing.htmlDocument}
+                  slots={landingModuleSlots({
+                    name: landing.name,
+                    products,
+                    actions: landing.actions ?? [],
+                    news: landing.news ?? [],
+                    materials: landing.materials ?? [],
+                    trainings: landing.trainings ?? [],
+                    contact: {
+                      websiteUrl: landing.websiteUrl,
+                      supportEmail: landing.supportEmail,
+                      supportPhone: landing.supportPhone,
+                    },
+                    hub: false,
+                    logoUrl: landing.logoUrl,
+                  })}
+                />
+              ) : null
+            }
+          />
+        </>
       )}
     </div>
   );

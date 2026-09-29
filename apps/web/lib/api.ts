@@ -3611,6 +3611,8 @@ export interface BrandLanding {
   publicKey: string;
   publicPath: string;
   published: boolean;
+  /** El link público permite que un comercio o distro se vincule. */
+  allowPublicLink: boolean;
   headline: string | null;
   about: string | null;
   logoUrl: string | null;
@@ -3655,6 +3657,8 @@ export interface PublicBrandFile {
 export interface PublicBrandLanding {
   publicKey: string;
   name: string;
+  /** Se puede pedir vincularse desde este link. */
+  allowLink?: boolean;
   headline: string | null;
   about: string | null;
   logoUrl: string | null;
@@ -3927,6 +3931,18 @@ export const brandApi = {
 
 export const publicBrandApi = {
   get: (publicKey: string) => api.get<PublicBrandLanding>(`/public/brands/${publicKey}`),
+};
+
+export type BrandPublicLinkState =
+  | { state: "LINKED"; linkId: string; brandName: string }
+  | { state: "CAN_LINK"; brandName: string }
+  | { state: "CLOSED"; brandName: string; reason: string };
+
+/** Vincularse con una marca desde su link público (comercio o distro con sesión). */
+export const brandLinkApi = {
+  state: (publicKey: string) => api.get<BrandPublicLinkState>(`/my/brands/by-landing/${publicKey}`),
+  link: (publicKey: string) =>
+    api.post<{ linkId: string; brandName: string; created: boolean }>(`/my/brands/by-landing/${publicKey}/link`, {}),
 };
 
 export type NewsKind = "LAUNCH" | "INCOMING" | "PRICE_LIST" | "PROMO" | "CATALOG" | "NOTICE" | "OTHER";

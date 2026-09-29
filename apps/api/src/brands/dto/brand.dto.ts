@@ -99,6 +99,10 @@ export class UpdateBrandLandingDto {
   published?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  allowPublicLink?: boolean;
+
+  @IsOptional()
   @IsString()
   @MaxLength(120)
   headline?: string | null;

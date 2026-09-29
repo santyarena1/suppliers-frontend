@@ -23,6 +23,7 @@ import { BrandCatalogService } from "./brand-catalog.service";
 import { BrandResourcesService } from "./brand-resources.service";
 import { BrandHubService } from "./brand-hub.service";
 import { BrandItemsService } from "./brand-items.service";
+import { BrandPublicLinkService, assertPublicKey } from "./brand-public-link.service";
 import {
   BrandSkuRefDto,
   CreateBrandItemsDto,
@@ -204,12 +205,27 @@ export class RetailerBrandsController {
   constructor(
     private readonly actions: BrandActionsService,
     private readonly hub: BrandHubService,
-    private readonly items: BrandItemsService
+    private readonly items: BrandItemsService,
+    private readonly publicLink: BrandPublicLinkService
   ) {}
 
   @Get()
   list(@CurrentTenant() tenant: TenantContext) {
     return this.actions.visibleToClient(tenant);
+  }
+
+  /** Quien abrió el link público de una marca: ya vinculado, puede vincularse o no. */
+  @Get("by-landing/:publicKey")
+  linkState(@CurrentTenant() tenant: TenantContext, @Param("publicKey") publicKey: string) {
+    assertPublicKey(publicKey);
+    return this.publicLink.stateFor(tenant, publicKey);
+  }
+
+  /** Vincularse con la marca desde su link público, sin código. */
+  @Post("by-landing/:publicKey/link")
+  linkFromLanding(@CurrentTenant() tenant: TenantContext, @Param("publicKey") publicKey: string) {
+    assertPublicKey(publicKey);
+    return this.publicLink.link(tenant, publicKey);
   }
 
   /** Semáforo de la marca para quien está vinculado: primero sus distribuidores. */

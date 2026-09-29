@@ -157,6 +157,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Reemplaza al mapa de señales por SKU (`/my/brand/signals`, que queda solo por compatibilidad; la migración `20260929010000_brand_items` pasó las señales a productos). Un producto de la marca agrupa sus códigos en cada distribuidor (sugeridos por EAN / part number). Automático: el nivel sale del stock sincronizado más reciente con los rangos de la marca; sin sincronización en 48 h es `UNKNOWN`. Manual: la luz que elige la marca por distribuidor. El estado del producto (próximo ingreso, discontinuado) pisa todo. Unidades exactas solo para la marca y solo si `brandSeesExact`; comercios y público ven rangos. El hub `/my/brands/:linkId` ahora trae `availability` y `stockMode` en lugar de `signals`, y la landing pública arma `products` desde los productos de la marca. UI: `/marca/productos`, sección Productos de `/marcas/:linkId` y `/m/:publicKey`. Diseño: `docs/superpowers/specs/2026-09-29-marcas-semaforo-design.md`.
 
+### [FEATURE] Tipo 3 — vincularse con la marca desde su link público
+- **Método**: GET | POST
+- **Ruta**: `GET /my/brands/by-landing/:publicKey` · `POST /my/brands/by-landing/:publicKey/link` · `PUT /my/brand/landing` (campo `allowPublicLink`)
+- **Auth**: Bearer con organización `RETAILER` o `DISTRIBUTOR` (la marca edita `allowPublicLink` en su landing).
+- **Body / Params**: `publicKey` de la landing publicada.
+- **Respuesta esperada**: estado `{ state: "LINKED", linkId, brandName } | { state: "CAN_LINK", brandName } | { state: "CLOSED", brandName, reason }` · vincular `{ linkId, brandName, created }` · la landing pública agrega `allowLink`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: El link público es la puerta de entrada: quien lo recibió vincula su organización sin código (comercio → marca, o distro → marca). Solo si la landing está publicada y `allowPublicLink` (por defecto sí). Un vínculo que la marca revocó no se reabre desde el link (ahí hace falta código). Sin sesión, `/m/:publicKey` guarda el pedido en el navegador (`nodo.pendingBrandLink`, 7 días) y manda a crear cuenta o entrar; al volver, la app muestra "¿Vinculamos tu organización con la marca?".
+
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
 - **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/insights`, `/orders/:id/approve`, `/orders/:id/reject`

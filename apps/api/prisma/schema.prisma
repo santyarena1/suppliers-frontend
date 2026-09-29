@@ -1121,6 +1121,8 @@ model BrandLanding {
   backgroundColor  String?
   textColor        String?
   fontFamily       String?
+  /// El link público permite que un comercio o distro se vincule con la marca.
+  allowPublicLink  Boolean @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

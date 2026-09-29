@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import AuthGuard from "../AuthGuard";
 import ImpersonationBanner from "../ImpersonationBanner";
+import PendingBrandLinkBanner from "../brands/PendingBrandLinkBanner";
 import MobileTopBar from "./MobileTopBar";
 import Sidebar from "./Sidebar";
 import TenantRouteGate from "../org/TenantRouteGate";
@@ -27,6 +28,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <OnboardingGate>
         <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
           <ImpersonationBanner />
+          <PendingBrandLinkBanner />
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <MobileTopBar onOpen={() => setMobileOpen(true)} />
             {mobileOpen && (
