@@ -2,25 +2,35 @@ import { BadRequestException } from "@nestjs/common";
 import { NewBytesApiClient } from "./new-bytes-client";
 import { NewBytesOrderService } from "./new-bytes-order.service";
 
-function stubApi() {
+function stubApi(acceptUpTo: Record<number, number> = {}) {
   const api = {
     get: jest.fn(),
     post: jest.fn(),
     patch: jest.fn(),
   };
 
-  api.patch.mockImplementation(async () => ({ ok: true }));
+  // Carrito del portal con estado: se vacía y se carga como el real.
+  // `acceptUpTo` limita lo que New Bytes acepta por producto (sin stock).
+  let portal: { productId: number; amount: number }[] = [];
+  api.patch.mockImplementation(async (path: string) => {
+    if (path === "carrito/empty") portal = [];
+    return { ok: true };
+  });
 
-  api.post.mockImplementation(async (path: string) => {
+  api.post.mockImplementation(async (path: string, body?: { productId: number; amount: number }[]) => {
     if (path === "carrito/new") return { ok: true };
-    if (path === "carrito/item") return { ok: true };
+    if (path === "carrito/item") {
+      portal = (body ?? []).map((it) => ({ productId: it.productId, amount: Math.min(it.amount, acceptUpTo[it.productId] ?? it.amount) }));
+      return { ok: true };
+    }
     if (path === "carrito/process") return { orderId: 9901, branch: 1 };
     return {};
   });
 
   api.get.mockImplementation(async (path: string) => {
     if (path === "carrito") {
-      return [{ productId: 108613, amount: 1, title: "RTX 3070", price: 1538.74, subtotal: 1538.74 }];
+      const rows = portal.length ? portal : [{ productId: 108613, amount: 1 }];
+      return rows.map((r) => ({ ...r, title: "RTX 3070", price: 1538.74, subtotal: 1538.74 * r.amount }));
     }
     if (path === "carrito/subtotales") return { subTotalDollar: 1538.74, subTotalDollarFinal: 1538.74 };
     if (path === "carrito/availability") return { available: true };
@@ -114,6 +124,15 @@ describe("NewBytesOrderService", () => {
       { productId: 108613, amount: 3, type: 0 },
       { productId: 555, amount: 3, type: 0 },
     ]);
+  });
+
+  it("si New Bytes acepta menos de lo pedido no confirma el pedido", async () => {
+    api = stubApi({ 108613: 1 });
+    jest.spyOn(NewBytesApiClient, "login").mockResolvedValue(api as never);
+    await expect(
+      service.submitDraft(AUTOR, CREDS, { items: [{ code: "108613", qty: 4, name: "RTX 3070" }], delivery: "pickup", medioDePagoId: 5 })
+    ).rejects.toThrow(/RTX 3070: pediste 4, New Bytes aceptó 1/);
+    expect(api.post).not.toHaveBeenCalledWith("carrito/process", expect.anything());
   });
 
   it("no cae a retiro si falta medio de envío: hay que elegir entrega", async () => {

@@ -505,148 +505,82 @@ describe("invid-order.parser", () => {
     expect(parseCartLines("<table></table>")).toEqual([]);
   });
 
-  describe("reconcilePortalCart", () => {
-    it("sin foto suma lo compartido y deja pendiente lo que solo está en el portal", () => {
-      const r = reconcilePortalCart(
-        [{ code: "A", qty: 2, name: "a" }],
-        [{ code: "A", qty: 5 }, { code: "Z", qty: 1, name: "zeta" }],
-        null
-      );
-      expect(r.merged).toEqual([
-        { code: "A", qty: 7, name: "a" },
-        { code: "Z", qty: 1, name: "zeta" },
-      ]);
-      expect(r.changes.summedInBoth).toEqual([{ code: "A", qty: 7, name: "a", baseQty: 2 }]);
-      expect(r.changes.addedInPortal).toEqual([{ code: "Z", qty: 1, name: "zeta" }]);
-      expect(r.changes.removedInPortal).toEqual([]);
-      // La foto guarda la cantidad de NODO, no el total ni lo pendiente.
-      expect(nextCartSnapshot(r.merged, r.changes, null)).toEqual({ A: 2 });
-    });
-
-    it("sin foto, la misma cantidad no se suma", () => {
-      const r = reconcilePortalCart([{ code: "A", qty: 2 }], [{ code: "A", qty: 2 }], null);
-      expect(r.merged).toEqual([{ code: "A", qty: 2 }]);
+  describe("reconcilePortalCart · el carrito de NODO manda", () => {
+    it("carga la cantidad de NODO aunque el portal tenga otra, y lo informa (no suma)", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 2, name: "a" }], [{ code: "A", qty: 5 }], null);
+      expect(r.merged).toEqual([{ code: "A", qty: 2, name: "a" }]);
+      expect(r.changes.keptNodoQty).toEqual([{ code: "A", qty: 2, name: "a", portalQty: 5 }]);
       expect(r.changes.summedInBoth).toEqual([]);
       expect(nextCartSnapshot(r.merged, r.changes, null)).toEqual({ A: 2 });
     });
 
-    it("la suma no se repite: la pasada siguiente adopta el total del portal", () => {
-      const first = reconcilePortalCart([{ code: "A", qty: 5 }], [{ code: "A", qty: 3 }], null);
-      expect(first.merged).toEqual([{ code: "A", qty: 8 }]);
-      const snap = nextCartSnapshot(first.merged, first.changes, null);
-      expect(snap).toEqual({ A: 5 });
-      const second = reconcilePortalCart([{ code: "A", qty: 5 }], [{ code: "A", qty: 8 }], snap);
-      expect(second.merged).toEqual([{ code: "A", qty: 8 }]);
-      expect(second.changes.qtyChangedInPortal).toEqual([{ code: "A", qty: 8 }]);
-      expect(second.changes.summedInBoth).toEqual([]);
-      const settled = reconcilePortalCart([{ code: "A", qty: 8 }], [{ code: "A", qty: 8 }], snap);
-      expect(settled.changes.qtyChangedInPortal).toEqual([]);
-      expect(nextCartSnapshot(settled.merged, settled.changes, snap)).toEqual({ A: 8 });
-    });
-
-    it("lo pendiente no entra en la foto y no se lee como borrado en NODO", () => {
-      const first = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "Z", qty: 4, name: "z" }], null);
-      const snap = nextCartSnapshot(first.merged, first.changes, null);
-      expect(snap).toEqual({ A: 1 });
-      const again = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "A", qty: 1 }, { code: "Z", qty: 4, name: "z" }], snap);
-      expect(again.merged).toEqual([{ code: "A", qty: 1 }, { code: "Z", qty: 4, name: "z" }]);
-      expect(again.changes.addedInPortal).toEqual([{ code: "Z", qty: 4, name: "z" }]);
-      expect(again.changes.removedInPortal).toEqual([]);
-    });
-
-    it("sacar un código lo deja afuera del portal sin tocar lo de NODO", () => {
-      const r = reconcilePortalCart(
-        [{ code: "A", qty: 2 }],
-        [{ code: "A", qty: 2 }, { code: "Z", qty: 1, name: "z" }],
-        null,
-        { dropPortalCodes: ["Z"] }
-      );
+    it("misma cantidad: nada que informar", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 2 }], [{ code: "A", qty: 2 }], null);
       expect(r.merged).toEqual([{ code: "A", qty: 2 }]);
-      expect(r.changes.addedInPortal).toEqual([]);
+      expect(r.changes.keptNodoQty).toEqual([]);
     });
 
-    it("lo que borraron en el portal se saca de NODO", () => {
+    it("si el comercio cambió la cantidad en NODO, no se informa como diferencia del portal", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 4 }], [{ code: "A", qty: 2 }], { A: 2 });
+      expect(r.merged).toEqual([{ code: "A", qty: 4 }]);
+      expect(r.changes.keptNodoQty).toEqual([]);
+    });
+
+    it("una cantidad cambiada en el portal no pisa la de NODO", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "A", qty: 6 }], { A: 1 });
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }]);
+      expect(r.changes.keptNodoQty).toEqual([{ code: "A", qty: 1, portalQty: 6 }]);
+      expect(r.changes.qtyChangedInPortal).toEqual([]);
+    });
+
+    it("lo que el portal perdió se vuelve a cargar y no se saca de NODO", () => {
       const r = reconcilePortalCart(
         [{ code: "A", qty: 1, name: "a" }, { code: "B", qty: 1, name: "b" }],
         [{ code: "A", qty: 1 }],
         { A: 1, B: 1 }
       );
-      expect(r.merged).toEqual([{ code: "A", qty: 1, name: "a" }]);
-      expect(r.changes.removedInPortal).toEqual(["B"]);
+      expect(r.merged).toEqual([{ code: "A", qty: 1, name: "a" }, { code: "B", qty: 1, name: "b" }]);
+      expect(r.changes.restoredInPortal).toEqual([{ code: "B", qty: 1, name: "b" }]);
+      expect(r.changes.removedInPortal).toEqual([]);
+    });
+
+    it("con carrito por cuenta vacío, se vuelve a cargar todo lo de NODO", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 });
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "B", qty: 2 }]);
+      expect(r.changes.restoredInPortal.map((i) => i.code)).toEqual(["A", "B"]);
+    });
+
+    it("un portal vacío por sesión nueva no se informa como pérdida", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 1 }], [], { A: 1 }, { sessionScoped: true });
+      expect(r.merged).toEqual([{ code: "A", qty: 1 }]);
+      expect(r.changes.restoredInPortal).toEqual([]);
+    });
+
+    it("New Bytes: que falte en el portal es normal, no se informa", () => {
+      const r = reconcilePortalCart([{ code: "B", qty: 2 }], [], { B: 2 }, { preserveNodoLines: true });
+      expect(r.merged).toEqual([{ code: "B", qty: 2 }]);
+      expect(r.changes.restoredInPortal).toEqual([]);
+    });
+
+    it("lo que solo está en el portal queda pendiente y fuera de la foto", () => {
+      const first = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "Z", qty: 4, name: "z" }], null);
+      expect(first.changes.addedInPortal).toEqual([{ code: "Z", qty: 4, name: "z" }]);
+      const snap = nextCartSnapshot(first.merged, first.changes, null);
+      expect(snap).toEqual({ A: 1 });
+      const again = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "A", qty: 1 }, { code: "Z", qty: 4, name: "z" }], snap);
+      expect(again.changes.addedInPortal).toEqual([{ code: "Z", qty: 4, name: "z" }]);
+    });
+
+    it("sacar un código lo deja afuera del portal sin tocar lo de NODO", () => {
+      const r = reconcilePortalCart([{ code: "A", qty: 2 }], [{ code: "A", qty: 2 }, { code: "Z", qty: 1 }], null, { dropPortalCodes: ["Z"] });
+      expect(r.merged).toEqual([{ code: "A", qty: 2 }]);
+      expect(r.changes.addedInPortal).toEqual([]);
     });
 
     it("lo que borraron en NODO se cae del portal", () => {
       const r = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "A", qty: 1 }, { code: "B", qty: 1 }], { A: 1, B: 1 });
       expect(r.merged).toEqual([{ code: "A", qty: 1 }]);
       expect(r.changes.addedInPortal).toEqual([]);
-    });
-
-    it("lo agregado en cada lado se junta", () => {
-      const r = reconcilePortalCart(
-        [{ code: "A", qty: 1 }, { code: "N", qty: 2 }],
-        [{ code: "A", qty: 1 }, { code: "P", qty: 3, name: "del portal" }],
-        { A: 1 }
-      );
-      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "N", qty: 2 }, { code: "P", qty: 3, name: "del portal" }]);
-      expect(r.changes.addedInPortal).toEqual([{ code: "P", qty: 3, name: "del portal" }]);
-    });
-
-    it("la cantidad cambiada en el portal gana; la cambiada en NODO se conserva", () => {
-      const r = reconcilePortalCart(
-        [{ code: "A", qty: 1 }, { code: "B", qty: 4 }],
-        [{ code: "A", qty: 6 }, { code: "B", qty: 1 }],
-        { A: 1, B: 1 }
-      );
-      expect(r.merged).toEqual([{ code: "A", qty: 6 }, { code: "B", qty: 4 }]);
-      expect(r.changes.qtyChangedInPortal).toEqual([{ code: "A", qty: 6 }]);
-    });
-
-    it("la foto no avanza sobre lo que NODO todavía no reflejó", () => {
-      // Portal borró B y cambió A a 6; NODO sigue con A:1, B:1. Se carga el portal con A:6.
-      const changes = { removedInPortal: ["B"], addedInPortal: [], qtyChangedInPortal: [{ code: "A", qty: 6 }], summedInBoth: [] };
-      expect(nextCartSnapshot([{ code: "A", qty: 6 }], changes, { A: 1, B: 1 })).toEqual({ A: 1, B: 1 });
-      // Si NODO no aplicó el cambio, la verificación siguiente lo detecta otra vez.
-      const again = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 1 }], [{ code: "A", qty: 6 }], { A: 1, B: 1 });
-      expect(again.merged).toEqual([{ code: "A", qty: 6 }]);
-      expect(again.changes.removedInPortal).toEqual(["B"]);
-      // Una vez que NODO coincide con el portal, la foto avanza.
-      const settled = reconcilePortalCart([{ code: "A", qty: 6 }], [{ code: "A", qty: 6 }], { A: 1, B: 1 });
-      expect(settled.changes).toEqual({ removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [], summedInBoth: [] });
-      expect(nextCartSnapshot([{ code: "A", qty: 6 }], settled.changes, { A: 1, B: 1 })).toEqual({ A: 6 });
-    });
-
-    it("un portal vacío es una sesión nueva, no un borrado: manda NODO", () => {
-      const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 }, { sessionScoped: true });
-      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "B", qty: 2 }]);
-      expect(r.changes.removedInPortal).toEqual([]);
-    });
-
-    it("un portal ajeno a la foto solo aporta lo que trae de más", () => {
-      const r = reconcilePortalCart([{ code: "A", qty: 1 }], [{ code: "P", qty: 2, name: "p" }], { A: 1, B: 2 }, { sessionScoped: true });
-      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "P", qty: 2, name: "p" }]);
-      expect(r.changes).toEqual({
-        removedInPortal: [],
-        addedInPortal: [{ code: "P", qty: 2, name: "p" }],
-        qtyChangedInPortal: [],
-        summedInBoth: [],
-      });
-    });
-
-    it("New Bytes no borra lo de NODO si el carrito del portal no lo trae", () => {
-      const r = reconcilePortalCart(
-        [{ code: "A", qty: 1 }, { code: "B", qty: 2, name: "b" }],
-        [{ code: "A", qty: 1 }],
-        { A: 1, B: 2 },
-        { preserveNodoLines: true }
-      );
-      expect(r.merged).toEqual([{ code: "A", qty: 1 }, { code: "B", qty: 2, name: "b" }]);
-      expect(r.changes.removedInPortal).toEqual([]);
-    });
-
-    it("con carrito por cuenta, vacío sí es borrado", () => {
-      const r = reconcilePortalCart([{ code: "A", qty: 1 }, { code: "B", qty: 2 }], [], { A: 1, B: 2 });
-      expect(r.merged).toEqual([]);
-      expect(r.changes.removedInPortal).toEqual(["A", "B"]);
     });
 
     it("la foto es un mapa código → cantidad", () => {

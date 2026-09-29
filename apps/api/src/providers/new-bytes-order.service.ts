@@ -1,3 +1,4 @@
+import { assertPortalCartMatches, type CartLine } from "./cart-match";
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
@@ -56,11 +57,30 @@ interface NbAddress {
 
 interface PreparedCart {
   api: NewBytesApiClient;
+  /** Lo que el portal dice que quedó cargado; `null` si la respuesta no se pudo leer con certeza. */
+  loaded: CartLine[] | null;
   items: { code: string; qty: number; name: string; price: number; subtotal: number; ivaPercent?: number }[];
   payments: NbPaymentOption[];
   addresses: NbAddress[];
   subtotales: NbSubtotales;
   availability: NbAvailability;
+}
+
+/**
+ * Renglones realmente cargados según `GET carrito` (`{ productId, amount }`).
+ * `null` si algún renglón no trae esos datos: no se puede afirmar qué quedó.
+ */
+export function nbLoadedLines(body: unknown): CartLine[] | null {
+  const list = unwrapNbList(body);
+  const lines: CartLine[] = [];
+  for (const row of list) {
+    const rec = asRecord(row) ?? {};
+    const code = asString(rec.productId);
+    const qty = asNumber(rec.amount);
+    if (!code || qty == null) return null;
+    lines.push({ code, qty });
+  }
+  return lines;
 }
 
 /** Una línea por código: online y esquema del mismo producto van juntos. */
@@ -246,6 +266,7 @@ export class NewBytesOrderService {
 
     return {
       api,
+      loaded: nbLoadedLines(cartBody),
       items: cartItemsFromBody(cartBody, items),
       payments: unwrapNbList(paymentsRaw).map(mapPaymentOption).filter((p): p is NbPaymentOption => p != null),
       addresses: unwrapNbList(addressesRaw).map(mapAddress).filter((a): a is NbAddress => a != null),
@@ -481,6 +502,9 @@ export class NewBytesOrderService {
     }
 
     const prepared = await this.prepareCart(credentials, input.items);
+    // Si New Bytes no aceptó algo, no sale un pedido distinto del carrito.
+    if (prepared.loaded) assertPortalCartMatches("New Bytes", mergeNbLines(input.items), prepared.loaded);
+    else this.logger.warn("New Bytes: no se pudo leer el carrito para verificarlo antes de confirmar");
     const payments = this.paymentsFor(prepared, input.delivery);
     const payment = this.resolvePayment(payments, input.medioDePagoId, true);
 

@@ -33,21 +33,30 @@ function summary(over: Record<string, unknown> = {}) {
   };
 }
 
-function stubApi() {
-  const leftoverCart = {
-    details: [{ code: 111, cart: [{ warehouse: 9, quantity: 2 }] }],
-  };
+/**
+ * Portal simulado con estado: arranca con un resto de otra sesión (código 111)
+ * y refleja lo que se borra o se agrega, como el carrito real de Elit.
+ * `acceptUpTo` limita lo que Elit acepta por código (sin stock).
+ */
+function stubApi(acceptUpTo: Record<number, number> = {}) {
+  const cart = new Map<number, number>([[111, 2]]);
   const api = {
     getJson: jest.fn(),
     postJson: jest.fn(),
   };
   api.getJson.mockImplementation(async (path: string) => {
-    if (path === "cart") return { data: leftoverCart };
+    if (path === "cart") {
+      return { data: { details: [...cart].map(([code, quantity]) => ({ code, cart: [{ warehouse: 9, quantity }] })) } };
+    }
     if (path === "cart/summary") return { data: summary() };
     return { data: {} };
   });
-  api.postJson.mockImplementation(async (path: string, body: unknown) => {
+  api.postJson.mockImplementation(async (path: string, body: { code?: number; quantity?: number }) => {
     if (path === "cart/process") return { data: [{ number: "9900123", reference: "NV-1" }] };
+    if (path === "cart/update" && body?.code && body.quantity === 0) cart.delete(body.code);
+    if (path === "cart/add" && body?.code && body.quantity) {
+      cart.set(body.code, Math.min(body.quantity, acceptUpTo[body.code] ?? body.quantity));
+    }
     return { data: body ?? {} };
   });
   return api;
@@ -101,19 +110,24 @@ describe("ElitOrderService", () => {
   it("al verificar concilia el carrito de la cuenta con el de NODO y avisa qué cambió", async () => {
     const snapshots = { load: jest.fn(async () => ({ "18636": 1, "555": 2 })), save: jest.fn(async () => undefined), clear: jest.fn(async () => undefined) };
     service = new ElitOrderService({ providerOrder: { create: createOrder, findMany: jest.fn() } } as never, snapshots as never);
-    // NODO: 18636 y 555. Portal: solo 111 (nuevo). La foto tenía 18636 y 555 → los dos los borraron en el portal.
+    // NODO: 18636 y 555. Portal: solo 111 (nuevo). La foto tenía 18636 y 555: el portal los perdió.
+    // NODO manda: se vuelven a cargar (y se informa); 111 queda pendiente.
     const preview = await service.preview(CREDS, { items: [...ITEMS, { code: "555", qty: 2 }] }, { tenantId: "t1" });
     expect(preview.sync).toEqual({
-      removedInPortal: ["18636", "555"],
+      removedInPortal: [],
       addedInPortal: [{ code: "111", qty: 2, name: "111" }],
       qtyChangedInPortal: [],
       summedInBoth: [],
+      keptNodoQty: [],
+      restoredInPortal: [
+        { code: "18636", qty: 1, name: "AP Cudy" },
+        { code: "555", qty: 2 },
+      ],
     });
+    expect(api.postJson).toHaveBeenCalledWith("cart/add", { code: 18636, quantity: 1 });
+    expect(api.postJson).toHaveBeenCalledWith("cart/add", { code: 555, quantity: 2 });
     expect(api.postJson).toHaveBeenCalledWith("cart/add", { code: 111, quantity: 2 });
-    expect(api.postJson).not.toHaveBeenCalledWith("cart/add", { code: 18636, quantity: 1 });
-    expect(api.postJson).not.toHaveBeenCalledWith("cart/add", { code: 555, quantity: 2 });
-    // Lo borrado se conserva en la foto. 111 sigue en el portal pero no entra
-    // a la foto hasta que el comercio lo deje en NODO.
+    // La foto es el carrito de NODO; 111 no entra hasta que el comercio lo deje en NODO.
     expect(snapshots.save).toHaveBeenCalledWith("t1", "ELIT", { "18636": 1, "555": 2 });
   });
 
@@ -159,10 +173,20 @@ describe("ElitOrderService", () => {
     expect(createOrder.mock.calls.at(-1)?.[0].data.status).toBe("CREATED");
   });
 
+  it("si Elit acepta menos de lo pedido no manda la nota de venta", async () => {
+    api = stubApi({ 18636: 1 });
+    jest.spyOn(ElitWebClient, "login").mockResolvedValue(api as never);
+    await expect(
+      service.submitDraft(AUTOR, CREDS, { items: [{ code: "18636", qty: 5, name: "AP Cudy" }], warehouse: 9 })
+    ).rejects.toThrow(/AP Cudy: pediste 5, Elit aceptó 1/);
+    expect(api.postJson.mock.calls.some((call) => call[0] === "cart/process")).toBe(false);
+  });
+
   it("si process falla deja FAILED y no marca creado", async () => {
-    api.postJson.mockImplementation(async (path: string) => {
+    const portal = api.postJson.getMockImplementation()!;
+    api.postJson.mockImplementation(async (path: string, body: unknown) => {
       if (path === "cart/process") throw new Error("Elit POST cart/process → 422: X is not allowed");
-      return { data: {} };
+      return portal(path, body);
     });
     await expect(service.submitDraft(AUTOR, CREDS, { items: ITEMS, warehouse: 9 })).rejects.toBeInstanceOf(
       BadGatewayException,

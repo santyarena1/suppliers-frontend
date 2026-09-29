@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
+import { assertPortalCartMatches } from "./cart-match";
 import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
 import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 import {
@@ -256,6 +257,8 @@ export class ElitOrderService {
     await this.syncCart(api, input.items);
     const summary = elitData<Record<string, unknown>>(await api.getJson("cart/summary"));
     await this.applyOptions(api, input, summary);
+    // Si Elit no aceptó algo (stock, código) no sale una nota de venta distinta del carrito.
+    assertPortalCartMatches("Elit", input.items, (await this.readCart(api)).lines);
 
     let raw: unknown;
     try {

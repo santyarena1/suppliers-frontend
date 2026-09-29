@@ -92,7 +92,10 @@ export function usePortalCartSync(
       const added = sync.addedInPortal ?? [];
       const qtyChanges = sync.qtyChangedInPortal ?? [];
       const summed = sync.summedInBoth ?? [];
-      const hasChanges = removed.length > 0 || added.length > 0 || qtyChanges.length > 0 || summed.length > 0;
+      const kept = sync.keptNodoQty ?? [];
+      const restored = sync.restoredInPortal ?? [];
+      const hasChanges =
+        removed.length > 0 || added.length > 0 || qtyChanges.length > 0 || summed.length > 0 || kept.length > 0 || restored.length > 0;
       if (!hasChanges) {
         retainPortalDrops(provider, []);
         setNotice((prev) => {
@@ -103,7 +106,7 @@ export function usePortalCartSync(
         return;
       }
 
-      const key = JSON.stringify({ removed, added, qtyChanges, summed });
+      const key = JSON.stringify({ removed, added, qtyChanges, summed, kept, restored });
       const drops = readPortalDrops(provider);
       const stuck = added.filter((item) => drops.includes(item.code));
       if (stuck.length > 0 && resyncRef.current && !autoRetried.current.has(key)) {
@@ -143,6 +146,15 @@ export function usePortalCartSync(
           setQty({ provider, externalId: change.code, channel: it.channel, schemeId: it.schemeId }, change.qty);
           lines.push(`${describe(change.code, it.name)} quedó en ${change.qty} u. (se sumaron los dos carritos)`);
         }
+      }
+      // El carrito de NODO manda: estas diferencias solo se informan, no cambian nada.
+      for (const change of kept) {
+        lines.push(
+          `${describe(change.code, change.name)}: en el portal había ${change.portalQty ?? "otra cantidad"} u.; se cargaron tus ${change.qty} u.`
+        );
+      }
+      for (const change of restored) {
+        lines.push(`${describe(change.code, change.name)} ya no estaba en el portal; se volvió a cargar (${change.qty} u.)`);
       }
 
       const pending: PortalPendingLine[] = added.map((item) => ({

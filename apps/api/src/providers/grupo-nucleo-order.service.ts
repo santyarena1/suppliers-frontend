@@ -327,6 +327,14 @@ export class GrupoNucleoOrderService {
     }
 
     const notes = (input.notes ?? "").trim();
+    // Un producto que Grupo Núcleo no confirmó viene con precio 0: no se manda así.
+    const unconfirmed = preview.items.filter((it) => !(it.priceUsd > 0));
+    if (unconfirmed.length > 0) {
+      throw new BadRequestException(
+        `No se envió el pedido: Grupo Núcleo no confirmó ${unconfirmed.map((it) => it.name || it.code).join(", ")}. Revisá el código o el stock y volvé a cotizar.`
+      );
+    }
+
     let raw: unknown;
     try {
       if (customerSale && input.customer) {

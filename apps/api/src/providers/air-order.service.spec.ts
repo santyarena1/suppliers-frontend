@@ -144,4 +144,18 @@ describe("AirOrderService", () => {
     expect(result.orderNumber).toBe("NV-1");
     expect(result.message).toMatch(/vendedor/);
   });
+
+  it("si Air acepta menos de lo pedido no manda el pedido", async () => {
+    // El canasto quedó con 2 aunque se pidieron 5 (sin stock).
+    await expect(
+      service.submitDraft(AUTOR, { user: "u", pass: "p" }, {
+        items: [{ code: "ABC", qty: 5, name: "Mouse" }],
+        sucursal: "SUC06",
+        vendedor: "01",
+        pago: "01",
+        entrega: "01",
+      })
+    ).rejects.toThrow(/Mouse: pediste 5, Air aceptó 2/);
+    expect(api.sendPedido).not.toHaveBeenCalled();
+  });
 });

@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
+import { assertPortalCartMatches } from "./cart-match";
 import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
 import {
   AIR_DELIVERIES,
@@ -241,6 +242,14 @@ export class AirOrderService {
     if (input.transporte) await api.setPrefer("transporte", input.transporte, cart.nrocompro);
     if (input.notes) await api.setPrefer("texto", input.notes, cart.nrocompro);
     cart = await api.getPedido(cart.nrocompro);
+    // Si Air rechazó algo al cargar el canasto, no sale un pedido distinto del carrito.
+    assertPortalCartMatches(
+      "Air",
+      input.items,
+      cart.items.filter((it) => it.codiart).map((it) => ({ code: it.codiart, qty: it.cantidad })),
+      // El canasto se vació antes de cargar: un renglón de más sería flete o similar, no un producto.
+      { ignoreExtras: true }
+    );
 
     let sendRaw: unknown;
     try {

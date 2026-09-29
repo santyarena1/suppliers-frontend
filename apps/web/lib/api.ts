@@ -1588,8 +1588,12 @@ export interface PortalCartSync {
   /** Solo en el carrito del distribuidor. Sigue allá hasta que el comercio lo deje o lo saque. */
   addedInPortal: { code: string; qty: number; name?: string }[];
   qtyChangedInPortal: { code: string; qty: number; name?: string }[];
-  /** Mismo producto en los dos carritos: `qty` es la suma, `baseQty` la que tenía NODO. */
+  /** Ya no se usa (los carritos no se suman). */
   summedInBoth?: { code: string; qty: number; name?: string; baseQty?: number }[];
+  /** El portal tenía otra cantidad: se cargó la de NODO (`qty`); `portalQty` es la que había allá. */
+  keptNodoQty?: { code: string; qty: number; name?: string; portalQty?: number }[];
+  /** El portal había perdido estos productos del carrito de NODO: se volvieron a cargar. */
+  restoredInPortal?: { code: string; qty: number; name?: string }[];
 }
 
 export interface InvidCheckoutPreview {
