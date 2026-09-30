@@ -158,7 +158,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
     invalidateMyModules();
     invalidateTgsEnabled();
     clearSession();
-    router.push("/login");
+    window.location.assign("/login");
   }
 
   const roleMeta = user?.role ? ROLE_LABEL[user.role] : undefined;

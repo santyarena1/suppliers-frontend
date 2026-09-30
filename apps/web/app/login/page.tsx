@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authApi } from "@/lib/api";
 import { saveSession, sessionFromToken } from "@/lib/auth";
@@ -28,8 +27,17 @@ function flagFromUrl(name: string): boolean {
   return new URLSearchParams(window.location.search).get(name) != null;
 }
 
+const ONBOARDING_TIMEOUT_MS = 5000;
+
+/** Ruta interna a la que quería ir antes de que el middleware lo mande a login. */
+function safeFrom(): string | null {
+  if (typeof window === "undefined") return null;
+  const from = new URLSearchParams(window.location.search).get("from");
+  if (!from || !from.startsWith("/") || from.startsWith("//") || from.startsWith("/\\") || from.startsWith("/login")) return null;
+  return from;
+}
+
 export default function LoginPage() {
-  const router = useRouter();
   const [registered, setRegistered] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -54,17 +62,22 @@ export default function LoginPage() {
       invalidateMyModules();
       invalidateTgsEnabled();
       saveSession(token, sessionFromToken(token, username));
+      let destination = safeFrom() ?? "/search";
       try {
         const { onboardingApi } = await import("@/lib/api");
-        const status = await onboardingApi.status();
-        if (status.data.needsOnboarding) {
-          router.push("/onboarding");
-          return;
-        }
+        const status = await Promise.race([
+          onboardingApi.status(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ONBOARDING_TIMEOUT_MS)),
+        ]);
+        if (status.data.needsOnboarding) destination = "/onboarding";
       } catch {
-        // Si falla el status, caemos al destino habitual.
+        // Si falla o tarda el status, caemos al destino habitual.
       }
-      router.push("/search");
+      // Navegación completa, no router.push: el caché del router de Next puede
+      // tener guardada la redirección a /login de cuando no había cookie, y los
+      // cachés en memoria (módulos, proveedores) son de la sesión anterior.
+      window.location.assign(destination);
+      return;
     } catch (err: unknown) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       if (e?.response?.status === 401 || e?.response?.status === 400) {
@@ -74,7 +87,6 @@ export default function LoginPage() {
       } else {
         setError(`Error de conexión: ${e?.message || "no se pudo contactar al servidor"}`);
       }
-    } finally {
       setLoading(false);
     }
   }
