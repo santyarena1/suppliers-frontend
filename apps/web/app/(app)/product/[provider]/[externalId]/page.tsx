@@ -40,6 +40,7 @@ import {
   Store,
 } from "lucide-react";
 import ProductBuyActions from "@/components/ProductBuyActions";
+import { OwnStoreProductCompare } from "@/components/OwnStoreCompare";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
 
 export default function ProductPage({ params }: { params: Promise<{ provider: string; externalId: string }> }) {
@@ -448,6 +449,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       <ProductBuyActions product={product} qty={qty} />
                     </div>}
                   </div>
+
+                  {product && (
+                    <OwnStoreProductCompare
+                      productName={product.name}
+                      costUsd={unpriced ? null : unitDisplayUsd}
+                    />
+                  )}
 
                   <button type="button" onClick={() => void searchSameName()} className="pp pp__ghost">
                     <Sparkles className="w-3.5 h-3.5" />

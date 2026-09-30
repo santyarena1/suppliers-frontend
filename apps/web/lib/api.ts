@@ -2850,6 +2850,44 @@ export const retailApi = {
     }>(`/admin/retail/stores/${storeId}/products`, { params: opts }),
 };
 
+export interface OwnRetailStoreOption {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  syncedAt: string;
+  productCount: number;
+}
+
+export interface OwnStoreSettings {
+  canEdit: boolean;
+  store: OwnRetailStoreOption | null;
+}
+
+export interface OwnStoreQuote {
+  key: string;
+  productId: string;
+  name: string;
+  price: number;
+  currency: string;
+  productUrl: string | null;
+  imageUrl: string | null;
+  syncedAt: string;
+  coverage: number;
+  confident: boolean;
+}
+
+/** Tienda web del comercio (tipo 1), elegida entre los locales ya sincronizados. */
+export const ownStoreApi = {
+  get: () => api.get<OwnStoreSettings>("/my/own-store"),
+  options: () => api.get<OwnRetailStoreOption[]>("/my/own-store/options"),
+  set: (retailStoreId: string | null) => api.put<OwnStoreSettings>("/my/own-store", { retailStoreId }),
+  quotes: (items: { key: string; name: string }[]) =>
+    api.post<{
+      store: { id: string; name: string; logoUrl: string | null } | null;
+      quotes: OwnStoreQuote[];
+    }>("/my/own-store/quotes", { items }),
+};
+
 // --- Permisos por módulo del usuario actual ---
 export type ModuleKey = "search" | "cart" | "credentials" | "providers" | "brands" | "news" | "diagnostics" | "admin";
 
