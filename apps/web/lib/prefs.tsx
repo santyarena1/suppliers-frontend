@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { tenantSeesIibbPerceptions } from "@/lib/auth";
+import { isShippingSplit, type ShippingSplit } from "@/lib/shipping";
 
 export type Currency = "USD" | "ARS";
 export type DollarType = "blue" | "oficial" | "tarjeta" | "mep" | "cripto" | "mayorista";
@@ -22,6 +23,41 @@ const DOLLAR_LABELS: Record<DollarType, string> = {
   mayorista: "Mayorista",
 };
 
+/**
+ * Cómo arranca cada filtro de la búsqueda. Tocar el filtro en la búsqueda no
+ * cambia esto: acá se elige con qué queda prendido o apagado al entrar.
+ */
+export interface SearchDefaults {
+  /** Sumar el envío estimado al precio. Apagado, el envío queda como referencia. */
+  shipping: boolean;
+  offline: boolean;
+  scheme: boolean;
+  outOfStock: boolean;
+}
+
+const SEARCH_DEFAULTS: SearchDefaults = { shipping: false, offline: false, scheme: false, outOfStock: false };
+const SEARCH_DEFAULT_KEYS: Record<keyof SearchDefaults, string> = {
+  shipping: "pref_filter_shipping",
+  offline: "pref_filter_offline",
+  scheme: "pref_filter_scheme",
+  outOfStock: "pref_filter_nostock",
+};
+
+/** Lectura directa, para inicializar la búsqueda al montar. */
+export function readSearchDefaults(): SearchDefaults {
+  if (typeof window === "undefined") return SEARCH_DEFAULTS;
+  try {
+    const out = { ...SEARCH_DEFAULTS };
+    for (const key of Object.keys(SEARCH_DEFAULT_KEYS) as (keyof SearchDefaults)[]) {
+      const raw = localStorage.getItem(SEARCH_DEFAULT_KEYS[key]);
+      if (raw != null) out[key] = raw === "1";
+    }
+    return out;
+  } catch {
+    return SEARCH_DEFAULTS;
+  }
+}
+
 interface PrefsContextValue {
   currency: Currency;
   setCurrency: (c: Currency) => void;
@@ -30,6 +66,11 @@ interface PrefsContextValue {
   /** Incluir percepciones/IIBB. Independiente del IVA. Default: true. Offline nunca las suma. */
   withIibb: boolean;
   setWithIibb: (v: boolean) => void;
+  /** Cómo se reparte el envío estimado entre los productos del pedido. */
+  shippingSplit: ShippingSplit;
+  setShippingSplit: (s: ShippingSplit) => void;
+  searchDefaults: SearchDefaults;
+  setSearchDefault: (key: keyof SearchDefaults, value: boolean) => void;
   dollarType: DollarType;
   setDollarType: (t: DollarType) => void;
   rates: DollarRate[];
@@ -47,6 +88,8 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [withIva, setWithIvaState] = useState<boolean>(true);
   const [withIibb, setWithIibbState] = useState<boolean>(true);
   const [dollarType, setDollarTypeState] = useState<DollarType>("oficial");
+  const [shippingSplit, setShippingSplitState] = useState<ShippingSplit>("units");
+  const [searchDefaults, setSearchDefaults] = useState<SearchDefaults>(SEARCH_DEFAULTS);
   const [rates, setRates] = useState<DollarRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
 
@@ -59,6 +102,9 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
     if (i != null) setWithIvaState(i === "1");
     if (iibb != null) setWithIibbState(iibb === "1");
     if (d) setDollarTypeState(d);
+    const split = localStorage.getItem("pref_shipping_split");
+    if (isShippingSplit(split)) setShippingSplitState(split);
+    setSearchDefaults(readSearchDefaults());
   }, []);
 
   const setCurrency = useCallback((c: Currency) => {
@@ -72,6 +118,14 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const setWithIibb = useCallback((v: boolean) => {
     setWithIibbState(v);
     localStorage.setItem("pref_iibb", v ? "1" : "0");
+  }, []);
+  const setShippingSplit = useCallback((s: ShippingSplit) => {
+    setShippingSplitState(s);
+    localStorage.setItem("pref_shipping_split", s);
+  }, []);
+  const setSearchDefault = useCallback((key: keyof SearchDefaults, value: boolean) => {
+    setSearchDefaults((prev) => ({ ...prev, [key]: value }));
+    localStorage.setItem(SEARCH_DEFAULT_KEYS[key], value ? "1" : "0");
   }, []);
   const setDollarType = useCallback((t: DollarType) => {
     setDollarTypeState(t);
@@ -112,6 +166,7 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   return (
     <PrefsContext.Provider value={{
       currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
+      shippingSplit, setShippingSplit, searchDefaults, setSearchDefault,
       dollarType, setDollarType,
       rates, currentRate, refreshRates, loadingRates,
       dollarLabel: (t) => DOLLAR_LABELS[t] || t,

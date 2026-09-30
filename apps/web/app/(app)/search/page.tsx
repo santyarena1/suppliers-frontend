@@ -23,7 +23,8 @@ import { useMyProviders } from "@/lib/myProviders";
 import { useIsRetailer, usePurchasePolicies } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { displayAmountFromPricing } from "@/lib/display-price";
-import { usePrefs } from "@/lib/prefs";
+import { readSearchDefaults, usePrefs } from "@/lib/prefs";
+import { productShipping, useShippingContext } from "@/lib/product-shipping";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useResults } from "@/lib/results";
 import { trackSearch } from "@/lib/history";
@@ -34,12 +35,16 @@ import Link from "next/link";
 import {
   Search, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
-  ChevronDown, ChevronRight, SlidersHorizontal, TrendingDown,
+  ChevronDown, ChevronRight, SlidersHorizontal, TrendingDown, Truck,
 } from "lucide-react";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc" | "name_desc";
 type ViewMode = "grid" | "list" | "grouped";
 type PriceView = "list" | "offline" | "scheme";
+
+const SHIPPING_CHIP_TITLE =
+  "Prendido: el precio suma el envío estimado según tu forma de envío habitual con cada distribuidor. " +
+  "Apagado: el envío aparece debajo del precio solo como referencia. Es aproximado: el costo real lo da el distribuidor.";
 
 export default function SearchPageWrapper() {
   return (
@@ -82,7 +87,19 @@ function SearchPage() {
   const platformHidden = useMemo(() => myProviders.filter((p) => p.linked && p.platformHidden), [myProviders]);
   const anyOffline = searchable.some((p) => purchasePolicies[p.provider]?.acceptsOffline);
   const anyScheme = searchable.some((p) => purchasePolicies[p.provider]?.acceptsScheme);
-  const [priceView, setPriceView] = useState<PriceView>("list");
+  // La página se monta en el cliente (AuthGuard): leer los defaults acá no
+  // desarma la hidratación.
+  const [priceView, setPriceView] = useState<PriceView>(() => {
+    const d = readSearchDefaults();
+    return d.offline ? "offline" : d.scheme ? "scheme" : "list";
+  });
+  const shippingCtx = useShippingContext();
+  // Sin cotización del dólar, un envío en pesos no se puede sumar a un precio en dólares.
+  const anyShipping = searchable.some((p) => {
+    const est = shippingCtx.estimates[p.provider]?.estimate;
+    return Boolean(est?.amount && !est.pickup && (est.currency === "USD" || shippingCtx.arsPerUsd > 0));
+  });
+  const [includeShipping, setIncludeShipping] = useState(() => readSearchDefaults().shipping);
   const priceMode: PriceMode = retailer && priceView !== "list" ? priceView : "list";
   const [selectedProviders, setSelectedProviders] = useState<Set<Provider>>(new Set());
   const [selectedBrands, setSelectedBrands] = useState<Set<string>>(
@@ -106,7 +123,7 @@ function SearchPage() {
   const [dropsView, setDropsView] = useState(false);
   /** En mobile los filtros/controles viven en un panel que se abre/cierra. */
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
+  const [includeOutOfStock, setIncludeOutOfStock] = useState(() => readSearchDefaults().outOfStock);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -485,7 +502,7 @@ function SearchPage() {
           withIibb: withIibb && pricing.mode !== "offline",
           provider: p.provider,
         }
-      ).unitDisplayUsd;
+      ).unitDisplayUsd + (includeShipping ? (productShipping(p, shippingCtx)?.perUnitUsd ?? 0) : 0);
     };
     let arr = results;
     if (dropsView) {
@@ -543,7 +560,7 @@ function SearchPage() {
     return arr;
   }, [
     results, hideNoImage, onlyPriceDrops, minPrice, maxPrice, sortBy, priceMode,
-    purchasePolicies, withIva, withIibb, iibbEpoch,
+    purchasePolicies, withIva, withIibb, iibbEpoch, includeShipping, shippingCtx,
     dropsView, selectedProviders, selectedBrands, selectedCategories,
   ]);
 
@@ -912,6 +929,30 @@ function SearchPage() {
             <div className="hidden md:flex items-center gap-2 ml-auto flex-shrink-0">
               {retailer && (
                 <span className="flex items-center gap-1">
+                  {anyShipping ? (
+                    <button
+                      type="button"
+                      onClick={() => setIncludeShipping((v) => !v)}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
+                        includeShipping
+                          ? "border-sky-500 text-sky-300 bg-sky-500/10"
+                          : "border-surface-700 text-surface-400 hover:text-surface-200"
+                      }`}
+                      title={SHIPPING_CHIP_TITLE}
+                    >
+                      <Truck className="w-3.5 h-3.5" />
+                      Incluir envío
+                    </button>
+                  ) : (
+                    <Link
+                      href="/proveedores"
+                      className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border transition-all border-surface-700 text-surface-400 hover:text-surface-200`}
+                      title="Cargá tus formas de envío en Proveedores → el distribuidor → Configuración"
+                    >
+                      <Truck className="w-3.5 h-3.5" />
+                      Envío estimado
+                    </Link>
+                  )}
                   {anyOffline ? (
                     <button
                       type="button"
@@ -1085,6 +1126,30 @@ function SearchPage() {
 
               {retailer && (
                 <span className="flex items-center gap-1 flex-wrap">
+                  {anyShipping ? (
+                    <button
+                      type="button"
+                      onClick={() => setIncludeShipping((v) => !v)}
+                      className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
+                        includeShipping
+                          ? "border-sky-500 text-sky-300 bg-sky-500/10"
+                          : "border-surface-700 text-surface-400 hover:text-surface-200"
+                      }`}
+                      title={SHIPPING_CHIP_TITLE}
+                    >
+                      <Truck className="w-3.5 h-3.5" />
+                      Incluir envío
+                    </button>
+                  ) : (
+                    <Link
+                      href="/proveedores"
+                      className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all border-surface-700 text-surface-400 hover:text-surface-200`}
+                      title="Cargá tus formas de envío en Proveedores → el distribuidor → Configuración"
+                    >
+                      <Truck className="w-3.5 h-3.5" />
+                      Envío estimado
+                    </Link>
+                  )}
                   {anyOffline ? (
                     <button
                       type="button"
@@ -1317,6 +1382,30 @@ function SearchPage() {
 
                     {retailer && (
                       <span className="flex items-center gap-1">
+                        {anyShipping ? (
+                          <button
+                            type="button"
+                            onClick={() => setIncludeShipping((v) => !v)}
+                            className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all ${
+                              includeShipping
+                                ? "border-sky-500 bg-sky-500/15 text-sky-300"
+                                : "border-surface-700 text-surface-500 hover:text-surface-300"
+                            }`}
+                            title={SHIPPING_CHIP_TITLE}
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            Incluir envío
+                          </button>
+                        ) : (
+                          <Link
+                            href="/proveedores"
+                            className={`flex items-center gap-1 text-[11px] font-medium px-2 py-1.5 rounded-md border transition-all border-surface-700 text-surface-500 hover:text-surface-300`}
+                            title="Cargá tus formas de envío en Proveedores → el distribuidor → Configuración"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            Envío estimado
+                          </Link>
+                        )}
                         {anyOffline ? (
                           <button
                             type="button"
@@ -1453,7 +1542,7 @@ function SearchPage() {
                   data-tour="search-results"
                 >
                   {filtered.map((product, i) => (
-                    <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} priceMode={priceMode} />
+                    <ProductCard key={`${product.provider}-${product.externalId}-${i}`} product={product} priceMode={priceMode} includeShipping={includeShipping} />
                   ))}
                 </div>
               )}
@@ -1466,6 +1555,7 @@ function SearchPage() {
                       key={`${product.provider}-${product.externalId}-${i}`}
                       product={product}
                       priceMode={priceMode}
+                      includeShipping={includeShipping}
                       layout="row"
                     />
                   ))}
@@ -1492,7 +1582,7 @@ function SearchPage() {
                         {!collapsed && (
                           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
                             {items.map((p, i) => (
-                              <ProductCard key={`${p.provider}-${p.externalId}-${i}`} product={p} priceMode={priceMode} />
+                              <ProductCard key={`${p.provider}-${p.externalId}-${i}`} product={p} priceMode={priceMode} includeShipping={includeShipping} />
                             ))}
                           </div>
                         )}

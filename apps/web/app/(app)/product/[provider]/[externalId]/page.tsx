@@ -23,6 +23,8 @@ import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { purchaseLinePricing } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options";
+import { productShipping, useShippingContext } from "@/lib/product-shipping";
+import { SHIPPING_DISCLAIMER, SHIPPING_SPLIT_LABELS } from "@/lib/shipping";
 import {
   ArrowLeft,
   Package,
@@ -158,6 +160,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     ...o,
     unitUsd: applyPaymentOption(unitDisplayUsd, o),
   }));
+
+  const shippingCtx = useShippingContext();
+  const shippingEstimate = shippingCtx.estimates[providerName]?.estimate ?? null;
+  const shipping = product ? productShipping(product, shippingCtx) : null;
 
 
   function copyId() {
@@ -418,6 +424,46 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           Precio unitario según cómo pagues, para comparar. NODO no elige la forma
                           de pago ni la manda al confirmar el pedido: la arreglás con el
                           distribuidor.
+                        </p>
+                      </div>
+                    )}
+
+                    {!unpriced && shippingEstimate && (
+                      <div className="pp__pay">
+                        <h2 className="pp__sec-title">Envío estimado</h2>
+                        {shippingEstimate.pickup ? (
+                          <p className="pp__note">Con este distribuidor solés retirar: no se suma envío.</p>
+                        ) : shipping ? (
+                          <div className="pp__pay-rows">
+                            <div className="pp__pay-row">
+                              <span className="pp__pay-label">{shippingEstimate.label}</span>
+                              <span className="pp__pay-delta">por pedido</span>
+                              <span className="pp__pay-amount">{money(shipping.costUsd)}</span>
+                            </div>
+                            <div className="pp__pay-row">
+                              <span className="pp__pay-label">
+                                {shipping.basis === "in_cart"
+                                  ? "Ya cuenta en tu carrito"
+                                  : `A este producto, con tu carrito actual`}
+                              </span>
+                              <span className="pp__pay-delta">{SHIPPING_SPLIT_LABELS[shippingCtx.split].label.toLowerCase()}</span>
+                              <span className="pp__pay-amount">{money(shipping.perUnitUsd)}/u</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="pp__note">
+                            Tu forma de envío habitual es {shippingEstimate.label}, pero todavía no sabemos cuánto sale.{" "}
+                            <Link href={`/proveedores/${encodeURIComponent(providerName)}`} className="underline">
+                              Cargale el valor
+                            </Link>{" "}
+                            en la configuración del distribuidor.
+                          </p>
+                        )}
+                        <p className="pp__note">
+                          {shippingEstimate.source === "history" && shippingEstimate.orders
+                            ? `Sale de tus pedidos: la usaste en ${shippingEstimate.orders} de los últimos ${shippingEstimate.ofOrders}. `
+                            : "Es la forma de envío que cargaste para este distribuidor. "}
+                          {SHIPPING_DISCLAIMER}
                         </p>
                       </div>
                     )}

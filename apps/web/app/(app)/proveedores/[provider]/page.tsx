@@ -17,6 +17,7 @@ import { isAdmin } from "@/lib/auth";
 import { useCan } from "@/lib/permissions";
 import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
+import { invalidateShippingEstimates } from "@/lib/shipping";
 import { parsePrice, proxyImg } from "@/lib/format";
 import { SKU_PREFIX } from "@/lib/providerMeta";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
@@ -200,6 +201,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         // Lista completa: lo que se borró en pantalla se borra de verdad. Una fila
         // sin nombre es una que se agregó y no se llenó, no se guarda.
         paymentOptions: [...(config.paymentOptions ?? []).filter((o) => o.label.trim()), ...learnedMeanwhile],
+        shippingMethods: (config.shippingMethods ?? []).filter((m) => m.label.trim()),
         syncIntervalMinutes: config.syncIntervalMinutes,
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,
@@ -218,6 +220,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setConfig(res.data);
       loadedPaymentIds.current = new Set((res.data.paymentOptions ?? []).map((o) => o.id));
       invalidateMyProviders();
+      invalidateShippingEstimates();
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 3000);
     } catch (err: unknown) {

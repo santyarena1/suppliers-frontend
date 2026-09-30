@@ -2,6 +2,7 @@
 
 import { FileSpreadsheet, Plug } from "lucide-react";
 import PaymentOptionsEditor from "@/components/PaymentOptionsEditor";
+import ShippingMethodsEditor from "@/components/ShippingMethodsEditor";
 import { IMPLEMENTED_PROVIDERS, isListProvider, type IvaAdjustment, type ProviderConfig } from "@/lib/api";
 import { IVA_ADJUSTMENT_LABELS, IVA_ADJUSTMENTS, providerHasIvaRate, providerPricesFromList } from "@/lib/purchase-pricing";
 
@@ -129,6 +130,12 @@ export default function ProviderPurchaseConfig({
       <PaymentOptionsEditor
         options={config.paymentOptions ?? []}
         onChange={(paymentOptions) => onChange({ ...config, paymentOptions })}
+      />
+
+      <ShippingMethodsEditor
+        provider={provider}
+        methods={config.shippingMethods ?? []}
+        onChange={(shippingMethods) => onChange({ ...config, shippingMethods })}
       />
 
       {/* Offline y esquema */}

@@ -3,10 +3,12 @@ import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleIni
 import {
   isListProviderKey,
   parsePaymentOptions,
+  parseShippingMethods,
   providerHasIvaRate,
   LIST_PROVIDER_PREFIX,
   type PaymentOption,
   type Provider,
+  type ShippingMethod,
 } from "@nodo/shared";
 import type { IvaAdjustment, OfferSource, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -125,6 +127,7 @@ export class ProvidersService implements OnModuleInit {
       manualIibbPercent: null as number | null,
       manualPerceptionsPercent: null as number | null,
       paymentOptions: [] as PaymentOption[],
+      shippingMethods: [] as ShippingMethod[],
       missingProductAction: "KEEP" as const,
       zeroStockAction: "KEEP" as const,
       hideUnsyncedCatalog: false,
@@ -179,13 +182,16 @@ export class ProvidersService implements OnModuleInit {
     if (merged.acceptsScheme && !merged.schemeIvaAdjustment) {
       throw new BadRequestException("Si acepta esquema, hay que elegir cómo tratar el IVA de esquema.");
     }
-    const { paymentOptions, ...rest } = dto;
+    const { paymentOptions, shippingMethods, ...rest } = dto;
     const data = {
       ...rest,
       ...merged,
       priceChannel,
       ...(paymentOptions !== undefined
         ? { paymentOptions: snapshotJson(parsePaymentOptions(paymentOptions)) }
+        : {}),
+      ...(shippingMethods !== undefined
+        ? { shippingMethods: snapshotJson(parseShippingMethods(shippingMethods)) }
         : {}),
     };
     const saved = await this.prisma.providerSyncConfig.upsert({
@@ -2166,6 +2172,7 @@ function serializeSyncConfig<T extends object>(c: T) {
     manualIibbPercent: row.manualIibbPercent == null ? null : Number(row.manualIibbPercent),
     manualPerceptionsPercent: row.manualPerceptionsPercent == null ? null : Number(row.manualPerceptionsPercent),
     paymentOptions: parsePaymentOptions(row.paymentOptions),
+    shippingMethods: parseShippingMethods(row.shippingMethods),
     acceptsOffline: Boolean(row.acceptsOffline),
     acceptsScheme: Boolean(row.acceptsScheme),
     hideUnsyncedCatalog: Boolean(row.hideUnsyncedCatalog),

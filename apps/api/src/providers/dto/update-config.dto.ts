@@ -17,7 +17,13 @@ import {
   ValidateNested,
 } from "class-validator";
 import { IvaAdjustment, MissingProductAction, PriceChannel, ZeroStockAction } from "@prisma/client";
-import { PAYMENT_OPTION_KINDS, type PaymentOptionKind } from "@nodo/shared";
+import {
+  MAX_SHIPPING_METHODS,
+  PAYMENT_OPTION_KINDS,
+  SHIPPING_CURRENCIES,
+  type PaymentOptionKind,
+  type ShippingCurrency,
+} from "@nodo/shared";
 
 /** Una forma de pago con su descuento o recargo. Solo informativa. */
 export class ProviderPaymentOptionDto {
@@ -43,6 +49,27 @@ export class ProviderPaymentOptionDto {
   @IsOptional()
   @IsIn(["cart", "manual"])
   source?: "cart" | "manual";
+}
+
+/** Una forma de envío con su valor por pedido. Sirve para estimar el envío. */
+export class ProviderShippingMethodDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(60)
+  label!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100_000_000)
+  amount!: number;
+
+  @IsIn(SHIPPING_CURRENCIES)
+  currency!: ShippingCurrency;
+
+  @IsOptional()
+  @IsBoolean()
+  habitual?: boolean;
 }
 
 export class UpdateProviderConfigDto {
@@ -130,4 +157,12 @@ export class UpdateProviderConfigDto {
   @ValidateNested({ each: true })
   @Type(() => ProviderPaymentOptionDto)
   paymentOptions?: ProviderPaymentOptionDto[];
+
+  /** Lista completa: lo que no venga acá se borra. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_SHIPPING_METHODS)
+  @ValidateNested({ each: true })
+  @Type(() => ProviderShippingMethodDto)
+  shippingMethods?: ProviderShippingMethodDto[];
 }

@@ -23,6 +23,7 @@ import {
 import { onboardingApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import OwnStoreSettings from "@/components/OwnStoreSettings";
+import SearchDefaultsSettings from "@/components/SearchDefaultsSettings";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
   soft: Sparkles,
@@ -303,6 +304,8 @@ function ConfiguracionPageInner() {
                   )}
                 </div>
               </section>
+
+              <SearchDefaultsSettings />
 
               <OwnStoreSettings showToast={showToast} />
 

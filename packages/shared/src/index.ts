@@ -11,3 +11,4 @@ export * from "./tgs";
 export * from "./news";
 export * from "./payment-options";
 export * from "./nb-cta-summary";
+export * from "./shipping";

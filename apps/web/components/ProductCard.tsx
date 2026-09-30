@@ -18,6 +18,8 @@ import { usePurchasePolicy } from "@/lib/purchase";
 import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options";
 import { displayAmountFromPricing, displayTaxBadge, displayTaxTitle } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
+import { useProductShipping, type ProductShipping } from "@/lib/product-shipping";
+import { SHIPPING_DISCLAIMER } from "@/lib/shipping";
 import {
   entryKey,
   loadCompareEntries,
@@ -73,15 +75,39 @@ function ProviderPill({ provider }: { provider: string }) {
   );
 }
 
+/**
+ * El renglón del envío estimado. Con el filtro "Incluir envío" apagado es solo
+ * referencia; prendido, el precio de arriba ya lo suma y el renglón lo aclara.
+ */
+function shippingLine(
+  shipping: ProductShipping,
+  included: boolean,
+  money: (usd: number) => string
+): { text: string; title: string } {
+  const { estimate, basis } = shipping;
+  const origin =
+    estimate.source === "history" && estimate.orders
+      ? `Forma habitual: ${estimate.label}, en ${estimate.orders} de tus últimos ${estimate.ofOrders} pedidos.`
+      : `Forma de envío: ${estimate.label}, con el valor que cargaste.`;
+  const title = `${origin} ${SHIPPING_DISCLAIMER}`;
+  if (basis === "in_cart") return { text: `Envío ${estimate.label}: ya cuenta en el carrito`, title };
+  const amount =
+    basis === "order" ? `${money(shipping.costUsd)} por pedido` : `${money(shipping.perUnitUsd)}/u`;
+  return { text: `${included ? "Incluye envío" : "Envío"} aprox. ${amount} · ${estimate.label}`, title };
+}
+
 export default function ProductCard({
   product,
   priceMode = "list",
   layout = "card",
+  includeShipping = false,
 }: {
   product: ProductDTO;
   priceMode?: PriceMode;
   /** `row`: misma información que la tarjeta, en una fila compacta. */
   layout?: "card" | "row";
+  /** Sumar el envío estimado al precio. Si no, el envío se muestra como referencia. */
+  includeShipping?: boolean;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [saleOpen, setSaleOpen] = useState(false);
@@ -102,7 +128,9 @@ export default function ProductCard({
     withIibb: includeIibb,
     provider: product.provider,
   });
-  const displayUsd = shown.displayUsd;
+  const shipping = useProductShipping(product);
+  const shippingIncluded = includeShipping && shipping != null && shipping.perUnitUsd > 0;
+  const displayUsd = shown.displayUsd + (shippingIncluded ? shipping.perUnitUsd : 0);
   const listed = linePricing(product);
   const showingOffline = pricing.adjusted && pricing.mode === "offline";
   const showingScheme = pricing.adjusted && pricing.mode === "scheme";
@@ -111,6 +139,7 @@ export default function ProductCard({
   const money = (usd: number) => (currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount));
 
   const primary = money(displayUsd);
+  const ship = shipping ? shippingLine(shipping, shippingIncluded, money) : null;
 
   const canScheme = Boolean(policy?.acceptsScheme && policy.schemeIvaAdjustment);
   const schemeHint =
@@ -322,6 +351,10 @@ export default function ProductCard({
         ))}
       </p>
 
+      <p className={`pc__ship pc-mono${ship ? "" : " pc--vacant"}`} title={ship?.title}>
+        {ship && <span className={shippingIncluded ? "is-in" : undefined}>{ship.text}</span>}
+      </p>
+
       <div className={`pc__flags${stockChip || showingOffline || showingScheme ? "" : " pc--vacant"}`}>
         {stockChip && (
           <span className={`pc__flag pc__flag--${stockChip.tone}`}>
@@ -509,6 +542,10 @@ export default function ProductCard({
               {p.text}
             </span>
           ))}
+        </p>
+
+        <p className={`pc__ship pc-mono${ship ? "" : " pc--vacant"}`} title={ship?.title}>
+          {ship && <span className={shippingIncluded ? "is-in" : undefined}>{ship.text}</span>}
         </p>
 
         <div

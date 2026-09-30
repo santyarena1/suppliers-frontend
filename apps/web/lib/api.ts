@@ -1,6 +1,7 @@
 import axios from "axios";
 import { SESSION_EVENT, getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
+import type { ShippingMethod } from "./shipping";
 import type {
   AdminSubscriptionDetail,
   AdminSubscriptionFilter,
@@ -1295,6 +1296,8 @@ export interface ProviderConfig {
   manualPerceptionsPercent: number | null;
   /** Formas de pago con descuento o recargo, tal como las ve este comercio. */
   paymentOptions: PaymentOption[];
+  /** Formas de envío con su valor por pedido, para estimar el envío. */
+  shippingMethods?: ShippingMethod[];
   syncIntervalMinutes: number;
   missingProductAction: MissingProductAction;
   zeroStockAction: ZeroStockAction;

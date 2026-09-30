@@ -38,6 +38,7 @@ import { commercialId, type TenantContext } from "./tenant-context.service";
 import { TenantVisibilityService } from "./tenant-visibility.service";
 import { TenantGuard } from "./tenant.guard";
 import { TenantsService } from "./tenants.service";
+import { ShippingEstimatesService } from "./shipping-estimates.service";
 
 /** Regla fija: solo el dueño cambia permisos, así nadie se da más de lo que tiene. */
 function assertOwner(tenant: TenantContext) {
@@ -54,7 +55,8 @@ export class MyTenantController {
     private readonly tenants: TenantsService,
     private readonly visibility: TenantVisibilityService,
     private readonly portfolio: PortfolioService,
-    private readonly permissions: TenantPermissionsService
+    private readonly permissions: TenantPermissionsService,
+    private readonly shipping: ShippingEstimatesService
   ) {}
 
   @Get("org")
@@ -100,6 +102,16 @@ export class MyTenantController {
   @Get("providers")
   providers(@CurrentTenant() tenant: TenantContext) {
     return this.visibility.listFor(commercialId(tenant), tenant.userId);
+  }
+
+  /**
+   * Envío estimado por distribuidor: la forma de envío habitual del comercio
+   * (de sus pedidos o la que marcó a mano) y cuánto sale. La búsqueda lo usa
+   * para mostrar el envío aproximado de cada producto.
+   */
+  @Get("shipping-estimates")
+  shippingEstimates(@CurrentTenant() tenant: TenantContext) {
+    return this.shipping.forTenant(commercialId(tenant));
   }
 
   /**

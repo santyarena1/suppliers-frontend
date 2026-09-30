@@ -112,6 +112,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Son **solo informativas**: NODO no elige la forma de pago ni la manda al confirmar el carrito, igual que el precio de esquema o el de offline. Se muestran como otra opción de precio en las cards y en la ficha; un recargo nunca tacha el precio final. Lo que informa el portal al cotizar entra por el POST y no pisa lo cargado a mano.
 
+### [FEATURE] Envío estimado por distribuidor
+- **Método**: GET (estimación) · PUT (formas de envío a mano)
+- **Ruta**: `GET /my/shipping-estimates` · `PUT /providers/:provider/config` (campo `shippingMethods`)
+- **Auth**: Bearer usuario con organización
+- **Body / Params**: `shippingMethods: [{ label, amount, currency: "ARS" | "USD", habitual? }]` — lista completa, lo que no venga se borra. Una sola puede ser `habitual`.
+- **Respuesta esperada**: `[{ provider, estimate: { id, label, pickup, amount, currency, source: "manual" | "history", orders, ofOrders } | null, learned: { orders, methods: [{ id, label, pickup, orders, lastAmount, currency, lastAt }] }, manual: ShippingMethod[] }]`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Lo aprendido sale de los últimos 30 pedidos por distribuidor (180 días, sin offline): la forma más usada y su último costo informado (New Bytes en pesos, Elit en dólares). Manda la habitual marcada a mano; si no, la más usada, con el valor cargado a mano si coincide el nombre. El reparto por producto (unidades, valor o pedido) y el filtro "Incluir envío" son preferencias del navegador. Es una estimación: el costo real lo da el portal en el checkout.
+
 ### [FEATURE] Equipo de la organización (Tipo 1 autónomo)
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `/my/org` · `/my/team` · `/my/team/:membershipId` · `/my/team/:membershipId/password` · `/my/team/:membershipId/managed-brands`
