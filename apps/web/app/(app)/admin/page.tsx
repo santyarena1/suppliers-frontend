@@ -13,16 +13,18 @@ import DiagnosticsPanel from "@/components/DiagnosticsPanel";
 import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
 import AdminAdsPanel from "@/components/admin/AdminAdsPanel";
 import AdminNewsPanel from "@/components/admin/AdminNewsPanel";
+import SubscriptionsPanel from "@/components/admin/SubscriptionsPanel";
 import {
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
-  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone, Newspaper,
+  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone, Newspaper, CreditCard,
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "organizations" | "retail" | "catalog" | "images" | "ads" | "news" | "diagnostics";
+type Tab = "organizations" | "subscriptions" | "retail" | "catalog" | "images" | "ads" | "news" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "organizations", label: "Directorio", icon: <Network className="w-3.5 h-3.5" /> },
+  { key: "subscriptions", label: "Suscripciones", icon: <CreditCard className="w-3.5 h-3.5" /> },
   { key: "retail", label: "Locales / precios", icon: <DollarSign className="w-3.5 h-3.5" /> },
   { key: "catalog", label: "Catálogo", icon: <Tags className="w-3.5 h-3.5" /> },
   { key: "images", label: "Imágenes", icon: <ImageIcon className="w-3.5 h-3.5" /> },
@@ -31,7 +33,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
-const TAB_KEYS: Tab[] = ["organizations", "retail", "catalog", "images", "ads", "news", "diagnostics"];
+const TAB_KEYS: Tab[] = ["organizations", "subscriptions", "retail", "catalog", "images", "ads", "news", "diagnostics"];
 const LEGACY_TABS = new Set(["users", "permissions"]);
 
 export default function AdminPage() {
@@ -120,6 +122,7 @@ function AdminPageInner() {
                 </div>
               </>
             )}
+            {tab === "subscriptions" && <SubscriptionsPanel showToast={showToast} />}
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
             {tab === "images" && <ImageSyncPanel showToast={showToast} />}

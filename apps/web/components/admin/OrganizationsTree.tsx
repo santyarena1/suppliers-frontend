@@ -22,6 +22,7 @@ import {
   tenantsApi,
 } from "@/lib/api";
 import GeneratedPassword from "./GeneratedPassword";
+import { PLAN_CATALOG, formatUsd, type TenantPlan } from "@/lib/plans";
 import EnterAsButton from "./EnterAsButton";
 import PlatformAccountPanel, { PLATFORM_ROLE_LABELS } from "./PlatformAccountPanel";
 import PermissionsMatrix, { type PermissionsSource } from "../team/PermissionsMatrix";
@@ -1675,6 +1676,11 @@ function CreateTenantModal({
     ownerUsername: "",
     ownerEmail: "",
     ownerPassword: "",
+    plan: "PRO" as TenantPlan,
+    billing: "ACTIVE" as "ACTIVE" | "TRIAL" | "COURTESY",
+    firstBillingAt: "",
+    courtesyUntil: "",
+    courtesyReason: "",
   });
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<{ username: string; password?: string } | null>(null);
@@ -1685,7 +1691,7 @@ function CreateTenantModal({
     setSaving(true);
     try {
       if (isRetailer) {
-        // Igual que el autoregistro: PRO, dueño, catálogo demo y recorrido guiado.
+        // Igual que el autoregistro: dueño, catálogo demo y recorrido guiado; el plan lo elige Administración.
         const { data } = await adminOnboardingApi.createRetailer({
           name: form.name.trim(),
           contactEmail: form.contactEmail.trim() || undefined,
@@ -1693,6 +1699,12 @@ function CreateTenantModal({
           ownerUsername: form.ownerUsername.trim(),
           ownerEmail: form.ownerEmail.trim(),
           ownerPassword: form.ownerPassword.trim() || undefined,
+          plan: form.plan,
+          billing: form.billing,
+          firstBillingAt: form.billing === "ACTIVE" && form.firstBillingAt ? new Date(`${form.firstBillingAt}T12:00:00`).toISOString() : undefined,
+          courtesyUntil:
+            form.billing === "COURTESY" ? (form.courtesyUntil ? new Date(`${form.courtesyUntil}T12:00:00`).toISOString() : null) : undefined,
+          courtesyReason: form.billing === "COURTESY" ? form.courtesyReason.trim() || undefined : undefined,
         });
         showToast("Comercio creado con su dueño y el catálogo de prueba");
         setCreated({ username: data.owner.username, password: data.generatedPassword });
@@ -1817,8 +1829,56 @@ function CreateTenantModal({
                 <input minLength={8} type="text" value={form.ownerPassword} onChange={(e) => setForm({ ...form, ownerPassword: e.target.value })} className={inputClass} />
               </div>
               <p className="text-[11px] text-surface-500 leading-relaxed">
-                Queda con plan PRO, catálogo de prueba y el recorrido guiado para su primer ingreso.
+                Queda con catálogo de prueba y el recorrido guiado para su primer ingreso.
               </p>
+            </fieldset>
+          )}
+          {isRetailer && (
+            <fieldset className="border border-surface-800 rounded-lg p-3 flex flex-col gap-3">
+              <legend className="px-1 text-[11px] font-semibold text-surface-300">Plan</legend>
+              <div>
+                <label className={labelClass}>Plan</label>
+                <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value as TenantPlan })} className={inputClass}>
+                  {(["BASE", "PRO", "CUSTOM"] as TenantPlan[]).map((plan) => (
+                    <option key={plan} value={plan}>
+                      {PLAN_CATALOG[plan].label} · {formatUsd(PLAN_CATALOG[plan].monthlyPrice)} / mes
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelClass}>Modalidad</label>
+                <select
+                  value={form.billing}
+                  onChange={(e) => setForm({ ...form, billing: e.target.value as "ACTIVE" | "TRIAL" | "COURTESY" })}
+                  className={inputClass}
+                >
+                  <option value="ACTIVE">Suscripción paga</option>
+                  <option value="TRIAL">Prueba</option>
+                  <option value="COURTESY">Cortesía</option>
+                </select>
+              </div>
+              {form.billing === "ACTIVE" && (
+                <div>
+                  <label className={labelClass}>Primer vencimiento (vacío = en un mes)</label>
+                  <input type="date" value={form.firstBillingAt} onChange={(e) => setForm({ ...form, firstBillingAt: e.target.value })} className={inputClass} />
+                </div>
+              )}
+              {form.billing === "COURTESY" && (
+                <>
+                  <div>
+                    <label className={labelClass}>Cortesía hasta (vacío = sin vencimiento)</label>
+                    <input type="date" value={form.courtesyUntil} onChange={(e) => setForm({ ...form, courtesyUntil: e.target.value })} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Motivo</label>
+                    <input value={form.courtesyReason} onChange={(e) => setForm({ ...form, courtesyReason: e.target.value })} className={inputClass} />
+                  </div>
+                </>
+              )}
+              {form.plan === "CUSTOM" && (
+                <p className="text-[11px] text-surface-500 leading-relaxed">La puesta en marcha (USD 300) queda pendiente; se gestiona en Suscripciones.</p>
+              )}
             </fieldset>
           )}
           <button
