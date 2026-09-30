@@ -4,14 +4,14 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ## Implementado
 
-### [FEATURE] Onboarding comercio (Tipo 1) + plan PRO
+### [FEATURE] Onboarding comercio (Tipo 1) + plan NODO Base
 - **Método**: GET | POST
 - **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/step` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`
 - **Auth**: Bearer token requerido. `bootstrap`: usuario sin membresía (`ROLE_USER`, o `ROLE_ADMIN` en preview). `preview`: solo `ROLE_ADMIN`. `start-tour` / `reseed-demo`: comercio `OWNER`/`ADMIN` (reseed).
 - **Body / Params**: bootstrap `{ name, contactEmail?, contactPhone? }` · step `{ step }` · el resto `{}`
 - **Respuesta esperada**: status `{ needsOnboarding, completed, hasTenant, mode: fresh|existing|preview, preview, tenant?, steps[{ id, kind, title, body, href, spotlight, ctaLabel, completeWhen?, skipIfExisting }], currentStep, demo?, canBootstrap, canStartTour }` · step `{ currentStep }` · bootstrap/preview/complete `{ token?, org?, onboarding }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Crea `Tenant` RETAILER `plan=PRO`, membresía `OWNER`, distros demo + ~10 ofertas con foto/ficha + 2 pedidos. `currentStep` (guardado en `User.onboardingStep` con `POST /onboarding/step`) es la única fuente de verdad del paso; `start-tour` y `complete` lo limpian. `start-tour` salta el alta (`onboardingReplay`). Preview superadmin: guarda Administración, suelta membresía, onboarding desde 0, al completar restaura. Demo Norte/Sur solo se ven durante el recorrido (alta, repaso o preview): no entran al Directorio ni a `/my/providers` de quien ya terminó. `/onboarding` solo crea el comercio; la guía corre dentro de la app sin bloquear (spotlight `data-tour`). Ver `docs/PLAN_ONBOARDING.md`.
+- **Notas**: Crea `Tenant` RETAILER `plan=BASE` con suscripción `TRIAL` (14 días; el preview del superadmin entra en `PRO` por cortesía), membresía `OWNER`, distros demo + ~10 ofertas con foto/ficha + 2 pedidos. `currentStep` (guardado en `User.onboardingStep` con `POST /onboarding/step`) es la única fuente de verdad del paso; `start-tour` y `complete` lo limpian. `start-tour` salta el alta (`onboardingReplay`). Preview superadmin: guarda Administración, suelta membresía, onboarding desde 0, al completar restaura. Demo Norte/Sur solo se ven durante el recorrido (alta, repaso o preview): no entran al Directorio ni a `/my/providers` de quien ya terminó. `/onboarding` solo crea el comercio; la guía corre dentro de la app sin bloquear (spotlight `data-tour`). Ver `docs/PLAN_ONBOARDING.md`.
 
 ### [FEATURE] Renovar sesión (JWT)
 - **Método**: POST
@@ -62,10 +62,10 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Método**: POST
 - **Ruta**: `/admin/onboarding/retailers`
 - **Auth**: Bearer ROLE_ADMIN
-- **Body / Params**: `{ name, contactEmail?, contactPhone?, ownerUsername, ownerEmail, ownerPassword? }`
+- **Body / Params**: `{ name, contactEmail?, contactPhone?, ownerUsername, ownerEmail, ownerPassword?, plan?: "BASE"|"PRO"|"CUSTOM", billing?: "ACTIVE"|"TRIAL"|"COURTESY", firstBillingAt?, courtesyUntil?: string|null, courtesyReason? }`
 - **Respuesta esperada**: `{ tenant: { id, name, type, plan }, owner: { id, username, email }, generatedPassword? }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Deja el comercio igual que el autoregistro: plan PRO, dueño, catálogo demo; el recorrido guiado arranca en su primer ingreso. Sin `ownerPassword` la plataforma genera una y la devuelve una única vez.
+- **Notas**: Deja el comercio como el autoregistro (dueño, catálogo demo) pero con el plan que elige Administración: por defecto `PRO` pago (`billing=ACTIVE`, primer vencimiento en un mes o `firstBillingAt`). `COURTESY` sin `courtesyUntil` = cortesía indefinida. `CUSTOM` deja la puesta en marcha pendiente. Ver `docs/PLAN_SUSCRIPCIONES.md`; el recorrido guiado arranca en su primer ingreso. Sin `ownerPassword` la plataforma genera una y la devuelve una única vez.
 
 ### [FEATURE] Entrar como otro usuario (suplantación)
 - **Método**: POST
@@ -90,9 +90,9 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/my/providers`, `/my/redeem-code`
 - **Auth**: Bearer usuario con organización
 - **Body / Params**: canje `{ code }`
-- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent, linkId }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
+- **Respuesta esperada**: `VisibleProvider[]` con `{ provider, name, linked, advertised, accountManager, discountPercent, linkId, inSearch, includeInSearch }` · canje `{ linkId, tenantName, tenantType, provider }` recién después de canjear
 - **Estado**: IMPLEMENTADO
-- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Cada fila trae `platformHidden: boolean`: el superadmin lo ocultó en toda la plataforma (`ProviderDisplayConfig.visible=false`); el vínculo sigue pero la búsqueda y el catálogo responden vacío, así que el buscador no lo ofrece como filtro ni lo consulta. Nunca es `true` para un proveedor por lista (`LIST_*`) ni para uno que el comercio conectó cargando su propia lista (`selfConnected`): el interruptor global apaga integraciones de la plataforma, no la lista que trajo el comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones.
+- **Notas**: `/my/providers` es la única fuente de qué proveedores existen para un comercio. Cada fila trae `platformHidden: boolean`: el superadmin lo ocultó en toda la plataforma (`ProviderDisplayConfig.visible=false`); el vínculo sigue pero la búsqueda y el catálogo responden vacío, así que el buscador no lo ofrece como filtro ni lo consulta. Nunca es `true` para un proveedor por lista (`LIST_*`) ni para uno que el comercio conectó cargando su propia lista (`selfConnected`): el interruptor global apaga integraciones de la plataforma, no la lista que trajo el comercio. Todos los rechazos del canje responden lo mismo para que no se puedan enumerar códigos ni organizaciones. `inSearch` dice si el proveedor participa del buscador agregado según el plan (NODO Base: hasta 5 a la vez); `includeInSearch` es la elección guardada (`true`/`false`/`null`). El front filtra el buscador con `linked && !platformHidden && inSearch !== false`.
 
 ### [FEATURE] Percepción aprendida del portal del proveedor
 - **Método**: POST
@@ -497,6 +497,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: "Pendiente visible" ahora es oferta activa con stock > 0 **o stock desconocido** (las listas de precios no siempre lo traen y el catálogo igual muestra esos productos). Antes, todo producto sin stock informado caía en "sin stock / diferidos" y parecía que solo Air tenía pendientes. El selector de distribuidor de la pantalla sale de `status.byProvider` (todos los que tienen productos, incluidos `LIST_*`), no de la lista fija de 14.
 
+
+### [FEATURE] Planes y suscripciones de comercios (Tipo 1)
+- **Método**: GET | POST | PUT | DELETE
+- **Ruta**: comercio `/my/subscription` · `/my/subscription/upgrade` · `/my/subscription/request` · `/my/subscription/payment-notice` · `PUT /my/providers/:provider/search` · superadmin `/admin/subscriptions` · `/admin/subscriptions/:tenantId` · `…/:tenantId/plan` (PUT) · `…/payments` (POST) · `…/billing-date` (PUT) · `…/extend` (POST) · `…/courtesy` (PUT, DELETE) · `…/suspend` · `…/reactivate` · `…/cancel` (POST) · `…/notes` (PUT) · `…/setup-fee` (PUT)
+- **Auth**: `/my/subscription*`: Bearer de un comercio (`RETAILER`); ver cualquier miembro, `upgrade`/`request`/`payment-notice` solo `OWNER`/`ADMIN` (`canManage`). Abiertas aunque la suscripción esté suspendida. `PUT /my/providers/:provider/search`: `RETAILER` con `providers.manage`. `/admin/subscriptions*`: `ROLE_ADMIN`.
+- **Body / Params**: upgrade `{}` · request `{ plan, message? }` · payment-notice `{ reference?, message? }` · search `{ enabled: boolean }` · admin list `?filter=all|active|upcoming|past_due|grace|suspended|courtesy|cancelled&q=` · plan `{ plan, price?: number|null, reason? }` · payments `{ kind?: SUBSCRIPTION|SETUP_FEE, amount?, paidAt?, months? (1–24), periodStart?, periodEnd?, provider?: MANUAL|TRANSFER|COURTESY|MERCADOPAGO|STRIPE|OTHER, externalReference?, notes? }` · billing-date `{ nextBillingAt }` · extend `{ days (1–365), reason? }` · courtesy PUT `{ plan?, until?: string|null, reason? }` · courtesy DELETE `{ mode: CONVERT|CANCEL, nextBillingAt? }` · suspend/cancel `{ reason? }` · reactivate `{ nextBillingAt? }` · notes `{ notes: string|null }` · setup-fee `{ status?: PENDING|PAID|WAIVED|NOT_APPLICABLE, amount?: number|null, blocksCustom? }`
+- **Respuesta esperada**: `GET /my/subscription` → `{ tenantId, tenantName, plan, planLabel, price, listPrice, priceOverridden, currency, status, statusLabel, access: FULL|RESTRICTED, startedAt, currentPeriodStart, currentPeriodEnd, nextBillingAt, dueAt, suspendsAt, daysUntilDue, daysOverdue, trialEndsAt, cancelledAt, setupFee: { amount, status, statusLabel, paidAt, blocksCustom }, capabilities: { maxSearchProviders: number|null, directCheckout, providerPortalAccess, providerAccountAccess, integratedChat, advancedAnalytics, externalIntegrations, customModules, customBranding }, usage: { connectedProviders, activeSearchProviders, maxSearchProviders }, canManage, payments[] }` · upgrade `{ applied, requested, subscription }` · search → `{ connectedProviders, activeSearchProviders, maxSearchProviders, provider, inSearch }` · admin list `{ counts: Record<filtro, number>, rows: AdminSubscriptionRow[] }` (vista + `storedStatus, courtesy { active, until, reason }, suspensionReason, cancellationReason, notes, gracePeriodEnd, lastPayment, pendingRequest, paymentNoticeAt, tenantActive, createdAt`) · detalle y acciones → fila + `usage, payments[], events[], reminders[]`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El plan es del tenant. Precios: Base USD 45, Pro USD 60, Custom USD 150 + USD 300 de puesta en marcha. El estado efectivo se calcula por fechas en cada request (`PAST_DUE` → `GRACE_PERIOD` → `SUSPENDED` a los 7 días del vencimiento). La cortesía se le muestra al comercio como `ACTIVE`. Registrar un pago deja `ACTIVE` al instante. Superadmin en su propia sesión recibe `access=FULL` y capacidades completas; suplantando, ve lo del comercio. Errores de plan en el envelope: 403 `PLAN_FEATURE_UNAVAILABLE` (`details.capability`, `details.requiredPlan`), 409 `PLAN_SEARCH_LIMIT` (`details.maxSearchProviders`, `details.activeSearchProviders`), 403 `SUBSCRIPTION_SUSPENDED`. Rutas con capacidad: `providers/:p/checkout/*` y aprobación online (`directCheckout`); pedidos del portal, cuenta corriente, perfil, documentos, pagos y notas de venta (`providerAccountAccess`); percepciones y formas de pago observadas (`providerPortalAccess`); `/chat/*` salvo `unread`, que devuelve 0 (`integratedChat`); `/orders/insights*` (`advancedAnalytics`). El pedido offline (Generar pedido) está en todos los planes. Ver `docs/PLAN_SUSCRIPCIONES.md`.
 
 ## Pendiente (futuro)
 

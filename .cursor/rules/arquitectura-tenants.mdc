@@ -63,12 +63,18 @@ SKUs de distros con semáforo/precio sugerido, materiales y acciones.
  `TenantLink`. Plan: `docs/PLAN_NOTICIAS.md`.
 8. **Onboarding de comercio.** Todo usuario de un `RETAILER` (dueño o subusuario) pasa
  por el recorrido hasta marcar `onboardingCompletedAt`. El alta self-serve obliga a
- crear el nombre de la organización y entra en plan `PRO` (plan básico). Detalle:
+ crear el nombre de la organización y entra en `BASE` (NODO Base) en prueba. Detalle:
  `docs/PLAN_ONBOARDING.md`.
+9. **Planes de comercio.** El plan (`BASE`, `PRO`, `CUSTOM`) y la `Subscription` son de
+ la organización, solo para `RETAILER`. Se valida server-side por **capacidad**
+ (`@RequiresCapability`, `assertCapability`), nunca con `plan === "..."` ni solo
+ escondiendo botones. Bajar de plan o suspender nunca borra datos. Distribuidores y
+ marcas no tienen plan comercial. Detalle: `docs/PLAN_SUSCRIPCIONES.md`.
 
 ## Al agregar features
 
 - Nueva entidad de negocio → lleva `tenantId` y su índice.
-- Nuevo endpoint → declarar qué `TenantType` y qué `TenantRole` lo pueden usar.
+- Nuevo endpoint → declarar qué `TenantType` y qué `TenantRole` lo pueden usar, y si
+  depende de una capacidad del plan del comercio.
 - Nueva pantalla → derivar la navegación del `TenantType` del usuario, no de `User.role`.
 - Cambios de contrato → actualizar `API_CONTRACT.md`.

@@ -1,4 +1,4 @@
-# Onboarding de comercios (Tipo 1) y plan PRO
+# Onboarding de comercios (Tipo 1) y plan inicial
 
 Documento vivo. Alta self-serve de un comercio y recorrido guiado dentro de la app.
 
@@ -7,20 +7,22 @@ Documento vivo. Alta self-serve de un comercio y recorrido guiado dentro de la a
 ### Alta nueva
 ```
 /register o landing #cuenta → login → /onboarding (solo el nombre del comercio)
-  └─ POST /onboarding/bootstrap → Tenant RETAILER plan=PRO + OWNER + demo
+  └─ POST /onboarding/bootstrap → Tenant RETAILER plan=BASE (suscripción TRIAL) + OWNER + demo
      └─ entra a la app: la guía arranca sola en "welcome"
 ```
 
 ### Alta desde superadmin
-`POST /admin/onboarding/retailers` crea comercio + dueño + demo. El recorrido arranca en el
-primer ingreso del dueño.
+`POST /admin/onboarding/retailers` crea comercio + dueño + demo con el plan (Base, Pro o
+Custom) y la modalidad (paga, prueba o cortesía) que elige Administración; por defecto Pro
+pago. El recorrido arranca en el primer ingreso del dueño. Planes: `docs/PLAN_SUSCRIPCIONES.md`.
 
 ### Repetir el recorrido
 Configuración → Ayuda → Repetir (`POST /onboarding/start-tour`): borra el paso guardado,
 asegura la demo y la guía vuelve a empezar.
 
 ### Superadmin desde la landing (preview)
-Login + `POST /onboarding/preview`: suelta Administración y hace el alta desde cero.
+Login + `POST /onboarding/preview`: suelta Administración y hace el alta desde cero (en Pro
+por cortesía, para ver todo).
 "Salir del preview" / terminar restaura Administración.
 
 ## Una sola fuente de verdad
