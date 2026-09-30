@@ -202,8 +202,8 @@ export default function SignupCta() {
               </div>
 
               <p className="lnd-note mt-6 leading-relaxed">
-                Arrancás en el plan PRO. Después del registro nombrás tu comercio y
-                explorás con guía interactiva.
+                Arrancás en NODO Base con un período de prueba. Después del registro
+                nombrás tu comercio y explorás con guía interactiva.
               </p>
             </form>
           </Reveal>

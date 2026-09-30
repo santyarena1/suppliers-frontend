@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Button, Chip, SectionHead, Shell } from "./ui";
+import { PLAN_CARDS, PLAN_CATALOG, PLAN_FEATURE_GROUPS, formatUsd, type PlanCell, type TenantPlan } from "@/lib/plans";
 
 type Plan = {
   n: string;
@@ -10,46 +11,6 @@ type Plan = {
   items: string[];
   featured?: boolean;
 };
-
-const RETAIL: Plan[] = [
-  {
-    n: "01",
-    name: "PRO",
-    who: "Un local, plan básico",
-    featured: true,
-    items: [
-      "Búsqueda unificada sobre tus distribuidores",
-      "Comparación con el costo puesto",
-      "Carga de listas por planilla",
-      "Hasta 3 usuarios · catálogo demo al empezar",
-      "Plan de entrada mientras definimos precios de Local y Cadena",
-    ],
-  },
-  {
-    n: "02",
-    name: "Local",
-    who: "Un local con equipo",
-    items: [
-      "Todo lo de PRO",
-      "Compra online donde el distribuidor la permite",
-      "Historial de pedidos, cuenta corriente y facturas",
-      "Pedido armado por un empleado y aprobado por el dueño",
-      "Chat con los vendedores · precio a definir",
-    ],
-  },
-  {
-    n: "03",
-    name: "Cadena",
-    who: "Varias sucursales",
-    items: [
-      "Todo lo de Local",
-      "Varios locales y depósitos",
-      "Permisos por rol y por sucursal",
-      "Comparación y reportes entre sucursales",
-      "Precio a definir",
-    ],
-  },
-];
 
 const SUPPLY: Plan[] = [
   {
@@ -79,7 +40,6 @@ const SUPPLY: Plan[] = [
 
 export default function Pricing() {
   const [tab, setTab] = useState<"retail" | "supply">("retail");
-  const plans = tab === "retail" ? RETAIL : SUPPLY;
 
   return (
     <section id="planes" className="relative py-24 sm:py-36">
@@ -87,7 +47,7 @@ export default function Pricing() {
         <SectionHead
           title={<>Planes</>}
           meta="05 · Precios"
-          lead="PRO es el plan básico con el que entra un comercio nuevo. Local y Cadena ya tienen alcance definido; el precio lo publicamos cuando esté cerrado."
+          lead="Todos los planes incluyen tus distribuidores conectados, el carrito multi-proveedor y la gestión completa de tu equipo. Precios mensuales por comercio."
         />
 
         <div
@@ -116,37 +76,98 @@ export default function Pricing() {
           ))}
         </div>
 
-        <div className={`grid gap-5 ${tab === "retail" ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
-          {plans.map((p) => (
-            <div
-              key={`${tab}-${p.name}`}
-              className={`lnd-panel p-6 sm:p-7 flex flex-col${p.featured ? " lnd-panel--active" : ""}`}
-            >
+        {tab === "retail" ? <RetailPlans /> : (
+          <div className="grid gap-5 lg:grid-cols-2">
+            {SUPPLY.map((p) => (
+              <div
+                key={p.name}
+                className={`lnd-panel p-6 sm:p-7 flex flex-col${p.featured ? " lnd-panel--active" : ""}`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="lnd-display lnd-display--md">{p.name}</h3>
+                    <p className="lnd-note mt-2">{p.who}</p>
+                  </div>
+                  <span className="lnd-mono text-[0.7rem]" style={{ color: "var(--fg-faint)" }}>
+                    {p.n}
+                  </span>
+                </div>
+
+                <div className="mt-6 flex items-center gap-3">
+                  <span
+                    className="lnd-draft lnd-mono text-[0.72rem] px-2.5 py-1.5 rounded-[3px] tracking-[0.14em] uppercase"
+                  >
+                    Precio a definir
+                  </span>
+                  {p.featured && <Chip tone="ember">Recomendado</Chip>}
+                </div>
+
+                <ul className="mt-7 space-y-3 flex-1">
+                  {p.items.map((it) => (
+                    <li key={it} className="flex items-start gap-3 text-[0.85rem] text-[var(--fg-dim)]">
+                      <span
+                        className="mt-[0.45rem] w-1.5 h-1.5 rounded-full flex-shrink-0"
+                        style={{ background: p.featured ? "var(--ember)" : "var(--lilac)" }}
+                        aria-hidden="true"
+                      />
+                      <span className="leading-relaxed">{it}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-8">
+                  <Button href="#cuenta" variant={p.featured ? "primary" : "ghost"}>
+                    Coordinar el alta
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Shell>
+    </section>
+  );
+}
+
+const RETAIL_ORDER: TenantPlan[] = ["BASE", "PRO", "CUSTOM"];
+
+function RetailPlans() {
+  const [showAll, setShowAll] = useState(false);
+  return (
+    <>
+      <div className="grid gap-5 lg:grid-cols-3">
+        {PLAN_CARDS.map((card, i) => {
+          const def = PLAN_CATALOG[card.plan];
+          const featured = !!card.highlight;
+          return (
+            <div key={card.plan} className={`lnd-panel p-6 sm:p-7 flex flex-col${featured ? " lnd-panel--active" : ""}`}>
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="lnd-display lnd-display--md">{p.name}</h3>
-                  <p className="lnd-note mt-2">{p.who}</p>
+                  <h3 className="lnd-display lnd-display--md">{def.label}</h3>
+                  <p className="lnd-note mt-2">{def.tagline}</p>
                 </div>
                 <span className="lnd-mono text-[0.7rem]" style={{ color: "var(--fg-faint)" }}>
-                  {p.n}
+                  {String(i + 1).padStart(2, "0")}
                 </span>
               </div>
 
-              <div className="mt-6 flex items-center gap-3">
-                <span
-                  className="lnd-draft lnd-mono text-[0.72rem] px-2.5 py-1.5 rounded-[3px] tracking-[0.14em] uppercase"
-                >
-                  Precio a definir
-                </span>
-                {p.featured && <Chip tone="ember">Recomendado</Chip>}
+              <div className="mt-6 flex flex-wrap items-end gap-3">
+                <span className="lnd-display lnd-display--md">{formatUsd(def.monthlyPrice)}</span>
+                <span className="lnd-note pb-1">/ mes</span>
+                {card.highlight && <Chip tone="ember">{card.highlight}</Chip>}
               </div>
+              {card.footnote && (
+                <p className="lnd-mono text-[0.7rem] mt-2" style={{ color: "var(--fg-faint)" }}>
+                  {card.footnote}
+                </p>
+              )}
 
               <ul className="mt-7 space-y-3 flex-1">
-                {p.items.map((it) => (
+                {card.bullets.map((it) => (
                   <li key={it} className="flex items-start gap-3 text-[0.85rem] text-[var(--fg-dim)]">
                     <span
                       className="mt-[0.45rem] w-1.5 h-1.5 rounded-full flex-shrink-0"
-                      style={{ background: p.featured ? "var(--ember)" : "var(--lilac)" }}
+                      style={{ background: featured ? "var(--ember)" : "var(--lilac)" }}
                       aria-hidden="true"
                     />
                     <span className="leading-relaxed">{it}</span>
@@ -155,14 +176,88 @@ export default function Pricing() {
               </ul>
 
               <div className="mt-8">
-                <Button href="#cuenta" variant={p.featured ? "primary" : "ghost"}>
-                  {tab === "retail" ? "Crear mi cuenta" : "Coordinar el alta"}
+                <Button href="#cuenta" variant={featured ? "primary" : "ghost"}>
+                  {card.cta}
                 </Button>
               </div>
             </div>
-          ))}
+          );
+        })}
+      </div>
+
+      <div className="mt-8 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          aria-expanded={showAll}
+          className="lnd-label px-4 py-2 rounded transition-colors duration-200"
+          style={{ border: "1px solid var(--hair)", color: "var(--fg-dim)" }}
+        >
+          {showAll ? "Ocultar funciones" : "Ver todas las funciones"}
+        </button>
+      </div>
+
+      {showAll && (
+        <div className="mt-6 overflow-x-auto lnd-panel p-0">
+          <table className="w-full min-w-[560px] text-left text-[0.85rem]">
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--hair)" }}>
+                <th className="px-4 py-3 lnd-label" style={{ color: "var(--fg-faint)" }}>
+                  Funciones
+                </th>
+                {RETAIL_ORDER.map((plan) => (
+                  <th
+                    key={plan}
+                    className="px-3 py-3 text-center lnd-label"
+                    style={{ color: plan === "PRO" ? "var(--ember)" : "var(--fg-dim)" }}
+                  >
+                    {PLAN_CATALOG[plan].label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PLAN_FEATURE_GROUPS.map((group) => (
+                <Fragment key={group.title}>
+                  <tr>
+                    <td colSpan={4} className="px-4 pt-5 pb-1 lnd-label" style={{ color: "var(--fg-faint)" }}>
+                      {group.title}
+                    </td>
+                  </tr>
+                  {group.rows.map((row) => (
+                    <tr key={row.label} style={{ borderBottom: "1px solid var(--hair)" }}>
+                      <td className="px-4 py-2.5 text-[var(--fg-dim)]">{row.label}</td>
+                      {RETAIL_ORDER.map((plan) => (
+                        <td key={plan} className="px-3 py-2.5 text-center">
+                          <ComparisonCell value={row.values[plan]} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </Shell>
-    </section>
+      )}
+    </>
   );
+}
+
+function ComparisonCell({ value }: { value: PlanCell }) {
+  if (value === true) {
+    return (
+      <span style={{ color: "var(--ember)" }} aria-label="Incluido">
+        ●
+      </span>
+    );
+  }
+  if (value === false) {
+    return (
+      <span style={{ color: "var(--fg-faint)" }} aria-label="No incluido">
+        —
+      </span>
+    );
+  }
+  return <span className="text-[0.8rem] text-[var(--fg-dim)]">{value}</span>;
 }
