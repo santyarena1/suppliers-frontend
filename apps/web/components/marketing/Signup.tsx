@@ -1,0 +1,182 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { AlertCircle, Check, Loader2 } from "lucide-react";
+import { authApi, onboardingApi } from "@/lib/api";
+import { saveSession, sessionFromToken } from "@/lib/auth";
+import { invalidateMyModules } from "@/lib/permissions";
+import { invalidateTgsEnabled } from "@/lib/tgs";
+import { Reveal } from "./Reveal";
+
+/** Con la clave de superadmin, el formulario abre el onboarding en modo preview. */
+const PREVIEW_USER = "superadmin";
+
+const PERKS = [
+  "Recorrido guiado con catálogo y pedidos de prueba",
+  "Conectás tus distribuidores cuando quieras",
+  "Tu equipo entra con sus propios usuarios",
+];
+
+export function Signup() {
+  const router = useRouter();
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const isPreviewLogin = username.trim().toLowerCase() === PREVIEW_USER;
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (password.length < 8) {
+      setError("La contraseña necesita al menos 8 caracteres.");
+      return;
+    }
+    if (!isPreviewLogin && password !== confirm) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      if (isPreviewLogin) {
+        const login = await authApi.login(username.trim(), password);
+        invalidateMyModules();
+        invalidateTgsEnabled();
+        saveSession(login.data.token, sessionFromToken(login.data.token, username.trim()));
+        const preview = await onboardingApi.preview();
+        saveSession(preview.data.token, sessionFromToken(preview.data.token, username.trim()));
+        router.push("/onboarding");
+        return;
+      }
+      await authApi.register(username.trim(), email.trim(), password);
+      const res = await authApi.login(username.trim(), password);
+      invalidateMyModules();
+      invalidateTgsEnabled();
+      saveSession(res.data.token, sessionFromToken(res.data.token, username.trim()));
+      router.push("/onboarding");
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(". ") : msg || "No se pudo crear la cuenta. Probá de nuevo.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section id="probar" className="nl-section nl-divider relative scroll-mt-16 overflow-hidden">
+      <div className="nl-glow" style={{ width: 700, height: 500, left: -260, bottom: -260 }} aria-hidden />
+      <div className="nl-shell relative grid items-start gap-12 lg:grid-cols-[1fr_0.95fr] lg:gap-20">
+        <Reveal>
+          <h2 className="nl-h2">Creá tu cuenta y probalo hoy</h2>
+          <p className="nl-lead mt-5">
+            Empezás con un recorrido de prueba para ver cómo funciona todo. Después conectás tus distribuidores y
+            buscás de verdad.
+          </p>
+          <ul className="mt-8 flex flex-col gap-3">
+            {PERKS.map((p) => (
+              <li key={p} className="flex items-center gap-3 text-[0.975rem] text-[var(--fg)]">
+                <Check className="h-4 w-4 text-[var(--accent-2)]" aria-hidden /> {p}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-10 text-sm text-[var(--fg-3)]">
+            ¿Ya tenés cuenta?{" "}
+            <Link href="/login" className="text-[var(--fg-2)] underline underline-offset-4 hover:text-white">
+              Entrar
+            </Link>
+          </p>
+        </Reveal>
+
+        <Reveal delay={100}>
+          <form onSubmit={onSubmit} className="nl-surface p-6 sm:p-8" noValidate={false}>
+            {error && (
+              <div role="alert" className="mb-6 flex items-start gap-2.5 rounded-[10px] bg-[rgb(240_106_106/0.1)] px-3.5 py-3 text-sm text-[#f7a7a7] ring-1 ring-[rgb(240_106_106/0.35)]">
+                <AlertCircle className="mt-px h-4 w-4 flex-shrink-0" aria-hidden />
+                <span>{error}</span>
+              </div>
+            )}
+            {isPreviewLogin && (
+              <p className="mb-5 rounded-[10px] bg-[var(--accent-soft)] px-3.5 py-2.5 text-sm text-[var(--fg-2)]">
+                Modo preview: con la clave de superadmin hacés el onboarding desde cero y después volvés a Administración.
+              </p>
+            )}
+            <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-2">
+                <label htmlFor="nl-user" className="text-sm font-medium text-[var(--fg)]">
+                  Usuario
+                </label>
+                <input
+                  id="nl-user"
+                  className="nl-input"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  required
+                />
+                <p className="text-xs text-[var(--fg-3)]">Con el que vas a entrar a NODO.</p>
+              </div>
+              {!isPreviewLogin && (
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="nl-email" className="text-sm font-medium text-[var(--fg)]">
+                    Email
+                  </label>
+                  <input
+                    id="nl-email"
+                    type="email"
+                    className="nl-input"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+              )}
+              <div className={`grid gap-5 ${isPreviewLogin ? "" : "sm:grid-cols-2"}`}>
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="nl-pass" className="text-sm font-medium text-[var(--fg)]">
+                    Contraseña
+                  </label>
+                  <input
+                    id="nl-pass"
+                    type="password"
+                    className="nl-input"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={isPreviewLogin ? "current-password" : "new-password"}
+                    minLength={8}
+                    required
+                  />
+                </div>
+                {!isPreviewLogin && (
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="nl-pass2" className="text-sm font-medium text-[var(--fg)]">
+                      Repetila
+                    </label>
+                    <input
+                      id="nl-pass2"
+                      type="password"
+                      className="nl-input"
+                      value={confirm}
+                      onChange={(e) => setConfirm(e.target.value)}
+                      autoComplete="new-password"
+                      required
+                    />
+                  </div>
+                )}
+              </div>
+              <p className="-mt-2 text-xs text-[var(--fg-3)]">Mínimo 8 caracteres.</p>
+              <button type="submit" disabled={loading} className="nl-btn nl-btn--primary mt-1 w-full disabled:opacity-60">
+                {loading && <Loader2 className="nl-spin h-4 w-4" aria-hidden />}
+                {loading ? "Creando la cuenta" : "Probar NODO"}
+              </button>
+            </div>
+          </form>
+        </Reveal>
+      </div>
+    </section>
+  );
+}

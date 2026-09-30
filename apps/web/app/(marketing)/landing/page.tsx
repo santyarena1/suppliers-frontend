@@ -1,33 +1,40 @@
-import Audiences from "@/components/landing/Audiences";
-import BuyScene from "@/components/landing/BuyScene";
-import CostScene from "@/components/landing/CostScene";
-import Hero from "@/components/landing/Hero";
-import HowToStart from "@/components/landing/HowToStart";
-import LandingFooter from "@/components/landing/LandingFooter";
-import { LandingNav, SectionRail } from "@/components/landing/LandingNav";
-import Pricing from "@/components/landing/Pricing";
-import SearchScene from "@/components/landing/SearchScene";
-import SignupCta from "@/components/landing/SignupCta";
+import "./nodo-landing.css";
+import { BeforeAfter } from "@/components/marketing/BeforeAfter";
+import { CheckoutDemo } from "@/components/marketing/CheckoutDemo";
+import { Communications } from "@/components/marketing/Communications";
+import { CostDemo } from "@/components/marketing/CostDemo";
+import { Faq } from "@/components/marketing/Faq";
+import { Footer } from "@/components/marketing/Footer";
+import { Hero } from "@/components/marketing/Hero";
+import { Nav } from "@/components/marketing/Nav";
+import { Pricing } from "@/components/marketing/Pricing";
+import { Savings } from "@/components/marketing/Savings";
+import { Signup } from "@/components/marketing/Signup";
+import { Steps } from "@/components/marketing/Steps";
 
+/**
+ * Landing de NODO: qué resuelve (comparar y comprar a todos los distribuidores
+ * en un lugar), cuánto ahorra (calculadora con los números del visitante),
+ * cómo se ve (demos del producto) y cuánto cuesta (Pro destacado).
+ */
 export default function LandingPage() {
   return (
-    <>
-      <LandingNav />
-      <SectionRail />
-
+    <div className="nl">
+      <Nav />
       <main>
         <Hero />
-        <SearchScene />
-        <CostScene />
-        <BuyScene />
-        <HowToStart />
-        <Audiences />
+        <BeforeAfter />
+        <CostDemo />
+        <CheckoutDemo />
+        <Communications />
+        <Savings />
+        <Steps />
         <Pricing />
-        <SignupCta />
+        <Faq />
+        <Signup />
       </main>
-
-      <LandingFooter />
-      <div className="lnd-grain" />
-    </>
+      <Footer />
+      <div className="lnd-grain" aria-hidden />
+    </div>
   );
 }
