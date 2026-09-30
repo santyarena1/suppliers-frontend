@@ -115,7 +115,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     monthlyPrice: 45,
     currency: "USD",
     setupFee: null,
-    tagline: "Centralizá y prepará tus compras.",
+    tagline: "Buscá, compará y armá el pedido. Lo enviás vos.",
   },
   PRO: {
     plan: "PRO",
@@ -124,7 +124,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     monthlyPrice: 60,
     currency: "USD",
     setupFee: null,
-    tagline: "Gestioná tus compras y proveedores directamente desde NODO.",
+    tagline: "Operá contra el portal: checkout, cuenta y chat.",
   },
   CUSTOM: {
     plan: "CUSTOM",
@@ -133,7 +133,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     monthlyPrice: 150,
     currency: "USD",
     setupFee: 300,
-    tagline: "NODO adaptado a tu empresa.",
+    tagline: "Integraciones y módulos a medida de tu empresa.",
   },
 };
 

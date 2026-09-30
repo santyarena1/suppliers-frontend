@@ -42,7 +42,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     monthlyPrice: 45,
     currency: "USD",
     setupFee: null,
-    tagline: "Centralizá y prepará tus compras.",
+    tagline: "Buscá, compará y armá el pedido. Lo enviás vos.",
   },
   PRO: {
     plan: "PRO",
@@ -51,7 +51,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     monthlyPrice: 60,
     currency: "USD",
     setupFee: null,
-    tagline: "Gestioná tus compras y proveedores directamente desde NODO.",
+    tagline: "Operá contra el portal: checkout, cuenta y chat.",
   },
   CUSTOM: {
     plan: "CUSTOM",
@@ -60,7 +60,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     monthlyPrice: 150,
     currency: "USD",
     setupFee: 300,
-    tagline: "NODO adaptado a tu empresa.",
+    tagline: "Integraciones y módulos a medida de tu empresa.",
   },
 };
 
@@ -323,11 +323,11 @@ export const PLAN_CARDS: PlanCard[] = [
   {
     plan: "BASE",
     bullets: [
-      "Todos tus distribuidores conectados",
-      `Buscá en hasta ${BASE_SEARCH_LIMIT} a la vez`,
-      "Carrito multi-proveedor",
-      "Generá pedidos y envialos por WhatsApp",
-      "Equipo y permisos completos",
+      "Distribuidores conectados ilimitados",
+      `Hasta ${BASE_SEARCH_LIMIT} activos a la vez en el buscador`,
+      "Comparación de precio, stock y costo puesto",
+      "Carrito multi-proveedor · generar pedido / WhatsApp",
+      "Equipo y permisos completos (igual que Pro)",
     ],
     cta: "Empezar con Base",
   },
@@ -335,19 +335,20 @@ export const PLAN_CARDS: PlanCard[] = [
     plan: "PRO",
     highlight: "MÁS ELEGIDO",
     bullets: [
-      "Buscá en todos tus distribuidores",
-      "Pedidos directos al distribuidor",
-      "Cuenta corriente y facturas integradas",
-      "Chat comercial y analytics avanzados",
+      "Todo lo de Base, sin tope de buscador",
+      "Checkout directo al portal del distribuidor",
+      "Cuenta corriente, facturas y formas de pago",
+      "Chat comercial + analytics avanzados",
     ],
     cta: "Elegir Pro",
   },
   {
     plan: "CUSTOM",
     bullets: [
-      "Una versión de NODO adaptada a la operación de tu empresa.",
-      "Personalización, integraciones y flujos diseñados para tu operación.",
       "Todo lo de NODO Pro",
+      "Integraciones ERP / CRM y sistemas externos",
+      "Módulos y flujos a medida de tu operación",
+      "Identidad visual y configuración adaptada",
     ],
     cta: "Hablar con NODO",
     footnote: "Puesta en marcha: USD 300 (pago único)",

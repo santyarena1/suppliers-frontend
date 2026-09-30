@@ -276,6 +276,52 @@
   color: var(--ember);
 }
 
+/* --- Capturas reales del sistema --- */
+.lnd-shot { width: 100%; }
+.lnd-shot__frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--hair);
+  background: rgb(11 13 26 / 0.85);
+  box-shadow: 0 28px 70px -36px rgb(0 0 0 / 0.95);
+}
+.lnd-shot__img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.lnd-shot__cap {
+  margin: 0.7rem 0 0;
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  line-height: 1.6;
+  color: var(--fg-faint);
+}
+.lnd-shot--hero .lnd-shot__frame {
+  border-color: var(--hair-strong);
+}
+
+.lnd-features-toggle {
+  font-family: var(--lnd-font-mono), ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.95rem 1.35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ember);
+  background: rgb(255 106 61 / 0.08);
+  border: 1px solid rgb(255 106 61 / 0.55);
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms var(--ease-out);
+}
+.lnd-features-toggle:hover {
+  background: rgb(255 106 61 / 0.14);
+  border-color: var(--ember);
+}
+.lnd-features-toggle:active { transform: translateY(1px); }
+
 @media (prefers-reduced-motion: reduce) {
   .lnd *,
   .lnd *::before,

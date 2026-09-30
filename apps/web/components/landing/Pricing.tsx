@@ -2,7 +2,14 @@
 
 import { Fragment, useState } from "react";
 import { Button, Chip, SectionHead, Shell } from "./ui";
-import { PLAN_CARDS, PLAN_CATALOG, PLAN_FEATURE_GROUPS, formatUsd, type PlanCell, type TenantPlan } from "@/lib/plans";
+import {
+  PLAN_CARDS,
+  PLAN_CATALOG,
+  PLAN_FEATURE_GROUPS,
+  formatUsd,
+  type PlanCell,
+  type TenantPlan,
+} from "@/lib/plans";
 
 type Plan = {
   n: string;
@@ -38,6 +45,24 @@ const SUPPLY: Plan[] = [
   },
 ];
 
+const DIFF = [
+  {
+    plan: "BASE" as TenantPlan,
+    axis: "Preparás la compra",
+    line: "Buscás, comparás y armás el pedido. Lo enviás vos al vendedor.",
+  },
+  {
+    plan: "PRO" as TenantPlan,
+    axis: "Operás desde NODO",
+    line: "Checkout al portal, cuenta corriente, chat y analytics integrados.",
+  },
+  {
+    plan: "CUSTOM" as TenantPlan,
+    axis: "NODO a tu medida",
+    line: "Integraciones ERP/CRM, módulos propios e identidad adaptada.",
+  },
+];
+
 export default function Pricing() {
   const [tab, setTab] = useState<"retail" | "supply">("retail");
 
@@ -47,7 +72,7 @@ export default function Pricing() {
         <SectionHead
           title={<>Planes</>}
           meta="05 · Precios"
-          lead="Todos los planes incluyen tus distribuidores conectados, el carrito multi-proveedor y la gestión completa de tu equipo. Precios mensuales por comercio."
+          lead="La diferencia no es un cupo de búsquedas: es hasta dónde llega la integración. Base centraliza y prepara. Pro opera contra el portal. Custom adapta NODO a tu empresa."
         />
 
         <div
@@ -76,7 +101,9 @@ export default function Pricing() {
           ))}
         </div>
 
-        {tab === "retail" ? <RetailPlans /> : (
+        {tab === "retail" ? (
+          <RetailPlans />
+        ) : (
           <div className="grid gap-5 lg:grid-cols-2">
             {SUPPLY.map((p) => (
               <div
@@ -94,9 +121,7 @@ export default function Pricing() {
                 </div>
 
                 <div className="mt-6 flex items-center gap-3">
-                  <span
-                    className="lnd-draft lnd-mono text-[0.72rem] px-2.5 py-1.5 rounded-[3px] tracking-[0.14em] uppercase"
-                  >
+                  <span className="lnd-draft lnd-mono text-[0.72rem] px-2.5 py-1.5 rounded-[3px] tracking-[0.14em] uppercase">
                     Precio a definir
                   </span>
                   {p.featured && <Chip tone="ember">Recomendado</Chip>}
@@ -133,14 +158,37 @@ const RETAIL_ORDER: TenantPlan[] = ["BASE", "PRO", "CUSTOM"];
 
 function RetailPlans() {
   const [showAll, setShowAll] = useState(false);
+
   return (
     <>
+      <div className="grid gap-3 sm:grid-cols-3 mb-8">
+        {DIFF.map((d) => (
+          <div
+            key={d.plan}
+            className="rounded-md px-4 py-3"
+            style={{
+              border: "1px solid var(--hair)",
+              background: d.plan === "PRO" ? "rgb(255 106 61 / 0.08)" : "rgb(11 13 26 / 0.45)",
+            }}
+          >
+            <div className="lnd-label" style={{ color: d.plan === "PRO" ? "var(--ember)" : "var(--fg-faint)" }}>
+              {PLAN_CATALOG[d.plan].shortLabel}
+            </div>
+            <div className="mt-1.5 text-[0.9rem] text-[var(--fg)]">{d.axis}</div>
+            <p className="lnd-note mt-1.5 leading-relaxed">{d.line}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-3">
         {PLAN_CARDS.map((card, i) => {
           const def = PLAN_CATALOG[card.plan];
           const featured = !!card.highlight;
           return (
-            <div key={card.plan} className={`lnd-panel p-6 sm:p-7 flex flex-col${featured ? " lnd-panel--active" : ""}`}>
+            <div
+              key={card.plan}
+              className={`lnd-panel p-6 sm:p-7 flex flex-col${featured ? " lnd-panel--active" : ""}`}
+            >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h3 className="lnd-display lnd-display--md">{def.label}</h3>
@@ -185,16 +233,18 @@ function RetailPlans() {
         })}
       </div>
 
-      <div className="mt-8 flex justify-center">
+      <div className="mt-10 flex flex-col items-center gap-3">
         <button
           type="button"
           onClick={() => setShowAll((v) => !v)}
           aria-expanded={showAll}
-          className="lnd-label px-4 py-2 rounded transition-colors duration-200"
-          style={{ border: "1px solid var(--hair)", color: "var(--fg-dim)" }}
+          className="lnd-features-toggle"
         >
-          {showAll ? "Ocultar funciones" : "Ver todas las funciones"}
+          {showAll ? "Ocultar comparador de funciones" : "Ver todas las funciones · Base vs Pro vs Custom"}
         </button>
+        <p className="lnd-note text-center max-w-md">
+          Tabla completa: qué incluye cada plan, sin límites artificiales de búsquedas ni pedidos.
+        </p>
       </div>
 
       {showAll && (
