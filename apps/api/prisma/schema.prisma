@@ -185,9 +185,14 @@ model Tenant {
   notificationsFrom OrgNotification[] @relation("NotifFrom")
   notificationsTo   OrgNotification[] @relation("NotifTo")
   newsArticles      NewsArticle[]
+  /// Local de venta ya sincronizado que este comercio declara como propio.
+  /// Compara el costo final con el precio publicado en esa web.
+  ownRetailStoreId  String?
+  ownRetailStore    RetailStore? @relation("TenantOwnRetailStore", fields: [ownRetailStoreId], references: [id], onDelete: SetNull)
 
   @@index([type, active])
   @@index([mirrorsCommercialFromId])
+  @@index([ownRetailStoreId])
 }
 
 enum OpsAliasKind {
@@ -1877,6 +1882,7 @@ model RetailStore {
   syncedAt     DateTime @default(now())
   updatedAt    DateTime @updatedAt
   products     RetailProduct[]
+  ownerTenants Tenant[] @relation("TenantOwnRetailStore")
 
   @@index([active, name])
 }

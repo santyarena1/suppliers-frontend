@@ -46,6 +46,7 @@ import {
   queryMatchRatio,
   repairImplausibleSalePrice,
 } from "@/lib/retailMatch";
+import { useOwnStore } from "@/lib/own-store";
 
 function simplifyQuery(name: string): string {
   return name
@@ -74,6 +75,13 @@ const SORT_OPTIONS: { value: RetailSortKey; label: string }[] = [
   { value: "relevance", label: "Relevancia" },
   { value: "store_asc", label: "Local A-Z" },
 ];
+
+function pinOwnStore<T extends { hit: { store: { id: string } } }>(rows: T[], ownId: string | null): T[] {
+  if (!ownId) return rows;
+  const mine = rows.filter((row) => row.hit.store.id === ownId);
+  if (mine.length === 0) return rows;
+  return [...mine, ...rows.filter((row) => row.hit.store.id !== ownId)];
+}
 
 function sortHits(hits: RetailSearchHit[], sort: RetailSortKey): RetailSearchHit[] {
   const arr = [...hits];
@@ -106,6 +114,7 @@ export default function SalePricePanel({
   const inline = variant === "inline";
   const active = activeProp ?? (inline || open);
   const { convert } = usePrefs();
+  const ownStoreId = useOwnStore().store?.id ?? null;
   const costArs = costUsd != null && costUsd > 0 ? convert(costUsd).amount : null;
   const initial = useMemo(() => simplifyQuery(seedQuery), [seedQuery]);
   const [q, setQ] = useState(initial);
@@ -270,28 +279,37 @@ export default function SalePricePanel({
 
   const bestMatches = useMemo(() => {
     const best = visibleResults.filter((x) => x.matchRatio >= BEST_MATCH_THRESHOLD);
-    if (sortBy === "price_asc") return [...best].sort((a, b) => a.hit.price - b.hit.price);
-    if (sortBy === "price_desc") return [...best].sort((a, b) => b.hit.price - a.hit.price);
+    if (sortBy === "price_asc") return pinOwnStore([...best].sort((a, b) => a.hit.price - b.hit.price), ownStoreId);
+    if (sortBy === "price_desc") return pinOwnStore([...best].sort((a, b) => b.hit.price - a.hit.price), ownStoreId);
     if (sortBy === "store_asc") {
-      return [...best].sort(
-        (a, b) => a.hit.store.name.localeCompare(b.hit.store.name, "es") || a.hit.price - b.hit.price
+      return pinOwnStore(
+        [...best].sort(
+          (a, b) => a.hit.store.name.localeCompare(b.hit.store.name, "es") || a.hit.price - b.hit.price
+        ),
+        ownStoreId
       );
     }
-    return [...best].sort((a, b) => b.matchRatio - a.matchRatio || a.hit.price - b.hit.price);
-  }, [visibleResults, sortBy]);
+    return pinOwnStore(
+      [...best].sort((a, b) => b.matchRatio - a.matchRatio || a.hit.price - b.hit.price),
+      ownStoreId
+    );
+  }, [visibleResults, sortBy, ownStoreId]);
 
   const otherMatches = useMemo(() => {
     const bestIds = new Set(bestMatches.map((x) => x.hit.id));
     const rest = visibleResults.filter((x) => !bestIds.has(x.hit.id));
-    if (sortBy === "price_asc") return [...rest].sort((a, b) => a.hit.price - b.hit.price);
-    if (sortBy === "price_desc") return [...rest].sort((a, b) => b.hit.price - a.hit.price);
-    if (sortBy === "store_asc") {
-      return [...rest].sort(
-        (a, b) => a.hit.store.name.localeCompare(b.hit.store.name, "es") || a.hit.price - b.hit.price
-      );
-    }
-    return rest;
-  }, [visibleResults, bestMatches, sortBy]);
+    const sorted =
+      sortBy === "price_asc"
+        ? [...rest].sort((a, b) => a.hit.price - b.hit.price)
+        : sortBy === "price_desc"
+          ? [...rest].sort((a, b) => b.hit.price - a.hit.price)
+          : sortBy === "store_asc"
+            ? [...rest].sort(
+                (a, b) => a.hit.store.name.localeCompare(b.hit.store.name, "es") || a.hit.price - b.hit.price
+              )
+            : rest;
+    return pinOwnStore(sorted, ownStoreId);
+  }, [visibleResults, bestMatches, sortBy, ownStoreId]);
 
   if (!active) return null;
 
@@ -632,6 +650,7 @@ function RetailHitCard({
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [logoErr, setLogoErr] = useState(false);
+  const mine = useOwnStore().store?.id === hit.store.id;
   const matchLabel = `${Math.round(matchRatio * 100)}% match`;
 
   return (
@@ -676,6 +695,11 @@ function RetailHitCard({
             <Store className="w-3.5 h-3.5 text-surface-500" />
           )}
           <span className="text-[11px] font-semibold text-brand-300 truncate">{hit.store.name}</span>
+          {mine && (
+            <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-300 flex-shrink-0">
+              Tu tienda
+            </span>
+          )}
           <span className="text-[10px] text-surface-600 ml-auto flex-shrink-0">
             {timeAgo(hit.syncedAt)}
           </span>

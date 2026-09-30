@@ -26,6 +26,7 @@ import {
 } from "@/lib/compare-store";
 import AddToCartButton from "./AddToCartButton";
 import SalePricePanel from "./SalePricePanel";
+import { OwnStorePriceHint } from "./OwnStoreCompare";
 import ProductSyncedAt from "./ProductSyncedAt";
 import { ListOverdueHint } from "@/components/list-import/ListFreshnessHints";
 
@@ -356,6 +357,8 @@ export default function ProductCard({
     </p>
   );
 
+  const webHint = <OwnStorePriceHint productName={product.name} costUsd={priced ? displayUsd : null} />;
+
   const actions = (
     <div className="pc__foot">
       <span className="pc__id pc-mono" title="Part number y código del distribuidor">
@@ -404,6 +407,7 @@ export default function ProductCard({
         <div className="pl__main">{details}</div>
         <div className="pl__side">
           {priceBlock}
+          {webHint}
           {actions}
         </div>
         <SalePricePanel
@@ -459,6 +463,8 @@ export default function ProductCard({
             <span className="pc__amount">Sin precio</span>
           )}
         </p>
+
+        {webHint}
 
         <p className="pc__base pc-mono" title={priced ? taxTitle : undefined}>
           {priced ? (

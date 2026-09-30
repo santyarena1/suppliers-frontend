@@ -221,6 +221,24 @@ a.pc__name:hover { color: var(--pc-accent); }
   max-width: 100%;
   overflow-wrap: anywhere;
 }
+.pc__web {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  font-size: 0.62rem;
+  line-height: 1.3;
+  color: var(--pc-dim);
+  min-width: 0;
+}
+.pc__web > span {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.pc__web .is-margin { color: var(--pc-good); font-weight: 600; }
+.pc__web .is-loss { color: var(--pc-warn); font-weight: 600; }
 
 .pc__base {
   align-self: stretch;
@@ -476,6 +494,7 @@ a.pc__name:hover { color: var(--pc-accent); }
   -webkit-line-clamp: 2;
 }
 .pl .pc__price { align-items: flex-end; text-align: right; }
+.pl .pc__web { align-items: flex-end; text-align: right; }
 .pl .pc__amount { font-size: 1.15rem; }
 .pl .pc__base { flex-direction: row; flex-wrap: wrap; gap: 0.1rem 0.45rem; }
 .pl .pc__base > span { display: inline; width: auto; }
@@ -517,6 +536,7 @@ a.pc__name:hover { color: var(--pc-accent); }
   .pl__main { grid-area: main; }
   .pl__side { grid-area: side; align-items: stretch; }
   .pl .pc__price { align-items: flex-start; text-align: left; }
+  .pl .pc__web { align-items: flex-start; text-align: left; }
   .pl .pc__amount { font-size: 1.05rem; }
   .pl .pc__foot {
     flex-direction: row;

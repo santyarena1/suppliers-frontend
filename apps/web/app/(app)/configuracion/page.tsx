@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { onboardingApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import OwnStoreSettings from "@/components/OwnStoreSettings";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
   soft: Sparkles,
@@ -302,6 +303,8 @@ function ConfiguracionPageInner() {
                   )}
                 </div>
               </section>
+
+              <OwnStoreSettings showToast={showToast} />
 
               <HelpOnboardingSection showToast={showToast} />
             </div>
