@@ -4,6 +4,17 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ## Implementado
 
+### [FEATURE] Salud / errores (superadmin)
+- **Método**: GET | POST
+- **Ruta**: `GET /admin/health/overview` · `GET /admin/health/client-errors` · `POST /health/client-errors`
+- **Auth**: Bearer. Overview y listado: `ROLE_ADMIN`. Reporte de cliente: cualquier usuario autenticado (throttle 30/min).
+- **Body / Params**:
+  - client-errors query `?take=&hours=`
+  - report `{ kind: js|unhandledrejection|react|network|other, message, stack?, source?, line?, column?, url?, userAgent?, meta? }`
+- **Respuesta esperada**: overview `{ checkedAt, summary:{ok,warn,error,info}, checks[{id,group,label,status,message,detail?,href?}], clientErrors:{lastHour,last24h} }` · list `{ items, since }` · report `{ id, createdAt }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: UI en `/admin?tab=health`. Agrega señales de API/DB, flags de cron, ingest de locales (última corrida, locales viejos, probe PrecioLider/Compra Gamer), syncs de catálogo en ERROR/trabadas/vencidas, imágenes, importaciones de lista y HTTP del front (`WEB_ORIGIN`/`FRONTEND_URL`/`CORS_ORIGIN`). El front autenticado reporta errores de ventana y `unhandledrejection` (dedupe en sessionStorage). Retención de reportes: 14 días.
+
 ### [FEATURE] Onboarding comercio (Tipo 1) + plan NODO Base
 - **Método**: GET | POST
 - **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/step` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`

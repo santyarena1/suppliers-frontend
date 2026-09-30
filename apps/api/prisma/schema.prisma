@@ -2225,6 +2225,28 @@ model SubscriptionEvent {
   @@index([tenantId, createdAt])
 }
 
+/// Errores de JS / red reportados por el front (superadmin → Salud).
+/// Retención corta: el servicio limpia filas viejas al listar.
+model ClientErrorReport {
+  id        String   @id @default(uuid())
+  /// js | unhandledrejection | react | network | other
+  kind      String
+  message   String
+  stack     String?
+  source    String?
+  line      Int?
+  column    Int?
+  url       String?
+  userAgent String?
+  userId    String?
+  /// Extra (status HTTP, endpoint, componentStack, etc.).
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([kind, createdAt])
+}
+
 /// Recordatorio de vencimiento ya generado. Único por ciclo (anchorAt = vencimiento) y canal:
 /// así no se duplica aunque el cron corra muchas veces. Hoy el canal es IN_APP (OrgNotification).
 model SubscriptionReminder {

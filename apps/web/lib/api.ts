@@ -2804,6 +2804,67 @@ export interface RetailSearchResponse {
   totalMatched?: number;
 }
 
+export type HealthStatus = "ok" | "warn" | "error" | "info";
+export type HealthGroup =
+  | "platform"
+  | "crons"
+  | "retail"
+  | "catalog"
+  | "images"
+  | "imports"
+  | "frontend";
+
+export interface HealthCheck {
+  id: string;
+  group: HealthGroup;
+  label: string;
+  status: HealthStatus;
+  message: string;
+  detail?: Record<string, unknown>;
+  href?: string;
+}
+
+export interface PlatformHealthOverview {
+  checkedAt: string;
+  summary: { ok: number; warn: number; error: number; info: number };
+  checks: HealthCheck[];
+  clientErrors: { lastHour: number; last24h: number };
+}
+
+export interface ClientErrorReport {
+  id: string;
+  kind: string;
+  message: string;
+  stack: string | null;
+  source: string | null;
+  line: number | null;
+  column: number | null;
+  url: string | null;
+  userAgent: string | null;
+  userId: string | null;
+  meta: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export const healthApi = {
+  overview: () => api.get<PlatformHealthOverview>("/admin/health/overview"),
+  clientErrors: (opts?: { take?: number; hours?: number }) =>
+    api.get<{ items: ClientErrorReport[]; since: string }>("/admin/health/client-errors", {
+      params: opts,
+    }),
+  reportClientError: (data: {
+    kind: "js" | "unhandledrejection" | "react" | "network" | "other";
+    message: string;
+    stack?: string;
+    source?: string;
+    line?: number;
+    column?: number;
+    url?: string;
+    userAgent?: string;
+    meta?: Record<string, unknown>;
+  }) => api.post<{ id: string; createdAt: string }>("/health/client-errors", data),
+};
+
 export const retailApi = {
   search: (q: string, take = 60) =>
     api.get<RetailSearchResponse>("/retail/search", { params: { q, take } }),
