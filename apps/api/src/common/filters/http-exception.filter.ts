@@ -14,6 +14,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = "Error interno del servidor";
     let errors: ApiFieldError[] | undefined;
+    let code: string | undefined;
+    let details: Record<string, unknown> | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -21,13 +23,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (typeof response === "string") {
         message = response;
       } else if (typeof response === "object" && response !== null) {
-        const body = response as { message?: string | string[]; error?: string };
+        const body = response as { message?: string | string[]; error?: string; code?: unknown; details?: unknown };
         if (Array.isArray(body.message)) {
           message = "Error de validación";
           errors = body.message.map((m) => ({ field: "unknown", message: m }));
         } else {
           message = body.message ?? body.error ?? message;
         }
+        if (typeof body.code === "string") code = body.code;
+        if (body.details && typeof body.details === "object") details = body.details as Record<string, unknown>;
       }
     } else if (exception instanceof Error) {
       this.logger.error(exception.message, exception.stack);
@@ -41,7 +45,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.error("Excepción no controlada", String(exception));
     }
 
-    const body: ApiFailure = { success: false, message, ...(errors ? { errors } : {}) };
+    const body: ApiFailure = {
+      success: false,
+      message,
+      ...(errors ? { errors } : {}),
+      ...(code ? { code } : {}),
+      ...(details ? { details } : {}),
+    };
     reply.status(status).send(body);
   }
 }
