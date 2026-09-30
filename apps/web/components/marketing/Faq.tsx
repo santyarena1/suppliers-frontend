@@ -18,6 +18,10 @@ const QA = [
     a: "NODO actualiza el catálogo de cada distribuidor automáticamente, y cada producto muestra cuándo se actualizó por última vez.",
   },
   {
+    q: "¿Cómo sabe NODO cuánto sale el envío?",
+    a: "Aprende de tus pedidos cómo te llega lo de cada distribuidor y cuánto te costó, y vos podés cargar tus propias formas de envío con su valor. En la búsqueda ves el envío aproximado de cada producto, repartido según lo que ya tenés en el carrito. El costo final lo da el distribuidor al confirmar.",
+  },
+  {
     q: "¿Cuántos usuarios puedo tener?",
     a: "Los que necesites, en todos los planes. Cada uno con su rol: quién compra, quién aprueba y quién solo consulta.",
   },

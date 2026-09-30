@@ -101,6 +101,19 @@ export function withIva(net: number, iva: number) {
   return Math.round(net * (1 + iva / 100) * 100) / 100;
 }
 
+/**
+ * Envío habitual de ejemplo por distribuidor: la forma y el costo por pedido,
+ * en pesos. En NODO sale de los pedidos del comercio o de lo que carga a mano.
+ */
+export const DEMO_SHIPPING: Record<string, { label: string; ars: number }> = {
+  "Distribuidor 1": { label: "Moto", ars: 9500 },
+  "Distribuidor 2": { label: "Moto", ars: 12000 },
+  "Distribuidor 3": { label: "Expreso", ars: 18000 },
+  "Distribuidor 4": { label: "Comisionista", ars: 7500 },
+};
+
+export const ars = (n: number) => `$ ${Math.round(n).toLocaleString("es-AR")}`;
+
 /** Cómo se arma el costo final de una sola oferta (sin comparar distribuidores). */
 export const COST_EXAMPLE = {
   product: SEARCH_RESULTS[0],

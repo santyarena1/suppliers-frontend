@@ -13,6 +13,7 @@ const WITH_NODO = [
   "Una búsqueda muestra todos los distribuidores a la vez",
   "Precio final con IVA y percepciones de cada uno",
   "Stock actualizado, sin preguntar por WhatsApp",
+  "Envío aproximado de cada producto, según cómo te llega de cada uno",
   "Un solo carrito, aunque compres a cinco distribuidores",
   "Todos los pedidos y facturas en el mismo lugar",
 ];

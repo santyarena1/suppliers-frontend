@@ -14,9 +14,10 @@ import {
   Plus,
   Search,
   ShoppingCart,
+  Truck,
 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
-import { SEARCH_QUERY, SEARCH_RESULTS, withIva, type DemoProduct } from "@/lib/marketing-demo";
+import { DEMO_SHIPPING, SEARCH_QUERY, SEARCH_RESULTS, ars, withIva, type DemoProduct } from "@/lib/marketing-demo";
 import { useInView, usePrefersReducedMotion } from "./Reveal";
 
 type Phase = "typing" | "results";
@@ -64,19 +65,33 @@ function Sidebar({ cart }: { cart: number }) {
   );
 }
 
+/**
+ * Envío por unidad: el costo habitual del pedido repartido entre las unidades
+ * de ese distribuidor en el carrito, contando la que se está por sumar.
+ */
+function shippingPerUnit(p: DemoProduct, qty: number, cartUnitsOfDistributor: number): number | null {
+  const ship = DEMO_SHIPPING[p.distributor];
+  if (!ship) return null;
+  return ship.ars / Math.max(1, cartUnitsOfDistributor + (qty > 0 ? 0 : 1));
+}
+
 function ProductCard({
   p,
   qty,
   delay,
   flash,
   desktopOnly,
+  cartUnits,
 }: {
   p: DemoProduct;
   qty: number;
   delay: number;
   flash: boolean;
   desktopOnly: boolean;
+  /** Unidades de este distribuidor que ya están en el carrito. */
+  cartUnits: number;
 }) {
+  const perUnit = shippingPerUnit(p, qty, cartUnits);
   return (
     <article
       data-field-row
@@ -102,6 +117,14 @@ function ProductCard({
             <span className="text-[11px] font-normal text-[var(--fg-3)]">+ IVA {p.iva.toLocaleString("es-AR")} %</span>
           </p>
           <p className="text-[11px] tabular-nums text-[var(--fg-2)]">Final {usd(withIva(p.net, p.iva))}</p>
+          {perUnit != null && (
+            <p className="mt-1 flex items-center gap-1 font-mono text-[10.5px] tabular-nums text-[var(--fg-3)]">
+              <Truck className="h-3 w-3 flex-shrink-0" aria-hidden />
+              <span className="truncate">
+                Envío aprox. {ars(perUnit)}/u · {DEMO_SHIPPING[p.distributor].label}
+              </span>
+            </p>
+          )}
         </div>
         <span className="inline-flex w-fit items-center gap-1 rounded-md border border-[rgb(62_207_142/0.4)] px-1.5 py-0.5 font-mono text-[10.5px] text-[#7fe3b4]">
           <Check className="h-3 w-3" /> {p.stock} U.
@@ -190,6 +213,9 @@ export function SearchDemo() {
               </span>
             </div>
             <div className="hidden flex-wrap items-center gap-2 border-b border-[var(--line)] px-4 py-2.5 sm:flex">
+              <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[#141733] px-3 text-xs text-[var(--fg-2)]">
+                <Truck className="h-3.5 w-3.5" /> Incluir envío
+              </span>
               {["Categoría · Memorias", "Marca · ADATA", "Todos · Distribuidor"].map((f) => (
                 <span
                   key={f}
@@ -214,6 +240,7 @@ export function SearchDemo() {
                       delay={reduced ? 0 : i * 90}
                       qty={i === ADDED_INDEX ? qty : 0}
                       desktopOnly={i >= 3}
+                      cartUnits={p.distributor === SEARCH_RESULTS[ADDED_INDEX].distributor ? qty : 0}
                       flash={i === ADDED_INDEX && qty > 0 && !added}
                     />
                   ))}
