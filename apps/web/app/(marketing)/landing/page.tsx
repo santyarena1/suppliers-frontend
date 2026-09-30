@@ -7,6 +7,7 @@ import { Faq } from "@/components/marketing/Faq";
 import { Footer } from "@/components/marketing/Footer";
 import { Hero } from "@/components/marketing/Hero";
 import { Nav } from "@/components/marketing/Nav";
+import { PageField } from "@/components/marketing/PageField";
 import { Pricing } from "@/components/marketing/Pricing";
 import { Savings } from "@/components/marketing/Savings";
 import { Signup } from "@/components/marketing/Signup";
@@ -20,8 +21,9 @@ import { Steps } from "@/components/marketing/Steps";
 export default function LandingPage() {
   return (
     <div className="nl">
+      <PageField />
       <Nav />
-      <main>
+      <main className="relative z-[1]">
         <Hero />
         <BeforeAfter />
         <CostDemo />
@@ -33,7 +35,9 @@ export default function LandingPage() {
         <Faq />
         <Signup />
       </main>
-      <Footer />
+      <div className="relative z-[1]">
+        <Footer />
+      </div>
       <div className="lnd-grain" aria-hidden />
     </div>
   );

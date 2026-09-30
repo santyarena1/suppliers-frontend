@@ -1,16 +1,13 @@
 import { ArrowRight } from "lucide-react";
-import DataField from "@/components/landing/DataField";
 import { SearchDemo } from "./SearchDemo";
 
 /**
- * Portada: el mensaje arriba y la pantalla de búsqueda real abajo, con el campo
- * de partículas de NODO detrás (las coincidencias aterrizan en las tarjetas).
+ * Portada: el mensaje arriba y la pantalla de búsqueda real abajo. El campo de
+ * partículas está en el fondo de toda la página (PageField).
  */
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
-      <DataField className="!z-0" />
-      <div className="lnd-vignette" aria-hidden />
       <div className="nl-shell relative z-10 pb-24 pt-16 lg:pt-24">
         <div className="max-w-3xl">
           <h1 className="nl-h1">
