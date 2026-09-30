@@ -76,12 +76,12 @@ enum TenantType {
   BRAND // Cliente tipo 3 — marca
 }
 
-/// Plan comercial del comercio. El alta self-serve entra en PRO (plan básico).
-/// LOCAL y CADENA quedan listos para cuando se definan precios.
+/// Plan comercial del comercio (solo RETAILER). Capacidades en packages/shared/src/plans.ts.
+/// Si pagó o no vive en `Subscription`, no acá. Ver docs/PLAN_SUSCRIPCIONES.md.
 enum TenantPlan {
+  BASE
   PRO
-  LOCAL
-  CADENA
+  CUSTOM
 }
 
 enum TenantRole {
@@ -147,8 +147,11 @@ model Tenant {
   commercialMirrors       Tenant[] @relation("CommercialMirror")
   /// Proveedores por lista: cada cuántos días se espera una lista nueva. `null` = sin cadencia.
   listUpdateDays     Int?
-  /// Plan del comercio. Solo aplica de verdad a RETAILER; distros/marcas quedan en PRO.
+  /// Plan del comercio. Solo aplica a RETAILER; distros y marcas no tienen plan comercial todavía.
+  /// El default queda en PRO para no recortar nada por un alta que no lo elija: el
+  /// autoregistro y el alta de Administración lo eligen explícitamente.
   plan               TenantPlan    @default(PRO)
+  subscription       Subscription?
   /// Cuándo se sembraron productos/pedidos de demostración para este comercio.
   demoSeededAt       DateTime?
   active             Boolean       @default(true)
@@ -907,6 +910,11 @@ model ProviderSyncConfig {
   /// Si está activo, el buscador no lista fichas de este distribuidor que este
   /// local todavía no sincronizó (sin precio ni stock propios).
   hideUnsyncedCatalog  Boolean              @default(false)
+  /// "Incluir en búsqueda" que eligió el comercio. `null` = nunca eligió: entra si
+  /// el plan tiene lugar. Apagarlo no desconecta nada: solo sale del buscador.
+  includeInSearch      Boolean?
+  /// Cuándo lo eligió: con tope de plan, los elegidos antes tienen prioridad.
+  includeInSearchAt    DateTime?
   priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)
   // Si el proveedor informa esta cantidad de stock o menos, lo tratamos como
   // sin stock (aplica zeroStockAction). 0 = desactivado. Mismo concepto que
@@ -2069,4 +2077,166 @@ model AdEvent {
 
   @@index([campaignId, createdAt])
   @@index([kind, createdAt])
+}
+
+// ---------- Planes y suscripciones de comercios (tipo 1) ----------
+// Ver docs/PLAN_SUSCRIPCIONES.md. El plan vive en `Tenant.plan`; acá, si está
+// al día. Las fechas mandan: el estado efectivo se recalcula en cada request
+// (packages/shared/src/plans.ts → computeSubscriptionState).
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  GRACE_PERIOD
+  SUSPENDED
+  COURTESY
+  CANCELLED
+}
+
+enum SetupFeeStatus {
+  NOT_APPLICABLE
+  PENDING
+  PAID
+  WAIVED
+}
+
+enum SubscriptionPaymentKind {
+  SUBSCRIPTION
+  SETUP_FEE
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  VOIDED
+}
+
+/// Medio del pago. Hoy entran a mano; los gateways quedan listos sin atar el modelo a uno.
+enum SubscriptionPaymentProvider {
+  MANUAL
+  TRANSFER
+  COURTESY
+  MERCADOPAGO
+  STRIPE
+  OTHER
+}
+
+/// Suscripción de la organización (una por comercio). Nunca se borra ni borra nada:
+/// suspender o cancelar deja intactos proveedores, credenciales, listas y pedidos.
+model Subscription {
+  id                   String             @id @default(uuid())
+  tenantId             String             @unique
+  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Estado guardado. El efectivo lo corrigen las fechas (vencimiento, gracia, cortesía).
+  status               SubscriptionStatus @default(ACTIVE)
+  startedAt            DateTime           @default(now())
+  currentPeriodStart   DateTime?
+  /// Hasta cuándo está pago.
+  currentPeriodEnd     DateTime?
+  /// Próximo cobro. `null` = coincide con currentPeriodEnd.
+  nextBillingAt        DateTime?
+  /// Suspensión pactada distinta de vencimiento + días de gracia (ej. al reactivar).
+  gracePeriodEnd       DateTime?
+  trialEndsAt          DateTime?
+  suspendedAt          DateTime?
+  /// MANUAL (Administración, queda hasta reactivar) u OVERDUE (por falta de pago, se levanta al pagar).
+  suspensionReason     String?
+  cancelledAt          DateTime?
+  cancellationReason   String?
+  /// Cortesía: `null` con status COURTESY = sin vencimiento.
+  courtesyUntil        DateTime?
+  courtesyReason       String?
+  /// Precio pactado distinto del de lista. `null` = precio del plan.
+  priceOverride        Decimal?           @db.Decimal(10, 2)
+  currency             String             @default("USD")
+  /// Puesta en marcha (Custom). Monto y estado administrables.
+  setupFee             Decimal?           @db.Decimal(10, 2)
+  setupFeeStatus       SetupFeeStatus     @default(NOT_APPLICABLE)
+  setupFeePaidAt       DateTime?
+  /// Si está prendido y la puesta en marcha está pendiente, el Custom opera como Pro.
+  setupFeeBlocksCustom Boolean            @default(false)
+  /// Notas internas de Administración. El comercio no las ve.
+  notes                String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  payments  SubscriptionPayment[]
+  events    SubscriptionEvent[]
+  reminders SubscriptionReminder[]
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+}
+
+/// Pago de la suscripción o de la puesta en marcha.
+model SubscriptionPayment {
+  id                String                      @id @default(uuid())
+  tenantId          String
+  subscriptionId    String
+  subscription      Subscription                @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  kind              SubscriptionPaymentKind     @default(SUBSCRIPTION)
+  /// Plan que se pagó (queda aunque después cambie).
+  plan              TenantPlan?
+  amount            Decimal                     @db.Decimal(10, 2)
+  currency          String                      @default("USD")
+  status            SubscriptionPaymentStatus   @default(PAID)
+  provider          SubscriptionPaymentProvider @default(MANUAL)
+  /// Id del gateway o nro. de transferencia. Único por medio: evita registrar dos veces el mismo pago.
+  externalReference String?
+  paidAt            DateTime?
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  notes             String?
+  recordedById      String?
+  createdAt         DateTime                    @default(now())
+
+  @@unique([provider, externalReference])
+  @@index([tenantId, createdAt])
+  @@index([subscriptionId, createdAt])
+}
+
+/// Historial de la suscripción: cambios de plan y estado, pagos, cortesías, migración.
+model SubscriptionEvent {
+  id             String              @id @default(uuid())
+  tenantId       String
+  subscriptionId String
+  subscription   Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  /// MIGRATED | CREATED | PLAN_CHANGED | STATUS_CHANGED | PAYMENT_RECORDED | COURTESY_SET | ...
+  type           String
+  fromStatus     SubscriptionStatus?
+  toStatus       SubscriptionStatus?
+  fromPlan       TenantPlan?
+  toPlan         TenantPlan?
+  /// `null` = lo hizo el sistema (cron, migración).
+  actorUserId    String?
+  data           Json?
+  createdAt      DateTime            @default(now())
+
+  @@index([subscriptionId, createdAt])
+  @@index([tenantId, createdAt])
+}
+
+/// Recordatorio de vencimiento ya generado. Único por ciclo (anchorAt = vencimiento) y canal:
+/// así no se duplica aunque el cron corra muchas veces. Hoy el canal es IN_APP (OrgNotification).
+model SubscriptionReminder {
+  id             String       @id @default(uuid())
+  tenantId       String
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  /// UPCOMING_7D | UPCOMING_3D | DUE_TODAY | OVERDUE_3D | SUSPENSION_TOMORROW | SUSPENDED
+  kind           String
+  anchorAt       DateTime
+  /// IN_APP hoy; EMAIL, WHATSAPP… cuando existan.
+  channel        String       @default("IN_APP")
+  /// SENT | FAILED | SKIPPED
+  status         String       @default("SENT")
+  sentAt         DateTime?
+  notificationId String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([subscriptionId, kind, anchorAt, channel])
+  @@index([tenantId, createdAt])
 }
