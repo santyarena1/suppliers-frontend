@@ -20,6 +20,7 @@ import { DEMO_DISTRIBUTORS, DEMO_PRODUCTS, DEMO_SEARCH_HINTS } from "./onboardin
 import { pickRealDemo, type RealDemo } from "./onboarding-demo-real";
 import * as argon2 from "argon2";
 import { generatePassword } from "../common/generate-password";
+import { initialSubscription, type InitialSubscriptionInput } from "../subscriptions/subscription-init";
 import { AdminCreateRetailerDto, BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
 import { RETAILER_ONBOARDING_STEPS, type OnboardingStep } from "./onboarding-steps";
 
@@ -163,12 +164,18 @@ export class OnboardingService {
     });
     if (taken) throw new ConflictException("Ya existe una organización con ese nombre");
 
+    // Self-serve arranca en NODO Base con prueba. El preview del superadmin no
+    // cobra ni corta nada: Pro en cortesía, para poder recorrer todo.
+    const plan: TenantPlan = preview ? "PRO" : "BASE";
+    const subscription: InitialSubscriptionInput = preview
+      ? { plan, mode: "COURTESY", courtesyReason: "Preview del onboarding (superadmin)" }
+      : { plan, mode: "TRIAL" };
     const tenant = await this.prisma.$transaction(async (tx) => {
       const created = await tx.tenant.create({
         data: {
           name,
           type: "RETAILER",
-          plan: "PRO",
+          plan,
           contactEmail: dto.contactEmail?.trim() || user.email,
           contactPhone: dto.contactPhone?.trim() || null,
           notes: preview ? "Comercio de preview del onboarding (superadmin)" : null,
@@ -183,6 +190,7 @@ export class OnboardingService {
           title: preview ? "Preview onboarding" : "Dueño del local",
         },
       });
+      await createSubscription(tx, created.id, subscription, userId);
       return created;
     });
 
@@ -204,9 +212,10 @@ export class OnboardingService {
   }
 
   /**
-   * Superadmin da de alta un comercio con su dueño. Queda igual que un
-   * autoregistro: plan PRO, catálogo demo, y el recorrido guiado arranca solo
-   * la primera vez que el dueño entra (onboardingCompletedAt queda en null).
+   * Superadmin da de alta un comercio con su dueño: catálogo demo, y el recorrido
+   * guiado arranca solo la primera vez que el dueño entra (onboardingCompletedAt
+   * queda en null). Plan y modalidad los elige Administración (por defecto Pro
+   * activo con primer cobro en un mes).
    */
   async createRetailerForAdmin(dto: AdminCreateRetailerDto) {
     const name = dto.name.trim().replace(/\s+/g, " ");
@@ -225,12 +234,20 @@ export class OnboardingService {
 
     const password = dto.ownerPassword ?? generatePassword();
     const passwordHash = await argon2.hash(password);
+    const plan: TenantPlan = dto.plan ?? "PRO";
+    const subscription: InitialSubscriptionInput = {
+      plan,
+      mode: dto.billing ?? "ACTIVE",
+      firstBillingAt: dto.firstBillingAt ? new Date(dto.firstBillingAt) : null,
+      courtesyUntil: dto.courtesyUntil ? new Date(dto.courtesyUntil) : null,
+      courtesyReason: dto.courtesyReason ?? null,
+    };
     const { tenant, owner } = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
           name,
           type: "RETAILER",
-          plan: "PRO",
+          plan,
           contactEmail: dto.contactEmail?.trim() || email,
           contactPhone: dto.contactPhone?.trim() || null,
         },
@@ -239,6 +256,7 @@ export class OnboardingService {
       await tx.tenantMembership.create({
         data: { tenantId: tenant.id, userId: owner.id, role: "OWNER", title: "Dueño del local" },
       });
+      await createSubscription(tx, tenant.id, subscription, null);
       return { tenant, owner };
     });
 
@@ -755,4 +773,26 @@ export class OnboardingService {
       return true;
     });
   }
+}
+
+/** La suscripción inicial y su evento CREATED, dentro de la misma transacción del alta. */
+async function createSubscription(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  input: InitialSubscriptionInput,
+  actorUserId: string | null
+) {
+  const data = initialSubscription(input);
+  const sub = await tx.subscription.create({ data: { tenantId, ...data } });
+  await tx.subscriptionEvent.create({
+    data: {
+      tenantId,
+      subscriptionId: sub.id,
+      type: "CREATED",
+      toStatus: data.status,
+      toPlan: input.plan,
+      actorUserId,
+      data: { mode: input.mode },
+    },
+  });
 }

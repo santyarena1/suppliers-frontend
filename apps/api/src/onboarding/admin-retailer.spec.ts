@@ -6,6 +6,8 @@ function makeService(opts: { nameTaken?: boolean; userClash?: { username: string
     tenant: { create: jest.fn().mockResolvedValue({ id: "t-new", name: "Local Nuevo", type: "RETAILER", plan: "PRO" }) },
     user: { create: jest.fn().mockResolvedValue({ id: "u-new", username: "duenio", email: "d@x.com" }) },
     tenantMembership: { create: jest.fn().mockResolvedValue({ id: "m-new" }) },
+    subscription: { create: jest.fn().mockResolvedValue({ id: "s-new" }) },
+    subscriptionEvent: { create: jest.fn().mockResolvedValue({ id: "e-new" }) },
   };
   const prisma = {
     tenant: { findFirst: jest.fn().mockResolvedValue(opts.nameTaken ? { id: "t-old" } : null) },
@@ -34,6 +36,21 @@ describe("OnboardingService.createRetailerForAdmin", () => {
     expect(out.owner.username).toBe("duenio");
     // Sin contraseña cargada, la plataforma genera una y la muestra una única vez.
     expect(out.generatedPassword).toEqual(expect.any(String));
+    // Por defecto: Pro activo, primer cobro en un mes.
+    expect(tx.subscription.create.mock.calls[0][0].data).toMatchObject({ tenantId: "t-new", status: "ACTIVE" });
+  });
+
+  it("Administración elige el plan y la modalidad (Base, Custom, cortesía)", async () => {
+    const { service, tx } = makeService();
+    await service.createRetailerForAdmin({ ...dto, plan: "CUSTOM", billing: "COURTESY", courtesyReason: "Piloto" });
+    expect(tx.tenant.create.mock.calls[0][0].data).toMatchObject({ plan: "CUSTOM" });
+    expect(tx.subscription.create.mock.calls[0][0].data).toMatchObject({
+      status: "COURTESY",
+      courtesyUntil: null,
+      courtesyReason: "Piloto",
+      setupFeeStatus: "PENDING",
+    });
+    expect(tx.subscriptionEvent.create.mock.calls[0][0].data).toMatchObject({ type: "CREATED", toPlan: "CUSTOM" });
   });
 
   it("si se carga la contraseña no se devuelve", async () => {

@@ -1,4 +1,5 @@
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from "class-validator";
+import { IsDateString, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from "class-validator";
+import { TENANT_PLANS, type TenantPlan } from "@nodo/shared";
 
 export class OnboardingStepDto {
   @IsString()
@@ -37,6 +38,31 @@ export class AdminCreateRetailerDto {
   @IsString()
   @MinLength(8)
   ownerPassword?: string;
+
+  /** Plan comercial. Si se omite, NODO Pro. */
+  @IsOptional()
+  @IsIn(TENANT_PLANS as unknown as string[])
+  plan?: TenantPlan;
+
+  /** ACTIVE: primer cobro en un mes (o `firstBillingAt`). TRIAL: prueba. COURTESY: sin cobro. */
+  @IsOptional()
+  @IsIn(["ACTIVE", "TRIAL", "COURTESY"])
+  billing?: "ACTIVE" | "TRIAL" | "COURTESY";
+
+  @IsOptional()
+  @IsDateString()
+  firstBillingAt?: string;
+
+  /** Solo con cortesía. Vacío = sin vencimiento. */
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== "")
+  @IsDateString()
+  courtesyUntil?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  courtesyReason?: string;
 }
 
 export class BootstrapRetailerOrgDto {
