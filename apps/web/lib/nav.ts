@@ -1,7 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
-  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3,
+  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3, CreditCard,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -49,6 +49,7 @@ export type NavItemId =
   | "notices"
   | "news"
   | "settings"
+  | "subscription"
   | "admin"
   | "sistema-tgs";
 
@@ -263,6 +264,14 @@ export const NAV_ITEMS: NavItemDef[] = [
     label: "Equipo",
     icon: UserCog,
     tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"],
+    section: "system",
+  },
+  {
+    id: "subscription",
+    href: "/suscripcion",
+    label: "Plan y facturación",
+    icon: CreditCard,
+    tenantTypes: ["RETAILER"],
     section: "system",
   },
   {

@@ -1,6 +1,16 @@
 import axios from "axios";
 import { SESSION_EVENT, getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
+import type {
+  AdminSubscriptionDetail,
+  AdminSubscriptionFilter,
+  AdminSubscriptionRow,
+  MySubscription,
+  SearchUsage,
+  SetupFeeStatus,
+  SubscriptionPaymentProvider,
+  TenantPlan,
+} from "./plans";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -271,7 +281,7 @@ export const authApi = {
   refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
 };
 
-export type TenantPlan = "PRO" | "LOCAL" | "CADENA";
+export type { TenantPlan } from "./plans";
 
 export type OnboardingStepId =
   | "org"
@@ -429,6 +439,10 @@ export interface VisibleProvider {
   selfConnected?: boolean;
   /** El administrador lo ocultó en toda la plataforma: no hay catálogo que buscar. */
   platformHidden?: boolean;
+  /** Participa del buscador (NODO Base: hasta 5 a la vez). Conectado igual aunque esté en `false`. */
+  inSearch?: boolean;
+  /** Lo que eligió el comercio en "Incluir en búsqueda". `null` = nunca lo tocó. */
+  includeInSearch?: boolean | null;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
@@ -500,6 +514,9 @@ export interface RedeemedCode {
 
 export const myApi = {
   providers: () => api.get<VisibleProvider[]>("/my/providers"),
+  /** Incluir en búsqueda ON/OFF. Con NODO Base, prender un 6º responde 409 PLAN_SEARCH_LIMIT. */
+  setIncludeInSearch: (provider: Provider, enabled: boolean) =>
+    api.put<SearchUsage & { provider: Provider; inSearch: boolean }>(`/my/providers/${provider}/search`, { enabled }),
   /** Avisa qué formas de pago informó el portal. No pisan las cargadas a mano. */
   recordObservedPaymentOptions: (provider: Provider, options: PaymentOption[]) =>
     api.post(`/my/providers/${provider}/observed-payment-options`, { options }),
@@ -1136,9 +1153,16 @@ export async function loadLinkedProviders(): Promise<Provider[]> {
   return (await loadMyProviders()).filter((p) => p.linked).map((p) => p.provider);
 }
 
-/** Vinculados cuyo catálogo se puede buscar: el oculto por la plataforma responde vacío. */
+/**
+ * Vinculados cuyo catálogo se puede buscar: el oculto por la plataforma responde
+ * vacío, y con NODO Base solo participan los activos en búsqueda.
+ */
 export async function loadSearchableProviders(): Promise<Provider[]> {
-  return (await loadMyProviders()).filter((p) => p.linked && !p.platformHidden).map((p) => p.provider);
+  return (await loadMyProviders()).filter(isSearchable).map((p) => p.provider);
+}
+
+export function isSearchable(p: VisibleProvider): boolean {
+  return p.linked && !p.platformHidden && p.inSearch !== false;
 }
 
 export function cachedMyProviders(): VisibleProvider[] | null {
@@ -3490,7 +3514,7 @@ export interface PermissionMatrix {
   canEdit: boolean;
 }
 
-/** Superadmin: alta de un comercio completo (PRO + dueño + demo + recorrido guiado). */
+/** Superadmin: alta de un comercio completo (plan elegido + dueño + demo + recorrido guiado). */
 export const adminOnboardingApi = {
   createRetailer: (data: {
     name: string;
@@ -3499,6 +3523,11 @@ export const adminOnboardingApi = {
     ownerUsername: string;
     ownerEmail: string;
     ownerPassword?: string;
+    plan?: TenantPlan;
+    billing?: "ACTIVE" | "TRIAL" | "COURTESY";
+    firstBillingAt?: string;
+    courtesyUntil?: string | null;
+    courtesyReason?: string;
   }) =>
     api.post<{
       tenant: { id: string; name: string; type: TenantType; plan: string };
@@ -4228,3 +4257,56 @@ export const adminBrandOrgsApi = {
 };
 
 export default api;
+
+// --- Plan y facturación (Tipo 1) ---
+
+export const subscriptionApi = {
+  mine: () => api.get<MySubscription>("/my/subscription"),
+  upgrade: (plan: TenantPlan, message?: string) =>
+    api.post<{ applied: boolean; requested: boolean; subscription: MySubscription }>("/my/subscription/upgrade", { plan, message }),
+  request: (plan: TenantPlan, message?: string) => api.post<{ requested: boolean }>("/my/subscription/request", { plan, message }),
+  paymentNotice: (data: { reference?: string; message?: string }) =>
+    api.post<{ received: boolean }>("/my/subscription/payment-notice", data),
+};
+
+export const adminSubscriptionsApi = {
+  list: (filter: AdminSubscriptionFilter = "all", q?: string) =>
+    api.get<{ counts: Record<AdminSubscriptionFilter, number>; rows: AdminSubscriptionRow[] }>("/admin/subscriptions", {
+      params: { filter, ...(q?.trim() ? { q: q.trim() } : {}) },
+    }),
+  detail: (tenantId: string) => api.get<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}`),
+  changePlan: (tenantId: string, data: { plan: TenantPlan; price?: number | null; reason?: string }) =>
+    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/plan`, data),
+  registerPayment: (
+    tenantId: string,
+    data: {
+      kind?: "SUBSCRIPTION" | "SETUP_FEE";
+      amount?: number;
+      paidAt?: string;
+      months?: number;
+      periodStart?: string;
+      periodEnd?: string;
+      provider?: SubscriptionPaymentProvider;
+      externalReference?: string;
+      notes?: string;
+    }
+  ) => api.post<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/payments`, data),
+  setBillingDate: (tenantId: string, nextBillingAt: string) =>
+    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/billing-date`, { nextBillingAt }),
+  extend: (tenantId: string, days: number, reason?: string) =>
+    api.post<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/extend`, { days, reason }),
+  setCourtesy: (tenantId: string, data: { plan?: TenantPlan; until?: string | null; reason?: string }) =>
+    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/courtesy`, data),
+  endCourtesy: (tenantId: string, data: { mode: "CONVERT" | "CANCEL"; nextBillingAt?: string }) =>
+    api.delete<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/courtesy`, { data }),
+  suspend: (tenantId: string, reason?: string) =>
+    api.post<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/suspend`, { reason }),
+  reactivate: (tenantId: string, nextBillingAt?: string) =>
+    api.post<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/reactivate`, { nextBillingAt }),
+  cancel: (tenantId: string, reason?: string) =>
+    api.post<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/cancel`, { reason }),
+  setNotes: (tenantId: string, notes: string | null) =>
+    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/notes`, { notes }),
+  setSetupFee: (tenantId: string, data: { status?: SetupFeeStatus; amount?: number | null; blocksCustom?: boolean }) =>
+    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/setup-fee`, data),
+};

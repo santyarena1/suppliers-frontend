@@ -12,6 +12,8 @@ import OnboardingGate from "../onboarding/OnboardingGate";
 import ChatRealtime from "../chat/ChatRealtime";
 import CartFloat from "../CartFloat";
 import SessionKeepAlive from "../SessionKeepAlive";
+import SubscriptionBanner from "../subscription/SubscriptionBanner";
+import SuspendedGate from "../subscription/SuspendedGate";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -29,6 +31,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
           <ImpersonationBanner />
           <PendingBrandLinkBanner />
+          <SubscriptionBanner />
           <div className="flex min-h-0 flex-1 overflow-hidden">
             <MobileTopBar onOpen={() => setMobileOpen(true)} />
             {mobileOpen && (
@@ -39,7 +42,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             )}
             <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
-              <TenantRouteGate>{children}</TenantRouteGate>
+              <TenantRouteGate>
+                <SuspendedGate>{children}</SuspendedGate>
+              </TenantRouteGate>
             </div>
           </div>
         </div>
