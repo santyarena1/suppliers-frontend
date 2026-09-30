@@ -1,6 +1,19 @@
-import { Body, Controller, Delete, ForbiddenException, Get, Param, Post, Put, Query, UseGuards } from "@nestjs/common";
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
-import type { JwtPayload, TenantRole } from "@nodo/shared";
+import { isProviderKey, type JwtPayload, type TenantRole } from "@nodo/shared";
 import { PermissionChangesDto } from "./dto/permissions.dto";
 import { TenantPermissionsService } from "./tenant-permissions.service";
 import { assertPermission } from "./tenant-roles";
@@ -17,7 +30,9 @@ import {
   UpdateMembershipDto,
   UpdateOwnClientDto,
   UpdateOwnOrgDto,
+  SetIncludeInSearchDto,
 } from "./dto/tenant.dto";
+import { RequiresCapability, searchLimitError } from "./entitlements";
 import { PortfolioService } from "./portfolio.service";
 import { commercialId, type TenantContext } from "./tenant-context.service";
 import { TenantVisibilityService } from "./tenant-visibility.service";
@@ -94,6 +109,26 @@ export class MyTenantController {
    * sin consultar el carrito de ese proveedor, y para que valga en cualquier
    * sesión del comercio, no solo en el navegador donde se cotizó.
    */
+  /**
+   * Incluir en búsqueda ON/OFF. Solo cambia si el proveedor participa del buscador:
+   * credenciales, lista y vínculo quedan como están. Tipo 1 con `providers.manage`.
+   */
+  @Put("providers/:provider/search")
+  setIncludeInSearch(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Body() dto: SetIncludeInSearchDto
+  ) {
+    if (tenant.tenantType !== "RETAILER") throw new NotFoundException("Proveedor no encontrado");
+    assertPermission(tenant, "providers.manage");
+    if (!isProviderKey(provider)) throw new BadRequestException("Proveedor inválido");
+    return this.visibility.setIncludeInSearch(commercialId(tenant), provider, dto.enabled, {
+      viewerUserId: tenant.userId,
+      onLimit: searchLimitError,
+    });
+  }
+
+  @RequiresCapability("providerPortalAccess")
   @Post("providers/:provider/observed-iibb")
   recordObservedIibb(
     @CurrentTenant() tenant: TenantContext,
@@ -109,6 +144,7 @@ export class MyTenantController {
    * carrito, igual que el precio de esquema o el de offline. Las que el
    * comercio administra se guardan con el resto de la config del proveedor.
    */
+  @RequiresCapability("providerPortalAccess")
   @Post("providers/:provider/observed-payment-options")
   recordObservedPaymentOptions(
     @CurrentTenant() tenant: TenantContext,

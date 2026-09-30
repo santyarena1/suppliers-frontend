@@ -1,6 +1,13 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
-import type { JwtPayload } from "@nodo/shared";
+import { Reflector } from "@nestjs/core";
+import type { JwtPayload, PlanCapabilityKey } from "@nodo/shared";
 import type { FastifyRequest } from "fastify";
+import {
+  ALLOW_WHEN_RESTRICTED_KEY,
+  checkEntitlements,
+  REQUIRED_CAPABILITY_KEY,
+  REQUIRES_ACTIVE_SUBSCRIPTION_KEY,
+} from "./entitlements";
 import { TenantContextService, type TenantContext } from "./tenant-context.service";
 
 export type RequestWithTenant = FastifyRequest & {
@@ -12,17 +19,31 @@ export type RequestWithTenant = FastifyRequest & {
  * Deja la organización de quien hace el pedido colgada del request, para que
  * `@CurrentTenant()` la lea sin volver a la base.
  *
- * Nunca rechaza: un ROLE_ADMIN sin membresía no pertenece a ninguna organización
- * y tiene que poder usar los endpoints que no la necesitan. Quien sí la necesite
- * la pide con `@CurrentTenant()`, que es el que falla si no hay.
+ * No rechaza por falta de organización: un ROLE_ADMIN sin membresía no pertenece
+ * a ninguna y tiene que poder usar los endpoints que no la necesitan. Quien sí la
+ * necesite la pide con `@CurrentTenant()`, que es el que falla si no hay.
+ *
+ * Sí rechaza por plan (docs/PLAN_SUSCRIPCIONES.md): un comercio suspendido no
+ * escribe, y un endpoint marcado con `@RequiresCapability` exige que el plan lo
+ * incluya. Distribuidores, marcas y el superadmin en su sesión no tienen plan.
  */
 @Injectable()
 export class TenantGuard implements CanActivate {
-  constructor(private readonly tenantContext: TenantContextService) {}
+  constructor(
+    private readonly tenantContext: TenantContextService,
+    private readonly reflector: Reflector
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithTenant>();
     request.tenant = request.user ? await this.tenantContext.fromSession(request.user) : null;
+    const targets = [context.getHandler(), context.getClass()];
+    checkEntitlements(request.tenant, {
+      method: request.method,
+      capability: this.reflector.getAllAndOverride<PlanCapabilityKey | undefined>(REQUIRED_CAPABILITY_KEY, targets),
+      allowWhenRestricted: this.reflector.getAllAndOverride<boolean | undefined>(ALLOW_WHEN_RESTRICTED_KEY, targets),
+      requiresActive: this.reflector.getAllAndOverride<boolean | undefined>(REQUIRES_ACTIVE_SUBSCRIPTION_KEY, targets),
+    });
     return true;
   }
 }

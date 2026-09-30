@@ -904,7 +904,7 @@ export class ProvidersService implements OnModuleInit {
     name: string,
     opts: { includeOutOfStock?: boolean; brand?: string; viewerUserId?: string } = {}
   ) {
-    if (!(await this.visibility.canReadCatalog(tenantId, provider, opts.viewerUserId))) return [];
+    if (!(await this.visibility.canSearch(tenantId, provider, opts.viewerUserId))) return [];
     const rules = await this.rulesFor(tenantId, provider);
     const stockWhere = catalogStockWhere(
       Boolean(opts.includeOutOfStock),
@@ -2094,10 +2094,11 @@ export class ProvidersService implements OnModuleInit {
   /**
    * Proveedores de los que esta organización puede leer catálogo: los que tiene
    * vinculados, menos los que el superadmin escondió de toda la plataforma
-   * (salvo lo que el comercio cargó con su propia lista).
+   * (salvo lo que el comercio cargó con su propia lista) y menos los que quedan
+   * fuera del buscador por el tope del plan Base.
    */
   private async readableProviders(tenantId: string, viewerUserId?: string): Promise<string[]> {
-    return this.visibility.readableCatalogKeys(tenantId, viewerUserId);
+    return this.visibility.searchableCatalogKeys(tenantId, viewerUserId);
   }
 
   /**

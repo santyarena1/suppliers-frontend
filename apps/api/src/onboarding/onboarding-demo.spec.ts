@@ -39,8 +39,8 @@ describe("onboarding demo catalog", () => {
     );
   });
 
-  it("etiqueta el plan PRO como PRO", () => {
-    expect(TENANT_PLAN_LABELS.PRO).toBe("PRO");
+  it("etiqueta los planes con su nombre comercial", () => {
+    expect(TENANT_PLAN_LABELS).toEqual({ BASE: "NODO Base", PRO: "NODO Pro", CUSTOM: "NODO Custom" });
   });
 });
 

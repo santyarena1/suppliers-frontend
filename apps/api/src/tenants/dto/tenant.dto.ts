@@ -353,3 +353,8 @@ export class SavePaymentOptionsDto {
   @Type(() => PaymentOptionDto)
   options!: PaymentOptionDto[];
 }
+
+export class SetIncludeInSearchDto {
+  @IsBoolean()
+  enabled!: boolean;
+}

@@ -16,6 +16,7 @@ import { PolytechOrderService, type PolytechCartItems } from "../providers/polyt
 import type { OrderAuthor } from "../providers/provider-draft";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
+import { assertCapability, hasCapability } from "../tenants/entitlements";
 import type { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offline-order.dto";
 import type { RenameOpsAliasDto, SplitOpsAliasDto, UnifyOpsAliasDto } from "./dto/ops-alias.dto";
 import {
@@ -81,6 +82,7 @@ export class OrdersService {
     if (isOfflineChannel(order.channel)) {
       throw new BadRequestException("Este pedido se gestiona en Nodo y no se envía al portal del proveedor.");
     }
+    assertCapability(tenant, "directCheckout");
     const provider = order.provider as Provider;
     const credentials = await this.credentialsOf(tenant, provider);
     const author: OrderAuthor = { userId: order.userId, tenantId: tenant.tenantId };
@@ -100,6 +102,7 @@ export class OrdersService {
     if (isOfflineChannel(order.channel)) {
       throw new BadRequestException("Este pedido se gestiona en Nodo y no se cotiza en el portal del proveedor.");
     }
+    assertCapability(tenant, "directCheckout");
     const provider = order.provider as Provider;
     const credentials = await this.credentialsOf(tenant, provider);
     const input = order.draftInput as Record<string, unknown>;
@@ -121,7 +124,7 @@ export class OrdersService {
         offline: modes.has("offline"),
         scheme: modes.has("scheme"),
         list: modes.has("list"),
-      }, tenant.userId);
+      }, tenant.userId, { manualOnly: !hasCapability(tenant, "directCheckout") });
       const items = normalizeOfflineItems(group.items);
       if (items.length === 0) {
         throw new BadRequestException(`No hay productos de ${providerLabel(provider)} en el pedido`);
@@ -568,20 +571,25 @@ export class OrdersService {
    * clásico (sin facturar). Para uno que cotiza por lista es la única forma de
    * pedir, con el precio de lista, offline o esquema según lo que el comercio
    * configuró.
+   *
+   * Sin checkout directo en el plan (NODO Base), el pedido por mensaje es la forma
+   * de pedirle a cualquier proveedor: "Generar pedido" con el precio que se ve.
    */
   private async assertOfflineAllowed(
     tenantId: string,
     provider: Provider,
     modes: { offline: boolean; scheme: boolean; list: boolean } = { offline: true, scheme: false, list: false },
     viewerUserId?: string,
+    opts: { manualOnly?: boolean } = {},
   ) {
     await this.visibility.assertLinked(tenantId, provider, viewerUserId);
+    const manualList = Boolean(opts.manualOnly && modes.list && !modes.offline && !modes.scheme);
     const config = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
       select: { acceptsOffline: true, acceptsScheme: true, priceChannel: true },
     });
     const fromList = providerPricesFromList(provider, config?.priceChannel);
-    if (!providerHasIvaRate(provider, config?.priceChannel)) {
+    if (!manualList && !providerHasIvaRate(provider, config?.priceChannel)) {
       throw new BadRequestException(
         `${providerLabel(provider)} no informa alícuota de IVA: no se puede registrar un pedido offline.`
       );
@@ -594,7 +602,7 @@ export class OrdersService {
     if (modes.scheme && !config?.acceptsScheme) {
       throw new BadRequestException(`Activá el esquema de ${providerLabel(provider)} en Configuración antes de confirmarlo.`);
     }
-    if (modes.list && !fromList) {
+    if (modes.list && !fromList && !opts.manualOnly) {
       throw new BadRequestException(
         `${providerLabel(provider)} se compra desde su portal: el pedido por mensaje es solo para proveedores que cotizan por lista.`
       );

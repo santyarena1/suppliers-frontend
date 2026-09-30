@@ -1,6 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  getPlanCapabilities,
   isListProviderKey,
+  isTenantPlan,
   mergeLearnedPaymentOptions,
   providerHasCatalogAdapter,
   parsePaymentOptions,
@@ -8,6 +10,7 @@ import {
   type IvaAdjustment,
   type PaymentOption,
   type Provider,
+  selectSearchProviders,
 } from "@nodo/shared";
 import { domainEvents } from "../common/events/domain-events";
 import { isDemoDistributorKey, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
@@ -53,6 +56,21 @@ export interface VisibleProvider {
    * el comercio cargó con su propia lista (ver `hiddenForViewer`).
    */
   platformHidden: boolean;
+  /**
+   * Participa del buscador. El plan Base busca en hasta 5 a la vez: el resto sigue
+   * conectado (credenciales, lista, vínculo intactos) pero fuera de la búsqueda.
+   * Ver docs/PLAN_SUSCRIPCIONES.md.
+   */
+  inSearch: boolean;
+  /** Lo que eligió el comercio: `null` = nunca tocó el interruptor. */
+  includeInSearch: boolean | null;
+}
+
+/** Cuántos proveedores buscan a la vez y cuántos permite el plan. */
+export interface SearchUsage {
+  connectedProviders: number;
+  activeSearchProviders: number;
+  maxSearchProviders: number | null;
 }
 
 /**
@@ -118,7 +136,7 @@ export class TenantVisibilityService {
   async listFor(tenantId: string, viewerUserId?: string): Promise<VisibleProvider[]> {
     const propio = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
-      select: { id: true, name: true, type: true, providerKey: true },
+      select: { id: true, name: true, type: true, providerKey: true, plan: true },
     });
     if (!propio) return [];
     const hidden = await this.platformHiddenProviders();
@@ -141,6 +159,8 @@ export class TenantVisibilityService {
           linkId: null,
           purchase: purchaseFromConfig(propio.providerKey, ownConfig),
           platformHidden: hiddenForViewer(hidden, propio.providerKey, false),
+          inSearch: !hiddenForViewer(hidden, propio.providerKey, false),
+          includeInSearch: null,
         },
       ];
     }
@@ -189,12 +209,14 @@ export class TenantVisibilityService {
           offlineIvaAdjustment: true,
           schemeIvaAdjustment: true,
           schemeDiscountPercent: true,
+          includeInSearch: true,
+          includeInSearchAt: true,
         },
       }),
     ]);
     const configByProvider = new Map(configs.map((c) => [c.provider, c]));
 
-    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden">>();
+    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden" | "inSearch" | "includeInSearch">>();
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
@@ -239,7 +261,8 @@ export class TenantVisibilityService {
 
     // El administrador de la plataforma ve todo: cada distribuidor activo con clave
     // de proveedor aparece vinculado, sin código de acceso ni vendedor asignado.
-    if (await this.isPlatformAdminOrg(tenantId)) {
+    const platformAdminOrg = await this.isPlatformAdminOrg(tenantId);
+    if (platformAdminOrg) {
       const distribuidores = await this.prisma.tenant.findMany({
         where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null } },
         select: { id: true, name: true, providerKey: true },
@@ -263,9 +286,71 @@ export class TenantVisibilityService {
       }
     }
 
-    return [...visibles.values()]
+    const rows = [...visibles.values()]
       .map((v) => ({ ...v, platformHidden: hiddenForViewer(hidden, v.provider, v.selfConnected) }))
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
+
+    // Administración opera sin tope; el resto, según el plan de la organización.
+    const max = platformAdminOrg ? null : maxSearchProvidersFor(propio.plan);
+    const inSearch = selectSearchProviders(
+      rows
+        .filter((v) => v.linked && !v.platformHidden)
+        .map((v) => ({
+          provider: v.provider,
+          name: v.name,
+          includeInSearch: configByProvider.get(v.provider)?.includeInSearch ?? null,
+          chosenAt: configByProvider.get(v.provider)?.includeInSearchAt ?? null,
+        })),
+      max
+    );
+    return rows.map((v) => ({
+      ...v,
+      inSearch: inSearch.has(v.provider),
+      includeInSearch: configByProvider.get(v.provider)?.includeInSearch ?? null,
+    }));
+  }
+
+  /** Conectados y activos en búsqueda, para el contador del panel y `/my/subscription`. */
+  async searchUsage(tenantId: string, viewerUserId?: string): Promise<SearchUsage> {
+    const [visibles, tenant, platformAdminOrg] = await Promise.all([
+      this.listFor(tenantId, viewerUserId),
+      this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true, type: true } }),
+      this.isPlatformAdminOrg(tenantId),
+    ]);
+    const linked = visibles.filter((v) => v.linked);
+    return {
+      connectedProviders: linked.length,
+      activeSearchProviders: linked.filter((v) => v.inSearch).length,
+      maxSearchProviders:
+        platformAdminOrg || tenant?.type !== "RETAILER" ? null : maxSearchProvidersFor(tenant?.plan ?? "PRO"),
+    };
+  }
+
+  /**
+   * Prende o apaga un proveedor en el buscador. Nunca toca credenciales, lista ni
+   * vínculo. Prender uno de más con el plan Base responde 409 `PLAN_SEARCH_LIMIT`.
+   */
+  async setIncludeInSearch(
+    tenantId: string,
+    provider: Provider,
+    enabled: boolean,
+    opts: { viewerUserId?: string; onLimit: (max: number, active: number) => Error }
+  ): Promise<SearchUsage & { provider: Provider; inSearch: boolean }> {
+    const visible = await this.assertLinked(tenantId, provider, opts.viewerUserId);
+    if (enabled && !visible.inSearch) {
+      const usage = await this.searchUsage(tenantId, opts.viewerUserId);
+      if (usage.maxSearchProviders != null && usage.activeSearchProviders >= usage.maxSearchProviders) {
+        throw opts.onLimit(usage.maxSearchProviders, usage.activeSearchProviders);
+      }
+    }
+    await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId, provider } },
+      create: { tenantId, provider, includeInSearch: enabled, includeInSearchAt: new Date() },
+      update: { includeInSearch: enabled, includeInSearchAt: new Date() },
+    });
+    const usage = await this.searchUsage(tenantId, opts.viewerUserId);
+    const after = (await this.listFor(tenantId, opts.viewerUserId)).find((v) => v.provider === provider);
+    return { ...usage, provider, inSearch: Boolean(after?.inSearch) };
   }
 
   private async platformHiddenProviders(): Promise<Set<string>> {
@@ -316,6 +401,17 @@ export class TenantVisibilityService {
   async readableCatalogKeys(tenantId: string, viewerUserId?: string): Promise<string[]> {
     const visibles = await this.listFor(tenantId, viewerUserId);
     return visibles.filter((v) => v.linked && !v.platformHidden).map((v) => v.provider);
+  }
+
+  /** Los que participan del buscador y del catálogo agregado (respeta el tope del plan). */
+  async searchableCatalogKeys(tenantId: string, viewerUserId?: string): Promise<string[]> {
+    const visibles = await this.listFor(tenantId, viewerUserId);
+    return visibles.filter((v) => v.inSearch).map((v) => v.provider);
+  }
+
+  async canSearch(tenantId: string, provider: Provider, viewerUserId?: string): Promise<boolean> {
+    const visible = (await this.listFor(tenantId, viewerUserId)).find((v) => v.provider === provider);
+    return Boolean(visible?.inSearch);
   }
 
   async canReadCatalog(tenantId: string, provider: Provider, viewerUserId?: string): Promise<boolean> {
@@ -378,6 +474,10 @@ export class TenantVisibilityService {
     domainEvents.emit("tenant.linked", { clientTenantId: tenantId, supplierTenantId: supplier.id, provider });
     return { ...visible, linked: true, advertised: false };
   }
+}
+
+function maxSearchProvidersFor(plan: string | null | undefined): number | null {
+  return getPlanCapabilities(isTenantPlan(plan) ? plan : "PRO").maxSearchProviders;
 }
 
 const EMPTY_PURCHASE: PurchasePolicyView = {

@@ -14,6 +14,7 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { TenantGuard } from "../tenants/tenant.guard";
+import { AllowWhenRestricted } from "../tenants/entitlements";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { BrandLandingService } from "./brand-landing.service";
 import { BrandActionsService } from "./brand-actions.service";
@@ -275,6 +276,7 @@ export class OrgNotificationsController {
     return this.notes.listMine(tenant);
   }
 
+  @AllowWhenRestricted()
   @Post(":id/read")
   read(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
     return this.notes.markRead(tenant, id);

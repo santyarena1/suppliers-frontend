@@ -1,14 +1,53 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import {
   isPermissionKey,
+  resolveEntitlements,
   resolvePermissions,
   type JwtPayload,
   type PermissionKey,
   type PermissionOverrides,
+  type SubscriptionDates,
+  type SubscriptionStatus,
+  type TenantEntitlements,
+  type TenantPlan,
   type TenantRole,
   type TenantType,
 } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
+
+/** Columnas de la suscripción que hacen falta para saber qué puede hacer la org. */
+export const SUBSCRIPTION_DATES_SELECT = {
+  status: true,
+  currentPeriodEnd: true,
+  nextBillingAt: true,
+  gracePeriodEnd: true,
+  trialEndsAt: true,
+  courtesyUntil: true,
+  suspensionReason: true,
+  setupFeeStatus: true,
+  setupFeeBlocksCustom: true,
+} as const;
+
+type SubscriptionDatesRow = {
+  status: string;
+  currentPeriodEnd: Date | null;
+  nextBillingAt: Date | null;
+  gracePeriodEnd: Date | null;
+  trialEndsAt: Date | null;
+  courtesyUntil: Date | null;
+  suspensionReason: string | null;
+  setupFeeStatus: string;
+  setupFeeBlocksCustom: boolean;
+};
+
+export function toSubscriptionDates(row: SubscriptionDatesRow | null | undefined): SubscriptionDates | null {
+  if (!row) return null;
+  return {
+    ...row,
+    status: row.status as SubscriptionStatus,
+    setupFeeStatus: row.setupFeeStatus as SubscriptionDates["setupFeeStatus"],
+  };
+}
 
 export interface TenantContext {
   userId: string;
@@ -26,6 +65,11 @@ export interface TenantContext {
    * prueba: carrito propio, mismas cuentas que testuser1).
    */
   commercialTenantId: string;
+  /**
+   * Plan y suscripción de la organización (no de la persona). Ausente solo en
+   * contextos armados a mano (tests): se toma como sin restricciones.
+   */
+  entitlements?: TenantEntitlements;
 }
 
 /** Filas de excepción → mapa; descarta claves que ya no están en el catálogo. */
@@ -60,7 +104,17 @@ export class TenantContextService {
       where: { userId, active: true, tenant: { active: true } },
       orderBy: { createdAt: "asc" },
       include: {
-        tenant: { select: { id: true, name: true, type: true, mirrorsCommercialFromId: true } },
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            mirrorsCommercialFromId: true,
+            plan: true,
+            subscription: { select: SUBSCRIPTION_DATES_SELECT },
+          },
+        },
+        user: { select: { role: true } },
         permissionOverrides: { select: { permission: true, allowed: true } },
       },
     });
@@ -90,6 +144,14 @@ export class TenantContextService {
         memberOverrides: toOverrides(membership.permissionOverrides),
       }),
       commercialTenantId: membership.tenant.mirrorsCommercialFromId ?? membership.tenant.id,
+      // El superadmin opera sin topes en su sesión. Al entrar como otro usuario el
+      // token es de ese usuario, así que ve y sufre las restricciones de su plan.
+      entitlements: resolveEntitlements({
+        tenantType,
+        plan: (membership.tenant.plan ?? "PRO") as TenantPlan,
+        subscription: toSubscriptionDates(membership.tenant.subscription),
+        platformAdmin: membership.user?.role === "ROLE_ADMIN",
+      }),
     };
   }
 
@@ -108,7 +170,10 @@ export class TenantContextService {
     // de la organización ni a una organización desactivada.
     const [stale, tenantRow] = await Promise.all([
       this.prisma.tenantMembership.findFirst({ where: { userId: user.userId, tenantId: user.tenantId }, select: { id: true } }),
-      this.prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { active: true } }),
+      this.prisma.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { active: true, plan: true, subscription: { select: SUBSCRIPTION_DATES_SELECT } },
+      }),
     ]);
     if (stale || !tenantRow?.active) return null;
 
@@ -132,6 +197,12 @@ export class TenantContextService {
         roleOverrides: toOverrides(roleOverrides),
       }),
       commercialTenantId: user.commercialTenantId ?? user.tenantId,
+      entitlements: resolveEntitlements({
+        tenantType: user.tenantType,
+        plan: (tenantRow.plan ?? "PRO") as TenantPlan,
+        subscription: toSubscriptionDates(tenantRow.subscription),
+        platformAdmin: user.role === "ROLE_ADMIN" && !user.impersonatedBy,
+      }),
     };
   }
 

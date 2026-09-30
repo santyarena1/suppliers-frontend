@@ -10,6 +10,7 @@ import { CredentialsService } from "../credentials/credentials.service";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { assertPermission } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
+import { RequiresActiveSubscription, RequiresCapability } from "../tenants/entitlements";
 import { ProvidersService } from "./providers.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
@@ -106,6 +107,7 @@ export class ProvidersController {
   }
 
   /** Historial real de pedidos de Invid (solo lectura) — usa la credencial del portal ya guardada. */
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/INVID/orders")
   async invidOrders(
     @CurrentTenant() tenant: TenantContext,
@@ -118,6 +120,7 @@ export class ProvidersController {
   }
 
   /** Saldo y movimientos reales de cuenta corriente de Invid (solo lectura). */
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/INVID/account-statement")
   async invidAccountStatement(
     @CurrentTenant() tenant: TenantContext,
@@ -130,11 +133,13 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/INVID/documents")
   async invidDocument(@CurrentTenant() tenant: TenantContext, @Query("href") href: string) {
     return this.invidAccountService.getDocument(await this.invidCredentials(tenant), href);
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Post("providers/INVID/payments/attach")
   async invidPaymentAttach(@CurrentTenant() tenant: TenantContext, @Req() req: FastifyRequest) {
     assertPermission(tenant, "providers.account");
@@ -167,16 +172,19 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("directCheckout")
   @Get("providers/INVID/checkout/addresses")
   async invidAddresses(@CurrentTenant() tenant: TenantContext) {
     return this.invidOrderService.getAddresses(await this.invidCredentials(tenant));
   }
 
+  @RequiresCapability("directCheckout")
   @Get("providers/INVID/checkout/payments")
   invidPayments() {
     return this.invidOrderService.paymentOptions();
   }
 
+  @RequiresCapability("directCheckout")
   @Get("providers/INVID/checkout/deliveries")
   invidDeliveries() {
     return this.invidOrderService.deliveryOptions();
@@ -194,6 +202,7 @@ export class ProvidersController {
     return draft;
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/INVID/checkout/preview")
   async invidCheckoutPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: InvidCheckoutPreviewDto) {
     return this.invidOrderService.preview(await this.invidCredentials(tenant), dto, {
@@ -203,6 +212,7 @@ export class ProvidersController {
   }
 
   /** Crea el borrador en Invid (pedido pendiente) y guarda una copia en Nodo. */
+  @RequiresCapability("directCheckout")
   @Post("providers/INVID/checkout/draft")
   async invidCheckoutDraft(
     @CurrentUser() user: { userId: string },
@@ -215,6 +225,7 @@ export class ProvidersController {
   }
 
   /** Historial real de pedidos web de NewBytes (solo lectura). */
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_BYTES/orders")
   async newBytesOrders(
     @CurrentTenant() tenant: TenantContext,
@@ -227,6 +238,7 @@ export class ProvidersController {
   }
 
   /** Órdenes de compra reales de NewBytes (las que genera el checkout). */
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_BYTES/purchase-orders")
   async newBytesPurchaseOrders(
     @CurrentTenant() tenant: TenantContext,
@@ -239,6 +251,7 @@ export class ProvidersController {
   }
 
   /** Comprobantes / cuenta corriente de NewBytes (solo lectura). */
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_BYTES/account-statement")
   async newBytesAccountStatement(
     @CurrentTenant() tenant: TenantContext,
@@ -251,16 +264,19 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_BYTES/profile")
   async newBytesProfile(@CurrentTenant() tenant: TenantContext) {
     return this.newBytesAccountService.getProfile(await this.newBytesCredentials(tenant));
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_BYTES/documents")
   async newBytesDocument(@CurrentTenant() tenant: TenantContext, @Query("voucherId") voucherId: string) {
     return this.newBytesAccountService.getDocument(await this.newBytesCredentials(tenant), voucherId);
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_BYTES/orders/:id")
   async newBytesOrderDetail(
     @CurrentTenant() tenant: TenantContext,
@@ -270,11 +286,13 @@ export class ProvidersController {
     return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(tenant), id, kind);
   }
 
+  @RequiresCapability("directCheckout")
   @Get("providers/NEW_BYTES/checkout/addresses")
   async newBytesAddresses(@CurrentTenant() tenant: TenantContext) {
     return this.newBytesOrderService.getAddresses(await this.newBytesCredentials(tenant));
   }
 
+  @RequiresCapability("directCheckout")
   @Get("providers/NEW_BYTES/checkout/payments")
   async newBytesPayments(@CurrentTenant() tenant: TenantContext) {
     return this.newBytesOrderService.getPayments(await this.newBytesCredentials(tenant));
@@ -293,12 +311,14 @@ export class ProvidersController {
   }
 
   /** GET /carrito tal cual está en la cuenta. No lo modifica. */
+  @RequiresCapability("directCheckout")
   @Get("providers/NEW_BYTES/checkout/portal-cart")
   async newBytesPortalCart(@CurrentTenant() tenant: TenantContext) {
     return this.newBytesOrderService.readPortalCart(await this.newBytesCredentials(tenant));
   }
 
   /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */
+  @RequiresCapability("directCheckout")
   @Post("providers/NEW_BYTES/checkout/cart")
   async newBytesCheckoutCart(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutCartDto) {
     return this.newBytesOrderService.syncCart(await this.newBytesCredentials(tenant), dto, {
@@ -308,6 +328,7 @@ export class ProvidersController {
   }
 
   /** GET /carrito/calcularEnvioPara/{cp}/{idDirCli} sobre el carrito armado. */
+  @RequiresCapability("directCheckout")
   @Post("providers/NEW_BYTES/checkout/shipping")
   async newBytesCheckoutShipping(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutShippingDto) {
     return this.newBytesOrderService.quoteShippingForAddress(await this.newBytesCredentials(tenant), dto, {
@@ -316,6 +337,7 @@ export class ProvidersController {
     });
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/NEW_BYTES/checkout/preview")
   async newBytesCheckoutPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: NewBytesCheckoutPreviewDto) {
     return this.newBytesOrderService.preview(await this.newBytesCredentials(tenant), dto, {
@@ -325,6 +347,7 @@ export class ProvidersController {
   }
 
   /** POST /carrito/process: retiro ({ note, medioDePagoId }) o envío (cotización + idDirCli). */
+  @RequiresCapability("directCheckout")
   @Post("providers/NEW_BYTES/checkout/draft")
   async newBytesCheckoutDraft(
     @CurrentUser() user: { userId: string },
@@ -345,6 +368,7 @@ export class ProvidersController {
     return JSON.parse(stored.credentialsJson) as Record<string, string>;
   }
 
+  @RequiresCapability("directCheckout")
   @Get("providers/GRUPO_NUCLEO/checkout/options")
   gnCheckoutOptions() {
     return this.grupoNucleoOrderService.checkoutOptions();
@@ -363,17 +387,20 @@ export class ProvidersController {
   }
 
   /** La API de GN no expone historial/cta cte — devolvemos copias de Nodo. */
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/GRUPO_NUCLEO/account")
   gnAccount(@CurrentTenant() tenant: TenantContext) {
     assertPermission(tenant, "providers.account");
     return this.grupoNucleoOrderService.getAccount(tenant.tenantId);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/GRUPO_NUCLEO/checkout/preview")
   async gnPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: GrupoNucleoCheckoutPreviewDto) {
     return this.grupoNucleoOrderService.preview(await this.credentialsOf(tenant, "GRUPO_NUCLEO"), dto);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/GRUPO_NUCLEO/checkout/draft")
   async gnDraft(
     @CurrentUser() user: { userId: string },
@@ -389,6 +416,7 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("directCheckout")
   @Get("providers/AIR/checkout/options")
   async airCheckoutOptions(@CurrentTenant() tenant: TenantContext) {
     return this.airOrderService.checkoutOptions(await this.credentialsOf(tenant, "AIR"));
@@ -406,6 +434,7 @@ export class ProvidersController {
     return draft;
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/AIR/account")
   async airAccount(
     @CurrentTenant() tenant: TenantContext,
@@ -418,11 +447,13 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/AIR/documents")
   async airDocument(@CurrentTenant() tenant: TenantContext, @Query("href") href: string) {
     return this.airAccountService.getDocument(await this.credentialsOf(tenant, "AIR"), href);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/AIR/checkout/preview")
   async airPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: AirCheckoutPreviewDto) {
     return this.airOrderService.preview(await this.credentialsOf(tenant, "AIR"), {
@@ -436,6 +467,7 @@ export class ProvidersController {
     }, { tenantId: tenant.tenantId, dropPortalCodes: dto.dropPortalCodes });
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/AIR/checkout/draft")
   async airDraft(
     @CurrentUser() user: { userId: string },
@@ -459,6 +491,7 @@ export class ProvidersController {
     return draft;
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/ELIT/account")
   async elitAccount(
     @CurrentTenant() tenant: TenantContext,
@@ -471,11 +504,13 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/ELIT/salenotes/:number")
   async elitSaleNote(@CurrentTenant() tenant: TenantContext, @Param("number") number: string) {
     return this.elitAccountService.getSaleNote(tenant.tenantId, await this.credentialsOf(tenant, "ELIT"), number);
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/ELIT/documents")
   async elitDocument(
     @CurrentTenant() tenant: TenantContext,
@@ -486,6 +521,7 @@ export class ProvidersController {
     return this.elitAccountService.getDocument(await this.credentialsOf(tenant, "ELIT"), { form, number, kind });
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/ELIT/payments")
   async elitPayments(@CurrentTenant() tenant: TenantContext) {
     assertPermission(tenant, "providers.account");
@@ -493,18 +529,21 @@ export class ProvidersController {
   }
 
   /** Bancos y tipos de operación. No usar GET /account/payments?include=options (crea un informe vacío). */
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/ELIT/payments/options")
   async elitPaymentOptions(@CurrentTenant() tenant: TenantContext) {
     assertPermission(tenant, "providers.account");
     return this.elitAccountService.getPaymentOptions(await this.credentialsOf(tenant, "ELIT"));
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Post("providers/ELIT/payments/operation")
   async elitPaymentOperation(@CurrentTenant() tenant: TenantContext, @Body() dto: ElitPaymentOperationDto) {
     assertPermission(tenant, "providers.account");
     return this.elitAccountService.createPaymentOperation(await this.credentialsOf(tenant, "ELIT"), dto);
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Post("providers/ELIT/payments/operation/:id/attach")
   async elitPaymentAttach(
     @CurrentTenant() tenant: TenantContext,
@@ -522,12 +561,14 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Post("providers/ELIT/payments/finish")
   async elitPaymentFinish(@CurrentTenant() tenant: TenantContext) {
     assertPermission(tenant, "providers.account");
     return this.elitAccountService.finishPayment(await this.credentialsOf(tenant, "ELIT"));
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/ELIT/checkout/preview")
   async elitPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: ElitCheckoutPreviewDto) {
     return this.elitOrderService.preview(await this.credentialsOf(tenant, "ELIT"), dto, {
@@ -536,6 +577,7 @@ export class ProvidersController {
     });
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/ELIT/checkout/draft")
   async elitDraft(
     @CurrentUser() user: { userId: string },
@@ -560,6 +602,7 @@ export class ProvidersController {
     return draft;
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_TREE/account")
   async newTreeAccount(
     @CurrentTenant() tenant: TenantContext,
@@ -574,6 +617,7 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/NEW_TREE/documents")
   async newTreeDocument(
     @CurrentTenant() tenant: TenantContext,
@@ -584,11 +628,13 @@ export class ProvidersController {
     return this.newTreeAccountService.getDocument(await this.credentialsOf(tenant, "NEW_TREE"), token, name);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/NEW_TREE/checkout/preview")
   async newTreePreview(@CurrentTenant() tenant: TenantContext, @Body() dto: NewTreeCheckoutPreviewDto) {
     return this.newTreeOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "NEW_TREE"), dto);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/NEW_TREE/checkout/draft")
   async newTreeDraft(
     @CurrentUser() user: { userId: string },
@@ -613,6 +659,7 @@ export class ProvidersController {
     return draft;
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/SOLUTION_BOX/account")
   async solutionBoxAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
     assertPermission(tenant, "providers.account");
@@ -622,21 +669,25 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/SOLUTION_BOX/orders/:number/:ext")
   async solutionBoxOrder(@CurrentTenant() tenant: TenantContext, @Param("number") number: string, @Param("ext") ext: string) {
     return this.solutionBoxAccountService.getOrder(await this.credentialsOf(tenant, "SOLUTION_BOX"), number, ext);
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/SOLUTION_BOX/orders/:number/:ext/invoice")
   async solutionBoxInvoice(@CurrentTenant() tenant: TenantContext, @Param("number") number: string, @Param("ext") ext: string) {
     return this.solutionBoxAccountService.getInvoice(await this.credentialsOf(tenant, "SOLUTION_BOX"), number, ext);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/SOLUTION_BOX/checkout/preview")
   async solutionBoxPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: SolutionBoxCheckoutPreviewDto) {
     return this.solutionBoxOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "SOLUTION_BOX"), dto);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/SOLUTION_BOX/checkout/draft")
   async solutionBoxDraft(
     @CurrentUser() user: { userId: string },
@@ -661,6 +712,7 @@ export class ProvidersController {
     return draft;
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/DISTECNA/account")
   async distecnaAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
     assertPermission(tenant, "providers.account");
@@ -670,11 +722,13 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/DISTECNA/checkout/preview")
   async distecnaPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: DistecnaCheckoutPreviewDto) {
     return this.distecnaOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "DISTECNA"), dto);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/DISTECNA/checkout/draft")
   async distecnaDraft(
     @CurrentUser() user: { userId: string },
@@ -698,6 +752,7 @@ export class ProvidersController {
     return draft;
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/POLYTECH/account")
   async polytechAccount(@CurrentTenant() tenant: TenantContext, @Query("refresh") refresh?: string) {
     assertPermission(tenant, "providers.account");
@@ -707,6 +762,7 @@ export class ProvidersController {
     );
   }
 
+  @RequiresCapability("providerAccountAccess")
   @Get("providers/POLYTECH/orders/detail")
   async polytechOrderDetail(
     @CurrentTenant() tenant: TenantContext,
@@ -719,11 +775,13 @@ export class ProvidersController {
     });
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/POLYTECH/checkout/preview")
   async polytechPreview(@CurrentTenant() tenant: TenantContext, @Body() dto: PolytechCheckoutPreviewDto) {
     return this.polytechOrderService.preview(tenant.tenantId, await this.credentialsOf(tenant, "POLYTECH"), dto);
   }
 
+  @RequiresCapability("directCheckout")
   @Post("providers/POLYTECH/checkout/draft")
   async polytechDraft(
     @CurrentUser() user: { userId: string },
@@ -815,6 +873,7 @@ export class ProvidersController {
   // membresía no hay nada que mostrar (vacío, no error). El superadmin de
   // prueba ve el catálogo del Comercio de Pruebas; el carrito es el suyo.
 
+  @RequiresActiveSubscription()
   @Get("search/provider/:provider")
   search(
     @CurrentTenantOrNone() tenant: TenantContext | null,

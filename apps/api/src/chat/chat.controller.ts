@@ -22,6 +22,7 @@ import { SkipEnvelope } from "../common/decorators/skip-envelope.decorator";
 import { AssetsService } from "../assets/assets.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
+import { hasCapability, RequiresCapability } from "../tenants/entitlements";
 import { assertPermission } from "../tenants/tenant-roles";
 import { ChatHub } from "./chat.hub";
 import { ChatService } from "./chat.service";
@@ -46,41 +47,50 @@ export class ChatController {
     private readonly assets: AssetsService
   ) {}
 
+  @RequiresCapability("integratedChat")
   @Get("threads")
   threads(@CurrentTenant() tenant: TenantContext) {
     return this.chat.listThreads(tenant);
   }
 
+  /** Sin chat en el plan el contador queda en cero: la campanita no insiste. */
   @Get("unread")
   unread(@CurrentTenant() tenant: TenantContext) {
+    if (!hasCapability(tenant, "integratedChat")) return { unreadTotal: 0 };
     return this.chat.unreadTotal(tenant);
   }
 
+  @RequiresCapability("integratedChat")
   @Get("search")
   search(@CurrentTenant() tenant: TenantContext, @Query() query: ChatSearchQueryDto) {
     return this.chat.search(tenant, query.q, query.take);
   }
 
+  @RequiresCapability("integratedChat")
   @Get("peers")
   peers(@CurrentTenant() tenant: TenantContext, @Query() query: ChatPeersQueryDto) {
     return this.chat.listPeers(tenant, query.linkId);
   }
 
+  @RequiresCapability("integratedChat")
   @Post("open")
   open(@CurrentTenant() tenant: TenantContext, @Body() dto: OpenChatDto) {
     return this.chat.open(tenant, dto.linkId, dto.peerUserId);
   }
 
+  @RequiresCapability("integratedChat")
   @Post("share-order")
   shareOrder(@CurrentTenant() tenant: TenantContext, @Body() dto: ShareOrderDto) {
     return this.chat.shareOrder(tenant, dto.orderId, dto.threadId);
   }
 
+  @RequiresCapability("integratedChat")
   @Get("threads/:threadId")
   thread(@CurrentTenant() tenant: TenantContext, @Param("threadId") threadId: string) {
     return this.chat.getThread(tenant, threadId);
   }
 
+  @RequiresCapability("integratedChat")
   @Get("threads/:threadId/messages")
   messages(
     @CurrentTenant() tenant: TenantContext,
@@ -90,6 +100,7 @@ export class ChatController {
     return this.chat.listMessages(tenant, threadId, { before: query.before, take: query.take });
   }
 
+  @RequiresCapability("integratedChat")
   @Post("threads/:threadId/messages")
   send(
     @CurrentTenant() tenant: TenantContext,
@@ -99,16 +110,19 @@ export class ChatController {
     return this.chat.send(tenant, threadId, dto);
   }
 
+  @RequiresCapability("integratedChat")
   @Post("threads/:threadId/read")
   read(@CurrentTenant() tenant: TenantContext, @Param("threadId") threadId: string) {
     return this.chat.markRead(tenant, threadId);
   }
 
+  @RequiresCapability("integratedChat")
   @Post("threads/:threadId/typing")
   typing(@CurrentTenant() tenant: TenantContext, @Param("threadId") threadId: string) {
     return this.chat.typing(tenant, threadId);
   }
 
+  @RequiresCapability("integratedChat")
   @Post("threads/:threadId/pins")
   pin(
     @CurrentTenant() tenant: TenantContext,
@@ -118,6 +132,7 @@ export class ChatController {
     return this.chat.pin(tenant, threadId, dto.messageId);
   }
 
+  @RequiresCapability("integratedChat")
   @Delete("threads/:threadId/pins/:messageId")
   unpin(
     @CurrentTenant() tenant: TenantContext,
@@ -127,6 +142,7 @@ export class ChatController {
     return this.chat.unpin(tenant, threadId, messageId);
   }
 
+  @RequiresCapability("integratedChat")
   @Patch("messages/:messageId")
   edit(
     @CurrentTenant() tenant: TenantContext,
@@ -136,11 +152,13 @@ export class ChatController {
     return this.chat.edit(tenant, messageId, dto.body);
   }
 
+  @RequiresCapability("integratedChat")
   @Delete("messages/:messageId")
   remove(@CurrentTenant() tenant: TenantContext, @Param("messageId") messageId: string) {
     return this.chat.remove(tenant, messageId);
   }
 
+  @RequiresCapability("integratedChat")
   @Post("messages/:messageId/reactions")
   react(
     @CurrentTenant() tenant: TenantContext,
@@ -150,6 +168,7 @@ export class ChatController {
     return this.chat.react(tenant, messageId, dto.emoji);
   }
 
+  @RequiresCapability("integratedChat")
   @Post("upload")
   async upload(@CurrentTenant() tenant: TenantContext, @Req() req: FastifyRequest) {
     assertPermission(tenant, "chat.write");
@@ -176,6 +195,11 @@ export class ChatController {
         });
       };
       write({ type: "hello", data: { userId: tenant.userId, username } });
+      if (!hasCapability(tenant, "integratedChat")) {
+        write({ type: "unread", data: { unreadTotal: 0 } });
+        const idle = setInterval(() => subscriber.next({ type: "ping", data: {} }), 25000);
+        return () => clearInterval(idle);
+      }
       void this.chat.unreadTotal(tenant).then((unread) => write({ type: "unread", data: unread }));
       const off = this.hub.subscribe(tenant.userId, tenant.tenantId, username, write);
       const ping = setInterval(() => {

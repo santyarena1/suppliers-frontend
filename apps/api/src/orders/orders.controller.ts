@@ -4,6 +4,7 @@ import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
+import { RequiresCapability } from "../tenants/entitlements";
 import { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offline-order.dto";
 import { RenameOpsAliasDto, SplitOpsAliasDto, UnifyOpsAliasDto } from "./dto/ops-alias.dto";
 import { RejectOrderDto } from "./dto/reject-order.dto";
@@ -34,16 +35,19 @@ export class OrdersController {
   }
 
   /** Compras del comercio de la sesión. Nunca cruza con otro local. */
+  @RequiresCapability("advancedAnalytics")
   @Get("insights")
   insights(@CurrentTenant() tenant: TenantContext, @Query("days") days?: string) {
     return this.orders.insights(tenant, days);
   }
 
+  @RequiresCapability("advancedAnalytics")
   @Put("insights/aliases")
   unifyAlias(@CurrentTenant() tenant: TenantContext, @Body() dto: UnifyOpsAliasDto) {
     return this.orders.unifyOpsAlias(tenant, dto);
   }
 
+  @RequiresCapability("advancedAnalytics")
   @Patch("insights/aliases/:groupId")
   renameAlias(
     @CurrentTenant() tenant: TenantContext,
@@ -53,6 +57,7 @@ export class OrdersController {
     return this.orders.renameOpsAlias(tenant, groupId, dto);
   }
 
+  @RequiresCapability("advancedAnalytics")
   @Post("insights/aliases/:groupId/split")
   splitAlias(
     @CurrentTenant() tenant: TenantContext,
@@ -62,6 +67,7 @@ export class OrdersController {
     return this.orders.splitOpsAlias(tenant, groupId, dto);
   }
 
+  @RequiresCapability("advancedAnalytics")
   @Delete("insights/aliases/:groupId")
   deleteAlias(@CurrentTenant() tenant: TenantContext, @Param("groupId") groupId: string) {
     return this.orders.deleteOpsAlias(tenant, groupId);
