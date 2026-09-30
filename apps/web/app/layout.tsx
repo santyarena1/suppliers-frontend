@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/lib/theme";
 import { BrandingProvider } from "@/lib/branding";
 import { brandThemeBootScript } from "@/lib/brand-presets";
 import ProviderCartPreloader from "@/components/ProviderCartPreloader";
+import ApiHealthGate from "@/components/system/ApiHealthGate";
 
 export const metadata: Metadata = {
   title: "NODO",
@@ -37,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <CartProvider>
                 <ProviderCartPreloader />
                 <ResultsProvider>
-                  {children}
+                  <ApiHealthGate>{children}</ApiHealthGate>
                 </ResultsProvider>
               </CartProvider>
             </PrefsProvider>

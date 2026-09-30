@@ -5,8 +5,15 @@ import { NextResponse, NextRequest } from "next/server";
 const AUTH_PATHS = new Set(["/login", "/register"]);
 // Estas se ven siempre, con o sin sesión. Un usuario logueado tiene que poder
 // abrir la landing o una propuesta sin que lo manden a la app.
-const OPEN_PATHS = new Set(["/landing", "/preview"]);
+const OPEN_PATHS = new Set(["/landing", "/preview", "/actualizacion"]);
 const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
+
+function maintenanceEnabled(): boolean {
+  const raw = (process.env.MAINTENANCE_MODE || process.env.NEXT_PUBLIC_MAINTENANCE_MODE || "")
+    .trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
 
 function isPrefetch(req: NextRequest): boolean {
   return (
@@ -18,6 +25,17 @@ function isPrefetch(req: NextRequest): boolean {
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Mantenimiento planificado: toda la app muestra /actualizacion.
+  // Activa con MAINTENANCE_MODE=1 en el entorno del frontend.
+  if (maintenanceEnabled()) {
+    if (pathname === "/actualizacion") return NextResponse.next();
+    if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
+    const url = req.nextUrl.clone();
+    url.pathname = "/actualizacion";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
 
   if (OPEN_PATHS.has(pathname)) return NextResponse.next();
   if (AUTH_PATHS.has(pathname)) return guardLogin(req);

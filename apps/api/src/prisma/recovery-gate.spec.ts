@@ -1,4 +1,10 @@
-import { DB_RESTARTING_MESSAGE, dbOutageStatus, recoveryHttpResponse } from "./recovery-gate";
+import {
+  DB_DOWN_MESSAGE,
+  DB_RESTARTING_MESSAGE,
+  dbOutageStatus,
+  isDbUnhealthy,
+  recoveryHttpResponse,
+} from "./recovery-gate";
 
 describe("recoveryHttpResponse", () => {
   it("responde 200 en /health para que Railway no corte el deploy", () => {
@@ -9,14 +15,14 @@ describe("recoveryHttpResponse", () => {
     expect(recoveryHttpResponse("GET", "/health?x=1").status).toBe(200);
   });
 
-  it("el login y el resto avisan que la base está reiniciando", () => {
+  it("responde 503 en el resto mientras Postgres no acepta", () => {
     expect(recoveryHttpResponse("POST", "/auth/login")).toEqual({
       status: 503,
       body: { success: false, message: DB_RESTARTING_MESSAGE },
     });
   });
 
-  it("deja pasar el preflight", () => {
+  it("responde 204 en OPTIONS (CORS preflight)", () => {
     expect(recoveryHttpResponse("OPTIONS", "/auth/login").status).toBe(204);
   });
 });
@@ -30,8 +36,22 @@ describe("dbOutageStatus", () => {
     expect(dbOutageStatus("Can't reach database server at postgres.railway.internal")?.status).toBe(503);
   });
 
-  it("no esconde un error de clave o de migración", () => {
+  it("no traduce errores de negocio o migraciones rotas", () => {
     expect(dbOutageStatus("password authentication failed")).toBeNull();
     expect(dbOutageStatus("Migration failed to apply cleanly")).toBeNull();
+  });
+});
+
+describe("isDbUnhealthy", () => {
+  it("marca waiting y down", () => {
+    expect(isDbUnhealthy("ok")).toBe(false);
+    expect(isDbUnhealthy("waiting")).toBe(true);
+    expect(isDbUnhealthy("down")).toBe(true);
+    expect(isDbUnhealthy(undefined)).toBe(false);
+  });
+
+  it("expone mensajes distintos para waiting vs down", () => {
+    expect(DB_RESTARTING_MESSAGE).toMatch(/reiniciando/i);
+    expect(DB_DOWN_MESSAGE).toMatch(/no está disponible/i);
   });
 });
