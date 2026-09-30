@@ -10,6 +10,11 @@ function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
 }
 
+/** Los recordatorios de plan y facturación llegan con `landingKey` `subscription:<tipo>`. */
+function isSubscriptionNotice(n: OrgNotice) {
+  return n.landingKey?.startsWith("subscription:") ?? false;
+}
+
 export default function AvisosPage() {
   const [items, setItems] = useState<OrgNotice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,14 +91,22 @@ export default function AvisosPage() {
                     Ir a Noticias
                   </Link>
                 )}
-                {n.kind !== "NEWS" && n.landingKey && (
-                  <a href={`/m/${n.landingKey}`} target="_blank" rel="noreferrer" className="inline-block mt-2 text-[11px] text-brand-400">
-                    Ver landing
-                  </a>
+                {isSubscriptionNotice(n) ? (
+                  <Link href="/suscripcion" className="inline-block mt-2 text-[11px] text-brand-400">
+                    Ver suscripción
+                  </Link>
+                ) : (
+                  <>
+                    {n.kind !== "NEWS" && n.landingKey && (
+                      <a href={`/m/${n.landingKey}`} target="_blank" rel="noreferrer" className="inline-block mt-2 text-[11px] text-brand-400">
+                        Ver landing
+                      </a>
+                    )}
+                    <Link href="/marcas" className="inline-block mt-2 ml-3 text-[11px] text-surface-400">
+                      Ir a marcas
+                    </Link>
+                  </>
                 )}
-                <Link href="/marcas" className="inline-block mt-2 ml-3 text-[11px] text-surface-400">
-                  Ir a marcas
-                </Link>
               </article>
             ))
           )}

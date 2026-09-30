@@ -29,6 +29,7 @@ import {
 import { getToken, isTokenExpired } from "@/lib/auth";
 import { readPortalDrops } from "@/lib/portalCartSync";
 import { rememberNbPortalCart } from "@/lib/nbPortalCart";
+import { cachedSubscription, capabilityAllowed } from "@/lib/subscription";
 
 export const WARM_PROVIDERS = ["INVID", "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE", "SOLUTION_BOX", "DISTECNA", "POLYTECH"] as const;
 export type WarmProvider = (typeof WARM_PROVIDERS)[number];
@@ -287,6 +288,8 @@ export function ensureCheckoutWarmup(
     forgetCheckoutWarmup(provider);
     return;
   }
+  // Sin checkout directo en el plan no hay portal que calentar.
+  if (!capabilityAllowed(cachedSubscription(), "directCheckout")) return;
 
   const itemsKey = cartItemsKey(items);
   const current = slots[provider];

@@ -53,6 +53,8 @@ import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrder
 import { SchemePicker } from "@/components/SchemePicker";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import type { PendingOrderProvider } from "@/lib/pendingOrders";
+import UpsellNotice from "@/components/subscription/UpsellNotice";
+import { capabilityAllowed, useSubscription } from "@/lib/subscription";
 
 type PerceptionLine = { label: string; amount: number };
 
@@ -175,6 +177,11 @@ function CartPageInner() {
   const retailer = useIsRetailer();
   const policies = usePurchasePolicies();
   const { providers: myProviders } = useMyProviders();
+  // NODO Base arma el carrito igual, pero no manda al portal: genera el pedido en
+  // Nodo y el mensaje para el vendedor. El backend corta el checkout de todos modos.
+  const { subscription } = useSubscription();
+  const directCheckout = capabilityAllowed(subscription, "directCheckout");
+  const [generating, setGenerating] = useState<string | null>(null);
   const [channelTab, setChannelTab] = useState<"online" | "offline">("online");
   const [invidPreview, setInvidPreview] = useState<InvidCheckoutPreview | null>(null);
   const [elitPreview, setElitPreview] = useState<ElitCheckoutPreview | null>(null);
@@ -376,7 +383,7 @@ function CartPageInner() {
   const sbLines = useMemo(() => cartLinesFromItems(onlineByProvider.SOLUTION_BOX ?? []), [onlineByProvider.SOLUTION_BOX]);
   const dtLines = useMemo(() => cartLinesFromItems(onlineByProvider.DISTECNA ?? []), [onlineByProvider.DISTECNA]);
   const ptLines = useMemo(() => cartLinesFromItems(onlineByProvider.POLYTECH ?? []), [onlineByProvider.POLYTECH]);
-  const warmEnabled = hydrated && channelTab === "online";
+  const warmEnabled = hydrated && channelTab === "online" && directCheckout;
   const invidWarm = useCheckoutWarmup("INVID", invidLines, warmEnabled);
   const elitWarm = useCheckoutWarmup("ELIT", elitLines, warmEnabled);
   const nbWarm = useCheckoutWarmup("NEW_BYTES", nbLines, warmEnabled);
@@ -776,6 +783,35 @@ function CartPageInner() {
     }
   }
 
+  /**
+   * Plan sin checkout directo: registra el pedido en Nodo (uno por distribuidor) y
+   * copia el mensaje. Es el mismo pedido por mensaje de los proveedores por lista.
+   */
+  async function generateManualOrders(scope: "all" | string) {
+    const providers = scope === "all" ? sortedProviders.filter((p) => (onlineByProvider[p]?.length ?? 0) > 0) : [scope];
+    const groups = providers.flatMap((p) => messageOrdersFromCart(viewItems, policies, p, currentRate?.venta));
+    if (groups.length === 0) return;
+    setGenerating(scope);
+    setNotice(null);
+    try {
+      await ordersApi.createOffline(groups);
+      await copySellerMessage();
+      if (scope === "all") clear("online");
+      else clearProvider(scope, "online");
+      setActiveTab("all");
+      setNotice(
+        groups.length === 1
+          ? "Pedido generado en Nodo. El mensaje quedó copiado para mandárselo al vendedor (o compartilo por WhatsApp)."
+          : `${groups.length} pedidos generados en Nodo, uno por distribuidor. El mensaje quedó copiado para los vendedores.`
+      );
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      setNotice(msg || "No se pudo generar el pedido");
+    } finally {
+      setGenerating(null);
+    }
+  }
+
   async function copyForWhatsApp() {
     const txt = buildWhatsAppText(activeTab);
     try {
@@ -1124,6 +1160,43 @@ function CartPageInner() {
                   />
                 )}
                 <div className="flex flex-col gap-4 has-[.cart-action]:border-t has-[.cart-action]:border-surface-800 has-[.cart-action]:pt-6">
+                  {!directCheckout && channelTab === "online" && viewItems.length > 0 && !(activeTab !== "all" && pricesFromList(activeTab)) && (
+                    <div className="cart-action flex flex-col gap-3">
+                      <p className="text-xs text-surface-300">
+                        {activeTab === "all"
+                          ? "Se genera un pedido por distribuidor en Nodo y el mensaje queda copiado para mandárselo a cada vendedor."
+                          : `El pedido de ${myProviders.find((mp) => mp.provider === activeTab)?.name ?? providerLabel(activeTab)} se guarda en Nodo y el mensaje queda copiado para el vendedor.`}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void generateManualOrders(activeTab)}
+                          disabled={generating !== null}
+                          className="self-start flex items-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-3 py-2"
+                        >
+                          {generating === activeTab ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          {generating === activeTab ? "Generando…" : activeTab === "all" ? "Generar pedidos" : "Generar pedido"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void copySellerMessage()}
+                          className="self-start flex items-center gap-2 bg-surface-800 hover:bg-surface-700 border border-surface-700 text-surface-100 text-sm font-medium rounded-lg px-3 py-2"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                          Copiar mensaje
+                        </button>
+                        <button
+                          type="button"
+                          onClick={shareWhatsApp}
+                          className="self-start flex items-center gap-2 bg-surface-800 hover:bg-surface-700 border border-surface-700 text-surface-100 text-sm font-medium rounded-lg px-3 py-2"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          WhatsApp
+                        </button>
+                      </div>
+                      <UpsellNotice capability="directCheckout" compact className="self-start" />
+                    </div>
+                  )}
                   {activeTab !== "all" && pricesFromList(activeTab) && viewItems.length > 0 && (
                     <div className="cart-action flex flex-col gap-2">
                       <p className="text-xs text-sky-200/80">
@@ -1151,7 +1224,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.INVID?.length > 0 && (activeTab === "all" || activeTab === "INVID") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.INVID?.length > 0 && (activeTab === "all" || activeTab === "INVID") && (
                     <div className={activeTab === "INVID" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "INVID"}>
                       <InvidDraftPanel
                         compact
@@ -1167,7 +1240,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.NEW_BYTES?.length > 0 && (activeTab === "all" || activeTab === "NEW_BYTES") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.NEW_BYTES?.length > 0 && (activeTab === "all" || activeTab === "NEW_BYTES") && (
                     <div className={activeTab === "NEW_BYTES" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "NEW_BYTES"}>
                       <NewBytesDraftPanel
                         compact
@@ -1183,7 +1256,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.ELIT?.length > 0 && (activeTab === "all" || activeTab === "ELIT") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.ELIT?.length > 0 && (activeTab === "all" || activeTab === "ELIT") && (
                     <div className={activeTab === "ELIT" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "ELIT"}>
                       <ElitCheckoutPanel
                         items={onlineByProvider.ELIT}
@@ -1198,7 +1271,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.NEW_TREE?.length > 0 && (activeTab === "all" || activeTab === "NEW_TREE") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.NEW_TREE?.length > 0 && (activeTab === "all" || activeTab === "NEW_TREE") && (
                     <div className={activeTab === "NEW_TREE" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "NEW_TREE"}>
                       <NewTreeCheckoutPanel
                         items={onlineByProvider.NEW_TREE}
@@ -1211,7 +1284,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.SOLUTION_BOX?.length > 0 && (activeTab === "all" || activeTab === "SOLUTION_BOX") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.SOLUTION_BOX?.length > 0 && (activeTab === "all" || activeTab === "SOLUTION_BOX") && (
                     <div className={activeTab === "SOLUTION_BOX" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "SOLUTION_BOX"}>
                       <SolutionBoxCheckoutPanel
                         items={onlineByProvider.SOLUTION_BOX}
@@ -1224,7 +1297,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.GRUPO_NUCLEO?.length > 0 && (activeTab === "all" || activeTab === "GRUPO_NUCLEO") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.GRUPO_NUCLEO?.length > 0 && (activeTab === "all" || activeTab === "GRUPO_NUCLEO") && (
                     <div className={activeTab === "GRUPO_NUCLEO" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "GRUPO_NUCLEO"}>
                       <GrupoNucleoCheckoutPanel
                         items={onlineByProvider.GRUPO_NUCLEO}
@@ -1237,7 +1310,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.AIR?.length > 0 && (activeTab === "all" || activeTab === "AIR") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.AIR?.length > 0 && (activeTab === "all" || activeTab === "AIR") && (
                     <div className={activeTab === "AIR" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "AIR"}>
                       <AirCheckoutPanel
                         items={onlineByProvider.AIR}
@@ -1250,7 +1323,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.DISTECNA?.length > 0 && (activeTab === "all" || activeTab === "DISTECNA") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.DISTECNA?.length > 0 && (activeTab === "all" || activeTab === "DISTECNA") && (
                     <div className={activeTab === "DISTECNA" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "DISTECNA"}>
                       <DistecnaCheckoutPanel
                         items={onlineByProvider.DISTECNA}
@@ -1265,7 +1338,7 @@ function CartPageInner() {
                     </div>
                   )}
 
-                  {channelTab === "online" && onlineByProvider.POLYTECH?.length > 0 && (activeTab === "all" || activeTab === "POLYTECH") && (
+                  {directCheckout && channelTab === "online" && onlineByProvider.POLYTECH?.length > 0 && (activeTab === "all" || activeTab === "POLYTECH") && (
                     <div className={activeTab === "POLYTECH" ? "cart-action" : "hidden"} aria-hidden={activeTab !== "POLYTECH"}>
                       <PolytechCheckoutPanel
                         items={onlineByProvider.POLYTECH}
@@ -1292,7 +1365,7 @@ function CartPageInner() {
                           className="self-start flex items-center gap-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black text-sm font-semibold rounded-lg px-3 py-2"
                         >
                           {confirmingOffline ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                          {confirmingOffline ? "Guardando…" : "Confirmar pedido"}
+                          {confirmingOffline ? "Guardando…" : directCheckout ? "Confirmar pedido" : "Generar pedido"}
                         </button>
                         <button
                           type="button"

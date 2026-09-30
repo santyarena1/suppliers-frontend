@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import ChatApp from "@/components/chat/ChatApp";
+import PlanGate from "@/components/subscription/PlanGate";
 
 /**
  * El chat vive en el layout para que pasar de /mensajes a /mensajes/:id
@@ -32,7 +33,13 @@ export default function MensajesLayout({ children }: { children: React.ReactNode
           </div>
         }
       >
-        <ChatShell />
+        <PlanGate
+          capability="integratedChat"
+          message="El chat con tus distribuidores está disponible en NODO Pro."
+          className="m-4 sm:m-6"
+        >
+          <ChatShell />
+        </PlanGate>
       </Suspense>
       {children}
     </div>

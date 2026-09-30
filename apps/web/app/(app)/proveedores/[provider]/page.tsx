@@ -33,6 +33,7 @@ import SolutionBoxAccountPanel from "@/components/SolutionBoxAccountPanel";
 import DistecnaAccountPanel from "@/components/DistecnaAccountPanel";
 import PolytechAccountPanel from "@/components/PolytechAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
+import PlanGate from "@/components/subscription/PlanGate";
 import {
   AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
   Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
@@ -971,16 +972,19 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   </div>
                 )}
 
-                {tab === "invid-account" && <InvidAccountPanel />}
-
-                {tab === "nb-account" && <NewBytesAccountPanel />}
-                {tab === "elit-account" && <ElitAccountPanel />}
-                {tab === "gn-account" && <GrupoNucleoAccountPanel />}
-                {tab === "air-account" && <AirAccountPanel />}
-                {tab === "nt-account" && <NewTreeAccountPanel />}
-                {tab === "sb-account" && <SolutionBoxAccountPanel />}
-                {tab === "dt-account" && <DistecnaAccountPanel />}
-                {tab === "pt-account" && <PolytechAccountPanel />}
+                {tab.endsWith("-account") && (
+                  <PlanGate capability="providerAccountAccess">
+                  {tab === "invid-account" && <InvidAccountPanel />}
+                  {tab === "nb-account" && <NewBytesAccountPanel />}
+                  {tab === "elit-account" && <ElitAccountPanel />}
+                  {tab === "gn-account" && <GrupoNucleoAccountPanel />}
+                  {tab === "air-account" && <AirAccountPanel />}
+                  {tab === "nt-account" && <NewTreeAccountPanel />}
+                  {tab === "sb-account" && <SolutionBoxAccountPanel />}
+                  {tab === "dt-account" && <DistecnaAccountPanel />}
+                  {tab === "pt-account" && <PolytechAccountPanel />}
+                  </PlanGate>
+                )}
               </div>
             </div>
           )}

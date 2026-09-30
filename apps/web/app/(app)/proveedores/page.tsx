@@ -17,12 +17,18 @@ import { ListFreshnessChip } from "@/components/list-import/ListFreshnessHints";
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
+import SearchToggle from "@/components/subscription/SearchToggle";
+import UpsellNotice from "@/components/subscription/UpsellNotice";
+import { capabilityAllowed, invalidateSubscription, useSubscription } from "@/lib/subscription";
 import { Boxes, CheckCircle2, Clock, FileSpreadsheet, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
 export default function ProveedoresPage() {
   const retailer = useIsRetailer();
+  const { subscription } = useSubscription();
+  const chatAllowed = capabilityAllowed(subscription, "integratedChat");
+  const analyticsAllowed = capabilityAllowed(subscription, "advancedAnalytics");
   const [visible, setVisible] = useState<VisibleProvider[]>([]);
   const [statuses, setStatuses] = useState<StatusMap>({});
   const [loading, setLoading] = useState(true);
@@ -137,6 +143,13 @@ export default function ProveedoresPage() {
 
   const linked = visible.filter((p) => p.linked);
   const advertised = visible.filter((p) => !p.linked);
+  const activeInSearch = linked.filter((p) => p.inSearch !== false && !p.platformHidden).length;
+  const maxSearch = subscription?.capabilities.maxSearchProviders ?? null;
+
+  function onSearchChanged() {
+    invalidateSubscription();
+    void load(true);
+  }
 
   return (
     <>
@@ -177,7 +190,7 @@ export default function ProveedoresPage() {
 
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
-              <LocalPurchaseDashboard />
+              {analyticsAllowed ? <LocalPurchaseDashboard /> : <UpsellNotice capability="advancedAnalytics" compact />}
               {retailer && (
                 <div className="border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100">
                   <span className="font-semibold">Pedido offline y esquema</span>
@@ -187,9 +200,27 @@ export default function ProveedoresPage() {
                 </div>
               )}
               <section>
-                <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-3">
-                  Tus proveedores — {linked.length}
-                </h2>
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
+                    Tus proveedores — {linked.length}
+                  </h2>
+                  {retailer && linked.length > 0 && (
+                    <p className="text-xs text-surface-400" data-testid="search-usage">
+                      Proveedores conectados: <strong className="text-white">{linked.length}</strong>
+                      <span className="mx-1.5 text-surface-600">·</span>
+                      Activos en búsqueda:{" "}
+                      <strong className="text-white">
+                        {activeInSearch}
+                        {maxSearch != null && ` / ${maxSearch}`}
+                      </strong>
+                      {maxSearch != null && (
+                        <Link href="/suscripcion" className="ml-2 font-semibold text-brand-300 hover:text-brand-200">
+                          Buscar en todos con NODO Pro
+                        </Link>
+                      )}
+                    </p>
+                  )}
+                </div>
                 {loading ? (
                   <div className="flex items-center justify-center py-16">
                     <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
@@ -203,7 +234,7 @@ export default function ProveedoresPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {linked.map(({ provider, name, accountManager, linkId }) => {
+                    {linked.map(({ provider, name, accountManager, linkId, inSearch, platformHidden }) => {
                       const s = statuses[provider];
                       const bySpreadsheet = isListProvider(provider) || !IMPLEMENTED_PROVIDERS.includes(provider);
                       const result = syncResult[provider];
@@ -252,9 +283,12 @@ export default function ProveedoresPage() {
                             </p>
                           )}
                           {bySpreadsheet && <ListFreshnessChip provider={provider} />}
+                          {retailer && !platformHidden && (
+                            <SearchToggle provider={provider} name={name} inSearch={inSearch !== false} onChanged={onSearchChanged} />
+                          )}
 
                           <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
-                            {linkId && (
+                            {linkId && chatAllowed && (
                               <Link
                                 href={`/mensajes?linkId=${linkId}`}
                                 className="flex items-center justify-center gap-1 text-xs font-medium border border-brand-500/40 hover:border-brand-400 text-brand-200 hover:text-white rounded-lg px-2.5 py-1.5 transition-all"
