@@ -14,6 +14,7 @@ import {
   SUBSCRIPTION_PAYMENT_PROVIDER_LABELS,
   SUBSCRIPTION_POLICY,
   SUBSCRIPTION_STATUS_LABELS,
+  UNRESTRICTED_CAPABILITIES,
   type PlanCapabilities,
   type SetupFeeStatus,
   type SubscriptionAccess,
@@ -126,10 +127,12 @@ export class SubscriptionsService {
         : Promise.resolve([]),
     ]);
     const entitlements = tenant.entitlements;
+    const bypass = !!entitlements && !entitlements.enforced;
     return {
       ...clientView,
-      // Superadmin en su sesión: sin topes, pero ve la suscripción real.
-      capabilities: entitlements && !entitlements.enforced ? { ...view.capabilities, maxSearchProviders: null } : view.capabilities,
+      // Superadmin en su sesión: sin topes ni cortes, pero ve la suscripción real.
+      access: bypass ? ("FULL" as const) : clientView.access,
+      capabilities: bypass ? { ...UNRESTRICTED_CAPABILITIES } : view.capabilities,
       usage: {
         connectedProviders: usage.connectedProviders,
         activeSearchProviders: usage.activeSearchProviders,
