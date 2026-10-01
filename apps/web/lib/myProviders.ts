@@ -31,8 +31,12 @@ export function useMyProviders(): { providers: VisibleProvider[]; loading: boole
     }
 
     void loadMyProviders().then(apply);
+    // Sin forzar: invalidateMyProviders ya vació el cache, así que esto pide
+    // la lista UNA vez para todos los componentes montados (comparten el
+    // pedido en curso). Forzar acá hacía que cada tarjeta de producto pidiera
+    // la suya: cientos de pedidos por cambio y el API respondía 429.
     function onUpdated() {
-      void loadMyProviders(true).then(apply);
+      void loadMyProviders().then(apply);
     }
     window.addEventListener(MY_PROVIDERS_UPDATED, onUpdated);
     return () => {

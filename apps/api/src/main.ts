@@ -55,6 +55,9 @@ async function bootstrap() {
       callback(null, allowedOrigins.some((matches) => matches(origin)));
     },
     credentials: true,
+    // El navegador recuerda el permiso 10 minutos en vez de preguntar antes de
+    // cada pedido (la mitad del tráfico eran estos OPTIONS).
+    maxAge: 600,
   });
 
   app.useGlobalPipes(

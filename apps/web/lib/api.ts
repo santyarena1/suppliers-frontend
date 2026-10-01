@@ -1139,6 +1139,12 @@ export const ordersApi = {
  */
 let visibleProviders: { list: VisibleProvider[]; at: number } | null = null;
 let visibleProvidersInflight: Promise<VisibleProvider[]> | null = null;
+/**
+ * La última lista que respondió el servidor, aunque el cache se haya
+ * invalidado. Si un pedido falla (429, red), se sigue mostrando esta: nunca se
+ * reemplaza por una lista vacía que dice "no tenés proveedores".
+ */
+let lastKnownProviders: VisibleProvider[] | null = null;
 const VISIBLE_PROVIDERS_TTL_MS = 60_000;
 
 export const MY_PROVIDERS_UPDATED = "nodo:my-providers-updated";
@@ -1153,9 +1159,10 @@ export async function loadMyProviders(force = false): Promise<VisibleProvider[]>
     .providers()
     .then((r) => {
       visibleProviders = { list: r.data, at: Date.now() };
+      lastKnownProviders = r.data;
       return r.data;
     })
-    .catch(() => visibleProviders?.list ?? [])
+    .catch(() => visibleProviders?.list ?? lastKnownProviders ?? [])
     .finally(() => {
       visibleProvidersInflight = null;
     });
@@ -1174,7 +1181,11 @@ export function invalidateMyProviders() {
 // Los proveedores visibles son de la sesión: al cambiarla (login, logout,
 // "Entrar como") no puede quedar la lista de la anterior.
 if (typeof window !== "undefined") {
-  window.addEventListener(SESSION_EVENT, invalidateMyProviders);
+  window.addEventListener(SESSION_EVENT, () => {
+    // Otra sesión: la lista de respaldo era de otra persona.
+    lastKnownProviders = null;
+    invalidateMyProviders();
+  });
 }
 
 /** Solo los vinculados: de los publicitados todavía no hay catálogo que traer. */
