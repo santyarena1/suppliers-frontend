@@ -390,8 +390,16 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
           <p className="text-[10px] uppercase tracking-wider text-surface-500">Estado sync</p>
           {run ? (
             <div className="mt-0.5 space-y-1.5">
-              <p className="text-xs text-surface-300">
-                {run.status}
+              <p
+                className={
+                  run.status === "ERROR"
+                    ? "text-xs text-red-300"
+                    : run.status === "DEGRADED"
+                      ? "text-xs text-amber-300"
+                      : "text-xs text-surface-300"
+                }
+              >
+                {run.status === "DEGRADED" ? "DEGRADADO" : run.status}
                 {status?.running ? ` · ${status.mode === "batch" ? "batch cron" : "full"}` : ""}
                 {run.currentStoreName ? ` · ${run.currentStoreName}` : ""}
               </p>
@@ -406,7 +414,9 @@ function RetailTab({ showToast }: { showToast: (m: string, ok?: boolean) => void
                 {new Date(run.startedAt).toLocaleString("es-AR")}
               </p>
               {run.errorMessage && (
-                <p className="text-[11px] text-red-400">{run.errorMessage}</p>
+                <p className={`text-[11px] ${run.status === "ERROR" ? "text-red-400" : "text-amber-300/90"}`}>
+                  {run.errorMessage}
+                </p>
               )}
             </div>
           ) : (

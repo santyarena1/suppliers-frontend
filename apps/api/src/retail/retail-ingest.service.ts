@@ -4,6 +4,11 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { RetailSourceClient, type ExternalProduct, type ExternalStore } from "./retail-source.client";
 import {
+  RetailSourceUnavailableError,
+  describeRetailSourceError,
+  isRetailSourceUnavailable,
+} from "./retail-source.error";
+import {
   HG_PAGE_SIZE,
   RetailHardgamersClient,
   hardgamersExternalId,
@@ -467,11 +472,16 @@ export class RetailIngestService implements OnModuleInit {
       });
       return { productsUpserted: count };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const described = describeRetailSourceError(err);
       await this.prisma.retailIngestRun.update({
         where: { id: run.id },
-        data: { status: "ERROR", finishedAt: new Date(), errorMessage: message },
+        data: {
+          status: described.unavailable ? "DEGRADED" : "ERROR",
+          finishedAt: new Date(),
+          errorMessage: described.message,
+        },
       });
+      if (described.unavailable) return { productsUpserted: 0 };
       throw err;
     } finally {
       if (this.runGeneration === gen) {
@@ -525,7 +535,15 @@ export class RetailIngestService implements OnModuleInit {
       // Se ingestan todos los locales que publica la fuente. El "estado" que
       // trae es criterio del agregador, no del local: varios marcados como
       // inactivos siguen publicando precios y nos interesan igual.
-      const remoteStores = await this.client.listStores();
+      let remoteStores: ExternalStore[] = [];
+      let sourceWarning: string | null = null;
+      try {
+        remoteStores = await this.client.listStores();
+      } catch (err) {
+        if (!isRetailSourceUnavailable(err)) throw err;
+        sourceWarning = describeRetailSourceError(err).message;
+        this.logger.warn(sourceWarning);
+      }
 
       await mapPool(remoteStores, 4, async (store) => {
         await this.upsertStoreMeta(store);
@@ -593,37 +611,63 @@ export class RetailIngestService implements OnModuleInit {
       });
       await Promise.all(workers);
 
+      // Si el agregador está caído, el botón "Sincronizar todo" igual actualiza
+      // las fuentes que sí responden. El cron de batch no las toca: ya tienen
+      // su propio ciclo cada 15 minutos.
+      if (sourceWarning && opts.mode === "full" && !this.cancelRequested) {
+        try {
+          const cg = await this.ingestCompragamer();
+          if (cg) productsUpserted += cg.productos;
+        } catch (err) {
+          this.logger.warn(
+            `Compra Gamer en full degradado: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+        try {
+          const pageBudget = Math.max(4, Number(this.config.get("RETAIL_HG_PAGE_BUDGET") ?? 32));
+          const hg = await this.ingestHardgamersStores(undefined, { pageBudget });
+          productsUpserted += hg.products;
+          storesDone += hg.stores;
+        } catch (err) {
+          this.logger.warn(
+            `HardGamers en full degradado: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+
       const cancelled = this.cancelRequested;
+      const status = cancelled ? "CANCELLED" : sourceWarning ? "DEGRADED" : "OK";
       await this.prisma.retailIngestRun.update({
         where: { id: run.id },
         data: {
-          status: cancelled ? "CANCELLED" : "OK",
+          status,
           finishedAt: new Date(),
           productsUpserted,
           storesDone,
           currentStoreName: null,
           heartbeatAt: new Date(),
-          errorMessage: cancelled ? "Cancelada para iniciar sync full" : null,
+          errorMessage: cancelled ? "Cancelada para iniciar sync full" : sourceWarning,
         },
       });
       this.logger.log(
-        `Ingesta retail ${opts.mode} ${cancelled ? "CANCELLED" : "OK"}: ${storesDone} tiendas, ${productsUpserted} productos`
+        `Ingesta retail ${opts.mode} ${status}: ${storesDone} tiendas, ${productsUpserted} productos`
       );
       return { runId: run.id, productsUpserted, storesDone };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const described = describeRetailSourceError(err);
       await this.prisma.retailIngestRun.update({
         where: { id: run.id },
         data: {
-          status: "ERROR",
+          status: described.unavailable ? "DEGRADED" : "ERROR",
           finishedAt: new Date(),
-          errorMessage: message,
+          errorMessage: described.message,
           productsUpserted,
           storesDone,
           heartbeatAt: new Date(),
         },
       });
-      this.logger.error(`Ingesta retail ERROR: ${message}`);
+      this.logger.error(`Ingesta retail ${described.unavailable ? "DEGRADED" : "ERROR"}: ${described.message}`);
+      if (described.unavailable) return { runId: run.id, productsUpserted, storesDone };
       throw err;
     } finally {
       if (this.runGeneration === gen) {
@@ -777,6 +821,9 @@ export class RetailIngestService implements OnModuleInit {
         pageData = await this.client.listStoreProducts(externalStoreId, page, 100);
         retries = 0;
       } catch (err) {
+        if (isRetailSourceUnavailable(err) || err instanceof RetailSourceUnavailableError) {
+          throw err;
+        }
         retries += 1;
         if (retries > 3) throw err;
         const wait = 500 * 2 ** (retries - 1);
