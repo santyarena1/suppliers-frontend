@@ -1,3 +1,4 @@
+import { forgetSession } from "../auth/jwt.strategy";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
@@ -647,8 +648,15 @@ export class TenantsService {
     if (client.tenantType !== "RETAILER" && client.tenantType !== "DISTRIBUTOR") throw invalido;
     if (!tenantLinkAllowed(client.tenantType, code.tenant.type as TenantType)) throw invalido;
 
-    const [link] = await this.prisma.$transaction([
-      this.prisma.tenantLink.upsert({
+    // El cupo se descuenta primero y con condición: dos canjes simultáneos del
+    // último uso no pueden pasar los dos (el UPDATE re-evalúa el WHERE con la fila bloqueada).
+    const link = await this.prisma.$transaction(async (tx) => {
+      const taken = await tx.tenantAccessCode.updateMany({
+        where: { id: code.id, revoked: false, usedCount: { lt: code.maxUses } },
+        data: { usedCount: { increment: 1 } },
+      });
+      if (taken.count === 0) throw invalido;
+      const upserted = await tx.tenantLink.upsert({
         where: {
           clientTenantId_supplierTenantId: {
             clientTenantId: client.tenantId,
@@ -661,19 +669,16 @@ export class TenantsService {
           status: "ACTIVE",
         },
         update: { status: "ACTIVE" },
-      }),
-      this.prisma.tenantAccessCode.update({
-        where: { id: code.id },
-        data: { usedCount: { increment: 1 } },
-      }),
-      this.prisma.tenantAccessCodeRedemption.create({
+      });
+      await tx.tenantAccessCodeRedemption.create({
         data: {
           accessCodeId: code.id,
           redeemedByUserId: userId,
           redeemedByTenantId: client.tenantId,
         },
-      }),
-    ]);
+      });
+      return upserted;
+    });
 
     domainEvents.emit("tenant.linked", {
       clientTenantId: client.tenantId,
@@ -803,6 +808,7 @@ export class TenantsService {
         loginLockedUntil: null,
       },
     });
+    forgetSession(membership.userId);
     return { membershipId, generatedPassword: password };
   }
 

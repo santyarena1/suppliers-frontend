@@ -13,6 +13,9 @@ import {
   ValidateNested, Matches } from "class-validator";
 import { PROVIDER_KEY_PATTERN } from "@nodo/shared";
 
+/** Tope de montos: la columna es Decimal(14,4) y un 1e308 rompía con un 500. */
+const MAX_AMOUNT = 1_000_000_000;
+
 export class OfflineOrderItemDto {
   @IsString()
   @MaxLength(120)
@@ -36,30 +39,35 @@ export class OfflineOrderItemDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   unitPrice!: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   internosAmount?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   ivaPercent?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   internosPercent?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   finalLineUsd?: number;
 
   @IsOptional()
@@ -70,6 +78,7 @@ export class OfflineOrderItemDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   listUnitPrice?: number;
 
   @IsOptional()
@@ -85,12 +94,14 @@ export class OfflineOrderItemDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   originalUnitPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   originalFinalLineUsd?: number;
 
   @IsOptional()
@@ -112,6 +123,7 @@ export class OfflineOrderGroupDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  @Max(MAX_AMOUNT)
   quoteRate?: number;
 
   @IsArray()

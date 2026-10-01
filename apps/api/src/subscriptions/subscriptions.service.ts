@@ -1,4 +1,6 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { InboxService } from "../inbox/inbox.service";
+import { inboxRequester } from "./subscription-inbox";
 import { Prisma } from "@prisma/client";
 import {
   addDays,
@@ -21,6 +23,7 @@ import {
   type SubscriptionPaymentProvider,
   type SubscriptionStatus,
   type TenantPlan,
+  TENANT_PLAN_LABELS,
 } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { commercialId, toSubscriptionDates, type TenantContext } from "../tenants/tenant-context.service";
@@ -105,7 +108,8 @@ const REQUEST_EVENTS = ["UPGRADE_REQUESTED", "PLAN_REQUESTED"];
 export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly visibility: TenantVisibilityService
+    private readonly visibility: TenantVisibilityService,
+    @Optional() private readonly inbox?: InboxService
   ) {}
 
   // ---------- Lectura ----------
@@ -291,6 +295,14 @@ export class SubscriptionsService {
         data: { message: dto.message?.trim() || null },
       },
     });
+    const who = await inboxRequester(this.prisma, tenant);
+    void this.inbox?.record({
+      ...who,
+      type: "PLAN_REQUEST",
+      title: `${who.company} pide pasar a ${TENANT_PLAN_LABELS[dto.plan]}`,
+      message: dto.message,
+      data: { "Plan actual": TENANT_PLAN_LABELS[tenantRow.plan as TenantPlan], "Plan pedido": TENANT_PLAN_LABELS[dto.plan] },
+    });
     return { requested: true };
   }
 
@@ -306,6 +318,14 @@ export class SubscriptionsService {
         actorUserId: tenant.userId,
         data: { reference: dto.reference?.trim() || null, message: dto.message?.trim() || null },
       },
+    });
+    const who = await inboxRequester(this.prisma, tenant);
+    void this.inbox?.record({
+      ...who,
+      type: "PAYMENT_NOTICE",
+      title: `${who.company} avisa que pagó`,
+      message: dto.message,
+      data: { "Nº de operación": dto.reference?.trim() || null },
     });
     return { received: true };
   }

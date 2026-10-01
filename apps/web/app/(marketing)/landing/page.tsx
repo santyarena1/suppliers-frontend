@@ -2,6 +2,7 @@ import "./nodo-landing.css";
 import { BeforeAfter } from "@/components/marketing/BeforeAfter";
 import { CheckoutDemo } from "@/components/marketing/CheckoutDemo";
 import { Communications } from "@/components/marketing/Communications";
+import { Contact } from "@/components/marketing/Contact";
 import { CostDemo } from "@/components/marketing/CostDemo";
 import { Faq } from "@/components/marketing/Faq";
 import { Footer } from "@/components/marketing/Footer";
@@ -41,6 +42,7 @@ export default function LandingPage() {
         <StatsDemo />
         <Faq />
         <Signup />
+        <Contact />
         </StackedSections>
       </main>
       <div className="relative z-[1]">

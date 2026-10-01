@@ -36,6 +36,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
         if (typeof body.code === "string") code = body.code;
         if (body.details && typeof body.details === "object") details = body.details as Record<string, unknown>;
       }
+    } else if (clientFastifyError(exception)) {
+      // Errores de Fastify del lado del cliente (no es multipart, archivo muy grande…): no son un 500.
+      status = HttpStatus.BAD_REQUEST;
+      message = fastifyClientMessage(String(exception.code));
+      code = String(exception.code);
     } else if (exception instanceof Error) {
       this.logger.error(exception.message, exception.stack);
       const code = "code" in exception && exception.code != null ? String(exception.code) : "";
@@ -72,4 +77,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
       tenantId: user?.tenantId ?? null,
     });
   }
+}
+
+type FastifyClientError = Error & { code: string; statusCode: number };
+
+function clientFastifyError(exception: unknown): exception is FastifyClientError {
+  if (!(exception instanceof Error)) return false;
+  const { code, statusCode } = exception as Partial<FastifyClientError>;
+  return typeof code === "string" && code.startsWith("FST_") && typeof statusCode === "number" && statusCode >= 400 && statusCode < 500;
+}
+
+function fastifyClientMessage(code: string): string {
+  if (code === "FST_INVALID_MULTIPART_CONTENT_TYPE") return "Falta el archivo: mandalo como formulario (multipart)";
+  if (code === "FST_REQ_FILE_TOO_LARGE" || code === "FST_FILES_LIMIT" || code === "FST_PARTS_LIMIT") return "El archivo es demasiado grande";
+  return "El pedido no tiene el formato esperado";
 }

@@ -8,6 +8,8 @@ import PlanComparison from "@/components/subscription/PlanComparison";
 import { invalidateMyProviders, subscriptionApi } from "@/lib/api";
 import { formatUsd, PLAN_CATALOG, type MySubscription, type TenantPlan } from "@/lib/plans";
 import { invalidateSubscription, useSubscription } from "@/lib/subscription";
+import WhatsAppButton from "@/components/WhatsAppButton";
+import { NODO_WHATSAPP_LABEL } from "@/lib/contact";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
@@ -100,8 +102,8 @@ function StatusNotice({ sub }: { sub: MySubscription }) {
         <div className="text-sm text-surface-100">
           <p className="font-semibold text-white">Tu cuenta está suspendida</p>
           <p className="mt-1 text-surface-300">
-            No se borró ningún dato. Podés ver tus pedidos, proveedores y equipo; para volver a buscar y comprar, regularizá el
-            pago. Apenas se registre, NODO vuelve a funcionar.
+            No se borró ningún dato. Podés ver tus pedidos, proveedores y equipo; para volver a buscar y comprar, coordiná el
+            pago con nosotros. Apenas lo registramos, NODO vuelve a funcionar.
           </p>
         </div>
       </div>
@@ -112,7 +114,7 @@ function StatusNotice({ sub }: { sub: MySubscription }) {
       <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-300" />
         <div className="text-sm">
-          <p className="font-semibold text-white">Tu suscripción venció. Regularizá el pago para mantener NODO activo.</p>
+          <p className="font-semibold text-white">Tu suscripción venció. Coordiná el pago para mantener NODO activo.</p>
           <p className="mt-1 text-surface-300">
             {sub.suspendsAt ? `Seguís operando normalmente hasta el ${fmtDate(sub.suspendsAt)}.` : "Seguís operando normalmente por unos días."}
           </p>
@@ -302,7 +304,7 @@ function PaymentNotice({ sub, onMessage }: { sub: MySubscription; onMessage: (m:
       setOpen(false);
       setReference("");
       setMessage("");
-      onMessage({ ok: true, text: "Gracias. Avisamos a NODO: apenas se confirme el pago se actualiza tu suscripción." });
+      onMessage({ ok: true, text: "Recibimos tu aviso y ya le llegó al equipo de NODO. Apenas confirmemos el pago se actualiza tu suscripción." });
     } catch (err) {
       onMessage({ ok: false, text: errMsg(err, "No se pudo enviar el aviso") });
     } finally {
@@ -314,18 +316,24 @@ function PaymentNotice({ sub, onMessage }: { sub: MySubscription; onMessage: (m:
     <section className={`rounded-2xl border p-5 ${urgent ? "border-amber-500/30" : "border-surface-800"}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">¿Ya pagaste?</h2>
-          <p className="mt-1 text-xs text-surface-400">Avisanos con el número de transferencia o comprobante y lo registramos.</p>
+          <h2 className="text-sm font-semibold text-white">Coordinemos el pago</h2>
+          <p className="mt-1 text-xs text-surface-400 max-w-[60ch]">
+            Por ahora el pago se arregla directo con NODO: escribinos por WhatsApp al {NODO_WHATSAPP_LABEL} y te pasamos los
+            datos. Si ya pagaste, informalo con el número de transferencia o comprobante y lo registramos.
+          </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <WhatsAppButton forPayment size="sm" label="Coordinar por WhatsApp" />
         {!open && (
           <button
             type="button"
             onClick={() => setOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-xl border border-surface-700 px-3 py-1.5 text-xs text-surface-200 hover:bg-surface-800"
           >
-            <Send className="h-3.5 w-3.5" /> Informar un pago
+            <Send className="h-3.5 w-3.5" /> Ya pagué
           </button>
         )}
+        </div>
       </div>
       {open && (
         <div className="mt-4 grid gap-3">

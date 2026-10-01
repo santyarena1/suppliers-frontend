@@ -781,3 +781,66 @@ es `mercadopago`, la respuesta puede traer `mercadopagoUrl`.
 
 Historial de pedidos creados desde Nodo.
 
+
+## Solicitudes — contacto, distribuidores/marcas y bandeja del superadmin
+
+Todo lo que alguien le pide o avisa a NODO queda en `InboxRequest` y además llega por
+mail a `ADMIN_NOTIFY_EMAIL` (si no está, `santyarena01@gmail.com`). Se cargan solas al
+registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription/request`
+(pedido de plan) y con `POST /my/subscription/payment-notice` (aviso de pago).
+
+### [FEATURE] Formulario de contacto de la landing
+- **Método**: POST
+- **Ruta**: /contact
+- **Auth**: no requerido. Exige el header `x-turnstile-token` (Cloudflare Turnstile). Límite: 5 cada 10 minutos por IP.
+- **Body / Params**: `{ kind?: "CONTACT"|"CUSTOM"|"SUPPLIER"|"BRAND"|"PAYMENT", name (2..80), email, phone?, company?, message (5..2000) }`
+- **Respuesta esperada**: `{ "received": true }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: `CUSTOM` entra como pedido de plan, `SUPPLIER`/`BRAND` como "Distribuidor o marca", `PAYMENT` como aviso de pago. 403 `HUMAN_CHECK_REQUIRED` sin token válido; 429 por límite.
+
+### [FEATURE] "Soy distribuidor / marca" en el alta
+- **Método**: POST
+- **Ruta**: /my/join-request
+- **Auth**: Bearer token requerido (usuario sin organización, desde /onboarding)
+- **Body / Params**: `{ kind: "SUPPLIER"|"BRAND", company (2..120), phone?, website?, message? }`
+- **Respuesta esperada**: `{ "received": true }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: no crea organización. Nombre y mail salen de la cuenta.
+
+### [FEATURE] Bandeja "Solicitudes" (Administración)
+- **Método**: GET
+- **Ruta**: /admin/inbox?status=NEW|HANDLED|ARCHIVED&type=SIGNUP|NEW_STORE|PAYMENT_NOTICE|PLAN_REQUEST|SUPPLIER_JOIN|CONTACT&page=1
+- **Auth**: Bearer token requerido, ROLE_ADMIN
+- **Respuesta esperada**:
+```json
+{
+  "items": [{
+    "id": "uuid", "createdAt": "…", "type": "PAYMENT_NOTICE", "status": "NEW",
+    "title": "Tecno Sur avisa que pagó", "message": "…",
+    "contactName": "…", "contactEmail": "…", "contactPhone": "…", "company": "…",
+    "tenantId": "…", "tenantName": "Tecno Sur", "userId": "…",
+    "data": { "Nº de operación": "123456" },
+    "note": null, "handledAt": null, "emailedAt": "…"
+  }],
+  "total": 1, "page": 1, "pageSize": 50,
+  "pending": 3, "pendingByType": { "SIGNUP": 0, "NEW_STORE": 1, "PAYMENT_NOTICE": 1, "PLAN_REQUEST": 1, "SUPPLIER_JOIN": 0, "CONTACT": 0 }
+}
+```
+- **Estado**: IMPLEMENTADO
+- **Notas**: `data` es clave → valor ya rotulado para mostrar tal cual.
+
+### [FEATURE] Pendientes de la bandeja
+- **Método**: GET
+- **Ruta**: /admin/inbox/pending
+- **Auth**: Bearer token requerido, ROLE_ADMIN
+- **Respuesta esperada**: `{ "pending": 3 }`
+- **Estado**: IMPLEMENTADO
+
+### [FEATURE] Atender, archivar o reabrir una solicitud
+- **Método**: PATCH
+- **Ruta**: /admin/inbox/:id
+- **Auth**: Bearer token requerido, ROLE_ADMIN
+- **Body / Params**: `{ status?: "NEW"|"HANDLED"|"ARCHIVED", note?: string|null }`
+- **Respuesta esperada**: la solicitud actualizada (mismo formato que `items[]`, sin `tenantName`).
+- **Estado**: IMPLEMENTADO
+- **Notas**: `HANDLED`/`ARCHIVED` guardan `handledAt` y quién; volver a `NEW` los limpia.

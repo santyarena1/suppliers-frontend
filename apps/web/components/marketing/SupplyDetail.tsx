@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import type { SupplyAudience } from "@/lib/marketing-supply";
+import { Contact } from "./Contact";
 import { Footer } from "./Footer";
 import { Nav } from "./Nav";
 import { PageField } from "./PageField";
@@ -27,10 +28,10 @@ export function SupplyDetail({ audience, preview }: { audience: SupplyAudience; 
               <h1 className="nl-h1 mt-3">{audience.title}</h1>
               <p className="nl-lead mt-6">{audience.intro}</p>
               <div className="mt-9 flex flex-wrap items-center gap-3">
-                <a href="/landing#probar" className="nl-btn nl-btn--primary">
-                  Crear cuenta <ArrowRight className="h-4 w-4" aria-hidden />
+                <a href="#contacto" className="nl-btn nl-btn--primary">
+                  Quiero sumarme <ArrowRight className="h-4 w-4" aria-hidden />
                 </a>
-                <span className="text-sm text-[var(--fg-3)]">Creás la cuenta y te habilitamos el espacio.</span>
+                <span className="text-sm text-[var(--fg-3)]">Nos dejás tus datos y te habilitamos el espacio.</span>
               </div>
             </Reveal>
             <Reveal delay={120}>{preview}</Reveal>
@@ -71,13 +72,13 @@ export function SupplyDetail({ audience, preview }: { audience: SupplyAudience; 
                 <div>
                   <h2 className="nl-h2">Sumate a NODO</h2>
                   <p className="nl-body mt-3 max-w-[52ch]">
-                    El plan para {audience.kind} lo armamos con vos, según tu canal. Creás la cuenta y te habilitamos el
-                    espacio.
+                    El plan para {audience.kind} lo armamos con vos, según tu canal. Nos dejás tus datos, te contactamos y te
+                    habilitamos el espacio.
                   </p>
                 </div>
                 <div className="flex flex-col items-start gap-3">
-                  <a href="/landing#probar" className="nl-btn nl-btn--primary">
-                    Crear cuenta <ArrowRight className="h-4 w-4" aria-hidden />
+                  <a href="#contacto" className="nl-btn nl-btn--primary">
+                    Quiero sumarme <ArrowRight className="h-4 w-4" aria-hidden />
                   </a>
                   <Link href={other.href} className="text-sm text-[var(--fg-2)] underline underline-offset-4 hover:text-white">
                     Ver {other.label}
@@ -87,6 +88,11 @@ export function SupplyDetail({ audience, preview }: { audience: SupplyAudience; 
             </Reveal>
           </div>
         </section>
+
+        <Contact
+          defaultKind={audience.kind === "marcas" ? "BRAND" : "SUPPLIER"}
+          title={audience.kind === "marcas" ? "Sumá tu marca a NODO" : "Sumate como distribuidor"}
+        />
       </main>
       <div className="relative z-[1]">
         <Footer />

@@ -15,15 +15,18 @@ import AdminAdsPanel from "@/components/admin/AdminAdsPanel";
 import AdminNewsPanel from "@/components/admin/AdminNewsPanel";
 import SubscriptionsPanel from "@/components/admin/SubscriptionsPanel";
 import SystemHealthPanel from "@/components/admin/health/SystemHealthPanel";
+import InboxPanel from "@/components/admin/inbox/InboxPanel";
+import { inboxApi } from "@/lib/inbox";
 import {
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
-  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone, Newspaper, CreditCard, HeartPulse,
+  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone, Newspaper, CreditCard, HeartPulse, Inbox,
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "health" | "organizations" | "subscriptions" | "retail" | "catalog" | "images" | "ads" | "news" | "diagnostics";
+type Tab = "inbox" | "health" | "organizations" | "subscriptions" | "retail" | "catalog" | "images" | "ads" | "news" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
+  { key: "inbox", label: "Solicitudes", icon: <Inbox className="w-3.5 h-3.5" /> },
   { key: "health", label: "Salud del sistema", icon: <HeartPulse className="w-3.5 h-3.5" /> },
   { key: "organizations", label: "Directorio", icon: <Network className="w-3.5 h-3.5" /> },
   { key: "subscriptions", label: "Suscripciones", icon: <CreditCard className="w-3.5 h-3.5" /> },
@@ -35,7 +38,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
-const TAB_KEYS: Tab[] = ["health", "organizations", "subscriptions", "retail", "catalog", "images", "ads", "news", "diagnostics"];
+const TAB_KEYS: Tab[] = ["inbox", "health", "organizations", "subscriptions", "retail", "catalog", "images", "ads", "news", "diagnostics"];
 const LEGACY_TABS = new Set(["users", "permissions"]);
 
 export default function AdminPage() {
@@ -54,6 +57,12 @@ function AdminPageInner() {
     raw && TAB_KEYS.includes(raw as Tab) ? (raw as Tab) : "organizations";
   const [tab, setTab] = useState<Tab>(initial);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [inboxPending, setInboxPending] = useState(0);
+
+  useEffect(() => {
+    if (!isAdmin()) return;
+    inboxApi.pending().then((res) => setInboxPending(res.data.pending)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!isAdmin()) router.replace("/search");
@@ -111,6 +120,9 @@ function AdminPageInner() {
                 }`}
               >
                 {icon}{label}
+                {key === "inbox" && inboxPending > 0 && (
+                  <span className="rounded-full bg-brand-500 px-1.5 text-[10px] font-semibold leading-4 text-white tabular-nums">{inboxPending}</span>
+                )}
               </button>
             ))}
           </div>
@@ -132,6 +144,7 @@ function AdminPageInner() {
             {tab === "news" && <AdminNewsPanel showToast={showToast} />}
             {tab === "diagnostics" && <DiagnosticsPanel />}
             {tab === "health" && <SystemHealthPanel />}
+            {tab === "inbox" && <InboxPanel showToast={showToast} onPendingChange={setInboxPending} />}
           </div>
 
       {toast && (

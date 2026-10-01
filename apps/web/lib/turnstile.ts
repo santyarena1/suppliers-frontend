@@ -8,7 +8,7 @@
 export const TURNSTILE_SITE_KEY = (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "").trim();
 
 /** Rutas del API que exigen el token. */
-export const HUMAN_ROUTES = ["/auth/login", "/auth/register", "/auth/verify-email", "/auth/resend-verification"];
+export const HUMAN_ROUTES = ["/auth/login", "/auth/register", "/auth/verify-email", "/auth/resend-verification", "/contact"];
 
 /** Cuánto se espera al widget antes de mandar igual (el API decide). */
 const WAIT_MS = 10_000;

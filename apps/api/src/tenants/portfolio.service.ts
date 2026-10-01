@@ -198,8 +198,9 @@ export class PortfolioService {
         { name: link.clientTenant.name, linkId: link.id, status: link.status },
       ])
     );
+    const provider = await this.ownProvider(tenant);
     const rows = await this.prisma.providerOrder.findMany({
-      where: { tenantId: { in: [...byClient.keys()] } },
+      where: { tenantId: { in: [...byClient.keys()] }, provider },
       orderBy: { createdAt: "desc" },
       take: 200,
       include: {
@@ -221,6 +222,18 @@ export class PortfolioService {
         inBrandScope: inScopeIds.has(row.id),
       };
     });
+  }
+
+  /**
+   * El proveedor que es esta organización. El distribuidor solo ve los pedidos
+   * que el cliente le hizo a él, nunca lo que le compra a la competencia.
+   * Sin proveedor asignado no ve ninguno ("" no coincide con ningún pedido).
+   */
+  private async ownProvider(tenant: TenantContext): Promise<string> {
+    const ids = [...new Set([tenant.tenantId, tenant.commercialTenantId])];
+    const rows = await this.prisma.tenant.findMany({ where: { id: { in: ids } }, select: { id: true, providerKey: true } });
+    const own = rows.find((r) => r.id === tenant.tenantId)?.providerKey;
+    return own ?? rows.find((r) => r.id === tenant.commercialTenantId)?.providerKey ?? "";
   }
 
   private assertDistributor(tenant: TenantContext) {
@@ -264,10 +277,11 @@ export class PortfolioService {
   ) {
     const stats = new Map<string, { count: number; lastAt: string | null; lastTotal: number | null }>();
     if (clientIds.length === 0) return stats;
+    const provider = await this.ownProvider(tenant);
 
     if (tenant.tenantRole === "PRODUCT_MANAGER" && !opts?.ignorePmScope) {
       const rows = await this.prisma.providerOrder.findMany({
-        where: { tenantId: { in: clientIds } },
+        where: { tenantId: { in: clientIds }, provider },
         orderBy: { createdAt: "desc" },
         take: 1000,
         select: { id: true, tenantId: true, provider: true, items: true, createdAt: true, total: true },
@@ -290,7 +304,7 @@ export class PortfolioService {
 
     const grouped = await this.prisma.providerOrder.groupBy({
       by: ["tenantId"],
-      where: { tenantId: { in: clientIds } },
+      where: { tenantId: { in: clientIds }, provider },
       _count: { id: true },
       _max: { createdAt: true },
     });
@@ -301,7 +315,7 @@ export class PortfolioService {
       lastIds.length === 0
         ? []
         : await this.prisma.providerOrder.findMany({
-            where: { tenantId: { in: clientIds }, createdAt: { in: lastIds } },
+            where: { tenantId: { in: clientIds }, provider, createdAt: { in: lastIds } },
             select: { tenantId: true, createdAt: true, total: true },
           });
     for (const row of grouped) {
@@ -318,8 +332,9 @@ export class PortfolioService {
   }
 
   private async ordersOf(tenant: TenantContext, clientTenantId: string, scope?: "brands" | "all") {
+    const provider = await this.ownProvider(tenant);
     const rows = await this.prisma.providerOrder.findMany({
-      where: { tenantId: clientTenantId },
+      where: { tenantId: clientTenantId, provider },
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {

@@ -3,7 +3,9 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Optional,
 } from "@nestjs/common";
+import { InboxService } from "../inbox/inbox.service";
 import { Prisma, type TenantRole as PrismaTenantRole } from "@prisma/client";
 import {
   TENANT_PLAN_DESCRIPTIONS,
@@ -29,7 +31,8 @@ export class OnboardingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
-    private readonly tenantContext: TenantContextService
+    private readonly tenantContext: TenantContextService,
+    @Optional() private readonly inbox?: InboxService
   ) {}
 
   async status(userId: string) {
@@ -172,6 +175,13 @@ export class OnboardingService {
       ? { plan, mode: "COURTESY", courtesyReason: "Preview del onboarding (superadmin)" }
       : { plan, mode: "TRIAL" };
     const tenant = await this.prisma.$transaction(async (tx) => {
+      // Doble click o dos pestañas: el segundo espera al primero y ve que ya tiene organización.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`onboarding:${userId}`}))`;
+      const already = await tx.tenantMembership.findFirst({
+        where: { userId, active: true, tenant: { active: true } },
+        select: { id: true },
+      });
+      if (already) throw new ConflictException("Ya pertenecés a una organización");
       const created = await tx.tenant.create({
         data: {
           name,
@@ -196,6 +206,20 @@ export class OnboardingService {
     });
 
     await this.seedDemoSandbox(tenant.id, userId);
+
+    if (!preview) {
+      void this.inbox?.record({
+        type: "NEW_STORE",
+        title: `Nuevo comercio: ${tenant.name}`,
+        company: tenant.name,
+        contactName: user.username,
+        contactEmail: tenant.contactEmail ?? user.email,
+        contactPhone: tenant.contactPhone,
+        tenantId: tenant.id,
+        userId,
+        data: { Plan: TENANT_PLAN_LABELS[plan], Estado: "Prueba gratis de 14 días" },
+      });
+    }
 
     const { token } = await this.auth.issueTokenForUserId(userId);
     const status = await this.status(userId);

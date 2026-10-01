@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Lock } from "lucide-react";
 import { useSubscription } from "@/lib/subscription";
+import WhatsAppButton from "@/components/WhatsAppButton";
 
 /** Pantallas que son operación pura: con la cuenta suspendida no tienen nada para mostrar. */
 const OPERATIONAL = ["/search", "/comparador", "/cart", "/mensajes"];
@@ -31,14 +32,15 @@ export default function SuspendedGate({ children }: { children: React.ReactNode 
         <h1 className="text-xl font-semibold text-white">Tu cuenta de NODO está suspendida</h1>
         <p className="mt-3 text-sm text-surface-300">
           No se borró nada: tus proveedores, credenciales, listas, pedidos y equipo siguen tal cual. Mientras tanto
-          podés entrar, ver tus datos y tu suscripción. Cuando se registre el pago, todo vuelve a funcionar al instante.
+          podés entrar, ver tus datos y tu suscripción. Escribinos para coordinar el pago: apenas lo registramos, todo vuelve a funcionar al instante.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <WhatsAppButton forPayment label="Coordinar el pago" />
           <Link
             href="/suscripcion"
             className="inline-flex items-center rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500"
           >
-            Regularizar suscripción
+            Ver mi suscripción
           </Link>
           <Link
             href="/pedidos"

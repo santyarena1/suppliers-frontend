@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -13,6 +14,7 @@ import * as argon2 from "argon2";
 import type { JwtPayload, UserRole } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { MailService } from "../mail/mail.service";
+import { InboxService } from "../inbox/inbox.service";
 import { TenantContextService } from "../tenants/tenant-context.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
@@ -44,7 +46,8 @@ export class AuthService {
     private readonly tenantContext: TenantContextService,
     private readonly mail: MailService,
     private readonly google: GoogleTokenVerifier,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    @Optional() private readonly inbox?: InboxService
   ) {}
 
   async register(dto: RegisterDto) {
@@ -75,6 +78,15 @@ export class AuthService {
     const passwordHash = await argon2.hash(dto.password);
     const user = await this.prisma.user.create({
       data: { username, email, passwordHash },
+    });
+    void this.inbox?.record({
+      type: "SIGNUP",
+      title: `${user.username} se registró`,
+      contactName: user.username,
+      contactEmail: user.email,
+      userId: user.id,
+      data: { Alta: "Usuario y contraseña" },
+      notify: false,
     });
     await this.issueVerificationCode(user.id, user.email, user.username);
     return { id: user.id, username: user.username, email: user.email, needsVerification: true };
@@ -194,6 +206,15 @@ export class AuthService {
           googleId: profile.googleId,
           emailVerifiedAt: new Date(),
         },
+      });
+      void this.inbox?.record({
+        type: "SIGNUP",
+        title: `${user.username} se registró`,
+        contactName: user.username,
+        contactEmail: user.email,
+        userId: user.id,
+        data: { Alta: "Google" },
+        notify: false,
       });
     }
 

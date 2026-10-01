@@ -1,3 +1,4 @@
+import { forgetSession } from "../auth/jwt.strategy";
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import * as argon2 from "argon2";
 import {
@@ -97,6 +98,7 @@ export class AdminService {
       where: { id: userId },
       data: { passwordHash, sessionVersion: { increment: 1 }, failedLoginCount: 0, loginLockedUntil: null },
     });
+    forgetSession(userId);
     return {
       id: userId,
       // Solo cuando la generó la plataforma: es la única vez que puede verse.

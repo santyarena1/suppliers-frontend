@@ -156,54 +156,12 @@ export class TenantContextService {
   }
 
   /**
-   * La organización de la sesión en curso.
-   *
-   * La membresía de la base gana: si se movió al superadmin de un comercio a
-   * otro, un token viejo no lo deja operando el carrito ajeno.
+   * La organización de la sesión en curso. Sale siempre de la membresía en la
+   * base, nunca del token: a quien sacaron del equipo, o cuya organización se
+   * desactivó, el JWT viejo no lo deja seguir operando.
    */
   async fromSession(user: JwtPayload): Promise<TenantContext | null> {
-    const fromDb = await this.forUser(user.userId);
-    if (fromDb) return fromDb;
-    if (!(user.tenantId && user.tenantName && user.tenantType && user.tenantRole)) return null;
-
-    // Respaldo para tokens de antes de las membresías. No revive a quien sacaron
-    // de la organización ni a una organización desactivada.
-    const [stale, tenantRow] = await Promise.all([
-      this.prisma.tenantMembership.findFirst({ where: { userId: user.userId, tenantId: user.tenantId }, select: { id: true } }),
-      this.prisma.tenant.findUnique({
-        where: { id: user.tenantId },
-        select: { active: true, plan: true, subscription: { select: SUBSCRIPTION_DATES_SELECT } },
-      }),
-    ]);
-    if (stale || !tenantRow?.active) return null;
-
-    const roleOverrides =
-      user.tenantRole === "OWNER"
-        ? []
-        : await this.prisma.tenantRolePermission.findMany({
-            where: { tenantId: user.tenantId, role: user.tenantRole },
-            select: { permission: true, allowed: true },
-          });
-    return {
-      userId: user.userId,
-      tenantId: user.tenantId,
-      tenantName: user.tenantName,
-      tenantType: user.tenantType,
-      tenantRole: user.tenantRole,
-      membershipId: null,
-      permissions: resolvePermissions({
-        type: user.tenantType,
-        role: user.tenantRole,
-        roleOverrides: toOverrides(roleOverrides),
-      }),
-      commercialTenantId: user.commercialTenantId ?? user.tenantId,
-      entitlements: resolveEntitlements({
-        tenantType: user.tenantType,
-        plan: (tenantRow.plan ?? "PRO") as TenantPlan,
-        subscription: toSubscriptionDates(tenantRow.subscription),
-        platformAdmin: user.role === "ROLE_ADMIN" && !user.impersonatedBy,
-      }),
-    };
+    return this.forUser(user.userId);
   }
 
   async requireFromSession(user: JwtPayload): Promise<TenantContext> {

@@ -2313,3 +2313,33 @@ model ApiErrorEvent {
 
   @@index([createdAt])
 }
+
+/// Bandeja "Solicitudes" del superadmin: todo lo que alguien le pide o avisa a
+/// NODO (altas, avisos de pago, cambios de plan, distribuidores y marcas que
+/// quieren sumarse, consultas de la landing). Cada alta manda además un mail a
+/// ADMIN_NOTIFY_EMAIL. Lo escribe inbox/inbox.service.ts.
+model InboxRequest {
+  id           String    @id @default(uuid())
+  createdAt    DateTime  @default(now())
+  /// SIGNUP | NEW_STORE | PAYMENT_NOTICE | PLAN_REQUEST | SUPPLIER_JOIN | CONTACT
+  type         String
+  /// NEW | HANDLED | ARCHIVED
+  status       String    @default("NEW")
+  title        String
+  message      String?
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+  company      String?
+  tenantId     String?
+  userId       String?
+  data         Json?
+  /// Nota interna de quien la atendió.
+  note         String?
+  handledAt    DateTime?
+  handledById  String?
+  emailedAt    DateTime?
+
+  @@index([status, createdAt])
+  @@index([type, createdAt])
+}

@@ -1,3 +1,4 @@
+import { forgetSession } from "../auth/jwt.strategy";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -79,8 +80,10 @@ export class UsersService {
     }
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: { active },
+      // Desactivar cierra también las sesiones abiertas: al reactivar no reviven tokens viejos.
+      data: active ? { active } : { active, sessionVersion: { increment: 1 } },
     });
+    forgetSession(userId);
     return { id: user.id, active: user.active };
   }
 
@@ -90,6 +93,7 @@ export class UsersService {
       where: { id: userId },
       data: { endDate: endDate ? new Date(endDate) : null },
     });
+    forgetSession(userId);
     return { id: user.id, endDate: user.endDate };
   }
 

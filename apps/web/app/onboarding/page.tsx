@@ -15,6 +15,7 @@ import { archivo, chivoMono } from "@/app/(marketing)/fonts";
 import "../(marketing)/landing.css";
 import "./onboarding.css";
 import { clearTrialPlan, readTrialPlan } from "@/lib/trial-plan";
+import SupplierJoinCard from "@/components/onboarding/SupplierJoinCard";
 
 /** Lo que viene después de crear el comercio (la guía corre dentro de la app). */
 const NEXT_UP = [
@@ -38,6 +39,8 @@ function OnboardingInner() {
   const [orgName, setOrgName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  /** Comercio (crea la organización) o distribuidor / marca (deja una solicitud). */
+  const [audience, setAudience] = useState<"RETAILER" | "SUPPLIER">("RETAILER");
 
   const load = useCallback(async () => {
     setError("");
@@ -69,6 +72,7 @@ function OnboardingInner() {
 
   async function bootstrap(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -147,13 +151,16 @@ function OnboardingInner() {
 
       <div className="ob__layout">
         <aside className="ob__rail">
-          <p className="lnd-label">{status?.preview ? "Preview superadmin" : "Plan PRO"}</p>
-          <h1 className="lnd-display lnd-display--md">Creá tu comercio</h1>
+          <p className="lnd-label">{status?.preview ? "Preview superadmin" : audience === "SUPPLIER" ? "Distribuidores y marcas" : "Prueba gratis"}</p>
+          <h1 className="lnd-display lnd-display--md">{audience === "SUPPLIER" ? "Sumate a NODO" : "Creá tu comercio"}</h1>
           <p className="lnd-body ob__lead">
             {status?.preview
               ? "Estás probando el alta desde cero. Al terminar volvés a Administración."
+              : audience === "SUPPLIER"
+              ? "Tu espacio para vender en NODO lo armamos con vos. Dejanos tus datos y te contactamos en menos de 24 h hábiles."
               : "Es un solo paso. Después te mostramos la app con dos distribuidores de prueba, en 2 minutos."}
           </p>
+          {audience === "RETAILER" && (
           <ol className="ob__steps">
             <li>
               <span className="ob__step is-active">
@@ -170,6 +177,7 @@ function OnboardingInner() {
               </li>
             ))}
           </ol>
+          )}
         </aside>
 
         <section className="ob__stage">
@@ -180,6 +188,20 @@ function OnboardingInner() {
             </p>
           )}
 
+          {!status?.preview && (
+            <div className="lnd-seg ob__audience" role="group" aria-label="Qué tipo de empresa sos">
+              <button type="button" aria-pressed={audience === "RETAILER"} onClick={() => setAudience("RETAILER")}>
+                Tengo un comercio
+              </button>
+              <button type="button" aria-pressed={audience === "SUPPLIER"} onClick={() => setAudience("SUPPLIER")}>
+                Soy distribuidor / marca
+              </button>
+            </div>
+          )}
+
+          {audience === "SUPPLIER" && !status?.preview ? (
+            <SupplierJoinCard defaultEmail={contactEmail || undefined} />
+          ) : (
           <form className="lnd-panel lnd-panel--sheer ob__card" onSubmit={bootstrap}>
             <p className="lnd-label">Paso 01 · Organización</p>
             <h2 className="ob__card-title">¿Cómo se llama tu local?</h2>
@@ -227,6 +249,7 @@ function OnboardingInner() {
               Te cargamos dos distribuidores de prueba con productos y pedidos de ejemplo. Nada se le manda a nadie.
             </p>
           </form>
+          )}
         </section>
       </div>
     </main>

@@ -47,48 +47,12 @@ describe("TenantContextService.forUser · permisos", () => {
   });
 });
 
-describe("TenantContextService.fromSession · respaldo del JWT", () => {
-  const session = {
-    userId: "u1",
-    tenantId: "t1",
-    tenantName: "Local Uno",
-    tenantType: "RETAILER",
-    tenantRole: "ADMIN",
-  } as never;
-
-  function fallbackService(opts: { tenantActive: boolean; staleMembership: boolean; roleOverrides?: unknown[] }) {
-    const prisma = {
-      tenantMembership: {
-        findFirst: jest
-          .fn()
-          // 1ª consulta: membresía activa (no hay) · 2ª: cualquier membresía en ese tenant.
-          .mockResolvedValueOnce(null)
-          .mockResolvedValueOnce(opts.staleMembership ? { id: "m-vieja" } : null),
-      },
-      tenant: { findUnique: jest.fn().mockResolvedValue({ active: opts.tenantActive }) },
-      tenantRolePermission: { findMany: jest.fn().mockResolvedValue(opts.roleOverrides ?? []) },
-    };
-    return new TenantContextService(prisma as never);
-  }
-
-  it("no revive la sesión si la organización fue desactivada", async () => {
-    const ctx = await fallbackService({ tenantActive: false, staleMembership: false }).fromSession(session);
+describe("TenantContextService.fromSession", () => {
+  it("sin membresía en la base no hay organización, aunque el token diga otra cosa", async () => {
+    const prisma = { tenantMembership: { findFirst: jest.fn().mockResolvedValue(null) } };
+    const session = { userId: "u1", tenantId: "t1", tenantName: "Local Uno", tenantType: "RETAILER", tenantRole: "ADMIN" } as never;
+    const ctx = await new TenantContextService(prisma as never).fromSession(session);
     expect(ctx).toBeNull();
-  });
-
-  it("no revive la sesión de alguien a quien sacaron de la organización", async () => {
-    const ctx = await fallbackService({ tenantActive: true, staleMembership: true }).fromSession(session);
-    expect(ctx).toBeNull();
-  });
-
-  it("si aplica, respeta las restricciones que cargó el dueño para el rol", async () => {
-    const ctx = await fallbackService({
-      tenantActive: true,
-      staleMembership: false,
-      roleOverrides: [{ permission: "providers.manage", allowed: false }],
-    }).fromSession(session);
-    expect(ctx?.permissions).toContain("orders.approve");
-    expect(ctx?.permissions).not.toContain("providers.manage");
   });
 });
 

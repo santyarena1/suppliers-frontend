@@ -398,3 +398,8 @@
     animation: none !important;
   }
 }
+
+/* Comercio o distribuidor / marca, arriba de la tarjeta del alta. */
+.ob__audience {
+  margin-bottom: 0.9rem;
+}

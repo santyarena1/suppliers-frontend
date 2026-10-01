@@ -22,10 +22,19 @@ function streamQueryToken(req: { url?: string; query?: Record<string, unknown> }
 
 type SessionState = { active: boolean; endDate: Date | null; sessionVersion: number; at: number };
 
+/** Estado recordado por usuario. Un solo mapa por proceso, para poder olvidarlo al instante. */
+const sessionCache = new Map<string, SessionState>();
+
+/**
+ * Se llama al cambiar algo que corta sesiones (clave nueva, desactivar, sacar del
+ * equipo): el próximo request vuelve a la base en vez de esperar 30 s.
+ */
+export function forgetSession(userId: string): void {
+  sessionCache.delete(userId);
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  private readonly cache = new Map<string, SessionState>();
-
   constructor(
     config: ConfigService,
     private readonly prisma: PrismaService
@@ -42,7 +51,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * sesión no tiene que haber sido cerrada (contraseña nueva sube la versión).
    */
   async validate(payload: JwtPayload): Promise<JwtPayload> {
-    const state = await this.sessionState(payload.userId);
+    const state = await this.sessionState(payload.userId, payload.sv ?? 0);
     if (!state || !state.active) throw new UnauthorizedException("Tu sesión ya no es válida. Volvé a entrar.");
     if (state.endDate && state.endDate.getTime() < Date.now()) {
       throw new UnauthorizedException("La cuenta venció");
@@ -53,20 +62,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return payload;
   }
 
-  private async sessionState(userId: string): Promise<SessionState | null> {
-    const hit = this.cache.get(userId);
-    if (hit && Date.now() - hit.at < SESSION_CACHE_MS) return hit;
+  private async sessionState(userId: string, tokenVersion: number): Promise<SessionState | null> {
+    const hit = sessionCache.get(userId);
+    // Un token más nuevo que lo recordado (recién reseteó la clave en otra instancia) obliga a releer.
+    if (hit && Date.now() - hit.at < SESSION_CACHE_MS && tokenVersion <= hit.sessionVersion) return hit;
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { active: true, endDate: true, sessionVersion: true },
     });
     if (!user) {
-      this.cache.delete(userId);
+      sessionCache.delete(userId);
       return null;
     }
     const state = { ...user, at: Date.now() };
-    if (this.cache.size > 5000) this.cache.clear();
-    this.cache.set(userId, state);
+    if (sessionCache.size > 5000) sessionCache.clear();
+    sessionCache.set(userId, state);
     return state;
   }
 }

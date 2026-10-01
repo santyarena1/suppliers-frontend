@@ -286,3 +286,69 @@
   }
   .lnd-reveal { opacity: 1; transform: none; }
 }
+
+/* --- Selector segmentado (tipo de consulta, comercio / distribuidor) --- */
+.lnd-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  border: 1px solid var(--hair);
+  border-radius: 6px;
+  background: rgb(11 13 26 / 0.55);
+}
+.lnd-seg button {
+  flex: 1 1 auto;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 4px;
+  color: var(--fg-dim);
+  font-size: 0.85rem;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.lnd-seg button:hover { color: var(--fg); }
+.lnd-seg button[aria-pressed="true"] { background: var(--lilac-deep); color: #fff; }
+.lnd-seg button:focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; }
+
+/* --- WhatsApp: verde reconocible, mismo radio que los botones de la landing --- */
+.lnd-wa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.7rem 1.1rem;
+  border-radius: 4px;
+  background: #1f9d55;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background-color 160ms ease, transform 120ms ease;
+}
+.lnd-wa:hover { background: #23b360; }
+.lnd-wa:active { transform: translateY(1px); }
+
+/* --- Confirmación de un formulario enviado --- */
+.lnd-done {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+.lnd-done__icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(31 157 85 / 0.15);
+  color: #4ade80;
+}
+.lnd-form-error {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 4px;
+  background: rgb(255 106 61 / 0.1);
+  border: 1px solid rgb(255 106 61 / 0.35);
+  color: var(--ember);
+  font-size: 0.88rem;
+}

@@ -50,6 +50,22 @@ const EVENT_LABELS: Record<string, string> = {
   PAYMENT_NOTICE: "Aviso de pago del cliente",
 };
 
+/** Lo que el cliente o Administración escribió en el evento (Nº de operación, comentario, motivo). */
+const EVENT_DATA_LABELS: [string, string][] = [
+  ["reference", "Nº de operación"],
+  ["message", "Comentario"],
+  ["reason", "Motivo"],
+  ["note", "Nota"],
+];
+
+function eventDetails(data: Record<string, unknown> | null | undefined): [string, string][] {
+  if (!data) return [];
+  return EVENT_DATA_LABELS.flatMap(([key, label]) => {
+    const value = data[key];
+    return typeof value === "string" && value.trim() ? [[label, value.trim()] as [string, string]] : [];
+  });
+}
+
 const REMINDER_LABELS: Record<string, string> = {
   UPCOMING_7D: "7 días antes",
   UPCOMING_3D: "3 días antes",
@@ -710,6 +726,11 @@ function SubscriptionDetailDialog({
                         </span>
                       )}
                       {e.actor && <span className="text-surface-500">{e.actor}</span>}
+                      {eventDetails(e.data).map(([label, value]) => (
+                        <span key={label} className="basis-full text-surface-300 whitespace-pre-wrap break-words">
+                          <span className="text-surface-500">{label}:</span> {value}
+                        </span>
+                      ))}
                     </li>
                   ))}
                 </ul>

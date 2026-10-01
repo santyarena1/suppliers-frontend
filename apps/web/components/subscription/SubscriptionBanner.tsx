@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AlertTriangle, Lock } from "lucide-react";
 import { useSubscription } from "@/lib/subscription";
+import WhatsAppButton from "@/components/WhatsAppButton";
 
 /**
  * Aviso de vencimiento para el comercio. Vencida o en gracia sigue operando; con
@@ -32,9 +33,10 @@ export default function SubscriptionBanner() {
         {restricted ? <Lock className="w-4 h-4 text-red-300" /> : <AlertTriangle className="w-4 h-4 text-amber-300" />}
         <p className="text-sm text-white flex-1 min-w-[200px]">
           {restricted
-            ? "Tu cuenta está suspendida. Tus datos siguen intactos: regularizá el pago para volver a operar."
-            : "Tu suscripción venció. Regularizá el pago para mantener NODO activo."}
+            ? "Tu cuenta está suspendida. Tus datos siguen intactos: coordiná el pago con NODO para volver a operar."
+            : "Tu suscripción venció. Coordiná el pago con NODO para mantenerla activa."}
         </p>
+        <WhatsAppButton forPayment size="sm" label="Coordinar pago" />
         <Link
           href="/suscripcion"
           className={`inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${

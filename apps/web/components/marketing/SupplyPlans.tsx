@@ -44,7 +44,9 @@ export function SupplyPlans() {
                   <Link href={a.href} className="nl-btn nl-btn--primary">
                     Ver todo lo que podés hacer <ArrowRight className="h-4 w-4" aria-hidden />
                   </Link>
-                  <span className="text-sm text-[var(--fg-3)]">Precio a medida</span>
+                  <Link href={`${a.href}#contacto`} className="text-sm text-[var(--fg-2)] underline underline-offset-4 hover:text-white">
+                    Pedir precio a medida
+                  </Link>
                 </div>
               </article>
             </Reveal>

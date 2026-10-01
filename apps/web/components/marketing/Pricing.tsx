@@ -6,6 +6,7 @@ import { BASE_SEARCH_LIMIT, PLAN_CATALOG, PLAN_FEATURE_GROUPS, type PlanCell, ty
 import { Reveal } from "./Reveal";
 import { SupplyPlans } from "./SupplyPlans";
 import { rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
+import { announceContactKind } from "@/lib/contact";
 
 interface CardCopy {
   plan: TenantPlan;
@@ -58,11 +59,11 @@ const CARDS: CardCopy[] = [
       "Integración con tu ERP o CRM",
       "Módulos y flujos para tu operación",
       "NODO con la identidad de tu empresa",
-      "Lo pedís desde tu cuenta y te contactamos",
+      "Nos escribís y lo armamos con vos",
     ],
     cta: "Pedir NODO Custom",
     trialPlan: "PRO",
-    trialNote: `Mientras lo armamos, probás Pro ${TRIAL_DAYS} días gratis.`,
+    trialNote: `Te respondemos en 24 h hábiles. Mientras, podés probar Pro ${TRIAL_DAYS} días gratis.`,
   },
 ];
 
@@ -122,8 +123,12 @@ export function Pricing() {
                   </p>
 
                   <a
-                    href="#probar"
+                    href={c.plan === "CUSTOM" ? "#contacto" : "#probar"}
                     onClick={() => {
+                      if (c.plan === "CUSTOM") {
+                        announceContactKind("CUSTOM");
+                        return;
+                      }
                       rememberTrialPlan(c.trialPlan);
                       window.dispatchEvent(new Event("nodo:trial-plan"));
                     }}

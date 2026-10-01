@@ -12,6 +12,26 @@ import { UpsertOrgCartDto } from "./dto/org-cart.dto";
  * El carrito que usa la web es el de la organización: un solo armado por local,
  * visible para el equipo y para el vendedor del distribuidor vinculado.
  */
+type OrgCartPayload = {
+  tenantId: string;
+  items: Prisma.JsonValue[];
+  schemes: Prisma.JsonValue[];
+  updatedByUserId: string | null;
+  updatedAt: string | null;
+};
+
+function providerOf(entry: Prisma.JsonValue): string | null {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
+  const provider = (entry as Record<string, unknown>).provider;
+  return typeof provider === "string" ? provider : null;
+}
+
+/** El carrito del comercio recortado a un proveedor. Sin proveedor asignado, vacío. */
+export function onlyProvider(payload: OrgCartPayload, provider: string | null): OrgCartPayload {
+  const mine = (entry: Prisma.JsonValue) => provider !== null && providerOf(entry) === provider;
+  return { ...payload, items: payload.items.filter(mine), schemes: payload.schemes.filter(mine) };
+}
+
 @Injectable()
 export class CartService {
   constructor(
@@ -42,8 +62,7 @@ export class CartService {
       },
     });
     const payload = this.serializeOrg(row, tenant.tenantId);
-    const watchers = await this.cartWatcherIds(tenant.tenantId);
-    this.hub.emitToUsers(watchers, { type: "cart_updated", data: payload });
+    await this.broadcast(tenant.tenantId, payload);
     return payload;
   }
 
@@ -61,8 +80,11 @@ export class CartService {
     if (tenant.tenantRole === "SELLER" && link.accountManagerId !== tenant.userId) {
       throw new NotFoundException("Cliente no encontrado");
     }
-    const row = await this.prisma.orgCart.findUnique({ where: { tenantId: link.clientTenantId } });
-    return this.serializeOrg(row, link.clientTenantId);
+    const [row, supplier] = await Promise.all([
+      this.prisma.orgCart.findUnique({ where: { tenantId: link.clientTenantId } }),
+      this.prisma.tenant.findUnique({ where: { id: tenant.tenantId }, select: { providerKey: true } }),
+    ]);
+    return onlyProvider(this.serializeOrg(row, link.clientTenantId), supplier?.providerKey ?? null);
   }
 
   private serializeOrg(
@@ -78,16 +100,24 @@ export class CartService {
     };
   }
 
-  private async cartWatcherIds(retailerTenantId: string) {
+  /**
+   * El equipo del comercio recibe el carrito entero. Cada distribuidor vinculado
+   * (sus dueños y el vendedor asignado) recibe solo lo que es suyo: nunca ve lo
+   * que el comercio arma con la competencia.
+   */
+  private async broadcast(retailerTenantId: string, payload: OrgCartPayload) {
     const members = await this.prisma.tenantMembership.findMany({
       where: { tenantId: retailerTenantId, active: true, user: { active: true } },
       select: { userId: true },
     });
+    const memberIds = members.map((m) => m.userId);
+    this.hub.emitToUsers(memberIds, { type: "cart_updated", data: payload });
+
     const links = await this.prisma.tenantLink.findMany({
       where: { clientTenantId: retailerTenantId, status: { in: ["ACTIVE", "SUSPENDED"] } },
-      select: { accountManagerId: true, supplierTenantId: true },
+      select: { accountManagerId: true, supplierTenantId: true, supplierTenant: { select: { providerKey: true } } },
     });
-    const sellerIds = links.map((link) => link.accountManagerId).filter((id): id is string => Boolean(id));
+    if (links.length === 0) return;
     const owners = await this.prisma.tenantMembership.findMany({
       where: {
         tenantId: { in: links.map((link) => link.supplierTenantId) },
@@ -95,9 +125,20 @@ export class CartService {
         role: { in: ["OWNER", "ADMIN"] },
         user: { active: true },
       },
-      select: { userId: true },
+      select: { userId: true, tenantId: true },
     });
-    return [...new Set([...members.map((m) => m.userId), ...sellerIds, ...owners.map((m) => m.userId)])];
+    const already = new Set(memberIds);
+    for (const link of links) {
+      const ids = [
+        ...owners.filter((o) => o.tenantId === link.supplierTenantId).map((o) => o.userId),
+        ...(link.accountManagerId ? [link.accountManagerId] : []),
+      ].filter((id) => !already.has(id));
+      if (ids.length === 0) continue;
+      this.hub.emitToUsers([...new Set(ids)], {
+        type: "cart_updated",
+        data: onlyProvider(payload, link.supplierTenant.providerKey),
+      });
+    }
   }
 
   private assertRetailer(tenant: TenantContext) {
