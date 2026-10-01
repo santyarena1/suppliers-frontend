@@ -338,12 +338,20 @@ export function applyInvidCheckoutTaxes(
   const lineIva = checkout.lineIva;
   if (lineIva != null && lineIva > 0.0001) {
     const unit = round4(lineIva / safeQty);
-    lines.push({
-      kind: "iva",
-      label: "IVA",
-      percent: unitNet > 0 ? round4((unit / unitNet) * 100) : null,
-      unitAmount: unit,
-    });
+    const implied = unitNet > 0 ? (unit / unitNet) * 100 : null;
+    // El portal manda el IVA de la línea; si llega el total del carrito (bug
+    // viejo de `monto − neto`) el % se va a 80–1000 y no es un IVA real.
+    if (implied != null && implied > 30) {
+      const prev = keep("iva");
+      if (prev) lines.push(prev);
+    } else {
+      lines.push({
+        kind: "iva",
+        label: "IVA",
+        percent: implied != null ? round4(implied) : null,
+        unitAmount: unit,
+      });
+    }
   } else {
     const prev = keep("iva");
     if (prev) lines.push(prev);
