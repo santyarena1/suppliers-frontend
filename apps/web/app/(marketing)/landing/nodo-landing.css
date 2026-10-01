@@ -83,7 +83,11 @@
   transform-origin: 50% 0;
 }
 .nl-sheet:first-child { border-radius: 0; border-top: 0; background: none; box-shadow: none; }
-.nl-sheet > section.nl-divider { border-top: 0; }
+.nl-sheet > section/* Línea de un gráfico que se dibuja al aparecer. */
+.nl-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: nl-draw 1.2s var(--ease) forwards; }
+@keyframes nl-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .nl-draw { animation: none; stroke-dashoffset: 0; } }
+.nl-divider { border-top: 0; }
 .nl-divider { border-top: 1px solid var(--line); }
 
 /* Superficies */

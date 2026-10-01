@@ -344,7 +344,12 @@ export interface OnboardingStatus {
 
 export const onboardingApi = {
   status: () => api.get<OnboardingStatus>("/onboarding/status"),
-  bootstrap: (data: { name: string; contactEmail?: string | null; contactPhone?: string | null }) =>
+  bootstrap: (data: {
+    name: string;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    trialPlan?: "BASE" | "PRO";
+  }) =>
     api.post<{
       token: string;
       org: { id: string; name: string; type: TenantType; plan: TenantPlan; planLabel: string };

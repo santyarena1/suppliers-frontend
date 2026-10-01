@@ -76,6 +76,11 @@ const QA: { topic: Topic; q: string; a: string }[] = [
   },
   {
     topic: "cuenta",
+    q: "¿Cómo es la prueba gratis?",
+    a: "Todos los planes arrancan con 14 días gratis. Elegís Base o Pro al crear la cuenta y lo usás completo. Al terminar la prueba elegís el plan para seguir usando NODO.",
+  },
+  {
+    topic: "cuenta",
     q: "¿Puedo cambiar de plan?",
     a: "Cuando quieras, desde Plan y facturación dentro de tu cuenta. Empezás con Base y pasás a Pro el día que quieras comprar sin salir de NODO.",
   },

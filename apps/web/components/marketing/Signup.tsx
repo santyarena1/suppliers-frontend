@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
@@ -9,11 +9,13 @@ import { saveSession, sessionFromToken } from "@/lib/auth";
 import { invalidateMyModules } from "@/lib/permissions";
 import { invalidateTgsEnabled } from "@/lib/tgs";
 import { Reveal } from "./Reveal";
+import { readTrialPlan, rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
 
 /** Con la clave de superadmin, el formulario abre el onboarding en modo preview. */
 const PREVIEW_USER = "superadmin";
 
 const PERKS = [
+  `${TRIAL_DAYS} días gratis con el plan que elijas`,
   "Recorrido guiado con catálogo y pedidos de prueba",
   "Conectás tus distribuidores cuando quieras",
   "Tu equipo entra con sus propios usuarios",
@@ -28,6 +30,20 @@ export function Signup() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const isPreviewLogin = username.trim().toLowerCase() === PREVIEW_USER;
+  const [trialPlan, setTrialPlan] = useState<TrialPlan>("PRO");
+
+  // El plan elegido en las tarjetas de planes llega acá.
+  useEffect(() => {
+    const sync = () => setTrialPlan(readTrialPlan() ?? "PRO");
+    sync();
+    window.addEventListener("nodo:trial-plan", sync);
+    return () => window.removeEventListener("nodo:trial-plan", sync);
+  }, []);
+
+  function pickPlan(plan: TrialPlan) {
+    setTrialPlan(plan);
+    rememberTrialPlan(plan);
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +68,7 @@ export function Signup() {
         router.push("/onboarding");
         return;
       }
+      rememberTrialPlan(trialPlan);
       await authApi.register(username.trim(), email.trim(), password);
       const res = await authApi.login(username.trim(), password);
       invalidateMyModules();
@@ -71,10 +88,10 @@ export function Signup() {
       <div className="nl-glow" style={{ width: 700, height: 500, left: -260, bottom: -260 }} aria-hidden />
       <div className="nl-shell relative grid items-start gap-12 lg:grid-cols-[1fr_0.95fr] lg:gap-20">
         <Reveal>
-          <h2 className="nl-h2">Creá tu cuenta y probalo hoy</h2>
+          <h2 className="nl-h2">Probalo {TRIAL_DAYS} días gratis</h2>
           <p className="nl-lead mt-5">
-            Empezás con un recorrido de prueba para ver cómo funciona todo. Después conectás tus distribuidores y
-            buscás de verdad.
+            Creás tu cuenta y usás NODO con el plan que elijas durante {TRIAL_DAYS} días. Empezás con un recorrido
+            guiado, conectás tus distribuidores y buscás de verdad. Al terminar la prueba elegís el plan para seguir.
           </p>
           <ul className="mt-8 flex flex-col gap-3">
             {PERKS.map((p) => (
@@ -105,6 +122,30 @@ export function Signup() {
               </p>
             )}
             <div className="flex flex-col gap-5">
+              {!isPreviewLogin && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-[var(--fg)]">Plan para probar</span>
+                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Plan para probar">
+                    {(["BASE", "PRO"] as const).map((plan) => (
+                      <button
+                        key={plan}
+                        type="button"
+                        role="radio"
+                        aria-checked={trialPlan === plan}
+                        onClick={() => pickPlan(plan)}
+                        className={`rounded-[10px] border px-3 py-2.5 text-sm font-medium transition-colors ${
+                          trialPlan === plan
+                            ? "border-[rgb(139_127_255/0.6)] bg-[var(--accent-soft)] text-white"
+                            : "border-[var(--line)] text-[var(--fg-2)] hover:text-white"
+                        }`}
+                      >
+                        NODO {plan === "PRO" ? "Pro" : "Base"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[var(--fg-3)]">{TRIAL_DAYS} días gratis. Después elegís el plan para seguir.</p>
+                </div>
+              )}
               <div className="flex flex-col gap-2">
                 <label htmlFor="nl-user" className="text-sm font-medium text-[var(--fg)]">
                   Usuario
@@ -171,7 +212,7 @@ export function Signup() {
               <p className="-mt-2 text-xs text-[var(--fg-3)]">Mínimo 8 caracteres.</p>
               <button type="submit" disabled={loading} className="nl-btn nl-btn--primary mt-1 w-full disabled:opacity-60">
                 {loading && <Loader2 className="nl-spin h-4 w-4" aria-hidden />}
-                {loading ? "Creando la cuenta" : "Probar NODO"}
+                {loading ? "Creando la cuenta" : `Empezar mis ${TRIAL_DAYS} días gratis`}
               </button>
             </div>
           </form>

@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { Check, ChevronDown, Minus } from "lucide-react";
 import { BASE_SEARCH_LIMIT, PLAN_CATALOG, PLAN_FEATURE_GROUPS, type PlanCell, type TenantPlan } from "@/lib/plans";
 import { Reveal } from "./Reveal";
+import { rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
 
 interface CardCopy {
   plan: TenantPlan;
@@ -11,6 +12,9 @@ interface CardCopy {
   intro?: string;
   items: string[];
   cta: string;
+  /** Con qué plan arranca la prueba gratis si elige esta tarjeta. */
+  trialPlan: TrialPlan;
+  trialNote: string;
 }
 
 const CARDS: CardCopy[] = [
@@ -24,7 +28,9 @@ const CARDS: CardCopy[] = [
       "Carrito con varios distribuidores",
       "Pedido listo para mandar por WhatsApp",
     ],
-    cta: "Empezar con Base",
+    cta: `Probar Base ${TRIAL_DAYS} días gratis`,
+    trialPlan: "BASE",
+    trialNote: `${TRIAL_DAYS} días gratis. Después elegís tu plan.`,
   },
   {
     plan: "PRO",
@@ -39,7 +45,9 @@ const CARDS: CardCopy[] = [
       "Análisis de compras por mes, distribuidor y producto",
       "Aprobación de pedidos con el precio del día",
     ],
-    cta: "Elegir Pro",
+    cta: `Probar Pro ${TRIAL_DAYS} días gratis`,
+    trialPlan: "PRO",
+    trialNote: `${TRIAL_DAYS} días gratis. Después elegís tu plan.`,
   },
   {
     plan: "CUSTOM",
@@ -52,6 +60,8 @@ const CARDS: CardCopy[] = [
       "Lo pedís desde tu cuenta y te contactamos",
     ],
     cta: "Pedir NODO Custom",
+    trialPlan: "PRO",
+    trialNote: `Mientras lo armamos, probás Pro ${TRIAL_DAYS} días gratis.`,
   },
 ];
 
@@ -76,7 +86,8 @@ export function Pricing() {
           <h2 className="nl-h2 max-w-3xl">Un precio fijo por comercio, sin límite de usuarios</h2>
           <p className="nl-lead mt-5">
             La diferencia entre planes es hasta dónde llega NODO: con Base preparás la compra, con Pro la hacés entera
-            desde acá. Todos incluyen a tu equipo completo.
+            desde acá. Todos incluyen a tu equipo completo y arrancan con {TRIAL_DAYS} días gratis: al terminar la
+            prueba elegís el plan para seguir.
           </p>
         </Reveal>
 
@@ -111,10 +122,15 @@ export function Pricing() {
 
                   <a
                     href="#probar"
+                    onClick={() => {
+                      rememberTrialPlan(c.trialPlan);
+                      window.dispatchEvent(new Event("nodo:trial-plan"));
+                    }}
                     className={`nl-btn relative mt-7 w-full ${pro ? "nl-btn--primary" : "nl-btn--ghost"}`}
                   >
                     {c.cta}
                   </a>
+                  <p className="relative mt-2.5 text-center text-xs text-[var(--fg-3)]">{c.trialNote}</p>
 
                   {c.intro && <p className="relative mt-8 text-sm font-semibold text-white">{c.intro}</p>}
                   <ul className={`relative flex flex-col gap-3 ${c.intro ? "mt-4" : "mt-8"}`}>

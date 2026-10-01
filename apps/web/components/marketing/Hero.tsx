@@ -19,7 +19,7 @@ export function Hero() {
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
             <a href="#probar" className="nl-btn nl-btn--primary">
-              Probar NODO <ArrowRight className="h-4 w-4" aria-hidden />
+              Probar 14 días gratis <ArrowRight className="h-4 w-4" aria-hidden />
             </a>
             <a href="#planes" className="nl-btn nl-btn--ghost">
               Ver planes

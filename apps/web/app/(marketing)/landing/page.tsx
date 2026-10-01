@@ -12,6 +12,7 @@ import { Pricing } from "@/components/marketing/Pricing";
 import { Savings } from "@/components/marketing/Savings";
 import { Signup } from "@/components/marketing/Signup";
 import { StackedSections } from "@/components/marketing/StackedSections";
+import { StatsDemo } from "@/components/marketing/StatsDemo";
 import { Steps } from "@/components/marketing/Steps";
 
 /**
@@ -35,6 +36,7 @@ export default function LandingPage() {
         <Savings />
         <Steps />
         <Pricing />
+        <StatsDemo />
         <Faq />
         <Signup />
         </StackedSections>

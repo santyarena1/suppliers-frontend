@@ -164,9 +164,10 @@ export class OnboardingService {
     });
     if (taken) throw new ConflictException("Ya existe una organización con ese nombre");
 
-    // Self-serve arranca en NODO Base con prueba. El preview del superadmin no
-    // cobra ni corta nada: Pro en cortesía, para poder recorrer todo.
-    const plan: TenantPlan = preview ? "PRO" : "BASE";
+    // Self-serve arranca con prueba en el plan que eligió en la landing (Base
+    // si no eligió). El preview del superadmin no cobra ni corta nada: Pro en
+    // cortesía, para poder recorrer todo.
+    const plan: TenantPlan = preview ? "PRO" : (dto.trialPlan ?? "BASE");
     const subscription: InitialSubscriptionInput = preview
       ? { plan, mode: "COURTESY", courtesyReason: "Preview del onboarding (superadmin)" }
       : { plan, mode: "TRIAL" };

@@ -14,6 +14,7 @@ import { invalidateMyModules } from "@/lib/permissions";
 import { archivo, chivoMono } from "@/app/(marketing)/fonts";
 import "../(marketing)/landing.css";
 import "./onboarding.css";
+import { clearTrialPlan, readTrialPlan } from "@/lib/trial-plan";
 
 /** Lo que viene después de crear el comercio (la guía corre dentro de la app). */
 const NEXT_UP = [
@@ -75,7 +76,9 @@ function OnboardingInner() {
         name: orgName.trim(),
         contactEmail: contactEmail.trim() || null,
         contactPhone: contactPhone.trim() || null,
+        trialPlan: readTrialPlan(),
       });
+      clearTrialPlan();
       applyToken(res.data.token);
       // Entra a la app: la guía arranca sola en el primer paso.
       router.replace("/");

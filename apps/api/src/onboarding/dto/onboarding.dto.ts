@@ -81,4 +81,9 @@ export class BootstrapRetailerOrgDto {
   @IsString()
   @MaxLength(40)
   contactPhone?: string | null;
+
+  /** El plan que eligió en la landing: la prueba de 14 días arranca con ese. */
+  @IsOptional()
+  @IsIn(["BASE", "PRO"])
+  trialPlan?: "BASE" | "PRO";
 }
