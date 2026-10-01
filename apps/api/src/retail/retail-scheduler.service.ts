@@ -72,7 +72,7 @@ export class RetailSchedulerService {
       const cg = await this.ingest.ingestCompragamer();
       if (cg) this.logger.log("Cron Compra Gamer: " + cg.productos + " productos");
 
-      const pageBudget = Math.max(4, Number(this.config.get("RETAIL_HG_PAGE_BUDGET") ?? 32));
+      const pageBudget = Math.max(4, Number(this.config.get("RETAIL_HG_PAGE_BUDGET") ?? 96));
       const r = await this.ingest.ingestHardgamersStores(undefined, { pageBudget });
       this.logger.log(
         "Cron HardGamers: " +

@@ -8,6 +8,7 @@ import {
   describeRetailSourceError,
   isRetailSourceUnavailable,
 } from "./retail-source.error";
+import { storesMatch } from "./retail-hardgamers.stores";
 import {
   HG_PAGE_SIZE,
   RetailHardgamersClient,
@@ -30,7 +31,7 @@ function sleep(ms: number) {
 const STALE_MS = 15 * 60_000;
 
 /** Tope de seguridad por tienda en una corrida de la segunda fuente. */
-const MAX_HG_PAGES_PER_STORE = 120;
+const MAX_HG_PAGES_PER_STORE = 200;
 
 function firstImage(images?: { url?: string }[]): string | null {
   const url = images?.find((i) => i?.url)?.url;
@@ -87,10 +88,14 @@ export class RetailIngestService implements OnModuleInit {
     slugs?: string[],
     opts: { pageBudget?: number } = {}
   ): Promise<{ stores: number; products: number; pages: number; skipped: string[] }> {
-    const configured = slugs?.length ? slugs : this.hardgamers.storeSlugs();
+    const configured = slugs?.length ? slugs : await this.hardgamers.resolveStoreSlugs();
     // Sin presupuesto (disparo manual) se hace la vuelta entera.
     let budget = opts.pageBudget ?? Number.POSITIVE_INFINITY;
-    const targets = await this.hardgamersByStaleness(configured);
+    const known = await this.prisma.retailStore.findMany({
+      where: { active: true },
+      select: { id: true, name: true, externalId: true, syncedAt: true, raw: true },
+    });
+    const targets = this.hardgamersByStaleness(configured, known);
 
     let storesDone = 0;
     let productsUpserted = 0;
@@ -109,8 +114,10 @@ export class RetailIngestService implements OnModuleInit {
         }
 
         const storeName = first.storeName || slug;
-        const store = await this.upsertHardgamersStore(slug, storeName);
-        productsUpserted += await this.saveHardgamersDocs(store.id, first.docs);
+        const store = await this.upsertHardgamersStore(slug, storeName, known);
+        productsUpserted += await this.saveHardgamersDocs(store.id, first.docs, {
+          reuseByName: store.reuseByName,
+        });
 
         const pages = Math.max(1, Math.min(first.pages, Math.ceil(first.total / HG_PAGE_SIZE)));
         // El presupuesto decide si se ARRANCA otra tienda, no corta una empezada.
@@ -122,7 +129,9 @@ export class RetailIngestService implements OnModuleInit {
           budget -= 1;
           pagesRead += 1;
           if (!data || data.docs.length === 0) break;
-          productsUpserted += await this.saveHardgamersDocs(store.id, data.docs);
+          productsUpserted += await this.saveHardgamersDocs(store.id, data.docs, {
+            reuseByName: store.reuseByName,
+          });
         }
 
         await this.prisma.retailStore.update({
@@ -230,45 +239,91 @@ export class RetailIngestService implements OnModuleInit {
   }
 
   /** Las tiendas más viejas primero; las que nunca se trajeron van al frente. */
-  private async hardgamersByStaleness(slugs: string[]): Promise<string[]> {
-    const ids = new Map(slugs.map((s) => [hardgamersExternalId("store:" + s), s]));
-    const rows = await this.prisma.retailStore.findMany({
-      where: { externalId: { in: [...ids.keys()] } },
-      select: { externalId: true, syncedAt: true },
-    });
+  private hardgamersByStaleness(
+    slugs: string[],
+    known: Array<{ name: string; externalId: number; syncedAt: Date; raw: unknown }>
+  ): string[] {
     const syncedAt = new Map<string, number>();
     for (const slug of slugs) syncedAt.set(slug, 0);
-    for (const row of rows) {
-      const slug = ids.get(row.externalId);
-      if (slug) syncedAt.set(slug, row.syncedAt.getTime());
+    for (const slug of slugs) {
+      const hgId = hardgamersExternalId("store:" + slug);
+      for (const row of known) {
+        const rawSlug =
+          row.raw && typeof row.raw === "object" && "slug" in row.raw
+            ? String((row.raw as { slug?: unknown }).slug ?? "")
+            : "";
+        if (row.externalId === hgId || rawSlug === slug || storesMatch(row.name, slug)) {
+          const prev = syncedAt.get(slug) ?? 0;
+          const next = row.syncedAt.getTime();
+          if (next > prev) syncedAt.set(slug, next);
+        }
+      }
     }
     return [...slugs].sort((a, b) => (syncedAt.get(a) ?? 0) - (syncedAt.get(b) ?? 0));
   }
 
-  private async upsertHardgamersStore(slug: string, name: string) {
+  private async upsertHardgamersStore(
+    slug: string,
+    name: string,
+    known: Array<{ id: string; name: string; externalId: number; raw: unknown }>
+  ): Promise<{ id: string; reuseByName: boolean }> {
     const externalId = hardgamersExternalId("store:" + slug);
-    return this.prisma.retailStore.upsert({
-      where: { externalId },
-      create: {
+    const alreadyHg = known.find((s) => s.externalId === externalId);
+    if (alreadyHg) {
+      await this.prisma.retailStore.update({
+        where: { id: alreadyHg.id },
+        data: {
+          active: true,
+          raw: { source: "hardgamers", slug } as object,
+        },
+      });
+      return { id: alreadyHg.id, reuseByName: false };
+    }
+
+    const match = known.find((s) => {
+      const rawSlug =
+        s.raw && typeof s.raw === "object" && "slug" in s.raw
+          ? String((s.raw as { slug?: unknown }).slug ?? "")
+          : "";
+      return rawSlug === slug || storesMatch(s.name, slug) || storesMatch(s.name, name);
+    });
+    if (match) {
+      const prev =
+        match.raw && typeof match.raw === "object" ? (match.raw as Record<string, unknown>) : {};
+      await this.prisma.retailStore.update({
+        where: { id: match.id },
+        data: {
+          active: true,
+          raw: { ...prev, source: "hardgamers", slug } as object,
+        },
+      });
+      match.raw = { ...prev, source: "hardgamers", slug };
+      this.logger.log(
+        "HardGamers: " + name + " (" + slug + ") reusa el local ya cargado «" + match.name + "»"
+      );
+      return { id: match.id, reuseByName: match.externalId > 0 };
+    }
+
+    const created = await this.prisma.retailStore.create({
+      data: {
         externalId,
         name,
         active: true,
-        // HardGamers publica el precio final en pesos, sin centavos escondidos.
         priceDivisor: 1,
         raw: { source: "hardgamers", slug } as object,
         syncedAt: new Date(0),
       },
-      update: {
-        name,
-        active: true,
-        priceDivisor: 1,
-        raw: { source: "hardgamers", slug } as object,
-      },
-      select: { id: true },
+      select: { id: true, name: true, externalId: true, raw: true },
     });
+    known.push(created);
+    return { id: created.id, reuseByName: false };
   }
 
-  private async saveHardgamersDocs(storeId: string, docs: HardgamersDoc[]): Promise<number> {
+  private async saveHardgamersDocs(
+    storeId: string,
+    docs: HardgamersDoc[],
+    opts: { reuseByName?: boolean } = {}
+  ): Promise<number> {
     let n = 0;
     for (const doc of docs) {
       const name = (doc.name || "").trim();
@@ -280,31 +335,62 @@ export class RetailIngestService implements OnModuleInit {
       // El link trae utm de HardGamers: guardamos la ficha del local, limpia.
       const productUrl = (doc.link || "").split("?")[0] || null;
 
-      const row = await this.prisma.retailProduct.upsert({
-        where: { externalId },
-        create: {
-          externalId,
-          storeId,
-          name,
-          price: new Prisma.Decimal(price),
-          productUrl,
-          imageUrl: doc.image?.trim() || null,
-          searchText,
-          active: doc.availability !== false,
-          syncedAt: new Date(),
-        },
-        update: {
-          storeId,
-          name,
-          price: new Prisma.Decimal(price),
-          productUrl,
-          imageUrl: doc.image?.trim() || null,
-          searchText,
-          active: doc.availability !== false,
-          syncedAt: new Date(),
-        },
-        select: { id: true, price: true },
-      });
+      let existingId: string | null = null;
+      if (opts.reuseByName) {
+        const byHg = await this.prisma.retailProduct.findUnique({
+          where: { externalId },
+          select: { id: true, storeId: true },
+        });
+        if (byHg && byHg.storeId === storeId) {
+          existingId = byHg.id;
+        } else {
+          const byName = await this.prisma.retailProduct.findFirst({
+            where: { storeId, searchText },
+            select: { id: true },
+          });
+          existingId = byName?.id ?? null;
+        }
+      }
+
+      const row = existingId
+        ? await this.prisma.retailProduct.update({
+            where: { id: existingId },
+            data: {
+              name,
+              price: new Prisma.Decimal(price),
+              productUrl,
+              imageUrl: doc.image?.trim() || null,
+              searchText,
+              active: doc.availability !== false,
+              syncedAt: new Date(),
+            },
+            select: { id: true, price: true },
+          })
+        : await this.prisma.retailProduct.upsert({
+            where: { externalId },
+            create: {
+              externalId,
+              storeId,
+              name,
+              price: new Prisma.Decimal(price),
+              productUrl,
+              imageUrl: doc.image?.trim() || null,
+              searchText,
+              active: doc.availability !== false,
+              syncedAt: new Date(),
+            },
+            update: {
+              storeId,
+              name,
+              price: new Prisma.Decimal(price),
+              productUrl,
+              imageUrl: doc.image?.trim() || null,
+              searchText,
+              active: doc.availability !== false,
+              syncedAt: new Date(),
+            },
+            select: { id: true, price: true },
+          });
 
       // Historial: un punto por cambio real de precio, igual que la otra fuente.
       // Esta fuente no entrega id de cambio, asi que el punto se fecha al momento
@@ -624,8 +710,7 @@ export class RetailIngestService implements OnModuleInit {
           );
         }
         try {
-          const pageBudget = Math.max(4, Number(this.config.get("RETAIL_HG_PAGE_BUDGET") ?? 32));
-          const hg = await this.ingestHardgamersStores(undefined, { pageBudget });
+          const hg = await this.ingestHardgamersStores();
           productsUpserted += hg.products;
           storesDone += hg.stores;
         } catch (err) {

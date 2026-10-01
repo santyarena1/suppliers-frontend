@@ -2,15 +2,19 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import axios, { type AxiosInstance } from "axios";
 import { HttpsProxyAgent } from "https-proxy-agent";
+import {
+  HARDGAMERS_FALLBACK_SLUGS,
+  mergeHardgamersSlugs,
+  parseHardgamersStoreSlugs,
+} from "./retail-hardgamers.stores";
 
 /**
  * Segunda fuente de locales.
  *
- * Los trece locales que faltaban no están en el agregador principal, y varios
+ * HardGamers lista decenas de locales (la portada publica los slugs). Varios
  * (Full H4rd, XT-PC) contestan 403 a cualquier cliente que no sea un navegador.
- * HardGamers los lista a todos y, aunque no publica una API, cada página de
- * tienda trae el listado completo como JSON dentro de un `<span>` oculto: no
- * hace falta parsear tarjetas HTML, se lee el payload tal cual.
+ * Aunque no publica una API, cada página de tienda trae el listado completo
+ * como JSON dentro de un `<span>` oculto: no hace falta parsear tarjetas HTML.
  *
  * El sitio limita a 12 pedidos por minuto (`x-ratelimit-limit: 12`, ventana
  * rodante de 60s). Este cliente se queda por debajo a propósito y además frena
@@ -82,6 +86,8 @@ export class RetailHardgamersClient {
   private consecutiveBlocks = 0;
   /** Cuantas veces seguidas nos bloquearon: cada una espera mas que la anterior. */
   private blockRounds = 0;
+  private cachedSlugs: string[] | null = null;
+  private cachedSlugsAt = 0;
 
   constructor(private readonly config: ConfigService) {
     const baseURL = (config.get<string>("RETAIL_HG_BASE_URL") || DEFAULT_BASE).replace(/\/$/, "");
@@ -120,33 +126,48 @@ export class RetailHardgamersClient {
     });
   }
 
-  /** Los locales a traer de esta fuente. Configurables sin tocar código. */
-  storeSlugs(): string[] {
+  /** Extra de env: se suman a los descubiertos, no los reemplazan. */
+  extraStoreSlugs(): string[] {
     const raw = (this.config.get<string>("RETAIL_HG_STORES") || "").trim();
-    const list = raw
-      ? raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
-      : [
-          // Los slugs del sitio son camelCase; se sacaron de los enlaces de su
-          // portada, no adivinados. Solo van los locales que el agregador
-          // principal NO publica: sumar acá uno que ya viene por la otra fuente
-          // crearia el mismo local dos veces.
-          "hardcore",
-          "portalTech",
-          "armyTech",
-          "hypergaming",
-          "compufanStore",
-          "liontech",
-          "fullh4rd",
-          "maximus",
-          "gamerfactory",
-          "vertexRetail",
-          "mexx",
-          "noxie",
-          "xtpc",
-          // El agregador lo lista pero sin catalogo; acá sí tiene productos.
-          "slotOne",
-        ];
-    return [...new Set(list)];
+    if (!raw) return [];
+    return raw.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+  }
+
+  /**
+   * Todos los locales que se van a traer: portada de HardGamers + respaldo +
+   * `RETAIL_HG_STORES`. Antes solo se traían los que NO estaban en PrecioLíder;
+   * ahora se traen todos (el ingest reusa el local existente si el nombre coincide).
+   */
+  async resolveStoreSlugs(): Promise<string[]> {
+    const ttlMs = Math.max(60_000, Number(this.config.get("RETAIL_HG_SLUG_TTL_MS") ?? 6 * 60 * 60_000));
+    if (this.cachedSlugs && Date.now() - this.cachedSlugsAt < ttlMs) {
+      return mergeHardgamersSlugs(this.cachedSlugs, this.extraStoreSlugs());
+    }
+    const discovered = await this.discoverStoreSlugs();
+    const merged = mergeHardgamersSlugs(discovered, HARDGAMERS_FALLBACK_SLUGS, this.extraStoreSlugs());
+    this.cachedSlugs = merged;
+    this.cachedSlugsAt = Date.now();
+    this.logger.log("HardGamers: " + merged.length + " locales a sincronizar");
+    return merged;
+  }
+
+  private async discoverStoreSlugs(): Promise<string[]> {
+    try {
+      const html = await this.fetchHtml("/");
+      if (!html) return [];
+      const slugs = parseHardgamersStoreSlugs(html);
+      if (slugs.length === 0) {
+        this.logger.warn("HardGamers: la portada no trajo slugs de /stores/");
+      }
+      return slugs;
+    } catch (err) {
+      this.logger.warn(
+        "HardGamers: no se pudo leer la portada (" +
+          (err instanceof Error ? err.message : String(err)) +
+          "). Uso el listado de respaldo."
+      );
+      return [];
+    }
   }
 
   /** true si la fuente nos está bloqueando y todavía estamos en penitencia. */
@@ -175,26 +196,34 @@ export class RetailHardgamersClient {
   }
 
   async fetchStorePage(slug: string, page: number): Promise<HardgamersPage | null> {
-    if (this.isBlocked()) return null;
-
-    await this.waitForSlot();
     const path = `/stores/${encodeURIComponent(slug)}?page=${page}&limit=${HG_PAGE_SIZE}`;
+    const html = await this.fetchHtml(path);
+    if (html == null) return null;
+    return this.parsePage(html);
+  }
+
+  /** HTML de HardGamers, por proxy o por la salida de Vercel si está configurada. */
+  private async fetchHtml(path: string): Promise<string | null> {
+    if (this.isBlocked()) return null;
+    await this.waitForSlot();
+
+    const urlPath = path.startsWith("/") ? path : `/${path}`;
     const res = this.fetchVia
       ? await this.http.get<string>(
-          `${this.fetchVia}?url=${encodeURIComponent(DEFAULT_BASE + path)}`,
+          `${this.fetchVia}?url=${encodeURIComponent(DEFAULT_BASE + urlPath)}`,
           {
             responseType: "text",
             baseURL: "",
             headers: this.fetchToken ? { "x-nodo-fetch-token": this.fetchToken } : {},
           }
         )
-      : await this.http.get<string>(path, { responseType: "text" });
+      : await this.http.get<string>(urlPath, { responseType: "text" });
 
     if (res.status === 429) {
       const retry = Number(res.headers["retry-after"] ?? 30);
-      this.logger.warn(`HardGamers 429 en ${slug} p${page}: espero ${retry}s`);
+      this.logger.warn(`HardGamers 429 en ${urlPath}: espero ${retry}s`);
       await sleep(Math.min(120_000, Math.max(5_000, retry * 1000)));
-      return this.fetchStorePage(slug, page);
+      return this.fetchHtml(path);
     }
 
     if (res.status === 403) {
@@ -216,19 +245,17 @@ export class RetailHardgamersClient {
     }
 
     if (res.status !== 200 || typeof res.data !== "string") {
-      this.logger.warn(`HardGamers ${res.status} en ${slug} p${page}`);
+      this.logger.warn(`HardGamers ${res.status} en ${urlPath}`);
       return null;
     }
 
-    // Volvio a responder: se reinicia el retroceso.
     this.consecutiveBlocks = 0;
     this.blockRounds = 0;
 
-    // Si el servidor avisa que queda poco margen, frenamos antes de que corte.
     const remaining = Number(res.headers["x-ratelimit-remaining"]);
     if (Number.isFinite(remaining) && remaining <= 1) await sleep(15_000);
 
-    return this.parsePage(res.data);
+    return res.data;
   }
 
   /**
