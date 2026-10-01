@@ -139,6 +139,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Son **solo informativas**: NODO no elige la forma de pago ni la manda al confirmar el carrito, igual que el precio de esquema o el de offline. Se muestran como otra opción de precio en las cards y en la ficha; un recargo nunca tacha el precio final. Lo que informa el portal al cotizar entra por el POST y no pisa lo cargado a mano.
 
+### [FEATURE] Salud del sistema (superadmin)
+- **Método**: GET
+- **Ruta**: `/admin/health/overview?hours=24` (1 a 720)
+- **Auth**: Bearer ROLE_ADMIN (sin sesión 401, usuario común 403)
+- **Body / Params**: `hours`
+- **Respuesta esperada**: `{ generatedAt, hours, status: { level: ok|warning|critical, reasons[] }, runtime, traffic: { requests, ok, clientErrors, serverErrors, rateLimited, unauthorized, failedLogins, serverErrorRate, avgMs, timeline[], topErrorRoutes[], slowestRoutes[] }, recentErrors[], syncErrors[], jobs, integrity[], security, config }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El API cuenta cada respuesta por hora, ruta y código (tabla ApiMetric, volcado en lote cada minuto) y guarda los 5xx con su mensaje (ApiErrorEvent); se conserva 30 días. La configuración se informa como presente/ausente, nunca el valor.
+
 ### [FEATURE] Envío estimado por distribuidor
 - **Método**: GET (estimación) · PUT (formas de envío a mano)
 - **Ruta**: `GET /my/shipping-estimates` · `PUT /providers/:provider/config` (campo `shippingMethods`)

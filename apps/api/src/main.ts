@@ -9,6 +9,7 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { AppModule } from "./app.module";
+import { RequestMetricsService } from "./monitoring/request-metrics.service";
 
 /**
  * Los deploys de preview de Vercel tienen dominio dinámico, así que una entrada de
@@ -26,6 +27,17 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
 
   const config = app.get(ConfigService);
+
+  // Cada respuesta se cuenta por ruta y código para "Salud del sistema".
+  const metrics = app.get(RequestMetricsService);
+  const fastify = app.getHttpAdapter().getInstance();
+  fastify.addHook("onResponse", (req, reply, done) => {
+    if (req.method !== "OPTIONS") {
+      const route = (req as { routeOptions?: { url?: string } }).routeOptions?.url || "(sin ruta)";
+      metrics.record(req.method, route, reply.statusCode, reply.elapsedTime);
+    }
+    done();
+  });
 
   await app.register(helmet as any, {
     // Permite <img> desde el frontend (otro origen) hacia /assets/* y /uploads/*

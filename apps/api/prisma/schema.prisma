@@ -2282,3 +2282,34 @@ model SubscriptionReminder {
   @@unique([subscriptionId, kind, anchorAt, channel])
   @@index([tenantId, createdAt])
 }
+
+/// Métricas del API agregadas por hora, ruta y código de respuesta. Las
+/// escribe monitoring/request-metrics.service.ts en lote cada minuto y se
+/// guardan 30 días. Alimentan "Salud del sistema" en Administración.
+model ApiMetric {
+  hourStart DateTime
+  method    String
+  /// Patrón de la ruta (`/my/providers/:provider`), nunca la URL con ids.
+  route     String
+  status    Int
+  count     Int      @default(0)
+  totalMs   Int      @default(0)
+  maxMs     Int      @default(0)
+
+  @@id([hourStart, method, route, status])
+  @@index([hourStart])
+}
+
+/// Errores internos (5xx) con su mensaje, para verlos sin entrar a los logs.
+model ApiErrorEvent {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  method    String
+  route     String
+  status    Int
+  message   String
+  userId    String?
+  tenantId  String?
+
+  @@index([createdAt])
+}

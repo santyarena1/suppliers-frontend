@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { ClientIpThrottlerGuard } from "./common/guards/client-ip-throttler.guard";
+import { MonitoringModule } from "./monitoring/monitoring.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { CryptoModule } from "./common/crypto/crypto.module";
 import { MailModule } from "./mail/mail.module";
@@ -35,6 +36,7 @@ import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    MonitoringModule,
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

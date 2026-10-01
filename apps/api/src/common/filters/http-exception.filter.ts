@@ -1,11 +1,14 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from "@nestjs/common";
-import type { FastifyReply } from "fastify";
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger, Optional } from "@nestjs/common";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { RequestMetricsService } from "../../monitoring/request-metrics.service";
 import type { ApiFailure, ApiFieldError } from "@nodo/shared";
 import { dbOutageStatus } from "../../prisma/recovery-gate";
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
+
+  constructor(@Optional() private readonly metrics?: RequestMetricsService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -52,6 +55,21 @@ export class HttpExceptionFilter implements ExceptionFilter {
       ...(code ? { code } : {}),
       ...(details ? { details } : {}),
     };
+    if (status >= 500) this.recordServerError(ctx.getRequest<FastifyRequest>(), status, exception, message);
     reply.status(status).send(body);
+  }
+
+  /** Los errores internos quedan guardados para "Salud del sistema", con el mensaje real. */
+  private recordServerError(req: FastifyRequest, status: number, exception: unknown, message: string) {
+    if (!this.metrics) return;
+    const user = (req as { user?: { userId?: string; tenantId?: string } }).user;
+    this.metrics.recordError({
+      method: req.method,
+      route: (req as { routeOptions?: { url?: string } }).routeOptions?.url || req.url.split("?")[0],
+      status,
+      message: exception instanceof Error ? exception.message : message,
+      userId: user?.userId ?? null,
+      tenantId: user?.tenantId ?? null,
+    });
   }
 }
