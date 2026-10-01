@@ -32,6 +32,15 @@ export function onlyProvider(payload: OrgCartPayload, provider: string | null): 
   return { ...payload, items: payload.items.filter(mine), schemes: payload.schemes.filter(mine) };
 }
 
+/** Quién del distribuidor puede seguir el carrito de un cliente: dueño, admin o su vendedor asignado. */
+export function canWatchClientCart(
+  tenant: Pick<TenantContext, "tenantRole" | "userId">,
+  accountManagerId: string | null
+): boolean {
+  if (tenant.tenantRole === "OWNER" || tenant.tenantRole === "ADMIN") return true;
+  return tenant.tenantRole === "SELLER" && accountManagerId === tenant.userId;
+}
+
 @Injectable()
 export class CartService {
   constructor(
@@ -74,10 +83,12 @@ export class CartService {
       where: { id: linkId },
       select: { id: true, supplierTenantId: true, clientTenantId: true, accountManagerId: true, status: true },
     });
-    if (!link || link.supplierTenantId !== tenant.tenantId) {
+    // Estricto: vínculo activo y solo quien atiende a ese cliente (dueño/admin
+    // o el vendedor asignado). Cualquier otro caso responde igual que si no existiera.
+    if (!link || link.supplierTenantId !== tenant.tenantId || link.status !== "ACTIVE") {
       throw new NotFoundException("Cliente no encontrado");
     }
-    if (tenant.tenantRole === "SELLER" && link.accountManagerId !== tenant.userId) {
+    if (!canWatchClientCart(tenant, link.accountManagerId)) {
       throw new NotFoundException("Cliente no encontrado");
     }
     const [row, supplier] = await Promise.all([
@@ -114,24 +125,27 @@ export class CartService {
     this.hub.emitToUsers(memberIds, { type: "cart_updated", data: payload });
 
     const links = await this.prisma.tenantLink.findMany({
-      where: { clientTenantId: retailerTenantId, status: { in: ["ACTIVE", "SUSPENDED"] } },
+      where: { clientTenantId: retailerTenantId, status: "ACTIVE" },
       select: { accountManagerId: true, supplierTenantId: true, supplierTenant: { select: { providerKey: true } } },
     });
     if (links.length === 0) return;
-    const owners = await this.prisma.tenantMembership.findMany({
+    // Dueños y admins del distribuidor, y el vendedor asignado solo si sigue activo en ese equipo.
+    const supplierMembers = await this.prisma.tenantMembership.findMany({
       where: {
         tenantId: { in: links.map((link) => link.supplierTenantId) },
         active: true,
-        role: { in: ["OWNER", "ADMIN"] },
         user: { active: true },
       },
-      select: { userId: true, tenantId: true },
+      select: { userId: true, tenantId: true, role: true },
     });
+    const owners = supplierMembers.filter((m) => m.role === "OWNER" || m.role === "ADMIN");
     const already = new Set(memberIds);
     for (const link of links) {
       const ids = [
         ...owners.filter((o) => o.tenantId === link.supplierTenantId).map((o) => o.userId),
-        ...(link.accountManagerId ? [link.accountManagerId] : []),
+        ...supplierMembers
+          .filter((m) => m.tenantId === link.supplierTenantId && m.userId === link.accountManagerId)
+          .map((m) => m.userId),
       ].filter((id) => !already.has(id));
       if (ids.length === 0) continue;
       this.hub.emitToUsers([...new Set(ids)], {

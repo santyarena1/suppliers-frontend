@@ -935,6 +935,11 @@ function CartPageInner() {
                   ? channelTab === "offline" ? "Sin productos offline" : "Sin productos"
                   : `${viewItems.length} ${viewItems.length === 1 ? "línea" : "líneas"} · ${shownTotals.itemCount} ${shownTotals.itemCount === 1 ? "unidad" : "unidades"} · ${sortedProviders.length} ${sortedProviders.length === 1 ? "proveedor" : "proveedores"}`}
               </p>
+              {viewItems.length > 0 && (
+                <p className="text-[11px] text-surface-500 mt-1">
+                  Cada distribuidor vinculado ve solo sus propios productos de este carrito. Lo que armás con otros queda privado.
+                </p>
+              )}
               {showOfflineTab && (
                 <div className="flex gap-1 mt-2">
                   <button
