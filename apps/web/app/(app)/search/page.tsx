@@ -1513,6 +1513,12 @@ function SearchPage() {
                       ? "Probá con otro término o activá más proveedores"
                       : "Probá con otro término, más proveedores, o «Incluir sin stock»"}
                   </p>
+                  <p className="text-xs text-surface-500">
+                    Solo aparecen productos con tu precio: los proveedores con tu cuenta o tu lista cargada.{" "}
+                    <Link href="/proveedores" className="text-brand-300 hover:text-brand-200 underline underline-offset-2">
+                      Configurar proveedores
+                    </Link>
+                  </p>
                 </div>
               )}
 

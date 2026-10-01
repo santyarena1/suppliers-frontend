@@ -1240,18 +1240,14 @@ export class ProvidersService implements OnModuleInit {
     return new Set(rows.map((row) => row.provider));
   }
 
-  /** Proveedores de los que esta organización ya tiene al menos un precio propio. */
-  private async providersWithOwnPrices(tenantId: string, providers: string[]): Promise<Set<string>> {
-    if (providers.length === 0) return new Set();
-    const hits = await Promise.all(
-      providers.map((provider) =>
-        this.prisma.tenantProductOffer.findFirst({
-          where: { tenantId, provider, OR: [{ price: { not: null } }, { finalPrice: { not: null } }] },
-          select: { provider: true },
-        })
-      )
-    );
-    return new Set(hits.filter((hit): hit is { provider: string } => hit != null).map((hit) => hit.provider));
+  /**
+   * Proveedores en los que solo se lista lo que tiene precio propio del comercio.
+   * Son todos: un proveedor sin credenciales ni lista cargada no muestra nada,
+   * ni siquiera la ficha universal "sin precio" como vista previa. Lo que no se
+   * puede comprar no aparece en búsqueda, catálogo, categorías ni marcas.
+   */
+  private async providersWithOwnPrices(_tenantId: string, providers: string[]): Promise<Set<string>> {
+    return new Set(providers);
   }
 
   /**
