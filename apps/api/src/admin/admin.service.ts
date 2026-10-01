@@ -92,7 +92,11 @@ export class AdminService {
     await this.assertUserExists(userId);
     const nextPassword = password ?? generatePassword();
     const passwordHash = await argon2.hash(nextPassword);
-    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    // Contraseña nueva: se cierran las sesiones abiertas y se levanta el bloqueo.
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, sessionVersion: { increment: 1 }, failedLoginCount: 0, loginLockedUntil: null },
+    });
     return {
       id: userId,
       // Solo cuando la generó la plataforma: es la única vez que puede verse.

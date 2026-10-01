@@ -9,6 +9,12 @@ export interface JwtPayload {
   email: string;
   brandId?: string;
   /**
+   * Versión de sesión del usuario al emitir el token. Si cambió (contraseña
+   * nueva), el token deja de valer. Los tokens viejos sin este campo valen
+   * como versión 0.
+   */
+  sv?: number;
+  /**
    * Organización a la que pertenece quien usa la sesión, y su rol adentro. Ausente
    * si no hay membresía. El superadmin de prueba pertenece a Administración:
    * carrito propio, y `commercialTenantId` apunta al Comercio de Pruebas para

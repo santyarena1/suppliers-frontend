@@ -25,6 +25,12 @@ model User {
   googleId     String?       @unique
   /// Null hasta que confirma el mail (código) o entra con Google.
   emailVerifiedAt DateTime?
+  /// Contraseñas fallidas seguidas. Se vuelve a 0 al entrar bien.
+  failedLoginCount Int       @default(0)
+  /// Bloqueo temporal por intentos fallidos (ver auth/login-lockout.ts).
+  loginLockedUntil DateTime?
+  /// Sube al cambiar la contraseña o desactivar la cuenta: invalida los JWT ya emitidos.
+  sessionVersion   Int       @default(0)
   role         UserRole      @default(ROLE_USER)
   active       Boolean       @default(true)
   /// Usuario creado por la plataforma (dueño placeholder de una marca del catálogo).

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchTokenOk as checkFetchToken } from "@/lib/server/fetch-token";
 import https from "https";
 
 export const runtime = "nodejs";
@@ -20,14 +21,7 @@ const ALLOWED = new Set([
 ]);
 
 function fetchTokenOk(req: NextRequest): boolean {
-  const expected = (
-    process.env.DISTECNA_FETCH_TOKEN ||
-    process.env.RETAIL_FETCH_TOKEN ||
-    process.env.RETAIL_HG_FETCH_TOKEN ||
-    ""
-  ).trim();
-  if (!expected) return true;
-  return req.headers.get("x-nodo-fetch-token") === expected;
+  return checkFetchToken(req, "DISTECNA_FETCH_TOKEN", "RETAIL_FETCH_TOKEN", "RETAIL_HG_FETCH_TOKEN");
 }
 
 function parseTarget(raw: string | null): URL | null {

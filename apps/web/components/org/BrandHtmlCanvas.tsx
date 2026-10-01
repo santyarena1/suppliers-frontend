@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { sanitizeBrandDocument } from "@/lib/sanitize-html";
 import { inferBrandHubTarget, rewriteCssForBrandHost, scrollToBrandSection, appendMissingLandingSlots } from "@/lib/brand-html-nav";
 
 const HOST_CSS = `:host{all:initial;display:block;position:relative;isolation:isolate;overflow:visible;width:100%;min-height:0;height:auto;color-scheme:light;background:#fff;color:#111;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.45;}*,*::before,*::after{box-sizing:border-box;}img,video,svg{max-width:100%;height:auto;}a{color:inherit;cursor:pointer;}button{cursor:pointer;font:inherit;}::slotted(.brand-html-slot){display:block;color-scheme:dark;}.nodo-landing-modules{background:#0b1220;color:#f8fafc;padding:28px 16px 64px;}.nodo-landing-modules>section{display:block;max-width:72rem;margin:0 auto 3.5rem;}`;
@@ -11,13 +12,6 @@ function compileSlots(html: string): string {
     .replace(/\{\{\s*([a-z]+)\s*\}\}/gi, `<slot name="$1"></slot>`);
 }
 
-function stripActiveHtml(html: string): string {
-  return html
-    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
-    .replace(/<script\b[^>]*>/gi, "")
-    .replace(/<(iframe|object|embed|form)\b[\s\S]*?<\/\1>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
-}
 
 function rewriteStyleTags(html: string): string {
   return html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (_, css: string) => `<style>${rewriteCssForBrandHost(css)}</style>`);
@@ -45,7 +39,7 @@ export default function BrandHtmlCanvas({
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const compiled = appendMissingLandingSlots(
-    rewriteInlineStyles(rewriteStyleTags(compileSlots(stripActiveHtml(html ?? ""))))
+    rewriteInlineStyles(rewriteStyleTags(compileSlots(sanitizeBrandDocument(html ?? ""))))
   );
 
   useEffect(() => {

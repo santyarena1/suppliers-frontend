@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -16,6 +17,7 @@ import { TenantContextService } from "../tenants/tenant-context.service";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { GoogleTokenVerifier } from "./google-token.verifier";
+import { isLocked, lockForFailure, minutesLeft } from "./login-lockout";
 import {
   CODE_TTL_MS,
   MAX_ATTEMPTS,
@@ -34,6 +36,8 @@ const IMPERSONATION_EXPIRES_IN = "1h";
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -83,8 +87,27 @@ export class AuthService {
       throw new UnauthorizedException("Esta cuenta entra con Google");
     }
 
+    // Bloqueo por cuenta: frena la prueba de contraseñas aunque cambie la IP.
+    if (isLocked(user.loginLockedUntil)) {
+      throw new UnauthorizedException(
+        `Demasiados intentos fallidos. Probá de nuevo en ${minutesLeft(user.loginLockedUntil!)} minutos.`
+      );
+    }
+
     const valid = await argon2.verify(user.passwordHash, dto.password);
-    if (!valid) throw new UnauthorizedException("Usuario o contraseña incorrectos");
+    if (!valid) {
+      const failed = user.failedLoginCount + 1;
+      const lockMs = lockForFailure(failed);
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginCount: failed, ...(lockMs ? { loginLockedUntil: new Date(Date.now() + lockMs) } : {}) },
+      });
+      if (lockMs) this.logger.warn(`Login bloqueado por intentos fallidos: usuario ${user.id} (${failed} fallos)`);
+      throw new UnauthorizedException("Usuario o contraseña incorrectos");
+    }
+    if (user.failedLoginCount > 0 || user.loginLockedUntil) {
+      await this.prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, loginLockedUntil: null } });
+    }
 
     this.assertAccountUsable(user);
     this.assertEmailVerified(user);
@@ -218,7 +241,7 @@ export class AuthService {
    * emitirlo, para que el resto de la plataforma no tenga que buscarla en cada pedido.
    */
   private async payloadFor(
-    user: { id: string; username: string; email: string; role: UserRole; brandId: string | null },
+    user: { id: string; username: string; email: string; role: UserRole; brandId: string | null; sessionVersion?: number },
     extra: Partial<JwtPayload> = {}
   ): Promise<JwtPayload> {
     const tenant = await this.tenantContext.forUser(user.id);
@@ -227,6 +250,7 @@ export class AuthService {
       userId: user.id,
       role: user.role,
       email: user.email,
+      sv: user.sessionVersion ?? 0,
       ...(user.brandId ? { brandId: user.brandId } : {}),
       ...(tenant
         ? {

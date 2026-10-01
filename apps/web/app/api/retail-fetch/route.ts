@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchTokenOk } from "@/lib/server/fetch-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +30,7 @@ const BROWSER_HEADERS: Record<string, string> = {
 };
 
 export async function GET(req: NextRequest) {
-  const expected = (process.env.RETAIL_FETCH_TOKEN || "").trim();
-  if (expected && req.headers.get("x-nodo-fetch-token") !== expected) {
+  if (!fetchTokenOk(req, "RETAIL_FETCH_TOKEN")) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 

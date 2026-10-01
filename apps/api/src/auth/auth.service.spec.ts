@@ -170,6 +170,25 @@ describe("AuthService.login", () => {
     const { service } = makeService({ user: { ...dbUser, passwordHash: null, googleId: "g1" } });
     await expect(service.login({ username: "ana", password: "x" })).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  it("el quinto fallo seguido bloquea la cuenta 15 minutos", async () => {
+    const argon2 = await import("argon2");
+    const passwordHash = await argon2.hash("password123");
+    const { service, prisma } = makeService({ user: { ...dbUser, passwordHash, failedLoginCount: 4, loginLockedUntil: null } });
+    await expect(service.login({ username: "ana", password: "mala" })).rejects.toBeInstanceOf(UnauthorizedException);
+    const data = prisma.user.update.mock.calls[0][0].data;
+    expect(data.failedLoginCount).toBe(5);
+    expect(data.loginLockedUntil.getTime() - Date.now()).toBeGreaterThan(14 * 60_000);
+  });
+
+  it("bloqueada, no entra ni con la contraseña correcta", async () => {
+    const argon2 = await import("argon2");
+    const passwordHash = await argon2.hash("password123");
+    const { service } = makeService({
+      user: { ...dbUser, passwordHash, failedLoginCount: 5, loginLockedUntil: new Date(Date.now() + 10 * 60_000) },
+    });
+    await expect(service.login({ username: "ana", password: "password123" })).rejects.toThrow(/Demasiados intentos/);
+  });
 });
 
 describe("AuthService.verifyEmail", () => {

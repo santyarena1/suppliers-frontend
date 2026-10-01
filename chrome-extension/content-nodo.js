@@ -5,6 +5,7 @@
 
 window.addEventListener("message", (event) => {
   if (event.source !== window) return;
+  if (event.origin !== window.location.origin) return;
   const data = event.data;
   if (!data || data.source !== "nodo" || data.type !== "SEND_INVID_ORDER") return;
 

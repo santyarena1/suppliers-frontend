@@ -795,7 +795,13 @@ export class TenantsService {
     const password = generatePassword();
     await this.prisma.user.update({
       where: { id: membership.userId },
-      data: { passwordHash: await argon2.hash(password) },
+      // Contraseña nueva: se cierran las sesiones abiertas y se levanta el bloqueo.
+      data: {
+        passwordHash: await argon2.hash(password),
+        sessionVersion: { increment: 1 },
+        failedLoginCount: 0,
+        loginLockedUntil: null,
+      },
     });
     return { membershipId, generatedPassword: password };
   }
