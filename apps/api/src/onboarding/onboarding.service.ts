@@ -253,7 +253,9 @@ export class OnboardingService {
           contactPhone: dto.contactPhone?.trim() || null,
         },
       });
-      const owner = await tx.user.create({ data: { username, email, passwordHash, role: "ROLE_USER" } });
+      const owner = await tx.user.create({
+        data: { username, email, passwordHash, role: "ROLE_USER", emailVerifiedAt: new Date() },
+      });
       await tx.tenantMembership.create({
         data: { tenantId: tenant.id, userId: owner.id, role: "OWNER", title: "Dueño del local" },
       });

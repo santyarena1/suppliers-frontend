@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 
 // Solo estas rebotan al inicio cuando ya hay sesión: entrar al login estando
 // logueado no tiene sentido.
-const AUTH_PATHS = new Set(["/login", "/register"]);
+const AUTH_PATHS = new Set(["/login", "/register", "/verify-email"]);
 // Estas se ven siempre, con o sin sesión. Un usuario logueado tiene que poder
 // abrir la landing o una propuesta sin que lo manden a la app.
 const OPEN_PATHS = new Set(["/landing", "/preview"]);

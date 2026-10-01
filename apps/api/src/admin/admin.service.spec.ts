@@ -24,7 +24,7 @@ function makeService(opts: {
       findMany: jest.fn().mockResolvedValue([{ module: "cart", allowed: false }]),
     },
   };
-  return { service: new AdminService(prisma as never), prisma };
+  return { service: new AdminService(prisma as never, { send: jest.fn() } as never), prisma };
 }
 
 describe("AdminService.createUser", () => {

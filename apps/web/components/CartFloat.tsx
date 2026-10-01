@@ -310,7 +310,8 @@ export default function CartFloat() {
     !hydrated ||
     !onSearch ||
     pathname?.startsWith("/login") ||
-    pathname?.startsWith("/register");
+    pathname?.startsWith("/register") ||
+    pathname?.startsWith("/verify-email");
 
   useEffect(() => {
     setOpen(false);

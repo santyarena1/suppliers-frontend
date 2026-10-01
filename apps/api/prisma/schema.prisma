@@ -19,7 +19,12 @@ model User {
   id           String        @id @default(uuid())
   username     String        @unique
   email        String        @unique
-  passwordHash String
+  /// Null si la cuenta solo entra con Google.
+  passwordHash String?
+  /// `sub` de Google. Unico cuando está.
+  googleId     String?       @unique
+  /// Null hasta que confirma el mail (código) o entra con Google.
+  emailVerifiedAt DateTime?
   role         UserRole      @default(ROLE_USER)
   active       Boolean       @default(true)
   /// Usuario creado por la plataforma (dueño placeholder de una marca del catálogo).
@@ -52,6 +57,7 @@ model User {
   auditLogs        AuditLogEntry[]
 
   memberships          TenantMembership[]
+  emailChallenges      EmailChallenge[]
   managedAccounts      TenantLink[]          @relation("AccountManager")
   productManagerScopes ProductManagerScope[]
   chatMessages         ChatMessage[]
@@ -64,6 +70,21 @@ model User {
   newsCreated          NewsArticle[]
 
   @@index([brandId])
+}
+
+/// Código de un solo uso (confirmación de mail). El código se guarda hasheado.
+model EmailChallenge {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose    String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  lastSentAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, purpose])
 }
 
 // ---------- Organizaciones (multi-tenant) ----------

@@ -5,6 +5,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { PrismaModule } from "./prisma/prisma.module";
 import { CryptoModule } from "./common/crypto/crypto.module";
+import { MailModule } from "./mail/mail.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
@@ -47,6 +48,7 @@ import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
     }),
     PrismaModule,
     CryptoModule,
+    MailModule,
     AuthModule,
     UsersModule,
     CredentialsModule,
