@@ -1940,7 +1940,7 @@ model RetailIngestRun {
   id               String   @id @default(uuid())
   startedAt        DateTime @default(now())
   finishedAt       DateTime?
-  /// RUNNING | OK | ERROR | CANCELLED
+  /// RUNNING | OK | ERROR | CANCELLED | DEGRADED
   status           String   @default("RUNNING")
   /// full | batch
   mode             String   @default("full")
