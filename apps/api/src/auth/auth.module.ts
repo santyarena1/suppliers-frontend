@@ -5,6 +5,7 @@ import { PassportModule } from "@nestjs/passport";
 import { TenantsModule } from "../tenants/tenants.module";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { TurnstileGuard } from "./turnstile.guard";
 import { GoogleTokenVerifier } from "./google-token.verifier";
 import { JwtStrategy } from "./jwt.strategy";
 
@@ -22,7 +23,7 @@ import { JwtStrategy } from "./jwt.strategy";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleTokenVerifier],
+  providers: [AuthService, JwtStrategy, GoogleTokenVerifier, TurnstileGuard],
   exports: [JwtModule, AuthService],
 })
 export class AuthModule {}

@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from "@nestjs/common";
+import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import type { JwtPayload } from "@nodo/shared";
 import { Public } from "../common/decorators/public.decorator";
@@ -9,6 +9,7 @@ import { RegisterDto } from "./dto/register.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { ResendVerificationDto } from "./dto/resend-verification.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
+import { TurnstileGuard } from "./turnstile.guard";
 
 @Controller("auth")
 export class AuthController {
@@ -16,6 +17,7 @@ export class AuthController {
 
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseGuards(TurnstileGuard)
   @Post("register")
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
@@ -24,6 +26,7 @@ export class AuthController {
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
+  @UseGuards(TurnstileGuard)
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
@@ -32,6 +35,7 @@ export class AuthController {
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
+  @UseGuards(TurnstileGuard)
   @Post("verify-email")
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.email, dto.code);
@@ -40,6 +44,7 @@ export class AuthController {
   @Public()
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
+  @UseGuards(TurnstileGuard)
   @Post("resend-verification")
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto.email);

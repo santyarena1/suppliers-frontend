@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import { authApi, apiFailure, onboardingApi } from "@/lib/api";
+import TurnstileWidget from "@/components/TurnstileWidget";
 import { saveSession, sessionFromToken } from "@/lib/auth";
 import { enterAuthenticated } from "@/lib/enter-session";
 import { invalidateMyModules } from "@/lib/permissions";
@@ -224,6 +225,8 @@ export function Signup() {
                 )}
               </div>
               <p className="-mt-2 text-xs text-[var(--fg-3)]">Mínimo 8 caracteres.</p>
+              {/* Cloudflare: casi siempre invisible; aparece solo si quiere confirmar que hay una persona. */}
+              <TurnstileWidget className="flex justify-center" />
               <button type="submit" disabled={loading} className="nl-btn nl-btn--primary mt-1 w-full disabled:opacity-60">
                 {loading && <Loader2 className="nl-spin h-4 w-4" aria-hidden />}
                 {loading ? "Creando la cuenta" : `Empezar mis ${TRIAL_DAYS} días gratis`}

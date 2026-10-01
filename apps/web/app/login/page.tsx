@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authApi, apiFailure } from "@/lib/api";
+import TurnstileWidget from "@/components/TurnstileWidget";
 import { enterAuthenticated } from "@/lib/enter-session";
 import { ArrowLeft, ArrowRight, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
@@ -149,6 +150,8 @@ export default function LoginPage() {
                 />
               </label>
 
+              {/* Cloudflare: casi siempre invisible; aparece solo si quiere confirmar que hay una persona. */}
+              <TurnstileWidget className="flex justify-center" />
               <button type="submit" disabled={loading} className="lnd-btn lnd-btn--primary lgn__go">
                 {loading ? (
                   <>

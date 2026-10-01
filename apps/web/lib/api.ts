@@ -2,6 +2,7 @@ import axios from "axios";
 import { SESSION_EVENT, getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
 import type { ShippingMethod } from "./shipping";
+import { HUMAN_ROUTES, takeHumanToken } from "./turnstile";
 import type {
   AdminSubscriptionDetail,
   AdminSubscriptionFilter,
@@ -24,10 +25,15 @@ const api = axios.create({ baseURL: BASE_URL });
  */
 const PUBLIC_PAGES = new Set(["/login", "/register", "/verify-email", "/landing", "/preview", "/onboarding"]);
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
+    // Login, registro y código: van con la verificación de Cloudflare.
+    if (HUMAN_ROUTES.some((route) => config.url === route)) {
+      const human = await takeHumanToken();
+      if (human) config.headers["x-turnstile-token"] = human;
+    }
   }
   return config;
 });

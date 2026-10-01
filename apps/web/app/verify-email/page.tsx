@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { authApi, apiFailure } from "@/lib/api";
+import TurnstileWidget from "@/components/TurnstileWidget";
 import { enterAuthenticated } from "@/lib/enter-session";
 import { ArrowLeft, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
@@ -122,6 +123,8 @@ export default function VerifyEmailPage() {
                 />
               </label>
 
+              {/* Cloudflare: casi siempre invisible; aparece solo si quiere confirmar que hay una persona. */}
+              <TurnstileWidget className="flex justify-center" />
               <button type="submit" disabled={loading || code.length !== 6} className="lnd-btn lnd-btn--primary lgn__go">
                 {loading ? (
                   <>
