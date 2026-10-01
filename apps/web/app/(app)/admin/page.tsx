@@ -14,13 +14,15 @@ import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
 import AdminAdsPanel from "@/components/admin/AdminAdsPanel";
 import AdminNewsPanel from "@/components/admin/AdminNewsPanel";
 import SubscriptionsPanel from "@/components/admin/SubscriptionsPanel";
+import HealthPanel from "@/components/admin/HealthPanel";
 import {
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
   ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone, Newspaper, CreditCard,
+  HeartPulse,
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "organizations" | "subscriptions" | "retail" | "catalog" | "images" | "ads" | "news" | "diagnostics";
+type Tab = "organizations" | "subscriptions" | "retail" | "catalog" | "images" | "ads" | "news" | "health" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "organizations", label: "Directorio", icon: <Network className="w-3.5 h-3.5" /> },
@@ -30,10 +32,11 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "images", label: "Imágenes", icon: <ImageIcon className="w-3.5 h-3.5" /> },
   { key: "ads", label: "Publicidad", icon: <Megaphone className="w-3.5 h-3.5" /> },
   { key: "news", label: "Noticias", icon: <Newspaper className="w-3.5 h-3.5" /> },
+  { key: "health", label: "Salud", icon: <HeartPulse className="w-3.5 h-3.5" /> },
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
-const TAB_KEYS: Tab[] = ["organizations", "subscriptions", "retail", "catalog", "images", "ads", "news", "diagnostics"];
+const TAB_KEYS: Tab[] = ["organizations", "subscriptions", "retail", "catalog", "images", "ads", "news", "health", "diagnostics"];
 const LEGACY_TABS = new Set(["users", "permissions"]);
 
 export default function AdminPage() {
@@ -128,6 +131,7 @@ function AdminPageInner() {
             {tab === "images" && <ImageSyncPanel showToast={showToast} />}
             {tab === "ads" && <AdminAdsPanel showToast={showToast} />}
             {tab === "news" && <AdminNewsPanel showToast={showToast} />}
+            {tab === "health" && <HealthPanel showToast={showToast} />}
             {tab === "diagnostics" && <DiagnosticsPanel />}
           </div>
 

@@ -14,6 +14,7 @@ import CartFloat from "../CartFloat";
 import SessionKeepAlive from "../SessionKeepAlive";
 import SubscriptionBanner from "../subscription/SubscriptionBanner";
 import SuspendedGate from "../subscription/SuspendedGate";
+import ClientErrorReporter from "../ClientErrorReporter";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,6 +28,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <AuthGuard>
       <SessionKeepAlive />
       <ChatRealtime />
+      <ClientErrorReporter />
       <OnboardingGate>
         <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
           <ImpersonationBanner />
