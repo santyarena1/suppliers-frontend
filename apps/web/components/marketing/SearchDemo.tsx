@@ -17,7 +17,7 @@ import {
   Truck,
 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
-import { DEMO_SHIPPING, SEARCH_QUERY, SEARCH_RESULTS, ars, withIva, type DemoProduct } from "@/lib/marketing-demo";
+import { DEMO_SHIPPING, SEARCHES, ars, withIva, type DemoProduct } from "@/lib/marketing-demo";
 import { useInView, usePrefersReducedMotion } from "./Reveal";
 
 type Phase = "typing" | "results";
@@ -26,7 +26,6 @@ export const usd = (n: number) =>
   `US$ ${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const ADDED_INDEX = 0;
-const ADDED_QTY = 8;
 
 function Sidebar({ cart }: { cart: number }) {
   const items = [
@@ -100,9 +99,16 @@ function ProductCard({
       }`}
       style={{ animationDelay: `${delay}ms` }}
     >
-      <div className="flex h-24 items-center justify-center bg-white p-2 sm:h-32 sm:p-3">
+      <div className="relative flex h-24 items-center justify-center bg-white p-2 sm:h-32 sm:p-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={p.image} alt={p.name} loading="lazy" className="h-full w-full object-contain" />
+        {/* Distintivo del distribuidor sobre la foto, como en la app */}
+        <span className="absolute left-1.5 top-1.5 inline-flex max-w-[calc(100%-0.75rem)] items-center gap-1.5 rounded-full border border-[rgb(64_51_252/0.35)] bg-white/95 py-0.5 pl-0.5 pr-2 text-[10.5px] font-semibold text-[#1e1b4b] shadow-sm">
+          <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-[#4033fc] font-mono text-[8.5px] text-white">
+            {p.distributor.replace(/D/g, "") || "L"}
+          </span>
+          <span className="truncate">{p.distributor}</span>
+        </span>
       </div>
       <div className="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
         <div>
@@ -155,15 +161,20 @@ function ProductCard({
 /**
  * La pantalla de búsqueda de NODO, reproducida con productos reales: se escribe
  * la búsqueda, aparecen los resultados de todos los distribuidores y se suma un
- * producto al carrito. Sin recomendar a ninguno.
+ * producto al carrito. Cada vuelta es otra búsqueda (memorias, monitores, placas
+ * de video). Sin recomendar a ningún distribuidor ni marca.
  */
 export function SearchDemo() {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useInView<HTMLDivElement>(0.25);
+  const [cycle, setCycle] = useState(0);
+  const search = SEARCHES[cycle % SEARCHES.length];
+  const SEARCH_QUERY = search.query;
+  const SEARCH_RESULTS = search.results;
+  const ADDED_QTY = search.addQty;
   const [typed, setTyped] = useState(SEARCH_QUERY.length);
   const [phase, setPhase] = useState<Phase>("results");
   const [qty, setQty] = useState(0);
-  const [cycle, setCycle] = useState(0);
   const [started, setStarted] = useState(false);
 
   // Arranca la primera vez que se ve y después se repite sola: hacer scroll no la reinicia.
@@ -185,9 +196,9 @@ export function SearchDemo() {
     const typedAt = 500 + SEARCH_QUERY.length * 75;
     timers.push(setTimeout(() => setPhase("results"), typedAt + 450));
     for (let q = 1; q <= ADDED_QTY; q++) timers.push(setTimeout(() => setQty(q), typedAt + 2600 + q * 110));
-    timers.push(setTimeout(() => setCycle((c) => c + 1), typedAt + 16000));
+    timers.push(setTimeout(() => setCycle((c) => c + 1), typedAt + 12000));
     return () => timers.forEach(clearTimeout);
-  }, [reduced, started, cycle]);
+  }, [reduced, started, cycle, SEARCH_QUERY, ADDED_QTY]);
 
   const added = qty === ADDED_QTY;
 
@@ -217,7 +228,7 @@ export function SearchDemo() {
               <span className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--line)] bg-[#141733] px-3 text-xs text-[var(--fg-2)]">
                 <Truck className="h-3.5 w-3.5" /> Incluir envío
               </span>
-              {["Categoría · Memorias", "Marca · ADATA", "Todos · Distribuidor"].map((f) => (
+              {[`Categoría · ${search.category}`, `Marca · ${search.brand}`, "Todos · Distribuidor"].map((f) => (
                 <span
                   key={f}
                   className="inline-flex h-8 items-center gap-2 rounded-lg border border-[var(--line)] bg-[#141733] px-3 text-xs text-[var(--fg-2)]"
@@ -227,13 +238,19 @@ export function SearchDemo() {
               ))}
               <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-[var(--fg-3)]">
                 <strong className="text-white">{SEARCH_RESULTS.length}</strong> productos ·{" "}
-                <strong className="text-white">4</strong> distribuidores
+                <strong className="text-white">{new Set(SEARCH_RESULTS.map((p) => p.distributor)).size}</strong> distribuidores
                 <ArrowUpDown className="ml-2 h-3.5 w-3.5" /> Precio
               </span>
             </div>
             <div className="p-2.5 sm:min-h-[29rem] sm:p-4">
-              {phase === "results" || cycle > 0 ? (
-                <div className={`grid grid-cols-2 gap-2 transition-opacity duration-300 sm:gap-3 lg:grid-cols-3 ${phase === "typing" ? "opacity-30" : ""}`}>
+              {/* La grilla de resultados está siempre montada: mientras se escribe la
+                  búsqueda queda invisible bajo los placeholders, así la pantalla no
+                  cambia de alto y la página no salta. */}
+              <div className="relative">
+                <div
+                  className={`grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 ${phase === "results" ? "" : "invisible"}`}
+                  aria-hidden={phase !== "results"}
+                >
                   {SEARCH_RESULTS.map((p, i) => (
                     <ProductCard
                       key={`${p.code}-${cycle}-${phase}`}
@@ -246,13 +263,17 @@ export function SearchDemo() {
                     />
                   ))}
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3" aria-hidden>
-                  {SEARCH_RESULTS.map((p) => (
-                    <div key={p.code} className="h-[19rem] animate-pulse sm:h-[23.5rem] rounded-xl border border-[var(--line)] bg-[#12152e]" />
-                  ))}
-                </div>
-              )}
+                {phase !== "results" && (
+                  <div className="absolute inset-0 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3" aria-hidden>
+                    {SEARCH_RESULTS.map((p, i) => (
+                      <div
+                        key={p.code}
+                        className={`${i >= 4 ? "hidden sm:block" : ""} animate-pulse rounded-xl border border-[var(--line)] bg-[#12152e]`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

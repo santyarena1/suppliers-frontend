@@ -3,10 +3,10 @@ import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 
 const LINKS = [
-  { href: "#como-funciona", label: "Cómo funciona" },
-  { href: "#ahorro", label: "Cuánto ahorrás" },
-  { href: "#planes", label: "Planes" },
-  { href: "#preguntas", label: "Preguntas" },
+  { href: "/landing#como-funciona", label: "Cómo funciona" },
+  { href: "/landing#ahorro", label: "Cuánto ahorrás" },
+  { href: "/landing#planes", label: "Planes" },
+  { href: "/landing#preguntas", label: "Preguntas" },
 ];
 
 export function Nav() {
@@ -32,7 +32,7 @@ export function Nav() {
           <Link href="/login" className="inline-flex rounded-lg px-2 py-2 text-sm text-[var(--fg-2)] hover:text-white sm:px-3">
             Entrar
           </Link>
-          <a href="#probar" className="nl-btn nl-btn--primary nl-btn--sm">
+          <a href="/landing#probar" className="nl-btn nl-btn--primary nl-btn--sm">
             Probar NODO
           </a>
         </div>

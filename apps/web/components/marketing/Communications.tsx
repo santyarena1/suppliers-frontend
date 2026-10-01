@@ -72,7 +72,8 @@ export function Communications() {
               <p className="relative inline-flex items-center gap-2 text-sm font-semibold text-white">
                 <Bell className="h-4 w-4 text-[var(--accent-2)]" aria-hidden /> Notificaciones
               </p>
-              <div className="relative mt-5">
+              {/* Alto fijo: los avisos van apareciendo sin estirar la tarjeta. */}
+              <div className="relative mt-5 h-[25rem] overflow-hidden">
                 <Feed />
               </div>
             </div>

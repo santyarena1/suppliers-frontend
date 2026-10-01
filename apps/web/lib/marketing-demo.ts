@@ -1,6 +1,8 @@
 /**
- * Datos de las demos de la landing. Los productos, códigos y fotos son reales
- * (catálogo de NODO); los distribuidores van sin nombre y los precios son de
+ * Datos de las demos de la landing. Los productos y códigos son reales; las
+ * fotos de ADATA salen del catálogo de NODO y las de ASUS y GIGABYTE son las
+ * oficiales del fabricante (Open Icecat), guardadas en /public/landing/products.
+ * Los distribuidores van sin nombre y los precios son de
  * ejemplo: la landing no compara ni recomienda distribuidores ni marcas, porque
  * NODO también es para ellos.
  */
@@ -95,6 +97,172 @@ export const SEARCH_RESULTS: DemoProduct[] = [
     iva: 10.5,
     updated: "Actualizado hoy, 8:20",
   },
+];
+
+const ASUS_MONITORS: DemoProduct[] = [
+  {
+    name: 'ASUS TUF Gaming VG249Q1A 23,8" 165Hz',
+    brand: "ASUS",
+    category: "Monitores",
+    code: "90LM06J1-B01170",
+    image: "/landing/products/asus-vg249q1a.jpg",
+    distributor: "Distribuidor 1",
+    stock: 34,
+    net: 132.4,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:20",
+  },
+  {
+    name: 'ASUS VA24EHE 23,8" IPS 75Hz',
+    brand: "ASUS",
+    category: "Monitores",
+    code: "90LM0560-B01170",
+    image: "/landing/products/asus-va24ehe.jpg",
+    distributor: "Distribuidor 3",
+    stock: 58,
+    net: 97.9,
+    iva: 10.5,
+    updated: "Actualizado hoy, 7:50",
+  },
+  {
+    name: 'ASUS TUF Gaming VG27AQ 27" QHD 165Hz',
+    brand: "ASUS",
+    category: "Monitores",
+    code: "90LM0500-B01370",
+    image: "/landing/products/asus-vg27aq.jpg",
+    distributor: "Distribuidor 2",
+    stock: 9,
+    net: 264.8,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:20",
+  },
+  {
+    name: 'ASUS TUF Gaming VG259Q 24,5" 144Hz',
+    brand: "ASUS",
+    category: "Monitores",
+    code: "90LM0530-B01370",
+    image: "/landing/products/asus-vg259q.jpg",
+    distributor: "Distribuidor 4",
+    stock: 17,
+    net: 163.5,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:05",
+  },
+  {
+    name: 'ASUS VA27DQSB 27" IPS 75Hz',
+    brand: "ASUS",
+    category: "Monitores",
+    code: "90LM06H1-B01370",
+    image: "/landing/products/asus-va27dqsb.jpg",
+    distributor: "Distribuidor 1",
+    stock: 22,
+    net: 171.2,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:20",
+  },
+  {
+    name: 'ASUS ROG Swift PG42UQ 41,5" OLED 4K',
+    brand: "ASUS",
+    category: "Monitores",
+    code: "90LM0850-B01170",
+    image: "/landing/products/asus-pg42uq.jpg",
+    distributor: "Distribuidor 2",
+    stock: 3,
+    net: 1189,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:20",
+  },
+];
+
+const GIGABYTE_GPUS: DemoProduct[] = [
+  {
+    name: "GIGABYTE GeForce RTX 4060 GAMING OC 8G",
+    brand: "GIGABYTE",
+    category: "Placas de video",
+    code: "GV-N4060GAMING OC-8GD",
+    image: "/landing/products/gigabyte-rtx4060-gaming.jpg",
+    distributor: "Distribuidor 3",
+    stock: 21,
+    net: 341.6,
+    iva: 10.5,
+    updated: "Actualizado hoy, 7:50",
+  },
+  {
+    name: "GIGABYTE GeForce RTX 4060 EAGLE OC 8G",
+    brand: "GIGABYTE",
+    category: "Placas de video",
+    code: "GV-N4060EAGLE OC-8GD",
+    image: "/landing/products/gigabyte-rtx4060-eagle.jpg",
+    distributor: "Distribuidor 1",
+    stock: 16,
+    net: 318.9,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:20",
+  },
+  {
+    name: "GIGABYTE GeForce RTX 3050 WINDFORCE OC 6G",
+    brand: "GIGABYTE",
+    category: "Placas de video",
+    code: "GV-N3050WF2OC-6GD",
+    image: "/landing/products/gigabyte-rtx3050-windforce.jpg",
+    distributor: "Distribuidor 4",
+    stock: 40,
+    net: 204.7,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:05",
+  },
+  {
+    name: "GIGABYTE Radeon RX 7600 GAMING OC 8G",
+    brand: "GIGABYTE",
+    category: "Placas de video",
+    code: "GV-R76GAMING OC-8GD",
+    image: "/landing/products/gigabyte-rx7600-gaming.jpg",
+    distributor: "Distribuidor 2",
+    stock: 11,
+    net: 288.3,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:20",
+  },
+  {
+    name: "GIGABYTE GeForce RTX 4060 Ti GAMING OC 8G",
+    brand: "GIGABYTE",
+    category: "Placas de video",
+    code: "GV-N406TGAMING OC-8GD",
+    image: "/landing/products/gigabyte-rtx4060ti-gaming.jpg",
+    distributor: "Distribuidor 1",
+    stock: 7,
+    net: 433.5,
+    iva: 10.5,
+    updated: "Actualizado hoy, 8:20",
+  },
+  {
+    name: "GIGABYTE GeForce RTX 4070 WINDFORCE OC 12G",
+    brand: "GIGABYTE",
+    category: "Placas de video",
+    code: "GV-N4070WF3OC-12GD",
+    image: "/landing/products/gigabyte-rtx4070-windforce.jpg",
+    distributor: "Distribuidor 3",
+    stock: 5,
+    net: 608.2,
+    iva: 10.5,
+    updated: "Actualizado hoy, 7:50",
+  },
+];
+
+export interface DemoSearch {
+  query: string;
+  category: string;
+  brand: string;
+  /** Unidades que la demo suma al carrito del primer resultado. */
+  addQty: number;
+  results: DemoProduct[];
+}
+
+/** Las búsquedas que va mostrando la portada, una por vuelta. */
+export const SEARCHES: DemoSearch[] = [
+  { query: SEARCH_QUERY, category: "Memorias", brand: "ADATA", addQty: 8, results: SEARCH_RESULTS },
+  { query: "monitor asus", category: "Monitores", brand: "ASUS", addQty: 3, results: ASUS_MONITORS },
+  { query: "placa de video gigabyte", category: "Placas de video", brand: "GIGABYTE", addQty: 2, results: GIGABYTE_GPUS },
 ];
 
 export function withIva(net: number, iva: number) {

@@ -19,7 +19,9 @@ function isPrefetch(req: NextRequest): boolean {
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (OPEN_PATHS.has(pathname)) return NextResponse.next();
+  // Lo que cuelga de la landing (páginas de marcas y distribuidores, fotos de
+  // las demos) es tan público como la landing.
+  if (OPEN_PATHS.has(pathname) || pathname.startsWith("/landing/")) return NextResponse.next();
   if (AUTH_PATHS.has(pathname)) return guardLogin(req);
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
 

@@ -31,6 +31,11 @@ const QA: { topic: Topic; q: string; a: string }[] = [
   },
   {
     topic: "precios",
+    q: "¿Puedo ver a cuánto se vende afuera?",
+    a: "Sí. En cada producto ves los precios de venta de locales de computación y, si cargaste tu tienda web en Configuración, tu precio publicado al lado de tu costo final, con el margen.",
+  },
+  {
+    topic: "precios",
     q: "¿Qué pasa si trabajo con un distribuidor que no está?",
     a: "Subís su lista de precios en Excel y aparece en la búsqueda como uno más. El pedido te queda armado para mandárselo por mensaje.",
   },

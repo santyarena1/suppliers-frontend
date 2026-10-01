@@ -125,7 +125,7 @@ export function CheckoutDemo() {
                             ) : (
                               <span className="h-4 w-4 rounded-full border border-[var(--line-2)]" aria-hidden />
                             )}
-                            <span className={final && state === "done" ? "font-semibold text-white" : "text-[var(--fg-2)]"}>
+                            <span className={`truncate ${final && state === "done" ? "font-semibold text-white" : "text-[var(--fg-2)]"}`}>
                               {final && state === "done" ? `Pedido Nº ${g.orderNumber} creado en su portal` : label}
                             </span>
                           </li>
@@ -152,11 +152,14 @@ export function CheckoutDemo() {
                   )}
                 </div>
               ))}
-              {done && !reduced && (
+              {/* Siempre ocupa su lugar: que aparezca al final no corre la página. */}
+              {!reduced && (
                 <button
                   type="button"
                   onClick={() => setRun((r) => r + 1)}
-                  className="nl-anim-in inline-flex items-center gap-2 self-start rounded-lg px-2 py-1 text-sm text-[var(--fg-3)] hover:text-white"
+                  tabIndex={done ? 0 : -1}
+                  aria-hidden={!done}
+                  className={`inline-flex items-center gap-2 self-start rounded-lg px-2 py-1 text-sm text-[var(--fg-3)] transition-opacity hover:text-white ${done ? "opacity-100" : "pointer-events-none opacity-0"}`}
                 >
                   <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Ver de nuevo
                 </button>

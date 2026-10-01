@@ -4,6 +4,7 @@ import { Fragment, useState } from "react";
 import { Check, ChevronDown, Minus } from "lucide-react";
 import { BASE_SEARCH_LIMIT, PLAN_CATALOG, PLAN_FEATURE_GROUPS, type PlanCell, type TenantPlan } from "@/lib/plans";
 import { Reveal } from "./Reveal";
+import { SupplyPlans } from "./SupplyPlans";
 import { rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
 
 interface CardCopy {
@@ -200,13 +201,9 @@ export function Pricing() {
             </table>
           </div>
         )}
-        <p className="mt-6 text-center text-sm text-[var(--fg-3)]">
-          Precios en dólares, por comercio y por mes. ¿Sos distribuidor o marca? Tenemos un espacio para vos:{" "}
-          <a href="#probar" className="text-[var(--fg-2)] underline underline-offset-4 hover:text-white">
-            creá la cuenta
-          </a>{" "}
-          y te lo habilitamos.
-        </p>
+        <p className="mt-6 text-center text-sm text-[var(--fg-3)]">Precios en dólares, por comercio y por mes.</p>
+
+        <SupplyPlans />
       </div>
     </section>
   );
