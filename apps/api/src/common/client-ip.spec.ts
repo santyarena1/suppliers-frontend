@@ -1,23 +1,19 @@
 import { clientIp } from "./client-ip";
 
 describe("clientIp", () => {
-  it("toma la IP que agrega el proxy (la de más a la derecha)", () => {
-    expect(clientIp("200.1.1.1", "100.64.0.2")).toBe("200.1.1.1");
+  it("usa X-Real-IP, que Railway reescribe con la IP de quien se conecta", () => {
+    expect(clientIp("186.139.59.87", "186.139.59.87, 46.151.194.129", "100.64.0.10")).toBe("186.139.59.87");
   });
 
-  it("un X-Forwarded-For falseado por el cliente no cambia el resultado", () => {
-    expect(clientIp("1.2.3.4, 9.9.9.9, 200.1.1.1", "100.64.0.2")).toBe("200.1.1.1");
+  it("no cuenta por el borde de Railway (último salto de X-Forwarded-For)", () => {
+    expect(clientIp(undefined, "186.139.59.87, 46.151.194.129", "100.64.0.10")).toBe("186.139.59.87");
   });
 
-  it("saltea los saltos internos del proxy", () => {
-    expect(clientIp("200.1.1.1, 10.0.0.5", "100.64.0.2")).toBe("200.1.1.1");
+  it("sin headers usa la IP del socket", () => {
+    expect(clientIp(undefined, undefined, "127.0.0.1")).toBe("127.0.0.1");
   });
 
-  it("sin header usa la IP del socket", () => {
-    expect(clientIp(undefined, "127.0.0.1")).toBe("127.0.0.1");
-  });
-
-  it("ignora basura en el header", () => {
-    expect(clientIp("no-es-ip, 200.1.1.1", undefined)).toBe("200.1.1.1");
+  it("ignora basura en los headers", () => {
+    expect(clientIp("no-es-ip", "tampoco", "127.0.0.1")).toBe("127.0.0.1");
   });
 });
