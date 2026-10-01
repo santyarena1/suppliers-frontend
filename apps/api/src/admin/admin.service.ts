@@ -12,6 +12,7 @@ import {
 } from "@nodo/shared";
 import { generatePassword } from "../common/generate-password";
 import { PrismaService } from "../prisma/prisma.service";
+import { MailService } from "../mail/mail.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateProviderDisplayDto } from "./dto/update-provider-display.dto";
 import { UpdateBrandDisplayDto } from "./dto/update-brand-display.dto";
@@ -20,7 +21,10 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService
+  ) {}
 
   // ---------- Usuarios ----------
 
@@ -30,7 +34,7 @@ export class AdminService {
    */
   async createUser(dto: CreateUserDto) {
     const existing = await this.prisma.user.findFirst({
-      where: { OR: [{ username: dto.username }, { email: dto.email }] },
+      where: { OR: [{ username: dto.username }, { email: { equals: dto.email.trim().toLowerCase(), mode: "insensitive" } }] },
     });
     if (existing) {
       throw new ConflictException(
@@ -42,9 +46,10 @@ export class AdminService {
     const user = await this.prisma.user.create({
       data: {
         username: dto.username,
-        email: dto.email,
+        email: dto.email.trim().toLowerCase(),
         passwordHash,
         role: "ROLE_ADMIN",
+        emailVerifiedAt: new Date(),
         active: dto.active ?? true,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
       },
@@ -66,14 +71,17 @@ export class AdminService {
       if (clash) throw new ConflictException("El nombre de usuario ya está en uso");
     }
     if (dto.email) {
-      const clash = await this.prisma.user.findFirst({ where: { email: dto.email, id: { not: userId } } });
+      const email = dto.email.trim().toLowerCase();
+      const clash = await this.prisma.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" }, id: { not: userId } },
+      });
       if (clash) throw new ConflictException("El email ya está registrado");
     }
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: {
         ...(dto.username ? { username: dto.username } : {}),
-        ...(dto.email ? { email: dto.email } : {}),
+        ...(dto.email ? { email: dto.email.trim().toLowerCase(), emailVerifiedAt: new Date() } : {}),
       },
       select: { id: true, username: true, email: true, role: true, brandId: true },
     });
@@ -90,6 +98,17 @@ export class AdminService {
       // Solo cuando la generó la plataforma: es la única vez que puede verse.
       ...(password ? {} : { generatedPassword: nextPassword }),
     };
+  }
+
+  /**
+   * Manda un mail a la cuenta. El email es el canal de la plataforma: no hay
+   * baja ni casilla de "puede o no recibir información".
+   */
+  async sendUserEmail(userId: string, dto: { subject: string; text: string }) {
+    const user = await this.assertUserExists(userId);
+    const html = `<pre style="font-family:Arial,sans-serif;white-space:pre-wrap">${escapeHtml(dto.text)}</pre>`;
+    await this.mail.send({ to: user.email, subject: dto.subject, text: dto.text, html });
+    return { sent: true, to: user.email };
   }
 
   /**
@@ -239,4 +258,8 @@ export class AdminService {
       update: { brandPreset },
     });
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }

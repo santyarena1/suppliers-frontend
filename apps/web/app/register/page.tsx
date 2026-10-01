@@ -3,14 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { authApi } from "@/lib/api";
-import { saveSession, sessionFromToken } from "@/lib/auth";
-import { invalidateMyModules } from "@/lib/permissions";
-import { invalidateTgsEnabled } from "@/lib/tgs";
+import { authApi, apiFailure } from "@/lib/api";
+import { enterAuthenticated } from "@/lib/enter-session";
 import { ArrowLeft, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 import DataField from "@/components/landing/DataField";
+import GoogleSignInButton, { googleSignInEnabled } from "@/components/GoogleSignInButton";
 import "../(marketing)/landing.css";
 import "../login/login.css";
 
@@ -23,6 +22,7 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const showGoogle = googleSignInEnabled();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,16 +34,21 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await authApi.register(username, email, password);
-      const res = await authApi.login(username, password);
-      const token = res.data.token;
-      invalidateMyModules();
-      invalidateTgsEnabled();
-      saveSession(token, sessionFromToken(token, username));
-      router.push("/onboarding");
+      router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(msg || "Error al registrarse. Intentá de nuevo.");
-    } finally {
+      setError(apiFailure(err).message || "Error al registrarse. Intentá de nuevo.");
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogle(idToken: string) {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await authApi.google(idToken);
+      await enterAuthenticated(res.data.token, "");
+    } catch (err: unknown) {
+      setError(apiFailure(err).message || "No se pudo entrar con Google.");
       setLoading(false);
     }
   }
@@ -113,6 +118,9 @@ export default function RegisterPage() {
                   required
                   autoComplete="email"
                 />
+                <span className="lgn__hint">
+                  Ahí te llega el código de confirmación y, después, la información de tu cuenta.
+                </span>
               </label>
 
               <label className="lgn__row" data-field-row>
@@ -156,6 +164,15 @@ export default function RegisterPage() {
                 )}
               </button>
             </form>
+
+            {showGoogle && (
+              <>
+                <p className="lgn__alt" role="separator">
+                  <span>o continuá con</span>
+                </p>
+                <GoogleSignInButton className="lgn__google" onCredential={(token) => void handleGoogle(token)} disabled={loading} />
+              </>
+            )}
 
             <p className="lgn__foot">
               ¿Ya tenés cuenta? <Link href="/login">Ingresá</Link>

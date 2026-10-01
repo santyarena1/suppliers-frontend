@@ -460,8 +460,9 @@ export class TenantsService {
     const tenant = await this.assertTenantExists(tenantId);
     this.assertRoleAllowed(tenant.type, dto.role);
 
+    const email = dto.email.trim().toLowerCase();
     const clash = await this.prisma.user.findFirst({
-      where: { OR: [{ username: dto.username }, { email: dto.email }] },
+      where: { OR: [{ username: dto.username }, { email: { equals: email, mode: "insensitive" } }] },
     });
     if (clash) {
       throw new ConflictException(
@@ -482,9 +483,10 @@ export class TenantsService {
         user: {
           create: {
             username: dto.username,
-            email: dto.email,
+            email,
             passwordHash,
             role: platformRole,
+            emailVerifiedAt: new Date(),
             brandId: tenant.type === "BRAND" ? tenant.brandId : null,
           },
         },

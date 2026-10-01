@@ -114,6 +114,7 @@ export class BrandOrgsService implements OnModuleInit {
             passwordHash,
             role: UserRole.ROLE_USER,
             managedByPlatform: true,
+            emailVerifiedAt: new Date(),
           },
         },
       },

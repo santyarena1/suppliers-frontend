@@ -16,6 +16,7 @@ import { CreateBannerDto, UpdateBannerDto } from "./dto/banner.dto";
 import { UpdatePlatformSettingsDto } from "./dto/platform-settings.dto";
 import { ActiveStatusBodyDto, EndDateBodyDto } from "./dto/body-only.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { SendUserEmailDto } from "./dto/send-user-email.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 
 function assertProvider(value: string): Provider {
@@ -68,6 +69,12 @@ export class AdminController {
   @Put("users/:id/password")
   resetPassword(@Param("id") id: string, @Body() dto: ResetPasswordDto) {
     return this.adminService.resetPassword(id, dto.password);
+  }
+
+  /** Escribe al mail de la cuenta. No hay baja: el email es el canal de NODO. */
+  @Post("users/:id/email")
+  sendUserEmail(@Param("id") id: string, @Body() dto: SendUserEmailDto) {
+    return this.adminService.sendUserEmail(id, dto);
   }
 
   /** Devuelve una sesión del usuario indicado para ver la plataforma como él. */

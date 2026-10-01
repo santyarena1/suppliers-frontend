@@ -4,6 +4,33 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ## Implementado
 
+### [FEATURE] Verificación de email (código)
+- **Método**: POST
+- **Ruta**: `/auth/register` · `/auth/verify-email` · `/auth/resend-verification` · `/auth/login`
+- **Auth**: público (throttle: 10/min register/login/verify, 5/min resend)
+- **Body / Params**: register `{ username, email, password }` · verify `{ email, code }` (6 dígitos) · resend `{ email }`
+- **Respuesta esperada**: register `{ id, username, email, needsVerification: true }` (sin JWT) · verify `{ token }` · resend `{ sent: true }` · login sin confirmar: **403** `{ code: "EMAIL_NOT_VERIFIED", details: { email } }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El mail es el canal de la cuenta: no hay opt-in ni casilla de “puede o no recibir información”. El código dura 15 minutos, 5 intentos, reenvío cada 60s; se guarda hasheado (SHA-256 + `EMAIL_CODE_PEPPER` o `JWT_SECRET`). Cuentas ya existentes, altas de admin/equipo y placeholders `@nodo.internal` nacen verificadas. Envío: `RESEND_API_KEY` o SMTP (`SMTP_HOST`…). En desarrollo, si no hay proveedor, el cuerpo va al log. Front: `/verify-email`.
+
+### [FEATURE] Login con Google
+- **Método**: POST
+- **Ruta**: `/auth/google`
+- **Auth**: público (throttle 10/min)
+- **Body / Params**: `{ idToken }` (GIS, Identity Services)
+- **Respuesta esperada**: `{ token }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: El API verifica el ID token con `GOOGLE_CLIENT_ID` (claves JWKS de Google). El front usa el mismo valor en `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; si falta, no se muestra el botón. Google confirma el mail: la cuenta nace verificada (o se vincula a una existente por email). Sin contraseña hasta que admin la resetee. Si Google no marcó `email_verified`, 401.
+
+### [FEATURE] Envío de mail a una cuenta (admin)
+- **Método**: POST
+- **Ruta**: `/admin/users/:id/email`
+- **Auth**: Bearer ROLE_ADMIN
+- **Body / Params**: `{ subject, text }`
+- **Respuesta esperada**: `{ sent: true, to }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Usa el mismo `MailService` que la confirmación. No hay baja ni preferencias de marketing: el email de la cuenta es el domicilio para avisos de NODO.
+
 ### [FEATURE] Onboarding comercio (Tipo 1) + plan NODO Base
 - **Método**: GET | POST
 - **Ruta**: `/onboarding/status` · `/onboarding/bootstrap` · `/onboarding/start-tour` · `/onboarding/preview` · `/onboarding/preview/exit` · `/onboarding/step` · `/onboarding/complete` · `/onboarding/reopen` · `/onboarding/reseed-demo`
@@ -42,12 +69,12 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ### [FEATURE] Gestión completa de usuarios (admin)
 - **Método**: GET | POST | PUT | DELETE
-- **Ruta**: `/admin/users`, `/admin/users/:id`, `/admin/users/:id/password`, `/admin/users/:id/superadmin`, `/admin/users/:id/active-status`, `/admin/users/:id/end-date`
+- **Ruta**: `/admin/users`, `/admin/users/:id`, `/admin/users/:id/password`, `/admin/users/:id/email`, `/admin/users/:id/superadmin`, `/admin/users/:id/active-status`, `/admin/users/:id/end-date`
 - **Auth**: Bearer ROLE_ADMIN
 - **Body / Params**: crear (solo superadmins) `{ username, email, password?, active?, endDate? }` · editar `{ username?, email? }` · superadmin `{ superadmin: boolean }` · password `{ password? }` (mín. 8)
 - **Respuesta esperada**: lista enriquecida con `brand`, `providers` (nombres, sin secretos), `brandAccesses`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un usuario = una cuenta que pertenece a una o más organizaciones con un rol; ese rol define qué puede hacer. Los miembros se crean y asignan por `/admin/tenants/:id/members*`; `POST /admin/users` solo da de alta superadmins (el único usuario sin organización). El nivel de plataforma no se elige a mano: `PUT .../superadmin` lo prende o, al apagarlo, lo recalcula desde la organización (marca → `ROLE_BRAND`, resto → `ROLE_USER`); no deja a la plataforma sin superadmin activo. `GET /me/permissions` devuelve los módulos del nivel de plataforma, sin excepciones por usuario (se quitaron `GET/PUT /admin/permissions/:userId` y las rutas viejas `/user/update-active-status`, `/user/update-end-date`, `/user/delete`). `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse. En la UI vive en el **Directorio** (`/admin`): ficha del usuario (cuenta, superadmin, clave, “Entrar como”, organizaciones).
+- **Notas**: Un usuario = una cuenta que pertenece a una o más organizaciones con un rol; ese rol define qué puede hacer. Los miembros se crean y asignan por `/admin/tenants/:id/members*`; `POST /admin/users` solo da de alta superadmins (el único usuario sin organización). El nivel de plataforma no se elige a mano: `PUT .../superadmin` lo prende o, al apagarlo, lo recalcula desde la organización (marca → `ROLE_BRAND`, resto → `ROLE_USER`); no deja a la plataforma sin superadmin activo. `GET /me/permissions` devuelve los módulos del nivel de plataforma, sin excepciones por usuario (se quitaron `GET/PUT /admin/permissions/:userId` y las rutas viejas `/user/update-active-status`, `/user/update-end-date`, `/user/delete`). `GET /admin/users` no devuelve hashes ni credenciales de distribuidores. `endDate: null` limpia el vencimiento. Al crear o resetear sin `password`, la plataforma genera una y la devuelve en `generatedPassword`; como solo se guarda el hash, esa es la única vez que puede leerse. Altas de admin y de equipo nacen con el email ya verificado. `POST /admin/users/:id/email` manda un aviso al mail de la cuenta (sin baja). En la UI vive en el **Directorio** (`/admin`): ficha del usuario (cuenta, superadmin, clave, “Entrar como”, organizaciones).
 
 ### [FEATURE] Permisos por organización
 - **Método**: GET | PUT

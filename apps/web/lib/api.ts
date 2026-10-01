@@ -22,7 +22,7 @@ const api = axios.create({ baseURL: BASE_URL });
  * significa que alguien anónimo tocó un endpoint con auth. Nunca redirigimos
  * desde estas rutas.
  */
-const PUBLIC_PAGES = new Set(["/login", "/register", "/landing", "/preview", "/onboarding"]);
+const PUBLIC_PAGES = new Set(["/login", "/register", "/verify-email", "/landing", "/preview", "/onboarding"]);
 
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
@@ -50,7 +50,7 @@ api.interceptors.response.use(
     // carrito. Solo limpiamos cuando el token falta o ya venció.
     if (typeof window !== "undefined" && error?.response?.status === 401 && !PUBLIC_PAGES.has(window.location.pathname)) {
       const url = String(error?.config?.url ?? "");
-      if (url.includes("/auth/login") || url.includes("/auth/register")) {
+      if (/\/auth\/(login|register|verify-email|resend-verification|google)\b/.test(url)) {
         return Promise.reject(error);
       }
       // Sin token nunca hubo sesión que vencer: es una visita anónima que pegó
@@ -270,7 +270,25 @@ export interface CredentialResponse {
 export interface RegisterResponse {
   id: string;
   username: string;
-  role: "ROLE_USER" | "ROLE_ADMIN" | "ROLE_BRAND";
+  email: string;
+  needsVerification: boolean;
+}
+
+export type ApiFailure = {
+  message?: string;
+  code?: string;
+  details?: Record<string, unknown>;
+  status?: number;
+};
+
+export function apiFailure(err: unknown): ApiFailure {
+  const e = err as {
+    response?: { status?: number; data?: { message?: string | string[]; code?: string; details?: Record<string, unknown> } };
+    message?: string;
+  };
+  const data = e.response?.data;
+  const message = Array.isArray(data?.message) ? data.message.join(". ") : data?.message ?? e.message;
+  return { message, code: data?.code, details: data?.details, status: e.response?.status };
 }
 
 // --- Auth ---
@@ -279,6 +297,11 @@ export const authApi = {
     api.post<{ token: string }>("/auth/login", { username, password }),
   register: (username: string, email: string, password: string) =>
     api.post<RegisterResponse>("/auth/register", { username, email, password }),
+  verifyEmail: (email: string, code: string) =>
+    api.post<{ token: string }>("/auth/verify-email", { email, code }),
+  resendVerification: (email: string) =>
+    api.post<{ sent: boolean }>("/auth/resend-verification", { email }),
+  google: (idToken: string) => api.post<{ token: string }>("/auth/google", { idToken }),
   refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
 };
 

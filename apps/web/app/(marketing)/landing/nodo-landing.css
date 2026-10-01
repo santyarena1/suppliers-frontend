@@ -127,6 +127,26 @@
 .nl-btn--ghost:hover { border-color: rgb(255 255 255 / 0.25); background: rgb(255 255 255 / 0.05); }
 .nl-btn--sm { height: 38px; padding: 0 14px; font-size: 0.875rem; }
 
+.nl-alt {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.25rem 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.nl-alt::before,
+.nl-alt::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.nl-google { width: 100%; }
+.nl-google > div { display: flex; justify-content: center; }
+
 /* Chips de estado (producto) */
 .nl-chip {
   display: inline-flex;

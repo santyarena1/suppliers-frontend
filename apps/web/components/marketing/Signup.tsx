@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
-import { authApi, onboardingApi } from "@/lib/api";
+import { authApi, apiFailure, onboardingApi } from "@/lib/api";
 import { saveSession, sessionFromToken } from "@/lib/auth";
+import { enterAuthenticated } from "@/lib/enter-session";
 import { invalidateMyModules } from "@/lib/permissions";
 import { invalidateTgsEnabled } from "@/lib/tgs";
 import { Reveal } from "./Reveal";
 import { readTrialPlan, rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
+import GoogleSignInButton, { googleSignInEnabled } from "@/components/GoogleSignInButton";
 
 /** Con la clave de superadmin, el formulario abre el onboarding en modo preview. */
 const PREVIEW_USER = "superadmin";
@@ -31,6 +33,7 @@ export function Signup() {
   const [loading, setLoading] = useState(false);
   const isPreviewLogin = username.trim().toLowerCase() === PREVIEW_USER;
   const [trialPlan, setTrialPlan] = useState<TrialPlan>("PRO");
+  const showGoogle = googleSignInEnabled();
 
   // El plan elegido en las tarjetas de planes llega acá.
   useEffect(() => {
@@ -70,15 +73,23 @@ export function Signup() {
       }
       rememberTrialPlan(trialPlan);
       await authApi.register(username.trim(), email.trim(), password);
-      const res = await authApi.login(username.trim(), password);
-      invalidateMyModules();
-      invalidateTgsEnabled();
-      saveSession(res.data.token, sessionFromToken(res.data.token, username.trim()));
-      router.push("/onboarding");
+      router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(". ") : msg || "No se pudo crear la cuenta. Probá de nuevo.");
+      setError(apiFailure(err).message || "No se pudo crear la cuenta. Probá de nuevo.");
     } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogle(idToken: string) {
+    setError("");
+    setLoading(true);
+    rememberTrialPlan(trialPlan);
+    try {
+      const res = await authApi.google(idToken);
+      await enterAuthenticated(res.data.token, "");
+    } catch (err: unknown) {
+      setError(apiFailure(err).message || "No se pudo entrar con Google.");
       setLoading(false);
     }
   }
@@ -174,6 +185,9 @@ export function Signup() {
                     autoComplete="email"
                     required
                   />
+                  <p className="text-xs text-[var(--fg-3)]">
+                    Ahí te llega el código de confirmación y, después, la información de tu cuenta.
+                  </p>
                 </div>
               )}
               <div className={`grid gap-5 ${isPreviewLogin ? "" : "sm:grid-cols-2"}`}>
@@ -214,6 +228,18 @@ export function Signup() {
                 {loading && <Loader2 className="nl-spin h-4 w-4" aria-hidden />}
                 {loading ? "Creando la cuenta" : `Empezar mis ${TRIAL_DAYS} días gratis`}
               </button>
+              {showGoogle && !isPreviewLogin && (
+                <>
+                  <p className="nl-alt" role="separator">
+                    <span>o continuá con</span>
+                  </p>
+                  <GoogleSignInButton
+                    className="nl-google"
+                    onCredential={(token) => void handleGoogle(token)}
+                    disabled={loading}
+                  />
+                </>
+              )}
             </div>
           </form>
         </Reveal>
