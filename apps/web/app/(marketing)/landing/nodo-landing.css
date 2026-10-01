@@ -72,10 +72,18 @@
 /* Un hijo de grilla con texto largo (truncate, montos) no puede ensanchar la columna en mobile. */
 .nl .grid > * { min-width: 0; }
 @media (min-width: 1024px) { .nl-section { padding: 128px 0; } }
-/* Módulos apilados: cada tarjeta se pega debajo del menú, un poco más abajo
-   que la anterior, así la pila deja ver los bordes. */
-.nl-stack-card { top: calc(76px + var(--i) * 12px); transform-origin: 50% 0; transition: transform 120ms linear, filter 120ms linear; will-change: transform; }
-@media (min-width: 1024px) { .nl-stack-card { top: calc(104px + var(--i) * 16px); } }
+/* Secciones apiladas: cada una es una hoja que sube y tapa a la anterior.
+   La de abajo se achica y se apaga (lo hace StackedSections). */
+.nl-sheet {
+  position: sticky;
+  border-radius: 28px 28px 0 0;
+  border-top: 1px solid var(--line-2);
+  background: linear-gradient(180deg, rgb(19 22 43 / 0.94) 0%, rgb(11 13 26 / 0.8) 320px, rgb(11 13 26 / 0.55) 100%);
+  box-shadow: 0 -30px 60px -30px rgb(3 3 16 / 0.95);
+  transform-origin: 50% 0;
+}
+.nl-sheet:first-child { border-radius: 0; border-top: 0; background: none; box-shadow: none; }
+.nl-sheet > section.nl-divider { border-top: 0; }
 .nl-divider { border-top: 1px solid var(--line); }
 
 /* Superficies */

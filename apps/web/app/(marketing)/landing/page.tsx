@@ -11,6 +11,7 @@ import { PageField } from "@/components/marketing/PageField";
 import { Pricing } from "@/components/marketing/Pricing";
 import { Savings } from "@/components/marketing/Savings";
 import { Signup } from "@/components/marketing/Signup";
+import { StackedSections } from "@/components/marketing/StackedSections";
 import { Steps } from "@/components/marketing/Steps";
 
 /**
@@ -24,6 +25,8 @@ export default function LandingPage() {
       <PageField />
       <Nav />
       <main className="relative z-[1]">
+        {/* Cada sección es una hoja que sube y tapa a la anterior. */}
+        <StackedSections>
         <Hero />
         <BeforeAfter />
         <CostDemo />
@@ -34,6 +37,7 @@ export default function LandingPage() {
         <Pricing />
         <Faq />
         <Signup />
+        </StackedSections>
       </main>
       <div className="relative z-[1]">
         <Footer />
