@@ -41,7 +41,7 @@ export const SUPPLY: Record<SupplyKind, SupplyAudience> = {
     title: "Tu cartera de comercios, ordenada y al día",
     intro:
       "Tus clientes ya buscan y compran en NODO. Con tu espacio de distribuidor ves quién te compra, quién dejó de hacerlo, qué te piden y les hablás sin salir de la plataforma.",
-    href: "/landing/distribuidores",
+    href: "/distribuidores",
     groups: [
       {
         title: "Cartera de comercios",
@@ -96,7 +96,7 @@ export const SUPPLY: Record<SupplyKind, SupplyAudience> = {
     title: "Tu marca en cada mostrador",
     intro:
       "Dejás de preguntar por teléfono quién tiene tu producto y a cuánto. NODO te muestra el stock y el precio en cada distribuidor, lo que compran los comercios y te da un canal directo para lanzamientos, eventos y materiales.",
-    href: "/landing/marcas",
+    href: "/marcas",
     groups: [
       {
         title: "Semáforo de stock",

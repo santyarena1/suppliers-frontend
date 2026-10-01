@@ -12,9 +12,9 @@ export function Footer() {
           <span className="ml-3 text-sm text-[var(--fg-3)]">Compras de tecnología para comercios.</span>
         </div>
         <nav aria-label="Pie" className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[var(--fg-2)]">
-          <a href="/landing#como-funciona" className="hover:text-white">Cómo funciona</a>
-          <a href="/landing#planes" className="hover:text-white">Planes</a>
-          <a href="/landing#preguntas" className="hover:text-white">Preguntas</a>
+          <Link href="/#como-funciona" className="hover:text-white">Cómo funciona</Link>
+          <Link href="/#planes" className="hover:text-white">Planes</Link>
+          <Link href="/#preguntas" className="hover:text-white">Preguntas</Link>
           <Link href="/login" className="hover:text-white">Entrar</Link>
         </nav>
       </div>

@@ -6,6 +6,19 @@ const AUTH_PATHS = new Set(["/login", "/register", "/verify-email"]);
 // Estas se ven siempre, con o sin sesión. Un usuario logueado tiene que poder
 // abrir la landing o una propuesta sin que lo manden a la app.
 const OPEN_PATHS = new Set(["/landing", "/preview"]);
+/**
+ * Direcciones públicas de la landing; por dentro se sirven desde /landing.
+ * /marcas también es una sección de la app: con sesión gana la app.
+ */
+const LANDING_PAGES: Record<string, string> = {
+  "/distribuidores": "/landing/distribuidores",
+  "/marcas": "/landing/marcas",
+};
+const APP_PATHS_WITH_SESSION = new Set(["/marcas"]);
+const LANDING_REDIRECTS: Record<string, string> = {
+  "/landing/distribuidores": "/distribuidores",
+  "/landing/marcas": "/marcas",
+};
 /** El dominio de NODO. Los anteriores redirigen acá con la misma ruta. */
 const CANONICAL_HOST = "nodohub.app";
 const LEGACY_HOSTS = new Set(["suppliers-frontend.vercel.app", "www.nodohub.app"]);
@@ -33,13 +46,22 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url, 308);
   }
 
-  // Lo que cuelga de la landing (páginas de marcas y distribuidores, fotos de
-  // las demos) es tan público como la landing.
+  const auth = req.cookies.get("tgs_auth")?.value;
+
+  // La landing vive en la raíz del dominio. /landing queda para quien tiene
+  // sesión (en la raíz ve la app) y para links viejos, que se redirigen.
+  if (LANDING_PAGES[pathname] && !(auth && APP_PATHS_WITH_SESSION.has(pathname))) {
+    return rewriteTo(req, LANDING_PAGES[pathname]);
+  }
+  if (LANDING_REDIRECTS[pathname]) return redirectTo(req, LANDING_REDIRECTS[pathname]);
+  if (pathname === "/landing" && !auth) return redirectTo(req, "/");
+  if (pathname === "/" && !auth) return rewriteTo(req, "/landing");
+
+  // Lo que cuelga de la landing (fotos de las demos) es tan público como la landing.
   if (OPEN_PATHS.has(pathname) || pathname.startsWith("/landing/")) return NextResponse.next();
   if (AUTH_PATHS.has(pathname)) return guardLogin(req);
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
-  const auth = req.cookies.get("tgs_auth")?.value;
   if (!auth) {
     // Un prefetch sin cookie no puede cachear el redirect a /login: Next lo
     // guarda como destino de /cart (u otra ruta) y al tocarla parece que se
@@ -48,16 +70,23 @@ export function middleware(req: NextRequest) {
       return new NextResponse(null, { status: 204 });
     }
     const url = req.nextUrl.clone();
-    // Sin sesión, la raíz es la landing pública; el resto sigue yendo al login.
-    if (pathname === "/") {
-      url.pathname = "/landing";
-      return NextResponse.redirect(url);
-    }
     url.pathname = "/login";
     url.searchParams.set("from", pathname);
     return NextResponse.redirect(url);
   }
   return NextResponse.next();
+}
+
+function rewriteTo(req: NextRequest, pathname: string) {
+  const url = req.nextUrl.clone();
+  url.pathname = pathname;
+  return NextResponse.rewrite(url);
+}
+
+function redirectTo(req: NextRequest, pathname: string) {
+  const url = req.nextUrl.clone();
+  url.pathname = pathname;
+  return NextResponse.redirect(url, 308);
 }
 
 function guardLogin(req: NextRequest) {

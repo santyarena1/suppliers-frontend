@@ -47,7 +47,7 @@ function OnboardingInner() {
     try {
       const res = await onboardingApi.status();
       if (res.data.hasTenant) {
-        router.replace("/");
+        window.location.assign("/");
         return;
       }
       setStatus(res.data);
@@ -85,7 +85,7 @@ function OnboardingInner() {
       clearTrialPlan();
       applyToken(res.data.token);
       // Entra a la app: la guía arranca sola en el primer paso.
-      router.replace("/");
+      window.location.assign("/");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "No se pudo crear la organización.");
@@ -98,7 +98,7 @@ function OnboardingInner() {
     try {
       const res = await onboardingApi.exitPreview();
       if (res.data.token) applyToken(res.data.token);
-      router.replace("/");
+      window.location.assign("/");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg || "No se pudo salir del preview.");
@@ -123,7 +123,7 @@ function OnboardingInner() {
       <div className="lnd-grain" aria-hidden="true" />
 
       <header className="ob__top">
-        <Link href="/landing" className="ob__brand">
+        <Link href="/" className="ob__brand">
           <NodoLogo className="w-7 h-7" />
           <span>
             <NodoWordmark className="h-3.5" />

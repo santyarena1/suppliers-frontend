@@ -12,7 +12,7 @@ import { Reveal } from "./Reveal";
  * pantalla principal y todo lo que puede hacer, agrupado como en el menú de la app.
  */
 export function SupplyDetail({ audience, preview }: { audience: SupplyAudience; preview: React.ReactNode }) {
-  const other = audience.kind === "marcas" ? { href: "/landing/distribuidores", label: "NODO para distribuidores" } : { href: "/landing/marcas", label: "NODO para marcas" };
+  const other = audience.kind === "marcas" ? { href: "/distribuidores", label: "NODO para distribuidores" } : { href: "/marcas", label: "NODO para marcas" };
   return (
     <div className="nl">
       <PageField />
@@ -21,7 +21,7 @@ export function SupplyDetail({ audience, preview }: { audience: SupplyAudience; 
         <section className="nl-section">
           <div className="nl-shell grid items-center gap-12 lg:grid-cols-[1fr_1.05fr] lg:gap-16">
             <Reveal>
-              <Link href="/landing#planes" className="inline-flex items-center gap-1.5 text-sm text-[var(--fg-3)] hover:text-white">
+              <Link href="/#planes" className="inline-flex items-center gap-1.5 text-sm text-[var(--fg-3)] hover:text-white">
                 <ArrowLeft className="h-4 w-4" aria-hidden /> Volver a NODO
               </Link>
               <p className="nl-kicker mt-8">{audience.name}</p>

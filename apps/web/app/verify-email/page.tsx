@@ -64,7 +64,7 @@ export default function VerifyEmailPage() {
       <div className="lnd-grain" aria-hidden="true" />
 
       <div className="lgn__wrap">
-        <Link href="/landing" className="lgn__brand">
+        <Link href="/" className="lgn__brand">
           <NodoLogo className="w-7 h-7" />
           <span>
             <NodoWordmark className="h-3.5" />

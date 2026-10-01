@@ -81,7 +81,7 @@ export default function LoginPage() {
       <div className="lnd-grain" aria-hidden="true" />
 
       <div className="lgn__wrap">
-        <Link href="/landing" className="lgn__brand">
+        <Link href="/" className="lgn__brand">
           <NodoLogo className="w-7 h-7" />
           <span>
             <NodoWordmark className="h-3.5" />
@@ -98,7 +98,7 @@ export default function LoginPage() {
               Conectás tus proveedores una vez. NODO te muestra quién tiene cada producto, a qué
               precio real puesto y con cuánto stock, y comprás sin salir del sistema.
             </p>
-            <Link href="/landing" className="lgn__back lnd-mono">
+            <Link href="/" className="lgn__back lnd-mono">
               <ArrowLeft className="w-3 h-3" />
               Ver cómo funciona
             </Link>
