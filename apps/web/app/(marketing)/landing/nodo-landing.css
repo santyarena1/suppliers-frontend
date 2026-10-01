@@ -72,6 +72,10 @@
 /* Un hijo de grilla con texto largo (truncate, montos) no puede ensanchar la columna en mobile. */
 .nl .grid > * { min-width: 0; }
 @media (min-width: 1024px) { .nl-section { padding: 128px 0; } }
+/* Módulos apilados: cada tarjeta se pega debajo del menú, un poco más abajo
+   que la anterior, así la pila deja ver los bordes. */
+.nl-stack-card { top: calc(76px + var(--i) * 12px); transform-origin: 50% 0; transition: transform 120ms linear, filter 120ms linear; will-change: transform; }
+@media (min-width: 1024px) { .nl-stack-card { top: calc(104px + var(--i) * 16px); } }
 .nl-divider { border-top: 1px solid var(--line); }
 
 /* Superficies */
