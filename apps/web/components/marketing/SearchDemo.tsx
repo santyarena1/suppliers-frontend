@@ -100,28 +100,29 @@ function ProductCard({
       }`}
       style={{ animationDelay: `${delay}ms` }}
     >
-      <div className="flex h-32 items-center justify-center bg-white p-3">
+      <div className="flex h-24 items-center justify-center bg-white p-2 sm:h-32 sm:p-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={p.image} alt={p.name} loading="lazy" className="h-full w-full object-contain" />
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-3">
+      <div className="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
         <div>
-          <p className="line-clamp-2 min-h-[2.5rem] text-[13px] font-semibold leading-snug text-white">{p.name}</p>
-          <p className="mt-0.5 text-[11px] text-[var(--fg-3)]">
+          <p className="line-clamp-2 min-h-[2.25rem] text-[12px] font-semibold leading-snug text-white sm:min-h-[2.5rem] sm:text-[13px]">{p.name}</p>
+          <p className="mt-0.5 hidden text-[11px] text-[var(--fg-3)] sm:block">
             {p.brand} · {p.category}
           </p>
         </div>
         <div>
-          <p className="text-[15px] font-bold tabular-nums text-white">
+          <p className="text-[14px] font-bold tabular-nums text-white sm:text-[15px]">
             {usd(p.net)}{" "}
-            <span className="text-[11px] font-normal text-[var(--fg-3)]">+ IVA {p.iva.toLocaleString("es-AR")} %</span>
+            <span className="block text-[10.5px] font-normal text-[var(--fg-3)] sm:inline sm:text-[11px]">+ IVA {p.iva.toLocaleString("es-AR")} %</span>
           </p>
           <p className="text-[11px] tabular-nums text-[var(--fg-2)]">Final {usd(withIva(p.net, p.iva))}</p>
           {perUnit != null && (
             <p className="mt-1 flex items-center gap-1 font-mono text-[10.5px] tabular-nums text-[var(--fg-3)]">
               <Truck className="h-3 w-3 flex-shrink-0" aria-hidden />
               <span className="truncate">
-                Envío aprox. {ars(perUnit)}/u · {DEMO_SHIPPING[p.distributor].label}
+                Envío<span className="hidden sm:inline"> aprox.</span> {ars(perUnit)}/u
+                <span className="hidden sm:inline"> · {DEMO_SHIPPING[p.distributor].label}</span>
               </span>
             </p>
           )}
@@ -129,14 +130,14 @@ function ProductCard({
         <span className="inline-flex w-fit items-center gap-1 rounded-md border border-[rgb(62_207_142/0.4)] px-1.5 py-0.5 font-mono text-[10.5px] text-[#7fe3b4]">
           <Check className="h-3 w-3" /> {p.stock} U.
         </span>
-        <p className="truncate border-t border-[var(--line)] pt-2 font-mono text-[10.5px] text-[var(--fg-3)]">
+        <p className="truncate border-t border-[var(--line)] pt-2 font-mono text-[10px] text-[var(--fg-3)] sm:text-[10.5px]">
           {p.code} · {p.distributor}
         </p>
         <div className="flex items-center gap-1.5">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--line-2)] text-[var(--fg-3)]">
+          <span className="hidden h-7 w-7 items-center justify-center rounded-md border border-[var(--line-2)] text-[var(--fg-3)] sm:flex">
             <GitCompare className="h-3.5 w-3.5" />
           </span>
-          <span className="flex h-7 w-7 items-center justify-center rounded-md border border-[var(--line-2)] text-[var(--fg-3)]">
+          <span className="hidden h-7 w-7 items-center justify-center rounded-md border border-[var(--line-2)] text-[var(--fg-3)] sm:flex">
             <DollarSign className="h-3.5 w-3.5" />
           </span>
           <span className="ml-auto flex h-7 items-center gap-2 rounded-md border border-[var(--line-2)] px-2 text-[12px] tabular-nums text-white">
@@ -145,7 +146,7 @@ function ProductCard({
             <Plus className="h-3 w-3 text-[var(--accent-2)]" />
           </span>
         </div>
-        <p className="font-mono text-[10px] text-[var(--fg-3)]">{p.updated}</p>
+        <p className="hidden font-mono text-[10px] text-[var(--fg-3)] sm:block">{p.updated}</p>
       </div>
     </article>
   );
@@ -230,25 +231,25 @@ export function SearchDemo() {
                 <ArrowUpDown className="ml-2 h-3.5 w-3.5" /> Precio
               </span>
             </div>
-            <div className="min-h-[29rem] p-4">
+            <div className="p-2.5 sm:min-h-[29rem] sm:p-4">
               {phase === "results" || cycle > 0 ? (
-                <div className={`grid gap-3 transition-opacity duration-300 sm:grid-cols-2 lg:grid-cols-3 ${phase === "typing" ? "opacity-30" : ""}`}>
+                <div className={`grid grid-cols-2 gap-2 transition-opacity duration-300 sm:gap-3 lg:grid-cols-3 ${phase === "typing" ? "opacity-30" : ""}`}>
                   {SEARCH_RESULTS.map((p, i) => (
                     <ProductCard
                       key={`${p.code}-${cycle}-${phase}`}
                       p={p}
                       delay={reduced ? 0 : i * 90}
                       qty={i === ADDED_INDEX ? qty : 0}
-                      desktopOnly={i >= 3}
+                      desktopOnly={i >= 4}
                       cartUnits={p.distributor === SEARCH_RESULTS[ADDED_INDEX].distributor ? qty : 0}
                       flash={i === ADDED_INDEX && qty > 0 && !added}
                     />
                   ))}
                 </div>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-hidden>
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3" aria-hidden>
                   {SEARCH_RESULTS.map((p) => (
-                    <div key={p.code} className="h-[23.5rem] animate-pulse rounded-xl border border-[var(--line)] bg-[#12152e]" />
+                    <div key={p.code} className="h-[19rem] animate-pulse sm:h-[23.5rem] rounded-xl border border-[var(--line)] bg-[#12152e]" />
                   ))}
                 </div>
               )}

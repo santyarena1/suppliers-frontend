@@ -130,8 +130,8 @@ export function Faq() {
             </div>
           </Reveal>
 
-          <Reveal delay={140}>
-            <a href="#probar" className="nl-btn nl-btn--ghost mt-8 hidden lg:inline-flex">
+          <Reveal delay={140} className="hidden lg:block">
+            <a href="#probar" className="nl-btn nl-btn--ghost mt-8">
               Probar NODO <ArrowRight className="h-4 w-4" aria-hidden />
             </a>
           </Reveal>
@@ -141,10 +141,10 @@ export function Faq() {
           {shown.map((item, i) => (
             <div
               key={item.q}
-              className="nl-anim-in grid gap-x-6 gap-y-2 border-b border-[var(--line)] py-7 sm:grid-cols-[3rem_1fr]"
+              className="nl-anim-in grid grid-cols-[2.25rem_1fr] gap-x-3 border-b border-[var(--line)] py-6 sm:grid-cols-[3rem_1fr] sm:gap-x-6 sm:py-7"
               style={{ animationDelay: `${i * 40}ms` }}
             >
-              <span className="font-mono text-sm tabular-nums text-[var(--accent-2)]" aria-hidden>
+              <span className="pt-1 font-mono text-sm tabular-nums text-[var(--accent-2)]" aria-hidden>
                 {String(i + 1).padStart(2, "0")}
               </span>
               <div>

@@ -35,7 +35,7 @@ export function CostDemo() {
     { label: `IVA ${p.iva.toLocaleString("es-AR")} %`, value: ivaUsd, color: "bg-[#9d9fff]", show: step >= 1 },
     { label: `${COST_EXAMPLE.perceptionLabel} ${COST_EXAMPLE.perceptionPct} %`, value: percUsd, color: "bg-[var(--ember)]", show: step >= 2 },
     {
-      label: `Envío aprox. · ${ship.label}, repartido en ${SHIP_UNITS} u.`,
+      label: `Envío aprox. (${ship.label}, ${SHIP_UNITS} u.)`,
       value: shipUsd,
       color: "bg-[#3ecf8e]",
       show: step >= 3,
@@ -89,13 +89,13 @@ export function CostDemo() {
                     <span className={`h-2.5 w-2.5 rounded-full ${r.color}`} aria-hidden />
                     {r.label}
                   </dt>
-                  <dd className="tabular-nums text-white">{usd(r.value)}</dd>
+                  <dd className="flex-shrink-0 whitespace-nowrap tabular-nums text-white">{usd(r.value)}</dd>
                 </div>
               ))}
             </dl>
             <div className="mt-6 flex items-end justify-between gap-4 border-t border-[var(--line)] pt-5">
               <p className="text-[0.95rem] text-[var(--fg-2)]">Lo que te sale por unidad</p>
-              <p className={`text-3xl font-bold tabular-nums transition-colors duration-500 ${step >= 4 ? "text-white" : "text-[var(--fg-3)]"}`}>
+              <p className={`whitespace-nowrap text-2xl font-bold tabular-nums transition-colors sm:text-3xl duration-500 ${step >= 4 ? "text-white" : "text-[var(--fg-3)]"}`}>
                 {usd(step >= 4 ? final : withIva(p.net, 0))}
               </p>
             </div>

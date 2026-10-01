@@ -67,7 +67,10 @@
 .nl-accent { color: var(--accent-2); }
 
 /* Secciones */
-.nl-section { padding: 88px 0; }
+.nl-section { padding: 64px 0; }
+@media (min-width: 640px) { .nl-section { padding: 88px 0; } }
+/* Un hijo de grilla con texto largo (truncate, montos) no puede ensanchar la columna en mobile. */
+.nl .grid > * { min-width: 0; }
 @media (min-width: 1024px) { .nl-section { padding: 128px 0; } }
 .nl-divider { border-top: 1px solid var(--line); }
 

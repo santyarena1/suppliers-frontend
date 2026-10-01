@@ -77,7 +77,7 @@ export function CheckoutDemo() {
                           <span className="min-w-0 truncate">
                             {l.qty} × {l.name}
                           </span>
-                          <span className="tabular-nums text-[var(--fg-3)]">{usd(l.unit)}</span>
+                          <span className="flex-shrink-0 whitespace-nowrap tabular-nums text-[var(--fg-3)]">{usd(l.unit)}</span>
                         </li>
                       ))}
                     </ul>

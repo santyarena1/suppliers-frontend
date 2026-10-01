@@ -85,7 +85,7 @@ export function Pricing() {
             const def = PLAN_CATALOG[c.plan];
             const pro = c.plan === "PRO";
             return (
-              <Reveal key={c.plan} delay={i * 90} className={pro ? "lg:-my-4" : ""}>
+              <Reveal key={c.plan} delay={i * 90} className={pro ? "order-first lg:order-none lg:-my-4" : ""}>
                 <article
                   className={`relative flex h-full flex-col rounded-[var(--r)] p-7 sm:p-8 ${
                     pro

@@ -39,8 +39,9 @@ export function BeforeAfter() {
                 {TODAY.map((t, i) => (
                   <li
                     key={t.label}
-                    className="flex items-center gap-3 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3"
-                    style={{ transform: `translateX(${(i % 2) * 10}px)` }}
+                    className={`flex items-center gap-3 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-4 py-3 ${
+                      i % 2 ? "sm:translate-x-[10px]" : ""
+                    }`}
                   >
                     <t.icon className="h-4 w-4 flex-shrink-0 text-[var(--fg-3)]" aria-hidden />
                     <span className="min-w-0 flex-1 truncate text-sm text-[var(--fg)]">{t.label}</span>

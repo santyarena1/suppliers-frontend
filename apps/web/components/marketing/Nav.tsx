@@ -29,7 +29,7 @@ export function Nav() {
           ))}
         </nav>
         <div className="flex items-center gap-2">
-          <Link href="/login" className="hidden rounded-lg px-3 py-2 text-sm text-[var(--fg-2)] hover:text-white sm:inline-flex">
+          <Link href="/login" className="inline-flex rounded-lg px-2 py-2 text-sm text-[var(--fg-2)] hover:text-white sm:px-3">
             Entrar
           </Link>
           <a href="#probar" className="nl-btn nl-btn--primary nl-btn--sm">
