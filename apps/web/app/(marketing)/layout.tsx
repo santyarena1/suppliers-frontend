@@ -3,9 +3,9 @@ import "./landing.css";
 import { archivo, chivoMono } from "./fonts";
 
 export const metadata: Metadata = {
-  title: "NODO — Todos tus distribuidores en una sola búsqueda",
+  title: "NODO | Todos tus distribuidores en una sola búsqueda",
   description:
-    "NODO reúne el catálogo de todos tus distribuidores en una búsqueda, un carrito y un historial de pedidos. Precios con impuestos reales, stock al día y compra sin salir del sistema.",
+    "Buscá una vez en todos tus distribuidores: stock y precio final con impuestos. Un carrito, un pedido por distribuidor, directo en su portal.",
 };
 
 /**
