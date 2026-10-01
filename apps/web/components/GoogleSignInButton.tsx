@@ -37,7 +37,10 @@ type Props = {
 export default function GoogleSignInButton({ onCredential, disabled, className }: Props) {
   const slot = useRef<HTMLDivElement>(null);
   const cb = useRef(onCredential);
-  cb.current = onCredential;
+  // La última versión del callback, sin tocar el ref durante el render.
+  useEffect(() => {
+    cb.current = onCredential;
+  }, [onCredential]);
 
   useEffect(() => {
     if (!CLIENT_ID) return;
