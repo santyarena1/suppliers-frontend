@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { isChatReactionEmoji, resolvePermissions, TENANT_ROLE_LABELS, type Provider, type TenantRole, type TenantType, providerLabel } from "@nodo/shared";
+import { signAssetPath } from "../assets/asset-signing";
 import { PrismaService } from "../prisma/prisma.service";
 import { toOverrides, type TenantContext } from "../tenants/tenant-context.service";
 import { assertPermission, hasPermission } from "../tenants/tenant-roles";
@@ -269,10 +270,15 @@ export class ChatService {
       throw new BadRequestException("El mensaje está vacío");
     }
     if (kind === "IMAGE" || kind === "FILE") {
-      const url = dto.payload && typeof dto.payload.url === "string" ? dto.payload.url : "";
+      // El link llega firmado desde la subida: se guarda sin firma y se firma de
+      // nuevo cada vez que se le entrega a alguien que ve la conversación.
+      const raw = dto.payload && typeof dto.payload.url === "string" ? dto.payload.url : "";
+      const url = raw.split("?")[0];
       if (!/^\/assets\/[0-9a-f-]{36}$/i.test(url)) {
         throw new BadRequestException("El archivo tiene que ser uno que subiste en este chat");
       }
+      await this.assertAttachable(tenant, threadId, url.slice("/assets/".length));
+      dto = { ...dto, payload: { ...dto.payload, url } };
     }
     return this.persistMessage(tenant, threadId, dto);
   }
@@ -885,6 +891,35 @@ export class ChatService {
     return { kind: row.kind, text: row.body.slice(0, 140), author: row.author?.username ?? null };
   }
 
+  /**
+   * Un adjunto privado solo se puede mandar si lo subió esta organización o si
+   * ya está en esta misma conversación: nadie "lava" el archivo de otro chat
+   * mandándolo en el suyo para conseguir un link firmado.
+   */
+  private async assertAttachable(tenant: TenantContext, threadId: string, assetId: string) {
+    const asset = await this.prisma.storedAsset.findUnique({
+      where: { id: assetId },
+      select: { isPrivate: true, ownerTenantId: true },
+    });
+    if (!asset) throw new BadRequestException("El archivo tiene que ser uno que subiste en este chat");
+    if (!asset.isPrivate || asset.ownerTenantId === tenant.tenantId) return;
+    const already = await this.prisma.chatMessage.findFirst({
+      where: { threadId, kind: { in: ["IMAGE", "FILE"] }, payload: { path: ["url"], equals: `/assets/${assetId}` } },
+      select: { id: true },
+    });
+    if (!already) throw new BadRequestException("El archivo tiene que ser uno que subiste en este chat");
+  }
+
+  /** Los adjuntos se entregan con link firmado: solo los ve quien recibe este mensaje. */
+  private signPayload(kind: string, payload: Prisma.JsonValue | null): Prisma.JsonValue | null {
+    if ((kind !== "IMAGE" && kind !== "FILE") || !payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return payload;
+    }
+    const url = (payload as Record<string, unknown>).url;
+    if (typeof url !== "string") return payload;
+    return { ...(payload as Record<string, Prisma.JsonValue>), url: signAssetPath(url.split("?")[0]) };
+  }
+
   private serializeMessage(
     row: Prisma.ChatMessageGetPayload<{ include: typeof MESSAGE_INCLUDE }>
   ) {
@@ -893,7 +928,7 @@ export class ChatService {
       threadId: row.threadId,
       kind: row.kind,
       body: row.deletedAt ? "" : row.body,
-      payload: row.deletedAt ? null : row.payload,
+      payload: row.deletedAt ? null : this.signPayload(row.kind, row.payload),
       author: row.author,
       replyTo: row.replyTo
         ? {

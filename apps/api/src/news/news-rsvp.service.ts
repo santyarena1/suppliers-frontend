@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { PrismaService } from "../prisma/prisma.service";
-import type { TenantContext } from "../tenants/tenant-context.service";
+import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { NewsVisibilityService } from "./news-visibility.service";
 
 const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -294,5 +294,11 @@ export class NewsRsvpService {
       (!article.expiresAt || article.expiresAt > now);
     const authors = await this.visibility.authorIdsFor(tenant);
     if (!live || !authors.includes(article.tenantId)) throw new NotFoundException("Nota no encontrada");
+    // Confirmar asistencia es para comercios vinculados: el que ve el evento
+    // solo porque está pautado no tiene acceso al link ni a la lista.
+    if (article.tenantId !== tenant.tenantId) {
+      const linked = await this.visibility.linkedSupplierIds(commercialId(tenant));
+      if (!linked.has(article.tenantId)) throw new NotFoundException("Nota no encontrada");
+    }
   }
 }

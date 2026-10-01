@@ -23,7 +23,11 @@ function ctx(tenantId: string, userId: string, type: "RETAILER" | "BRAND") {
 d("NewsRsvpService contra Postgres", () => {
   // El cliente no conecta hasta la primera consulta: sin INTEGRATION_DB la suite se salta.
   const prisma = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://skip@localhost/skip" } } });
-  const visibility = { authorIdsFor: jest.fn(async () => ["rsvp-brand"]) };
+  const visibility = {
+    authorIdsFor: jest.fn(async () => ["rsvp-brand"]),
+    // El comercio de la prueba está vinculado a la marca: puede confirmar asistencia.
+    linkedSupplierIds: jest.fn(async () => new Set(["rsvp-brand"])),
+  };
   const service = new NewsRsvpService(prisma as never, visibility as never);
   const brand = ctx("rsvp-brand", "u-brand", "BRAND");
   const shopA = ctx("rsvp-shop", "u-a", "RETAILER");

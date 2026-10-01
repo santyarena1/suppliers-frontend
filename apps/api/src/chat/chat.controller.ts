@@ -175,11 +175,15 @@ export class ChatController {
     const file = await req.file();
     if (!file) throw new BadRequestException("No se recibió ningún archivo");
     const buffer = await file.toBuffer();
-    return this.assets.saveChatFile({
-      filename: file.filename,
-      mimetype: file.mimetype,
-      buffer,
-    });
+    // Privado: solo se sirve con link firmado a quien ve la conversación.
+    return this.assets.saveChatFile(
+      {
+        filename: file.filename,
+        mimetype: file.mimetype,
+        buffer,
+      },
+      tenant.tenantId
+    );
   }
 
   @Sse("stream")

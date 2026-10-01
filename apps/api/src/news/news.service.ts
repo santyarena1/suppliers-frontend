@@ -142,6 +142,9 @@ export class NewsService {
       linked: linked.has(row.tenantId),
       advertised: !linked.has(row.tenantId),
       viewerType: tenant.tenantType,
+      // Quien ve la nota solo porque está pautada no está vinculado: ve el
+      // evento como en la página pública, sin link privado ni confirmación.
+      publicView: !linked.has(row.tenantId),
       logos,
       hubPath,
     });

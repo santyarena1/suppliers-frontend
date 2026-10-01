@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { signAssetPath } from "./asset-signing";
 import { extname } from "path";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -76,11 +77,15 @@ export class AssetsService {
     return { url: `/assets/${asset.id}` };
   }
 
-  async saveChatFile(file: {
-    filename: string;
-    mimetype: string;
-    buffer: Buffer;
-  }): Promise<{ url: string; filename: string; mimeType: string; byteSize: number; kind: "IMAGE" | "FILE" }> {
+  async saveChatFile(
+    file: {
+      filename: string;
+      mimetype: string;
+      buffer: Buffer;
+    },
+    /** Adjunto del chat: privado y de esta organización. Sin esto, es público (materiales de marca). */
+    privateFor?: string
+  ): Promise<{ url: string; filename: string; mimeType: string; byteSize: number; kind: "IMAGE" | "FILE" }> {
     const mime = (file.mimetype || "").toLowerCase();
     if (!CHAT_MIME.has(mime)) {
       throw new BadRequestException("En el chat se pueden mandar fotos o PDF / Excel");
@@ -99,11 +104,12 @@ export class AssetsService {
         filename: originalName,
         byteSize: file.buffer.length,
         data: file.buffer,
+        ...(privateFor ? { isPrivate: true, ownerTenantId: privateFor } : {}),
       },
       select: { id: true },
     });
     return {
-      url: `/assets/${asset.id}`,
+      url: privateFor ? signAssetPath(`/assets/${asset.id}`) : `/assets/${asset.id}`,
       filename: originalName,
       mimeType: mime,
       byteSize: file.buffer.length,

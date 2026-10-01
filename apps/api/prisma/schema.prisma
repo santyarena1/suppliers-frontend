@@ -836,6 +836,10 @@ model StoredAsset {
   filename  String
   byteSize  Int
   data      Bytes
+  /// Adjunto del chat: no se sirve sin link firmado (ver assets/asset-signing.ts).
+  isPrivate     Boolean  @default(false)
+  /// Organización que lo subió. Solo ella puede adjuntarlo en una conversación.
+  ownerTenantId String?
   createdAt DateTime @default(now())
 }
 

@@ -2,14 +2,17 @@ import {
   BadRequestException,
   Controller,
   Get,
-  Header,
   Param,
+  NotFoundException,
   Post,
+  Query,
   Req,
+  Res,
   StreamableFile,
 } from "@nestjs/common";
 import { SkipThrottle } from "@nestjs/throttler";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { verifyAssetSignature } from "./asset-signing";
 import { Public } from "../common/decorators/public.decorator";
 import { AssetsService } from "./assets.service";
 
@@ -47,13 +50,31 @@ export class AssetsController {
     });
   }
 
-  /** Sirve el binario del asset. Público (img tags / img-proxy no envían JWT). */
+  /**
+   * Sirve el binario del asset. Las imágenes de catálogo y materiales son
+   * públicas (img tags no envían JWT). Los adjuntos del chat son privados: sin
+   * un link firmado vigente responden 404, igual que si no existieran.
+   */
   @Get(":id")
   @Public()
   @SkipThrottle()
-  @Header("Cache-Control", "public, max-age=31536000, immutable")
-  async get(@Param("id") id: string): Promise<StreamableFile> {
+  async get(
+    @Param("id") id: string,
+    @Query("exp") exp: string | undefined,
+    @Query("sig") sig: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply
+  ): Promise<StreamableFile> {
     const asset = await this.assetsService.findById(id);
+    if (asset.isPrivate && !verifyAssetSignature(asset.id, exp, sig)) {
+      throw new NotFoundException("Asset no encontrado");
+    }
+    // Lo que se sirve acá es un archivo, nunca una página: ni SVG ni HTML ejecutan código.
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    reply.header(
+      "Cache-Control",
+      asset.isPrivate ? "private, max-age=3600" : "public, max-age=31536000, immutable"
+    );
     return new StreamableFile(Buffer.from(asset.data), {
       type: asset.mimeType,
       disposition: `inline; filename="${asset.filename.replace(/"/g, "")}"`,
