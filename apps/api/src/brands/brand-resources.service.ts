@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { hasPermission } from "../tenants/tenant-roles";
+import { assetIdFromUrl, signIfAsset } from "../assets/asset-signing";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import type { UpsertBrandResourceDto } from "./dto/brand.dto";
@@ -36,25 +37,27 @@ export class BrandResourcesService {
       where: { tenantId: tenant.tenantId, ...(kind ? { kind } : {}) },
       orderBy: { createdAt: "desc" },
     });
-    return { canWrite: this.canWrite(tenant), resources: rows };
+    return { canWrite: this.canWrite(tenant), resources: rows.map(withSignedFile) };
   }
 
   async create(tenant: TenantContext, dto: UpsertBrandResourceDto) {
     this.assertBrand(tenant);
     if (!this.canWrite(tenant)) throw new ForbiddenException("No podés cargar archivos");
     this.validate(dto);
-    return this.prisma.brandResource.create({
+    const row = await this.prisma.brandResource.create({
       data: {
         tenantId: tenant.tenantId,
         kind: dto.kind,
         type: dto.type,
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
-        fileUrl: dto.fileUrl?.trim() || null,
+        fileUrl: dto.fileUrl?.split("?")[0].trim() || null,
         contentUrl: dto.contentUrl?.trim() || null,
         isPublic: dto.isPublic ?? true,
       },
     });
+    await this.syncFilePrivacy(tenant.tenantId, row.fileUrl, row.isPublic);
+    return withSignedFile(row);
   }
 
   /** Si el archivo se descarga desde el link público o queda solo para vinculados. */
@@ -66,7 +69,22 @@ export class BrandResourcesService {
       data: { isPublic },
     });
     if (updated.count === 0) throw new NotFoundException("Archivo no encontrado");
-    return this.prisma.brandResource.findUnique({ where: { id } });
+    const row = await this.prisma.brandResource.findUnique({ where: { id } });
+    if (row) await this.syncFilePrivacy(tenant.tenantId, row.fileUrl, row.isPublic);
+    return row ? withSignedFile(row) : row;
+  }
+
+  /**
+   * "Solo vinculados" vale también para el archivo: deja de servirse sin link
+   * firmado. Solo toca archivos sin dueño (recién subidos) o de esta marca.
+   */
+  private async syncFilePrivacy(tenantId: string, fileUrl: string | null, isPublic: boolean) {
+    const assetId = assetIdFromUrl(fileUrl);
+    if (!assetId) return;
+    await this.prisma.storedAsset.updateMany({
+      where: { id: assetId, OR: [{ ownerTenantId: null }, { ownerTenantId: tenantId }] },
+      data: { isPrivate: !isPublic, ownerTenantId: tenantId },
+    });
   }
 
   async remove(tenant: TenantContext, id: string) {
@@ -84,4 +102,9 @@ export class BrandResourcesService {
       throw new BadRequestException("Falta el archivo o el link");
     }
   }
+}
+
+/** El archivo del material, con link firmado si es de NODO. */
+function withSignedFile<T extends { fileUrl: string | null }>(row: T): T {
+  return { ...row, fileUrl: signIfAsset(row.fileUrl) };
 }

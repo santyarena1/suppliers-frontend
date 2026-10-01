@@ -6,6 +6,8 @@
 import { ForbiddenException, NotFoundException } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { AdsService } from "../ads/ads.service";
+import { AssetsController } from "../assets/assets.controller";
+import { AssetsService } from "../assets/assets.service";
 import { BrandActionsService } from "../brands/brand-actions.service";
 import { BrandItemsService } from "../brands/brand-items.service";
 import { BrandNotificationsService } from "../brands/brand-notifications.service";
@@ -213,6 +215,33 @@ d("Aislamiento multi-tenant (2a pasada): admin/ads/brands/news", () => {
     } as never);
     await expect(brandResources.setVisibility(asBrandB, resource.id, true)).rejects.toThrow(NotFoundException);
     await expect(brandResources.remove(asBrandB, resource.id)).rejects.toThrow(NotFoundException);
+  });
+
+  it("brandResources: un material 'solo vinculados' no se descarga sin link firmado; al hacerlo público, sí", async () => {
+    (process.env as Record<string, string>).ASSET_SIGNING_SECRET = process.env.ASSET_SIGNING_SECRET ?? "secreto-iso2";
+    const asBrandA = ctx({ tenantId: brandA, tenantType: "BRAND", userId: userBrandA, tenantRole: "OWNER", permissions: ["brand.manage"] as never });
+    const asset = await prisma.storedAsset.create({
+      data: { mimeType: "application/pdf", filename: "lista.pdf", byteSize: 3, data: Buffer.from("pdf") },
+    });
+    const resource = await brandResources.create(asBrandA, {
+      kind: "MATERIAL",
+      type: "BANNER",
+      title: "ISO2 lista privada",
+      fileUrl: `/assets/${asset.id}`,
+      isPublic: false,
+    } as never);
+    expect(resource.fileUrl).toMatch(/\?exp=\d+&sig=/);
+
+    const controller = new AssetsController(new AssetsService(prisma as never));
+    const reply = { header: jest.fn() } as never;
+    await expect(controller.get(asset.id, undefined, undefined, reply)).rejects.toThrow(NotFoundException);
+    const signed = new URL(resource.fileUrl!, "https://x");
+    await expect(
+      controller.get(asset.id, signed.searchParams.get("exp")!, signed.searchParams.get("sig")!, reply)
+    ).resolves.toBeDefined();
+
+    await brandResources.setVisibility(asBrandA, resource.id, true);
+    await expect(controller.get(asset.id, undefined, undefined, reply)).resolves.toBeDefined();
   });
 
   it("news: un comercio no vinculado no puede marcar como leída/RSVPear una nota de otra marca a nombre propio sin ser autor", async () => {

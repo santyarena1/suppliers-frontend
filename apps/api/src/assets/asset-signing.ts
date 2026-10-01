@@ -37,3 +37,15 @@ export function verifyAssetSignature(assetId: string, exp: unknown, sig: unknown
   const got = Buffer.from(sig);
   return expected.length === got.length && timingSafeEqual(expected, got);
 }
+
+/** Id del asset si la URL es `/assets/<id>` (con o sin firma). */
+export function assetIdFromUrl(url: string | null | undefined): string | null {
+  const match = /^\/assets\/([0-9a-f-]{36})(?:\?.*)?$/i.exec(url ?? "");
+  return match ? match[1] : null;
+}
+
+/** Firma la URL si es un asset; cualquier otra cosa (links externos) queda igual. */
+export function signIfAsset(url: string | null): string | null {
+  const id = assetIdFromUrl(url);
+  return id ? signAssetPath(`/assets/${id}`) : url;
+}

@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { signIfAsset } from "../assets/asset-signing";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
 import { compileBrandHtml } from "./brand-html";
@@ -87,8 +88,10 @@ export class BrandHubService {
       this.actionVisible(row.scopes, tenant.tenantId, tenant.tenantType)
     );
     const withP = await Promise.all(visibleActions.map((row) => this.actions.progressForClient(row, tenant.tenantId)));
-    const materials = resources.filter((r) => r.kind === "MATERIAL");
-    const trainings = resources.filter((r) => r.kind === "TRAINING");
+    // El comercio está vinculado: recibe los archivos con link firmado
+    // (los "solo vinculados" no se sirven sin firma).
+    const materials = resources.filter((r) => r.kind === "MATERIAL").map(withSignedFile);
+    const trainings = resources.filter((r) => r.kind === "TRAINING").map(withSignedFile);
     const compiled = compileBrandHtml(landing?.html ?? "");
     const presence = brandPresence({
       signalCount: availability.items.length,
@@ -166,4 +169,9 @@ export class BrandHubService {
     const distros = scopes.filter((s) => s.kind === "DISTRIBUTOR").map((s) => s.refId);
     return distros.length === 0 || distros.includes(clientId);
   }
+}
+
+/** El archivo del material, con link firmado si es de NODO. */
+function withSignedFile<T extends { fileUrl: string | null }>(row: T): T {
+  return { ...row, fileUrl: signIfAsset(row.fileUrl) };
 }
