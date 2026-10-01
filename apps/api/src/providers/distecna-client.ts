@@ -65,7 +65,7 @@ export function resolveDistecnaEgress(): { mode: DistecnaEgressMode; via: string
   let via = resolveDistecnaFetchVia();
   const proxyUrl = distecnaProxyUrl();
   if (isRailway() && !via) {
-    via = "https://suppliers-frontend.vercel.app/api/distecna-fetch";
+    via = "https://nodohub.app/api/distecna-fetch";
   }
   if (isRailway()) {
     if (via) return { mode: "via", via, proxyUrl };

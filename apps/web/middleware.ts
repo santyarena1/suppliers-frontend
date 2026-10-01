@@ -6,6 +6,9 @@ const AUTH_PATHS = new Set(["/login", "/register"]);
 // Estas se ven siempre, con o sin sesión. Un usuario logueado tiene que poder
 // abrir la landing o una propuesta sin que lo manden a la app.
 const OPEN_PATHS = new Set(["/landing", "/preview"]);
+/** El dominio de NODO. Los anteriores redirigen acá con la misma ruta. */
+const CANONICAL_HOST = "nodohub.app";
+const LEGACY_HOSTS = new Set(["suppliers-frontend.vercel.app", "www.nodohub.app"]);
 const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
 
 function isPrefetch(req: NextRequest): boolean {
@@ -18,6 +21,17 @@ function isPrefetch(req: NextRequest): boolean {
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // /api queda afuera del matcher: los proxies que llama el backend siguen
+  // respondiendo en el dominio viejo mientras se actualizan.
+  const host = (req.headers.get("host") || "").toLowerCase();
+  if (LEGACY_HOSTS.has(host)) {
+    const url = req.nextUrl.clone();
+    url.protocol = "https:";
+    url.host = CANONICAL_HOST;
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
 
   // Lo que cuelga de la landing (páginas de marcas y distribuidores, fotos de
   // las demos) es tan público como la landing.
