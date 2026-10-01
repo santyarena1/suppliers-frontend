@@ -3,7 +3,10 @@
 // Uso (desde apps/api):
 //   DATABASE_URL=postgresql://postgres@127.0.0.1:55432/nodo_test2 \
 //   SIM_BASE_URL=http://127.0.0.1:8091 SIM_API_LOG=<log del API> \
-//   [SIM_OUT=<reporte.json>] node test-e2e-sim/run.mjs
+//   [SIM_OUT=<reporte.json>] [SIM_ONLY=providers] node test-e2e-sim/run.mjs
+//
+// SIM_ONLY=providers corre solo P1–P6 (scenarios-providers.mjs). Levantar el API
+// con CRON_DISABLED=true: así nada sale a los portales reales con credenciales falsas.
 //
 // El API tiene que estar corriendo sin RESEND/SMTP (el código de mail sale por
 // el log) y sin TURNSTILE_SECRET_KEY. Crea datos con prefijo sim-<timestamp>.
@@ -13,6 +16,7 @@ import argon2 from "argon2";
 import { api, results, serverErrors, sleep, scenario } from "./lib.mjs";
 import { s1Register, s2Onboarding, s3Session, s4Team, s4bTeamRemoval, s5Security, s5bCrossOrg } from "./scenarios-auth.mjs";
 import { s6Link, s7PriceList, s8CartOrder, s9Plan } from "./scenarios-commerce.mjs";
+import { providerScenarios } from "./scenarios-providers.mjs";
 
 const { PrismaClient } = prismaPkg;
 const SESSION_CACHE_WAIT_MS = 31_000;
@@ -133,10 +137,15 @@ async function main() {
   console.log(`Simulación ${ctx.prefix} contra ${process.env.SIM_BASE_URL ?? "http://127.0.0.1:8091"}`);
   try {
     ctx.admin = await createAdmin(ctx);
+    if (process.env.SIM_ONLY === "providers") {
+      for (const step of providerScenarios) await runStep(step, ctx);
+      return;
+    }
     const steps = [s1Register, s2Onboarding, s3Session, s4Team, s5Security];
     for (const step of steps) await runStep(step, ctx);
     const deferredFrom = Date.now();
     for (const step of [s6Link, s7PriceList, s8CartOrder, s4bTeamRemoval, s5bCrossOrg, s9Plan, s10Probes]) await runStep(step, ctx);
+    for (const step of providerScenarios) await runStep(step, ctx);
     const wait = SESSION_CACHE_WAIT_MS - (Date.now() - deferredFrom);
     if (wait > 0) await sleep(wait);
     const late = scenario("S-diferidos", "Chequeos 31 s después (caché de sesión)");

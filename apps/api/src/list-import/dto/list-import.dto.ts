@@ -61,6 +61,15 @@ export class CreateListProviderDto {
   config?: UpdateProviderConfigDto;
 }
 
+/** Vigencia de la lista: cada cuántos días se espera una nueva. null = sin vigencia. */
+export class ListCadenceDto {
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  listUpdateDays!: number | null;
+}
+
 export class EnableOwnListDto {
   @IsOptional()
   @ValidateIf((_, value) => value !== null)

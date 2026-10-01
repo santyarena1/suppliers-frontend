@@ -747,6 +747,10 @@ model SupplierBaseOffer {
 model ImportProfile {
   id               String               @id @default(uuid())
   provider         String
+  /// Organización dueña del perfil: el distribuidor en su lista base, el comercio
+  /// en su lista propia. Cada uno lee sus planillas con su perfil; nunca se comparte.
+  /// null = perfil viejo sin dueño (no se usa más).
+  tenantId         String?
   version          Int                  @default(1)
   status           ImportProfileStatus  @default(PROPOSED)
   /// Hash de encabezados normalizados + cantidad de hojas.
@@ -775,6 +779,7 @@ model ImportProfile {
 
   @@index([provider, status])
   @@index([provider, fingerprint])
+  @@index([provider, tenantId, status])
 }
 
 // Una planilla subida. Termina siempre en un estado visible.
@@ -951,6 +956,9 @@ model ProviderSyncConfig {
   /// Si está activo, el buscador no lista fichas de este distribuidor que este
   /// local todavía no sincronizó (sin precio ni stock propios).
   hideUnsyncedCatalog  Boolean              @default(false)
+  /// Cada cuántos días espera este comercio una lista nueva de este proveedor
+  /// (su lista propia). null = usa la del proveedor (Tenant.listUpdateDays).
+  listUpdateDays       Int?
   /// "Incluir en búsqueda" que eligió el comercio. `null` = nunca eligió: entra si
   /// el plan tiene lugar. Apagarlo no desconecta nada: solo sale del buscador.
   includeInSearch      Boolean?

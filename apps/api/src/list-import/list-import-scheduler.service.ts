@@ -109,8 +109,38 @@ export class ListImportSchedulerService implements OnModuleInit, OnModuleDestroy
           })),
         });
       }
+      await this.notifyOverdueOwnLists();
     } catch (err) {
       this.logger.warn(`Aviso de listas vencidas falló: ${msg(err)}`);
+    }
+  }
+
+  /** Comercios con vigencia propia para su lista: el aviso le llega solo a ese comercio. */
+  private async notifyOverdueOwnLists() {
+    const configs = await this.prisma.providerSyncConfig.findMany({
+      where: { listUpdateDays: { not: null }, tenant: { active: true } },
+      select: { tenantId: true, provider: true },
+    });
+    for (const config of configs) {
+      const fresh = await this.imports.freshnessFor(config.provider, config.tenantId);
+      if (fresh.status !== "OVERDUE") continue;
+      const landingKey = `list-overdue:${config.provider}`;
+      const recent = await this.prisma.orgNotification.findFirst({
+        where: { toTenantId: config.tenantId, landingKey, createdAt: { gt: new Date(Date.now() - NOTIFY_DEDUP_MS) } },
+        select: { id: true },
+      });
+      if (recent) continue;
+      const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: config.provider }, select: { name: true } });
+      await this.prisma.orgNotification.create({
+        data: {
+          toTenantId: config.tenantId,
+          fromTenantId: null,
+          kind: "SYSTEM",
+          title: `Tu lista de ${supplier?.name ?? config.provider} está vencida`,
+          body: `La esperabas cada ${fresh.listUpdateDays} días. Última carga: ${fresh.lastImportAt?.toLocaleDateString("es-AR") ?? "nunca"}.`,
+          landingKey,
+        },
+      });
     }
   }
 }

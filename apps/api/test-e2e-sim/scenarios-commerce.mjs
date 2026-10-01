@@ -232,23 +232,35 @@ export async function s8CartOrder(ctx) {
 export async function s9Plan(ctx) {
   const s = scenario("S9", "Plan BASE (tope 5) y vencimiento de la prueba");
   const b = ctx.base;
+  // Un proveedor cuenta para el tope solo si está configurado (tiene precios del
+  // comercio): a cada lista creada se le carga una oferta con precio.
+  const tenantId = (await api("GET", "/my/org", { token: b.token })).data?.id;
+  async function priceIt(provider) {
+    await ctx.prisma.providerSyncCache.create({ data: { provider, externalId: "s9-1", name: `Producto ${provider}`, raw: {} } });
+    await ctx.prisma.tenantProductOffer.create({ data: { tenantId, provider, externalId: "s9-1", price: 10, stock: 5 } });
+  }
   const before = await api("GET", "/my/providers", { token: b.token });
-  let linked = (before.data ?? []).filter((p) => p.linked).length;
+  let linked = (before.data ?? []).filter((p) => p.linked && p.configured !== false && !p.provider.startsWith("LIST_DEMO_")).length;
   const created = [];
   for (let i = 1; linked + created.length < 7 && i <= 7; i++) {
     const r = await api("POST", "/providers", { token: b.token, body: { name: `Prov Lista ${ctx.prefix} ${i}`, type: "DISTRIBUTOR" } });
     s.check(`BASE crea proveedor por lista #${i} → 201`, r.status === 201 && r.data?.providerKey, r);
-    if (r.data?.providerKey) created.push(r.data.providerKey);
+    if (r.data?.providerKey) {
+      created.push(r.data.providerKey);
+      await priceIt(r.data.providerKey);
+    }
   }
   const provs = await api("GET", "/my/providers", { token: b.token });
   const list = provs.data ?? [];
-  linked = list.filter((p) => p.linked).length;
-  const inSearch = list.filter((p) => p.inSearch);
+  // Los demos del recorrido guiado no cuentan para el tope.
+  const real = (p) => !p.provider.startsWith("LIST_DEMO_");
+  linked = list.filter((p) => p.linked && p.configured !== false && real(p)).length;
+  const inSearch = list.filter((p) => p.inSearch && real(p));
   s.check("BASE con ≥6 proveedores conectados", linked >= 6, { linked, providers: list.map((p) => `${p.provider}:${p.inSearch ? "on" : "off"}`) });
   s.check("BASE: como máximo 5 en búsqueda", inSearch.length <= 5, { inSearch: inSearch.map((p) => p.provider) });
   const sub = await api("GET", "/my/subscription", { token: b.token });
   s.check("/my/subscription usage coherente (activos ≤ 5, máx 5)", sub.data?.usage?.maxSearchProviders === 5 && sub.data?.usage?.activeSearchProviders <= 5 && sub.data?.usage?.connectedProviders === linked, sub.data?.usage);
-  const off = list.find((p) => p.linked && !p.inSearch);
+  const off = list.find((p) => p.linked && p.configured !== false && !p.inSearch);
   if (off) {
     const on = await api("PUT", `/my/providers/${off.provider}/search`, { token: b.token, body: { enabled: true } });
     s.check("prender el 6.º proveedor → 409 PLAN_SEARCH_LIMIT", on.status === 409 && on.body?.code === "PLAN_SEARCH_LIMIT", on);

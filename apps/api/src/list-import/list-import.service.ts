@@ -198,7 +198,8 @@ export class ListImportService {
       return;
     }
 
-    const resolved = await this.resolveProfile(record.provider, analysis);
+    const owner = await this.ownerOfRecord(record);
+    const resolved = await this.resolveProfile(record.provider, owner, analysis);
     const sheet = resolved.sheet;
     const normalized = normalizeRows(sheet, resolved.spec);
     const matched = await matchAgainstCatalog(this.prisma, record.provider, normalized.items);
@@ -287,10 +288,10 @@ export class ListImportService {
    * solo coinciden las columnas clave; si no, uno propuesto (reutilizando una
    * propuesta pendiente con la misma huella antes de volver a preguntarle a la IA).
    */
-  private async resolveProfile(provider: string, analysis: StructureAnalysis) {
+  private async resolveProfile(provider: string, owner: string, analysis: StructureAnalysis) {
     const chosen = analysis.chosen!;
     const active = await this.prisma.importProfile.findFirst({
-      where: { provider, status: "ACTIVE" },
+      where: { provider, tenantId: owner, status: "ACTIVE" },
       orderBy: { version: "desc" },
     });
     if (active) {
@@ -304,14 +305,14 @@ export class ListImportService {
       }
     }
     const pending = await this.prisma.importProfile.findFirst({
-      where: { provider, status: "PROPOSED", fingerprint: analysis.fingerprint },
+      where: { provider, tenantId: owner, status: "PROPOSED", fingerprint: analysis.fingerprint },
       orderBy: { version: "desc" },
     });
     if (pending) {
       return { profile: pending, spec: specOf(pending), sheet: chosen, match: "PROPOSED" as const };
     }
     const learned = await this.learner.learn(chosen);
-    const created = await this.createProfileVersion(provider, learned.spec, chosen, analysis.sheets.length, {
+    const created = await this.createProfileVersion(provider, owner, learned.spec, chosen, analysis.sheets.length, {
       status: "PROPOSED",
       proposedByAi: learned.fromAi,
       aiReasoning: learned.reasoning,
@@ -327,15 +328,17 @@ export class ListImportService {
 
   private async createProfileVersion(
     provider: string,
+    owner: string,
     spec: ImportProfileSpec,
     sheet: SheetAnalysis,
     sheetCount: number,
     meta: { status: "PROPOSED" | "ACTIVE"; proposedByAi: boolean; aiReasoning: string | null; approvedByUserId: string | null }
   ): Promise<ImportProfile> {
-    const last = await this.prisma.importProfile.findFirst({ where: { provider }, orderBy: { version: "desc" }, select: { version: true } });
+    const last = await this.prisma.importProfile.findFirst({ where: { provider, tenantId: owner }, orderBy: { version: "desc" }, select: { version: true } });
     return this.prisma.importProfile.create({
       data: {
         provider,
+        tenantId: owner,
         version: (last?.version ?? 0) + 1,
         status: meta.status,
         fingerprint: fingerprintOf(sheetCount, sheet),
@@ -367,7 +370,7 @@ export class ListImportService {
       return rows.map((r) => ({ externalId: r.externalId, name: names.get(r.externalId) ?? r.externalId, price: num(r.price), finalPrice: num(r.finalPrice) }));
     }
     const rows = await this.prisma.tenantProductOffer.findMany({
-      where: { tenantId, provider, source: "OWN_LIST" },
+      where: { tenantId, provider, source: "OWN_LIST", active: true },
       select: { externalId: true, price: true, finalPrice: true, product: { select: { name: true } } },
     });
     return rows.map((r) => ({ externalId: r.externalId, name: r.product.name, price: num(r.price), finalPrice: num(r.finalPrice) }));
@@ -413,11 +416,14 @@ export class ListImportService {
     const snapshot = await this.snapshotFor(record);
     await this.prisma.supplierListImport.update({ where: { id: importId }, data: { snapshot, status: "PROCESSING" } });
 
+    let removedMissing = 0;
     if (record.level === "BASE") {
       await this.applyBase(record, items, missingIds);
+      removedMissing = missingIds.length;
     } else {
-      await this.applyTenant(record, items);
+      removedMissing = await this.applyTenant(record, items);
     }
+    const owner = await this.ownerOfRecord(record);
     // Los productos nuevos heredan las marcas ya aprobadas (Sentey, LNZ…) sin pasar por revisión,
     // y lo que sigue incompleto se intenta cerrar con IA usando solo marcas y categorías conocidas.
     const ids = items.map((i) => i.externalId);
@@ -443,6 +449,7 @@ export class ListImportService {
             brandsAutoAssigned: brands.assigned,
             aiCompleted: ai.completed,
             stillIncomplete: Math.max(0, ai.considered - ai.completed),
+            removedMissing,
           },
         },
       }),
@@ -453,7 +460,7 @@ export class ListImportService {
               data: { status: "ACTIVE", approvedByUserId: actor?.userId ?? null },
             }),
             this.prisma.importProfile.updateMany({
-              where: { provider: record.provider, status: "ACTIVE", id: { not: record.profileId } },
+              where: { provider: record.provider, tenantId: owner, status: "ACTIVE", id: { not: record.profileId } },
               data: { status: "ARCHIVED" },
             }),
           ]
@@ -487,17 +494,20 @@ export class ListImportService {
     await this.materializeForLinked(record.provider, supplier.id);
   }
 
-  /** Lista propia: ofertas OWN_LIST del comercio, y ficha visible (sin precio) para el resto. */
-  private async applyTenant(record: SupplierListImport, items: NormalizedProduct[]) {
+  /**
+   * Lista propia: ofertas OWN_LIST del comercio. Es la lista completa: lo que
+   * ya no viene deja de mostrarse (queda inactivo; revertir lo recupera). No se
+   * crea nada para otros comercios: la lista de uno no se ve en el de otro.
+   * Devuelve cuántos productos dejaron de mostrarse.
+   */
+  private async applyTenant(record: SupplierListImport, items: NormalizedProduct[]): Promise<number> {
+    const startedAt = new Date();
     await this.providers.applyListOffers({ tenantId: record.tenantId, provider: record.provider, items, source: "OWN_LIST" });
-    const others = await this.linkedTenantIds(record.provider);
-    for (const tenantId of others) {
-      if (tenantId === record.tenantId) continue;
-      await this.prisma.tenantProductOffer.createMany({
-        data: items.map((item) => ({ tenantId, provider: record.provider, externalId: item.externalId, source: "BASE_LIST" as const, active: true })),
-        skipDuplicates: true,
-      });
-    }
+    const gone = await this.prisma.tenantProductOffer.updateMany({
+      where: { tenantId: record.tenantId, provider: record.provider, source: "OWN_LIST", active: true, syncedAt: { lt: startedAt } },
+      data: { active: false },
+    });
+    return gone.count;
   }
 
   private async linkedTenantIds(provider: string): Promise<string[]> {
@@ -530,7 +540,7 @@ export class ListImportService {
     const rows = await this.prisma.tenantProductOffer.findMany({
       where: { tenantId: record.tenantId, provider: record.provider, source: "OWN_LIST" },
     });
-    return { level: "TENANT", rows: rows.map(serializeOffer) } as Prisma.InputJsonValue;
+    return { level: "TENANT", rows: rows.map((r) => ({ ...serializeOffer(r), active: r.active })) } as Prisma.InputJsonValue;
   }
 
   async discard(importId: string, actor: ImportActor) {
@@ -587,7 +597,7 @@ export class ListImportService {
             provider: record.provider,
             externalId: r.externalId,
             source: "OWN_LIST" as const,
-            active: true,
+            active: r.active ?? true,
             ...offerFromSerialized(r),
           })),
           skipDuplicates: true,
@@ -603,7 +613,7 @@ export class ListImportService {
   async list(actor: ImportActor, provider: Provider) {
     const access = await this.resolveAccess(actor, provider);
     const rows = await this.prisma.supplierListImport.findMany({
-      where: { provider, ...(access.level === "TENANT" ? { OR: [{ level: "BASE" }, { tenantId: access.tenantId }] } : {}) },
+      where: { provider, ...this.importScope(access) },
       orderBy: { createdAt: "desc" },
       take: 50,
       include: { tenant: { select: { name: true } } },
@@ -622,9 +632,10 @@ export class ListImportService {
   }
 
   private async assertSameAccess(actor: ImportActor, record: SupplierListImport) {
+    if (actor.isSuperadmin) return;
     const access = await this.resolveAccess(actor, record.provider);
-    if (access.level === "BASE") return;
-    if (record.level === "TENANT" && record.tenantId === access.tenantId) return;
+    // El distribuidor ve sus cargas de la base, nunca la lista propia de un comercio.
+    if (isInScope(record, access)) return;
     throw new ForbiddenException("Esta carga no es de tu organización");
   }
 
@@ -649,15 +660,28 @@ export class ListImportService {
     };
   }
 
+  /** Las cargas de la organización: la base para el proveedor, las propias para un comercio. */
+  private importScope(access: ImportAccess): Prisma.SupplierListImportWhereInput {
+    return access.level === "BASE" ? { level: "BASE" } : { level: "TENANT", tenantId: access.tenantId };
+  }
+
+  /** Dueño del perfil con el que se lee una carga ya guardada. */
+  private async ownerOfRecord(record: SupplierListImport): Promise<string> {
+    if (record.level === "TENANT") return record.tenantId;
+    const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: record.provider }, select: { id: true } });
+    return supplier?.id ?? record.tenantId;
+  }
+
   // ---------- Perfil ----------
 
   async getProfile(actor: ImportActor, provider: Provider) {
-    await this.resolveAccess(actor, provider);
+    const access = await this.resolveAccess(actor, provider);
+    const owner = ownerOf(access);
     const [active, proposed, latestImport] = await Promise.all([
-      this.prisma.importProfile.findFirst({ where: { provider, status: "ACTIVE" }, orderBy: { version: "desc" } }),
-      this.prisma.importProfile.findFirst({ where: { provider, status: "PROPOSED" }, orderBy: { version: "desc" } }),
+      this.prisma.importProfile.findFirst({ where: { provider, tenantId: owner, status: "ACTIVE" }, orderBy: { version: "desc" } }),
+      this.prisma.importProfile.findFirst({ where: { provider, tenantId: owner, status: "PROPOSED" }, orderBy: { version: "desc" } }),
       this.prisma.supplierListImport.findFirst({
-        where: { provider, preview: { not: Prisma.DbNull } },
+        where: { provider, ...this.importScope(access), preview: { not: Prisma.DbNull } },
         orderBy: { createdAt: "desc" },
         select: { id: true, status: true, preview: true, originalFileName: true, createdAt: true },
       }),
@@ -681,7 +705,7 @@ export class ListImportService {
       where: {
         provider,
         storedAssetId: { not: null },
-        ...(access.level === "TENANT" ? { level: "TENANT", tenantId: access.tenantId } : { level: "BASE" }),
+        ...this.importScope(access),
       },
       orderBy: { createdAt: "desc" },
     });
@@ -703,9 +727,10 @@ export class ListImportService {
 
   /** Guarda una versión nueva del perfil como activa y, si se pide, reprocesa una carga en revisión. */
   async saveProfile(actor: ImportActor, provider: Provider, dto: SaveImportProfileDto) {
-    await this.resolveAccess(actor, provider);
+    const access = await this.resolveAccess(actor, provider);
+    const owner = ownerOf(access);
     const latest = await this.prisma.supplierListImport.findFirst({
-      where: { provider, storedAssetId: { not: null } },
+      where: { provider, ...this.importScope(access), storedAssetId: { not: null } },
       orderBy: { createdAt: "desc" },
     });
     if (!latest) throw new BadRequestException("Subí una planilla primero: el perfil se define sobre un archivo real");
@@ -716,11 +741,12 @@ export class ListImportService {
 
     const spec = this.specFromDto(dto, sheet);
     const created = await this.prisma.$transaction(async (tx) => {
-      await tx.importProfile.updateMany({ where: { provider, status: { in: ["ACTIVE", "PROPOSED"] } }, data: { status: "ARCHIVED" } });
-      const last = await tx.importProfile.findFirst({ where: { provider }, orderBy: { version: "desc" }, select: { version: true } });
+      await tx.importProfile.updateMany({ where: { provider, tenantId: owner, status: { in: ["ACTIVE", "PROPOSED"] } }, data: { status: "ARCHIVED" } });
+      const last = await tx.importProfile.findFirst({ where: { provider, tenantId: owner }, orderBy: { version: "desc" }, select: { version: true } });
       return tx.importProfile.create({
         data: {
           provider,
+          tenantId: owner,
           version: (last?.version ?? 0) + 1,
           status: "ACTIVE",
           fingerprint: fingerprintOf(sheetCount, sheet),
@@ -743,7 +769,12 @@ export class ListImportService {
 
     if (dto.reprocessImportId) {
       const target = await this.prisma.supplierListImport.findUnique({ where: { id: dto.reprocessImportId } });
-      if (target && target.provider === provider && (target.status === "NEEDS_REVIEW" || target.status === "FAILED")) {
+      if (
+        target &&
+        target.provider === provider &&
+        isInScope(target, access) &&
+        (target.status === "NEEDS_REVIEW" || target.status === "FAILED")
+      ) {
         await this.prisma.supplierListImport.update({ where: { id: target.id }, data: { status: "PROCESSING", error: null } });
         this.kick(target.id);
       }
@@ -780,9 +811,9 @@ export class ListImportService {
 
   /** Pide a la IA (o a la heurística) una propuesta sobre la última planilla, sin guardarla. */
   async suggestProfile(actor: ImportActor, provider: Provider, sheetIndex?: number) {
-    await this.resolveAccess(actor, provider);
+    const access = await this.resolveAccess(actor, provider);
     const latest = await this.prisma.supplierListImport.findFirst({
-      where: { provider, storedAssetId: { not: null } },
+      where: { provider, ...this.importScope(access), storedAssetId: { not: null } },
       orderBy: { createdAt: "desc" },
     });
     if (!latest) throw new BadRequestException("Subí una planilla primero");
@@ -800,8 +831,39 @@ export class ListImportService {
     return this.freshnessFor(provider, access.level === "TENANT" ? access.tenantId : null);
   }
 
+  /**
+   * Cada cuántos días se espera una lista nueva. El proveedor la fija para su
+   * base; un comercio la fija para su lista propia (sin tocar la de los demás).
+   */
+  async setCadence(actor: ImportActor, provider: Provider, listUpdateDays: number | null) {
+    const access = await this.resolveAccess(actor, provider);
+    if (access.level === "BASE") {
+      await this.prisma.tenant.update({ where: { id: access.supplierTenantId }, data: { listUpdateDays } });
+      return this.freshnessFor(provider, null);
+    }
+    await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId: access.tenantId, provider } },
+      create: {
+        tenantId: access.tenantId,
+        provider,
+        listUpdateDays,
+        ...(this.registry.get(provider) ? {} : { priceChannel: "LIST" as const }),
+      },
+      update: { listUpdateDays },
+    });
+    return this.freshnessFor(provider, access.tenantId);
+  }
+
   async freshnessFor(provider: string, tenantId: string | null) {
-    const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: provider }, select: { listUpdateDays: true } });
+    const [supplier, own] = await Promise.all([
+      this.prisma.tenant.findUnique({ where: { providerKey: provider }, select: { listUpdateDays: true } }),
+      tenantId
+        ? this.prisma.providerSyncConfig.findUnique({
+            where: { tenantId_provider: { tenantId, provider } },
+            select: { listUpdateDays: true },
+          })
+        : Promise.resolve(null),
+    ]);
     const last = await this.prisma.supplierListImport.findFirst({
       where: {
         provider,
@@ -811,7 +873,7 @@ export class ListImportService {
       orderBy: { appliedAt: "desc" },
       select: { appliedAt: true, level: true },
     });
-    const days = supplier?.listUpdateDays ?? null;
+    const days = own?.listUpdateDays ?? supplier?.listUpdateDays ?? null;
     const lastAt = last?.appliedAt ?? null;
     const expectedAt = lastAt && days ? new Date(lastAt.getTime() + days * 86_400_000) : null;
     let status: "NONE" | "NO_CADENCE" | "OK" | "DUE_SOON" | "OVERDUE" = "OK";
@@ -853,6 +915,20 @@ export class ListImportService {
 
 // ---------- helpers ----------
 
+/** Dueño del perfil y de las planillas: el proveedor en su base, el comercio en su lista propia. */
+export function ownerOf(access: Pick<ImportAccess, "level" | "tenantId" | "supplierTenantId">): string {
+  return access.level === "BASE" ? access.supplierTenantId : access.tenantId;
+}
+
+/** Si una carga es de la organización con este acceso. */
+export function isInScope(
+  record: Pick<SupplierListImport, "level" | "tenantId">,
+  access: Pick<ImportAccess, "level" | "tenantId">
+): boolean {
+  if (access.level === "BASE") return record.level === "BASE";
+  return record.level === "TENANT" && record.tenantId === access.tenantId;
+}
+
 type SerializedOffer = {
   externalId: string;
   price: number | null;
@@ -861,6 +937,8 @@ type SerializedOffer = {
   ivaPercent: number | null;
   stock: number | null;
   stockStatus: string | null;
+  /** Solo en snapshots de lista propia: si la oferta estaba visible. */
+  active?: boolean;
 };
 
 function serializeOffer(row: {

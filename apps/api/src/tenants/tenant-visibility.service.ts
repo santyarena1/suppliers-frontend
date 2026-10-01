@@ -307,7 +307,8 @@ export class TenantVisibilityService {
     const inSearch = selectSearchProviders(
       rows
         // Un proveedor sin configurar no busca ni le quita el lugar a uno configurado.
-        .filter((v) => v.linked && !v.platformHidden && v.configured)
+        // Los demos del recorrido guiado tampoco: buscan aparte, sin ocupar lugar del plan.
+        .filter((v) => v.linked && !v.platformHidden && v.configured && !isDemoDistributorKey(v.provider))
         .map((v) => ({
           provider: v.provider,
           name: v.name,
@@ -316,6 +317,10 @@ export class TenantVisibilityService {
         })),
       max
     );
+    for (const v of rows) {
+      const choice = configByProvider.get(v.provider)?.includeInSearch ?? null;
+      if (isDemoDistributorKey(v.provider) && v.linked && !v.platformHidden && choice !== false) inSearch.add(v.provider);
+    }
     return rows.map((v) => ({
       ...v,
       inSearch: inSearch.has(v.provider),
@@ -330,7 +335,7 @@ export class TenantVisibilityService {
       this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true, type: true } }),
       this.isPlatformAdminOrg(tenantId),
     ]);
-    const linked = visibles.filter((v) => v.linked && v.configured);
+    const linked = visibles.filter((v) => v.linked && v.configured && !isDemoDistributorKey(v.provider));
     return {
       connectedProviders: linked.length,
       activeSearchProviders: linked.filter((v) => v.inSearch).length,

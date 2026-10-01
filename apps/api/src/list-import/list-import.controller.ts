@@ -21,7 +21,7 @@ import { commercialId, type TenantContext } from "../tenants/tenant-context.serv
 import { assertPermission } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { TenantsService } from "../tenants/tenants.service";
-import { CreateListProviderDto, EnableOwnListDto, SaveImportProfileDto } from "./dto/list-import.dto";
+import { CreateListProviderDto, EnableOwnListDto, ListCadenceDto, SaveImportProfileDto } from "./dto/list-import.dto";
 import { ListImportService, type ImportActor } from "./list-import.service";
 
 function assertProvider(value: string): Provider {
@@ -168,6 +168,18 @@ export class ListImportController {
   ) {
     const sheetIndex = sheet !== undefined && sheet !== "" ? Number(sheet) : undefined;
     return this.imports.suggestProfile(actorOf(user, tenant), assertProvider(provider), Number.isFinite(sheetIndex) ? sheetIndex : undefined);
+  }
+
+  /** Vigencia de la lista: el proveedor la fija para su base, el comercio para su lista propia. */
+  @Put("providers/:provider/list-cadence")
+  setCadence(
+    @CurrentUser() user: JwtPayload,
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Param("provider") provider: string,
+    @Body() dto: ListCadenceDto
+  ) {
+    assertManagesProviders(user, tenant);
+    return this.imports.setCadence(actorOf(user, tenant), assertProvider(provider), dto.listUpdateDays ?? null);
   }
 
   @Get("providers/:provider/freshness")

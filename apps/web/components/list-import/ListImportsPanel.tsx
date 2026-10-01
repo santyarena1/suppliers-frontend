@@ -8,6 +8,7 @@ import {
 import { listImportsApi, type ListImportRecord, type ListImportStatus, type Provider } from "@/lib/api";
 import { freshnessLabel, invalidateListFreshness, useListFreshness } from "@/lib/listFreshness";
 import NodoSpinner from "@/components/NodoSpinner";
+import ListCadenceEditor from "./ListCadenceEditor";
 
 const POLL_MS = 2500;
 
@@ -136,8 +137,12 @@ export default function ListImportsPanel({ provider, uploadsAsBase, onApplied }:
         {freshness?.expectedAt && (
           <span className="text-xs opacity-90">Próxima esperada: {fmtDate(freshness.expectedAt, false)}</span>
         )}
-        {freshness && !freshness.listUpdateDays && (
-          <span className="text-xs opacity-80">Definí la cadencia en la ficha del proveedor para que avise cuando venza.</span>
+        {freshness && (
+          <ListCadenceEditor
+            provider={provider}
+            current={freshness.listUpdateDays}
+            onSaved={() => setRefreshKey((k) => k + 1)}
+          />
         )}
         <Link
           href={`/proveedores/${provider}/listas/perfil`}
