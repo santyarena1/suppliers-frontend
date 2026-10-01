@@ -112,6 +112,9 @@ export const DEMO_SHIPPING: Record<string, { label: string; ars: number }> = {
   "Distribuidor 4": { label: "Comisionista", ars: 7500 },
 };
 
+/** Cotización de ejemplo para pasar el envío en pesos al precio en dólares. */
+export const DEMO_ARS_PER_USD = 1500;
+
 export const ars = (n: number) => `$ ${Math.round(n).toLocaleString("es-AR")}`;
 
 /** Cómo se arma el costo final de una sola oferta (sin comparar distribuidores). */

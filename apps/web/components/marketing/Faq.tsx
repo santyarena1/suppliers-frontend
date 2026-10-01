@@ -18,8 +18,8 @@ const QA = [
     a: "NODO actualiza el catálogo de cada distribuidor automáticamente, y cada producto muestra cuándo se actualizó por última vez.",
   },
   {
-    q: "¿Cómo sabe NODO cuánto sale el envío?",
-    a: "Aprende de tus pedidos cómo te llega lo de cada distribuidor y cuánto te costó, y vos podés cargar tus propias formas de envío con su valor. En la búsqueda ves el envío aproximado de cada producto, repartido según lo que ya tenés en el carrito. El costo final lo da el distribuidor al confirmar.",
+    q: "¿Cómo funciona el envío estimado?",
+    a: "NODO mira tus pedidos y aprende cómo te llega lo de cada distribuidor y cuánto te costó. Si a uno siempre le pedís moto y la moto sale $12.000, cada producto de ese distribuidor muestra su parte del envío, y baja a medida que sumás más cosas al carrito: con 8 unidades, $1.500 cada una. También podés cargar tus formas de envío con su valor, para los distribuidores que no lo informan, y elegir si se reparte por unidades, por valor o por pedido. Con el filtro \"Incluir envío\" se suma al precio; si no, queda de referencia. Es aproximado: el costo final lo da el distribuidor al confirmar.",
   },
   {
     q: "¿Cuántos usuarios puedo tener?",

@@ -66,10 +66,16 @@ function mix(a: RGB, b: RGB, t: number): RGB {
 export default function DataField({
   className = "",
   rowSelector = "[data-field-row]",
+  landRows = true,
 }: {
   className?: string;
   /** Filas del DOM a las que el campo tiene que aterrizar, medidas en vivo. */
   rowSelector?: string;
+  /**
+   * `false`: solo el campo, sin partículas que viajen a filas. Para usarlo de
+   * fondo, donde no hay panel al que aterrizar (sin esto dibuja tres rayas).
+   */
+  landRows?: boolean;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -146,7 +152,7 @@ export default function DataField({
         const hx = -w * 0.05 + t * w * 1.1;
         const hy = h * rb.y + Math.sin(t * rb.freq * Math.PI + rb.phase) * rb.amp * h + off;
 
-        const matches = i % 100 < MATCH_RATIO * 100;
+        const matches = landRows && i % 100 < MATCH_RATIO * 100;
         const rowIndex = i % rows.length;
         const row = rows[rowIndex];
         // Sesgada al arranque de la entrada: densa donde se ve, fina dentro del panel.
@@ -296,7 +302,7 @@ export default function DataField({
       window.removeEventListener("pointermove", onPointer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [rowSelector]);
+  }, [rowSelector, landRows]);
 
   return (
     <div ref={hostRef} className={`lnd-field ${className}`} aria-hidden="true">
