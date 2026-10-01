@@ -13,6 +13,10 @@ const d = url ? describe : describe.skip;
 const RETAILER = "sub-int-retailer";
 const ADMIN = "sub-int-admin";
 const DISTROS = Array.from({ length: 7 }, (_, i) => ({ id: `sub-int-d${i + 1}`, key: `LIST_SUBINT_${i + 1}`, name: `Distro Int ${i + 1}` }));
+/** Vinculado pero sin precios: primero por nombre, así si contara le sacaría el lugar a otro. */
+const UNPRICED = { id: "sub-int-d0", key: "LIST_SUBINT_0", name: "Distro Int 0" };
+const ALL_IDS = [RETAILER, UNPRICED.id, ...DISTROS.map((x) => x.id)];
+const ALL_KEYS = [UNPRICED.key, ...DISTROS.map((x) => x.key)];
 
 d("Suscripciones contra Postgres", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://skip@localhost/skip" } } });
@@ -25,7 +29,8 @@ d("Suscripciones contra Postgres", () => {
   const linkCount = () => prisma.tenantLink.count({ where: { clientTenantId: RETAILER } });
 
   beforeAll(async () => {
-    await prisma.tenant.deleteMany({ where: { id: { in: [RETAILER, ...DISTROS.map((x) => x.id)] } } });
+    await prisma.tenant.deleteMany({ where: { id: { in: ALL_IDS } } });
+    await prisma.providerSyncCache.deleteMany({ where: { provider: { in: ALL_KEYS } } });
     await prisma.user.upsert({
       where: { id: ADMIN },
       create: { id: ADMIN, username: "sub-int-admin", email: "sub-int-admin@nodo.test", passwordHash: "x", role: "ROLE_ADMIN" },
@@ -35,7 +40,11 @@ d("Suscripciones contra Postgres", () => {
     for (const x of DISTROS) {
       await prisma.tenant.create({ data: { id: x.id, name: x.name, type: "DISTRIBUTOR", providerKey: x.key } });
       await prisma.tenantLink.create({ data: { clientTenantId: RETAILER, supplierTenantId: x.id, status: "ACTIVE" } });
+      await prisma.providerSyncCache.create({ data: { provider: x.key, externalId: "p1", name: `Producto ${x.name}`, raw: {} } });
+      await prisma.tenantProductOffer.create({ data: { tenantId: RETAILER, provider: x.key, externalId: "p1", price: 10 } });
     }
+    await prisma.tenant.create({ data: { id: UNPRICED.id, name: UNPRICED.name, type: "DISTRIBUTOR", providerKey: UNPRICED.key } });
+    await prisma.tenantLink.create({ data: { clientTenantId: RETAILER, supplierTenantId: UNPRICED.id, status: "ACTIVE" } });
     await service.ensure(RETAILER);
     await prisma.subscription.update({
       where: { tenantId: RETAILER },
@@ -44,7 +53,8 @@ d("Suscripciones contra Postgres", () => {
   });
 
   afterAll(async () => {
-    await prisma.tenant.deleteMany({ where: { id: { in: [RETAILER, ...DISTROS.map((x) => x.id)] } } });
+    await prisma.tenant.deleteMany({ where: { id: { in: ALL_IDS } } });
+    await prisma.providerSyncCache.deleteMany({ where: { provider: { in: ALL_KEYS } } });
     await prisma.auditLogEntry.deleteMany({ where: { performedById: ADMIN } });
     await prisma.user.deleteMany({ where: { id: ADMIN } });
     await prisma.$disconnect();
@@ -55,17 +65,23 @@ d("Suscripciones contra Postgres", () => {
     expect(usage).toEqual({ connectedProviders: 7, activeSearchProviders: 5, maxSearchProviders: 5 });
   });
 
+  it("un proveedor vinculado sin precios no busca, no cuenta y no le saca el lugar a nadie", async () => {
+    const row = (await visibility.listFor(RETAILER)).find((v) => v.provider === UNPRICED.key)!;
+    expect(row).toMatchObject({ linked: true, configured: false, inSearch: false });
+    expect(await activeInSearch()).not.toContain(UNPRICED.key);
+  });
+
   it("prender un 6º responde PLAN_SEARCH_LIMIT y no toca nada", async () => {
-    const off = (await visibility.listFor(RETAILER)).find((v) => !v.inSearch)!;
+    const off = (await visibility.listFor(RETAILER)).find((v) => !v.inSearch && v.configured)!;
     await expect(visibility.setIncludeInSearch(RETAILER, off.provider, true, { onLimit: searchLimitError })).rejects.toMatchObject({
       response: { code: "PLAN_SEARCH_LIMIT" },
     });
-    expect(await linkCount()).toBe(7);
+    expect(await linkCount()).toBe(8);
   });
 
   it("apagar uno libera el lugar para otro", async () => {
     const [first] = await activeInSearch();
-    const off = (await visibility.listFor(RETAILER)).find((v) => !v.inSearch)!;
+    const off = (await visibility.listFor(RETAILER)).find((v) => !v.inSearch && v.configured)!;
     await visibility.setIncludeInSearch(RETAILER, first, false, { onLimit: searchLimitError });
     const result = await visibility.setIncludeInSearch(RETAILER, off.provider, true, { onLimit: searchLimitError });
     expect(result.inSearch).toBe(true);
@@ -78,7 +94,7 @@ d("Suscripciones contra Postgres", () => {
     expect(await activeInSearch()).toHaveLength(7);
     await service.changePlan(actor, RETAILER, { plan: "BASE" });
     expect(await activeInSearch()).toHaveLength(5);
-    expect(await linkCount()).toBe(7);
+    expect(await linkCount()).toBe(8);
     const audit = await prisma.auditLogEntry.count({ where: { entityId: RETAILER, action: "SUBSCRIPTION_PLAN_CHANGED" } });
     expect(audit).toBe(2);
   });
@@ -103,7 +119,7 @@ d("Suscripciones contra Postgres", () => {
     await cron.run();
     expect(await prisma.subscriptionReminder.count({ where: { tenantId: RETAILER } })).toBe(1);
     expect(await prisma.orgNotification.count({ where: { toTenantId: RETAILER, landingKey: "subscription:SUSPENDED" } })).toBe(1);
-    expect(await linkCount()).toBe(7);
+    expect(await linkCount()).toBe(8);
   });
 
   it("registrar el pago reactiva al instante", async () => {

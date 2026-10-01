@@ -476,6 +476,8 @@ export interface VisibleProvider {
   platformHidden?: boolean;
   /** Participa del buscador (NODO Base: hasta 5 a la vez). Conectado igual aunque esté en `false`. */
   inSearch?: boolean;
+  /** Tiene precios del comercio (cuenta sincronizada o lista aplicada). Sin esto no se muestra ni busca. */
+  configured?: boolean;
   /** Lo que eligió el comercio en "Incluir en búsqueda". `null` = nunca lo tocó. */
   includeInSearch?: boolean | null;
   accountManager: { name: string; email: string } | null;

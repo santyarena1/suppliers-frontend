@@ -8,7 +8,6 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import DistributorHome from "@/components/org/DistributorHome";
 import BrandHome from "@/components/org/BrandHome";
-import { credentialsApi, Provider } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
 import { useMyProviders } from "@/lib/myProviders";
 import { usePrefs } from "@/lib/prefs";
@@ -64,28 +63,14 @@ function RetailerHome() {
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<SearchEntry[]>([]);
   const [top, setTop] = useState<SearchEntry[]>([]);
-  const [configuredProviders, setConfiguredProviders] = useState<Set<Provider>>(new Set());
-  const [loadingCredentials, setLoadingCredentials] = useState(true);
-  const { providers: myProviders, loading: loadingProviders } = useMyProviders();
+  const { providers: allProviders, loading: loadingProviders } = useMyProviders();
+  // Solo los vinculados de verdad; "configurado" = ya tiene precios del comercio.
+  const myProviders = useMemo(() => allProviders.filter((p) => p.linked), [allProviders]);
+  const readyProviders = useMemo(() => myProviders.filter((p) => p.configured !== false), [myProviders]);
 
   useEffect(() => {
     setRecent(getRecentSearches(6));
     setTop(getTopSearches(6));
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    setLoadingCredentials(true);
-    credentialsApi.mine()
-      .then((res) => {
-        if (!alive) return;
-        setConfiguredProviders(new Set(res.data.map((c) => c.providerName)));
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (alive) setLoadingCredentials(false);
-      });
-    return () => { alive = false; };
   }, []);
 
   function go(q: string) {
@@ -102,8 +87,8 @@ function RetailerHome() {
     () => Array.from(new Set(cartItems.map((it) => it.provider))),
     [cartItems],
   );
-  const configuredCount = myProviders.filter((p) => configuredProviders.has(p.provider)).length;
-  const missingCount = loadingCredentials ? 0 : myProviders.length - configuredCount;
+  const configuredCount = readyProviders.length;
+  const missingCount = loadingProviders ? 0 : myProviders.length - configuredCount;
 
   return (
     <>
@@ -141,7 +126,7 @@ function RetailerHome() {
           <p className="hm__state hm-mono">
             <span>
               <Link href="/proveedores">
-                <b>{loadingCredentials ? "…" : configuredCount}</b> de {myProviders.length} proveedores
+                <b>{loadingProviders ? "…" : configuredCount}</b> de {myProviders.length} proveedores
                 configurados
               </Link>
             </span>
@@ -164,7 +149,7 @@ function RetailerHome() {
             {missingCount > 0 && (
               <span className="is-warn">
                 <Link href="/proveedores">
-                  {missingCount} sin credencial
+                  {missingCount} sin configurar
                 </Link>
               </span>
             )}
@@ -192,36 +177,26 @@ function RetailerHome() {
               <Loader2 className="w-4 h-4 animate-spin" />
               Cargando proveedores…
             </p>
-          ) : myProviders.length === 0 ? (
+          ) : readyProviders.length === 0 ? (
             <p className="hm__empty">
-              Todavía no estás conectado con ningún proveedor.{" "}
-              <Link href="/proveedores">Canjeá el código que te dieron</Link> para empezar.
+              Todavía no tenés ningún proveedor listo para buscar.{" "}
+              <Link href="/proveedores">Cargá tu cuenta o tu lista de precios</Link> y aparece acá.
             </p>
           ) : (
             <div className="hm__rail">
-              {myProviders.map(({ provider: p, name }) => {
-                const configured = configuredProviders.has(p);
-                const credUnknown = loadingCredentials;
+              {readyProviders.map(({ provider: p, name }) => {
                 const color = display.textColor(p);
                 return (
                   <button
                     key={p}
                     type="button"
                     className="hm__prov"
-                    data-state={credUnknown || configured ? "on" : "off"}
+                    data-state="on"
                     style={color ? ({ ["--pv"]: color } as React.CSSProperties) : undefined}
-                    onClick={() =>
-                      router.push(
-                        credUnknown || configured
-                          ? `/proveedores/${p}`
-                          : `/proveedores/${p}?tab=credentials`,
-                      )
-                    }
+                    onClick={() => router.push(`/proveedores/${p}`)}
                   >
                     <span className="hm__prov-name">{name}</span>
-                    <span className="hm__prov-note hm-mono">
-                      {credUnknown ? "…" : configured ? "Configurado" : "Sin credencial"}
-                    </span>
+                    <span className="hm__prov-note hm-mono">Configurado</span>
                   </button>
                 );
               })}

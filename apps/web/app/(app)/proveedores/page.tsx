@@ -234,7 +234,7 @@ export default function ProveedoresPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {linked.map(({ provider, name, accountManager, linkId, inSearch, platformHidden }) => {
+                    {linked.map(({ provider, name, accountManager, linkId, inSearch, platformHidden, configured }) => {
                       const s = statuses[provider];
                       const bySpreadsheet = isListProvider(provider) || !IMPLEMENTED_PROVIDERS.includes(provider);
                       const result = syncResult[provider];
@@ -247,7 +247,11 @@ export default function ProveedoresPage() {
                         >
                           <Link href={`/proveedores/${provider}`} className="flex items-center justify-between gap-3">
                             <ProviderBadge provider={provider} label={name} variant="inline" size="md" />
-                            {bySpreadsheet ? (
+                            {configured === false ? (
+                              <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-300">
+                                <KeyRound className="w-3 h-3" /> Sin configurar
+                              </span>
+                            ) : bySpreadsheet ? (
                               <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400">
                                 <FileSpreadsheet className="w-3 h-3" /> Por lista
                               </span>
@@ -282,8 +286,13 @@ export default function ProveedoresPage() {
                               Tu vendedor: {accountManager.name} · {accountManager.email}
                             </p>
                           )}
+                          {configured === false && (
+                            <p className="text-[11px] text-amber-200/80 -mt-1">
+                              No aparece en la búsqueda hasta que {bySpreadsheet ? "apliques tu lista de precios" : "cargues tu cuenta y sincronices"}.
+                            </p>
+                          )}
                           {bySpreadsheet && <ListFreshnessChip provider={provider} />}
-                          {retailer && !platformHidden && (
+                          {retailer && !platformHidden && configured !== false && (
                             <SearchToggle provider={provider} name={name} inSearch={inSearch !== false} onChanged={onSearchChanged} />
                           )}
 

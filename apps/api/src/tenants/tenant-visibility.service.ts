@@ -64,6 +64,11 @@ export interface VisibleProvider {
   inSearch: boolean;
   /** Lo que eligió el comercio: `null` = nunca tocó el interruptor. */
   includeInSearch: boolean | null;
+  /**
+   * Tiene precios del comercio: cuenta sincronizada, lista aplicada o lista del
+   * distribuidor vinculado. Sin esto no entra al buscador ni ocupa lugar del plan.
+   */
+  configured: boolean;
 }
 
 /** Cuántos proveedores buscan a la vez y cuántos permite el plan. */
@@ -161,6 +166,7 @@ export class TenantVisibilityService {
           platformHidden: hiddenForViewer(hidden, propio.providerKey, false),
           inSearch: !hiddenForViewer(hidden, propio.providerKey, false),
           includeInSearch: null,
+          configured: true,
         },
       ];
     }
@@ -216,7 +222,7 @@ export class TenantVisibilityService {
     ]);
     const configByProvider = new Map(configs.map((c) => [c.provider, c]));
 
-    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden" | "inSearch" | "includeInSearch">>();
+    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden" | "inSearch" | "includeInSearch" | "configured">>();
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
@@ -286,15 +292,22 @@ export class TenantVisibilityService {
       }
     }
 
+    // Administración ve todo lo vinculado como configurado: opera sin cuenta propia.
+    const priced = platformAdminOrg ? null : await this.providersWithPrices(tenantId, [...visibles.keys()]);
     const rows = [...visibles.values()]
-      .map((v) => ({ ...v, platformHidden: hiddenForViewer(hidden, v.provider, v.selfConnected) }))
+      .map((v) => ({
+        ...v,
+        platformHidden: hiddenForViewer(hidden, v.provider, v.selfConnected),
+        configured: priced === null || priced.has(v.provider),
+      }))
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
     // Administración opera sin tope; el resto, según el plan de la organización.
     const max = platformAdminOrg ? null : maxSearchProvidersFor(propio.plan);
     const inSearch = selectSearchProviders(
       rows
-        .filter((v) => v.linked && !v.platformHidden)
+        // Un proveedor sin configurar no busca ni le quita el lugar a uno configurado.
+        .filter((v) => v.linked && !v.platformHidden && v.configured)
         .map((v) => ({
           provider: v.provider,
           name: v.name,
@@ -317,7 +330,7 @@ export class TenantVisibilityService {
       this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true, type: true } }),
       this.isPlatformAdminOrg(tenantId),
     ]);
-    const linked = visibles.filter((v) => v.linked);
+    const linked = visibles.filter((v) => v.linked && v.configured);
     return {
       connectedProviders: linked.length,
       activeSearchProviders: linked.filter((v) => v.inSearch).length,
@@ -351,6 +364,22 @@ export class TenantVisibilityService {
     const usage = await this.searchUsage(tenantId, opts.viewerUserId);
     const after = (await this.listFor(tenantId, opts.viewerUserId)).find((v) => v.provider === provider);
     return { ...usage, provider, inSearch: Boolean(after?.inSearch) };
+  }
+
+  /** Proveedores con al menos una oferta activa con precio de este comercio. */
+  private async providersWithPrices(tenantId: string, providers: string[]): Promise<Set<string>> {
+    if (providers.length === 0) return new Set();
+    const rows = await this.prisma.tenantProductOffer.groupBy({
+      by: ["provider"],
+      where: {
+        tenantId,
+        active: true,
+        provider: { in: providers },
+        OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
+      },
+      _count: { _all: true },
+    });
+    return new Set(rows.map((r) => r.provider));
   }
 
   private async platformHiddenProviders(): Promise<Set<string>> {

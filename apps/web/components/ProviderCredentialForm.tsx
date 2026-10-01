@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, KeyRound, Loader2, Pencil, Trash2, XCircle } from "lucide-react";
-import { credentialsApi, type Provider } from "@/lib/api";
+import { credentialsApi, providersApi, type Provider } from "@/lib/api";
 import { getTenant } from "@/lib/auth";
 import {
   PROVIDER_CREDENTIAL_SCHEMAS,
@@ -85,7 +85,14 @@ export default function ProviderCredentialForm({
       }
       await credentialsApi.save(provider, creds);
       setHasCred(true);
-      setResult({ ok: true, msg: "Cuenta guardada. Ya podés sincronizar y, si aplica, ver pedidos." });
+      // Se sincroniza solo: hasta tener precios propios el proveedor no aparece en la búsqueda.
+      const started = await providersApi.sync(provider).then(() => true, () => false);
+      setResult({
+        ok: true,
+        msg: started
+          ? "Cuenta guardada. Estamos trayendo tu catálogo: cuando termine, el proveedor aparece en la búsqueda con tus precios."
+          : "Cuenta guardada. Tocá Sincronizar para traer tu catálogo: hasta entonces no aparece en la búsqueda.",
+      });
       onChanged?.();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;

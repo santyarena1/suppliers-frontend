@@ -76,7 +76,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const { providers: myProviders } = useMyProviders();
   const { statuses, loading: statusesLoading } = useProviderStatuses();
   const linkedProviders = useMemo(
-    () => myProviders.filter((p) => p.linked),
+    () => myProviders.filter((p) => p.linked && p.configured !== false),
     [myProviders],
   );
 

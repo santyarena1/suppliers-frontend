@@ -9,7 +9,7 @@ import ProviderBadge from "@/components/ProviderBadge";
  */
 export default function PartnerCarousel() {
   const { providers: mine, loading } = useMyProviders();
-  const partners = mine.filter((p) => p.linked);
+  const partners = mine.filter((p) => p.linked && p.configured !== false);
 
   if (loading) {
     return (

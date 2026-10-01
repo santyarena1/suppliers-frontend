@@ -986,7 +986,7 @@ function CartPageInner() {
                 {pedidosOpen && (
                   <div className="absolute right-0 top-full mt-1.5 w-64 bg-surface-950 border border-surface-800 shadow-xl z-30 py-1 max-h-80 overflow-y-auto">
                     <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Historial</p>
-                    {myProviders.filter((mp) => mp.linked && providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && mp.configured !== false && providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
                         href={providerOrdersHref(p, pricesFromList(p))}
@@ -999,7 +999,7 @@ function CartPageInner() {
                     ))}
                     <div className="h-px bg-surface-800 my-1" />
                     <p className="px-3 pt-1.5 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Distribuidores</p>
-                    {myProviders.filter((mp) => mp.linked && !providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && mp.configured !== false && !providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
                         href={providerOrdersHref(p)}
