@@ -220,9 +220,14 @@ export class MyTenantController {
     return this.tenants.removeOwnMember(tenant, membershipId);
   }
 
+  /** `requireSetup: false` = entra directo con la contraseña generada, sin completar la cuenta. */
   @Post("team/:membershipId/password")
-  resetPassword(@CurrentTenant() tenant: TenantContext, @Param("membershipId") membershipId: string) {
-    return this.tenants.resetOwnMemberPassword(tenant, membershipId);
+  resetPassword(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("membershipId") membershipId: string,
+    @Body() body: { requireSetup?: unknown }
+  ) {
+    return this.tenants.resetOwnMemberPassword(tenant, membershipId, body?.requireSetup !== false);
   }
 
   @Put("team/:membershipId/managed-brands")

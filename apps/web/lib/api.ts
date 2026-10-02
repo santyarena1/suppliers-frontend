@@ -639,8 +639,8 @@ export const myApi = {
   updateMember: (membershipId: string, data: Partial<{ role: TenantRole; title: string | null; active: boolean }>) =>
     api.put<TenantMember>(`/my/team/${membershipId}`, data),
   removeMember: (membershipId: string) => api.delete(`/my/team/${membershipId}`),
-  resetMemberPassword: (membershipId: string) =>
-    api.post<{ membershipId: string; generatedPassword: string }>(`/my/team/${membershipId}/password`),
+  resetMemberPassword: (membershipId: string, requireSetup = true) =>
+    api.post<{ membershipId: string; generatedPassword: string }>(`/my/team/${membershipId}/password`, { requireSetup }),
   setManagedBrands: (membershipId: string, brandNames: string[]) =>
     api.put(`/my/team/${membershipId}/managed-brands`, { brandNames }),
   accessCodes: () => api.get<{ canManage: boolean; codes: TenantAccessCode[] }>("/my/access-codes"),

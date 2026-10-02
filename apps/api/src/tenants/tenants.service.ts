@@ -791,7 +791,7 @@ export class TenantsService {
     return this.removeMember(membershipId);
   }
 
-  async resetOwnMemberPassword(tenant: TenantContext, membershipId: string) {
+  async resetOwnMemberPassword(tenant: TenantContext, membershipId: string, requireSetup = true) {
     this.assertCanManageTeam(tenant);
     const membership = await this.assertMembershipInTenant(membershipId, tenant.tenantId);
     if (tenant.tenantRole !== "OWNER" && membership.role === "OWNER") {
@@ -807,11 +807,11 @@ export class TenantsService {
         sessionVersion: { increment: 1 },
         failedLoginCount: 0,
         loginLockedUntil: null,
-        mustSetupAccount: true,
+        mustSetupAccount: requireSetup,
       },
     });
     forgetSession(membership.userId);
-    return { membershipId, generatedPassword: password };
+    return { membershipId, generatedPassword: password, mustSetupAccount: requireSetup };
   }
 
   async setOwnProductManagerScope(tenant: TenantContext, membershipId: string, dto: SetProductManagerScopeDto) {

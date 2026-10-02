@@ -39,6 +39,7 @@ export default function EquipoPage() {
   const [generated, setGenerated] = useState<string | null>(null);
   // La que se regenera es temporal: al entrar tiene que completar la cuenta.
   const [generatedIsReset, setGeneratedIsReset] = useState(false);
+  const [generatedNeedsSetup, setGeneratedNeedsSetup] = useState(true);
   const [tab, setTab] = useState<"users" | "permissions">("users");
 
   const permissionsSource = useMemo<PermissionsSource>(
@@ -107,7 +108,13 @@ export default function EquipoPage() {
             <GeneratedPassword
               password={generated}
               onDismiss={() => setGenerated(null)}
-              note={generatedIsReset ? "Al entrar le vamos a pedir que confirme su mail y elija una contraseña nueva o conecte Google." : undefined}
+              note={
+                !generatedIsReset
+                  ? undefined
+                  : generatedNeedsSetup
+                    ? "Al entrar le vamos a pedir que confirme su mail y elija una contraseña nueva o conecte Google."
+                    : "Entra directo con esta contraseña. La puede cambiar en Configuración → Cambiar contraseña."
+              }
             />
           )}
 
@@ -184,8 +191,9 @@ export default function EquipoPage() {
                       canManage={canManage}
                       orgName={org?.name ?? ""}
                       onRun={run}
-                      onGenerated={(password) => {
+                      onGenerated={(password, needsSetup) => {
                         setGeneratedIsReset(true);
+                        setGeneratedNeedsSetup(needsSetup ?? true);
                         setGenerated(password);
                       }}
                     />
@@ -237,7 +245,7 @@ function MemberRow({
   canManage: boolean;
   orgName: string;
   onRun: (action: () => Promise<unknown>, ok: string, fallback: string) => Promise<void>;
-  onGenerated: (password: string) => void;
+  onGenerated: (password: string, needsSetup?: boolean) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
@@ -310,9 +318,12 @@ function MemberRow({
             title="Nueva contraseña"
             onClick={async () => {
               if (!window.confirm(`¿Generar una contraseña nueva para ${member.username}?`)) return;
+              const requireSetup = window.confirm(
+                `¿Pedirle a ${member.username} que confirme su mail y elija otra contraseña al entrar?\n\nAceptar: sí, tiene que completar la cuenta.\nCancelar: entra directo con la contraseña nueva y la cambia cuando quiera en Configuración.`
+              );
               try {
-                const res = await myApi.resetMemberPassword(member.membershipId);
-                onGenerated(res.data.generatedPassword);
+                const res = await myApi.resetMemberPassword(member.membershipId, requireSetup);
+                onGenerated(res.data.generatedPassword, requireSetup);
               } catch (err) {
                 onRun(async () => {
                   throw err;
