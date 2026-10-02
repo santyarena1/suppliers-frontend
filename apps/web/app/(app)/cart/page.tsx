@@ -188,6 +188,8 @@ function CartPageInner() {
   const [distecnaPreview, setDistecnaPreview] = useState<DistecnaCheckoutPreview | null>(null);
   const [polytechPreview, setPolytechPreview] = useState<PolytechCheckoutPreview | null>(null);
   const [nbSnapshot, setNbSnapshot] = useState<NewBytesCartSnapshot | null>(null);
+  // Envío elegido en el panel de NewBytes, en pesos (lo cobra NewBytes).
+  const [nbShippingArs, setNbShippingArs] = useState<number | null>(null);
 
   const [confirmClear, setConfirmClear] = useState<"all" | string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
@@ -436,12 +438,17 @@ function CartPageInner() {
         totalUSD: elitQuoted.total,
       }
     : undefined;
+  // NewBytes cotiza el envío en pesos; el carrito suma en dólares.
+  const nbShippingUSD =
+    nbShippingArs != null && currentRate?.venta ? nbShippingArs / currentRate.venta : undefined;
   const nbExtra: TaxExtra | undefined = nbQuoted
     ? {
+        shippingUSD: nbShippingUSD,
         perceptionsUSD: nbQuoted.perceptions ?? 0,
         perceptionLines: nbQuoted.perceptionLines ?? [],
         quotedVatUSD: quotedAmount(nbQuoted.iva),
-        totalUSD: nbQuoted.total,
+        // El total del portal no trae el envío: se suma el que se eligió.
+        totalUSD: nbQuoted.total != null ? nbQuoted.total + (nbShippingUSD ?? 0) : undefined,
       }
     : undefined;
   /**
@@ -1262,6 +1269,7 @@ function CartPageInner() {
                           clearProvider("NEW_BYTES", "online");
                         }}
                         onPreviewed={setNbSnapshot}
+                        onShippingChange={setNbShippingArs}
                       />
                     </div>
                   )}

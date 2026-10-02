@@ -41,10 +41,13 @@ export default function NewBytesDraftPanel({
   items,
   onCreated,
   onPreviewed,
+  onShippingChange,
 }: {
   items: CartItem[];
   onCreated: (message?: string) => void;
   onPreviewed?: (snapshot: NewBytesCartSnapshot | null) => void;
+  /** Costo del envío elegido, en pesos como lo cotiza NewBytes (0 = retiro). `null` = todavía sin elegir. */
+  onShippingChange?: (ars: number | null) => void;
   compact?: boolean;
 }) {
   const cartKey = items.map((it) => `${it.externalId}:${it.qty}`).join("|");
@@ -191,6 +194,12 @@ export default function NewBytesDraftPanel({
   }, [delivery, addressId, cartItems]);
 
   const selectedQuote = quotes.find((q) => q.id === medioDeEnvioId);
+  // El envío que se elige acá viaja en el pedido (mediodeEnvioId + idDirCli) y
+  // NewBytes lo cobra: el resumen del carrito lo tiene que sumar.
+  const shippingArs = delivery === "pickup" ? 0 : selectedQuote?.total ?? null;
+  useEffect(() => {
+    onShippingChange?.(shippingArs);
+  }, [shippingArs, onShippingChange]);
   const canSubmit =
     Boolean(medioDePagoId) &&
     !quoting &&
