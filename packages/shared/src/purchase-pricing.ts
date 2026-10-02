@@ -6,6 +6,9 @@
  * los internos sí quedan. Sin alícuota de IVA no se inventa nada.
  */
 
+/** Sin integración de catálogo: sus precios llegan siempre por lista, cualquiera sea el canal guardado. */
+const PROVIDERS_LIST_ONLY = ["GC", "ASHIR", "HDC"];
+
 export const IVA_ADJUSTMENTS = ["REMOVE", "HALF", "FLAT_10_5"] as const;
 export type IvaAdjustment = (typeof IVA_ADJUSTMENTS)[number];
 
@@ -39,13 +42,13 @@ export type PriceChannel = "API" | "LIST";
  */
 export function providerHasIvaRate(provider: string, priceChannel?: PriceChannel | string | null): boolean {
   if ((PROVIDERS_WITH_IVA_RATE as readonly string[]).includes(provider)) return true;
-  if (provider.startsWith("LIST_")) return true;
+  if (provider.startsWith("LIST_") || PROVIDERS_LIST_ONLY.includes(provider)) return true;
   return priceChannel === "LIST";
 }
 
 /** Los precios de este proveedor, para este comercio, salen de una planilla. */
 export function providerPricesFromList(provider: string, priceChannel?: PriceChannel | string | null): boolean {
-  return provider.startsWith("LIST_") || priceChannel === "LIST";
+  return provider.startsWith("LIST_") || PROVIDERS_LIST_ONLY.includes(provider) || priceChannel === "LIST";
 }
 
 export type PurchasePolicy = {

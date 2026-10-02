@@ -63,8 +63,7 @@ export function catalogHideEmptyOfferWhere(
  * borró, el lugar que deja la lista de otro comercio— no se puede comprar, y
  * listarlo "sin precio" hace dudar de todo el resultado.
  *
- * Vacío si ningún proveedor está en ese caso: ahí se sigue viendo la ficha
- * universal como vista previa.
+ * Un precio 0 es "sin precio" ("NO VENDER", fichas sin cotizar del portal).
  */
 export function catalogPricedOnlyWhere(pricedProviders: Iterable<string>): Prisma.TenantProductOfferWhereInput[] {
   const priced = [...pricedProviders];
@@ -73,8 +72,8 @@ export function catalogPricedOnlyWhere(pricedProviders: Iterable<string>): Prism
     {
       OR: [
         { provider: { notIn: priced } },
-        { price: { not: null } },
-        { finalPrice: { not: null } },
+        { price: { gt: 0 } },
+        { finalPrice: { gt: 0 } },
       ],
     },
   ];

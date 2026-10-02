@@ -93,8 +93,8 @@ describe("catalogPricedOnlyWhere", () => {
       {
         OR: [
           { provider: { notIn: ["NEW_BYTES"] } },
-          { price: { not: null } },
-          { finalPrice: { not: null } },
+          { price: { gt: 0 } },
+          { finalPrice: { gt: 0 } },
         ],
       },
     ]);

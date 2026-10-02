@@ -65,8 +65,9 @@ export class OrderApprovalService {
     draft: DraftLike
   ): Promise<HeldOrder | null> {
     this.assertCanOrder(tenant);
+    // Todo checkout pasa por acá: con o sin aprobación, el proveedor tiene que poder recibir pedidos.
+    await this.visibility.assertOrderable(commercialId(tenant), provider, tenant.userId);
     if (!this.needsApproval(tenant)) return null;
-    await this.visibility.assertLinked(commercialId(tenant), provider, tenant.userId);
 
     const items = Array.isArray(draft.items) ? draft.items : [];
     if (items.length === 0) {

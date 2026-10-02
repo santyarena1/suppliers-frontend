@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { isKnownProvider, type Provider } from "@nodo/shared";
+import { providerHasCatalogAdapter, type Provider } from "@nodo/shared";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
@@ -56,8 +56,9 @@ export class CredentialsService {
       update: { credentialsEncrypted: encrypted, savedById },
     });
     // Con cuenta propia, los precios llegan por API. Si antes se conectó por lista,
-    // el canal quedaba en LIST y ni la sincronización la tomaba.
-    if (isKnownProvider(dto.providerName)) {
+    // el canal quedaba en LIST y ni la sincronización la tomaba. Solo si hay
+    // integración: Ashir, GC o HDC siguen por lista aunque guarden una cuenta.
+    if (providerHasCatalogAdapter(dto.providerName)) {
       await this.prisma.providerSyncConfig.updateMany({
         where: { tenantId, provider: dto.providerName, priceChannel: { not: "API" } },
         data: { priceChannel: "API" },
@@ -77,7 +78,7 @@ export class CredentialsService {
       });
     // Sin cuenta, los precios que trajo dejan de actualizarse: se dejan de mostrar.
     // Una lista propia de ese proveedor (canal LIST) no depende de la cuenta y queda.
-    if (isKnownProvider(providerName)) {
+    if (providerHasCatalogAdapter(providerName)) {
       const config = await this.prisma.providerSyncConfig.findUnique({
         where: { tenantId_provider: { tenantId, provider: providerName } },
         select: { priceChannel: true },

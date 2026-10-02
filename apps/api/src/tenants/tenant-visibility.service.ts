@@ -406,7 +406,7 @@ export class TenantVisibilityService {
         tenantId,
         active: true,
         provider: { in: providers },
-        OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
+        OR: [{ price: { gt: 0 } }, { finalPrice: { gt: 0 } }],
       },
       _count: { _all: true },
     });
@@ -497,6 +497,18 @@ export class TenantVisibilityService {
   }
 
   /** Igual, pero además exige vínculo: ver que existe no alcanza para operar. */
+  /**
+   * Para hacer un pedido: vínculo, y que la plataforma no lo tenga pausado. Un
+   * carrito armado antes de que se ocultara no puede terminar en un pedido.
+   */
+  async assertOrderable(tenantId: string, provider: Provider, viewerUserId?: string): Promise<VisibleProvider> {
+    const visible = await this.assertLinked(tenantId, provider, viewerUserId);
+    if (visible.platformHidden) {
+      throw new ForbiddenException(`${visible.name} está pausado en NODO por ahora: no se pueden hacer pedidos.`);
+    }
+    return visible;
+  }
+
   async assertLinked(tenantId: string, provider: Provider, viewerUserId?: string): Promise<VisibleProvider> {
     const visible = await this.assertVisible(tenantId, provider, viewerUserId);
     if (!visible.linked) {
@@ -578,7 +590,9 @@ function purchaseFromConfig(
   const priceChannel: "API" | "LIST" =
     config?.priceChannel === "LIST" ||
     isListProviderKey(provider) ||
-    (config?.priceChannel == null && !providerHasCatalogAdapter(provider))
+    // Sin integración (Ashir, GC, HDC) no hay portal al que mandarle el pedido:
+    // siempre por lista, aunque una config vieja haya quedado en API.
+    !providerHasCatalogAdapter(provider)
       ? "LIST"
       : "API";
   const manual = {

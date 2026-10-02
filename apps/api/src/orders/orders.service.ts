@@ -79,6 +79,7 @@ export class OrdersService {
 
   async approve(tenant: TenantContext, userId: string, id: string) {
     const order = await this.approval.assertApprovable(tenant, id);
+    await this.visibility.assertOrderable(commercialId(tenant), order.provider as Provider, tenant.userId);
     // Un pedido offline no sale al portal: aprobarlo solo lo deja confirmado en Nodo.
     if (isOfflineChannel(order.channel)) {
       await this.approval.markApproved(order.id, userId);
@@ -587,7 +588,7 @@ export class OrdersService {
     viewerUserId?: string,
     opts: { manualOnly?: boolean } = {},
   ) {
-    await this.visibility.assertLinked(tenantId, provider, viewerUserId);
+    await this.visibility.assertOrderable(tenantId, provider, viewerUserId);
     const manualList = Boolean(opts.manualOnly && modes.list && !modes.offline && !modes.scheme);
     const config = await this.prisma.providerSyncConfig.findUnique({
       where: { tenantId_provider: { tenantId, provider } },
