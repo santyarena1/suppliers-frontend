@@ -19,7 +19,7 @@ export const HUMAN_ROUTES = [
 ];
 
 /** Cuánto se espera al widget antes de mandar igual (el API decide). */
-const WAIT_MS = 10_000;
+const WAIT_MS = 20_000;
 
 let token: string | null = null;
 let waiters: ((value: string | null) => void)[] = [];
@@ -42,6 +42,12 @@ export function clearHumanToken() {
 
 export function registerTurnstileReset(fn: (() => void) | null) {
   resetWidget = fn;
+}
+
+/** El API rechazó la verificación: se descarta el token y se pide uno nuevo al widget. */
+export function resetHumanCheck() {
+  token = null;
+  resetWidget?.();
 }
 
 /** El token vigente (esperando al widget si hace falta). Lo consume y pide uno nuevo. */

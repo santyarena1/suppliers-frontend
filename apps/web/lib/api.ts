@@ -2,7 +2,7 @@ import axios from "axios";
 import { SESSION_EVENT, getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
 import type { ShippingMethod } from "./shipping";
-import { HUMAN_ROUTES, takeHumanToken } from "./turnstile";
+import { HUMAN_ROUTES, resetHumanCheck, takeHumanToken } from "./turnstile";
 import { isCatalogUrl, normalizeCatalogPayload, payloadNeedsFx, waitArsPerUsd } from "./fx";
 import type {
   AdminSubscriptionDetail,
@@ -58,6 +58,10 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Cloudflare no confirmó: el widget pide un token nuevo para el próximo intento.
+    if (error?.response?.status === 403 && error?.response?.data?.code === "HUMAN_CHECK_REQUIRED") {
+      resetHumanCheck();
+    }
     // Le regeneraron la contraseña: hasta completar la cuenta, todo lo demás
     // responde ACCOUNT_SETUP_REQUIRED y se lo lleva a completarla.
     if (

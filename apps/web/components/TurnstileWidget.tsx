@@ -36,9 +36,8 @@ function loadScript(): Promise<void> {
 }
 
 /**
- * Verificación de Cloudflare en las pantallas de acceso. En modo "solo si
- * hace falta": casi siempre no se ve nada; aparece únicamente cuando
- * Cloudflare quiere confirmar que hay una persona.
+ * Verificación de Cloudflare en las pantallas de acceso. Siempre visible: casi
+ * siempre se tilda sola en un segundo; si Cloudflare quiere confirmar, se ve la casilla.
  */
 export default function TurnstileWidget({ className = "" }: { className?: string }) {
   const slot = useRef<HTMLDivElement>(null);
@@ -52,7 +51,12 @@ export default function TurnstileWidget({ className = "" }: { className?: string
         if (cancelled || !slot.current || !window.turnstile) return;
         widgetId = window.turnstile.render(slot.current, {
           sitekey: TURNSTILE_SITE_KEY,
-          appearance: "interaction-only",
+          // Siempre visible: en modo invisible, si Cloudflare pedía confirmar no se
+          // veía nada y el ingreso salía sin token ("no verificó").
+          appearance: "always",
+          size: "flexible",
+          "refresh-expired": "auto",
+          retry: "auto",
           theme: "dark",
           language: "es",
           callback: (value: string) => provideHumanToken(value),
