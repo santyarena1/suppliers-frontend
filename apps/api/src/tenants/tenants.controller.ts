@@ -48,7 +48,7 @@ export class TenantsController {
 
   @Put(":id/roles/:role/permissions")
   setRolePermissions(@Param("id") id: string, @Param("role") role: string, @Body() dto: PermissionChangesDto) {
-    return this.permissions.setRole(id, role as TenantRole, dto.changes);
+    return this.permissions.setRole(id, role as TenantRole, dto.changes).then((matrix) => ({ ...matrix, canEdit: true }));
   }
 
   @Put(":id/members/:membershipId/permissions")
@@ -57,7 +57,7 @@ export class TenantsController {
     @Param("membershipId") membershipId: string,
     @Body() dto: PermissionChangesDto
   ) {
-    return this.permissions.setMember(id, membershipId, dto.changes);
+    return this.permissions.setMember(id, membershipId, dto.changes).then((matrix) => ({ ...matrix, canEdit: true }));
   }
 
   @Put(":id")

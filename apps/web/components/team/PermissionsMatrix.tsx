@@ -83,7 +83,10 @@ export default function PermissionsMatrix({
     async (busyKey: string, run: () => Promise<PermissionMatrix>) => {
       setBusy(busyKey);
       try {
-        setMatrix(await run());
+        const next = await run();
+        // Quien pudo guardar puede seguir editando: si la respuesta no trae canEdit,
+        // se conserva el de antes (antes quedaba todo bloqueado tras el primer cambio).
+        setMatrix((prev) => ({ ...next, canEdit: next.canEdit ?? prev?.canEdit ?? true }));
         invalidateMyModules();
         onMessage(true, "Permisos actualizados");
       } catch (err) {

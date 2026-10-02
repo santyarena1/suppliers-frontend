@@ -80,7 +80,10 @@ export class MyTenantController {
   @Put("team/roles/:role/permissions")
   setRolePermissions(@CurrentTenant() tenant: TenantContext, @Param("role") role: string, @Body() dto: PermissionChangesDto) {
     assertOwner(tenant);
-    return this.permissions.setRole(tenant.tenantId, role as TenantRole, dto.changes);
+    // Devuelve también canEdit: sin eso la pantalla bloqueaba todo después del primer cambio.
+    return this.permissions
+      .setRole(tenant.tenantId, role as TenantRole, dto.changes)
+      .then((matrix) => ({ ...matrix, canEdit: true }));
   }
 
   @Put("team/members/:membershipId/permissions")
@@ -90,7 +93,7 @@ export class MyTenantController {
     @Body() dto: PermissionChangesDto
   ) {
     assertOwner(tenant);
-    return this.permissions.setMember(tenant.tenantId, membershipId, dto.changes);
+    return this.permissions.setMember(tenant.tenantId, membershipId, dto.changes).then((matrix) => ({ ...matrix, canEdit: true }));
   }
 
   @Put("org")
