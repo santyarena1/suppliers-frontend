@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from "class-validator";
 import { TENANT_ROLE_LABELS, type TenantRole } from "@nodo/shared";
 
 const ROLES = Object.keys(TENANT_ROLE_LABELS);
@@ -14,12 +14,6 @@ export class CreateTeamInviteDto {
   @Min(1)
   @Max(500)
   maxUses?: number | null;
-
-  /** Vacío = no vence. */
-  @IsOptional()
-  @ValidateIf((_, v) => v !== null && v !== "")
-  @IsDateString()
-  expiresAt?: string | null;
 }
 
 export class JoinTeamDto {

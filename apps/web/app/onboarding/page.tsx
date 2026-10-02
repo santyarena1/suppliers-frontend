@@ -213,7 +213,7 @@ function OnboardingInner() {
                 Tengo un comercio
               </button>
               <button type="button" aria-pressed={audience === "TEAM"} onClick={() => setAudience("TEAM")}>
-                Tengo un código de equipo
+                Me invitó un comercio
               </button>
               <button type="button" aria-pressed={audience === "SUPPLIER"} onClick={() => setAudience("SUPPLIER")}>
                 Soy distribuidor / marca

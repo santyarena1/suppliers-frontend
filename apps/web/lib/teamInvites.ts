@@ -15,13 +15,16 @@ export interface TeamInvite {
   revoked: boolean;
   status: TeamInviteStatus;
   createdAt: string;
+  /** Quién entró con este código. */
+  usedBy?: { username: string; at: string }[];
 }
 
 export type TeamInvitePreview = { valid: false } | { valid: true; organizationName: string; roleLabel: string };
 
 export const teamInvitesApi = {
   list: () => api.get<TeamInvite[]>("/my/team/invite-codes"),
-  create: (data: { role: TenantRole; maxUses?: number | null; expiresAt?: string | null }) =>
+  /** Las invitaciones no vencen: valen hasta que se usan o se anulan. */
+  create: (data: { role: TenantRole; maxUses?: number | null }) =>
     api.post<TeamInvite>("/my/team/invite-codes", data),
   revoke: (id: string) => api.delete<{ id: string; revoked: true }>(`/my/team/invite-codes/${id}`),
   preview: (code: string) => api.get<TeamInvitePreview>(`/team-invites/${encodeURIComponent(code)}/preview`),
@@ -39,8 +42,8 @@ export const teamInvitesApi = {
 export const TEAM_INVITE_STATUS_LABELS: Record<TeamInviteStatus, string> = {
   ACTIVE: "Activo",
   EXPIRED: "Vencido",
-  EXHAUSTED: "Sin usos",
-  REVOKED: "Revocado",
+  EXHAUSTED: "Usado",
+  REVOKED: "Anulado",
 };
 
 /** Mismo formato que el API: XXXX-XXXX, mayúsculas, sin ambigüedades. */
@@ -90,7 +93,7 @@ export function clearPendingTeamCode(): void {
 /** Mensaje claro para los errores del canje. */
 export function teamJoinError(err: unknown): string {
   const res = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
-  if (res?.status === 409) return "Ya pertenecés a una organización.";
+  if (res?.status === 409) return "Ya pertenecés a un comercio: no podés sumarte a otro con esta invitación.";
   if (res?.status === 429) return "Demasiados intentos. Esperá un minuto y probá de nuevo.";
   return res?.data?.message || "No pudimos sumarte al equipo. Revisá el código.";
 }

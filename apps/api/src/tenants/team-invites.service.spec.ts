@@ -83,9 +83,11 @@ describe("códigos de invitación al equipo", () => {
     await expect(service.create(owner, { role: "OWNER" })).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it("crear con vencimiento pasado se rechaza", async () => {
-    const { service } = setup();
-    await expect(service.create(owner, { role: "SELLER", expiresAt: past.toISOString() })).rejects.toBeInstanceOf(BadRequestException);
+  it("los códigos nuevos no vencen", async () => {
+    const { service: s2, prisma: p2 } = setup();
+    await s2.create(owner, { role: "SELLER" });
+    // Los códigos nuevos no vencen.
+    expect(p2.teamInviteCode.create.mock.calls[0][0].data.expiresAt).toBeNull();
   });
 
   it("solo el dueño invita administradores", async () => {

@@ -65,8 +65,18 @@ export class TeamInvitesService {
       where: { tenantId: tenant.tenantId },
       orderBy: { createdAt: "desc" },
       take: 100,
+      include: { redemptions: { select: { userId: true, createdAt: true }, orderBy: { createdAt: "asc" } } },
     });
-    return rows.map((row) => this.serialize(row as InviteRow));
+    // Quién entró con cada código, para verlo en Equipo.
+    const userIds = [...new Set(rows.flatMap((row) => row.redemptions.map((r) => r.userId)))];
+    const users = userIds.length
+      ? await this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } })
+      : [];
+    const username = new Map(users.map((u) => [u.id, u.username]));
+    return rows.map((row) => ({
+      ...this.serialize(row as InviteRow),
+      usedBy: row.redemptions.map((r) => ({ username: username.get(r.userId) ?? "Usuario", at: r.createdAt.toISOString() })),
+    }));
   }
 
   async create(tenant: TenantContext, dto: CreateTeamInviteDto) {
@@ -76,10 +86,6 @@ export class TeamInvitesService {
     }
     if (tenant.tenantRole !== "OWNER" && dto.role === "ADMIN") {
       throw new ForbiddenException("Solo el dueño puede invitar administradores");
-    }
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
-    if (expiresAt && expiresAt.getTime() <= Date.now()) {
-      throw new BadRequestException("La fecha de vencimiento tiene que ser futura");
     }
     const active = await this.prisma.teamInviteCode.findMany({
       where: { tenantId: tenant.tenantId, revoked: false },
@@ -96,7 +102,8 @@ export class TeamInvitesService {
             code: generateTeamInviteCode(),
             role: dto.role,
             maxUses: dto.maxUses ?? null,
-            expiresAt,
+            // Los códigos no vencen: valen hasta que se usan o se revocan.
+            expiresAt: null,
             createdById: tenant.userId,
           },
         });

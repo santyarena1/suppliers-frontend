@@ -39,8 +39,8 @@ export default function TeamJoinCard({ onJoined, initialError }: TeamJoinCardPro
   return (
     <form className="lnd-panel lnd-panel--sheer ob__card" onSubmit={join}>
       <p className="lnd-label">Sumarme a un equipo</p>
-      <h2 className="ob__card-title">¿Te pasaron un código?</h2>
-      <p className="lnd-body">Con el código que te dio el comercio entrás a su equipo con el rol que eligieron para vos.</p>
+      <h2 className="ob__card-title">¿Te invitó un comercio?</h2>
+      <p className="lnd-body">Pegá el código de la invitación y entrás directo a su equipo, con lo que te dejaron hacer.</p>
       {error && (
         <p className="ob__error" role="alert">
           <AlertCircle className="w-4 h-4" />
