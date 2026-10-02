@@ -30,6 +30,9 @@ export class RetailSchedulerService {
   private async tick(source: "cron" | "boot") {
     if (!shouldRunScheduledJob()) return;
     if (this.config.get("RETAIL_INGEST_DISABLED") === "true") return;
+    // Este lote es solo PrecioLíder (HardGamers y Compra Gamer tienen su ciclo propio).
+    // Caída desde el 2026-10-01: con esto se deja de consultarla cada 15 minutos.
+    if (this.config.get("RETAIL_PRECIOLIDER_DISABLED") === "true") return;
 
     const recovered = await this.ingest.recoverStaleLock();
     if (recovered) {
