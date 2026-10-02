@@ -159,9 +159,12 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
         saveSession(token, sessionFromToken(token, getUser()?.username ?? ""));
       }
       writePaused(false);
-      await refresh();
-    } finally {
+      // Carga completa: sin datos de ejemplo en proveedores, búsqueda ni carrito.
+      // (Renovar el token de la misma persona ya no recarga la app por sí solo.)
+      window.location.assign("/");
+    } catch {
       setBusy(false);
+      await refresh();
     }
   }, [refresh]);
 

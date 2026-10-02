@@ -149,6 +149,12 @@ export default function OnboardingCoach() {
     return () => window.removeEventListener("keydown", onKey);
   }, [active, step?.kind, step?.completeWhen, next, back, pause]);
 
+  /** Cerrar el recorrido desde cualquier paso: lo marca terminado y saca los datos de ejemplo. */
+  function exitTour() {
+    if (!window.confirm("¿Salir del recorrido? Se sacan los datos de ejemplo. Lo podés volver a ver cuando quieras desde Inicio.")) return;
+    void finish();
+  }
+
   if (!active || !step) return null;
 
   const total = steps.length;
@@ -166,6 +172,9 @@ export default function OnboardingCoach() {
           </p>
           <p className="nc-title nc-title--sm">{step.title}</p>
           <div className="nc-actions">
+            <button type="button" className="nc-btn nc-btn--text" onClick={exitTour} disabled={busy}>
+              Salir
+            </button>
             <button type="button" className="nc-btn nc-btn--ghost" onClick={pause}>
               Pausar
             </button>
@@ -261,6 +270,11 @@ export default function OnboardingCoach() {
           {!isFinish && (
             <button type="button" className="nc-btn nc-btn--text" onClick={pause}>
               {index === 0 ? "Ahora no" : "Pausar"}
+            </button>
+          )}
+          {!isFinish && (
+            <button type="button" className="nc-btn nc-btn--text" onClick={exitTour} disabled={busy} title="Termina el recorrido y saca los datos de ejemplo">
+              Salir del recorrido
             </button>
           )}
           <span className="nc-spacer" />
