@@ -51,6 +51,8 @@ export default function PlatformAccountPanel({
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [generated, setGenerated] = useState<string | null>(null);
+  const [requireSetup, setRequireSetup] = useState(true);
+  const [generatedNeedsSetup, setGeneratedNeedsSetup] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [togglingAdmin, setTogglingAdmin] = useState(false);
@@ -123,8 +125,14 @@ export default function PlatformAccountPanel({
   async function applyNewPassword(value?: string) {
     setResetting(true);
     try {
-      const { data } = await adminApi.resetPassword(user.id, value);
-      showToast("Contraseña reseteada. Al entrar va a tener que completar su cuenta.");
+      const { data } = await adminApi.resetPassword(user.id, value, requireSetup);
+      showToast(
+        requireSetup
+          ? "Contraseña reseteada. Al entrar va a tener que completar su cuenta."
+          : "Contraseña reseteada. Entra directo con esta contraseña y la puede cambiar en Configuración."
+      );
+      setGeneratedNeedsSetup(requireSetup);
+      onReload();
       setGenerated(data.generatedPassword ?? null);
       setPassword("");
       setPassword2("");
@@ -132,6 +140,16 @@ export default function PlatformAccountPanel({
       showToast(errMsg(err, "No se pudo resetear la contraseña"), false);
     } finally {
       setResetting(false);
+    }
+  }
+
+  async function clearSetupRequired() {
+    try {
+      await adminApi.setAccountSetupRequired(user.id, false);
+      showToast("Listo: entra con su contraseña actual, sin completar la cuenta.");
+      onReload();
+    } catch (err) {
+      showToast(errMsg(err, "No se pudo quitar el pedido"), false);
     }
   }
 
@@ -268,6 +286,22 @@ export default function PlatformAccountPanel({
             placeholder="Repetir contraseña"
             className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500"
           />
+          <label className="flex items-start gap-2 text-[11px] text-surface-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={requireSetup}
+              onChange={(e) => setRequireSetup(e.target.checked)}
+              className="mt-0.5 accent-brand-500"
+            />
+            <span>
+              Pedir que complete la cuenta al entrar
+              <span className="block text-surface-500">
+                {requireSetup
+                  ? "Al entrar confirma su mail y elige otra contraseña o conecta Google."
+                  : "Entra directo con esta contraseña. Después la cambia desde Configuración → Cambiar contraseña."}
+              </span>
+            </span>
+          </label>
           <div className="flex gap-2">
             <button
               type="submit"
@@ -286,11 +320,28 @@ export default function PlatformAccountPanel({
               Generar
             </button>
           </div>
-          {generated && <GeneratedPassword password={generated} onDismiss={() => setGenerated(null)} note="Al entrar le vamos a pedir que confirme su mail y elija una contraseña nueva o conecte Google." />}
+          {generated && (
+            <GeneratedPassword
+              password={generated}
+              onDismiss={() => setGenerated(null)}
+              note={
+                generatedNeedsSetup
+                  ? "Al entrar le vamos a pedir que confirme su mail y elija una contraseña nueva o conecte Google."
+                  : "Entra directo con esta contraseña. La puede cambiar en Configuración → Cambiar contraseña."
+              }
+            />
+          )}
           {!generated && user.mustSetupAccount && (
-            <p className="text-[11px] rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 px-3 py-2">
-              Pendiente de completar cuenta: tiene una contraseña temporal y al entrar tiene que confirmar su mail.
-            </p>
+            <div className="text-[11px] rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 px-3 py-2 flex flex-col gap-2">
+              <span>Pendiente de completar cuenta: al entrar tiene que confirmar su mail.</span>
+              <button
+                type="button"
+                onClick={() => void clearSetupRequired()}
+                className="self-start rounded-md border border-amber-400/40 px-2 py-1 font-semibold text-amber-200 hover:text-white hover:border-amber-300"
+              >
+                Quitar pedido de completar cuenta
+              </button>
+            </div>
           )}
         </form>
 

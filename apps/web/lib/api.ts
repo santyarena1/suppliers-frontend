@@ -337,6 +337,9 @@ export const authApi = {
   resendVerification: (email: string) =>
     api.post<{ sent: boolean }>("/auth/resend-verification", { email }),
   google: (idToken: string) => api.post<{ token: string }>("/auth/google", { idToken }),
+  /** Cambiar la propia contraseña (Configuración). Sin `currentPassword` solo si entra con Google. */
+  changePassword: (currentPassword: string | undefined, newPassword: string) =>
+    api.post<{ token: string }>("/auth/change-password", { currentPassword, newPassword }),
   /** Manda un código para elegir contraseña nueva. Responde igual exista o no la cuenta. */
   forgotPassword: (email: string) => api.post<{ sent: boolean }>("/auth/forgot-password", { email }),
   /** Código + contraseña nueva: cambia la clave y devuelve sesión. */
@@ -3140,8 +3143,11 @@ export const adminApi = {
   listUsers: () => api.get<AdminUser[]>("/admin/users"),
   updateUser: (userId: string, data: { username?: string; email?: string }) =>
     api.put<{ id: string; username: string; email: string; role: UserRole }>(`/admin/users/${userId}`, data),
-  resetPassword: (userId: string, password?: string) =>
-    api.put<{ id: string; generatedPassword?: string }>(`/admin/users/${userId}/password`, { password }),
+  /** `requireSetup=false`: entra directo con esa contraseña, sin "completar cuenta". */
+  resetPassword: (userId: string, password?: string, requireSetup = true) =>
+    api.put<{ id: string; generatedPassword?: string; mustSetupAccount?: boolean }>(`/admin/users/${userId}/password`, { password, requireSetup }),
+  setAccountSetupRequired: (userId: string, required: boolean) =>
+    api.put<{ id: string; mustSetupAccount: boolean }>(`/admin/users/${userId}/account-setup`, { required }),
   impersonate: (userId: string) =>
     api.post<ImpersonationSession>(`/admin/users/${userId}/impersonate`, {}),
   setSuperadmin: (userId: string, superadmin: boolean) =>

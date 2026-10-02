@@ -299,6 +299,30 @@ export class AuthService {
    * El token de entrada tiene que seguir siendo válido: esto alarga la sesión
    * mientras la pestaña está abierta, no revive una ya vencida.
    */
+  async changePassword(userId: string, dto: { currentPassword?: string; newPassword: string }) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException("Usuario no encontrado");
+    this.assertAccountUsable(user);
+    // Con contraseña, hay que saber la actual. Una cuenta que entra con Google la crea sin eso.
+    if (user.passwordHash) {
+      const ok = dto.currentPassword ? await argon2.verify(user.passwordHash, dto.currentPassword) : false;
+      if (!ok) throw new BadRequestException("La contraseña actual no es correcta");
+    }
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await argon2.hash(dto.newPassword),
+        sessionVersion: { increment: 1 },
+        failedLoginCount: 0,
+        loginLockedUntil: null,
+        mustSetupAccount: false,
+      },
+    });
+    forgetSession(userId);
+    const token = await this.jwt.signAsync(await this.payloadFor(updated));
+    return { token };
+  }
+
   async refresh(session: JwtPayload) {
     const user = await this.prisma.user.findUnique({ where: { id: session.userId } });
     if (!user) throw new UnauthorizedException("Usuario no encontrado");

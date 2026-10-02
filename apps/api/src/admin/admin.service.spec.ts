@@ -86,3 +86,18 @@ describe("AdminService.resetPassword", () => {
     });
   });
 });
+
+describe("AdminService.resetPassword sin completar cuenta", () => {
+  it("con requireSetup=false entra directo con esa contraseña", async () => {
+    const { service, prisma } = makeService({ user: { id: "u1", role: "ROLE_USER" } });
+    const out = await service.resetPassword("u1", "Damian2026!", false);
+    expect(out.generatedPassword).toBeUndefined();
+    expect(prisma.user.update.mock.calls[0][0].data).toMatchObject({ mustSetupAccount: false });
+  });
+
+  it("se puede quitar el pedido de completar cuenta sin tocar la contraseña", async () => {
+    const { service, prisma } = makeService({ user: { id: "u1", role: "ROLE_USER" } });
+    await service.setAccountSetupRequired("u1", false);
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: "u1" }, data: { mustSetupAccount: false } });
+  });
+});

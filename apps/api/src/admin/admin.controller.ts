@@ -15,7 +15,7 @@ import { UpdateBrandDisplayDto } from "./dto/update-brand-display.dto";
 import { CreateBannerDto, UpdateBannerDto } from "./dto/banner.dto";
 import { UpdatePlatformSettingsDto } from "./dto/platform-settings.dto";
 import { ActiveStatusBodyDto, EndDateBodyDto } from "./dto/body-only.dto";
-import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { AccountSetupRequiredDto, ResetPasswordDto } from "./dto/reset-password.dto";
 import { SendUserEmailDto } from "./dto/send-user-email.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 
@@ -68,7 +68,12 @@ export class AdminController {
 
   @Put("users/:id/password")
   resetPassword(@Param("id") id: string, @Body() dto: ResetPasswordDto) {
-    return this.adminService.resetPassword(id, dto.password);
+    return this.adminService.resetPassword(id, dto.password, dto.requireSetup ?? true);
+  }
+
+  @Put("users/:id/account-setup")
+  setAccountSetupRequired(@Param("id") id: string, @Body() dto: AccountSetupRequiredDto) {
+    return this.adminService.setAccountSetupRequired(id, dto.required);
   }
 
   /** Escribe al mail de la cuenta. No hay baja: el email es el canal de NODO. */

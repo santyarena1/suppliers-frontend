@@ -23,6 +23,7 @@ import {
 import { onboardingApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import OwnStoreSettings from "@/components/OwnStoreSettings";
+import ChangePasswordCard from "@/components/ChangePasswordCard";
 import SearchDefaultsSettings from "@/components/SearchDefaultsSettings";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
@@ -145,6 +146,7 @@ function ConfiguracionPageInner() {
         <div className={`mx-auto px-4 sm:px-6 py-6 ${tab === "prefs" ? "max-w-2xl" : "max-w-3xl"}`}>
           {tab === "prefs" && (
             <div className="flex flex-col gap-6">
+              <ChangePasswordCard />
               <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Palette className="w-4 h-4 text-brand-400" />

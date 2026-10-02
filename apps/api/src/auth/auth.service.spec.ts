@@ -1,3 +1,4 @@
+import * as argon2 from "argon2";
 import { BadRequestException, ConflictException, ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { hashEmailCode } from "./email-codes";
@@ -404,5 +405,28 @@ describe("AuthService.login · contraseña regenerada", () => {
       token: "nuevo.jwt",
       mustSetupAccount: true,
     });
+  });
+});
+
+describe("AuthService.changePassword", () => {
+  it("con la contraseña actual correcta la cambia, cierra sesiones y devuelve token", async () => {
+    const hash = await argon2.hash("Vieja12345");
+    const { service, prisma } = makeService({ user: { id: "u1", username: "damian", passwordHash: hash, active: true, endDate: null, role: "ROLE_USER", mustSetupAccount: true } });
+    const out = await service.changePassword("u1", { currentPassword: "Vieja12345", newPassword: "Nueva12345" });
+    expect(out.token).toBe("nuevo.jwt");
+    expect(prisma.user.update.mock.calls[0][0].data).toMatchObject({ sessionVersion: { increment: 1 }, mustSetupAccount: false });
+  });
+
+  it("con la actual incorrecta → 400 y no cambia nada", async () => {
+    const hash = await argon2.hash("Vieja12345");
+    const { service, prisma } = makeService({ user: { id: "u1", passwordHash: hash, active: true, endDate: null, role: "ROLE_USER" } });
+    await expect(service.changePassword("u1", { currentPassword: "otra", newPassword: "Nueva12345" })).rejects.toThrow("La contraseña actual no es correcta");
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("una cuenta que entra con Google crea su contraseña sin la actual", async () => {
+    const { service, prisma } = makeService({ user: { id: "u1", passwordHash: null, googleId: "g1", active: true, endDate: null, role: "ROLE_USER" } });
+    await service.changePassword("u1", { newPassword: "Nueva12345" });
+    expect(prisma.user.update).toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ import { RegisterDto } from "./dto/register.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { ResendVerificationDto } from "./dto/resend-verification.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { TurnstileGuard } from "./turnstile.guard";
@@ -118,6 +119,14 @@ export class AuthController {
   @Post("account-setup/google")
   accountSetupGoogle(@CurrentUser() user: JwtPayload, @Body() dto: AccountSetupGoogleDto) {
     return this.accountSetup.connectGoogle(user.userId, dto.idToken);
+  }
+
+  /** Cambiar la propia contraseña (Configuración). Cierra las otras sesiones y devuelve un token nuevo. */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post("change-password")
+  changePassword(@CurrentUser() user: JwtPayload, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(user.userId, dto);
   }
 
   /** Renueva el JWT mientras la sesión actual todavía es válida. */

@@ -89,7 +89,15 @@ export class AdminService {
     return user;
   }
 
-  async resetPassword(userId: string, password?: string) {
+  /** Poner o quitar el pedido de "completar cuenta" sin tocar la contraseña. */
+  async setAccountSetupRequired(userId: string, required: boolean) {
+    await this.assertUserExists(userId);
+    await this.prisma.user.update({ where: { id: userId }, data: { mustSetupAccount: required } });
+    forgetSession(userId);
+    return { id: userId, mustSetupAccount: required };
+  }
+
+  async resetPassword(userId: string, password?: string, requireSetup = true) {
     await this.assertUserExists(userId);
     const nextPassword = password ?? generatePassword();
     const passwordHash = await argon2.hash(nextPassword);
@@ -102,12 +110,13 @@ export class AdminService {
         sessionVersion: { increment: 1 },
         failedLoginCount: 0,
         loginLockedUntil: null,
-        mustSetupAccount: true,
+        mustSetupAccount: requireSetup,
       },
     });
     forgetSession(userId);
     return {
       id: userId,
+      mustSetupAccount: requireSetup,
       // Solo cuando la generó la plataforma: es la única vez que puede verse.
       ...(password ? {} : { generatedPassword: nextPassword }),
     };
