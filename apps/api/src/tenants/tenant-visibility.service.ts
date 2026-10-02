@@ -300,6 +300,9 @@ export class TenantVisibilityService {
         platformHidden: hiddenForViewer(hidden, v.provider, v.selfConnected),
         configured: priced === null || priced.has(v.provider),
       }))
+      // Oculto por la plataforma = para un comercio no existe: ni búsqueda, ni
+      // Proveedores, ni avisos. Solo Administración lo sigue viendo para gestionarlo.
+      .filter((v) => platformAdminOrg || !v.platformHidden)
       .sort((a, b) => a.name.localeCompare(b.name, "es"));
 
     // Administración opera sin tope; el resto, según el plan de la organización.
