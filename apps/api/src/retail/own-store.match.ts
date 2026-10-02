@@ -46,9 +46,30 @@ export interface OwnStoreMatch {
   confident: boolean;
 }
 
+/** Código de fabricante o interno (100-100000263BOX): las webs casi nunca lo ponen. */
+function isPartNumberToken(t: string): boolean {
+  return /\d{6,}/.test(t);
+}
+
+const hasLetter = (t: string) => /[a-z]/i.test(t);
+
+/**
+ * Tokens que importan para encontrar el producto en la web propia. Sin códigos
+ * de fabricante, y si hay un modelo con letras (5700G, A520M) los números
+ * sueltos (100, 3377) no son obligatorios: antes un "(100-100000263BOX)" en el
+ * nombre del distribuidor hacía que no se encontrara nada.
+ */
+export function ownStoreTokens(name: string): ScoredToken[] {
+  const tokens = extractSearchTokens(name, 10).filter((t) => !isPartNumberToken(t.t));
+  const mixedModel = tokens.some((t) => isModelSkuToken(t.t) && hasLetter(t.t));
+  return tokens
+    .filter((t) => !(mixedModel && /^\d+$/.test(t.t) && isModelSkuToken(t.t)))
+    .slice(0, 8);
+}
+
 /** Plan de búsqueda acotado a una sola tienda. `null` si el nombre no aporta tokens. */
 export function ownStoreSearchPlan(name: string): OwnStoreSearchPlan | null {
-  const tokens = extractSearchTokens(name, 8);
+  const tokens = ownStoreTokens(name);
   if (tokens.length === 0) return null;
   const skuTokens = [...new Set(tokens.filter((t) => isModelSkuToken(t.t)).map((t) => t.t))];
   const strong = tokens.filter((t) => t.strong).map((t) => t.t);
@@ -63,6 +84,9 @@ export function ownStoreSearchPlan(name: string): OwnStoreSearchPlan | null {
 export function isConfidentOwnStoreMatch(match: MatchScore): boolean {
   if (match.hits < 1) return false;
   if (match.skuTotal > 0 && match.skuHits < match.skuTotal) return false;
+  // Mismo modelo (todos los SKU) y marca/línea: las palabras de más del
+  // distribuidor ("65W WRAITH STEALTH", "16MB 4.6GHz") no lo vuelven dudoso.
+  if (match.skuTotal > 0 && match.strongHits >= 2) return true;
   if (match.strongTotal >= 2 && match.strongHits < match.strongTotal) return false;
   if (match.coverage < 0.5) return false;
   return match.strongHits >= 1 || match.hits >= 2;
@@ -74,8 +98,10 @@ export function pickOwnStoreMatch(
   query: string,
   store: OwnStorePriceContext
 ): OwnStoreMatch | null {
-  const tokens = extractSearchTokens(query, 8);
+  const tokens = ownStoreTokens(query);
   if (tokens.length === 0 || rows.length === 0) return null;
+  const queryModels = new Set(tokens.filter((t) => isModelSkuToken(t.t)).map((t) => t.t));
+  const queryIsBundle = /\b(combo|kit|pack)\b/.test(normalizeSearchText(query));
 
   let best: { row: OwnStoreMatchRow; match: MatchScore; price: number } | null = null;
   for (const row of rows) {
@@ -106,6 +132,18 @@ export function pickOwnStoreMatch(
     imageUrl: best.row.imageUrl,
     syncedAt: best.row.syncedAt.toISOString(),
     coverage: best.match.coverage,
-    confident: isConfidentOwnStoreMatch(best.match),
+    confident: isConfidentOwnStoreMatch(best.match) && !isDifferentProduct(best.row, queryModels, queryIsBundle),
   };
+}
+
+/**
+ * La web tiene otro producto aunque comparta el modelo: un combo cuando se busca
+ * el procesador solo, o un modelo con letras de más (B550M en un combo).
+ */
+function isDifferentProduct(row: OwnStoreMatchRow, queryModels: Set<string>, queryIsBundle: boolean): boolean {
+  const text = row.searchText || normalizeSearchText(row.name);
+  if (!queryIsBundle && /\b(combo|kit|pack)\b/.test(text)) return true;
+  return extractSearchTokens(text, 14).some(
+    (p) => isModelSkuToken(p.t) && hasLetter(p.t) && !isPartNumberToken(p.t) && !queryModels.has(p.t)
+  );
 }

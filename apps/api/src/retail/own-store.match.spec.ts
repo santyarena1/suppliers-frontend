@@ -50,3 +50,37 @@ describe("tienda propia · coincidencia", () => {
     expect(match?.confident ?? false).toBe(false);
   });
 });
+
+describe("tienda propia · nombres reales de distribuidores (Ryzen 7 5700G)", () => {
+  const web = [
+    row({ id: "cpu", name: "PROCESADOR AMD (AM4) RYZEN 7 5700G", price: 355000 }),
+    row({ id: "combo", name: "COMBO MOTHER ASUS PRIME B550M-K + RYZEN 7 5700G", price: 520000 }),
+  ];
+
+  it.each([
+    "MICRO AMD (AM4) RYZEN 7 5700G (100-100000263BOX)",
+    "CPU AMD RYZEN 7 5700G AM4 65W WRAITH STEALTH",
+    "Microprocesador AMD Ryzen 7 5700G 16MB 4.6GHz AM4",
+    "PROCESADOR AMD RYZEN 7 5700G AM4",
+  ])("encuentra el mismo procesador aunque el distribuidor le agregue datos: %s", (name) => {
+    const match = pickOwnStoreMatch(web, name, store);
+    expect(match?.productId).toBe("cpu");
+    expect(match?.confident).toBe(true);
+  });
+
+  it("un combo del distribuidor no se compara con el procesador solo de la web", () => {
+    const match = pickOwnStoreMatch(web, "COMBO MOTHER ASUS PRIME A520M-K + RYZEN 7 5700G BOX", store);
+    expect(match?.confident ?? false).toBe(false);
+  });
+
+  it("el procesador solo no se compara con un combo de la web", () => {
+    const onlyCombo = [row({ id: "combo", name: "COMBO MOTHER ASUS PRIME B550M-K + RYZEN 7 5700G", price: 520000 })];
+    const match = pickOwnStoreMatch(onlyCombo, "PROCESADOR AMD RYZEN 7 5700G AM4", store);
+    expect(match?.confident ?? false).toBe(false);
+  });
+
+  it("otro modelo no matchea (5700X contra 5700G)", () => {
+    const match = pickOwnStoreMatch(web, "PROCESADOR AMD RYZEN 7 5700X AM4", store);
+    expect(match?.confident ?? false).toBe(false);
+  });
+});
