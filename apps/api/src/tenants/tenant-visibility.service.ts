@@ -371,6 +371,32 @@ export class TenantVisibilityService {
     return { ...usage, provider, inSearch: Boolean(after?.inSearch) };
   }
 
+  /**
+   * El comercio corta con un proveedor: borra su cuenta, deja de mostrar sus
+   * precios y revoca el vínculo. No borra historial (pedidos, cargas de lista).
+   * Volver a conectarse (código, lista o cuenta) lo reactiva desde cero.
+   */
+  async disconnect(tenantId: string, provider: Provider, viewerUserId?: string) {
+    if (isDemoDistributorKey(provider)) throw new BadRequestException("Los distribuidores de ejemplo se van solos al terminar el recorrido");
+    const visible = (await this.listFor(tenantId, viewerUserId)).find((v) => v.provider === provider);
+    if (!visible?.linked) throw new NotFoundException("Proveedor no encontrado");
+    const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: provider }, select: { id: true } });
+    if (!supplier) throw new NotFoundException("Proveedor no encontrado");
+    await this.prisma.$transaction([
+      this.prisma.credential.deleteMany({ where: { tenantId, providerName: provider } }),
+      this.prisma.tenantProductOffer.updateMany({ where: { tenantId, provider, active: true }, data: { active: false } }),
+      this.prisma.providerSyncConfig.updateMany({
+        where: { tenantId, provider },
+        data: { enabled: false, includeInSearch: null, includeInSearchAt: null },
+      }),
+      this.prisma.tenantLink.updateMany({
+        where: { clientTenantId: tenantId, supplierTenantId: supplier.id },
+        data: { status: "REVOKED" },
+      }),
+    ]);
+    return { provider, disconnected: true };
+  }
+
   /** Proveedores con al menos una oferta activa con precio de este comercio. */
   private async providersWithPrices(tenantId: string, providers: string[]): Promise<Set<string>> {
     if (providers.length === 0) return new Set();

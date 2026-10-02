@@ -749,12 +749,13 @@ function CartPageInner() {
     setConfirmingOffline(true);
     setNotice(null);
     try {
-      await ordersApi.createOffline(groups);
-      await copySellerMessage();
+      const res = await ordersApi.createOffline(groups);
+      const held = heldForApproval(res.data);
+      if (!held) await copySellerMessage();
       if (activeTab === "all") clear("offline");
       else clearProvider(activeTab, "offline");
       setActiveTab("all");
-      setNotice("Pedido guardado en Nodo como aprobado. El mensaje quedó copiado para el vendedor. Si cambia algo, lo editás en Pedidos.");
+      setNotice(held ? "Pedido guardado en Nodo, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, lo ves en Pedidos y ahí copiás el mensaje para el vendedor." : "Pedido guardado en Nodo como aprobado. El mensaje quedó copiado para el vendedor. Si cambia algo, lo editás en Pedidos.");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setNotice(msg || "No se pudo guardar el pedido offline");
@@ -770,11 +771,12 @@ function CartPageInner() {
     setConfirmingList(provider);
     setNotice(null);
     try {
-      await ordersApi.createOffline(groups);
-      await copySellerMessage();
+      const res = await ordersApi.createOffline(groups);
+      const held = heldForApproval(res.data);
+      if (!held) await copySellerMessage();
       clearProvider(provider, channelTab);
       setActiveTab("all");
-      setNotice("Pedido guardado en Nodo. El mensaje quedó copiado para mandárselo al vendedor. Si cambia algo, lo editás en Pedidos.");
+      setNotice(held ? "Pedido guardado en Nodo, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, lo ves en Pedidos y ahí copiás el mensaje para el vendedor." : "Pedido guardado en Nodo. El mensaje quedó copiado para mandárselo al vendedor. Si cambia algo, lo editás en Pedidos.");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setNotice(msg || "No se pudo guardar el pedido");
@@ -794,13 +796,16 @@ function CartPageInner() {
     setGenerating(scope);
     setNotice(null);
     try {
-      await ordersApi.createOffline(groups);
-      await copySellerMessage();
+      const res = await ordersApi.createOffline(groups);
+      const held = heldForApproval(res.data);
+      if (!held) await copySellerMessage();
       if (scope === "all") clear("online");
       else clearProvider(scope, "online");
       setActiveTab("all");
       setNotice(
-        groups.length === 1
+        held
+          ? "Pedido guardado en Nodo, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, lo ves en Pedidos y ahí copiás el mensaje para el vendedor."
+          : groups.length === 1
           ? "Pedido generado en Nodo. El mensaje quedó copiado para mandárselo al vendedor (o compartilo por WhatsApp)."
           : `${groups.length} pedidos generados en Nodo, uno por distribuidor. El mensaje quedó copiado para los vendedores.`
       );
@@ -2121,4 +2126,9 @@ function QtyControl({
       </button>
     </div>
   );
+}
+
+/** El pedido offline sigue la regla de aprobación: sin permiso de confirmar, queda esperando. */
+function heldForApproval(orders: { approvalStatus: string }[] | undefined): boolean {
+  return Boolean(orders?.some((o) => o.approvalStatus === "PENDING_APPROVAL"));
 }

@@ -330,9 +330,8 @@ export async function p4ReuploadFreshness(ctx) {
   const fr3 = await api("GET", `/providers/${fkey}/freshness`, { token: r.token });
   s.check("aplicada hace 30 días con cadencia 7 → OVERDUE", fr3.data?.status === "OVERDUE", fr3.data);
   const sr = await search(r.token, fkey, `${tag}ze1`);
-  s.check("[dueño] lista vencida → no debería mostrarse en búsqueda", (sr.data?.length ?? 0) === 0, { count: sr.data?.length, price: sr.data?.[0]?.price }, {
-    hint: "freshnessFor (list-import.service.ts:803-825) solo informa; ni search() ni listFor() lo consultan. El aviso es la leyenda 'Lista vencida' en ProductCard y la notificación del cron 09:00 (list-import-scheduler.service.ts:78-116)",
-  });
+  // Decisión del dueño: la lista vencida se sigue mostrando, con aviso.
+  s.check("lista vencida → se sigue mostrando en búsqueda (con aviso de vencida)", (sr.data?.length ?? 0) >= 1, { count: sr.data?.length, price: sr.data?.[0]?.price });
   const prow = await myProvider(r.token, fkey);
   s.note(`lista vencida en /my/providers: ${JSON.stringify(compact(prow))} (sin campo de vigencia)`);
   const notes = await api("GET", "/my/notifications", { token: r.token });
@@ -505,4 +504,36 @@ export async function p6BaseLimit(ctx) {
   s.check("BASE completado: los 4 propios quedan en búsqueda", mine.every((k) => in3.includes(k)), { inSearch: in3 });
 }
 
-export const providerScenarios = [p1OnboardingDemo, p2Integrated, p3ListVariants, p4ReuploadFreshness, p5SharedProviderIsolated, p6BaseLimit];
+/** Desconectarse de un proveedor y volver a conectarse. */
+export async function p7Disconnect(ctx) {
+  const s = scenario("P7", "Desconectar un proveedor y volver a conectarlo");
+  const r = await newRetailer(ctx, "pdisc", "PRO");
+  const v5 = listVariants(`${ctx.pTag}x`).find((v) => v.key === "V5");
+  const q = Object.keys(v5.expect)[0];
+  const c = await createListProvider(r.token, `Xray ${ctx.prefix}`);
+  const key = c.data?.providerKey;
+  const up = await uploadAndApply(r.token, key, v5);
+  const row0 = await myProvider(r.token, key);
+  s.check("lista aplicada → configurado y en búsqueda", up.final.data?.status === "APPLIED" && row0?.inSearch === true, { status: up.final.data?.status, row: row0 && { configured: row0.configured, inSearch: row0.inSearch } });
+  const before = await search(r.token, key, q);
+  s.check("antes de desconectar la búsqueda trae el producto", (before.data?.length ?? 0) >= 1, { status: before.status, count: before.data?.length });
+  const disc = await api("DELETE", `/my/providers/${key}`, { token: r.token });
+  s.check("DELETE /my/providers/:p → 200", disc.status === 200 && disc.data?.disconnected === true, disc);
+  const row = await myProvider(r.token, key);
+  s.check("después de desconectar no figura vinculado", !row || row.linked === false, { row });
+  const after = await search(r.token, key, q);
+  s.check("después de desconectar la búsqueda no trae nada", (after.data?.length ?? 0) === 0, { status: after.status, count: after.data?.length });
+  const again = await api("DELETE", `/my/providers/${key}`, { token: r.token });
+  s.check("desconectar dos veces → 404", again.status === 404, again);
+  const demo = await api("DELETE", "/my/providers/LIST_DEMO_NORTE", { token: r.token });
+  s.check("los demos no se desconectan a mano (400/404)", demo.status === 400 || demo.status === 404, demo);
+  const blocked = await uploadFile(r.token, key, v5);
+  s.check("desconectado no puede subir lista sin reconectarse (403/404)", blocked.status === 403 || blocked.status === 404, { status: blocked.status });
+  const re = await connectByListKey(r.token, key, `Xray ${ctx.prefix}`);
+  s.check("se reconecta buscándolo en el directorio → conectar por lista", (re.conn?.status ?? 0) < 300 && re.conn !== null, { dir: re.dir?.status, found: Boolean(re.row), conn: re.conn?.status });
+  const up2 = await uploadAndApply(r.token, key, v5);
+  const row2 = await myProvider(r.token, key);
+  s.check("volver a subir la lista lo reconecta y vuelve a la búsqueda", up2.final.data?.status === "APPLIED" && row2?.linked === true && row2?.inSearch === true, { status: up2.final.data?.status, upload: up2.up?.status, row: row2 && { linked: row2.linked, configured: row2.configured, inSearch: row2.inSearch } });
+}
+
+export const providerScenarios = [p1OnboardingDemo, p2Integrated, p3ListVariants, p4ReuploadFreshness, p5SharedProviderIsolated, p6BaseLimit, p7Disconnect];

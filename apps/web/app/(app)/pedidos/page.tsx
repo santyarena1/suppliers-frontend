@@ -82,7 +82,12 @@ function RetailerPedidosPage() {
     try {
       if (accion === "aprobar") {
         const res = await ordersApi.approve(order.id);
-        setAviso({ ok: true, text: res.data.message || `Pedido enviado a ${order.providerName}` });
+        setAviso({
+          ok: true,
+          text: isOffline(order)
+            ? `Pedido de ${order.providerName} aprobado`
+            : res.data.message || `Pedido enviado a ${order.providerName}`,
+        });
       } else {
         await ordersApi.reject(order.id);
         setAviso({ ok: true, text: `Pedido de ${order.providerName} rechazado` });
@@ -959,7 +964,8 @@ function OrderCard({
               >
                 Rechazar
               </button>
-              {quote ? (
+              {/* Offline no se cotiza en el portal: se aprueba directo. */}
+              {quote || offline ? (
                 <button
                   type="button"
                   onClick={onApprove}
@@ -967,7 +973,7 @@ function OrderCard({
                   className="flex-[1.4] h-10 inline-flex items-center justify-center gap-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-xl text-xs font-semibold transition-colors"
                 >
                   {working && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {working ? "Enviando…" : "Aprobar y enviar"}
+                  {working ? (offline ? "Aprobando…" : "Enviando…") : offline ? "Aprobar" : "Aprobar y enviar"}
                 </button>
               ) : (
                 <button

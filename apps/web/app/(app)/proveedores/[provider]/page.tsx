@@ -34,6 +34,7 @@ import SolutionBoxAccountPanel from "@/components/SolutionBoxAccountPanel";
 import DistecnaAccountPanel from "@/components/DistecnaAccountPanel";
 import PolytechAccountPanel from "@/components/PolytechAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
+import DisconnectProviderCard from "@/components/DisconnectProviderCard";
 import PlanGate from "@/components/subscription/PlanGate";
 import {
   AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
@@ -859,6 +860,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {isRetailer && canManage && !provider.startsWith("LIST_DEMO_") && (
+                      <DisconnectProviderCard provider={provider} />
                     )}
                   </div>
                 )}

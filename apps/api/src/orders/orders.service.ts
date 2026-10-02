@@ -79,8 +79,10 @@ export class OrdersService {
 
   async approve(tenant: TenantContext, userId: string, id: string) {
     const order = await this.approval.assertApprovable(tenant, id);
+    // Un pedido offline no sale al portal: aprobarlo solo lo deja confirmado en Nodo.
     if (isOfflineChannel(order.channel)) {
-      throw new BadRequestException("Este pedido se gestiona en Nodo y no se envía al portal del proveedor.");
+      await this.approval.markApproved(order.id, userId);
+      return { orderId: order.id, approved: true, offline: true };
     }
     assertCapability(tenant, "directCheckout");
     const provider = order.provider as Provider;
@@ -116,6 +118,9 @@ export class OrdersService {
       throw new ForbiddenException("Solo un comercio puede registrar un pedido offline");
     }
 
+    // Offline sigue siendo un pedido: misma regla que el resto. Quien no tiene
+    // "orders.confirm" lo deja pendiente de aprobación.
+    const held = this.approval.needsApproval(tenant);
     const created = [];
     for (const group of dto.orders) {
       const provider = group.provider as Provider;
@@ -135,12 +140,12 @@ export class OrdersService {
           userId,
           tenantId: tenant.tenantId,
           createdByUserId: userId,
-          approvedByUserId: userId,
-          approvalDecidedAt: new Date(),
+          approvedByUserId: held ? null : userId,
+          approvalDecidedAt: held ? null : new Date(),
           provider,
           channel: ORDER_CHANNEL_OFFLINE,
           status: OFFLINE_ORDER_STATUS,
-          approvalStatus: "APPROVED",
+          approvalStatus: held ? "PENDING_APPROVAL" : "APPROVED",
           paymentOption: "OFFLINE",
           paymentLabel: null,
           notes: snap.notes,

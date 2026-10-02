@@ -140,6 +140,15 @@ export class MyTenantController {
     });
   }
 
+  /** Desconectarse de un proveedor: cuenta, precios y vínculo. Tipo 1 con `providers.manage`. */
+  @Delete("providers/:provider")
+  disconnectProvider(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    if (tenant.tenantType !== "RETAILER") throw new NotFoundException("Proveedor no encontrado");
+    assertPermission(tenant, "providers.manage");
+    if (!isProviderKey(provider)) throw new BadRequestException("Proveedor inválido");
+    return this.visibility.disconnect(commercialId(tenant), provider, tenant.userId);
+  }
+
   @RequiresCapability("providerPortalAccess")
   @Post("providers/:provider/observed-iibb")
   recordObservedIibb(

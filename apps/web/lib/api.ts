@@ -552,6 +552,8 @@ export interface RedeemedCode {
 export const myApi = {
   providers: () => api.get<VisibleProvider[]>("/my/providers"),
   /** Incluir en búsqueda ON/OFF. Con NODO Base, prender un 6º responde 409 PLAN_SEARCH_LIMIT. */
+  /** Desconectarse: borra la cuenta, deja de mostrar sus precios y revoca el vínculo. */
+  disconnectProvider: (provider: Provider) => api.delete<{ provider: Provider; disconnected: true }>(`/my/providers/${provider}`),
   setIncludeInSearch: (provider: Provider, enabled: boolean) =>
     api.put<SearchUsage & { provider: Provider; inSearch: boolean }>(`/my/providers/${provider}/search`, { enabled }),
   /** Avisa qué formas de pago informó el portal. No pisan las cargadas a mano. */
