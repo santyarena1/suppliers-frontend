@@ -861,3 +861,39 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: la solicitud actualizada (mismo formato que `items[]`, sin `tenantName`).
 - **Estado**: IMPLEMENTADO
 - **Notas**: `HANDLED`/`ARCHIVED` guardan `handledAt` y quién; volver a `NEW` los limpia.
+
+## Códigos de invitación al equipo (tipo 1)
+
+### [EQUIPO] Listar / crear / revocar códigos
+- **Método**: GET | POST | DELETE
+- **Ruta**: /my/team/invite-codes · /my/team/invite-codes/:id
+- **Auth**: Bearer token requerido; permiso `team.manage`; solo RETAILER
+- **Body (POST)**: `{ role: TenantRole (no OWNER; ADMIN solo el dueño), maxUses?: number|null, expiresAt?: ISO|null }`
+- **Respuesta esperada**: `{ id, code: "XXXX-XXXX", role, roleLabel, maxUses, usedCount, expiresAt, revoked, status: ACTIVE|EXPIRED|EXHAUSTED|REVOKED, createdAt }` (GET devuelve lista)
+- **Estado**: IMPLEMENTADO
+
+### [EQUIPO] Vista previa del código (registro)
+- **Método**: GET
+- **Ruta**: /team-invites/:code/preview
+- **Auth**: no requerido (throttle 20/min)
+- **Respuesta esperada**: `{ valid: true, organizationName, roleLabel }` o `{ valid: false }` (sin más datos)
+- **Estado**: IMPLEMENTADO
+
+### [EQUIPO] Entrar al equipo con un código
+- **Método**: POST
+- **Ruta**: /onboarding/join-team
+- **Auth**: Bearer token requerido (usuario sin organización)
+- **Body**: `{ code }`
+- **Respuesta esperada**: `{ tenantId, tenantName, role, roleLabel, token, onboarding }`. 400 `TEAM_INVITE_INVALID` si venció, se agotó o fue revocado; 409 si ya pertenece a una organización.
+- **Estado**: IMPLEMENTADO
+
+### [AUTH] Completar la cuenta tras una contraseña regenerada
+- **Contexto**: cuando el superadmin (`PUT /admin/users/:id/password`) o el dueño (`POST /my/team/:membershipId/password`) regeneran una contraseña, el usuario queda con `mustSetupAccount = true`. El login con esa contraseña responde `{ token, mustSetupAccount: true }` y, hasta completar, cualquier otro endpoint autenticado responde **403** `{ code: "ACCOUNT_SETUP_REQUIRED" }` (salvo `/auth/account-setup*` y `/auth/refresh`). La web lleva a `/completar-cuenta`.
+- **Método / Ruta**: `GET /auth/account-setup` → `{ username, email, mustSetupAccount }`
+- **Método / Ruta**: `POST /auth/account-setup/email` `{ email }` → `{ sent: true }` (manda código de 6 dígitos al mail; 409 si el mail lo usa otra cuenta; 400 `RESEND_COOLDOWN`)
+- **Método / Ruta**: `POST /auth/account-setup/email/verify` `{ email, code }` → `{ verified: true, email }` (el código solo vale para el mail al que se mandó)
+- **Método / Ruta**: `POST /auth/account-setup/password` `{ password }` → `{ token }` (400 si el mail no se confirmó antes; cierra las otras sesiones)
+- **Método / Ruta**: `POST /auth/account-setup/google` `{ idToken }` → `{ token }` (la cuenta queda con el mail de Google y sin contraseña; 409 si ese Google o ese mail son de otra cuenta)
+- **Auth**: Bearer token requerido (el de la contraseña temporal)
+- **Estado**: IMPLEMENTADO
+- **Notas**: `GET /admin/users`, el árbol de organizaciones y `GET /my/team` exponen `mustSetupAccount` para mostrar "Pendiente de completar cuenta".

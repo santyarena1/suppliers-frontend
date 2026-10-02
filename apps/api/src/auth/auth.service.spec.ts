@@ -393,3 +393,16 @@ describe("AuthService.login por email", () => {
     });
   });
 });
+
+describe("AuthService.login · contraseña regenerada", () => {
+  it("entra igual (aunque el mail no esté confirmado) y avisa que falta completar la cuenta", async () => {
+    const argon2 = await import("argon2");
+    const passwordHash = await argon2.hash("temporal-123");
+    const user = { ...dbUser, passwordHash, emailVerifiedAt: null, mustSetupAccount: true, failedLoginCount: 0, loginLockedUntil: null };
+    const { service } = makeService({ user });
+    await expect(service.login({ username: "ana", password: "temporal-123" })).resolves.toEqual({
+      token: "nuevo.jwt",
+      mustSetupAccount: true,
+    });
+  });
+});

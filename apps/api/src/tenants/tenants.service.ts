@@ -31,7 +31,7 @@ import { tenantLinkAllowed, tenantLinkRejection } from "./link-sides";
 
 const MEMBERSHIP_INCLUDE = {
   user: {
-    select: { id: true, username: true, email: true, role: true, active: true, endDate: true },
+    select: { id: true, username: true, email: true, role: true, active: true, endDate: true, mustSetupAccount: true },
   },
 } satisfies Prisma.TenantMembershipInclude;
 
@@ -80,7 +80,7 @@ export class TenantsService {
       }),
       this.prisma.user.findMany({
         where: { memberships: { none: {} } },
-        select: { id: true, username: true, email: true, role: true, active: true, endDate: true },
+        select: { id: true, username: true, email: true, role: true, active: true, endDate: true, mustSetupAccount: true },
         orderBy: { username: "asc" },
       }),
     ]);
@@ -800,12 +800,14 @@ export class TenantsService {
     const password = generatePassword();
     await this.prisma.user.update({
       where: { id: membership.userId },
-      // Contraseña nueva: se cierran las sesiones abiertas y se levanta el bloqueo.
+      // Contraseña nueva: se cierran las sesiones abiertas y se levanta el bloqueo. Es
+      // temporal: al entrar tiene que confirmar su mail y elegir otra o conectar Google.
       data: {
         passwordHash: await argon2.hash(password),
         sessionVersion: { increment: 1 },
         failedLoginCount: 0,
         loginLockedUntil: null,
+        mustSetupAccount: true,
       },
     });
     forgetSession(membership.userId);
@@ -903,7 +905,7 @@ export class TenantsService {
     role: string;
     title: string | null;
     active: boolean;
-    user: { id: string; username: string; email: string; role: string; active: boolean; endDate: Date | null };
+    user: { id: string; username: string; email: string; role: string; active: boolean; endDate: Date | null; mustSetupAccount?: boolean };
   }) {
     return {
       membershipId: membership.id,
@@ -916,6 +918,7 @@ export class TenantsService {
       platformRole: membership.user.role,
       active: membership.user.active,
       endDate: membership.user.endDate,
+      mustSetupAccount: Boolean(membership.user.mustSetupAccount),
     };
   }
 

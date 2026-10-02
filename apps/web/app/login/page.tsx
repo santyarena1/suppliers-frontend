@@ -58,7 +58,9 @@ export default function LoginPage() {
     try {
       const res = await authApi.login(identifier, password);
       rememberLastLogin({ method: "password", identifier });
-      await enterAuthenticated(res.data.token, identifier.includes("@") ? "" : identifier);
+      await enterAuthenticated(res.data.token, identifier.includes("@") ? "" : identifier, {
+        mustSetupAccount: res.data.mustSetupAccount,
+      });
       return;
     } catch (err: unknown) {
       const fail = apiFailure(err);

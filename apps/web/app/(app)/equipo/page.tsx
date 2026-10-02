@@ -15,6 +15,7 @@ import {
 import { getTenant } from "@/lib/auth";
 import { KeyRound, Loader2, Plus, Trash2, Users, Building2, Megaphone, ShieldCheck } from "lucide-react";
 import PermissionsMatrix, { type PermissionsSource } from "@/components/team/PermissionsMatrix";
+import TeamInviteCodes from "@/components/team/TeamInviteCodes";
 
 const inputClass =
   "w-full bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500";
@@ -36,6 +37,8 @@ export default function EquipoPage() {
   const [aviso, setAviso] = useState<{ ok: boolean; text: string } | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [generated, setGenerated] = useState<string | null>(null);
+  // La que se regenera es temporal: al entrar tiene que completar la cuenta.
+  const [generatedIsReset, setGeneratedIsReset] = useState(false);
   const [tab, setTab] = useState<"users" | "permissions">("users");
 
   const permissionsSource = useMemo<PermissionsSource>(
@@ -100,7 +103,13 @@ export default function EquipoPage() {
               {aviso.text}
             </p>
           )}
-          {generated && <GeneratedPassword password={generated} onDismiss={() => setGenerated(null)} />}
+          {generated && (
+            <GeneratedPassword
+              password={generated}
+              onDismiss={() => setGenerated(null)}
+              note={generatedIsReset ? "Al entrar le vamos a pedir que confirme su mail y elija una contraseña nueva o conecte Google." : undefined}
+            />
+          )}
 
           {loading ? (
             <div className="flex justify-center py-16">
@@ -175,12 +184,18 @@ export default function EquipoPage() {
                       canManage={canManage}
                       orgName={org?.name ?? ""}
                       onRun={run}
-                      onGenerated={setGenerated}
+                      onGenerated={(password) => {
+                        setGeneratedIsReset(true);
+                        setGenerated(password);
+                      }}
                     />
                   ))}
                 </div>
               )}
             </section>
+              {canManage && org?.type === "RETAILER" && (
+                <TeamInviteCodes orgName={org.name} isOwner={session?.role === "OWNER"} onMessage={onPermissionsMessage} />
+              )}
               </>
               )}
             </>
@@ -195,7 +210,10 @@ export default function EquipoPage() {
           onClose={() => setShowAdd(false)}
           onCreated={async (password) => {
             setShowAdd(false);
-            if (password) setGenerated(password);
+            if (password) {
+              setGeneratedIsReset(false);
+              setGenerated(password);
+            }
             setAviso({ ok: true, text: "Usuario agregado" });
             await load();
           }}
@@ -224,7 +242,17 @@ function MemberRow({
   return (
     <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
       <div className="flex-1 min-w-[160px]">
-        <p className="text-sm text-surface-200">{member.username}</p>
+        <p className="text-sm text-surface-200 flex items-center gap-1.5 flex-wrap">
+          {member.username}
+          {member.mustSetupAccount && (
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300"
+              title="Le regeneraron la contraseña: al entrar tiene que confirmar su mail y elegir otra o conectar Google"
+            >
+              Pendiente de completar cuenta
+            </span>
+          )}
+        </p>
         <p className="text-[11px] text-surface-500">{member.email}</p>
       </div>
       {canManage ? (

@@ -12,6 +12,7 @@ import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
 import DataField from "@/components/landing/DataField";
 import GoogleSignInButton, { googleSignInEnabled } from "@/components/GoogleSignInButton";
+import TeamCodeField from "@/components/team/TeamCodeField";
 import "../(marketing)/landing.css";
 import "../login/login.css";
 
@@ -152,6 +153,8 @@ export default function RegisterPage() {
                   autoComplete="new-password"
                 />
               </label>
+
+              <TeamCodeField rowClassName="lgn__row" labelClassName="lnd-label" inputClassName="lnd-input" />
 
               {/* Cloudflare: casi siempre invisible; aparece solo si quiere confirmar que hay una persona. */}
               <TurnstileWidget className="flex justify-center" />

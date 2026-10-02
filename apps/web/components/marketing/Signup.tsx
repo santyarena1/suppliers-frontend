@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import { authApi, apiFailure, onboardingApi } from "@/lib/api";
 import TurnstileWidget from "@/components/TurnstileWidget";
+import TeamCodeField from "@/components/team/TeamCodeField";
 import { saveSession, sessionFromToken } from "@/lib/auth";
 import { enterAuthenticated } from "@/lib/enter-session";
 import { invalidateMyModules } from "@/lib/permissions";
@@ -225,6 +226,13 @@ export function Signup() {
                 )}
               </div>
               <p className="-mt-2 text-xs text-[var(--fg-3)]">Mínimo 8 caracteres.</p>
+              {!isPreviewLogin && (
+                <TeamCodeField
+                  rowClassName="flex flex-col gap-2"
+                  labelClassName="text-sm font-medium text-[var(--fg)]"
+                  inputClassName="nl-input"
+                />
+              )}
               {/* Cloudflare: casi siempre invisible; aparece solo si quiere confirmar que hay una persona. */}
               <TurnstileWidget className="flex justify-center" />
               <button type="submit" disabled={loading} className="nl-btn nl-btn--primary mt-1 w-full disabled:opacity-60">

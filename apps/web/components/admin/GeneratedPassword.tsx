@@ -6,6 +6,8 @@ import { Check, Copy, TriangleAlert, X } from "lucide-react";
 interface Props {
   password: string;
   onDismiss: () => void;
+  /** Aclaración extra (p. ej. que la contraseña es temporal). */
+  note?: string;
 }
 
 /**
@@ -13,7 +15,7 @@ interface Props {
  * que este es el único momento en que puede leerse: si se cierra sin copiarla
  * hay que generar otra.
  */
-export default function GeneratedPassword({ password, onDismiss }: Props) {
+export default function GeneratedPassword({ password, onDismiss, note }: Props) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -52,6 +54,7 @@ export default function GeneratedPassword({ password, onDismiss }: Props) {
       <p className="text-[11px] text-amber-200/70">
         No se vuelve a mostrar. Si la perdés, generá una nueva.
       </p>
+      {note && <p className="text-[11px] text-amber-100/90">{note}</p>}
     </div>
   );
 }

@@ -242,12 +242,25 @@ export async function s4Team(ctx) {
   const newLogin = await api("POST", "/auth/login", { body: { username: memberUser, password: reset.data?.generatedPassword ?? "" } });
   s.check("la contraseña generada entra", newLogin.status === 200, newLogin);
   mTok = newLogin.data?.token;
+  s.check("la clave generada es temporal: el login avisa que falta completar la cuenta", newLogin.data?.mustSetupAccount === true, newLogin);
+  const pending = await api("GET", "/my/org", { token: mTok });
+  s.check("token NUEVO antes de completar la cuenta → 403 ACCOUNT_SETUP_REQUIRED", pending.status === 403 && pending.body?.code === "ACCOUNT_SETUP_REQUIRED", pending);
+  // Completa la cuenta: confirma el mail y elige contraseña.
+  const sellerEmail = `${memberUser}-ok@sim.nodo.test`;
+  const mark = logLength();
+  await api("POST", "/auth/account-setup/email", { token: mTok, body: { email: sellerEmail } });
+  const setupCode = await codeFromLog(sellerEmail, { after: mark });
+  await api("POST", "/auth/account-setup/email/verify", { token: mTok, body: { email: sellerEmail, code: setupCode?.code ?? "" } });
+  const sellerPass = `${memberPass}-2`;
+  const setup = await api("POST", "/auth/account-setup/password", { token: mTok, body: { password: sellerPass } });
+  s.check("el SELLER completa la cuenta (mail + contraseña) → token nuevo", setup.status === 200 && typeof setup.data?.token === "string", setup);
+  mTok = setup.data?.token;
   const fresh = await api("GET", "/my/org", { token: mTok });
-  s.check("token NUEVO (login con la clave generada) sirve enseguida → 200", fresh.status === 200, fresh, {
-    hint: "jwt.strategy.ts:56-70: la caché de 30 s guarda la sessionVersion vieja; el token nuevo (sv+1) se rechaza hasta que vence",
+  s.check("token NUEVO (después de completar la cuenta) sirve enseguida → 200", fresh.status === 200, fresh, {
+    hint: "jwt.strategy.ts: la caché de sesión tiene que olvidarse al completar la cuenta (forgetSession)",
   });
   ctx.seller.token = mTok;
-  ctx.seller.password = reset.data?.generatedPassword;
+  ctx.seller.password = sellerPass;
 }
 
 /** Pasos de equipo que dependen de que exista un pedido (se corren después de S8). */

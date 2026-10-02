@@ -31,6 +31,9 @@ model User {
   loginLockedUntil DateTime?
   /// Sube al cambiar la contraseña o desactivar la cuenta: invalida los JWT ya emitidos.
   sessionVersion   Int       @default(0)
+  /// Le regeneraron la contraseña (superadmin o su equipo): hasta que confirme su mail
+  /// y elija contraseña nueva (o conecte Google) solo puede usar /auth/account-setup.
+  mustSetupAccount                 Boolean       @default(false)
   role         UserRole      @default(ROLE_USER)
   active       Boolean       @default(true)
   /// Usuario creado por la plataforma (dueño placeholder de una marca del catálogo).
@@ -188,6 +191,7 @@ model Tenant {
   memberships   TenantMembership[]
   rolePermissions TenantRolePermission[]
   accessCodes   TenantAccessCode[]
+  teamInviteCodes TeamInviteCode[]
   supplierLinks TenantLink[]          @relation("LinkClient")
   clientLinks   TenantLink[]          @relation("LinkSupplier")
   pmScopes      ProductManagerScope[]
@@ -945,6 +949,9 @@ model ProviderSyncConfig {
   /// aprendido de sus pedidos se estima el envío en la búsqueda. Una sola
   /// puede ser habitual: esa manda sobre lo que digan los pedidos.
   shippingMethods      Json?
+  /// Envío gratis desde este total del pedido a este distribuidor (con su moneda).
+  /// Solo afecta a las formas de envío propias / estimadas, nunca al envío que cotiza el portal.
+  /// ARS | USD
   /// Foto del carrito del portal tal como NODO lo dejó en la última verificación
   /// (`{ codigo: cantidad }`). El carrito del portal y el de NODO son el mismo:
   /// con la foto se distingue "lo borraron en el portal" de "lo agregaron en
@@ -2360,4 +2367,36 @@ model InboxRequest {
 
   @@index([status, createdAt])
   @@index([type, createdAt])
+}
+
+/// Código para sumarse al equipo de una organización (tipo 1). El dueño lo
+/// comparte y quien se registra con él entra con el rol del código. Lo maneja
+/// tenants/team-invites.service.ts.
+model TeamInviteCode {
+  id          String                 @id @default(uuid())
+  tenantId    String
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// XXXX-XXXX, sin caracteres ambiguos.
+  code        String                 @unique
+  role        TenantRole
+  /// null = sin límite de usos.
+  maxUses     Int?
+  usedCount   Int                    @default(0)
+  expiresAt   DateTime?
+  revoked     Boolean                @default(false)
+  createdById String
+  createdAt   DateTime               @default(now())
+  redemptions TeamInviteRedemption[]
+
+  @@index([tenantId, createdAt])
+}
+
+model TeamInviteRedemption {
+  id        String         @id @default(uuid())
+  inviteId  String
+  invite    TeamInviteCode @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime       @default(now())
+
+  @@index([inviteId])
 }

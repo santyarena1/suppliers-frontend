@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import type { JwtPayload } from "@nodo/shared";
 import { Public } from "../common/decorators/public.decorator";
@@ -12,10 +12,15 @@ import { GoogleLoginDto } from "./dto/google-login.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { TurnstileGuard } from "./turnstile.guard";
+import { AccountSetupService } from "./account-setup.service";
+import { AccountSetupEmailDto, AccountSetupGoogleDto, AccountSetupPasswordDto, AccountSetupVerifyDto } from "./dto/account-setup.dto";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly accountSetup: AccountSetupService
+  ) {}
 
   @Public()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
@@ -78,6 +83,41 @@ export class AuthController {
   @Post("google")
   google(@Body() dto: GoogleLoginDto) {
     return this.authService.loginWithGoogle(dto.idToken);
+  }
+
+  // ---------- Completar la cuenta (contraseña regenerada) ----------
+
+  @Get("account-setup")
+  accountSetupStatus(@CurrentUser() user: JwtPayload) {
+    return this.accountSetup.status(user.userId);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post("account-setup/email")
+  accountSetupEmail(@CurrentUser() user: JwtPayload, @Body() dto: AccountSetupEmailDto) {
+    return this.accountSetup.sendEmailCode(user.userId, dto.email);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post("account-setup/email/verify")
+  accountSetupVerify(@CurrentUser() user: JwtPayload, @Body() dto: AccountSetupVerifyDto) {
+    return this.accountSetup.verifyEmail(user.userId, dto.email, dto.code);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post("account-setup/password")
+  accountSetupPassword(@CurrentUser() user: JwtPayload, @Body() dto: AccountSetupPasswordDto) {
+    return this.accountSetup.setPassword(user.userId, dto.password);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @Post("account-setup/google")
+  accountSetupGoogle(@CurrentUser() user: JwtPayload, @Body() dto: AccountSetupGoogleDto) {
+    return this.accountSetup.connectGoogle(user.userId, dto.idToken);
   }
 
   /** Renueva el JWT mientras la sesión actual todavía es válida. */

@@ -13,11 +13,18 @@ export function safeFrom(): string | null {
   return from;
 }
 
-/** Guarda la sesión y entra a la app (onboarding si falta). */
-export async function enterAuthenticated(token: string, username: string) {
+/**
+ * Guarda la sesión y entra a la app (onboarding si falta). Con la contraseña
+ * regenerada va primero a completar la cuenta.
+ */
+export async function enterAuthenticated(token: string, username: string, opts: { mustSetupAccount?: boolean } = {}) {
   invalidateMyModules();
   invalidateTgsEnabled();
   saveSession(token, sessionFromToken(token, username));
+  if (opts.mustSetupAccount) {
+    window.location.assign("/completar-cuenta");
+    return;
+  }
   let destination = safeFrom() ?? "/search";
   try {
     const { onboardingApi } = await import("./api");

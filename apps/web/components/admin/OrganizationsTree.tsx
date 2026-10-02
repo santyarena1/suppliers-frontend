@@ -65,6 +65,8 @@ type UserRow = {
   orgs: UserOrg[];
   platformRole: AdminUser["role"];
   active: boolean;
+  /** Le regeneraron la contraseña y todavía no completó la cuenta. */
+  mustSetupAccount?: boolean;
 };
 
 const TYPE_ORDER: TenantType[] = ["RETAILER", "DISTRIBUTOR", "BRAND"];
@@ -183,6 +185,7 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
                 orgs: [org],
                 platformRole: member.platformRole,
                 active: member.active,
+                mustSetupAccount: member.mustSetupAccount,
               }
         );
       }
@@ -196,6 +199,7 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
           orgs: [],
           platformRole: user.role,
           active: user.active,
+          mustSetupAccount: user.mustSetupAccount,
         });
       }
     }
@@ -395,6 +399,9 @@ export default function OrganizationsTree({ showToast }: { showToast: ToastFn })
                             {orgSummary}
                             {row.active ? "" : " · inactivo"}
                           </p>
+                          {row.mustSetupAccount && (
+                            <p className="text-[10px] text-amber-300 truncate">Pendiente de completar cuenta</p>
+                          )}
                         </button>
                         <EnterAsButton
                           userId={row.userId}

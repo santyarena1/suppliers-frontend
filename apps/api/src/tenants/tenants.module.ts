@@ -9,11 +9,13 @@ import { ShippingEstimatesService } from "./shipping-estimates.service";
 import { TenantGuard } from "./tenant.guard";
 import { TenantsController } from "./tenants.controller";
 import { TenantsService } from "./tenants.service";
+import { MyTeamInvitesController, TeamInvitePreviewController } from "./team-invites.controller";
+import { TeamInvitesService } from "./team-invites.service";
 
 @Module({
   imports: [forwardRef(() => ChatModule)],
-  controllers: [TenantsController, MyTenantController],
-  providers: [TenantsService, PortfolioService, TenantPermissionsService, TenantContextService, TenantVisibilityService, TenantGuard, ShippingEstimatesService],
-  exports: [TenantsService, TenantContextService, TenantVisibilityService, TenantGuard],
+  controllers: [TenantsController, MyTenantController, MyTeamInvitesController, TeamInvitePreviewController],
+  providers: [TenantsService, PortfolioService, TenantPermissionsService, TenantContextService, TenantVisibilityService, TenantGuard, ShippingEstimatesService, TeamInvitesService],
+  exports: [TenantsService, TenantContextService, TenantVisibilityService, TenantGuard, TeamInvitesService],
 })
 export class TenantsModule {}

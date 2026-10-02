@@ -4,6 +4,7 @@ import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
 import type { JwtPayload } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { accountSetupAllows, accountSetupRequired } from "./account-setup-gate";
 
 /** Cuánto se recuerda el estado de un usuario antes de volver a la base. */
 const SESSION_CACHE_MS = 30_000;
@@ -20,7 +21,13 @@ function streamQueryToken(req: { url?: string; query?: Record<string, unknown> }
   return typeof token === "string" && token ? token : null;
 }
 
-type SessionState = { active: boolean; endDate: Date | null; sessionVersion: number; at: number };
+type SessionState = {
+  active: boolean;
+  endDate: Date | null;
+  sessionVersion: number;
+  mustSetupAccount: boolean;
+  at: number;
+};
 
 /** Estado recordado por usuario. Un solo mapa por proceso, para poder olvidarlo al instante. */
 const sessionCache = new Map<string, SessionState>();
@@ -43,6 +50,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromExtractors([ExtractJwt.fromAuthHeaderAsBearerToken(), streamQueryToken]),
       ignoreExpiration: false,
       secretOrKey: config.get<string>("JWT_SECRET")!,
+      passReqToCallback: true,
     });
   }
 
@@ -50,7 +58,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    * Un token bien firmado no alcanza: la cuenta tiene que seguir activa y la
    * sesión no tiene que haber sido cerrada (contraseña nueva sube la versión).
    */
-  async validate(payload: JwtPayload): Promise<JwtPayload> {
+  async validate(req: { url?: string; routeOptions?: { url?: string } }, payload: JwtPayload): Promise<JwtPayload> {
     const state = await this.sessionState(payload.userId, payload.sv ?? 0);
     if (!state || !state.active) throw new UnauthorizedException("Tu sesión ya no es válida. Volvé a entrar.");
     if (state.endDate && state.endDate.getTime() < Date.now()) {
@@ -58,6 +66,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
     if ((payload.sv ?? 0) !== state.sessionVersion) {
       throw new UnauthorizedException("Tu sesión ya no es válida. Volvé a entrar.");
+    }
+    // Contraseña regenerada: hasta completar la cuenta solo puede completarla.
+    if (state.mustSetupAccount && !accountSetupAllows(req.url ?? "")) {
+      throw accountSetupRequired();
     }
     return payload;
   }
@@ -68,7 +80,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (hit && Date.now() - hit.at < SESSION_CACHE_MS && tokenVersion <= hit.sessionVersion) return hit;
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { active: true, endDate: true, sessionVersion: true },
+      select: { active: true, endDate: true, sessionVersion: true, mustSetupAccount: true },
     });
     if (!user) {
       sessionCache.delete(userId);

@@ -1,3 +1,4 @@
+import { AccountSetupService } from "./account-setup.service";
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
@@ -23,7 +24,7 @@ import { JwtStrategy } from "./jwt.strategy";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleTokenVerifier, TurnstileGuard],
+  providers: [AuthService, AccountSetupService, JwtStrategy, GoogleTokenVerifier, TurnstileGuard],
   exports: [JwtModule, AuthService],
 })
 export class AuthModule {}

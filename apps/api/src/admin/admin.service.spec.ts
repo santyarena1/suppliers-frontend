@@ -74,3 +74,15 @@ describe("AdminService.getEffectivePermissions", () => {
     expect(prisma.userModuleAccess.findMany).not.toHaveBeenCalled();
   });
 });
+
+describe("AdminService.resetPassword", () => {
+  it("la contraseña regenerada es temporal: marca que tiene que completar la cuenta", async () => {
+    const { service, prisma } = makeService({ user: { id: "u1", role: "ROLE_USER" } });
+    const out = await service.resetPassword("u1");
+    expect(out.generatedPassword).toEqual(expect.any(String));
+    expect(prisma.user.update.mock.calls[0][0].data).toMatchObject({
+      mustSetupAccount: true,
+      sessionVersion: { increment: 1 },
+    });
+  });
+});

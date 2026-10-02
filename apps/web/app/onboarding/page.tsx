@@ -16,6 +16,8 @@ import "../(marketing)/landing.css";
 import "./onboarding.css";
 import { clearTrialPlan, readTrialPlan } from "@/lib/trial-plan";
 import SupplierJoinCard from "@/components/onboarding/SupplierJoinCard";
+import TeamJoinCard from "@/components/team/TeamJoinCard";
+import { clearPendingTeamCode, getPendingTeamCode, teamInvitesApi, teamJoinError } from "@/lib/teamInvites";
 
 /** Lo que viene después de crear el comercio (la guía corre dentro de la app). */
 const NEXT_UP = [
@@ -39,8 +41,9 @@ function OnboardingInner() {
   const [orgName, setOrgName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
-  /** Comercio (crea la organización) o distribuidor / marca (deja una solicitud). */
-  const [audience, setAudience] = useState<"RETAILER" | "SUPPLIER">("RETAILER");
+  /** Comercio (crea la organización), equipo (entra con un código) o distribuidor / marca (deja una solicitud). */
+  const [audience, setAudience] = useState<"RETAILER" | "TEAM" | "SUPPLIER">("RETAILER");
+  const [teamError, setTeamError] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -49,6 +52,22 @@ function OnboardingInner() {
       if (res.data.hasTenant) {
         window.location.assign("/");
         return;
+      }
+      // Se registró con el código de un equipo: entra directo, sin crear comercio.
+      const pendingTeam = res.data.preview ? null : getPendingTeamCode();
+      if (pendingTeam) {
+        try {
+          const joined = await teamInvitesApi.join(pendingTeam);
+          clearPendingTeamCode();
+          invalidateMyModules();
+          saveSession(joined.data.token, sessionFromToken(joined.data.token, getUser()?.username ?? ""));
+          window.location.assign("/");
+          return;
+        } catch (joinErr) {
+          clearPendingTeamCode();
+          setTeamError(teamJoinError(joinErr));
+          setAudience("TEAM");
+        }
       }
       setStatus(res.data);
       const user = getUser();
@@ -193,13 +212,24 @@ function OnboardingInner() {
               <button type="button" aria-pressed={audience === "RETAILER"} onClick={() => setAudience("RETAILER")}>
                 Tengo un comercio
               </button>
+              <button type="button" aria-pressed={audience === "TEAM"} onClick={() => setAudience("TEAM")}>
+                Tengo un código de equipo
+              </button>
               <button type="button" aria-pressed={audience === "SUPPLIER"} onClick={() => setAudience("SUPPLIER")}>
                 Soy distribuidor / marca
               </button>
             </div>
           )}
 
-          {audience === "SUPPLIER" && !status?.preview ? (
+          {audience === "TEAM" && !status?.preview ? (
+            <TeamJoinCard
+              initialError={teamError}
+              onJoined={(token) => {
+                applyToken(token);
+                window.location.assign("/");
+              }}
+            />
+          ) : audience === "SUPPLIER" && !status?.preview ? (
             <SupplierJoinCard defaultEmail={contactEmail || undefined} />
           ) : (
           <form className="lnd-panel lnd-panel--sheer ob__card" onSubmit={bootstrap}>

@@ -6,15 +6,29 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { AdminCreateRetailerDto, BootstrapRetailerOrgDto, OnboardingStepDto } from "./dto/onboarding.dto";
 import { OnboardingService } from "./onboarding.service";
+import { Throttle } from "@nestjs/throttler";
+import { JoinTeamDto } from "../tenants/dto/team-invite.dto";
+import { TeamInvitesService } from "../tenants/team-invites.service";
 
 @UseGuards(AuthGuard("jwt"))
 @Controller("onboarding")
 export class OnboardingController {
-  constructor(private readonly onboarding: OnboardingService) {}
+  constructor(
+    private readonly onboarding: OnboardingService,
+    private readonly invites: TeamInvitesService
+  ) {}
 
   @Get("status")
   status(@CurrentUser() user: JwtPayload) {
     return this.onboarding.status(user.userId);
+  }
+
+  /** Entrar al equipo de un comercio con el código que te pasaron. */
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post("join-team")
+  async joinTeam(@CurrentUser() user: JwtPayload, @Body() dto: JoinTeamDto) {
+    const joined = await this.invites.redeem(user.userId, dto.code);
+    return { ...joined, ...(await this.onboarding.sessionAfterJoin(user.userId)) };
   }
 
   @Post("bootstrap")
@@ -66,7 +80,10 @@ export class OnboardingController {
 @Roles("ROLE_ADMIN")
 @Controller("admin/onboarding")
 export class AdminOnboardingController {
-  constructor(private readonly onboarding: OnboardingService) {}
+  constructor(
+    private readonly onboarding: OnboardingService,
+    private readonly invites: TeamInvitesService
+  ) {}
 
   @Post("retailers")
   createRetailer(@Body() dto: AdminCreateRetailerDto) {

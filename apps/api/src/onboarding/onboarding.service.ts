@@ -308,6 +308,15 @@ export class OnboardingService {
   }
 
   /**
+   * Después de sumarse a un equipo con un código: sesión nueva con la
+   * organización y el estado del recorrido (un miembro hace el de su rol).
+   */
+  async sessionAfterJoin(userId: string) {
+    const { token } = await this.auth.issueTokenForUserId(userId);
+    return { token, onboarding: await this.status(userId) };
+  }
+
+  /**
    * Comercio ya existente: reabre el recorrido saltando el alta (org/plan) y
    * asegura el catálogo demo para poder probar filtros y pedidos.
    */

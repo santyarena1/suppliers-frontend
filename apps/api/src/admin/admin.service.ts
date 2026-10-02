@@ -93,10 +93,17 @@ export class AdminService {
     await this.assertUserExists(userId);
     const nextPassword = password ?? generatePassword();
     const passwordHash = await argon2.hash(nextPassword);
-    // Contraseña nueva: se cierran las sesiones abiertas y se levanta el bloqueo.
+    // Contraseña nueva: se cierran las sesiones abiertas y se levanta el bloqueo. Es
+    // temporal: al entrar tiene que confirmar su mail y elegir otra o conectar Google.
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash, sessionVersion: { increment: 1 }, failedLoginCount: 0, loginLockedUntil: null },
+      data: {
+        passwordHash,
+        sessionVersion: { increment: 1 },
+        failedLoginCount: 0,
+        loginLockedUntil: null,
+        mustSetupAccount: true,
+      },
     });
     forgetSession(userId);
     return {

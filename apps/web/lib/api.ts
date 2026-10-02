@@ -58,6 +58,17 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Le regeneraron la contraseña: hasta completar la cuenta, todo lo demás
+    // responde ACCOUNT_SETUP_REQUIRED y se lo lleva a completarla.
+    if (
+      typeof window !== "undefined" &&
+      error?.response?.status === 403 &&
+      error?.response?.data?.code === "ACCOUNT_SETUP_REQUIRED" &&
+      window.location.pathname !== "/completar-cuenta"
+    ) {
+      window.location.assign("/completar-cuenta");
+      return Promise.reject(error);
+    }
     // Un 401 no siempre es "tu sesión de NODO murió". El carrito calienta
     // checkout de varios portales: si alguno contesta 401 y el JWT nuestro
     // sigue vivo, echar al usuario parece un cierre de sesión al tocar el
@@ -314,7 +325,7 @@ export function apiFailure(err: unknown): ApiFailure {
 // --- Auth ---
 export const authApi = {
   login: (username: string, password: string) =>
-    api.post<{ token: string }>("/auth/login", { username, password }),
+    api.post<{ token: string; mustSetupAccount?: boolean }>("/auth/login", { username, password }),
   register: (username: string, email: string, password: string) =>
     api.post<RegisterResponse>("/auth/register", { username, email, password }),
   verifyEmail: (email: string, code: string) =>
@@ -328,6 +339,16 @@ export const authApi = {
   resetPassword: (email: string, code: string, password: string) =>
     api.post<{ token: string }>("/auth/reset-password", { email, code, password }),
   refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
+};
+
+/** Completar la cuenta después de una contraseña regenerada (ver /completar-cuenta). */
+export const accountSetupApi = {
+  status: () => api.get<{ username: string; email: string; mustSetupAccount: boolean }>("/auth/account-setup"),
+  sendEmailCode: (email: string) => api.post<{ sent: boolean }>("/auth/account-setup/email", { email }),
+  verifyEmail: (email: string, code: string) =>
+    api.post<{ verified: boolean; email: string }>("/auth/account-setup/email/verify", { email, code }),
+  setPassword: (password: string) => api.post<{ token: string }>("/auth/account-setup/password", { password }),
+  google: (idToken: string) => api.post<{ token: string }>("/auth/account-setup/google", { idToken }),
 };
 
 export type { TenantPlan } from "./plans";
@@ -3045,6 +3066,8 @@ export interface AdminUser {
   role: UserRole;
   active: boolean;
   endDate: string | null;
+  /** Le regeneraron la contraseña y todavía no completó la cuenta. */
+  mustSetupAccount?: boolean;
   createdAt: string;
   updatedAt?: string;
   tenantId?: string | null;
@@ -3534,6 +3557,8 @@ export interface TenantMember {
   platformRole: UserRole;
   active: boolean;
   endDate: string | null;
+  /** Le regeneraron la contraseña y todavía no completó la cuenta. */
+  mustSetupAccount?: boolean;
   managedBrands?: string[];
 }
 
@@ -3577,7 +3602,7 @@ export interface TenantNode {
 
 export interface TenantTree {
   tenants: TenantNode[];
-  unassignedUsers: Pick<AdminUser, "id" | "username" | "email" | "role" | "active" | "endDate">[];
+  unassignedUsers: Pick<AdminUser, "id" | "username" | "email" | "role" | "active" | "endDate" | "mustSetupAccount">[];
 }
 
 export interface TenantUserRelations {

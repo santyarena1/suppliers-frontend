@@ -124,7 +124,7 @@ export default function PlatformAccountPanel({
     setResetting(true);
     try {
       const { data } = await adminApi.resetPassword(user.id, value);
-      showToast("Contraseña reseteada");
+      showToast("Contraseña reseteada. Al entrar va a tener que completar su cuenta.");
       setGenerated(data.generatedPassword ?? null);
       setPassword("");
       setPassword2("");
@@ -286,7 +286,12 @@ export default function PlatformAccountPanel({
               Generar
             </button>
           </div>
-          {generated && <GeneratedPassword password={generated} onDismiss={() => setGenerated(null)} />}
+          {generated && <GeneratedPassword password={generated} onDismiss={() => setGenerated(null)} note="Al entrar le vamos a pedir que confirme su mail y elija una contraseña nueva o conecte Google." />}
+          {!generated && user.mustSetupAccount && (
+            <p className="text-[11px] rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 px-3 py-2">
+              Pendiente de completar cuenta: tiene una contraseña temporal y al entrar tiene que confirmar su mail.
+            </p>
+          )}
         </form>
 
         {(user.providers ?? []).length > 0 && (

@@ -3,6 +3,10 @@ import { createHash, randomInt, timingSafeEqual } from "crypto";
 export const VERIFY_EMAIL = "VERIFY_EMAIL";
 /** Otro propósito: un código de verificación no sirve para cambiar la contraseña ni al revés. */
 export const RESET_PASSWORD = "RESET_PASSWORD";
+/** Completar la cuenta tras una contraseña regenerada: confirmar el mail nuevo. */
+export const ACCOUNT_SETUP = "ACCOUNT_SETUP";
+/** Marca, en el mismo desafío, que el mail ya quedó confirmado en este proceso. */
+export const ACCOUNT_SETUP_VERIFIED = "VERIFIED";
 export const CODE_TTL_MS = 15 * 60 * 1000;
 export const RESEND_COOLDOWN_MS = 60_000;
 export const MAX_ATTEMPTS = 5;

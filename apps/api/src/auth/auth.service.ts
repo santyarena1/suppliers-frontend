@@ -131,10 +131,11 @@ export class AuthService {
     }
 
     this.assertAccountUsable(user);
-    this.assertEmailVerified(user);
+    // Con la contraseña regenerada, confirmar el mail es parte de completar la cuenta.
+    if (!user.mustSetupAccount) this.assertEmailVerified(user);
 
     const token = await this.jwt.signAsync(await this.payloadFor(user));
-    return { token };
+    return user.mustSetupAccount ? { token, mustSetupAccount: true } : { token };
   }
 
   async verifyEmail(email: string, code: string) {
