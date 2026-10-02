@@ -84,6 +84,18 @@ interface PrefsContextValue {
 
 const PrefsContext = createContext<PrefsContextValue | null>(null);
 
+const RATES_CACHE_KEY = "pref_dollar_rates";
+
+function readCachedRates(): DollarRate[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(RATES_CACHE_KEY) ?? "[]");
+    return Array.isArray(raw) ? (raw as DollarRate[]).filter((r) => r && typeof r.venta === "number" && r.venta > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>("ARS");
   const [withIva, setWithIvaState] = useState<boolean>(true);
@@ -91,6 +103,8 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [dollarType, setDollarTypeState] = useState<DollarType>("oficial");
   const [shippingSplit, setShippingSplitState] = useState<ShippingSplit>("units");
   const [searchDefaults, setSearchDefaults] = useState<SearchDefaults>(SEARCH_DEFAULTS);
+  // Arranca con la última cotización guardada: sin esto, al abrir la app los
+  // precios en pesos pasaban de "sin cotización" al valor real (se movían).
   const [rates, setRates] = useState<DollarRate[]>([]);
   const [loadingRates, setLoadingRates] = useState(false);
 
@@ -103,6 +117,8 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
     if (i != null) setWithIvaState(i === "1");
     if (iibb != null) setWithIibbState(iibb === "1");
     if (d) setDollarTypeState(d);
+    const cachedRates = readCachedRates();
+    if (cachedRates.length > 0) setRates((prev) => (prev.length > 0 ? prev : cachedRates));
     const split = localStorage.getItem("pref_shipping_split");
     if (isShippingSplit(split)) setShippingSplitState(split);
     setSearchDefaults(readSearchDefaults());
@@ -145,6 +161,11 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
         fechaActualizacion: d.fechaActualizacion,
       }));
       setRates(mapped);
+      try {
+        localStorage.setItem(RATES_CACHE_KEY, JSON.stringify(mapped));
+      } catch {
+        /* sin storage: solo memoria */
+      }
     } catch {
       // keep previous rates
     } finally {

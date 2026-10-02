@@ -141,11 +141,20 @@ function announceSession() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(SESSION_EVENT));
 }
 
+/** Quién usa la app: si esto no cambia, renovar el token no es "otra sesión". */
+function sessionIdentity(user: SessionUser | null): string {
+  if (!user) return "";
+  return [user.id, user.username, user.role, user.tenantId, user.tenantType, user.tenantRole, user.brandId].join("|");
+}
+
 export function saveSession(token: string, user: SessionUser) {
+  const before = sessionIdentity(getUser());
   localStorage.setItem("token", token);
   localStorage.setItem("user", JSON.stringify(user));
   persistAuthCookie(token);
-  announceSession();
+  // La renovación periódica (y al volver a la pestaña) es la misma persona: avisar
+  // "cambió la sesión" borraba la búsqueda y recargaba proveedores, carrito y envíos.
+  if (sessionIdentity(user) !== before) announceSession();
 }
 
 export function clearSession() {
