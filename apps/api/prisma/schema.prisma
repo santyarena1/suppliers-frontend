@@ -983,6 +983,16 @@ model ProviderSyncConfig {
   lastSyncError        String?
   lastSyncCreated      Int                  @default(0)
   lastSyncUpdated      Int                  @default(0)
+  /// Último intento de sync automático o manual (salga bien o mal). Con
+  /// consecutiveFailures arma el backoff: un proveedor que falla no se
+  /// reintenta en cada tick del cron.
+  lastAttemptAt        DateTime?
+  /// Fallos seguidos. Una sync OK lo vuelve a 0.
+  consecutiveFailures  Int                  @default(0)
+  /// Auto-sync pausado tras muchos fallos seguidos. Se despausa con una sync
+  /// manual que salga bien. El motivo queda en criollo para mostrarlo.
+  pausedAt             DateTime?
+  pauseReason          String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 

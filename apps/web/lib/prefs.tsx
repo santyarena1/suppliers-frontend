@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { tenantSeesIibbPerceptions } from "@/lib/auth";
+import { setArsPerUsd } from "./fx";
 import { isShippingSplit, type ShippingSplit } from "@/lib/shipping";
 
 export type Currency = "USD" | "ARS";
@@ -156,6 +157,11 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   }, [refreshRates]);
 
   const currentRate = rates.find((r) => r.type === dollarType) || null;
+
+  // Los precios que un proveedor da en pesos se pasan a USD con este mismo dólar (lib/fx.ts).
+  useEffect(() => {
+    setArsPerUsd(currentRate?.venta);
+  }, [currentRate]);
 
   const convert = useCallback((usdPrice: number) => {
     if (currency === "USD") return { amount: usdPrice, currency: "USD" as Currency };

@@ -20,6 +20,7 @@ import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import SearchToggle from "@/components/subscription/SearchToggle";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import { capabilityAllowed, invalidateSubscription, useSubscription } from "@/lib/subscription";
+import { type SyncHealth } from "@/components/SyncHealthBanner";
 import { Boxes, CheckCircle2, Clock, FileSpreadsheet, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
@@ -284,6 +285,11 @@ export default function ProveedoresPage() {
                           {accountManager && (
                             <p className="text-[11px] text-surface-500 -mt-1">
                               Tu vendedor: {accountManager.name} · {accountManager.email}
+                            </p>
+                          )}
+                          {(s as { health?: SyncHealth | null } | undefined)?.health?.paused && (
+                            <p className="text-[11px] text-red-300 -mt-1 leading-relaxed">
+                              <b>Sync pausado por error de {name}.</b> Cuando se restablezca, continúa solo.
                             </p>
                           )}
                           {configured === false && (

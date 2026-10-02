@@ -417,11 +417,15 @@ export class ListImportService {
     await this.prisma.supplierListImport.update({ where: { id: importId }, data: { snapshot, status: "PROCESSING" } });
 
     let removedMissing = 0;
-    if (record.level === "BASE") {
-      await this.applyBase(record, items, missingIds);
-      removedMissing = missingIds.length;
-    } else {
-      removedMissing = await this.applyTenant(record, items);
+    try {
+      if (record.level === "BASE") {
+        removedMissing = await this.applyBase(record, items, missingIds);
+      } else {
+        removedMissing = await this.applyTenant(record, items);
+      }
+    } catch (err) {
+      await this.failApply(record, snapshot, err);
+      throw err;
     }
     const owner = await this.ownerOfRecord(record);
     // Los productos nuevos heredan las marcas ya aprobadas (Sentey, LNZ…) sin pasar por revisión,
@@ -470,8 +474,13 @@ export class ListImportService {
     return this.get(importId, actor);
   }
 
-  /** Lista base: escribe fichas + ofertas del proveedor, la base, y la materializa en cada vinculado. */
-  private async applyBase(record: SupplierListImport, items: NormalizedProduct[], missingIds: string[]) {
+  /**
+   * Lista base: escribe fichas + ofertas del proveedor, la base, y la materializa en
+   * cada vinculado. Lo que ya no viene sale de la base y deja de mostrarse en el
+   * distribuidor y en todos sus clientes (las listas propias OWN_LIST no se tocan).
+   * Revertir lo vuelve a mostrar. Devuelve cuántas ofertas dejaron de mostrarse.
+   */
+  private async applyBase(record: SupplierListImport, items: NormalizedProduct[], missingIds: string[]): Promise<number> {
     const supplier = await this.prisma.tenant.findUniqueOrThrow({ where: { providerKey: record.provider }, select: { id: true } });
     await this.providers.applyListOffers({ tenantId: supplier.id, provider: record.provider, items, source: "BASE_LIST" });
 
@@ -488,10 +497,41 @@ export class ListImportService {
         )
       );
     }
+    let hidden = 0;
     if (missingIds.length) {
       await this.prisma.supplierBaseOffer.deleteMany({ where: { provider: record.provider, externalId: { in: missingIds } } });
+      const gone = await this.prisma.tenantProductOffer.updateMany({
+        where: { provider: record.provider, source: "BASE_LIST", externalId: { in: missingIds }, active: true },
+        data: { active: false },
+      });
+      hidden = gone.count;
     }
     await this.materializeForLinked(record.provider, supplier.id);
+    return hidden;
+  }
+
+  /**
+   * Una carga que falla a mitad no puede quedar aplicada en parte: se restaura la
+   * foto previa y queda FAILED con un mensaje que dice qué pasó.
+   */
+  private async failApply(record: SupplierListImport, snapshot: Prisma.InputJsonValue, err: unknown) {
+    const reason = err instanceof Error ? err.message : String(err);
+    let restored = false;
+    try {
+      await this.restoreSnapshot(record, snapshot as unknown as { level: string; rows: SerializedOffer[] });
+      restored = true;
+    } catch (restoreErr) {
+      this.logger.error(
+        `No se pudo restaurar ${record.provider} tras fallar la carga ${record.id}: ${restoreErr instanceof Error ? restoreErr.message : String(restoreErr)}`
+      );
+    }
+    const message = restored
+      ? `No se pudo aplicar la lista (${reason}). No se cambió nada: sigue la lista anterior. Probá de nuevo.`
+      : `No se pudo aplicar la lista (${reason}) y pudo quedar aplicada en parte. Volvé a subir el archivo.`;
+    await this.prisma.supplierListImport
+      .update({ where: { id: record.id }, data: { status: "FAILED", error: message.slice(0, 1000) } })
+      .catch(() => undefined);
+    this.logger.error(`Carga ${record.id} falló al aplicar: ${reason}`);
   }
 
   /**
@@ -572,6 +612,14 @@ export class ListImportService {
     const snapshot = record.snapshot as { level: string; rows: SerializedOffer[] } | null;
     if (!snapshot || !Array.isArray(snapshot.rows)) throw new ConflictException("La carga no tiene snapshot para revertir");
 
+    await this.restoreSnapshot(record, snapshot);
+    await this.prisma.supplierListImport.update({ where: { id: importId }, data: { status: "REVERTED", revertedAt: new Date() } });
+    return this.get(importId, actor);
+  }
+
+  /** Vuelve las ofertas a la foto tomada antes de aplicar (revertir, o una carga que falló a mitad). */
+  private async restoreSnapshot(record: SupplierListImport, snapshot: { level: string; rows: SerializedOffer[] }) {
+    if (!snapshot || !Array.isArray(snapshot.rows)) throw new Error("sin foto previa");
     if (record.level === "BASE") {
       const keep = new Set(snapshot.rows.map((r) => r.externalId));
       await this.prisma.$transaction([
@@ -604,8 +652,6 @@ export class ListImportService {
         }),
       ]);
     }
-    await this.prisma.supplierListImport.update({ where: { id: importId }, data: { status: "REVERTED", revertedAt: new Date() } });
-    return this.get(importId, actor);
   }
 
   // ---------- Lecturas ----------

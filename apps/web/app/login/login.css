@@ -225,3 +225,67 @@
   .lgn__wrap { padding: 1.5rem 1.1rem 1.25rem; gap: 1.5rem; }
   .lgn__card { padding: 1.35rem; }
 }
+
+/* Contraseña: etiqueta con "¿Olvidaste…?" a la derecha, y ojo para mostrar. */
+.lgn__label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+.lgn__label-row .lnd-label { margin-bottom: 0; }
+.lgn__forgot,
+.lgn__inline {
+  font-size: 0.74rem;
+  color: var(--mist);
+  text-decoration: none;
+  border-bottom: 1px solid rgb(191 210 255 / 0.35);
+  transition: color 160ms ease, border-color 160ms ease;
+  white-space: nowrap;
+}
+.lgn__forgot:hover,
+.lgn__inline:hover { color: var(--ember); border-color: var(--ember); }
+.lgn__inline { font-size: inherit; color: inherit; border-color: currentColor; font-weight: 600; }
+
+.lgn__pass { position: relative; display: block; }
+.lgn__pass .lnd-input { padding-right: 2.6rem; width: 100%; }
+.lgn__eye {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  padding: 0.3rem;
+  border: 0;
+  background: none;
+  color: var(--fg-faint);
+  cursor: pointer;
+  border-radius: 4px;
+}
+.lgn__eye:hover { color: var(--fg); }
+.lgn__eye:focus-visible { outline: 2px solid var(--mist); outline-offset: 1px; }
+
+/* La última vez entró con Google: el botón va primero y con un recordatorio. */
+.lgn__google-first { display: flex; flex-direction: column; gap: 0.55rem; }
+.lgn__last {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6fe0b0;
+  text-align: center;
+}
+.lgn__form--tight { margin-top: 0; }
+
+.lgn__steps {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+.lgn__steps span {
+  height: 3px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--hair);
+}
+.lgn__steps span.is-on { background: var(--ember); }

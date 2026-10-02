@@ -8,6 +8,7 @@ import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
+import type { FxMarked } from "@/lib/fx";
 
 interface Props {
   product?: TaxableProduct | ProductDTO;
@@ -52,11 +53,11 @@ export default function PriceTag({
     qty
   );
   const displayUsd = shown.displayUsd;
-  const { amount } = convert(displayUsd);
-  const primary = currency === "USD" ? formatUSD(amount) : formatARS(amount);
-  const secondary = currency === "USD"
-    ? formatARS(convert(displayUsd).amount)
-    : formatUSD(displayUsd);
+  // Cotizado en pesos por el proveedor: en pesos se ve su precio original.
+  const fx = (product ?? null) as FxMarked | null;
+  const pesos = (usd: number) => (fx?.sourceCurrency === "ARS" && fx.fxRate ? usd * fx.fxRate : convert(usd).amount);
+  const primary = currency === "USD" ? formatUSD(displayUsd) : formatARS(pesos(displayUsd));
+  const secondary = currency === "USD" ? formatARS(pesos(displayUsd)) : formatUSD(displayUsd);
 
   const modeBadge =
     pricing.mode === "offline"
@@ -76,7 +77,7 @@ export default function PriceTag({
             qty
           );
           const usd = sd.displayUsd;
-          return currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
+          return currency === "USD" ? formatUSD(usd) : formatARS(pesos(usd));
         })()
       : null;
 

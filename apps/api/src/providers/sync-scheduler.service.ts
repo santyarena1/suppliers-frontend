@@ -32,6 +32,10 @@ export class SyncSchedulerService {
           this.logger.warn(
             `Auto-sync ${config.provider} falló: ${err instanceof Error ? err.message : String(err)}`
           );
+          // Cuenta para el backoff aunque haya fallado antes de arrancar la corrida.
+          await this.providersService
+            .noteCronFailure(config.tenantId, config.provider as Provider, err)
+            .catch(() => undefined);
         }
       }
     } finally {

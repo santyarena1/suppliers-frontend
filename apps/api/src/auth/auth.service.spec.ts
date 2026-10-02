@@ -10,7 +10,7 @@ function makeService(opts?: {
   challenge?: Record<string, unknown> | null;
   signAsync?: jest.Mock;
   forUser?: jest.Mock;
-  mail?: { sendVerificationCode?: jest.Mock };
+  mail?: { sendVerificationCode?: jest.Mock; sendPasswordResetCode?: jest.Mock };
   google?: { verify?: jest.Mock };
 }) {
   const users = opts?.users;
@@ -44,7 +44,10 @@ function makeService(opts?: {
   };
   const jwt = { signAsync: opts?.signAsync ?? jest.fn().mockResolvedValue("nuevo.jwt") };
   const tenantContext = { forUser: opts?.forUser ?? jest.fn().mockResolvedValue(null) };
-  const mail = { sendVerificationCode: opts?.mail?.sendVerificationCode ?? jest.fn().mockResolvedValue(undefined) };
+  const mail = {
+    sendVerificationCode: opts?.mail?.sendVerificationCode ?? jest.fn().mockResolvedValue(undefined),
+    sendPasswordResetCode: opts?.mail?.sendPasswordResetCode ?? jest.fn().mockResolvedValue(undefined),
+  };
   const google = { verify: opts?.google?.verify ?? jest.fn() };
   const config = { get: jest.fn((key: string) => (key === "EMAIL_CODE_PEPPER" ? pepper : undefined)) };
   return {
@@ -277,5 +280,116 @@ describe("AuthService.loginWithGoogle", () => {
       },
     });
     await expect(service.loginWithGoogle("id-token-de-google-que-es-largo")).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe("AuthService.forgotPassword", () => {
+  it("manda el código si la cuenta existe y responde igual que si no", async () => {
+    const { service, mail, prisma } = makeService({ user: dbUser });
+    await expect(service.forgotPassword("ANA@nodo.test")).resolves.toEqual({ sent: true });
+    expect(mail.sendPasswordResetCode).toHaveBeenCalledWith("ana@nodo.test", "ana", expect.stringMatching(/^\d{6}$/));
+    expect(prisma.emailChallenge.upsert.mock.calls[0][0].create.purpose).toBe("RESET_PASSWORD");
+
+    const none = makeService({ user: null });
+    await expect(none.service.forgotPassword("nadie@nodo.test")).resolves.toEqual({ sent: true });
+    expect(none.mail.sendPasswordResetCode).not.toHaveBeenCalled();
+  });
+
+  it("cuenta desactivada: no manda nada y responde igual", async () => {
+    const { service, mail } = makeService({ user: { ...dbUser, active: false } });
+    await expect(service.forgotPassword("ana@nodo.test")).resolves.toEqual({ sent: true });
+    expect(mail.sendPasswordResetCode).not.toHaveBeenCalled();
+  });
+
+  it("con el reenvío en espera o el mail caído, la respuesta no cambia", async () => {
+    const recent = { id: "c1", lastSentAt: new Date(), attempts: 0, expiresAt: new Date(Date.now() + 60_000), codeHash: "x" };
+    const { service, mail } = makeService({ user: dbUser, challenge: recent });
+    await expect(service.forgotPassword("ana@nodo.test")).resolves.toEqual({ sent: true });
+    expect(mail.sendPasswordResetCode).not.toHaveBeenCalled();
+
+    const down = makeService({ user: dbUser, mail: { sendPasswordResetCode: jest.fn().mockRejectedValue(new Error("resend")) } });
+    await expect(down.service.forgotPassword("ana@nodo.test")).resolves.toEqual({ sent: true });
+  });
+});
+
+describe("AuthService.resetPassword", () => {
+  const challenge = (purpose: string) => ({
+    id: "c1",
+    purpose,
+    codeHash: hashEmailCode("123456", pepper),
+    attempts: 0,
+    expiresAt: new Date(Date.now() + 10 * 60_000),
+    lastSentAt: new Date(),
+  });
+
+  it("cambia la contraseña, cierra sesiones, levanta el bloqueo y entra", async () => {
+    const { service, prisma } = makeService({
+      user: { ...dbUser, failedLoginCount: 5, loginLockedUntil: new Date(Date.now() + 60_000) },
+      challenge: challenge("RESET_PASSWORD"),
+    });
+    await expect(service.resetPassword("ana@nodo.test", "123456", "nuevaClave123")).resolves.toEqual({ token: "nuevo.jwt" });
+    expect(prisma.emailChallenge.findUnique.mock.calls[0][0].where.userId_purpose.purpose).toBe("RESET_PASSWORD");
+    const data = prisma.user.update.mock.calls[0][0].data;
+    expect(data).toMatchObject({ sessionVersion: { increment: 1 }, failedLoginCount: 0, loginLockedUntil: null });
+    const argon2 = await import("argon2");
+    expect(await argon2.verify(data.passwordHash, "nuevaClave123")).toBe(true);
+    expect(prisma.emailChallenge.delete).toHaveBeenCalled();
+  });
+
+  it("una cuenta creada con Google puede crearse una contraseña", async () => {
+    const { service, prisma } = makeService({
+      user: { ...dbUser, passwordHash: null, googleId: "g1" },
+      challenge: challenge("RESET_PASSWORD"),
+    });
+    await expect(service.resetPassword("ana@nodo.test", "123456", "nuevaClave123")).resolves.toEqual({ token: "nuevo.jwt" });
+    expect(prisma.user.update.mock.calls[0][0].data.passwordHash).toEqual(expect.any(String));
+  });
+
+  it("confirma el mail si no estaba confirmado", async () => {
+    const { service, prisma } = makeService({ user: { ...dbUser, emailVerifiedAt: null }, challenge: challenge("RESET_PASSWORD") });
+    await service.resetPassword("ana@nodo.test", "123456", "nuevaClave123");
+    expect(prisma.user.update.mock.calls[0][0].data.emailVerifiedAt).toEqual(expect.any(Date));
+  });
+
+  it("un código incorrecto suma un intento y no cambia nada", async () => {
+    const { service, prisma } = makeService({ user: dbUser, challenge: challenge("RESET_PASSWORD") });
+    await expect(service.resetPassword("ana@nodo.test", "654321", "nuevaClave123")).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.emailChallenge.update).toHaveBeenCalledWith({ where: { id: "c1" }, data: { attempts: { increment: 1 } } });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("sin código de este propósito (solo el de verificar email) no sirve", async () => {
+    // findUnique por (userId, RESET_PASSWORD) no encuentra nada: el de VERIFY_EMAIL no cuenta.
+    const { service, prisma } = makeService({ user: dbUser, challenge: null });
+    await expect(service.resetPassword("ana@nodo.test", "123456", "nuevaClave123")).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("mail inexistente → mismo error que código inválido", async () => {
+    const { service } = makeService({ user: null });
+    await expect(service.resetPassword("nadie@nodo.test", "123456", "nuevaClave123")).rejects.toThrow("Código inválido o vencido");
+  });
+
+  it("cuenta desactivada no puede cambiar la contraseña", async () => {
+    const { service, prisma } = makeService({ user: { ...dbUser, active: false }, challenge: challenge("RESET_PASSWORD") });
+    await expect(service.resetPassword("ana@nodo.test", "123456", "nuevaClave123")).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("AuthService.login por email", () => {
+  it("con @ busca por email sin distinguir mayúsculas", async () => {
+    const argon2 = await import("argon2");
+    const passwordHash = await argon2.hash("password123");
+    const { service, prisma } = makeService({ user: { ...dbUser, passwordHash } });
+    await expect(service.login({ username: "ANA@Nodo.test", password: "password123" })).resolves.toEqual({ token: "nuevo.jwt" });
+    expect(prisma.user.findFirst.mock.calls[0][0].where.email).toEqual({ equals: "ana@nodo.test", mode: "insensitive" });
+  });
+
+  it("cuenta solo Google: responde con código para que la web ofrezca Google o crear contraseña", async () => {
+    const { service } = makeService({ user: { ...dbUser, passwordHash: null, googleId: "g1" } });
+    await expect(service.login({ username: "ana", password: "x" })).rejects.toMatchObject({
+      response: { code: "GOOGLE_ACCOUNT" },
+    });
   });
 });

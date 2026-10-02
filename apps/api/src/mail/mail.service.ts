@@ -45,6 +45,23 @@ export class MailService {
     await this.send({ to, subject, text, html });
   }
 
+  async sendPasswordResetCode(to: string, username: string, code: string) {
+    const subject = "Tu código para cambiar la contraseña de NODO";
+    const text =
+      `Hola ${username},\n\n` +
+      `Tu código para elegir una contraseña nueva es ${code}.\n` +
+      `Vale 15 minutos.\n\n` +
+      `Si no pediste cambiar la contraseña, ignorá este mensaje: tu cuenta sigue igual.`;
+    const html = codeHtml({
+      username,
+      code,
+      title: "Elegí una contraseña nueva",
+      intro: "Usá este código para elegir una contraseña nueva para tu cuenta.",
+      footer: "Vale 15 minutos. Si no pediste cambiar la contraseña, ignorá este mensaje: tu cuenta sigue igual.",
+    });
+    await this.send({ to, subject, text, html });
+  }
+
   async send(message: MailMessage) {
     const from = this.config.get<string>("MAIL_FROM")?.trim() || "NODO <noreply@nodo.local>";
     const resendKey = this.config.get<string>("RESEND_API_KEY")?.trim();
@@ -111,6 +128,16 @@ export class MailService {
       throw new ServiceUnavailableException("No se pudo enviar el mail");
     }
   }
+}
+
+function codeHtml(opts: { username: string; code: string; title: string; intro: string; footer: string }): string {
+  return verificationHtml(opts.username, opts.code)
+    .replace("Confirmá tu email", () => escapeHtml(opts.title))
+    .replace(
+      /Hola [^<]*Usá este código para confirmar que el mail es tuyo\. Ahí te vamos a escribir sobre tu cuenta y sobre NODO\./,
+      () => `Hola ${escapeHtml(opts.username)}. ${escapeHtml(opts.intro)}`
+    )
+    .replace("Vale 15 minutos. Si no creaste una cuenta en NODO, ignorá este mensaje.", () => escapeHtml(opts.footer));
 }
 
 function verificationHtml(username: string, code: string): string {

@@ -213,3 +213,31 @@ export function isUser(): boolean {
 export function getBrandId(): string | null {
   return getUser()?.brandId ?? null;
 }
+
+// ---------- Último método de entrada ----------
+// Solo una comodidad del navegador: si la última vez entró con Google, el login
+// le muestra Google primero; si fue con contraseña, le deja el usuario cargado.
+
+const LAST_LOGIN_KEY = "nodo:last-login";
+
+export type LastLogin = { method: "google" | "password"; identifier: string };
+
+export function getLastLogin(): LastLogin | null {
+  try {
+    const raw = localStorage.getItem(LAST_LOGIN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LastLogin>;
+    if (parsed.method !== "google" && parsed.method !== "password") return null;
+    return { method: parsed.method, identifier: typeof parsed.identifier === "string" ? parsed.identifier : "" };
+  } catch {
+    return null;
+  }
+}
+
+export function rememberLastLogin(value: LastLogin): void {
+  try {
+    localStorage.setItem(LAST_LOGIN_KEY, JSON.stringify({ method: value.method, identifier: value.identifier.slice(0, 160) }));
+  } catch {
+    // Navegador sin storage: no pasa nada.
+  }
+}

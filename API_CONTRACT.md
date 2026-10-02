@@ -20,7 +20,24 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Body / Params**: `{ idToken }` (GIS, Identity Services)
 - **Respuesta esperada**: `{ token }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: El API verifica el ID token con `GOOGLE_CLIENT_ID` (claves JWKS de Google). El front usa el mismo valor en `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; si falta, no se muestra el botón. Google confirma el mail: la cuenta nace verificada (o se vincula a una existente por email). Sin contraseña hasta que admin la resetee. Si Google no marcó `email_verified`, 401.
+- **Notas**: El API verifica el ID token con `GOOGLE_CLIENT_ID` (claves JWKS de Google). El front usa el mismo valor en `NEXT_PUBLIC_GOOGLE_CLIENT_ID`; si falta, no se muestra el botón. Google confirma el mail: la cuenta nace verificada (o se vincula a una existente por email). Sin contraseña hasta que la cree con "Olvidé mi contraseña". Si Google no marcó `email_verified`, 401. Cuenta desactivada: 401; email vinculado a otro Google: 409. La web recuerda (localStorage `nodo:last-login`) si la última entrada fue con Google y en /login lo muestra primero.
+
+### [FEATURE] Login con usuario o email
+- **Método**: POST
+- **Ruta**: /auth/login
+- **Auth**: público (Turnstile, throttle 10/min)
+- **Body / Params**: `{ username, password }` — `username` acepta el usuario o el email (con `@` se busca por email sin distinguir mayúsculas).
+- **Respuesta esperada**: `{ token }`. Cuenta creada con Google sin contraseña: **401** `{ code: "GOOGLE_ACCOUNT" }` (la web ofrece Google o "Crear una contraseña").
+- **Estado**: IMPLEMENTADO
+
+### [FEATURE] Olvidé mi contraseña
+- **Método**: POST
+- **Ruta**: /auth/forgot-password · /auth/reset-password
+- **Auth**: público (Turnstile; throttle 5/min forgot, 10/min reset)
+- **Body / Params**: forgot `{ email }` · reset `{ email, code, password }` (código de 6 dígitos; contraseña 8–128)
+- **Respuesta esperada**: forgot `{ sent: true }` siempre (exista o no la cuenta, desactivada, en espera de reenvío o con el mail caído) · reset `{ token }` para entrar directo.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Código propio (`purpose = RESET_PASSWORD`): el de verificar email no sirve y viceversa. 15 minutos, 5 intentos, reenvío cada 60 s. Al cambiarla: sube `sessionVersion` (cierra las otras sesiones), levanta el bloqueo por intentos y confirma el mail si no lo estaba. Sirve para que una cuenta creada con Google tenga contraseña. Front: `/forgot-password` (link en /login).
 
 ### [FEATURE] Envío de mail a una cuenta (admin)
 - **Método**: POST

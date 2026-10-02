@@ -20,10 +20,12 @@ import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { GoogleTokenVerifier } from "./google-token.verifier";
 import { isLocked, lockForFailure, minutesLeft } from "./login-lockout";
+import { forgetSession } from "./jwt.strategy";
 import {
   CODE_TTL_MS,
   MAX_ATTEMPTS,
   RESEND_COOLDOWN_MS,
+  RESET_PASSWORD,
   VERIFY_EMAIL,
   emailCodesEqual,
   generateEmailCode,
@@ -93,10 +95,17 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { username: dto.username } });
+    // Usuario o email: con "@" se busca por email (sin distinguir mayúsculas).
+    const identifier = dto.username.trim();
+    const user = identifier.includes("@")
+      ? await this.prisma.user.findFirst({ where: { email: { equals: identifier.toLowerCase(), mode: "insensitive" } } })
+      : await this.prisma.user.findUnique({ where: { username: identifier } });
     if (!user) throw new UnauthorizedException("Usuario o contraseña incorrectos");
     if (!user.passwordHash) {
-      throw new UnauthorizedException("Esta cuenta entra con Google");
+      throw new UnauthorizedException({
+        message: "Esta cuenta entra con Google. Usá el botón de Google o creá una contraseña.",
+        code: "GOOGLE_ACCOUNT",
+      });
     }
 
     // Bloqueo por cuenta: frena la prueba de contraseñas aunque cambie la IP.
@@ -170,6 +179,68 @@ export class AuthService {
     if (!user || user.emailVerifiedAt) return { sent: true };
     await this.issueVerificationCode(user.id, user.email, user.username);
     return { sent: true };
+  }
+
+  /**
+   * Manda un código para elegir contraseña nueva (también sirve para que una
+   * cuenta creada con Google tenga contraseña). Siempre responde lo mismo: no
+   * se puede usar para averiguar qué mails están registrados.
+   */
+  async forgotPassword(email: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: email.trim().toLowerCase(), mode: "insensitive" } },
+    });
+    if (!user || !user.active) return { sent: true };
+    try {
+      await this.issueCode(user.id, user.email, RESET_PASSWORD, (code) =>
+        this.mail.sendPasswordResetCode(user.email, user.username, code)
+      );
+    } catch (err) {
+      // Cooldown o mail caído: la respuesta no cambia, queda en el log.
+      this.logger.warn(`No se mandó el código de contraseña a ${user.id}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { sent: true };
+  }
+
+  async resetPassword(email: string, code: string, password: string) {
+    const invalid = () => new BadRequestException("Código inválido o vencido");
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: email.trim().toLowerCase(), mode: "insensitive" } },
+    });
+    if (!user) throw invalid();
+
+    const challenge = await this.prisma.emailChallenge.findUnique({
+      where: { userId_purpose: { userId: user.id, purpose: RESET_PASSWORD } },
+    });
+    if (!challenge || challenge.attempts >= MAX_ATTEMPTS || challenge.expiresAt.getTime() < Date.now()) {
+      throw invalid();
+    }
+    const expected = hashEmailCode(code.trim(), this.pepper());
+    if (!emailCodesEqual(challenge.codeHash, expected)) {
+      await this.prisma.emailChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
+      throw invalid();
+    }
+    this.assertAccountUsable(user);
+
+    const passwordHash = await argon2.hash(password);
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          // Contraseña nueva: se cierran las otras sesiones y se levanta el bloqueo.
+          sessionVersion: { increment: 1 },
+          failedLoginCount: 0,
+          loginLockedUntil: null,
+          // Recibió el código en ese mail: el mail es suyo.
+          ...(user.emailVerifiedAt ? {} : { emailVerifiedAt: new Date() }),
+        },
+      }),
+      this.prisma.emailChallenge.delete({ where: { id: challenge.id } }),
+    ]);
+    forgetSession(user.id);
+    const token = await this.jwt.signAsync(await this.payloadFor(updated));
+    return { token };
   }
 
   async loginWithGoogle(idToken: string) {
@@ -360,8 +431,13 @@ export class AuthService {
   }
 
   private async issueVerificationCode(userId: string, email: string, username: string) {
+    await this.issueCode(userId, email, VERIFY_EMAIL, (code) => this.mail.sendVerificationCode(email, username, code));
+  }
+
+  /** Código de 6 dígitos por mail para un propósito, con vencimiento, intentos y espera entre reenvíos. */
+  private async issueCode(userId: string, _email: string, purpose: string, send: (code: string) => Promise<void>) {
     const existing = await this.prisma.emailChallenge.findUnique({
-      where: { userId_purpose: { userId, purpose: VERIFY_EMAIL } },
+      where: { userId_purpose: { userId, purpose } },
     });
     if (existing && Date.now() - existing.lastSentAt.getTime() < RESEND_COOLDOWN_MS) {
       throw new BadRequestException({
@@ -378,11 +454,11 @@ export class AuthService {
       lastSentAt: new Date(),
     };
     await this.prisma.emailChallenge.upsert({
-      where: { userId_purpose: { userId, purpose: VERIFY_EMAIL } },
-      create: { userId, purpose: VERIFY_EMAIL, ...data },
+      where: { userId_purpose: { userId, purpose } },
+      create: { userId, purpose, ...data },
       update: data,
     });
-    await this.mail.sendVerificationCode(email, username, code);
+    await send(code);
   }
 
   private pepper(): string {

@@ -356,44 +356,26 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     intro:
       "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Usuario y contraseña de la API (createToken) traen el catálogo con impuestos y stock por depósito — pedilos a tu vendedor de Solution Box. Mail y contraseña de www.solutionbox.com.ar habilitan pedidos, historial y facturas. Podés cargar uno, el otro, o los dos.",
+      "Usá el mismo mail y contraseña con los que entrás a www.solutionbox.com.ar. Con eso NODO trae el catálogo con tus precios, stock e IVA, y habilita pedidos, historial y facturas.",
     portalUrl: "https://www.solutionbox.com.ar",
     portalLabel: "www.solutionbox.com.ar",
     fields: [
       {
-        key: "api_user",
-        label: "Usuario API",
-        type: "text",
-        required: false,
-        placeholder: "Usuario de la API (createToken)",
-        help: "Catálogo con impuestos por producto y stock por depósito. Te lo da Solution Box.",
-        aliases: ["apiUser", "apiUsuario"],
-      },
-      {
-        key: "api_password",
-        label: "Contraseña API",
-        type: "password",
-        required: false,
-        placeholder: "Contraseña de la API",
-        aliases: ["apiPassword", "apiClave"],
-      },
-      {
         key: "email",
         label: "Mail del portal",
         type: "text",
-        required: false,
-        placeholder: "Mail de tu usuario en solutionbox.com.ar",
-        help: "Para pedidos, historial y facturas.",
-        aliases: ["user", "username", "usuario"],
+        required: true,
+        placeholder: "Mail con el que entrás a solutionbox.com.ar",
+        aliases: ["user", "username", "usuario", "api_user"],
         autoComplete: "username",
       },
       {
         key: "password",
         label: "Contraseña del portal",
         type: "password",
-        required: false,
+        required: true,
         placeholder: "Contraseña del sitio",
-        aliases: ["pass"],
+        aliases: ["pass", "api_password"],
         autoComplete: "current-password",
       },
     ],
@@ -526,18 +508,12 @@ export function validateCredentialValues(
   }
 
   if (provider === "SOLUTION_BOX") {
-    const apiUser = (values.api_user ?? "").trim();
-    const apiPassword = (values.api_password ?? "").trim();
+    // El catálogo y los pedidos salen del portal: hace falta el mail y la contraseña del sitio.
     const email = (values.email ?? "").trim();
     const password = (values.password ?? "").trim();
-    const apiComplete = apiUser && apiPassword;
-    const apiPartial = (apiUser || apiPassword) && !apiComplete;
-    const webComplete = email && password;
-    const webPartial = (email || password) && !webComplete;
-    if (apiPartial) return "Cargá el usuario y la contraseña de la API juntos.";
-    if (webPartial) return "Cargá el mail y la contraseña del portal juntos.";
-    if (apiComplete || webComplete) return null;
-    return "Cargá usuario y contraseña de la API, o mail y contraseña del portal.";
+    if (email && password) return null;
+    if (email || password) return "Cargá el mail y la contraseña del portal juntos.";
+    return "Cargá el mail y la contraseña con los que entrás a solutionbox.com.ar.";
   }
 
   if (provider === "ELIT") {

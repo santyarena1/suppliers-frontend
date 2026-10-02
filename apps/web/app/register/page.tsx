@@ -6,6 +6,7 @@ import Link from "next/link";
 import { authApi, apiFailure } from "@/lib/api";
 import TurnstileWidget from "@/components/TurnstileWidget";
 import { enterAuthenticated } from "@/lib/enter-session";
+import { rememberLastLogin } from "@/lib/auth";
 import { ArrowLeft, ArrowRight, AlertCircle, Loader2 } from "lucide-react";
 import NodoLogo from "@/components/NodoLogo";
 import NodoWordmark from "@/components/NodoWordmark";
@@ -47,6 +48,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const res = await authApi.google(idToken);
+      rememberLastLogin({ method: "google", identifier: "" });
       await enterAuthenticated(res.data.token, "");
     } catch (err: unknown) {
       setError(apiFailure(err).message || "No se pudo entrar con Google.");

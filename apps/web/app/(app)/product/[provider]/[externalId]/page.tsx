@@ -44,6 +44,7 @@ import {
 import ProductBuyActions from "@/components/ProductBuyActions";
 import { OwnStoreProductCompare } from "@/components/OwnStoreCompare";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
+import ArsPriceHint from "@/components/ArsPriceHint";
 
 export default function ProductPage({ params }: { params: Promise<{ provider: string; externalId: string }> }) {
   const { provider, externalId } = use(params);
@@ -174,6 +175,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
 
   function money(usd: number) {
     if (currency === "USD") return formatUSD(usd);
+    // Cotizado en pesos por el proveedor: en pesos se ve su precio original.
+    if (product?.sourceCurrency === "ARS" && product.fxRate) return formatARS(usd * product.fxRate);
     return formatARS(convert(usd).amount);
   }
 
@@ -321,7 +324,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         {!unpriced && qty > 1 ? ` · ${qty} u.` : ""}
                       </p>
                       <span className="pp__amount">{unpriced ? "Sin precio" : money(displayUSD)}</span>
-                      {!unpriced && currency === "ARS" && currentRate && (
+                      {product && (product.sourceCurrency === "ARS" || product.fxPending) && <ArsPriceHint product={product} />}
+                      {!unpriced && currency === "ARS" && currentRate && product?.sourceCurrency !== "ARS" && (
                         <p className="pp__sub">
                           Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
                         </p>

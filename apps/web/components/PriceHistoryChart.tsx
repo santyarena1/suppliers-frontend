@@ -18,6 +18,7 @@ import { usePrefs } from "@/lib/prefs";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { displayAmountFromPricing } from "@/lib/display-price";
+import { getArsPerUsd, normalizeProductFx } from "@/lib/fx";
 import type { PurchasePolicy } from "@/lib/purchase";
 
 type RangePreset = "30d" | "90d" | "180d" | "365d" | "all" | "custom";
@@ -134,12 +135,19 @@ export default function PriceHistoryChart({
   const displayPoints = useMemo(() => {
     return points
       .map((p) => {
-        const snapshot: ProductDTO = {
-          ...product,
-          price: p.price,
-          finalPrice: p.finalPrice,
-          currency: p.currency ?? product.currency,
-        };
+        // El historial viene en la moneda del proveedor: si era en pesos, se pasa a USD
+        // con la misma cotización que el precio actual (lib/fx.ts).
+        const snapshot: ProductDTO = normalizeProductFx(
+          {
+            ...product,
+            sourceCurrency: null,
+            fxRate: null,
+            price: p.price,
+            finalPrice: p.finalPrice,
+            currency: p.currency ?? product.sourceCurrency ?? product.currency,
+          },
+          product.fxRate ?? getArsPerUsd()
+        );
         const pricing = purchaseLinePricing(snapshot, policy, priceMode, 1);
         const shown = displayAmountFromPricing(pricing, {
           withIva,

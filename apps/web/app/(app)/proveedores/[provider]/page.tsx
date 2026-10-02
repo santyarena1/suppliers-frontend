@@ -35,18 +35,19 @@ import DistecnaAccountPanel from "@/components/DistecnaAccountPanel";
 import PolytechAccountPanel from "@/components/PolytechAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import DisconnectProviderCard from "@/components/DisconnectProviderCard";
+import SyncHealthBanner, { type SyncHealth } from "@/components/SyncHealthBanner";
 import PlanGate from "@/components/subscription/PlanGate";
 import {
   AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
   Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
 } from "lucide-react";
 
-const MISSING_ACTION_LABELS: Record<MissingProductAction, string> = {
-  KEEP: "No hacer nada",
-  OUT_OF_STOCK: "Marcar sin stock",
-  HIDE: "Ocultar del catálogo",
-  DELETE: "Eliminar de nuestra base",
+/** Lo que el proveedor dejó de mandar nunca queda a la vista con el precio viejo. */
+const MISSING_ACTION_LABELS: Partial<Record<MissingProductAction, string>> = {
+  HIDE: "Dejar de mostrarlo (vuelve si lo manda de nuevo)",
+  DELETE: "Borrarlo de nuestra base",
 };
+const shownMissingAction = (a: MissingProductAction): MissingProductAction => (a === "DELETE" ? "DELETE" : "HIDE");
 
 const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   KEEP: "Mostrar igual",
@@ -455,6 +456,18 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
           ) : (
             <div className="flex-1 overflow-y-auto">
               <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-5">
+                {!listPriced && (
+                  <SyncHealthBanner
+                    health={(status as { health?: SyncHealth | null } | null)?.health}
+                    providerName={providerLabel(provider)}
+                    syncing={syncing}
+                    canManage={canManage}
+                    onSync={() => void handleSync()}
+                    onOpenAccount={() => setTab("credentials")}
+                    onOpenSyncSettings={() => setTab("sync")}
+                  />
+                )}
+
                 {/* Stats */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <StatCard label="En catálogo" value={status?.total} icon={Boxes} loading={loadingStatus} />
@@ -764,16 +777,16 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           <div>
                             <label className="block text-xs font-medium text-surface-400 mb-1.5">Producto que dejó de venir en la última sync</label>
                             <select
-                              value={config.missingProductAction}
+                              value={shownMissingAction(config.missingProductAction)}
                               onChange={(e) => setConfig({ ...config, missingProductAction: e.target.value as MissingProductAction })}
                               className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
                             >
-                              {(Object.keys(MISSING_ACTION_LABELS) as MissingProductAction[]).map((k) => (
+                              {(["HIDE", "DELETE"] as MissingProductAction[]).map((k) => (
                                 <option key={k} value={k}>{MISSING_ACTION_LABELS[k]}</option>
                               ))}
                             </select>
                             <p className="text-[11px] text-surface-500 mt-1">
-                              Si este distribuidor deja de mandar un producto: no hacer nada, marcarlo sin stock, ocultarlo o borrarlo.
+                              Si este distribuidor deja de mandar un producto, no se sigue mostrando con un precio viejo.
                             </p>
                           </div>
                         </div>

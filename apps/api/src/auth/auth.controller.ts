@@ -9,6 +9,8 @@ import { RegisterDto } from "./dto/register.dto";
 import { VerifyEmailDto } from "./dto/verify-email.dto";
 import { ResendVerificationDto } from "./dto/resend-verification.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { TurnstileGuard } from "./turnstile.guard";
 
 @Controller("auth")
@@ -48,6 +50,26 @@ export class AuthController {
   @Post("resend-verification")
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto.email);
+  }
+
+  /** Manda un código para elegir contraseña nueva. Responde lo mismo exista o no la cuenta. */
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(TurnstileGuard)
+  @Post("forgot-password")
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  /** Código + contraseña nueva: cambia la clave, cierra las otras sesiones y entra. */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(TurnstileGuard)
+  @Post("reset-password")
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.email, dto.code, dto.password);
   }
 
   @Public()

@@ -5,6 +5,7 @@ import { orgCartApi, ProductDTO } from "@/lib/api";
 import { SESSION_EVENT, getImpersonator, getTenant, getUser } from "@/lib/auth";
 import { subscribeChatEvents } from "@/components/chat/ChatRealtime";
 import { extractTaxLines } from "@/lib/tax";
+import { getArsPerUsd, needsFx, normalizeProductFx, onArsPerUsd } from "@/lib/fx";
 
 export type CartChannel = "online" | "offline";
 
@@ -191,6 +192,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [schemes, setSchemes] = useState<CartScheme[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [fxTick, setFxTick] = useState(0);
   const skipPush = useRef(true);
   const saveTimer = useRef<number | null>(null);
   // El carrito es de quien está logueado: si cambia la sesión sin recargar la
@@ -198,6 +200,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [sessionUserId, setSessionUserId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : getUser()?.id ?? null
   );
+
+  // Productos en pesos guardados antes de pasar el catálogo a USD (lib/fx.ts):
+  // se corrigen apenas hay cotización, así el total no los suma como dólares.
+  useEffect(() => onArsPerUsd(() => setFxTick((t) => t + 1)), []);
+  useEffect(() => {
+    if (!getArsPerUsd() || !items.some(needsFx)) return;
+    setItems((prev) => prev.map((it) => normalizeProductFx(it)));
+  }, [items, fxTick]);
 
   useEffect(() => {
     const sync = () => setSessionUserId(getUser()?.id ?? null);

@@ -83,6 +83,16 @@ function stockFromTextOrNumber(stock: unknown, amountStock: unknown): { stock?: 
   return { stock: qty, stockStatus: status };
 }
 
+/**
+ * Código de fabricante limpio: New Bytes manda "-" (o espacios) cuando no lo tiene,
+ * y eso juntaba productos distintos como si fueran el mismo.
+ */
+export function cleanCode(raw: unknown): string | undefined {
+  const text = asString(raw)?.trim();
+  if (!text || /^[-_.\s/]+$/.test(text)) return undefined;
+  return text;
+}
+
 /** Mapeo columna-a-columna del CSV de lista de precios. */
 export function mapCsvProduct(r: NbCsvRow): NormalizedProduct {
   const ivaRaw = asString(r.IVA)?.replace("%", "").trim();
@@ -91,8 +101,8 @@ export function mapCsvProduct(r: NbCsvRow): NormalizedProduct {
   const id = asString(r.CODIGO) || "";
   return {
     externalId: id,
-    sku: asString(r["ID FABRICANTE"]),
-    partNumber: asString(r["ID FABRICANTE"]),
+    sku: cleanCode(r["ID FABRICANTE"]),
+    partNumber: cleanCode(r["ID FABRICANTE"]),
     name,
     brand: asString(r.MARCA),
     category: asString(r.CATEGORIA_USUARIO) || asString(r.CATEGORIA),
@@ -131,8 +141,8 @@ export function mapJsonProduct(p: NbJsonProduct): NormalizedProduct | null {
   const price = p.price ?? undefined;
   return {
     externalId: id,
-    sku: asString(p.sku),
-    partNumber: asString(p.sku),
+    sku: cleanCode(p.sku),
+    partNumber: cleanCode(p.sku),
     ean: asString(p.ean),
     name,
     brand: asString(p.brand),

@@ -60,12 +60,20 @@ export async function interruptStaleCatalogSyncRuns(
   });
 }
 
+/**
+ * Al arrancar el servidor: cierra las corridas que ya no laten. Con olderThanMs
+ * respeta las que tienen latido reciente (otra réplica en un deploy rolling).
+ */
 export async function interruptRunningCatalogSyncRuns(
   prisma: PrismaService,
-  message = "Interrumpida por reinicio del servidor"
+  opts: { olderThanMs?: number; message?: string } = {}
 ) {
+  const message = opts.message ?? "Interrumpida por reinicio del servidor";
   await prisma.catalogSyncRun.updateMany({
-    where: { status: "RUNNING" },
+    where: {
+      status: "RUNNING",
+      ...(opts.olderThanMs ? { heartbeatAt: { lt: new Date(Date.now() - opts.olderThanMs) } } : {}),
+    },
     data: { status: "ERROR", finishedAt: new Date(), errorMessage: message },
   });
 }
@@ -81,15 +89,26 @@ export async function startCatalogSyncRun(
   });
   if (live) throw new CatalogSyncAlreadyRunningError();
 
-  const run = await prisma.catalogSyncRun.create({
-    data: {
-      tenantId: opts.tenantId,
-      provider: opts.provider,
-      source: opts.source,
-      expectedTotal: opts.expectedTotal,
-      status: "RUNNING",
-    },
-  });
+  // Dos arranques a la vez pasan el chequeo de arriba: el índice único parcial
+  // (una sola RUNNING por organización y proveedor) frena al segundo.
+  let run: { id: string };
+  try {
+    run = await prisma.catalogSyncRun.create({
+      data: {
+        tenantId: opts.tenantId,
+        provider: opts.provider,
+        source: opts.source,
+        expectedTotal: opts.expectedTotal,
+        status: "RUNNING",
+      },
+      select: { id: true },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      throw new CatalogSyncAlreadyRunningError();
+    }
+    throw err;
+  }
   return new CatalogSyncProgress(prisma, run.id);
 }
 

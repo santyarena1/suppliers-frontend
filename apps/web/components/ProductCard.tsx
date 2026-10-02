@@ -31,6 +31,7 @@ import SalePricePanel from "./SalePricePanel";
 import { OwnStorePriceHint } from "./OwnStoreCompare";
 import ProductSyncedAt from "./ProductSyncedAt";
 import { ListOverdueHint } from "@/components/list-import/ListFreshnessHints";
+import ArsPriceHint from "./ArsPriceHint";
 
 import { providerLabel } from "@/components/ProviderBadge";
 /**
@@ -136,7 +137,11 @@ export default function ProductCard({
   const showingScheme = pricing.adjusted && pricing.mode === "scheme";
 
   /** Todo importe de la tarjeta pasa por acá: una sola moneda, la elegida. */
-  const money = (usd: number) => (currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount));
+  // En pesos, un precio que el proveedor dio en pesos se ve exacto (su cotización, no la de hoy).
+  const money = (usd: number) =>
+    currency === "USD"
+      ? formatUSD(usd)
+      : formatARS(product.sourceCurrency === "ARS" && product.fxRate ? usd * product.fxRate : convert(usd).amount);
 
   const primary = money(displayUsd);
   const ship = shipping ? shippingLine(shipping, shippingIncluded, money) : null;
@@ -369,6 +374,7 @@ export default function ProductCard({
       <div className="pc__sync pc-mono">
         <ProductSyncedAt syncedAt={product.syncedAt} className="pc__sync-line" compact />
         <ListOverdueHint provider={product.provider} className="pc__sync-warn" />
+        <ArsPriceHint product={product} className="pc__sync-warn" />
       </div>
     </>
   );
@@ -609,6 +615,7 @@ export default function ProductCard({
         <div className="pc__sync pc-mono">
           <ProductSyncedAt syncedAt={product.syncedAt} className="pc__sync-line" />
           <ListOverdueHint provider={product.provider} className="pc__sync-warn" />
+          <ArsPriceHint product={product} className="pc__sync-warn" />
         </div>
       </div>
 

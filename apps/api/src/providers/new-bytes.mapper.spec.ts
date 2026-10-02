@@ -337,3 +337,16 @@ describe("new-bytes-client helpers", () => {
     });
   });
 });
+
+describe("cleanCode (código de fabricante de New Bytes)", () => {
+  it("descarta '-', vacíos y separadores sueltos", () => {
+    const { cleanCode } = jest.requireActual("./new-bytes.mapper") as typeof import("./new-bytes.mapper");
+    expect(cleanCode("-")).toBeUndefined();
+    expect(cleanCode(" - ")).toBeUndefined();
+    expect(cleanCode("")).toBeUndefined();
+    expect(cleanCode("   ")).toBeUndefined();
+    expect(cleanCode("--")).toBeUndefined();
+    expect(cleanCode(" ABC-123 ")).toBe("ABC-123");
+    expect(cleanCode("SSD")).toBe("SSD");
+  });
+});

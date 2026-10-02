@@ -1,11 +1,38 @@
 import { BadGatewayException, BadRequestException } from "@nestjs/common";
-import axios, { type AxiosInstance } from "axios";
+import axios, { type AxiosInstance, type AxiosResponse } from "axios";
 import { asRecord, asString, axiosErrorMessage } from "./json-value";
 
 export const SOLUTION_BOX_SITE = "https://www.solutionbox.com.ar";
 export const SOLUTION_BOX_API = `${SOLUTION_BOX_SITE}/api`;
 export const SOLUTION_BOX_IMAGE_BASE = `${SOLUTION_BOX_SITE}/articulos/thumbs/`;
 const TIMEOUT_MS = 60_000;
+/** Esperas ante un 429 dentro de la misma corrida (después se corta con error). */
+export const SOLUTION_BOX_RETRY_DELAYS_MS = [2_000, 5_000, 15_000, 30_000];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** `Retry-After` en segundos (acotado a 60 s), o la espera por defecto del intento. */
+export function retryDelayMs(retryAfter: unknown, attempt: number, delays = SOLUTION_BOX_RETRY_DELAYS_MS): number {
+  const seconds = Number(Array.isArray(retryAfter) ? retryAfter[0] : retryAfter);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds, 60) * 1000;
+  return delays[Math.min(attempt, delays.length - 1)];
+}
+
+/**
+ * ¿El portal rechazó el mail o la contraseña? Solo 401/403, o un 400 cuyo mensaje
+ * lo dice. Un 400 cualquiera, un 429 o un 5xx son problemas del portal: antes se
+ * informaban como "contraseña incorrecta" y confundían al comercio.
+ */
+export function isSolutionBoxBadLogin(status: number, body: unknown): boolean {
+  if (status === 401 || status === 403) return true;
+  if (status !== 400) return false;
+  const rec = asRecord(body);
+  const text = [asString(rec?.message), asString(rec?.error), asString(rec?.msg), typeof body === "string" ? body : undefined]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return /contrase|password|credencial|usuario|incorrect|inv[aá]lid/.test(text);
+}
 
 export interface SolutionBoxCredentials {
   email?: string;
@@ -13,8 +40,10 @@ export interface SolutionBoxCredentials {
 }
 
 export function parseSolutionBoxCredentials(raw: Record<string, string>): SolutionBoxCredentials {
-  const email = (raw.email || raw.user || raw.username || raw.usuario || "").trim();
-  const password = (raw.password || raw.pass || "").trim();
+  // api_user/api_password: lo que pedía el formulario anterior. El portal es el único
+  // acceso que se usa, así que se prueban como mail y contraseña del sitio.
+  const email = (raw.email || raw.user || raw.username || raw.usuario || raw.api_user || "").trim();
+  const password = (raw.password || raw.pass || raw.api_password || "").trim();
   return { email: email || undefined, password: password || undefined };
 }
 
@@ -117,15 +146,18 @@ export class SolutionBoxWebClient {
     }
     let token: string | undefined;
     try {
-      const res = await axios.post(`${SOLUTION_BOX_API}/session/login`, { email: creds.email, password: creds.password }, {
-        timeout: TIMEOUT_MS,
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        validateStatus: (s) => s < 500,
-      });
-      if (res.status === 401 || res.status === 403 || res.status === 400) {
+      const res = await withRateLimitRetry(() =>
+        axios.post(`${SOLUTION_BOX_API}/session/login`, { email: creds.email, password: creds.password }, {
+          timeout: TIMEOUT_MS,
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          validateStatus: (s) => s < 500,
+        })
+      );
+      if (isSolutionBoxBadLogin(res.status, res.data)) {
         throw new BadRequestException("Mail o contraseña de Solution Box incorrectos");
       }
-      if (res.status >= 400) throw new BadGatewayException(`Solution Box login → HTTP ${res.status}`);
+      if (res.status === 429) throw new BadGatewayException("Solution Box limitó los pedidos (429): se reintenta en la próxima sincronización");
+      if (res.status >= 400) throw new BadGatewayException(`Solution Box no dejó iniciar sesión (HTTP ${res.status}). Suele ser un problema momentáneo del portal.`);
       const rec = asRecord(res.data) ?? {};
       token = asString(rec.token) ?? asString(asRecord(rec.data)?.token) ?? asString(rec.accessToken);
     } catch (err) {
@@ -150,9 +182,9 @@ export class SolutionBoxWebClient {
 
   async get<T = unknown>(path: string, params?: Record<string, unknown>): Promise<T> {
     try {
-      const res = await this.http.get<T>(path, { params });
+      const res = await withRateLimitRetry(() => this.http.get<T>(path, { params }));
       if (res.status === 401) throw new BadGatewayException("La sesión de Solution Box expiró");
-      if (res.status === 429) throw new BadGatewayException("Solution Box limitó los pedidos (429): esperá unos minutos");
+      if (res.status === 429) throw new BadGatewayException("Solution Box limitó los pedidos (429): se reintenta en la próxima sincronización");
       if (res.status >= 400) throw new BadGatewayException(`Solution Box ${path} → HTTP ${res.status}`);
       return res.data;
     } catch (err) {
@@ -163,7 +195,7 @@ export class SolutionBoxWebClient {
 
   async post<T = unknown>(path: string, body: unknown, params?: Record<string, unknown>): Promise<{ status: number; data: T }> {
     try {
-      const res = await this.http.post<T>(path, body, { params });
+      const res = await withRateLimitRetry(() => this.http.post<T>(path, body, { params }));
       if (res.status === 401) throw new BadGatewayException("La sesión de Solution Box expiró");
       if (res.status === 429) throw new BadGatewayException("Solution Box limitó los pedidos (429): esperá unos minutos");
       return { status: res.status, data: res.data };
@@ -191,4 +223,22 @@ export class SolutionBoxWebClient {
       throw new BadGatewayException(`No se pudo descargar el documento de Solution Box: ${axiosErrorMessage(err, "error")}`);
     }
   }
+}
+
+/**
+ * Repite el pedido cuando el portal responde 429, con las esperas de
+ * `SOLUTION_BOX_RETRY_DELAYS_MS` (o su `Retry-After`). Si sigue limitado,
+ * devuelve la última respuesta para que el llamador corte con un mensaje claro.
+ */
+export async function withRateLimitRetry<T>(
+  send: () => Promise<AxiosResponse<T>>,
+  delays: number[] = SOLUTION_BOX_RETRY_DELAYS_MS,
+  wait: (ms: number) => Promise<unknown> = sleep
+): Promise<AxiosResponse<T>> {
+  let res = await send();
+  for (let attempt = 0; res.status === 429 && attempt < delays.length; attempt++) {
+    await wait(retryDelayMs(res.headers?.["retry-after"], attempt, delays));
+    res = await send();
+  }
+  return res;
 }

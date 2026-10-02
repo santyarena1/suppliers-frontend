@@ -38,6 +38,15 @@ export function currencyFromSign(sign: unknown, moneda?: unknown): string | unde
   return undefined;
 }
 
+/** "10.5 %" / "21%" / 21 → 10.5 / 21. Vacío o raro → undefined (no se inventa alícuota). */
+export function parsePercent(raw: unknown): number | undefined {
+  if (typeof raw === "number") return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : undefined;
+  const text = asString(raw)?.replace("%", "").replace(",", ".").trim();
+  if (!text) return undefined;
+  const value = Number(text);
+  return Number.isFinite(value) && value >= 0 && value <= 100 ? value : undefined;
+}
+
 /** "7.6 Kg" → { value: 7.6, unit: "Kg" } */
 export function parseMeasure(raw: unknown): { value: number; unit?: string } | undefined {
   const text = asString(raw)?.trim();
@@ -56,8 +65,9 @@ function firstImage(raw: unknown): string | undefined {
 
 /**
  * Artículo de /api/articulos/info/categoria/:code. `Precio` es neto (la tienda
- * muestra "no incluye IVA") y solo viene cuando hay stock; la alícuota no se
- * informa por producto, sale del checkout.
+ * muestra "no incluye IVA") y solo viene cuando hay stock. La alícuota llega por
+ * producto en `Tasa_IVA` ("10.5 %", "21 %"); si no viene, queda sin informar.
+ * La moneda sale de `Moneda_Signo`/`Moneda`: hay artículos en pesos.
  */
 export function mapSolutionBoxArticle(raw: unknown, category: SolutionBoxCategory | null): NormalizedProduct | null {
   const rec = asRecord(raw);
@@ -82,6 +92,7 @@ export function mapSolutionBoxArticle(raw: unknown, category: SolutionBoxCategor
     subcategory: category?.parentName ? category.name : undefined,
     price: price != null && price > 0 ? price : undefined,
     currency: price != null && price > 0 ? currencyFromSign(rec.Moneda_Signo, rec.Moneda) : undefined,
+    ivaPercent: parsePercent(rec.Tasa_IVA),
     stock: stock != null ? Math.max(0, Math.trunc(stock)) : undefined,
     imageUrl: firstImage(rec.Imagenes),
     productUrl: `${SOLUTION_BOX_SITE}/detalle?sku=${encodeURIComponent(alias)}`,

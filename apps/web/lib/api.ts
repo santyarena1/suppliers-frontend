@@ -3,6 +3,7 @@ import { SESSION_EVENT, getToken, isTokenExpired, persistAuthCookie, stopImperso
 import type { PaymentOption } from "./payment-options";
 import type { ShippingMethod } from "./shipping";
 import { HUMAN_ROUTES, takeHumanToken } from "./turnstile";
+import { isCatalogUrl, normalizeCatalogPayload, payloadNeedsFx, waitArsPerUsd } from "./fx";
 import type {
   AdminSubscriptionDetail,
   AdminSubscriptionFilter,
@@ -23,7 +24,7 @@ const api = axios.create({ baseURL: BASE_URL });
  * significa que alguien anónimo tocó un endpoint con auth. Nunca redirigimos
  * desde estas rutas.
  */
-const PUBLIC_PAGES = new Set(["/login", "/register", "/verify-email", "/landing", "/preview", "/onboarding"]);
+const PUBLIC_PAGES = new Set(["/login", "/register", "/verify-email", "/forgot-password", "/landing", "/preview", "/onboarding"]);
 
 api.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
@@ -46,6 +47,13 @@ api.interceptors.response.use(
     const body = response.data as unknown;
     if (body && typeof body === "object" && "success" in (body as Record<string, unknown>)) {
       response.data = (body as { data: unknown }).data;
+    }
+    // Productos cotizados en pesos: se pasan a USD como el resto (ver lib/fx.ts).
+    if (typeof window !== "undefined" && isCatalogUrl(response.config?.url) && payloadNeedsFx(response.data)) {
+      return waitArsPerUsd().then((rate) => {
+        response.data = normalizeCatalogPayload(response.data, rate);
+        return response;
+      });
     }
     return response;
   },
@@ -220,6 +228,12 @@ export interface ProductDTO {
   price: string | number | null;
   finalPrice?: string | number | null;
   currency?: string | null;
+  /** El proveedor lo cotizó en pesos; `price`/`finalPrice` ya están en USD (ver lib/fx.ts). */
+  sourceCurrency?: "ARS" | null;
+  /** Pesos por dólar con que se pasó a USD. */
+  fxRate?: number | null;
+  /** En pesos y sin cotización disponible: se muestra sin precio. */
+  fxPending?: boolean;
   ivaPercent?: string | number | null;
   taxes?: {
     kind: "iva" | "internos" | "iibb" | "other";
@@ -308,6 +322,11 @@ export const authApi = {
   resendVerification: (email: string) =>
     api.post<{ sent: boolean }>("/auth/resend-verification", { email }),
   google: (idToken: string) => api.post<{ token: string }>("/auth/google", { idToken }),
+  /** Manda un código para elegir contraseña nueva. Responde igual exista o no la cuenta. */
+  forgotPassword: (email: string) => api.post<{ sent: boolean }>("/auth/forgot-password", { email }),
+  /** Código + contraseña nueva: cambia la clave y devuelve sesión. */
+  resetPassword: (email: string, code: string, password: string) =>
+    api.post<{ token: string }>("/auth/reset-password", { email, code, password }),
   refresh: () => api.post<{ token: string }>("/auth/refresh", {}),
 };
 

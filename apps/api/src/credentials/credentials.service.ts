@@ -63,6 +63,27 @@ export class CredentialsService {
         where: { tenantId, provider: dto.providerName, priceChannel: { not: "API" } },
         data: { priceChannel: "API" },
       });
+      // Por defecto la sincronización automática queda prendida cada 1 h. Solo la
+      // primera vez (nunca sincronizó): si después la apagó, se respeta.
+      const config = await this.prisma.providerSyncConfig.findUnique({
+        where: { tenantId_provider: { tenantId, provider: dto.providerName } },
+        select: { lastSyncedAt: true, enabled: true },
+      });
+      if (!config) {
+        await this.prisma.providerSyncConfig.create({
+          data: { tenantId, provider: dto.providerName, priceChannel: "API", enabled: true, syncIntervalMinutes: 60 },
+        });
+      } else if (!config.lastSyncedAt && !config.enabled) {
+        await this.prisma.providerSyncConfig.update({
+          where: { tenantId_provider: { tenantId, provider: dto.providerName } },
+          data: { enabled: true, syncIntervalMinutes: 60 },
+        });
+      }
+      // Cuenta nueva o corregida: se levanta la pausa por fallos y se vuelve a intentar.
+      await this.prisma.providerSyncConfig.updateMany({
+        where: { tenantId, provider: dto.providerName },
+        data: { pausedAt: null, pauseReason: null, consecutiveFailures: 0 },
+      });
     }
     return {
       providerName: row.providerName as Provider,

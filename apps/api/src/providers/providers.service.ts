@@ -2,6 +2,7 @@ import { incompleteSyncMessage, missingActionIsSafe, shouldUnhideOnConfigChange 
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import {
   isListProviderKey,
+  providerLabel,
   parsePaymentOptions,
   parseShippingMethods,
   providerHasIvaRate,
@@ -9,6 +10,7 @@ import {
   type PaymentOption,
   type Provider,
   type ShippingMethod,
+  providerHasCatalogAdapter,
 } from "@nodo/shared";
 import type { IvaAdjustment, OfferSource, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -47,6 +49,22 @@ import {
   type CatalogSyncProgress,
   type CatalogSyncSource,
 } from "./catalog-sync-progress";
+import { SYNC_MAX_FAILURES, isSyncDue, pricesAreStale, syncFailureReason } from "./sync-backoff";
+
+/** Corridas RUNNING con latido más viejo que esto se dan por muertas al arrancar. */
+const RESTART_GRACE_MS = 30_000;
+const RESTART_RECHECK_MS = 60_000;
+/** Fichas de Solution Box que se enriquecen por corrida (el portal limita con 429). */
+const ENRICH_BATCH_SOLUTION_BOX = 150;
+/** Con "faltantes = sin stock", lo que no aparece hace esta cantidad de días se da de baja. */
+const ZOMBIE_DAYS = 14;
+const DAY_MS = 24 * 60 * 60_000;
+
+/** Lo que pasó en una corrida además de los diffs. */
+type UpsertStats = { lostPrice: number };
+
+/** Fallos ya contados por runSync: el cron no los vuelve a contar. */
+const recordedFailures = new WeakSet<object>();
 
 /** Cómo se guarda una tanda: de dónde vienen las ofertas. */
 export interface SyncOptions {
@@ -98,7 +116,14 @@ export class ProvidersService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await interruptRunningCatalogSyncRuns(this.prisma);
+    // En un deploy rolling la otra réplica puede estar sincronizando: solo se
+    // cierran las corridas sin latido reciente (el latido es cada 5 s). Un rato
+    // después se repasa, por las que murieron justo antes de este arranque.
+    await interruptRunningCatalogSyncRuns(this.prisma, { olderThanMs: RESTART_GRACE_MS });
+    const later = setTimeout(() => {
+      void interruptRunningCatalogSyncRuns(this.prisma, { olderThanMs: RESTART_GRACE_MS }).catch(() => undefined);
+    }, RESTART_RECHECK_MS);
+    later.unref?.();
   }
 
   async getConfig(tenantId: string, provider: Provider) {
@@ -315,8 +340,9 @@ export class ProvidersService implements OnModuleInit {
       const key = `${tenantId}:${provider}`;
       if (!this.enrichRunning.has(key)) {
         this.enrichRunning.add(key);
+        const ids = await this.idsToEnrich(provider, syncedExternalIds);
         adapter
-          .enrichDetails(credentials, syncedExternalIds, async (externalId, patch) => {
+          .enrichDetails(credentials, ids, async (externalId, patch) => {
             await this.patchProduct(tenantId, provider, externalId, patch);
           })
           .catch((err) => this.logger.warn(`Enriquecimiento de detalle ${provider} falló: ${errorMessage(err)}`))
@@ -398,6 +424,24 @@ export class ProvidersService implements OnModuleInit {
       "import",
       { offerSource: params.source }
     );
+  }
+
+  /**
+   * Qué fichas vale la pena enriquecer. Solution Box lee la ficha de a una: pedir
+   * las 2000 en cada sync horaria lo hacía chocar con el límite del portal (429).
+   * Ahí solo van las que todavía no tienen descripción, y como mucho un lote por
+   * corrida. El resto de los proveedores enriquece también datos de la oferta
+   * (stock de tienda, IVA) y sigue pidiendo todo.
+   */
+  private async idsToEnrich(provider: Provider, syncedIds: string[]): Promise<string[]> {
+    if (provider !== "SOLUTION_BOX" || syncedIds.length === 0) return syncedIds;
+    const missing = await this.prisma.providerSyncCache.findMany({
+      where: { provider, externalId: { in: syncedIds }, longDescription: null },
+      select: { externalId: true },
+      orderBy: { syncedAt: "desc" },
+      take: ENRICH_BATCH_SOLUTION_BOX,
+    });
+    return missing.map((m) => m.externalId);
   }
 
   /**
@@ -493,6 +537,7 @@ export class ProvidersService implements OnModuleInit {
       where: { tenantId, provider, active: true, ...sourceFilter },
     });
     const syncStartedAt = new Date();
+    const stats: UpsertStats = { lostPrice: 0 };
     const beat = setInterval(() => {
       void progress.touch().catch(() => undefined);
     }, 5_000);
@@ -500,7 +545,7 @@ export class ProvidersService implements OnModuleInit {
     try {
       await run(
         async (items) => {
-          await this.upsertPage(tenantId, provider, items, progress, offerSource);
+          await this.upsertPage(tenantId, provider, items, progress, offerSource, stats);
         },
         async (meta) => {
           if (meta.expectedTotal != null) await progress.setExpectedTotal(meta.expectedTotal);
@@ -508,11 +553,15 @@ export class ProvidersService implements OnModuleInit {
       );
     } catch (err) {
       await progress.fail(errorMessage(err));
-      await this.prisma.providerSyncConfig.upsert({
-        where: { tenantId_provider: { tenantId, provider } },
-        create: { tenantId, provider, lastSyncError: errorMessage(err) },
-        update: { lastSyncError: errorMessage(err) },
-      });
+      if (offerSource === "SYNC") {
+        await this.recordSyncFailure(tenantId, provider, err, source);
+      } else {
+        await this.prisma.providerSyncConfig.upsert({
+          where: { tenantId_provider: { tenantId, provider } },
+          create: { tenantId, provider, lastSyncError: errorMessage(err), priceChannel: this.defaultPriceChannel(provider) },
+          update: { lastSyncError: errorMessage(err) },
+        });
+      }
       throw err;
     } finally {
       clearInterval(beat);
@@ -525,10 +574,23 @@ export class ProvidersService implements OnModuleInit {
     const missingSafe = missingActionIsSafe(offersBefore, offersSeen);
     // Queda como aviso en el panel (lastSyncError) en vez de limpiarse al terminar.
     const syncWarning =
-      !missingSafe && config.missingProductAction !== "KEEP" ? incompleteSyncMessage(offersBefore, offersSeen) : null;
+      !missingSafe ? incompleteSyncMessage(offersBefore, offersSeen) : null;
     if (syncWarning) this.logger.warn(`${provider} (${tenantId}): ${syncWarning}`);
+    // Recién con la corrida completa vuelve a mostrarse lo que llegó y estaba
+    // oculto: una sync cortada a mitad no deshace las reglas de stock y faltantes.
+    await this.prisma.tenantProductOffer.updateMany({
+      where: { tenantId, provider, active: false, syncedAt: { gte: syncStartedAt }, ...sourceFilter },
+      data: { active: true },
+    });
     const missingCount = missingSafe
-      ? await this.applyMissingProductAction(tenantId, provider, syncStartedAt, config.missingProductAction, offerSource)
+      ? await this.applyMissingProductAction(
+          tenantId,
+          provider,
+          syncStartedAt,
+          config.missingProductAction,
+          offerSource,
+          config.zeroStockAction
+        )
       : 0;
     const zeroStockCount = await this.applyZeroStockAction(
       tenantId,
@@ -547,10 +609,26 @@ export class ProvidersService implements OnModuleInit {
     const updated = finished.updated;
     const count = finished.processed;
 
+    const lostPriceWarning =
+      stats.lostPrice > 0
+        ? `${stats.lostPrice} producto${stats.lostPrice === 1 ? "" : "s"} llegaron sin precio del proveedor y quedaron sin precio (no se muestran).`
+        : null;
+    const warning = [syncWarning, lostPriceWarning].filter(Boolean).join(" ") || null;
+    const now = new Date();
+    const okFields = {
+      lastSyncedAt: now,
+      lastAttemptAt: now,
+      lastSyncError: warning,
+      lastSyncCreated: created,
+      lastSyncUpdated: updated,
+      consecutiveFailures: 0,
+      pausedAt: null,
+      pauseReason: null,
+    };
     await this.prisma.providerSyncConfig.upsert({
       where: { tenantId_provider: { tenantId, provider } },
-      create: { tenantId, provider, lastSyncedAt: new Date(), lastSyncError: syncWarning, lastSyncCreated: created, lastSyncUpdated: updated },
-      update: { lastSyncedAt: new Date(), lastSyncError: syncWarning, lastSyncCreated: created, lastSyncUpdated: updated },
+      create: { tenantId, provider, priceChannel: this.defaultPriceChannel(provider), ...okFields },
+      update: okFields,
     });
 
     this.logger.log(
@@ -588,16 +666,19 @@ export class ProvidersService implements OnModuleInit {
   /**
    * Productos que esta organización tenía para este proveedor pero no vinieron en la
    * última sincronización. Solo se tocan sus ofertas: la ficha es de todos.
-   * KEEP / OUT_OF_STOCK / HIDE / DELETE salen de la config del distribuidor.
+   * Nunca queda a la vista con el precio viejo: KEEP y OUT_OF_STOCK (configs
+   * anteriores) se tratan como HIDE. DELETE además lo borra. Si el proveedor lo
+   * vuelve a mandar, la próxima sync OK lo muestra de nuevo.
    */
   private async applyMissingProductAction(
     tenantId: string,
     provider: Provider,
     syncStartedAt: Date,
     action: string,
-    source: OfferSource = "SYNC"
+    source: OfferSource = "SYNC",
+    zeroStockAction = "KEEP"
   ) {
-    if (action === "KEEP") return 0;
+    if (action === "KEEP" || action === "OUT_OF_STOCK") action = "HIDE";
     // Una lista solo decide sobre las filas de su mismo origen: la propia del
     // comercio no esconde lo que viene de la base, ni la base lo propio.
     const where = { tenantId, provider, syncedAt: { lt: syncStartedAt }, ...(source === "SYNC" ? {} : { source }) };
@@ -610,7 +691,18 @@ export class ProvidersService implements OnModuleInit {
       return res.count;
     }
     if (action === "OUT_OF_STOCK") {
-      const res = await this.prisma.tenantProductOffer.updateMany({ where, data: { stock: 0 } });
+      // Sin stock, y si además se ocultan los de stock cero, oculto ya. Lo que el
+      // proveedor dejó de mandar hace más de ZOMBIE_DAYS días se da de baja: si
+      // no, quedaba para siempre con el precio de cuando desapareció.
+      const hide = zeroStockAction === "HIDE" || zeroStockAction === "DELETE";
+      const res = await this.prisma.tenantProductOffer.updateMany({
+        where,
+        data: hide ? { stock: 0, active: false } : { stock: 0 },
+      });
+      await this.prisma.tenantProductOffer.updateMany({
+        where: { ...where, active: true, syncedAt: { lt: new Date(syncStartedAt.getTime() - ZOMBIE_DAYS * DAY_MS) } },
+        data: { active: false },
+      });
       return res.count;
     }
     return 0;
@@ -657,7 +749,8 @@ export class ProvidersService implements OnModuleInit {
     provider: Provider,
     items: NormalizedProduct[],
     progress?: CatalogSyncProgress,
-    offerSource: OfferSource = "SYNC"
+    offerSource: OfferSource = "SYNC",
+    stats?: UpsertStats
   ): Promise<CatalogSyncDiff[]> {
     // Historial de precio: se compara contra el precio guardado antes de
     // pisarlo, y solo se graba una fila nueva si realmente cambió (o es un
@@ -739,19 +832,22 @@ export class ProvidersService implements OnModuleInit {
           // Un sync por API sí deja intacto lo que no manda (undefined = sin cambio).
           const fromList = offerSource !== "SYNC";
           const orNull = <T,>(v: T | undefined): T | null | undefined => (fromList ? (v ?? null) : v);
+          const previous = previousByExternalId.get(item.externalId);
+          // El proveedor mandó el producto pero sin ningún precio (cambió el
+          // formato, campo vacío): no se deja el precio viejo con fecha nueva.
+          const noPrice = !fromList && item.price === undefined && item.finalPrice === undefined;
+          if (noPrice && previous && (previous.price != null || previous.finalPrice != null) && stats) stats.lostPrice++;
           const oferta = {
-            price: orNull(item.price),
-            finalPrice: orNull(item.finalPrice),
+            price: noPrice ? null : orNull(item.price),
+            finalPrice: noPrice ? null : orNull(item.finalPrice),
             currency: orNull(item.currency),
             ivaPercent: orNull(item.ivaPercent),
             stock: orNull(item.stock),
             stockStatus: orNull(item.stockStatus),
-            active: true,
-            needsResync: false,
+            needsResync: noPrice,
             source: offerSource,
           };
 
-          const previous = previousByExternalId.get(item.externalId);
           const previousFicha = previousFichaById.get(item.externalId);
           // La lista base nunca pisa los precios propios del comercio.
           const keepOwnPrice = offerSource === "BASE_LIST" && previous?.source === "OWN_LIST";
@@ -802,7 +898,9 @@ export class ProvidersService implements OnModuleInit {
             where: {
               tenantId_provider_externalId: { tenantId, provider, externalId: item.externalId },
             },
-            create: { tenantId, provider, externalId: item.externalId, ...oferta },
+            // Nueva: visible. Existente: `active` no se toca acá; si estaba oculta y
+            // volvió, se reactiva al terminar bien la corrida (ver runSync).
+            create: { tenantId, provider, externalId: item.externalId, ...oferta, active: true },
             update: { ...oferta, syncedAt: new Date() },
           });
 
@@ -825,7 +923,7 @@ export class ProvidersService implements OnModuleInit {
   async status(tenantId: string, provider: Provider) {
     await this.visibility.assertVisible(tenantId, provider);
     await interruptStaleCatalogSyncRuns(this.prisma, { tenantId, provider });
-    const [credential, total, withStock, last, currentRun] = await Promise.all([
+    const [credential, total, withStock, last, currentRun, config] = await Promise.all([
       this.credentials.findByProvider(tenantId, provider),
       this.prisma.tenantProductOffer.count({ where: { tenantId, provider, active: true } }),
       this.prisma.tenantProductOffer.count({
@@ -840,6 +938,20 @@ export class ProvidersService implements OnModuleInit {
         where: { tenantId, provider },
         orderBy: { startedAt: "desc" },
       }),
+      this.prisma.providerSyncConfig.findUnique({
+        where: { tenantId_provider: { tenantId, provider } },
+        select: {
+          enabled: true,
+          priceChannel: true,
+          syncIntervalMinutes: true,
+          lastSyncedAt: true,
+          lastAttemptAt: true,
+          lastSyncError: true,
+          consecutiveFailures: true,
+          pausedAt: true,
+          pauseReason: true,
+        },
+      }),
     ]);
 
     return {
@@ -851,7 +963,96 @@ export class ProvidersService implements OnModuleInit {
       withStock,
       lastSyncedAt: last?.syncedAt ?? null,
       currentRun: currentRun ? serializeCatalogSyncRun(currentRun) : null,
+      health: this.syncHealth(provider, config, total),
     };
+  }
+
+  /**
+   * Estado de la sincronización para el comercio: si los precios están viejos,
+   * si viene fallando o si se pausó, y el motivo en criollo.
+   */
+  private syncHealth(
+    provider: Provider,
+    config: {
+      enabled: boolean;
+      priceChannel: string;
+      syncIntervalMinutes: number;
+      lastSyncedAt: Date | null;
+      lastAttemptAt: Date | null;
+      lastSyncError: string | null;
+      consecutiveFailures: number;
+      pausedAt: Date | null;
+      pauseReason: string | null;
+    } | null,
+    offers: number
+  ) {
+    if (!config || config.priceChannel !== "API" || !this.registry.get(provider)) return null;
+    const failing = config.consecutiveFailures > 0;
+    return {
+      lastOkAt: config.lastSyncedAt,
+      lastAttemptAt: config.lastAttemptAt,
+      failing,
+      consecutiveFailures: config.consecutiveFailures,
+      failureReason: failing && config.lastSyncError ? syncFailureReason(config.lastSyncError) : null,
+      paused: Boolean(config.pausedAt),
+      pausedAt: config.pausedAt,
+      pauseReason: config.pauseReason,
+      autoSync: config.enabled,
+      stalePrices: offers > 0 && pricesAreStale(config),
+    };
+  }
+
+  /**
+   * Una sync de proveedor falló: queda el intento y el contador para el backoff
+   * del cron. Tras SYNC_MAX_FAILURES seguidos se pausa el auto-sync y se avisa al
+   * comercio. Los precios que ya tenía siguen (con aviso de desactualizados).
+   */
+  async recordSyncFailure(tenantId: string, provider: Provider, err: unknown, source: CatalogSyncSource = "cron") {
+    if (err && typeof err === "object") recordedFailures.add(err);
+    const message = errorMessage(err);
+    const now = new Date();
+    const row = await this.prisma.providerSyncConfig.upsert({
+      where: { tenantId_provider: { tenantId, provider } },
+      create: {
+        tenantId,
+        provider,
+        priceChannel: this.defaultPriceChannel(provider),
+        lastSyncError: message,
+        lastAttemptAt: now,
+        consecutiveFailures: 1,
+      },
+      update: { lastSyncError: message, lastAttemptAt: now, consecutiveFailures: { increment: 1 } },
+    });
+    if (!row.enabled || row.pausedAt || row.consecutiveFailures < SYNC_MAX_FAILURES) return;
+    const reason = syncFailureReason(message);
+    const paused = await this.prisma.providerSyncConfig.updateMany({
+      where: { id: row.id, pausedAt: null },
+      data: { pausedAt: now, pauseReason: reason },
+    });
+    if (paused.count === 0) return;
+    this.logger.warn(`Auto-sync de ${provider} (${tenantId}) pausado tras ${row.consecutiveFailures} fallos (${source}): ${message}`);
+    const name = providerLabel(provider);
+    await this.prisma.orgNotification
+      .create({
+        data: {
+          toTenantId: tenantId,
+          fromTenantId: null,
+          kind: "SYSTEM",
+          title: `Sync pausado por error de ${name}`,
+          body:
+            `${reason} Cuando ${name} se restablezca, la sincronización continúa sola. ` +
+            `Mientras tanto, los precios de ${name} son los de la última sincronización buena. Si el problema es la cuenta, revisala en Proveedores.`,
+          landingKey: `sync-paused:${provider}`,
+        },
+      })
+      .catch((e) => this.logger.warn(`No se pudo avisar la pausa de ${provider}: ${errorMessage(e)}`));
+  }
+
+  /** El cron falló antes de arrancar la corrida (sin cuenta, sin vínculo): también cuenta para el backoff. */
+  async noteCronFailure(tenantId: string, provider: Provider, err: unknown) {
+    if (err && typeof err === "object" && recordedFailures.has(err)) return;
+    if (/ya hay una sincronizaci/i.test(errorMessage(err))) return;
+    await this.recordSyncFailure(tenantId, provider, err, "cron");
   }
 
   async getCurrentSyncRun(tenantId: string, provider: Provider) {
@@ -1370,7 +1571,7 @@ export class ProvidersService implements OnModuleInit {
         AND (oferta.stock IS NULL OR oferta.stock > 0)
         AND ficha.category IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
-        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price IS NOT NULL OR oferta."finalPrice" IS NOT NULL)
+        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price > 0 OR oferta."finalPrice" > 0)
       GROUP BY ficha.category
       ORDER BY count DESC
       LIMIT 120
@@ -1404,7 +1605,7 @@ export class ProvidersService implements OnModuleInit {
         AND (oferta.stock IS NULL OR oferta.stock > 0)
         AND ficha.brand IS NOT NULL
         AND oferta.provider = ANY(${providers}::text[])
-        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price IS NOT NULL OR oferta."finalPrice" IS NOT NULL)
+        AND (oferta.provider <> ALL(${priced}::text[]) OR oferta.price > 0 OR oferta."finalPrice" > 0)
       GROUP BY ficha.brand
       ORDER BY count DESC
       LIMIT 200
@@ -1787,7 +1988,7 @@ export class ProvidersService implements OnModuleInit {
             provider,
             active: true,
             stock: { gt: 0 },
-            OR: [{ price: { not: null } }, { finalPrice: { not: null } }],
+            OR: [{ price: { gt: 0 } }, { finalPrice: { gt: 0 } }],
           },
           include: { product: true },
           orderBy: [{ syncedAt: "desc" }, { product: { name: "asc" } }],
@@ -2128,12 +2329,9 @@ export class ProvidersService implements OnModuleInit {
     const configs = await this.prisma.providerSyncConfig.findMany({
       where: { enabled: true, priceChannel: "API", tenant: { active: true } },
     });
-    const now = Date.now();
-    return configs.filter((c) => {
-      if (!c.lastSyncedAt) return true;
-      const dueAt = c.lastSyncedAt.getTime() + c.syncIntervalMinutes * 60_000;
-      return now >= dueAt;
-    });
+    const now = new Date();
+    // Sin integración (Ashir, GC, HDC) no hay portal: una config vieja en API no se intenta.
+    return configs.filter((c) => providerHasCatalogAdapter(c.provider) && isSyncDue(c, now));
   }
 }
 

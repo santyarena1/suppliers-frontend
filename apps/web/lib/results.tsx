@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { MY_PROVIDERS_UPDATED, ProductDTO } from "@/lib/api";
+import { needsFx } from "@/lib/fx";
 import { SESSION_EVENT, getUser } from "@/lib/auth";
 
 const RESULTS_KEY = "tgs_last_results";
@@ -40,6 +41,8 @@ function readStoredResults(): { q: string; r: ProductDTO[] } | null {
     if (!parsed?.q || !Array.isArray(parsed.r)) return null;
     // Los resultados (con sus precios) son de quien buscó: otra sesión no los ve.
     if ((parsed.u ?? null) !== (getUser()?.id ?? null)) return null;
+    // Resultados guardados antes de pasar los precios en pesos a USD: se vuelve a buscar.
+    if (parsed.r.some(needsFx)) return null;
     return { q: parsed.q, r: parsed.r };
   } catch {
     return null;

@@ -9,7 +9,7 @@ export function safeFrom(): string | null {
   if (typeof window === "undefined") return null;
   const from = new URLSearchParams(window.location.search).get("from");
   if (!from || !from.startsWith("/") || from.startsWith("//") || from.startsWith("/\\")) return null;
-  if (from.startsWith("/login") || from.startsWith("/register") || from.startsWith("/verify-email")) return null;
+  if (["/login", "/register", "/verify-email", "/forgot-password"].some((p) => from.startsWith(p))) return null;
   return from;
 }
 
