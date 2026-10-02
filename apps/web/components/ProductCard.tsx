@@ -19,7 +19,7 @@ import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options"
 import { displayAmountFromPricing, displayTaxBadge, displayTaxTitle } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useProductShipping, type ProductShipping } from "@/lib/product-shipping";
-import { SHIPPING_DISCLAIMER } from "@/lib/shipping";
+import { SHIPPING_DISCLAIMER, freeShippingLabel } from "@/lib/shipping";
 import {
   entryKey,
   loadCompareEntries,
@@ -86,15 +86,22 @@ function shippingLine(
   money: (usd: number) => string
 ): { text: string; title: string } {
   const { estimate, basis } = shipping;
+  if (shipping.free && shipping.freeShipping) {
+    return {
+      text: `Envío gratis (pedido desde ${freeShippingLabel(shipping.freeShipping)})`,
+      title: `Tu pedido a este distribuidor llega al envío gratis que cargaste (total con IVA). ${SHIPPING_DISCLAIMER}`,
+    };
+  }
+  const freeHint = shipping.freeShipping ? ` · gratis desde ${freeShippingLabel(shipping.freeShipping)}` : "";
   const origin =
     estimate.source === "history" && estimate.orders
       ? `Forma habitual: ${estimate.label}, en ${estimate.orders} de tus últimos ${estimate.ofOrders} pedidos.`
       : `Forma de envío: ${estimate.label}, con el valor que cargaste.`;
   const title = `${origin} ${SHIPPING_DISCLAIMER}`;
-  if (basis === "in_cart") return { text: `Envío ${estimate.label}: ya cuenta en el carrito`, title };
+  if (basis === "in_cart") return { text: `Envío ${estimate.label}: ya cuenta en el carrito${freeHint}`, title };
   const amount =
     basis === "order" ? `${money(shipping.costUsd)} por pedido` : `${money(shipping.perUnitUsd)}/u`;
-  return { text: `${included ? "Incluye envío" : "Envío"} aprox. ${amount} · ${estimate.label}`, title };
+  return { text: `${included ? "Incluye envío" : "Envío"} aprox. ${amount} · ${estimate.label}${freeHint}`, title };
 }
 
 export default function ProductCard({

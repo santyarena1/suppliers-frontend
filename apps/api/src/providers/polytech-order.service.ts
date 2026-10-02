@@ -1,4 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { type PortalShippingOptions } from "./portal-shipping-options";
 import { PrismaService } from "../prisma/prisma.service";
 import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 import { asNumber, snapshotJson } from "./json-value";
@@ -76,6 +77,21 @@ export class PolytechOrderService {
       where: { id, tenantId, provider: "POLYTECH" },
     });
     return row ? mapProviderDraft(row) : null;
+  }
+
+  /** Transportes de la cuenta de Polytech. La API no cotiza el envío: solo nombres. */
+  async shippingOptions(credentials: Record<string, string>): Promise<PortalShippingOptions> {
+    const api = await PolytechClient.fromCredentials(credentials);
+    const account = await api.account();
+    if (account.couriers.length === 0) {
+      return { provider: "POLYTECH", status: "at-checkout", options: [], note: "Tu cuenta de Polytech no tiene transportes cargados: se retira o se coordina." };
+    }
+    return {
+      provider: "POLYTECH",
+      status: "names-only",
+      options: account.couriers.map((c) => ({ id: c.id, label: c.name, amount: null, currency: null, plazo: null, group: null })),
+      note: "Transportes de tu cuenta de Polytech. Polytech no informa el costo: cargale el valor que te cobra cada uno.",
+    };
   }
 
   async getAccount(tenantId: string, credentials: Record<string, string>) {

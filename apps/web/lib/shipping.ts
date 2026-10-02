@@ -72,6 +72,40 @@ export interface ProviderShipping {
   estimate: ShippingEstimate | null;
   learned: { orders: number; methods: LearnedShippingMethod[] };
   manual: ShippingMethod[];
+  /** Envío gratis desde este total del pedido (con IVA), si el comercio lo cargó. */
+  freeShipping?: FreeShippingThreshold | null;
+}
+
+/**
+ * "Envío gratis desde $X" por distribuidor. Se compara contra el total del
+ * pedido con IVA, el mismo que muestra el carrito. Solo afecta a las formas de
+ * envío propias o estimadas: el envío que cotiza el portal lo cobra el
+ * distribuidor y no se toca. Misma lógica que packages/shared/src/shipping.ts.
+ */
+export interface FreeShippingThreshold {
+  amount: number;
+  currency: ShippingCurrency;
+}
+
+/** "$ 300.000" o "US$ 200", en la moneda en que se cargó el umbral. */
+export function freeShippingLabel(t: FreeShippingThreshold): string {
+  const n = Math.round(t.amount).toLocaleString("es-AR");
+  return t.currency === "USD" ? `US$ ${n}` : `$ ${n}`;
+}
+
+export function freeShippingThresholdUsd(t: FreeShippingThreshold | null | undefined, arsPerUsd: number): number | null {
+  if (!t || !(t.amount > 0)) return null;
+  if (t.currency === "USD") return t.amount;
+  return arsPerUsd > 0 ? t.amount / arsPerUsd : null;
+}
+
+export function qualifiesForFreeShipping(
+  orderTotalUsd: number,
+  t: FreeShippingThreshold | null | undefined,
+  arsPerUsd: number
+): boolean {
+  const limit = freeShippingThresholdUsd(t, arsPerUsd);
+  return limit != null && orderTotalUsd >= limit - 0.005;
 }
 
 export function isShippingSplit(value: unknown): value is ShippingSplit {

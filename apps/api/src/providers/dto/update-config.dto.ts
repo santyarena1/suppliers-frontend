@@ -158,6 +158,19 @@ export class UpdateProviderConfigDto {
   @Type(() => ProviderPaymentOptionDto)
   paymentOptions?: ProviderPaymentOptionDto[];
 
+  /** Envío gratis desde este total del pedido (con IVA). `null` = sin envío gratis. */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsNumber()
+  @Min(0)
+  @Max(1_000_000_000)
+  freeShippingFrom?: number | null;
+
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsIn(["ARS", "USD"])
+  freeShippingCurrency?: "ARS" | "USD" | null;
+
   /** Lista completa: lo que no venga acá se borra. */
   @IsOptional()
   @IsArray()

@@ -1,6 +1,8 @@
 "use client";
 
-import { Plus, Star, Trash2, Truck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Gift, Loader2, Plus, RefreshCw, Star, Trash2, Truck } from "lucide-react";
+import { providersApi, type PortalShippingOptions, type Provider } from "@/lib/api";
 import { formatARS, formatUSD } from "@/lib/format";
 import {
   SHIPPING_CURRENCIES,
@@ -26,15 +28,42 @@ function amountText(amount: number | null, currency: ShippingCurrency | null): s
  * búsqueda y en la ficha. Sirve sobre todo para los portales que no informan
  * el costo del envío. La que se marca como habitual manda sobre los pedidos.
  */
+/** Lo que expone el portal del distribuidor, para cargarlo sin tipear. */
+function usePortalShippingOptions(provider: string) {
+  const [data, setData] = useState<PortalShippingOptions | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    providersApi
+      .shippingOptions(provider as Provider)
+      .then((res) => alive && setData(res.data))
+      .catch(() => alive && setData(null))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [provider, tick]);
+  return { data, loading, reload: () => setTick((t) => t + 1) };
+}
+
 export default function ShippingMethodsEditor({
   provider,
   methods,
   onChange,
+  freeShippingFrom = null,
+  freeShippingCurrency = "ARS",
+  onFreeShippingChange,
 }: {
   provider: string;
   methods: ShippingMethod[];
   onChange: (next: ShippingMethod[]) => void;
+  freeShippingFrom?: number | null;
+  freeShippingCurrency?: ShippingCurrency | null;
+  onFreeShippingChange?: (from: number | null, currency: ShippingCurrency) => void;
 }) {
+  const portal = usePortalShippingOptions(provider);
   const learned = useShippingEstimates()[provider]?.learned ?? null;
   const top = learned?.methods[0] ?? null;
   const known = new Set(methods.map((m) => m.id));
@@ -46,6 +75,14 @@ export default function ShippingMethodsEditor({
   function toggleHabitual(i: number) {
     const on = !methods[i].habitual;
     onChange(methods.map((m, j) => ({ ...m, habitual: j === i ? on : false })));
+  }
+
+  function addPortalOption(o: PortalShippingOptions["options"][number]) {
+    const label = o.group ? `${o.label} (${o.group})` : o.label;
+    onChange([
+      ...methods,
+      { id: shippingMethodId(label), label, amount: o.amount ?? 0, currency: o.currency ?? "ARS", habitual: methods.length === 0 },
+    ]);
   }
 
   function add(from?: LearnedShippingMethod) {
@@ -99,6 +136,51 @@ export default function ShippingMethodsEditor({
           )}
         </div>
       )}
+
+      <div className="rounded-lg border border-surface-800 bg-surface-900/60 px-3.5 py-3 flex flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-surface-200">Formas de envío del portal</span>
+          <button
+            type="button"
+            onClick={portal.reload}
+            disabled={portal.loading}
+            className="inline-flex items-center gap-1 text-[11px] text-surface-400 hover:text-white disabled:opacity-40"
+          >
+            {portal.loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+            Actualizar
+          </button>
+        </div>
+        {portal.loading && !portal.data ? (
+          <p className="text-[11px] text-surface-500">Consultando al distribuidor…</p>
+        ) : portal.data && portal.data.options.length > 0 ? (
+          <ul className="flex flex-col divide-y divide-surface-800">
+            {portal.data.options.map((o) => {
+              const label = o.group ? `${o.label} (${o.group})` : o.label;
+              const already = known.has(shippingMethodId(label));
+              return (
+                <li key={`${o.group ?? ""}-${o.id}`} className="flex items-center gap-2 py-1.5">
+                  <span className="flex-1 min-w-0 text-xs text-surface-200">
+                    {label}
+                    {o.plazo && <span className="text-surface-500"> · {o.plazo}</span>}
+                  </span>
+                  <span className="text-xs tabular-nums text-surface-300">
+                    {o.amount == null ? "sin costo informado" : o.amount === 0 ? "sin cargo" : amountText(o.amount, o.currency)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => addPortalOption(o)}
+                    disabled={already}
+                    className="text-[11px] font-medium text-brand-300 hover:text-brand-200 disabled:text-surface-600"
+                  >
+                    {already ? "Cargada" : "Usar esta"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        {portal.data?.note && <p className="text-[11px] text-surface-500 leading-relaxed">{portal.data.note}</p>}
+      </div>
 
       {methods.length === 0 ? (
         <p className="text-xs text-surface-500">
@@ -171,6 +253,47 @@ export default function ShippingMethodsEditor({
         <Plus className="w-3.5 h-3.5" />
         Agregar forma de envío
       </button>
+      {onFreeShippingChange && (
+        <div className="rounded-lg border border-surface-800 px-3.5 py-3 flex flex-col gap-2">
+          <label className="text-xs font-medium text-surface-200 flex items-center gap-1.5">
+            <Gift className="w-3.5 h-3.5 text-emerald-300" />
+            Envío gratis desde
+          </label>
+          <div className="flex items-center gap-2">
+            <select
+              value={freeShippingCurrency ?? "ARS"}
+              onChange={(e) => onFreeShippingChange(freeShippingFrom, e.target.value as ShippingCurrency)}
+              className={`${INPUT} w-20 flex-shrink-0`}
+              aria-label="Moneda del envío gratis"
+            >
+              {SHIPPING_CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c === "ARS" ? "$" : "US$"}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={0}
+              step="1"
+              value={freeShippingFrom ?? ""}
+              placeholder="Sin envío gratis"
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                onFreeShippingChange(e.target.value === "" || !(n > 0) ? null : n, freeShippingCurrency ?? "ARS");
+              }}
+              className={`${INPUT} w-40 text-right tabular-nums`}
+              aria-label="Monto mínimo del pedido para envío gratis"
+            />
+          </div>
+          <p className="text-[11px] text-surface-500 leading-relaxed">
+            Si el pedido a este distribuidor llega a este monto (total con IVA, como en el carrito), tus formas de
+            envío quedan en $0 en la búsqueda, la ficha y el carrito. No cambia el envío que cotiza el portal del
+            distribuidor: ese lo cobra él.
+          </p>
+        </div>
+      )}
+
       <p className="text-[11px] text-surface-500">
         El costo es por pedido. Cómo se reparte entre los productos lo elegís en Configuración → Preferencias.
         Los valores son aproximados: el costo real lo da el distribuidor al confirmar.

@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
+import { atCheckout, PORTAL_SHIPPING_READERS, type PortalShippingOptions } from "./portal-shipping-options";
 import { AuthGuard } from "@nestjs/passport";
 import { SkipThrottle } from "@nestjs/throttler";
 import type { FastifyRequest } from "fastify";
@@ -836,6 +837,29 @@ export class ProvidersController {
   @Get("providers/:provider/status")
   status(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
     return this.providersService.status(commercialId(tenant), assertProvider(provider));
+  }
+
+  /**
+   * Formas de envío que expone el portal del distribuidor (solo lectura, nunca
+   * toca el carrito del portal). Para cargarlas en la configuración sin tipearlas.
+   */
+  @Get("providers/:provider/shipping-options")
+  async shippingOptions(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string): Promise<PortalShippingOptions> {
+    const key = assertProvider(provider);
+    if (!(PORTAL_SHIPPING_READERS as readonly string[]).includes(key)) return atCheckout(key);
+    const stored = await this.credentialsService.findByProvider(commercialId(tenant), key);
+    if (!stored) {
+      return { provider: key, status: "no-account", options: [], note: "Cargá tu cuenta del portal para ver sus formas de envío." };
+    }
+    const credentials = JSON.parse(stored.credentialsJson) as Record<string, string>;
+    try {
+      if (key === "NEW_BYTES") return await this.newBytesOrderService.shippingOptions(credentials);
+      if (key === "ELIT") return await this.elitOrderService.shippingOptions(credentials);
+      return await this.polytechOrderService.shippingOptions(credentials);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { provider: key, status: "error", options: [], note: `No pudimos leer las formas de envío del portal: ${message.slice(0, 160)}` };
+    }
   }
 
   @Get("providers/:provider/config")

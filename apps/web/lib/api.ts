@@ -1400,6 +1400,9 @@ export interface ProviderConfig {
   paymentOptions: PaymentOption[];
   /** Formas de envío con su valor por pedido, para estimar el envío. */
   shippingMethods?: ShippingMethod[];
+  /** Envío gratis desde este total del pedido (con IVA). `null` = sin envío gratis. */
+  freeShippingFrom?: number | null;
+  freeShippingCurrency?: "ARS" | "USD" | null;
   syncIntervalMinutes: number;
   missingProductAction: MissingProductAction;
   zeroStockAction: ZeroStockAction;
@@ -1418,7 +1421,24 @@ export interface ProviderConfig {
   lastSyncUpdated: number;
 }
 
+/** Formas de envío que expone el portal del distribuidor (solo lectura). */
+export interface PortalShippingOptions {
+  provider: string;
+  status: "live" | "names-only" | "at-checkout" | "no-account" | "error";
+  options: {
+    id: string;
+    label: string;
+    amount: number | null;
+    currency: "ARS" | "USD" | null;
+    plazo: string | null;
+    group: string | null;
+  }[];
+  note: string;
+}
+
 export const providersApi = {
+  shippingOptions: (providerName: Provider) =>
+    api.get<PortalShippingOptions>(`/providers/${providerName}/shipping-options`),
   sync: (providerName: Provider) =>
     api.post<ProviderSyncResult>(`/providers/${providerName}/sync`),
   status: (providerName: Provider) =>

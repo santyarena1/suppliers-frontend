@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import {
   learnShippingHabits,
-  parseShippingMethods,
+  parseShippingMethods, parseFreeShipping, type FreeShippingThreshold,
   resolveShippingEstimate,
   type LearnedShipping,
   type ObservedDelivery,
@@ -23,6 +23,8 @@ export interface ProviderShippingView {
   estimate: ShippingEstimate | null;
   learned: LearnedShipping;
   manual: ShippingMethod[];
+  /** Envío gratis desde este total del pedido (con IVA), si el comercio lo cargó. */
+  freeShipping: FreeShippingThreshold | null;
 }
 
 type OrderRow = {
@@ -64,7 +66,7 @@ export class ShippingEstimatesService {
       }),
       this.prisma.providerSyncConfig.findMany({
         where: { tenantId },
-        select: { provider: true, shippingMethods: true },
+        select: { provider: true, shippingMethods: true, freeShippingFrom: true, freeShippingCurrency: true },
       }),
     ]);
 
@@ -76,6 +78,9 @@ export class ShippingEstimatesService {
       if (observed) observedByProvider.set(order.provider, [...list, observed]);
     }
     const manualByProvider = new Map(configs.map((c) => [c.provider, parseShippingMethods(c.shippingMethods)]));
+    const freeByProvider = new Map(
+      configs.map((c) => [c.provider, parseFreeShipping(c.freeShippingFrom == null ? null : Number(c.freeShippingFrom), c.freeShippingCurrency)])
+    );
 
     const providers = new Set([...observedByProvider.keys(), ...manualByProvider.keys()]);
     const out: ProviderShippingView[] = [];
@@ -83,7 +88,13 @@ export class ShippingEstimatesService {
       const manual = manualByProvider.get(provider) ?? [];
       const learned = learnShippingHabits(observedByProvider.get(provider) ?? []);
       if (manual.length === 0 && learned.methods.length === 0) continue;
-      out.push({ provider, estimate: resolveShippingEstimate(manual, learned), learned, manual });
+      out.push({
+        provider,
+        estimate: resolveShippingEstimate(manual, learned),
+        learned,
+        manual,
+        freeShipping: freeByProvider.get(provider) ?? null,
+      });
     }
     return out;
   }

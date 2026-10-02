@@ -154,6 +154,8 @@ export class ProvidersService implements OnModuleInit {
       manualPerceptionsPercent: null as number | null,
       paymentOptions: [] as PaymentOption[],
       shippingMethods: [] as ShippingMethod[],
+      freeShippingFrom: null as number | null,
+      freeShippingCurrency: null as "ARS" | "USD" | null,
       missingProductAction: "KEEP" as const,
       zeroStockAction: "KEEP" as const,
       hideUnsyncedCatalog: false,
@@ -208,7 +210,14 @@ export class ProvidersService implements OnModuleInit {
     if (merged.acceptsScheme && !merged.schemeIvaAdjustment) {
       throw new BadRequestException("Si acepta esquema, hay que elegir cómo tratar el IVA de esquema.");
     }
-    const { paymentOptions, shippingMethods, ...rest } = dto;
+    const { paymentOptions, shippingMethods, freeShippingFrom, freeShippingCurrency, ...rest } = dto;
+    // Envío gratis: monto > 0 con su moneda; 0 o vacío lo apaga.
+    const free =
+      freeShippingFrom === undefined
+        ? {}
+        : freeShippingFrom && freeShippingFrom > 0
+          ? { freeShippingFrom, freeShippingCurrency: freeShippingCurrency ?? "ARS" }
+          : { freeShippingFrom: null, freeShippingCurrency: null };
     const data = {
       ...rest,
       ...merged,
@@ -219,6 +228,7 @@ export class ProvidersService implements OnModuleInit {
       ...(shippingMethods !== undefined
         ? { shippingMethods: snapshotJson(parseShippingMethods(shippingMethods)) }
         : {}),
+      ...free,
     };
     const saved = await this.prisma.providerSyncConfig.upsert({
       where: { tenantId_provider: { tenantId, provider } },
@@ -2371,6 +2381,8 @@ function serializeSyncConfig<T extends object>(c: T) {
     manualPerceptionsPercent: row.manualPerceptionsPercent == null ? null : Number(row.manualPerceptionsPercent),
     paymentOptions: parsePaymentOptions(row.paymentOptions),
     shippingMethods: parseShippingMethods(row.shippingMethods),
+    freeShippingFrom: row.freeShippingFrom == null ? null : Number(row.freeShippingFrom),
+    freeShippingCurrency: row.freeShippingFrom == null ? null : ((row.freeShippingCurrency as "ARS" | "USD" | null | undefined) ?? "ARS"),
     acceptsOffline: Boolean(row.acceptsOffline),
     acceptsScheme: Boolean(row.acceptsScheme),
     hideUnsyncedCatalog: Boolean(row.hideUnsyncedCatalog),

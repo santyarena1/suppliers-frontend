@@ -951,7 +951,9 @@ model ProviderSyncConfig {
   shippingMethods      Json?
   /// Envío gratis desde este total del pedido a este distribuidor (con su moneda).
   /// Solo afecta a las formas de envío propias / estimadas, nunca al envío que cotiza el portal.
+  freeShippingFrom     Decimal?             @db.Decimal(14, 2)
   /// ARS | USD
+  freeShippingCurrency String?
   /// Foto del carrito del portal tal como NODO lo dejó en la última verificación
   /// (`{ codigo: cantidad }`). El carrito del portal y el de NODO son el mismo:
   /// con la foto se distingue "lo borraron en el portal" de "lo agregaron en

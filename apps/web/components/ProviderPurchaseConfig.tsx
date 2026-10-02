@@ -136,6 +136,11 @@ export default function ProviderPurchaseConfig({
         provider={provider}
         methods={config.shippingMethods ?? []}
         onChange={(shippingMethods) => onChange({ ...config, shippingMethods })}
+        freeShippingFrom={config.freeShippingFrom ?? null}
+        freeShippingCurrency={config.freeShippingCurrency ?? "ARS"}
+        onFreeShippingChange={(freeShippingFrom, freeShippingCurrency) =>
+          onChange({ ...config, freeShippingFrom, freeShippingCurrency })
+        }
       />
 
       {/* Offline y esquema */}

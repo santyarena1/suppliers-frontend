@@ -1,4 +1,5 @@
 import { assertPortalCartMatches, type CartLine } from "./cart-match";
+import { atCheckout, type PortalShippingOptions } from "./portal-shipping-options";
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
@@ -191,6 +192,45 @@ export class NewBytesOrderService {
       .map(mapAddress)
       .filter((a): a is NbAddress => a != null)
       .map(({ raw: _raw, ...rest }) => rest);
+  }
+
+  /**
+   * Medios de envío que NewBytes cotiza para la dirección predeterminada. Solo
+   * GETs: no vacía ni arma el carrito. Con el carrito del portal vacío puede no
+   * devolver nada; ahí se avisa que cotiza al confirmar.
+   */
+  async shippingOptions(credentials: Record<string, string>): Promise<PortalShippingOptions> {
+    const api = await this.login(credentials);
+    const addresses = unwrapNbList(await api.get("miCuenta/shippingAddress"))
+      .map(mapAddress)
+      .filter((a): a is NbAddress => a != null);
+    const address = addresses.find((a) => a.isDefault && a.postalCode) ?? addresses.find((a) => a.postalCode);
+    if (!address?.postalCode) {
+      return { ...atCheckout("NEW_BYTES"), note: "NewBytes cotiza el envío por dirección: cargá una dirección con código postal en tu cuenta del portal." };
+    }
+    let quotes: NbShippingQuote[] = [];
+    try {
+      const path = `carrito/calcularEnvioPara/${encodeURIComponent(address.postalCode)}/${encodeURIComponent(address.id)}`;
+      quotes = parseShippingQuote(await api.get(path)).quotes;
+    } catch {
+      quotes = [];
+    }
+    if (quotes.length === 0) {
+      return { ...atCheckout("NEW_BYTES"), note: `NewBytes cotiza el envío con el carrito armado (dirección ${address.label}). Elegí el medio al confirmar.` };
+    }
+    return {
+      provider: "NEW_BYTES",
+      status: "live",
+      options: quotes.map((q) => ({
+        id: q.id,
+        label: q.label,
+        amount: q.total ?? null,
+        currency: q.total != null ? ("ARS" as const) : null,
+        plazo: q.plazo ?? null,
+        group: null,
+      })),
+      note: `Cotizado por NewBytes para ${address.label} (CP ${address.postalCode}). El costo puede variar según el pedido.`,
+    };
   }
 
   async getPayments(credentials: Record<string, string>): Promise<NbPaymentOption[]> {

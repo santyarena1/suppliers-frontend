@@ -1,4 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { atCheckout, type PortalShippingOptions } from "./portal-shipping-options";
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
 import { assertPortalCartMatches } from "./cart-match";
@@ -119,6 +120,31 @@ export class ElitOrderService {
       where: { id, tenantId, provider: "ELIT" },
     });
     return row ? mapProviderDraft(row) : null;
+  }
+
+  /**
+   * Formas de envío que Elit ofrece hoy por depósito, leídas del resumen del
+   * carrito con un GET: no se carga ni se vacía nada. El costo depende de lo que
+   * tenga el carrito del portal en ese momento.
+   */
+  async shippingOptions(credentials: Record<string, string>): Promise<PortalShippingOptions> {
+    const api = await ElitWebClient.login(credentials);
+    const summary = elitData<Record<string, unknown>>(await api.getJson("cart/summary"));
+    const methods = publicSummary(summary, []).shippingMethods;
+    if (methods.length === 0) return atCheckout("ELIT");
+    return {
+      provider: "ELIT",
+      status: "live",
+      options: methods.map((m) => ({
+        id: `${m.warehouse}-${m.value}`,
+        label: m.label,
+        amount: m.cost > 0 ? m.cost : m.cost === 0 ? 0 : null,
+        currency: "USD" as const,
+        plazo: null,
+        group: m.warehouseName || null,
+      })),
+      note: "Formas de envío de Elit por depósito. El costo es el que informa Elit para tu carrito actual y puede variar con el pedido.",
+    };
   }
 
   /** Lo que la cuenta de Elit tiene hoy en el carrito (es por cuenta, no por sesión). */

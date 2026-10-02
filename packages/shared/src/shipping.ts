@@ -274,3 +274,33 @@ export function shippingShare(input: ShippingShareInput): ShippingShare {
 
   return { perUnit: cost / Math.max(1, units), basis: "unit" };
 }
+
+/**
+ * "Envío gratis desde $X" por distribuidor. Se compara contra el total del
+ * pedido con IVA, el mismo que muestra el carrito. Solo afecta a las formas de
+ * envío propias o estimadas: el envío que cotiza el portal lo cobra el
+ * distribuidor y no se toca.
+ */
+export interface FreeShippingThreshold {
+  amount: number;
+  currency: ShippingCurrency;
+}
+
+export function parseFreeShipping(amount: unknown, currency: unknown): FreeShippingThreshold | null {
+  const n = typeof amount === "number" ? amount : Number(amount);
+  if (amount == null || !Number.isFinite(n) || n <= 0) return null;
+  return { amount: n, currency: isShippingCurrency(currency) ? currency : "ARS" };
+}
+
+/** El umbral en USD. En pesos sin cotización no se puede comparar: `null`. */
+export function freeShippingThresholdUsd(t: FreeShippingThreshold | null, arsPerUsd: number): number | null {
+  if (!t) return null;
+  if (t.currency === "USD") return t.amount;
+  return arsPerUsd > 0 ? t.amount / arsPerUsd : null;
+}
+
+/** El pedido (total con IVA, en USD) llega al envío gratis. */
+export function qualifiesForFreeShipping(orderTotalUsd: number, t: FreeShippingThreshold | null, arsPerUsd: number): boolean {
+  const limit = freeShippingThresholdUsd(t, arsPerUsd);
+  return limit != null && orderTotalUsd >= limit - 0.005;
+}

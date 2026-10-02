@@ -24,7 +24,7 @@ import { purchaseLinePricing } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options";
 import { productShipping, useShippingContext } from "@/lib/product-shipping";
-import { SHIPPING_DISCLAIMER, SHIPPING_SPLIT_LABELS } from "@/lib/shipping";
+import { SHIPPING_DISCLAIMER, freeShippingLabel, SHIPPING_SPLIT_LABELS } from "@/lib/shipping";
 import {
   ArrowLeft,
   Package,
@@ -438,6 +438,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         <h2 className="pp__sec-title">Envío estimado</h2>
                         {shippingEstimate.pickup ? (
                           <p className="pp__note">Con este distribuidor solés retirar: no se suma envío.</p>
+                        ) : shipping?.free && shipping.freeShipping ? (
+                          <p className="pp__note">
+                            <b>Envío gratis</b>: tu pedido a este distribuidor llega a {freeShippingLabel(shipping.freeShipping)} (total con IVA), el mínimo que cargaste.
+                          </p>
                         ) : shipping ? (
                           <div className="pp__pay-rows">
                             <div className="pp__pay-row">
@@ -454,6 +458,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                               <span className="pp__pay-delta">{SHIPPING_SPLIT_LABELS[shippingCtx.split].label.toLowerCase()}</span>
                               <span className="pp__pay-amount">{money(shipping.perUnitUsd)}/u</span>
                             </div>
+                            {shipping.freeShipping && shipping.missingUsd != null && shipping.missingUsd > 0 && (
+                              <div className="pp__pay-row">
+                                <span className="pp__pay-label">Envío gratis desde {freeShippingLabel(shipping.freeShipping)}</span>
+                                <span className="pp__pay-delta">te faltan</span>
+                                <span className="pp__pay-amount">{money(shipping.missingUsd)}</span>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <p className="pp__note">

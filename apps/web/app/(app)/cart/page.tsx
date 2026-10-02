@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import PrefsPanel from "@/components/PrefsPanel";
 import InvidDraftPanel from "@/components/InvidDraftPanel";
 import NewBytesDraftPanel from "@/components/NewBytesDraftPanel";
+import FreeShippingCartNote from "@/components/FreeShippingCartNote";
 import ElitCheckoutPanel from "@/components/ElitCheckoutPanel";
 import NewTreeCheckoutPanel from "@/components/NewTreeCheckoutPanel";
 import SolutionBoxCheckoutPanel from "@/components/SolutionBoxCheckoutPanel";
@@ -1416,6 +1417,16 @@ function CartPageInner() {
                     historyHref={activeTab !== "all" ? providerOrdersHref(activeTab, pricesFromList(activeTab)) : undefined}
                     historyLabel={activeTab !== "all" && providerHasOrderHistory(activeTab, pricesFromList(activeTab)) ? "Historial" : activeTab !== "all" ? "Cuenta" : undefined}
                   />
+
+                  {activeTab !== "all" && (
+                    <FreeShippingCartNote
+                      provider={activeTab}
+                      orderTotalUsd={shownTotals.subtotalUSD + shownTotals.ivaUSD + shownTotals.internosUSD}
+                      arsPerUsd={currentRate?.venta ?? 0}
+                      portalQuoted={Boolean(shownTotals.portalSources.envio?.length)}
+                      fmt={(usd) => fmt(usd)}
+                    />
+                  )}
 
                   {currentRate && currency === "ARS" && (
                     <p className="text-[11px] text-surface-600 -mt-1">

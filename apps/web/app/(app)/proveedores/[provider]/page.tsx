@@ -208,6 +208,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         // sin nombre es una que se agregó y no se llenó, no se guarda.
         paymentOptions: [...(config.paymentOptions ?? []).filter((o) => o.label.trim()), ...learnedMeanwhile],
         shippingMethods: (config.shippingMethods ?? []).filter((m) => m.label.trim()),
+        freeShippingFrom: config.freeShippingFrom ? Number(config.freeShippingFrom) : null,
+        freeShippingCurrency: config.freeShippingFrom ? (config.freeShippingCurrency ?? "ARS") : null,
         syncIntervalMinutes: config.syncIntervalMinutes,
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,
