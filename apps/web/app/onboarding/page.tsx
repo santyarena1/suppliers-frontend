@@ -20,10 +20,10 @@ import SupplierJoinCard from "@/components/onboarding/SupplierJoinCard";
 /** Lo que viene después de crear el comercio (la guía corre dentro de la app). */
 const NEXT_UP = [
   "Buscar en todos tus distribuidores a la vez",
-  "Armar el carrito por distribuidor",
-  "Ver tus pedidos",
-  "Conectar tus distribuidores reales",
-  "Sumar a tu equipo",
+  "Filtros, bajas de precio y precios de locales",
+  "Comparador, carrito y pedidos con su factura",
+  "Configurar un distribuidor, pestaña por pestaña",
+  "Estadísticas de compras y tu equipo",
 ];
 
 /**
@@ -158,7 +158,7 @@ function OnboardingInner() {
               ? "Estás probando el alta desde cero. Al terminar volvés a Administración."
               : audience === "SUPPLIER"
               ? "Tu espacio para vender en NODO lo armamos con vos. Dejanos tus datos y te contactamos en menos de 24 h hábiles."
-              : "Es un solo paso. Después te mostramos la app con dos distribuidores de prueba, en 2 minutos."}
+              : "Es un solo paso. Después te mostramos toda la app con dos distribuidores de prueba, en unos 5 minutos."}
           </p>
           {audience === "RETAILER" && (
           <ol className="ob__steps">

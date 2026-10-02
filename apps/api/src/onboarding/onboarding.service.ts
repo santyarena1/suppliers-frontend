@@ -25,6 +25,14 @@ import { generatePassword } from "../common/generate-password";
 import { initialSubscription, type InitialSubscriptionInput } from "../subscriptions/subscription-init";
 import { AdminCreateRetailerDto, BootstrapRetailerOrgDto } from "./dto/onboarding.dto";
 import { RETAILER_ONBOARDING_STEPS, type OnboardingStep } from "./onboarding-steps";
+import {
+  ORDER_DAYS,
+  buildDemoOrders,
+  buildDemoPriceHistory,
+  resolveTourHref,
+  type DemoHistoryProduct,
+} from "./onboarding-demo-history";
+import { getPlanCapabilities, isTenantPlan } from "@nodo/shared";
 
 @Injectable()
 export class OnboardingService {
@@ -52,11 +60,15 @@ export class OnboardingService {
     const preview = Boolean(user.onboardingPreviewRestoreTenantId);
     const mode = this.resolveMode(user, tenant, preview);
     const needsOnboarding = this.needsOnboarding(user, tenant, preview);
+    const planRow = tenant
+      ? await this.prisma.tenant.findUnique({ where: { id: tenant.tenantId }, select: { plan: true } })
+      : null;
     const steps = this.stepsFor({
       type: tenant?.tenantType ?? null,
       role: tenant?.tenantRole ?? null,
       hasTenant: Boolean(tenant),
       mode,
+      plan: planRow?.plan ?? null,
     });
 
     let demoQuery: string | null = null;
@@ -88,19 +100,18 @@ export class OnboardingService {
       };
     }
 
-    // La búsqueda del recorrido apunta a lo que hay en la demo de este comercio.
-    const tourSteps = demoQuery
-      ? steps.map((step) =>
-          step.href?.startsWith("/search") ? { ...step, href: `/search?q=${encodeURIComponent(demoQuery!)}` } : step
-        )
-      : steps;
+    // Los pasos apuntan a lo que hay en la demo de este comercio.
+    const demoProduct = tenant?.tenantType === "RETAILER" ? await this.demoProductPath(tenant.tenantId, demoQuery) : null;
+    const tourSteps = steps.map((step) => ({
+      ...step,
+      href: resolveTourHref(step.href, {
+        search: demoQuery,
+        product: demoProduct,
+        provider: DEMO_DISTRIBUTORS[0].providerKey,
+      }),
+    }));
 
-    const plan = tenant
-      ? await this.prisma.tenant.findUnique({
-          where: { id: tenant.tenantId },
-          select: { plan: true },
-        })
-      : null;
+    const plan = planRow;
 
     return {
       needsOnboarding,
@@ -618,51 +629,17 @@ export class OnboardingService {
       });
     }
 
-    const existingDemoOrders = await this.prisma.providerOrder.count({
-      where: { tenantId: retailerTenantId, notes: { contains: "[DEMO]" } },
-    });
-
-    if (existingDemoOrders === 0) {
-      const norte = products.find((p) => p.provider === "LIST_DEMO_NORTE")!;
-      const sur = [...products].reverse().find((p) => p.provider === "LIST_DEMO_SUR")!;
-      for (const [product, qty, note] of [
-        [norte, 1, "[DEMO] Pedido de ejemplo — Distribuidora Demo Norte"],
-        [sur, 2, "[DEMO] Pedido de ejemplo — Distribuidora Demo Sur"],
-      ] as const) {
-        await this.prisma.providerOrder.create({
-          data: {
-            userId: actorUserId,
-            tenantId: retailerTenantId,
-            createdByUserId: actorUserId,
-            approvedByUserId: actorUserId,
-            approvalDecidedAt: new Date(),
-            provider: product.provider,
-            channel: "OFFLINE",
-            status: "OFFLINE",
-            approvalStatus: "NOT_REQUIRED",
-            paymentOption: "OFFLINE",
-            notes: note,
-            subtotal: new Prisma.Decimal(product.price * qty),
-            impuestos: new Prisma.Decimal(0),
-            percepciones: new Prisma.Decimal(0),
-            total: new Prisma.Decimal(product.price * qty),
-            items: [
-              {
-                externalId: product.externalId,
-                sku: product.sku,
-                name: product.name,
-                quantity: qty,
-                unitPrice: product.price,
-                ivaPercent: product.ivaPercent,
-                pricingMode: "offline",
-              },
-            ],
-            addressSnapshot: {},
-            draftInput: { demo: true },
-          },
-        });
-      }
-    }
+    const history: DemoHistoryProduct[] = products.map((p) => ({
+      provider: p.provider,
+      externalId: p.externalId,
+      sku: p.sku,
+      name: p.name,
+      price: p.price,
+      finalPrice: p.finalPrice,
+      ivaPercent: p.ivaPercent,
+    }));
+    await this.seedDemoOrders(retailerTenantId, actorUserId, history);
+    await this.seedDemoPriceDrops(retailerTenantId, history);
 
     await this.prisma.tenant.update({
       where: { id: retailerTenantId },
@@ -670,6 +647,92 @@ export class OnboardingService {
     });
 
     return { distributors: distributors.map((d) => ({ id: d.id, name: d.name, providerKey: d.providerKey })) };
+  }
+
+  /**
+   * Pedidos de los últimos meses (online con número del distribuidor, y offline)
+   * para que pedidos, factura y estadísticas tengan contenido. Si faltan (demo
+   * vieja con solo dos offline), se regeneran; los de la persona no se tocan.
+   */
+  private async seedDemoOrders(retailerTenantId: string, actorUserId: string, products: DemoHistoryProduct[]) {
+    const demoWhere = {
+      tenantId: retailerTenantId,
+      provider: { in: DEMO_DISTRIBUTORS.map((d) => d.providerKey) },
+      notes: { contains: "[DEMO]" },
+    };
+    const [existing, online] = await Promise.all([
+      this.prisma.providerOrder.count({ where: demoWhere }),
+      this.prisma.providerOrder.count({ where: { ...demoWhere, channel: "ONLINE" } }),
+    ]);
+    if (existing >= ORDER_DAYS.length && online > 0) return;
+    await this.prisma.providerOrder.deleteMany({ where: demoWhere });
+    const orders = buildDemoOrders(products);
+    if (orders.length === 0) return;
+    await this.prisma.providerOrder.createMany({
+      data: orders.map((order) => ({
+        userId: actorUserId,
+        tenantId: retailerTenantId,
+        createdByUserId: actorUserId,
+        approvedByUserId: actorUserId,
+        approvalDecidedAt: order.createdAt,
+        provider: order.provider,
+        channel: order.channel,
+        status: order.status,
+        approvalStatus: "NOT_REQUIRED" as const,
+        invidOrderNumber: order.orderNumber,
+        paymentOption: order.paymentOption,
+        paymentLabel: order.paymentLabel,
+        deliveryLabel: order.deliveryLabel,
+        notes: order.notes,
+        subtotal: new Prisma.Decimal(order.subtotal),
+        impuestos: new Prisma.Decimal(order.impuestos),
+        percepciones: new Prisma.Decimal(0),
+        total: new Prisma.Decimal(order.total),
+        items: order.items as Prisma.InputJsonValue,
+        addressSnapshot: {},
+        draftInput: { demo: true },
+        createdAt: order.createdAt,
+      })),
+    });
+  }
+
+  /** Historial de precios con bajas recientes, para "Bajaron de precio". Solo de este comercio. */
+  private async seedDemoPriceDrops(retailerTenantId: string, products: DemoHistoryProduct[]) {
+    const points = buildDemoPriceHistory(products);
+    await this.prisma.productPriceHistory.deleteMany({
+      where: { tenantId: retailerTenantId, provider: { in: DEMO_DISTRIBUTORS.map((d) => d.providerKey) } },
+    });
+    if (points.length === 0) return;
+    await this.prisma.productPriceHistory.createMany({
+      data: points.map((p) => ({
+        tenantId: retailerTenantId,
+        provider: p.provider,
+        externalId: p.externalId,
+        price: new Prisma.Decimal(p.price),
+        finalPrice: p.finalPrice == null ? null : new Prisma.Decimal(p.finalPrice),
+        currency: "USD",
+        capturedAt: p.capturedAt,
+      })),
+    });
+  }
+
+  /** `PROVEEDOR/externalId` de un producto demo para abrir su ficha en el recorrido. */
+  private async demoProductPath(tenantId: string, brand: string | null): Promise<string | null> {
+    try {
+      const offer = await this.prisma.tenantProductOffer.findFirst({
+        where: {
+          tenantId,
+          active: true,
+          provider: { in: DEMO_DISTRIBUTORS.map((d) => d.providerKey) },
+          ...(brand ? { product: { brand: { equals: brand, mode: "insensitive" as const } } } : {}),
+        },
+        orderBy: { stock: "desc" },
+        select: { provider: true, externalId: true },
+      });
+      return offer ? `${offer.provider}/${encodeURIComponent(offer.externalId)}` : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Marca de un producto de la demo que está en los dos distribuidores demo. */
@@ -789,7 +852,9 @@ export class OnboardingService {
     role: TenantRole | null;
     hasTenant: boolean;
     mode: "fresh" | "existing" | "preview";
+    plan?: string | null;
   }): OnboardingStep[] {
+    const capabilities = getPlanCapabilities(isTenantPlan(opts.plan) ? opts.plan : "PRO");
     if (opts.type && opts.type !== "RETAILER" && opts.mode !== "preview") return [];
     return RETAILER_ONBOARDING_STEPS.filter((step) => {
       if (opts.mode === "existing" && step.skipIfExisting) return false;
@@ -797,6 +862,7 @@ export class OnboardingService {
       if (!opts.hasTenant) return step.id === "org";
       if (step.requiresTenant && !opts.hasTenant) return false;
       if (step.roles && opts.role && !step.roles.includes(opts.role)) return false;
+      if (step.capability && !capabilities[step.capability]) return false;
       return true;
     });
   }

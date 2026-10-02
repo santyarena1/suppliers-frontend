@@ -1,3 +1,4 @@
+import { isDemoDistributorKey } from "../onboarding/onboarding-demo";
 import { incompleteSyncMessage, missingActionIsSafe, shouldUnhideOnConfigChange } from "./missing-guard";
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import {
@@ -234,6 +235,9 @@ export class ProvidersService implements OnModuleInit {
   }
 
   async sync(tenantId: string, provider: Provider, opts: { source?: CatalogSyncSource } = {}) {
+    if (isDemoDistributorKey(provider)) {
+      throw new BadRequestException("Es un distribuidor de ejemplo: con uno real, acá traés su catálogo con tu cuenta.");
+    }
     await this.visibility.assertLinked(tenantId, provider);
     const adapter = this.registry.get(provider);
     if (!adapter) {

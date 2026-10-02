@@ -21,17 +21,49 @@ function useTargetRect(selector: string | null, enabled: boolean): Rect | null {
     let timer = 0;
     let frame = 0;
     let target: HTMLElement | null = null;
+    let settle = 0;
+    const observer = new ResizeObserver(() => onChange());
 
     const measure = () => {
       if (!target || !target.isConnected) {
-        target = document.querySelector(selector) as HTMLElement | null;
-        if (target) target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+        // El primero que se ve: en mobile, el panel de escritorio existe pero está oculto.
+        target =
+          (Array.from(document.querySelectorAll(selector)) as HTMLElement[]).find((el) => {
+            const box = el.getBoundingClientRect();
+            return box.width > 1 && box.height > 1;
+          }) ?? null;
+        if (target) {
+          target.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
+          // La pantalla sigue cargando datos y el elemento se mueve: se vuelve a
+          // medir un rato y cada vez que cambia de tamaño.
+          observer.observe(target);
+          let ticks = 0;
+          window.clearInterval(settle);
+          let rescrolls = 0;
+          settle = window.setInterval(() => {
+            if (ticks++ > 40) window.clearInterval(settle);
+            // Si la pantalla volvió arriba al terminar de cargar, se lo vuelve a mostrar.
+            const r = target?.getBoundingClientRect();
+            if (target && r && (r.top > window.innerHeight - 40 || r.bottom < 40) && rescrolls++ < 3) {
+              target.scrollIntoView({ block: "center", inline: "nearest" });
+            }
+            onChange();
+          }, 250);
+        }
       }
       if (!target) {
-        if (tries++ < 50) timer = window.setTimeout(measure, 150);
+        // Hasta ~15 s: hay pantallas que tardan en traer sus datos (estadísticas).
+        if (tries++ < 100) timer = window.setTimeout(measure, 150);
         return;
       }
       const r = target.getBoundingClientRect();
+      // Se ocultó o quedó vacío (otra vista del mismo dato): buscar el que se ve.
+      if (r.width <= 1 || r.height <= 1) {
+        target = null;
+        if (tries++ < 100) timer = window.setTimeout(measure, 150);
+        setRect(null);
+        return;
+      }
       setRect(r.width > 1 && r.height > 1 ? { top: r.top, left: r.left, width: r.width, height: r.height } : null);
     };
     const onChange = () => {
@@ -42,10 +74,10 @@ function useTargetRect(selector: string | null, enabled: boolean): Rect | null {
     measure();
     window.addEventListener("resize", onChange);
     window.addEventListener("scroll", onChange, true);
-    const observer = new ResizeObserver(onChange);
     observer.observe(document.body);
     return () => {
       window.clearTimeout(timer);
+      window.clearInterval(settle);
       cancelAnimationFrame(frame);
       window.removeEventListener("resize", onChange);
       window.removeEventListener("scroll", onChange, true);

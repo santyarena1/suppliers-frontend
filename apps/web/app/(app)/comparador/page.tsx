@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownAZ,
   ArrowLeftRight,
@@ -16,7 +16,8 @@ import {
   ProviderCompareColumn,
   RetailCompareColumn,
 } from "@/components/compare/CompareColumns";
-import type { ProductDTO, RetailSearchHit } from "@/lib/api";
+import { searchApi, type ProductDTO, type RetailSearchHit } from "@/lib/api";
+import { useActiveTourStep, useOnboarding } from "@/lib/onboarding";
 import { formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
@@ -55,6 +56,35 @@ export default function ComparadorPage() {
     setManualOrder(loadManualOrder());
     setHydrated(true);
   }, []);
+
+  // En el recorrido guiado el tablero no arranca vacío: dos productos de la demo,
+  // de distintos distribuidores, para que se vea cómo compara.
+  const tourStep = useActiveTourStep();
+  const { status: onboardingStatus } = useOnboarding();
+  const tourSeeded = useRef(false);
+  useEffect(() => {
+    if (tourStep !== "compare" || !hydrated || entries.length > 0 || tourSeeded.current) return;
+    tourSeeded.current = true;
+    const q = onboardingStatus?.demo?.searchHints?.[0] ?? "monitor";
+    void searchApi
+      .all(q)
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        // Mejor el mismo producto en dos distribuidores; si no hay, dos distintos.
+        const key = (p: ProductDTO) => (p.partNumber || p.name || "").trim().toLowerCase();
+        const same = list.find((p) => list.some((o) => o.provider !== p.provider && key(o) === key(p)));
+        const picks: ProductDTO[] = same
+          ? [same, list.find((o) => o.provider !== same.provider && key(o) === key(same))!]
+          : [];
+        for (const product of list) {
+          if (picks.length >= 2) break;
+          if (picks.some((p) => p.provider === product.provider)) continue;
+          picks.push(product);
+        }
+        if (picks.length > 0) setEntries(picks.map((p) => newProviderEntry(p, "list")));
+      })
+      .catch(() => undefined);
+  }, [tourStep, hydrated, entries.length, onboardingStatus]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -396,7 +426,7 @@ export default function ComparadorPage() {
         )}
       </header>
 
-      <div className="relative z-0 flex-1 overflow-x-auto overflow-y-auto">
+      <div className="relative z-0 flex-1 overflow-x-auto overflow-y-auto" data-tour="compare-board">
         {!hydrated ? (
           <div className="flex items-center justify-center py-24 text-surface-500 text-sm">
             Cargando…

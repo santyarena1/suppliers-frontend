@@ -57,11 +57,14 @@ function writePaused(value: boolean) {
   }
 }
 
-/** ¿La pantalla actual es la del paso? Compara solo la ruta, no los filtros. */
+/**
+ * ¿La pantalla actual es la del paso? Compara la ruta exacta, no los filtros:
+ * `/proveedores` (el listado) no es `/proveedores/X` (el detalle de uno).
+ */
 export function isOnStepPage(step: OnboardingStep | null, pathname: string): boolean {
   if (!step?.href) return true;
-  const target = step.href.split("?")[0];
-  return target === "/" ? pathname === "/" : pathname === target || pathname.startsWith(`${target}/`);
+  const target = decodeURIComponent(step.href.split("?")[0]);
+  return decodeURIComponent(pathname) === target;
 }
 
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
@@ -72,6 +75,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [paused, setPaused] = useState(false);
   const [busy, setBusy] = useState(false);
   const lastNeeds = useRef<boolean | null>(null);
+  const currentRef = useRef<OnboardingStepId | null>(null);
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
 
   const refresh = useCallback(async () => {
     try {
@@ -107,11 +114,17 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       writePaused(false);
       // Se guarda sin esperar: si falla, al recargar retoma el último paso guardado.
       void onboardingApi.setStep(id).catch(() => undefined);
-      // Solo navega si la URL cambia: dos pasos seguidos en la misma búsqueda no
-      // suman entradas al historial ni recargan la pantalla.
+      // Solo navega si la URL cambia: dos pasos seguidos en la misma pantalla no
+      // suman entradas al historial ni recargan. Cambiar de pestaña (?tab=) o
+      // pasar de una búsqueda a la portada del buscador sí navega.
       const here = typeof window === "undefined" ? pathname : `${window.location.pathname}${window.location.search}`;
       if (target.href && here !== target.href) {
-        if (!isOnStepPage(target, pathname) || target.href.includes("?")) router.push(target.href);
+        router.push(target.href);
+        // Si otra navegación todavía estaba cargando y ganó, se reintenta una vez.
+        const href = target.href;
+        window.setTimeout(() => {
+          if (currentRef.current === id && !isOnStepPage(target, window.location.pathname)) router.push(href);
+        }, 3000);
       }
     },
     [steps, pathname, router]
@@ -164,4 +177,13 @@ export function useOnboarding(): OnboardingContextValue {
   const ctx = useContext(OnboardingContext);
   if (!ctx) throw new Error("useOnboarding va dentro de OnboardingProvider");
   return ctx;
+}
+
+/**
+ * Paso del recorrido que está corriendo, o `null`. No falla fuera del recorrido:
+ * lo usan pantallas que se preparan para un paso (abrir una sección, cargar un ejemplo).
+ */
+export function useActiveTourStep(): OnboardingStepId | null {
+  const ctx = useContext(OnboardingContext);
+  return ctx?.active ? ctx.step?.id ?? null : null;
 }

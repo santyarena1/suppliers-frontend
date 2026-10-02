@@ -93,7 +93,7 @@ export default function SearchLanding({ onCategoryClick: _onCategoryClick, onSho
       <PromoGrid banners={banners} module="primary" />
 
       {priceDrops.length > 0 && (
-        <section>
+        <section data-tour="price-drops">
           <div className="hm__sec">
             <h3>
               <TrendingDown className="w-3 h-3 inline mr-1.5" />

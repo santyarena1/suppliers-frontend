@@ -45,6 +45,7 @@ import ProductBuyActions from "@/components/ProductBuyActions";
 import { OwnStoreProductCompare } from "@/components/OwnStoreCompare";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
 import ArsPriceHint from "@/components/ArsPriceHint";
+import { useActiveTourStep } from "@/lib/onboarding";
 
 export default function ProductPage({ params }: { params: Promise<{ provider: string; externalId: string }> }) {
   const { provider, externalId } = use(params);
@@ -637,6 +638,12 @@ function LocalesFooter({
   // En mobile arranca cerrado: la búsqueda de locales no invade el medio de la ficha.
   // En desktop (lg+) siempre abierta.
   const [open, setOpen] = useState(false);
+  const tourStep = useActiveTourStep();
+
+  // El recorrido muestra esta sección: en mobile se abre sola.
+  useEffect(() => {
+    if (tourStep === "local-prices") setOpen(true);
+  }, [tourStep]);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 1024px)");
@@ -649,6 +656,7 @@ function LocalesFooter({
   return (
     <section
       id="precios-locales"
+      data-tour="local-prices"
       className="w-full border-t border-surface-800 bg-surface-950/80 mt-2"
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8 pb-16">

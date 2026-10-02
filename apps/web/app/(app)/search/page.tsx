@@ -32,6 +32,7 @@ import { hasOwnPrice, parsePrice } from "@/lib/format";
 import ProviderBadge from "@/components/ProviderBadge";
 import { matchesSearchTokens, searchTokens } from "@/lib/catalog-search";
 import Link from "next/link";
+import { useActiveTourStep } from "@/lib/onboarding";
 import {
   Search, Loader2, X, LayoutGrid,
   List, ArrowUpDown, AlertCircle, Package, Filter,
@@ -123,6 +124,11 @@ function SearchPage() {
   const [dropsView, setDropsView] = useState(false);
   /** En mobile los filtros/controles viven en un panel que se abre/cierra. */
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // El recorrido muestra los filtros: en mobile están plegados, se abren solos.
+  const tourStep = useActiveTourStep();
+  useEffect(() => {
+    if (tourStep === "filters") setFiltersOpen(true);
+  }, [tourStep]);
   const [includeOutOfStock, setIncludeOutOfStock] = useState(() => readSearchDefaults().outOfStock);
   const [sortBy, setSortBy] = useState<SortKey>("price_asc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");

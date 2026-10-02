@@ -106,6 +106,10 @@ function RetailerPedidosPage() {
     [orders],
   );
   const offline = useMemo(() => orders.filter(isOffline), [orders]);
+  const tourOnlineId = useMemo(
+    () => orders.find((o) => !isOffline(o) && o.status === "CREATED" && o.approvalStatus !== "PENDING_APPROVAL")?.id ?? null,
+    [orders],
+  );
   const rechazados = useMemo(
     () => orders.filter((o) => o.approvalStatus === "REJECTED"),
     [orders],
@@ -262,6 +266,7 @@ function RetailerPedidosPage() {
                 <EmptyState filter={filter} hasAny={orders.length > 0} />
               ) : (
                 <div className="flex flex-col gap-3" data-tour="orders-list">
+                  {/* El recorrido guiado señala el pedido online más reciente. */}
                   {(filter === "all"
                     ? [...esperando, ...orders.filter((o) => o.approvalStatus !== "PENDING_APPROVAL")]
                     : filtered
@@ -272,7 +277,11 @@ function RetailerPedidosPage() {
                       && prev?.approvalStatus === "PENDING_APPROVAL"
                       && order.approvalStatus !== "PENDING_APPROVAL";
                     return (
-                      <div key={order.id} className="flex flex-col gap-3">
+                      <div
+                        key={order.id}
+                        className="flex flex-col gap-3"
+                        data-tour={order.id === tourOnlineId ? "order-online" : undefined}
+                      >
                         {i === 0 && filter === "all" && esperando.length > 0 && (
                           <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-500/80 px-0.5">
                             Por aprobar
@@ -377,6 +386,11 @@ function EmptyState({ filter, hasAny }: { filter: FilterKey; hasAny: boolean }) 
       )}
     </div>
   );
+}
+
+/** Distribuidores de ejemplo del recorrido guiado. */
+function isDemoProvider(provider: string): boolean {
+  return provider.startsWith("LIST_DEMO_");
 }
 
 function isOffline(order: TenantOrder) {
@@ -552,6 +566,14 @@ function OrderCard({
                 <span className="text-[11px] font-mono text-surface-400">
                   {order.webOrderNumber ? `Web #${order.webOrderNumber}` : `#${order.orderNumber}`}
                 </span>
+              )}
+              {isDemoProvider(order.provider) && !offline && order.orderNumber && (
+                <Link
+                  href={`/proveedores/${order.provider}?tab=demo-account&invoice=${encodeURIComponent(order.orderNumber)}`}
+                  className="text-[11px] font-medium text-brand-300 hover:text-brand-200 underline underline-offset-2"
+                >
+                  Ver factura
+                </Link>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1.5 text-[11px] text-surface-500">

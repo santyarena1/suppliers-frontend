@@ -400,7 +400,7 @@ export default function ProductCard({
 
   const actions = (
     <div className="pc__foot">
-      <span className="pc__id pc-mono" title="Part number y código del distribuidor">
+      <span className="pc__id pc-mono" title={`Part number y código del distribuidor: ${codeLabel}`}>
         {codeLabel}
       </span>
       <div className="pc__acts">
@@ -570,7 +570,7 @@ export default function ProductCard({
         </div>
 
         <div className="pc__foot">
-          <span className="pc__id pc-mono" title="Part number y código del distribuidor">
+          <span className="pc__id pc-mono" title={`Part number y código del distribuidor: ${codeLabel}`}>
             {codeLabel}
           </span>
 

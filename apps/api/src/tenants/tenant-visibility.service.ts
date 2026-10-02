@@ -171,7 +171,7 @@ export class TenantVisibilityService {
       ];
     }
 
-    const includeDemo = await this.viewerSeesDemo(viewerUserId);
+    const includeDemo = viewerUserId ? await this.viewerSeesDemo(viewerUserId) : await this.tenantInTour(tenantId);
     const now = new Date();
     const [links, publicitados, configs] = await Promise.all([
       this.prisma.tenantLink.findMany({
@@ -435,6 +435,22 @@ export class TenantVisibilityService {
       select: { id: true },
     });
     return admin != null;
+  }
+
+  /**
+   * Llamadas que no dicen quién mira (estado, listas, configuración de un
+   * proveedor): los demos se ven mientras alguien del comercio está en el recorrido.
+   */
+  private async tenantInTour(tenantId: string): Promise<boolean> {
+    const members = await this.prisma.tenantMembership.findMany({
+      where: { tenantId, active: true, user: { active: true } },
+      select: {
+        user: {
+          select: { role: true, onboardingCompletedAt: true, onboardingReplay: true, onboardingPreviewRestoreTenantId: true },
+        },
+      },
+    });
+    return members.some((m) => viewerSeesDemoCatalog(m.user));
   }
 
   private async viewerSeesDemo(userId?: string): Promise<boolean> {

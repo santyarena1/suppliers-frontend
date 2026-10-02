@@ -445,7 +445,7 @@ function Resumen({
         </div>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-3">
+      <div className="grid lg:grid-cols-3 gap-3" data-tour="stats-spend">
         <Card title="Evolución mensual" className="lg:col-span-2">
           <SpendAreaChart data={data.byMonth} />
         </Card>
@@ -491,7 +491,7 @@ function Resumen({
         </Card>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-3">
+      <div className="grid lg:grid-cols-3 gap-3" data-tour="stats-providers">
         <MiniRank title="Top distribuidores" rows={data.byProvider} onPick={(r) => onOpen("provider", r)} />
         <MiniRank title="Top marcas" rows={data.byBrand} onPick={(r) => onOpen("brand", r)} />
         <MiniRank title="Top categorías" rows={data.byCategory} onPick={(r) => onOpen("category", r)} />

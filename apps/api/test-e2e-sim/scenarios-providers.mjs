@@ -536,4 +536,65 @@ export async function p7Disconnect(ctx) {
   s.check("volver a subir la lista lo reconecta y vuelve a la búsqueda", up2.final.data?.status === "APPLIED" && row2?.linked === true && row2?.inSearch === true, { status: up2.final.data?.status, upload: up2.up?.status, row: row2 && { linked: row2.linked, configured: row2.configured, inSearch: row2.inSearch } });
 }
 
-export const providerScenarios = [p1OnboardingDemo, p2Integrated, p3ListVariants, p4ReuploadFreshness, p5SharedProviderIsolated, p6BaseLimit, p7Disconnect];
+/** Recorrido guiado extendido: datos de ejemplo durante el tour y limpios al terminar. */
+export async function p8ExtendedTour(ctx) {
+  const s = scenario("P8", "Recorrido guiado extendido (tutorial completo)");
+  const r = await newRetailer(ctx, "ptour", "PRO", { complete: false });
+
+  const st = await api("GET", "/onboarding/status", { token: r.token });
+  const ids = (st.data?.steps ?? []).map((x) => x.id);
+  const expected = ["welcome", "search", "filters", "price-drops", "local-prices", "compare", "add-to-cart", "cart", "orders", "order-online", "invoice", "orders-stats", "providers", "provider-lists", "provider-account", "provider-sync", "provider-config", "provider-catalog", "providers-stats", "team", "done"];
+  s.check("PRO dueño: el recorrido tiene todos los pasos en orden", JSON.stringify(ids) === JSON.stringify(expected), { ids });
+  const hrefs = (st.data?.steps ?? []).map((x) => x.href).filter(Boolean);
+  s.check("ningún paso queda con marcadores sin completar", hrefs.every((h) => !/[{}]/.test(h)), { hrefs });
+  const productStep = (st.data?.steps ?? []).find((x) => x.id === "local-prices");
+  s.check("el paso de locales abre la ficha de un producto demo", /^\/product\/LIST_DEMO_(NORTE|SUR)\//.test(productStep?.href ?? ""), { href: productStep?.href });
+
+  // La ficha del producto del paso existe.
+  const [, , prov, ext] = (productStep?.href ?? "").split("/");
+  if (prov && ext) {
+    const prod = await api("GET", `/providers/${prov}/products/${ext}`, { token: r.token });
+    s.check("la ficha del producto demo responde", prod.status === 200 && Boolean(prod.data?.name), { status: prod.status, name: prod.data?.name });
+  }
+
+  const orders = await api("GET", "/orders", { token: r.token });
+  const rows = Array.isArray(orders.data) ? orders.data : [];
+  const online = rows.filter((o) => o.channel === "ONLINE" && o.orderNumber);
+  const offline = rows.filter((o) => o.channel === "OFFLINE");
+  s.check("durante el tour hay pedidos de ejemplo online (con número) y offline", online.length >= 5 && offline.length >= 2, { online: online.length, offline: offline.length });
+  s.check("el pedido más reciente es online", rows[0]?.channel === "ONLINE" && Boolean(rows[0]?.orderNumber), { first: rows[0] && { channel: rows[0].channel, orderNumber: rows[0].orderNumber } });
+  s.check("los ítems de los pedidos traen qty y precio", rows.every((o) => (o.items ?? []).every((it) => it.qty > 0 && it.unitPrice > 0)), { sample: rows[0]?.items?.[0] });
+
+  const ins = await api("GET", "/orders/insights?days=90", { token: r.token });
+  s.check("las estadísticas de compras tienen contenido (pedidos, meses, distribuidores)", (ins.data?.kpis?.orders ?? 0) >= 10 && (ins.data?.byMonth?.length ?? 0) >= 2 && (ins.data?.byProvider?.length ?? 0) === 2, { orders: ins.data?.kpis?.orders, months: ins.data?.byMonth?.length, providers: ins.data?.byProvider?.length });
+
+  const drops = await api("GET", "/catalog/featured?take=24", { token: r.token });
+  const demoDrops = (drops.data ?? []).filter((p) => String(p.provider).startsWith("LIST_DEMO_") && (p.priceDropPercent ?? 0) > 0);
+  s.check("'Bajaron de precio' trae productos demo con baja", demoDrops.length >= 3, { count: demoDrops.length, sample: demoDrops.slice(0, 2).map((p) => ({ name: p.name, pct: p.priceDropPercent })) });
+
+  const sync = await api("POST", "/providers/LIST_DEMO_NORTE/sync", { token: r.token });
+  s.check("sincronizar un demo → 400 con mensaje claro (no 5xx)", sync.status === 400 && /ejemplo/i.test(sync.body?.message ?? ""), sync);
+  const cred = await api("POST", "/credentials", { token: r.token, body: { providerName: "LIST_DEMO_NORTE", credentials: { user: "x", password: "y" } } });
+  s.check("cargar cuenta a un demo → 400 con mensaje claro", cred.status === 400 && /ejemplo/i.test(cred.body?.message ?? ""), cred);
+
+  // Volver a abrir el recorrido no duplica los pedidos de ejemplo.
+  const re = await api("POST", "/onboarding/reseed-demo", { token: r.token });
+  const orders2 = await api("GET", "/orders", { token: r.token });
+  s.check("regenerar la demo no duplica pedidos", re.status < 300 && (orders2.data?.length ?? 0) === rows.length, { antes: rows.length, despues: orders2.data?.length, status: re.status });
+
+  await completeOnboarding(r);
+  const after = await api("GET", "/orders", { token: r.token });
+  s.check("al terminar: /orders sin pedidos de ejemplo", (after.data ?? []).length === 0, { count: after.data?.length });
+  const ins2 = await api("GET", "/orders/insights?days=90", { token: r.token });
+  s.check("al terminar: las estadísticas no cuentan los pedidos de ejemplo", (ins2.data?.kpis?.orders ?? 0) === 0, { orders: ins2.data?.kpis?.orders });
+  const drops2 = await api("GET", "/catalog/featured?take=24", { token: r.token });
+  s.check("al terminar: 'Bajaron de precio' sin demos", (drops2.data ?? []).filter((p) => String(p.provider).startsWith("LIST_DEMO_")).length === 0, { count: drops2.data?.length });
+
+  // Plan Base en prueba: sin estadísticas (son de Pro), el resto igual.
+  const b = await newRetailer(ctx, "ptourb", "BASE", { complete: false });
+  const stb = await api("GET", "/onboarding/status", { token: b.token });
+  const idsB = (stb.data?.steps ?? []).map((x) => x.id);
+  s.check("Base: el recorrido no muestra estadísticas (son de Pro)", !idsB.includes("orders-stats") && !idsB.includes("providers-stats") && idsB.includes("invoice"), { idsB });
+}
+
+export const providerScenarios = [p1OnboardingDemo, p2Integrated, p3ListVariants, p4ReuploadFreshness, p5SharedProviderIsolated, p6BaseLimit, p7Disconnect, p8ExtendedTour];

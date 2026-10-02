@@ -35,6 +35,8 @@ import DistecnaAccountPanel from "@/components/DistecnaAccountPanel";
 import PolytechAccountPanel from "@/components/PolytechAccountPanel";
 import ProviderCredentialForm from "@/components/ProviderCredentialForm";
 import DisconnectProviderCard from "@/components/DisconnectProviderCard";
+import { DemoAccountPanel, DemoCredentialsCard, DemoListsPanel, DemoSyncPanel, isDemoProvider } from "@/components/onboarding/DemoProviderPanels";
+import { useSearchParams } from "next/navigation";
 import SyncHealthBanner, { type SyncHealth } from "@/components/SyncHealthBanner";
 import PlanGate from "@/components/subscription/PlanGate";
 import {
@@ -55,12 +57,12 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
-type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account";
+type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account" | "demo-account";
 
 const CATALOG_PAGE = 50;
 
 const VALID_PROVIDER_TABS: ProviderTab[] = [
-  "lists", "orders", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account",
+  "lists", "orders", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account", "demo-account",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -77,6 +79,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const provider = raw.toUpperCase() as Provider;
   const valid = isProviderKey(provider);
   const listBased = isListProvider(provider);
+  // Distribuidor de ejemplo del recorrido: muestra todas las pestañas con contenido demo.
+  const demo = isDemoProvider(provider);
   const hasAdapter = IMPLEMENTED_PROVIDERS.includes(provider);
   // Ashir, HDC, Gaming City: no hay API. El Excel del comercio es el canal.
   const spreadsheet = !listBased && !hasAdapter;
@@ -96,15 +100,15 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const autoTabDone = useRef(false);
   const pendingRunId = useRef<string | null>(null);
 
+  const queryTab = useSearchParams().get("tab");
   useEffect(() => {
     tabFromQuery.current = false;
     autoTabDone.current = false;
-    const initialTab = new URLSearchParams(window.location.search).get("tab");
-    if (VALID_PROVIDER_TABS.includes(initialTab as ProviderTab)) {
-      setTab(initialTab as ProviderTab);
+    if (VALID_PROVIDER_TABS.includes(queryTab as ProviderTab)) {
+      setTab(queryTab as ProviderTab);
       tabFromQuery.current = true;
     }
-  }, [provider]);
+  }, [provider, queryTab]);
 
   useEffect(() => {
     void loadMyProviders().then((list) => {
@@ -513,10 +517,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-surface-800 overflow-x-auto scrollbar-none">
+                <div className="flex border-b border-surface-800 overflow-x-auto scrollbar-none" data-tour="provider-tabs">
                   {[
                     ...(listPriced ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }] : []),
-                    ...(listBased || spreadsheet
+                    ...((listBased || spreadsheet) && !demo
                       ? []
                       : [
                           { key: "credentials" as const, label: "Mi cuenta" },
@@ -534,6 +538,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     ...(provider === "SOLUTION_BOX" ? [{ key: "sb-account" as const, label: "Pedidos y Facturas", shortLabel: "Pedidos" }] : []),
                     ...(provider === "DISTECNA" ? [{ key: "dt-account" as const, label: "Pedidos y cuenta", shortLabel: "Pedidos" }] : []),
                     ...(provider === "POLYTECH" ? [{ key: "pt-account" as const, label: "Pedidos y cuenta", shortLabel: "Pedidos" }] : []),
+                    ...(demo ? [{ key: "demo-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Cta. Cte." }] : []),
                   ].map(({ key, label, shortLabel }) => (
                     <button
                       key={key}
@@ -563,7 +568,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                 {tab === "orders" && listPriced && <NodoOrdersPanel provider={provider} />}
 
-                {tab === "lists" && listPriced && (
+                {demo && tab === "lists" && <DemoListsPanel providerName={providerLabel(provider)} />}
+                {tab === "lists" && listPriced && !demo && (
                   <ListImportsPanel
                     provider={provider}
                     uploadsAsBase={listBased && (isAdmin() || !isRetailer)}
@@ -574,6 +580,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   />
                 )}
 
+                {demo && tab === "credentials" && <DemoCredentialsCard providerName={providerLabel(provider)} />}
+                {demo && tab === "sync" && <DemoSyncPanel providerName={providerLabel(provider)} />}
+                {demo && tab === "demo-account" && <DemoAccountPanel provider={provider} providerName={providerLabel(provider)} />}
+
                 {tab === "credentials" && !listBased && (
                   canManage ? (
                     <ProviderCredentialForm provider={provider} onChanged={loadStatus} />
@@ -582,7 +592,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   )
                 )}
 
-                {tab === "sync" && (
+                {tab === "sync" && !demo && (
                   <div className="max-w-xl flex flex-col gap-4">
                     {isRetailer && (
                       <button
@@ -644,7 +654,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 )}
 
                 {tab === "config" && (
-                  <div className="max-w-xl">
+                  <div className="max-w-xl" data-tour="provider-tab-content">
                     {loadingConfig ? (
                       <div className="flex items-center justify-center py-16">
                         <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
@@ -882,7 +892,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 )}
 
                 {tab === "catalog" && (
-                  <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-4" data-tour="provider-tab-content">
                     <form onSubmit={handleSearch} className="flex gap-2 max-w-xl flex-wrap items-center">
                       <div className="relative flex-1 min-w-[220px]">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500" />

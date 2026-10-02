@@ -39,6 +39,7 @@ import {
   type CatalogStats,
 } from "./purchase-analytics";
 import { indexOpsAliases, isAliasable, parseOpsGroupKey, type OpsAliasKind } from "./purchase-ops-aliases";
+import { DEMO_DISTRIBUTORS, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { normalizeApprovalQuote } from "./approval-quote";
 
 /**
@@ -238,9 +239,17 @@ export class OrdersService {
     const compareStart =
       periodStart && periodDays > 0 ? new Date(periodStart.getTime() - periodDays * 86_400_000) : null;
 
+    // Los pedidos de ejemplo del recorrido cuentan solo mientras dura el recorrido.
+    const showDemo = await this.viewerSeesDemo(tenant.userId);
     const counted = {
       tenantId: tenant.tenantId,
       status: { in: [...COUNTED_ORDER_STATUSES] },
+      ...(showDemo
+        ? {}
+        : {
+            provider: { notIn: DEMO_DISTRIBUTORS.map((d) => d.providerKey) as string[] },
+            NOT: { notes: { contains: "[DEMO]" } },
+          }),
     };
 
     const [currentRows, previousRows, catalogStats, aliasRows] = await Promise.all([
@@ -343,6 +352,14 @@ export class OrdersService {
       catalogStats,
       opsAliases: indexOpsAliases(aliasRows),
     });
+  }
+
+  private async viewerSeesDemo(userId: string): Promise<boolean> {
+    const viewer = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, onboardingCompletedAt: true, onboardingReplay: true, onboardingPreviewRestoreTenantId: true },
+    });
+    return Boolean(viewer && viewerSeesDemoCatalog(viewer));
   }
 
   async unifyOpsAlias(tenant: TenantContext, dto: UnifyOpsAliasDto) {

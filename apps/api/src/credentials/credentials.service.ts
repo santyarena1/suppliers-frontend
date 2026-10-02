@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { isDemoDistributorKey } from "../onboarding/onboarding-demo";
 import { providerHasCatalogAdapter, type Provider } from "@nodo/shared";
 import { CryptoService } from "../common/crypto/crypto.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -46,6 +47,9 @@ export class CredentialsService {
   async save(tenantId: string, savedById: string, dto: SaveCredentialDto) {
     // No se puede cargar la cuenta de un distribuidor que para este comercio no
     // existe. Si lo descubrió por publicidad, cargarla lo deja vinculado.
+    if (isDemoDistributorKey(dto.providerName)) {
+      throw new BadRequestException("Es un distribuidor de ejemplo: no lleva cuenta. Cargá la de tus distribuidores reales.");
+    }
     const values = cleanCredentialValues(dto.credentials);
     await this.visibility.ensureLinked(tenantId, dto.providerName);
 
