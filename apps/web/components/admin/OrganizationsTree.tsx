@@ -21,6 +21,8 @@ import {
   TenantUserRelations,
   tenantsApi,
 } from "@/lib/api";
+import Link from "next/link";
+import { CreditCard } from "lucide-react";
 import GeneratedPassword from "./GeneratedPassword";
 import { PLAN_CATALOG, formatUsd, type TenantPlan } from "@/lib/plans";
 import EnterAsButton from "./EnterAsButton";
@@ -744,6 +746,15 @@ function TenantPanel({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {tenant.type === "RETAILER" && (
+              <Link
+                href={`/admin?tab=subscriptions&org=${tenant.id}`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-brand-500/40 text-brand-200 hover:text-white hover:border-brand-400 transition-colors"
+                title="Cambiar plan, dar cortesía, extender, registrar pagos"
+              >
+                <CreditCard className="w-3.5 h-3.5" /> Plan y cortesía
+              </Link>
+            )}
             <button
               onClick={() => run(() => tenantsApi.update(tenant.id, { active: !tenant.active }), tenant.active ? "Organización desactivada" : "Organización activada", "No se pudo cambiar el estado")}
               className={`text-xs font-medium px-2.5 py-1.5 rounded-md border ${

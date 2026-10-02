@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { adminSubscriptionsApi } from "@/lib/api";
 import {
   ADMIN_SUBSCRIPTION_FILTERS,
@@ -111,6 +112,12 @@ export default function SubscriptionsPanel({ showToast }: { showToast: ShowToast
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
   const closeDetail = useCallback(() => setOpenId(null), []);
+  // Acceso directo desde el Directorio: /admin?tab=subscriptions&org=<id> abre esa suscripción.
+  const searchParams = useSearchParams();
+  const orgParam = searchParams.get("org");
+  useEffect(() => {
+    if (orgParam) setOpenId(orgParam);
+  }, [orgParam]);
 
   const load = useCallback(async () => {
     try {
