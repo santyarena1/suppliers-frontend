@@ -12,7 +12,9 @@ import {
   type BannerSlot,
 } from "@/lib/brand-presets";
 import { assetUrl } from "@/lib/assets";
-import { demoBannerForSlot } from "@/lib/demoBanners";
+import { demoFillForSlot, type BrandDemo, type CategoryDemo } from "@/lib/demoBanners";
+import BrandBanner from "./banners/BrandBanner";
+import CategoryBanner from "./banners/CategoryBanner";
 import { trackAdClick, trackAdImpression } from "@/components/ads/ad-track";
 
 function pickBanner(banners: Banner[], slot: BannerSlot): Banner | undefined {
@@ -121,9 +123,21 @@ function paidAsBanner(creative: AdCreative, slot: BannerSlot): Banner {
   };
 }
 
+type ResolvedSlot = {
+  slot: BannerSlot;
+  /** Imagen a mostrar: campaña, banner real o banda NODO de demo. */
+  banner?: Banner;
+  /** Mosaico demo armado como componente (marca o categoría). */
+  mosaic?: BrandDemo | CategoryDemo;
+  isDemo: boolean;
+  campaignId?: string;
+};
+
+const isVisible = (s: ResolvedSlot) => !!s.banner || !!s.mosaic;
+
 type PromoGridProps = {
   banners: Banner[];
-  /** Si true (default), rellena slots vacíos con imágenes de demo. */
+  /** Si true (default), rellena slots vacíos con los mosaicos de demo. */
   useDemoFill?: boolean;
   /**
    * Qué módulo dibujar. Se puede pedir uno solo para intercalar contenido en el
@@ -147,38 +161,43 @@ export default function PromoGrid({ banners, useDemoFill = true, module = "both"
       .catch(() => setPaid([]));
   }, []);
 
-  function resolveSlot(slot: BannerSlot) {
+  /** Prioridad: campaña paga → banner real del admin → relleno demo. */
+  function resolveSlot(slot: BannerSlot): ResolvedSlot {
     const paidMatch = paid.find((creative) => creative.slot === slot);
     if (paidMatch) {
       return { slot, banner: paidAsBanner(paidMatch, slot), isDemo: false, campaignId: paidMatch.campaignId };
     }
     const real = pickBanner(banners, slot);
-    if (real) return { slot, banner: real, isDemo: false, campaignId: undefined };
-    if (useDemoFill) return { slot, banner: demoBannerForSlot(slot), isDemo: true, campaignId: undefined };
-    return { slot, banner: undefined, isDemo: false, campaignId: undefined };
+    if (real) return { slot, banner: real, isDemo: false };
+    if (!useDemoFill) return { slot, isDemo: false };
+    const fill = demoFillForSlot(slot);
+    if (fill.kind === "image") return { slot, banner: fill.banner, isDemo: true };
+    return { slot, mosaic: fill, isDemo: true };
   }
 
   const primary = BANNER_SLOT_ORDER_PRIMARY.map(resolveSlot);
   const secondary = BANNER_SLOT_ORDER_SECONDARY.map(resolveSlot);
-  const anyVisible = [...primary, ...secondary].some((s) => !!s.banner);
-  if (!anyVisible) return null;
+  if (![...primary, ...secondary].some(isVisible)) return null;
 
-  function renderModule(
-    items: ReturnType<typeof resolveSlot>[],
-    containerClass: string,
-    keyPrefix: string,
-  ) {
-    const visible = items.filter((s) => !!s.banner);
-    if (visible.length === 0) return null;
+  function renderModule(items: ResolvedSlot[], containerClass: string, keyPrefix: string) {
+    if (!items.some(isVisible)) return null;
     return (
       <div key={keyPrefix} className={containerClass}>
-        {items.map(({ slot, banner, isDemo, campaignId }) =>
-          banner ? (
+        {items.map(({ slot, banner, mosaic, isDemo, campaignId }) => {
+          if (mosaic) {
+            return (
+              <SlotShell key={slot} slot={slot}>
+                {mosaic.kind === "brand" ? <BrandBanner demo={mosaic} /> : <CategoryBanner demo={mosaic} />}
+              </SlotShell>
+            );
+          }
+          if (!banner) return null;
+          return (
             <SlotShell key={slot} slot={slot}>
               <FilledBanner banner={banner} isDemo={isDemo} campaignId={campaignId} />
             </SlotShell>
-          ) : null,
-        )}
+          );
+        })}
       </div>
     );
   }

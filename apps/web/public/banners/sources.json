@@ -1,140 +1,223 @@
-[
- {
-  "slot": "hero_main",
-  "file": "/banners/brands/asus/hero_main.webp",
-  "kb": 11,
-  "sources": [
-   {
-    "brand": "asus",
-    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-2_0_desktop_2_1X.jpg",
-    "page": "https://www.asus.com/ar/"
-   }
-  ]
- },
- {
-  "slot": "hero_side",
-  "file": "/banners/brands/aorus/hero_side.webp",
-  "kb": 23,
-  "sources": [
-   {
-    "brand": "aorus",
-    "url": "https://static.gigabyte.com/StaticFile/Image/Global/06a0eba11d99d7c8fc2c134adc524ec8/PromotionBanner/605/webp/1920",
-    "page": "https://www.gigabyte.com/ar/Graphics-Card"
-   }
-  ]
- },
- {
-  "slot": "tile_4",
-  "file": "/banners/brands/msi/tile_4.webp",
-  "kb": 67,
-  "sources": [
-   {
-    "brand": "msi",
-    "url": "https://storage-asset.msi.com/global/picture/banner/banner_1767665981a8496ea3c324d5dd4703bed08acb31a0.jpeg",
-    "page": "https://www.msi.com/index.php"
-   }
-  ]
- },
- {
-  "slot": "mid_wide",
-  "file": "/banners/brands/hyperx/mid_wide.webp",
-  "kb": 30,
-  "sources": [
-   {
-    "brand": "hyperx",
-    "url": "https://hyperx.com/cdn/shop/files/HX_Cloud_Stinger_3_wireless_homepage_banner_desktop_1880x720px.jpg?v=1776961084&width=1880",
-    "page": "https://hyperx.com/"
-   }
-  ]
- },
- {
-  "slot": "mid_a",
-  "file": "/banners/brands/xpg/mid_a.webp",
-  "kb": 74,
-  "sources": [
-   {
-    "brand": "xpg",
-    "url": "https://webapi3.adata.com/storage/news_and_events/press_release_xpg_launches_new_great_value_chassis_psu_products_1000x1000.jpg",
-    "page": "https://www.xpg.com/"
-   }
-  ]
- },
- {
-  "slot": "tile_1",
-  "file": "/banners/categories/tile_1.webp",
-  "kb": 50,
-  "sources": [
-   {
-    "brand": "asus",
-    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-1_0_desktop_4_1X.jpg",
-    "page": "https://www.asus.com/ar/"
-   },
-   {
-    "brand": "aorus",
-    "url": "https://static.gigabyte.com/StaticFile/Image/Global/06a0eba11d99d7c8fc2c134adc524ec8/PromotionBanner/605/webp/1920",
-    "page": "https://www.gigabyte.com/ar/Graphics-Card"
-   },
-   {
-    "brand": "msi",
-    "url": "https://storage-asset.msi.com/global/picture/banner/banner_1767665981a8496ea3c324d5dd4703bed08acb31a0.jpeg",
-    "page": "https://www.msi.com/index.php"
-   }
-  ]
- },
- {
-  "slot": "tile_2",
-  "file": "/banners/categories/tile_2.webp",
-  "kb": 31,
-  "sources": [
-   {
-    "brand": "corsair",
-    "url": "http://assets.corsair.com/image/upload/f_auto/q_auto/v1789408351/hp-lg-tile-xeneonedge.png",
-    "page": "https://www.corsair.com/"
-   },
-   {
-    "brand": "hyperx",
-    "url": "https://hyperx.com/cdn/shop/files/HX_Cloud_Stinger_3_wireless_homepage_banner_desktop_1880x720px.jpg?v=1776961084&width=1100",
-    "page": "https://hyperx.com/"
-   },
-   {
-    "brand": "asus",
-    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-0_0_desktop_0_1X.jpg",
-    "page": "https://www.asus.com/ar/"
-   }
-  ]
- },
- {
-  "slot": "tile_3",
-  "file": "/banners/categories/tile_3.webp",
-  "kb": 44,
-  "sources": [
-   {
-    "brand": "asus",
-    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-7_0_desktop_7_1X.jpg",
-    "page": "https://www.asus.com/ar/"
-   },
-   {
-    "brand": "corsair",
-    "url": "http://assets.corsair.com/image/upload/f_auto/q_auto/v1789408351/hp-lg-tile-xeneonedge.png",
-    "page": "https://www.corsair.com/"
-   }
-  ]
- },
- {
-  "slot": "mid_b",
-  "file": "/banners/categories/mid_b.webp",
-  "kb": 59,
-  "sources": [
-   {
-    "brand": "asus",
-    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-6_0_desktop_5_1X.jpg",
-    "page": "https://www.asus.com/ar/"
-   },
-   {
-    "brand": "msi",
-    "url": "https://storage-asset.msi.com/global/picture/banner/banner_1780046930475719f66c0298abf3590f8c4a5d1e2b.jpeg",
-    "page": "https://www.msi.com/index.php"
-   }
-  ]
- }
-]
+{
+ "brandArt": [
+  {
+   "slot": "hero_main",
+   "file": "/banners/brands/asus/hero_main.webp",
+   "kb": 11,
+   "sources": [
+    {
+     "brand": "asus",
+     "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-2_0_desktop_2_1X.jpg",
+     "page": "https://www.asus.com/ar/"
+    }
+   ]
+  },
+  {
+   "slot": "hero_side",
+   "file": "/banners/brands/aorus/hero_side.webp",
+   "kb": 23,
+   "sources": [
+    {
+     "brand": "aorus",
+     "url": "https://static.gigabyte.com/StaticFile/Image/Global/06a0eba11d99d7c8fc2c134adc524ec8/PromotionBanner/605/webp/1920",
+     "page": "https://www.gigabyte.com/ar/Graphics-Card"
+    }
+   ]
+  },
+  {
+   "slot": "tile_4",
+   "file": "/banners/brands/msi/tile_4.webp",
+   "kb": 67,
+   "sources": [
+    {
+     "brand": "msi",
+     "url": "https://storage-asset.msi.com/global/picture/banner/banner_1767665981a8496ea3c324d5dd4703bed08acb31a0.jpeg",
+     "page": "https://www.msi.com/index.php"
+    }
+   ]
+  },
+  {
+   "slot": "mid_wide",
+   "file": "/banners/brands/hyperx/mid_wide.webp",
+   "kb": 30,
+   "sources": [
+    {
+     "brand": "hyperx",
+     "url": "https://hyperx.com/cdn/shop/files/HX_Cloud_Stinger_3_wireless_homepage_banner_desktop_1880x720px.jpg?v=1776961084&width=1880",
+     "page": "https://hyperx.com/"
+    }
+   ]
+  },
+  {
+   "slot": "mid_a",
+   "file": "/banners/brands/xpg/mid_a.webp",
+   "kb": 74,
+   "sources": [
+    {
+     "brand": "xpg",
+     "url": "https://webapi3.adata.com/storage/news_and_events/press_release_xpg_launches_new_great_value_chassis_psu_products_1000x1000.jpg",
+     "page": "https://www.xpg.com/"
+    }
+   ]
+  }
+ ],
+ "logos": [
+  {
+   "file": "/banners/logos/asus.svg",
+   "kb": 3,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/ASUS_Logo.svg"
+  },
+  {
+   "file": "/banners/logos/rog-dark.png",
+   "kb": 54,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/a/ac/ASUS_ROG_logo.svg",
+   "note": "fondo blanco quitado para fondo oscuro"
+  },
+  {
+   "file": "/banners/logos/gigabyte.svg",
+   "kb": 3,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/c/c3/Gigabyte_Technology_logo_20080107.svg"
+  },
+  {
+   "file": "/banners/logos/aorus-white.png",
+   "kb": 10,
+   "url": "https://www.aorus.com/AORUS_logo.png",
+   "note": "luminancia pasada a alfa"
+  },
+  {
+   "file": "/banners/logos/msi.svg",
+   "kb": 4,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/9/91/Micro-Star_International_logo.svg"
+  },
+  {
+   "file": "/banners/logos/xpg.svg",
+   "kb": 1,
+   "url": "https://www.xpg.com/vendor/xpgcms/img/chrome/xpg-logo.svg"
+  },
+  {
+   "file": "/banners/logos/hyperx.png",
+   "kb": 9,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/0/0f/HyperX_logo-for-DIGITAL-use.png"
+  },
+  {
+   "file": "/banners/logos/hyperx-white.png",
+   "kb": 9,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/0/0f/HyperX_logo-for-DIGITAL-use.png",
+   "note": "texto negro pasado a blanco"
+  },
+  {
+   "file": "/banners/logos/logitechg-white.svg",
+   "kb": 3,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/2/25/Logitech_G_logo_horiz_white.svg",
+   "note": "viewBox corregido"
+  },
+  {
+   "file": "/banners/logos/logitechg.svg",
+   "kb": 3,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/2/25/Logitech_G_logo_horiz_white.svg",
+   "note": "viewBox corregido, relleno #111"
+  },
+  {
+   "file": "/banners/logos/corsair.svg",
+   "kb": 3,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/Corsair_2020_logo.svg"
+  },
+  {
+   "file": "/banners/logos/samsung.png",
+   "kb": 9,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/0/00/Samsung_Orig_Wordmark_BLACK_RGB.png"
+  },
+  {
+   "file": "/banners/logos/lg.svg",
+   "kb": 15,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/e/ed/LG_Electronics_logo_2015_%28english%29.svg"
+  },
+  {
+   "file": "/banners/logos/lenovo.svg",
+   "kb": 5,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/b/b8/Lenovo_logo_2015.svg"
+  },
+  {
+   "file": "/banners/logos/hp.svg",
+   "kb": 3,
+   "url": "https://upload.wikimedia.org/wikipedia/commons/a/ad/HP_logo_2012.svg"
+  }
+ ],
+ "products": [
+  {
+   "file": "/banners/products/gpu-asus-prime-rtx5070ti.jpg",
+   "kb": 31,
+   "product": "ASUS PRIME RTX 5070 Ti 16GB",
+   "url": "https://static.nb.com.ar/i/nb_PLACA-DE-VIDEO-ASUS-PRIME-RTX-5070TI-16GB_ver_769a4a1c5a82b3351993e5d1b9c16316.png"
+  },
+  {
+   "file": "/banners/products/gpu-gigabyte-rtx5070-gaming.jpg",
+   "kb": 43,
+   "product": "GIGABYTE RTX 5070 GAMING OC 12GB",
+   "url": "https://static.nb.com.ar/i/nb_PLACA-DE-VIDEO-GIGABYTE-RTX-5070-GAMING-OC-12GB_ver_0cad939256db4e4be20916229fc33782.jpg"
+  },
+  {
+   "file": "/banners/products/gpu-msi-rtx5060-gaming-trio.jpg",
+   "kb": 21,
+   "product": "MSI GeForce RTX 5060 8G GAMING TRIO OC WHITE",
+   "url": "https://www.invidcomputers.com/thumb/0000000000418094280560418094_400x400.png"
+  },
+  {
+   "file": "/banners/products/per-logitech-g502x-plus.jpg",
+   "kb": 15,
+   "product": "Logitech G502 X PLUS",
+   "url": null,
+   "note": "foto de catálogo de distribuidor (sync de NODO); URL original no registrada"
+  },
+  {
+   "file": "/banners/products/per-corsair-k70-core-tkl.jpg",
+   "kb": 24,
+   "product": "Corsair K70 CORE TKL RGB Wireless",
+   "url": null,
+   "note": "foto de catálogo de distribuidor (sync de NODO); URL original no registrada"
+  },
+  {
+   "file": "/banners/products/per-hyperx-cloud-stinger2.jpg",
+   "kb": 15,
+   "product": "HyperX Cloud Stinger 2",
+   "url": null,
+   "note": "foto de catálogo de distribuidor (sync de NODO); URL original no registrada"
+  },
+  {
+   "file": "/banners/products/mon-asus-rog-pg32ucdp.jpg",
+   "kb": 40,
+   "product": "ASUS ROG Swift OLED PG32UCDP 32\"",
+   "url": "https://www.newtree.com.ar/Temp/App_WebSite/App_PictureFiles/Items/4711387973509_800.jpg"
+  },
+  {
+   "file": "/banners/products/mon-samsung-odyssey-g5.jpg",
+   "kb": 34,
+   "product": "Samsung Odyssey G5 27\" (G55)",
+   "url": "https://static.nb.com.ar/i/nb_OUTLET-MONITOR-SAMSUNG-27-G55-GAMER-ODYSSEY_ver_abd4b01814c8b32b4dda158c716e2e41.jpeg"
+  },
+  {
+   "file": "/banners/products/mon-lg-ultragear-24gs60f.jpg",
+   "kb": 24,
+   "product": "LG UltraGear 24GS60F 180Hz",
+   "url": "https://www.invidcomputers.com/thumb/0000000000416167954060416167-1_400x400.png"
+  },
+  {
+   "file": "/banners/products/nb-msi-cyborg15.jpg",
+   "kb": 14,
+   "product": "MSI Cyborg 15 C13WEO",
+   "url": "https://static.nb.com.ar/i/nb_NOTEBOOK-MSI-CYBORG-15-C13WEO-i7-13620H-8GB-DDR4-M2-512GB-FHD-15.6\"-RTX-5050_ver_7b234aff123f442b4071ea458ecb91f5.png"
+  },
+  {
+   "file": "/banners/products/nb-lenovo-legion5.jpg",
+   "kb": 39,
+   "product": "Lenovo Legion 5 16IRX9",
+   "url": "https://www.gruponucleo.app/Temp/App_WebSite/App_PictureFiles/Items/68182.jpg"
+  },
+  {
+   "file": "/banners/products/nb-hp-victus15.jpg",
+   "kb": 12,
+   "product": "HP Victus 15 (R5, RTX 3050)",
+   "url": "https://images.elit.com.ar/p/18145/i/tkXVJ_l.webp"
+  }
+ ]
+}
