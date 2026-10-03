@@ -27,7 +27,6 @@ export default function BrandBanner({ demo }: { demo: BrandDemo }) {
       />
       <div className={styles.fade} aria-hidden />
       <div className={styles.slash} aria-hidden />
-      <span className={styles.demo}>Demo</span>
       <div className={styles.copy}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

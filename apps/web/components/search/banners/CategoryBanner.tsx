@@ -12,7 +12,6 @@ export default function CategoryBanner({ demo }: { demo: CategoryDemo }) {
       aria-label={`${demo.title}: ${demo.cta.label}`}
     >
       <div className={styles.grid} aria-hidden />
-      <span className={styles.demo}>Demo</span>
       <div className={styles.catCopy}>
         <p className={styles.catKicker}>Categoría</p>
         <h3 className={styles.catTitle}>{demo.title}</h3>

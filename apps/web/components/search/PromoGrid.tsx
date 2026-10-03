@@ -67,11 +67,6 @@ function FilledBanner({
         <div className="absolute inset-0 bg-gradient-to-br from-brand-700/40 via-surface-900 to-surface-950" />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
-      {isDemo && (
-        <span className="absolute top-2 right-2 z-10 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-black/60 text-white/80 border border-white/15">
-          Demo
-        </span>
-      )}
       {campaignId && !isDemo && (
         <span className="absolute top-2 right-2 z-10 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/80 text-black">
           Patrocinado
