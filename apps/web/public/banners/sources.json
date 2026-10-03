@@ -1,0 +1,140 @@
+[
+ {
+  "slot": "hero_main",
+  "file": "/banners/brands/asus/hero_main.webp",
+  "kb": 11,
+  "sources": [
+   {
+    "brand": "asus",
+    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-2_0_desktop_2_1X.jpg",
+    "page": "https://www.asus.com/ar/"
+   }
+  ]
+ },
+ {
+  "slot": "hero_side",
+  "file": "/banners/brands/aorus/hero_side.webp",
+  "kb": 23,
+  "sources": [
+   {
+    "brand": "aorus",
+    "url": "https://static.gigabyte.com/StaticFile/Image/Global/06a0eba11d99d7c8fc2c134adc524ec8/PromotionBanner/605/webp/1920",
+    "page": "https://www.gigabyte.com/ar/Graphics-Card"
+   }
+  ]
+ },
+ {
+  "slot": "tile_4",
+  "file": "/banners/brands/msi/tile_4.webp",
+  "kb": 67,
+  "sources": [
+   {
+    "brand": "msi",
+    "url": "https://storage-asset.msi.com/global/picture/banner/banner_1767665981a8496ea3c324d5dd4703bed08acb31a0.jpeg",
+    "page": "https://www.msi.com/index.php"
+   }
+  ]
+ },
+ {
+  "slot": "mid_wide",
+  "file": "/banners/brands/hyperx/mid_wide.webp",
+  "kb": 30,
+  "sources": [
+   {
+    "brand": "hyperx",
+    "url": "https://hyperx.com/cdn/shop/files/HX_Cloud_Stinger_3_wireless_homepage_banner_desktop_1880x720px.jpg?v=1776961084&width=1880",
+    "page": "https://hyperx.com/"
+   }
+  ]
+ },
+ {
+  "slot": "mid_a",
+  "file": "/banners/brands/xpg/mid_a.webp",
+  "kb": 74,
+  "sources": [
+   {
+    "brand": "xpg",
+    "url": "https://webapi3.adata.com/storage/news_and_events/press_release_xpg_launches_new_great_value_chassis_psu_products_1000x1000.jpg",
+    "page": "https://www.xpg.com/"
+   }
+  ]
+ },
+ {
+  "slot": "tile_1",
+  "file": "/banners/categories/tile_1.webp",
+  "kb": 50,
+  "sources": [
+   {
+    "brand": "asus",
+    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-1_0_desktop_4_1X.jpg",
+    "page": "https://www.asus.com/ar/"
+   },
+   {
+    "brand": "aorus",
+    "url": "https://static.gigabyte.com/StaticFile/Image/Global/06a0eba11d99d7c8fc2c134adc524ec8/PromotionBanner/605/webp/1920",
+    "page": "https://www.gigabyte.com/ar/Graphics-Card"
+   },
+   {
+    "brand": "msi",
+    "url": "https://storage-asset.msi.com/global/picture/banner/banner_1767665981a8496ea3c324d5dd4703bed08acb31a0.jpeg",
+    "page": "https://www.msi.com/index.php"
+   }
+  ]
+ },
+ {
+  "slot": "tile_2",
+  "file": "/banners/categories/tile_2.webp",
+  "kb": 31,
+  "sources": [
+   {
+    "brand": "corsair",
+    "url": "http://assets.corsair.com/image/upload/f_auto/q_auto/v1789408351/hp-lg-tile-xeneonedge.png",
+    "page": "https://www.corsair.com/"
+   },
+   {
+    "brand": "hyperx",
+    "url": "https://hyperx.com/cdn/shop/files/HX_Cloud_Stinger_3_wireless_homepage_banner_desktop_1880x720px.jpg?v=1776961084&width=1100",
+    "page": "https://hyperx.com/"
+   },
+   {
+    "brand": "asus",
+    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-0_0_desktop_0_1X.jpg",
+    "page": "https://www.asus.com/ar/"
+   }
+  ]
+ },
+ {
+  "slot": "tile_3",
+  "file": "/banners/categories/tile_3.webp",
+  "kb": 44,
+  "sources": [
+   {
+    "brand": "asus",
+    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-7_0_desktop_7_1X.jpg",
+    "page": "https://www.asus.com/ar/"
+   },
+   {
+    "brand": "corsair",
+    "url": "http://assets.corsair.com/image/upload/f_auto/q_auto/v1789408351/hp-lg-tile-xeneonedge.png",
+    "page": "https://www.corsair.com/"
+   }
+  ]
+ },
+ {
+  "slot": "mid_b",
+  "file": "/banners/categories/mid_b.webp",
+  "kb": 59,
+  "sources": [
+   {
+    "brand": "asus",
+    "url": "https://www.asus.com/WebsitesBanner/AR/banners/p7f8jqznbmrk3lhy/p7f8jqznbmrk3lhy-6_0_desktop_5_1X.jpg",
+    "page": "https://www.asus.com/ar/"
+   },
+   {
+    "brand": "msi",
+    "url": "https://storage-asset.msi.com/global/picture/banner/banner_1780046930475719f66c0298abf3590f8c4a5d1e2b.jpeg",
+    "page": "https://www.msi.com/index.php"
+   }
+  ]
+ }
+]

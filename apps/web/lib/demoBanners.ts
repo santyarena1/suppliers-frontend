@@ -2,81 +2,27 @@ import type { Banner } from "@/lib/api";
 import type { BannerSlot } from "@/lib/brand-presets";
 
 /**
- * Banners de demostración para el bento del buscador.
- * Se usan solo en slots sin banner real cargado por el admin.
- * Imágenes Unsplash (tech / retail) — reemplazar por creativos reales de marca,
- * distribuidor, categoría o NODO.
+ * Banners de demostración para el bento del buscador. Se usan solo en slots
+ * sin banner real cargado por el admin ni campaña paga.
+ *
+ * Mosaicos de marca: material oficial de la web de cada marca. Mosaicos de
+ * categoría: fotos oficiales de 2–3 marcas que tienen esa categoría. Las
+ * fuentes (URL oficial de cada imagen) están en public/banners/sources.json.
+ * Las dos bandas finas son de NODO. Quedan marcados "Demo" hasta que la marca
+ * contrate o mande su material.
  */
-const DEMO: Record<
-  BannerSlot,
-  { imageUrl: string; title: string; subtitle: string }
-> = {
-  hero_main: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1400&h=900&q=80",
-    title: "ASUS · Performance",
-    subtitle: "Demo · marca · reemplazá en Configuración → Banners",
-  },
-  tile_1: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1591488320449-011701bb6704?auto=format&fit=crop&w=880&h=340&q=80",
-    title: "Periféricos",
-    subtitle: "Demo · espacio disponible",
-  },
-  tile_2: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=880&h=340&q=80",
-    title: "Almacenamiento",
-    subtitle: "Demo · espacio disponible",
-  },
-  tile_3: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1587831990711-23ca6441447b?auto=format&fit=crop&w=880&h=340&q=80",
-    title: "Monitores",
-    subtitle: "Demo · espacio disponible",
-  },
-  hero_side: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1593640408182-31c70c8268f5?auto=format&fit=crop&w=1000&h=900&q=80",
-    title: "ELIT",
-    subtitle: "Demo · distribuidor",
-  },
-  tile_4: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1555617981-dac3880eac6e?auto=format&fit=crop&w=480&h=960&q=80",
-    title: "NEW BYTES",
-    subtitle: "Demo · distribuidor",
-  },
-  strip: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1920&h=280&q=80",
-    title: "NODO · Catálogo unificado",
-    subtitle: "Demo · plataforma",
-  },
-  mid_wide: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1597872200969-2b65d56bd16b?auto=format&fit=crop&w=1400&h=700&q=80",
-    title: "GIGABYTE",
-    subtitle: "Demo · marca · módulo 2",
-  },
-  mid_a: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=700&h=420&q=80",
-    title: "JBL",
-    subtitle: "Demo · marca",
-  },
-  mid_b: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1616763355548-1b57a304932f?auto=format&fit=crop&w=700&h=420&q=80",
-    title: "Notebooks",
-    subtitle: "Demo · categoría",
-  },
-  mid_strip: {
-    imageUrl:
-      "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1920&h=280&q=80",
-    title: "Placas de video",
-    subtitle: "Demo · categoría · módulo 2",
-  },
+const DEMO: Record<BannerSlot, { imageUrl: string; title: string; subtitle: string }> = {
+  hero_main: { imageUrl: "/banners/brands/asus/hero_main.webp", title: "ROG Strix", subtitle: "ASUS · Republic of Gamers" },
+  hero_side: { imageUrl: "/banners/brands/aorus/hero_side.webp", title: "AORUS", subtitle: "Placas de video GIGABYTE" },
+  tile_4: { imageUrl: "/banners/brands/msi/tile_4.webp", title: "MSI", subtitle: "Placas de video" },
+  tile_1: { imageUrl: "/banners/categories/tile_1.webp", title: "Placas de video", subtitle: "ASUS · AORUS · MSI" },
+  tile_2: { imageUrl: "/banners/categories/tile_2.webp", title: "Periféricos", subtitle: "Corsair · HyperX · ROG" },
+  tile_3: { imageUrl: "/banners/categories/tile_3.webp", title: "Monitores", subtitle: "ASUS · Corsair" },
+  strip: { imageUrl: "/banners/strip.svg", title: "Un pedido por distribuidor, armado en un solo carrito", subtitle: "NODO" },
+  mid_wide: { imageUrl: "/banners/brands/hyperx/mid_wide.webp", title: "HyperX", subtitle: "Auriculares gamer" },
+  mid_a: { imageUrl: "/banners/brands/xpg/mid_a.webp", title: "XPG", subtitle: "Gabinetes y fuentes" },
+  mid_b: { imageUrl: "/banners/categories/mid_b.webp", title: "Notebooks", subtitle: "ROG · MSI" },
+  mid_strip: { imageUrl: "/banners/mid_strip.svg", title: "Todo tu catálogo en una búsqueda", subtitle: "NODO" },
 };
 
 export function demoBannerForSlot(slot: BannerSlot): Banner {
