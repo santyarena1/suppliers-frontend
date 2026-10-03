@@ -22,7 +22,7 @@ const LANDING_REDIRECTS: Record<string, string> = {
 /** El dominio de NODO. Los anteriores redirigen acá con la misma ruta. */
 const CANONICAL_HOST = "nodohub.app";
 const LEGACY_HOSTS = new Set(["suppliers-frontend.vercel.app", "www.nodohub.app"]);
-const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
+const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/banners", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
 
 function isPrefetch(req: NextRequest): boolean {
   return (
