@@ -11,11 +11,13 @@ import { TenantsController } from "./tenants.controller";
 import { TenantsService } from "./tenants.service";
 import { MyTeamInvitesController, TeamInvitePreviewController } from "./team-invites.controller";
 import { TeamInvitesService } from "./team-invites.service";
+import { MyJoinRequestsController } from "./join-requests.controller";
+import { JoinRequestsService } from "./join-requests.service";
 
 @Module({
   imports: [forwardRef(() => ChatModule)],
-  controllers: [TenantsController, MyTenantController, MyTeamInvitesController, TeamInvitePreviewController],
-  providers: [TenantsService, PortfolioService, TenantPermissionsService, TenantContextService, TenantVisibilityService, TenantGuard, ShippingEstimatesService, TeamInvitesService],
-  exports: [TenantsService, TenantContextService, TenantVisibilityService, TenantGuard, TeamInvitesService],
+  controllers: [TenantsController, MyTenantController, MyTeamInvitesController, TeamInvitePreviewController, MyJoinRequestsController],
+  providers: [TenantsService, PortfolioService, TenantPermissionsService, TenantContextService, TenantVisibilityService, TenantGuard, ShippingEstimatesService, TeamInvitesService, JoinRequestsService],
+  exports: [TenantsService, TenantContextService, TenantVisibilityService, TenantGuard, TeamInvitesService, JoinRequestsService],
 })
 export class TenantsModule {}

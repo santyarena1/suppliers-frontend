@@ -21,3 +21,14 @@ export class JoinTeamDto {
   @MaxLength(20)
   code!: string;
 }
+
+export class CreateJoinRequestDto {
+  @IsString()
+  @MaxLength(254)
+  ownerEmail!: string;
+}
+
+export class ApproveJoinRequestDto {
+  @IsIn(ROLES)
+  role!: TenantRole;
+}

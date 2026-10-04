@@ -77,6 +77,7 @@ model User {
   chatThreadsAsStore   ChatThread[]          @relation("ChatStoreParticipant")
   tgsSettingsSaved     TgsSettings[]
   newsCreated          NewsArticle[]
+  joinRequests         TenantJoinRequest[]
 
   @@index([brandId])
 }
@@ -192,6 +193,7 @@ model Tenant {
   rolePermissions TenantRolePermission[]
   accessCodes   TenantAccessCode[]
   teamInviteCodes TeamInviteCode[]
+  joinRequests    TenantJoinRequest[]
   supplierLinks TenantLink[]          @relation("LinkClient")
   clientLinks   TenantLink[]          @relation("LinkSupplier")
   pmScopes      ProductManagerScope[]
@@ -2401,4 +2403,35 @@ model TeamInviteRedemption {
   createdAt DateTime       @default(now())
 
   @@index([inviteId])
+}
+
+/// Pedido de una persona sin organización para sumarse a un comercio. Lo manda
+/// con el mail del dueño; el dueño (o quien gestiona el equipo) lo aprueba con
+/// un rol o lo rechaza. Ver apps/api/src/tenants/join-requests.service.ts.
+model TenantJoinRequest {
+  id          String            @id @default(uuid())
+  /// Null si el mail no es de ningún dueño: el pedido se guarda igual (no se
+  /// revela si el comercio existe) y nadie lo ve.
+  tenantId    String?
+  tenant      Tenant?           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Mail del dueño tal como lo escribió quien pide (en minúsculas).
+  ownerEmail  String
+  status      JoinRequestStatus @default(PENDING)
+  /// Rol con el que entró (solo al aprobar).
+  role        TenantRole?
+  decidedById String?
+  createdAt   DateTime          @default(now())
+  decidedAt   DateTime?
+
+  @@index([tenantId, status])
+  @@index([userId])
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }

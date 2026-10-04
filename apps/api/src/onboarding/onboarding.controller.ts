@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import type { JwtPayload } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -7,15 +7,19 @@ import { RolesGuard } from "../common/guards/roles.guard";
 import { AdminCreateRetailerDto, BootstrapRetailerOrgDto, OnboardingStepDto } from "./dto/onboarding.dto";
 import { OnboardingService } from "./onboarding.service";
 import { Throttle } from "@nestjs/throttler";
-import { JoinTeamDto } from "../tenants/dto/team-invite.dto";
+import { CreateJoinRequestDto, JoinTeamDto } from "../tenants/dto/team-invite.dto";
 import { TeamInvitesService } from "../tenants/team-invites.service";
+import { JoinRequestsService } from "../tenants/join-requests.service";
+import { TenantContextService } from "../tenants/tenant-context.service";
 
 @UseGuards(AuthGuard("jwt"))
 @Controller("onboarding")
 export class OnboardingController {
   constructor(
     private readonly onboarding: OnboardingService,
-    private readonly invites: TeamInvitesService
+    private readonly invites: TeamInvitesService,
+    private readonly joinRequests: JoinRequestsService,
+    private readonly tenantContext: TenantContextService
   ) {}
 
   @Get("status")
@@ -29,6 +33,32 @@ export class OnboardingController {
   async joinTeam(@CurrentUser() user: JwtPayload, @Body() dto: JoinTeamDto) {
     const joined = await this.invites.redeem(user.userId, dto.code);
     return { ...joined, ...(await this.onboarding.sessionAfterJoin(user.userId)) };
+  }
+
+  /** Sin código: pedirle al dueño de un comercio (por su mail) sumarse a su equipo. */
+  @Throttle({ default: { limit: 10, ttl: 60 * 60_000 } })
+  @Post("join-request")
+  requestToJoin(@CurrentUser() user: JwtPayload, @Body() dto: CreateJoinRequestDto) {
+    return this.joinRequests.request(user.userId, dto.ownerEmail);
+  }
+
+  /**
+   * El pedido propio. Si ya lo aprobaron (la persona tiene organización), trae
+   * la sesión nueva para entrar sin volver a loguearse.
+   */
+  @Get("join-request")
+  async myJoinRequest(@CurrentUser() user: JwtPayload) {
+    const request = await this.joinRequests.mine(user.userId);
+    const tenant = await this.tenantContext.forUser(user.userId);
+    if (tenant && request?.status === "APPROVED") {
+      return { request, joined: await this.onboarding.sessionAfterJoin(user.userId) };
+    }
+    return { request, joined: null };
+  }
+
+  @Delete("join-request")
+  cancelJoinRequest(@CurrentUser() user: JwtPayload) {
+    return this.joinRequests.cancel(user.userId);
   }
 
   @Post("bootstrap")

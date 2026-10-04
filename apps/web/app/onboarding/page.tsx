@@ -17,6 +17,8 @@ import "./onboarding.css";
 import { clearTrialPlan, readTrialPlan } from "@/lib/trial-plan";
 import SupplierJoinCard from "@/components/onboarding/SupplierJoinCard";
 import TeamJoinCard from "@/components/team/TeamJoinCard";
+import JoinRequestCard from "@/components/onboarding/JoinRequestCard";
+import { joinRequestsApi } from "@/lib/joinRequests";
 import { clearPendingTeamCode, getPendingTeamCode, teamInvitesApi, teamJoinError } from "@/lib/teamInvites";
 
 /** Lo que viene después de crear el comercio (la guía corre dentro de la app). */
@@ -41,8 +43,11 @@ function OnboardingInner() {
   const [orgName, setOrgName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
-  /** Comercio (crea la organización), equipo (entra con un código) o distribuidor / marca (deja una solicitud). */
-  const [audience, setAudience] = useState<"RETAILER" | "TEAM" | "SUPPLIER">("RETAILER");
+  /**
+   * Comercio (crea la organización), equipo con código, pedido al dueño de un
+   * comercio (por su mail) o distribuidor / marca (deja una solicitud).
+   */
+  const [audience, setAudience] = useState<"RETAILER" | "TEAM" | "REQUEST" | "SUPPLIER">("RETAILER");
   const [teamError, setTeamError] = useState("");
 
   const load = useCallback(async () => {
@@ -67,6 +72,21 @@ function OnboardingInner() {
           clearPendingTeamCode();
           setTeamError(teamJoinError(joinErr));
           setAudience("TEAM");
+        }
+      }
+      // Pidió sumarse a un comercio: si ya lo aprobaron entra; si espera, lo ve primero.
+      if (!res.data.preview) {
+        try {
+          const mine = await joinRequestsApi.mine();
+          if (mine.data.joined) {
+            invalidateMyModules();
+            saveSession(mine.data.joined.token, sessionFromToken(mine.data.joined.token, getUser()?.username ?? ""));
+            window.location.assign("/");
+            return;
+          }
+          if (mine.data.request?.status === "PENDING") setAudience("REQUEST");
+        } catch {
+          /* sin el estado del pedido, la pantalla arranca igual */
         }
       }
       setStatus(res.data);
@@ -170,13 +190,25 @@ function OnboardingInner() {
 
       <div className="ob__layout">
         <aside className="ob__rail">
-          <p className="lnd-label">{status?.preview ? "Preview superadmin" : audience === "SUPPLIER" ? "Distribuidores y marcas" : "Prueba gratis"}</p>
-          <h1 className="lnd-display lnd-display--md">{audience === "SUPPLIER" ? "Sumate a NODO" : "Creá tu comercio"}</h1>
+          <p className="lnd-label">
+            {status?.preview
+              ? "Preview superadmin"
+              : audience === "SUPPLIER"
+              ? "Distribuidores y marcas"
+              : audience === "TEAM" || audience === "REQUEST"
+              ? "Equipos"
+              : "Prueba gratis"}
+          </p>
+          <h1 className="lnd-display lnd-display--md">
+            {audience === "SUPPLIER" ? "Sumate a NODO" : audience === "TEAM" || audience === "REQUEST" ? "Sumate a un comercio" : "Creá tu comercio"}
+          </h1>
           <p className="lnd-body ob__lead">
             {status?.preview
               ? "Estás probando el alta desde cero. Al terminar volvés a Administración."
               : audience === "SUPPLIER"
               ? "Tu espacio para vender en NODO lo armamos con vos. Dejanos tus datos y te contactamos en menos de 24 h hábiles."
+              : audience === "TEAM" || audience === "REQUEST"
+              ? "Para usar NODO necesitás una organización. Entrá con el código que te pasaron o pedile al dueño que te sume."
               : "Es un solo paso. Después te mostramos toda la app con dos distribuidores de prueba, en unos 5 minutos."}
           </p>
           {audience === "RETAILER" && (
@@ -213,7 +245,10 @@ function OnboardingInner() {
                 Tengo un comercio
               </button>
               <button type="button" aria-pressed={audience === "TEAM"} onClick={() => setAudience("TEAM")}>
-                Me invitó un comercio
+                Tengo un código
+              </button>
+              <button type="button" aria-pressed={audience === "REQUEST"} onClick={() => setAudience("REQUEST")}>
+                Pedir unirme
               </button>
               <button type="button" aria-pressed={audience === "SUPPLIER"} onClick={() => setAudience("SUPPLIER")}>
                 Soy distribuidor / marca
@@ -224,6 +259,13 @@ function OnboardingInner() {
           {audience === "TEAM" && !status?.preview ? (
             <TeamJoinCard
               initialError={teamError}
+              onJoined={(token) => {
+                applyToken(token);
+                window.location.assign("/");
+              }}
+            />
+          ) : audience === "REQUEST" && !status?.preview ? (
+            <JoinRequestCard
               onJoined={(token) => {
                 applyToken(token);
                 window.location.assign("/");

@@ -6,7 +6,11 @@ import { OnboardingProvider, useOnboarding } from "@/lib/onboarding";
 import OnboardingChecklist from "./OnboardingChecklist";
 import OnboardingCoach from "./OnboardingCoach";
 
-/** Sin organización todavía: primero se crea el comercio en /onboarding. */
+/**
+ * Sin organización no se usa nada de la app: se crea un comercio, se entra con
+ * un código o se le pide al dueño de uno (todo en /onboarding). Mientras
+ * redirige no se muestra la app (sus pantallas fallarían sin organización).
+ */
 function RequireOrganization({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -17,6 +21,7 @@ function RequireOrganization({ children }: { children: React.ReactNode }) {
     if (missingOrg && pathname !== "/onboarding") router.replace("/onboarding");
   }, [missingOrg, pathname, router]);
 
+  if (missingOrg && pathname !== "/onboarding") return null;
   return <>{children}</>;
 }
 

@@ -6,7 +6,7 @@ import { TENANT_ROLE_LABELS, type TenantRole } from "@/lib/api";
 import { TEAM_INVITE_STATUS_LABELS, teamInviteLink, teamInvitesApi, type TeamInvite } from "@/lib/teamInvites";
 
 /** Roles que se pueden dar al invitar, con qué puede hacer cada uno. Nunca dueño. */
-const INVITE_ROLES: { role: TenantRole; hint: string }[] = [
+export const INVITE_ROLES: { role: TenantRole; hint: string }[] = [
   { role: "BUYER", hint: "Busca precios, arma el carrito y confirma pedidos." },
   { role: "SELLER", hint: "Busca precios y arma pedidos; los aprueba el dueño o un administrador." },
   { role: "VIEWER", hint: "Solo mira precios y stock. No hace pedidos." },

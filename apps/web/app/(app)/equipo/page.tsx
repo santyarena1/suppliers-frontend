@@ -16,6 +16,7 @@ import { getTenant } from "@/lib/auth";
 import { KeyRound, Loader2, Plus, Trash2, Users, Building2, Megaphone, ShieldCheck } from "lucide-react";
 import PermissionsMatrix, { type PermissionsSource } from "@/components/team/PermissionsMatrix";
 import TeamInviteCodes from "@/components/team/TeamInviteCodes";
+import TeamJoinRequests from "@/components/team/TeamJoinRequests";
 
 const inputClass =
   "w-full bg-surface-800 border border-surface-700 rounded-md px-2.5 py-1.5 text-sm text-white placeholder-surface-600 focus:outline-none focus:border-brand-500";
@@ -152,6 +153,14 @@ export default function EquipoPage() {
                 <PermissionsMatrix source={permissionsSource} onMessage={onPermissionsMessage} />
               ) : (
               <>
+              {canManage && org?.type === "RETAILER" && (
+                <TeamJoinRequests
+                  orgName={org.name}
+                  isOwner={session?.role === "OWNER"}
+                  onMessage={onPermissionsMessage}
+                  onApproved={() => void load()}
+                />
+              )}
               {canManage && org && (
                 <OrgProfile
                   org={org}
