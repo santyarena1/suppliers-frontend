@@ -32,7 +32,8 @@ function setup(link: Record<string, unknown> | null, supplierMembers: Record<str
     tenantMembership: {
       findMany: jest
         .fn()
-        // 1ª: equipo del comercio · 2ª: equipo de los distribuidores vinculados.
+        // Al guardar: 1ª nombres del equipo · 2ª equipo del comercio · 3ª equipo de los distribuidores vinculados.
+        .mockResolvedValueOnce([{ userId: "u-retail", user: { username: "ana" } }])
         .mockResolvedValueOnce([{ userId: "u-retail" }])
         .mockResolvedValueOnce(supplierMembers),
     },
@@ -93,8 +94,20 @@ describe("aviso en vivo al guardar el carrito", () => {
     const [team, dist] = hub.emitToUsers.mock.calls;
     expect(team[0]).toEqual(["u-retail"]);
     expect(team[1].data.items).toHaveLength(3);
+    expect(team[1].data.people).toEqual({ "u-retail": "ana" });
     expect(dist[0].sort()).toEqual(["u-owner", "u-seller"]);
     expect(dist[1].data.items).toEqual([{ provider: "LIST_NORTE", externalId: "A", qty: 1 }]);
+    expect(dist[1].data.people).toBeUndefined();
+  });
+
+  it("guarda quién puso cada unidad y el distribuidor no lo ve", async () => {
+    const { service, prisma, hub } = setup(null, [{ userId: "u-owner", tenantId: "t-dist", role: "OWNER" }]);
+    prisma.orgCart.findUnique.mockResolvedValueOnce(null);
+    const stored = { ...CART, items: [{ provider: "LIST_NORTE", externalId: "A", qty: 1, by: { "u-retail": 1 } }] };
+    prisma.orgCart.upsert.mockResolvedValueOnce(stored);
+    await service.putOrgCart(retailer, "u-retail", { items: [{ provider: "LIST_NORTE", externalId: "A", qty: 1 }] } as never);
+    expect(prisma.orgCart.upsert.mock.calls[0][0].create.items).toEqual(stored.items);
+    expect(hub.emitToUsers.mock.calls[1][1].data.items).toEqual([{ provider: "LIST_NORTE", externalId: "A", qty: 1 }]);
   });
 
   it("un vendedor asignado que ya no está en el equipo no recibe nada", async () => {

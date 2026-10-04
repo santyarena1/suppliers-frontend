@@ -12,7 +12,7 @@ import {
 import { capabilityAllowed, loadSubscription } from "@/lib/subscription";
 
 export default function ProviderCartPreloader() {
-  const { onlineByProvider, hydrated } = useCart();
+  const { orderOnlineByProvider: onlineByProvider, hydrated } = useCart();
 
   useEffect(() => {
     if (!hydrated || !getToken() || isTokenExpired()) return;

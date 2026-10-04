@@ -52,6 +52,9 @@ import {
 } from "lucide-react";
 import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
 import { SchemePicker } from "@/components/SchemePicker";
+import OrderPeopleFilter from "@/components/cart/OrderPeopleFilter";
+import LineAuthors from "@/components/cart/LineAuthors";
+import { isFiltering } from "@/lib/cartPeople";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import type { PendingOrderProvider } from "@/lib/pendingOrders";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
@@ -168,10 +171,24 @@ export default function CartPage() {
 }
 
 function CartPageInner() {
+  // La página trabaja sobre lo que entra al pedido: con el filtro «Productos de»
+  // (lib/cartPeople.ts) solo las unidades de esas personas. Al pedir o quitar,
+  // sale solo eso del carrito; lo del resto queda.
   const {
-    items, schemes, onlineByProvider, offlineByProvider,
-    setQty, remove, clear, clearProvider, onlineCount, offlineCount, hydrated,
+    orderItems: items, schemes, orderOnlineByProvider: onlineByProvider, orderOfflineByProvider: offlineByProvider,
+    setOrderQty: setQty, removeFromOrder: remove, consumeOrdered: clearProvider, hydrated,
+    orderFilter, setOrderFilter, items: allItems,
   } = useCart();
+  const clear = useCallback((channel?: "online" | "offline") => clearProvider(undefined, channel), [clearProvider]);
+  const onlineCount = useMemo(
+    () => items.filter((it) => it.channel !== "offline").reduce((sum, it) => sum + it.qty, 0),
+    [items]
+  );
+  const offlineCount = useMemo(
+    () => items.filter((it) => it.channel === "offline").reduce((sum, it) => sum + it.qty, 0),
+    [items]
+  );
+  const filtering = isFiltering(orderFilter);
   const searchParams = useSearchParams();
   const { currency, withIva, convert, currentRate, dollarLabel, dollarType } = usePrefs();
   const iibbEpoch = useIibbRatesEpoch();
@@ -985,6 +1002,7 @@ function CartPageInner() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-1.5 justify-end">
+              <OrderPeopleFilter />
               <PrefsPanel />
               <div className="relative" ref={pedidosRef}>
                 <button
@@ -1092,7 +1110,21 @@ function CartPageInner() {
             <PendingOrdersBanner onCreated={onBackgroundOrderCreated} />
           </div>
 
-          {items.length === 0 && channelTab === "online" ? (
+          {filtering && items.length === 0 && allItems.length > 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
+              <p className="text-base text-surface-200">Ninguna de estas personas tiene productos en el carrito</p>
+              <p className="text-sm text-surface-500 mt-2 max-w-md">
+                El resto del carrito sigue igual. Cambiá el filtro de «Productos» para armar el pedido con lo de otras personas.
+              </p>
+              <button
+                type="button"
+                onClick={() => setOrderFilter({ mode: "all" })}
+                className="mt-5 text-sm font-medium text-brand-400 hover:text-brand-300 border-b border-brand-400/40 pb-0.5"
+              >
+                Ver lo de todos
+              </button>
+            </div>
+          ) : items.length === 0 && channelTab === "online" ? (
             <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
               <p className="text-base text-surface-200">No hay productos en esta cotización</p>
               <p className="text-sm text-surface-500 mt-2 max-w-md">
@@ -1967,6 +1999,7 @@ function CartLine({
           <p className="text-xs text-surface-500 font-mono mt-1 truncate">
             {item.brand ? `${item.brand} · ` : ""}#{sku}
           </p>
+          <LineAuthors item={item} />
           {item.stockStatus?.toLowerCase().includes("bajo") && (
             <p className="text-xs text-amber-400/90 mt-0.5">Stock bajo</p>
           )}

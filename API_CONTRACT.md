@@ -380,9 +380,9 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/cart/org` · `/cart/clients/:linkId`
 - **Auth**: Bearer, organización. `GET/PUT /cart/org` es del comercio (`RETAILER`). `GET /cart/clients/:linkId` es del distribuidor, sobre un vínculo visible.
 - **Body / Params**: `{ items: CartItem[], schemes: CartScheme[] }`
-- **Respuesta esperada**: `{ tenantId, items, schemes, updatedByUserId, updatedAt }`
+- **Respuesta esperada**: `{ tenantId, items, schemes, updatedByUserId, updatedAt, people? }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: Un solo carrito por local, no por persona. El SSE `cart_updated` avisa al equipo del comercio y al vendedor/dueño del distro vinculado. `/cart/items` queda por compatibilidad y la web ya no lo usa. Las percepciones/IIBB son **de ese comercio** (las confirma el carrito o las carga a mano): no hay alícuota global por proveedor. El catálogo (búsqueda y ficha) usa la misma alícuota: Elit y varios no la mandan en el producto, solo en la cotización. **Lista y esquema las suman; offline no.** Marcas y distribuidores no ven ni aplican ese impuesto.
+- **Notas**: Un solo carrito por local, no por persona. El SSE `cart_updated` avisa al equipo del comercio y al vendedor/dueño del distro vinculado. `/cart/items` queda por compatibilidad y la web ya no lo usa. Las percepciones/IIBB son **de ese comercio** (las confirma el carrito o las carga a mano): no hay alícuota global por proveedor. El catálogo (búsqueda y ficha) usa la misma alícuota: Elit y varios no la mandan en el producto, solo en la cotización. **Lista y esquema las suman; offline no.** Marcas y distribuidores no ven ni aplican ese impuesto. **Autor por línea**: cada ítem lleva `by: { [userId]: unidades }` (suma = `qty`; `"_"` = sin registrar, de antes del cambio). Lo resuelve el servidor al guardar (`cart-attribution.ts`): cada uno suma solo a su nombre; lo de otro integrante se puede bajar o mover, nunca agrandar. Una web sin `by` conserva el reparto que tenía la línea. `people` (`{ [userId]: username }`, también ex integrantes) va solo al comercio; el distribuidor recibe las líneas sin `by` ni `people`. La web arma el pedido por distribuidor con el filtro «Productos de» (todos / solo de / todos menos) y, al pedir, saca del carrito solo las unidades de esas personas.
 
 ### [FEATURE] Publicidad paga (espacios, campañas, stats)
 - **Método**: GET | PUT | POST
@@ -886,6 +886,30 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Body**: `{ code }`
 - **Respuesta esperada**: `{ tenantId, tenantName, role, roleLabel, token, onboarding }`. 400 `TEAM_INVITE_INVALID` si venció, se agotó o fue revocado; 409 si ya pertenece a una organización.
 - **Estado**: IMPLEMENTADO
+
+### [EQUIPO] Pedir sumarse a un comercio (mail del dueño)
+- **Método**: POST | GET | DELETE
+- **Ruta**: /onboarding/join-request
+- **Auth**: Bearer token requerido (usuario sin organización; no superadmin). POST con throttle 10/h.
+- **Body (POST)**: `{ ownerEmail }`
+- **Respuesta esperada**:
+  - POST → `{ message, request: { id, ownerEmail, status, createdAt, decidedAt } }`. `message` es siempre el mismo ("Si el mail corresponde al dueño de un comercio, le llegó tu pedido…"), exista o no ese dueño: si no hay dueño el pedido se guarda igual sin comercio y nadie lo ve. 409 si ya tiene organización o ya tiene un pedido pendiente; 429 con más de 5 pedidos en 24 h; 400 mail inválido.
+  - GET → `{ request: {…} | null, joined: { token, onboarding } | null }`. `request` es el último pedido de los últimos 30 días (sin datos del comercio). `joined` viene cuando ya lo aprobaron: sesión nueva dentro del comercio.
+  - DELETE → `{ cancelled: number }` (cancela el pendiente propio)
+- **Estado**: IMPLEMENTADO
+- **Notas**: solo comercios (RETAILER) activos y no administrados por la plataforma; se busca una membresía OWNER activa cuyo usuario tenga ese mail (sin distinguir mayúsculas). Al dueño le llega mail + aviso en la campana (`landingKey: join-request:<id>`).
+
+### [EQUIPO] Pedidos para sumarse (dueño / gestor del equipo)
+- **Método**: GET | POST
+- **Ruta**: /my/team/join-requests · /my/team/join-requests/:id/approve · /my/team/join-requests/:id/reject
+- **Auth**: Bearer token requerido; permiso `team.manage`; solo RETAILER
+- **Body (approve)**: `{ role: TenantRole (no OWNER; ADMIN solo el dueño) }`
+- **Respuesta esperada**:
+  - GET → `[{ id, user: { id, username, email }, createdAt }]` (pendientes; quien ya entró a otra organización se cancela solo)
+  - approve → `{ id, status: "APPROVED", role, roleLabel, username }`. 409 si la persona ya se sumó a otra organización (el pedido queda cancelado); 404 si ya no está pendiente.
+  - reject → `{ id, status: "REJECTED" }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: aprobar crea o reactiva la membresía en una transacción con el candado `onboarding:<userId>` (el mismo que el canje de códigos). A quien pidió le llega un mail con el resultado.
 
 ### [AUTH] Completar la cuenta tras una contraseña regenerada
 - **Contexto**: cuando el superadmin (`PUT /admin/users/:id/password`) o el dueño (`POST /my/team/:membershipId/password`) regeneran una contraseña, el usuario queda con `mustSetupAccount = true`. El login con esa contraseña responde `{ token, mustSetupAccount: true }` y, hasta completar, cualquier otro endpoint autenticado responde **403** `{ code: "ACCOUNT_SETUP_REQUIRED" }` (salvo `/auth/account-setup*` y `/auth/refresh`). La web lleva a `/completar-cuenta`.

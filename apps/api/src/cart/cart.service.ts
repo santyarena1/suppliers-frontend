@@ -6,6 +6,7 @@ import { ChatHub } from "../chat/chat.hub";
 import { AddCartItemDto } from "./dto/add-item.dto";
 import { UpdateCartItemDto } from "./dto/update-item.dto";
 import { UpsertOrgCartDto } from "./dto/org-cart.dto";
+import { attributeCartItems } from "./cart-attribution";
 
 /**
  * El carrito personal (`/cart/items`) quedó por compatibilidad.
@@ -18,6 +19,8 @@ type OrgCartPayload = {
   schemes: Prisma.JsonValue[];
   updatedByUserId: string | null;
   updatedAt: string | null;
+  /** Nombre de cada integrante que figura en `by` de las líneas. Solo para el equipo del comercio. */
+  people?: Record<string, string>;
 };
 
 function providerOf(entry: Prisma.JsonValue): string | null {
@@ -29,7 +32,19 @@ function providerOf(entry: Prisma.JsonValue): string | null {
 /** El carrito del comercio recortado a un proveedor. Sin proveedor asignado, vacío. */
 export function onlyProvider(payload: OrgCartPayload, provider: string | null): OrgCartPayload {
   const mine = (entry: Prisma.JsonValue) => provider !== null && providerOf(entry) === provider;
-  return { ...payload, items: payload.items.filter(mine), schemes: payload.schemes.filter(mine) };
+  // El distribuidor no ve quién del equipo del comercio armó cada línea.
+  const { people: _people, ...rest } = payload;
+  return {
+    ...rest,
+    items: payload.items.filter(mine).map(withoutAuthors),
+    schemes: payload.schemes.filter(mine),
+  };
+}
+
+function withoutAuthors(entry: Prisma.JsonValue): Prisma.JsonValue {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+  const { by: _by, ...rest } = entry as Record<string, Prisma.JsonValue>;
+  return rest;
 }
 
 /** Quién del distribuidor puede seguir el carrito de un cliente: dueño, admin o su vendedor asignado. */
@@ -51,26 +66,28 @@ export class CartService {
   async getOrgCart(tenant: TenantContext) {
     this.assertRetailer(tenant);
     const row = await this.prisma.orgCart.findUnique({ where: { tenantId: tenant.tenantId } });
-    return this.serializeOrg(row, tenant.tenantId);
+    return this.withPeople(this.serializeOrg(row, tenant.tenantId));
   }
 
   async putOrgCart(tenant: TenantContext, userId: string, dto: UpsertOrgCartDto) {
     this.assertRetailer(tenant);
+    const prev = await this.prisma.orgCart.findUnique({ where: { tenantId: tenant.tenantId }, select: { items: true } });
+    const items = attributeCartItems(Array.isArray(prev?.items) ? prev.items : [], dto.items, userId);
     const row = await this.prisma.orgCart.upsert({
       where: { tenantId: tenant.tenantId },
       create: {
         tenantId: tenant.tenantId,
-        items: dto.items as Prisma.InputJsonValue,
+        items: items as Prisma.InputJsonValue,
         schemes: (dto.schemes ?? []) as Prisma.InputJsonValue,
         updatedByUserId: userId,
       },
       update: {
-        items: dto.items as Prisma.InputJsonValue,
+        items: items as Prisma.InputJsonValue,
         schemes: (dto.schemes ?? []) as Prisma.InputJsonValue,
         updatedByUserId: userId,
       },
     });
-    const payload = this.serializeOrg(row, tenant.tenantId);
+    const payload = await this.withPeople(this.serializeOrg(row, tenant.tenantId));
     await this.broadcast(tenant.tenantId, payload);
     return payload;
   }
@@ -109,6 +126,15 @@ export class CartService {
       updatedByUserId: row?.updatedByUserId ?? null,
       updatedAt: row?.updatedAt.toISOString() ?? null,
     };
+  }
+
+  /** Nombres del equipo (también de quien ya no está, para que sus líneas sigan teniendo autor). */
+  private async withPeople(payload: OrgCartPayload): Promise<OrgCartPayload> {
+    const members = await this.prisma.tenantMembership.findMany({
+      where: { tenantId: payload.tenantId },
+      select: { userId: true, user: { select: { username: true } } },
+    });
+    return { ...payload, people: Object.fromEntries(members.map((m) => [m.userId, m.user.username])) };
   }
 
   /**

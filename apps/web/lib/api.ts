@@ -777,6 +777,8 @@ export interface OrgCartSnapshot {
   schemes: unknown[];
   updatedByUserId: string | null;
   updatedAt: string | null;
+  /** Nombre de cada integrante del comercio (para el autor de cada línea). */
+  people?: Record<string, string>;
 }
 
 export const orgCartApi = {

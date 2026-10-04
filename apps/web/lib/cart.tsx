@@ -6,6 +6,18 @@ import { SESSION_EVENT, getImpersonator, getTenant, getUser } from "@/lib/auth";
 import { subscribeChatEvents } from "@/components/chat/ChatRealtime";
 import { extractTaxLines } from "@/lib/tax";
 import { getArsPerUsd, needsFx, normalizeProductFx, onArsPerUsd } from "@/lib/fx";
+import {
+  ALL_PEOPLE,
+  addShares,
+  includesPerson,
+  mergeShares,
+  pickShares,
+  sharesOf,
+  takeShares,
+  totalShares,
+  type CartShares,
+  type OrderFilter,
+} from "@/lib/cartPeople";
 
 export type CartChannel = "online" | "offline";
 
@@ -20,6 +32,8 @@ export interface CartItem extends ProductDTO {
   addedAt: number;
   channel: CartChannel;
   schemeId: string | null;
+  /** Unidades por integrante del comercio (ver lib/cartPeople.ts). */
+  by?: CartShares;
 }
 
 export type CartRef = {
@@ -56,6 +70,21 @@ interface CartContextValue {
   renameScheme: (id: string, name: string) => void;
   deleteScheme: (id: string) => void;
   schemesFor: (provider: string) => CartScheme[];
+  /** Nombre de cada integrante del comercio, por id. */
+  people: Record<string, string>;
+  /** Con lo de quién se arma el pedido. Lo que queda afuera sigue en el carrito. */
+  orderFilter: OrderFilter;
+  setOrderFilter: (filter: OrderFilter) => void;
+  /** Lo que entra al pedido según el filtro (todo, si no hay filtro). */
+  orderItems: CartItem[];
+  orderOnlineByProvider: Record<string, CartItem[]>;
+  orderOfflineByProvider: Record<string, CartItem[]>;
+  /** Saca del carrito lo que entró al pedido: con filtro, solo las unidades de esas personas. */
+  consumeOrdered: (provider?: string, channel?: CartChannel) => void;
+  /** Quitar desde la vista del pedido: con filtro, solo las unidades de esas personas. */
+  removeFromOrder: (ref: CartRef) => void;
+  /** Cambiar la cantidad que se ve en el pedido. */
+  setOrderQty: (ref: CartRef, qty: number) => void;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -183,6 +212,24 @@ function groupByProvider(list: CartItem[]): Record<string, CartItem[]> {
   return map;
 }
 
+/** Cambia la cantidad total: lo que se suma va a quien edita; lo que se baja sale primero de lo suyo. */
+function withQty(item: CartItem, qty: number): CartItem {
+  if (qty === item.qty) return item;
+  const me = getUser()?.id ?? null;
+  const shares = sharesOf(item);
+  const by = qty > item.qty
+    ? (me ? addShares(shares, me, qty - item.qty) : shares)
+    : takeShares(shares, item.qty - qty, me);
+  return { ...item, qty, by };
+}
+
+/** La línea sin las unidades de las personas del filtro (las que entraron al pedido). */
+function withoutPeople(item: CartItem, filter: OrderFilter): CartItem[] {
+  const left = takeShares(sharesOf(item), item.qty, null, (userId) => includesPerson(filter, userId));
+  const qty = totalShares(left);
+  return qty > 0 ? [{ ...item, qty, by: left }] : [];
+}
+
 function nextSchemeName(existing: CartScheme[], provider: string): string {
   const n = existing.filter((s) => s.provider === provider).length + 1;
   return `Esquema ${n}`;
@@ -192,6 +239,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [schemes, setSchemes] = useState<CartScheme[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [people, setPeople] = useState<Record<string, string>>({});
+  const [orderFilter, setOrderFilter] = useState<OrderFilter>(ALL_PEOPLE);
   const [fxTick, setFxTick] = useState(0);
   const skipPush = useRef(true);
   const saveTimer = useRef<number | null>(null);
@@ -230,6 +279,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setHydrated(false);
     setItems([]);
     setSchemes([]);
+    setPeople({});
+    setOrderFilter(ALL_PEOPLE);
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     async function boot() {
       const tenant = getTenant();
@@ -242,6 +293,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             const remoteItems = Array.isArray(remote.data.items) ? (remote.data.items as CartItem[]) : [];
             const remoteSchemes = Array.isArray(remote.data.schemes) ? (remote.data.schemes as CartScheme[]) : [];
             const remoteAt = remote.data.updatedAt ?? null;
+            if (!cancelled && remote.data.people) setPeople(remote.data.people);
             if (remoteItems.length > 0 || remoteSchemes.length > 0) {
               if (!cancelled) {
                 setItems(remoteItems.map((it) => ({ ...it, channel: it.channel === "offline" ? "offline" : "online" })));
@@ -320,7 +372,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     return subscribeChatEvents((type, payload) => {
       if (type !== "cart_updated") return;
       const me = getUser()?.id;
-      const data = payload.data as { items?: CartItem[]; schemes?: CartScheme[]; updatedByUserId?: string | null };
+      const data = payload.data as {
+        items?: CartItem[];
+        schemes?: CartScheme[];
+        updatedByUserId?: string | null;
+        people?: Record<string, string>;
+      };
+      if (data?.people) setPeople(data.people);
       if (!data || data.updatedByUserId === me) return;
       skipPush.current = true;
       if (Array.isArray(data.items)) setItems(data.items);
@@ -340,7 +398,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     });
     const k = cartItemKey(ref);
     const compact = compactProduct(product);
-    let result: CartItem = { ...compact, qty, addedAt: Date.now(), channel: ref.channel, schemeId: ref.schemeId };
+    const me = getUser()?.id ?? null;
+    let result: CartItem = {
+      ...compact,
+      qty,
+      addedAt: Date.now(),
+      channel: ref.channel,
+      schemeId: ref.schemeId,
+      ...(me ? { by: { [me]: qty } } : {}),
+    };
     setItems((prev) => {
       const idx = prev.findIndex((it) => cartItemKey(it) === k);
       if (idx >= 0) {
@@ -356,6 +422,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           qty: current.qty + qty,
           channel: ref.channel,
           schemeId: ref.schemeId,
+          ...(me ? { by: addShares(sharesOf(current), me, qty) } : {}),
         };
         next[idx] = result;
         return next;
@@ -372,7 +439,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const setQty = useCallback((ref: CartRef, qty: number) => {
     const k = cartItemKey(normalizeRef(ref));
-    setItems((prev) => prev.map((it) => (cartItemKey(it) === k ? { ...it, qty: Math.max(1, qty) } : it)));
+    setItems((prev) => prev.map((it) => (cartItemKey(it) === k ? withQty(it, Math.max(1, qty)) : it)));
   }, []);
 
   const patchItem = useCallback((ref: CartRef, data: Partial<Pick<CartItem, "taxes" | "finalPrice">>) => {
@@ -398,7 +465,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const next = prev.filter((_, i) => i !== srcIdx);
       if (destIdx >= 0) {
         const adjDest = destIdx > srcIdx ? destIdx - 1 : destIdx;
-        next[adjDest] = { ...next[adjDest], qty: next[adjDest].qty + moving.qty };
+        next[adjDest] = {
+          ...next[adjDest],
+          qty: next[adjDest].qty + moving.qty,
+          by: mergeShares(sharesOf(next[adjDest]), sharesOf(moving)),
+        };
         return next;
       }
       return [...next, { ...moving, channel: dest.channel, schemeId: dest.schemeId }];
@@ -454,6 +525,49 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const schemesFor = useCallback((provider: string) => schemes.filter((s) => s.provider === provider), [schemes]);
 
+  const consumeOrdered = useCallback((provider?: string, channel?: CartChannel) => {
+    const inScope = (it: CartItem) =>
+      (!provider || it.provider === provider) && (!channel || it.channel === channel);
+    setItems((prev) => prev.flatMap((it) => (inScope(it) ? withoutPeople(it, orderFilter) : [it])));
+  }, [orderFilter]);
+
+  const removeFromOrder = useCallback((ref: CartRef) => {
+    const k = cartItemKey(normalizeRef(ref));
+    setItems((prev) => prev.flatMap((it) => (cartItemKey(it) === k ? withoutPeople(it, orderFilter) : [it])));
+  }, [orderFilter]);
+
+  const setOrderQty = useCallback((ref: CartRef, qty: number) => {
+    const k = cartItemKey(normalizeRef(ref));
+    const me = getUser()?.id ?? null;
+    setItems((prev) =>
+      prev.map((it) => {
+        if (cartItemKey(it) !== k) return it;
+        const shown = pickShares(it, orderFilter)?.qty ?? 0;
+        const delta = Math.max(1, qty) - shown;
+        if (delta === 0) return it;
+        if (delta > 0) return { ...it, qty: it.qty + delta, by: me ? addShares(sharesOf(it), me, delta) : it.by };
+        const by = takeShares(sharesOf(it), -delta, me, (userId) => includesPerson(orderFilter, userId));
+        return { ...it, qty: totalShares(by), by };
+      })
+    );
+  }, [orderFilter]);
+
+  const orderItems = useMemo(
+    () => items.flatMap((it) => {
+      const picked = pickShares(it, orderFilter);
+      return picked ? [picked] : [];
+    }),
+    [items, orderFilter]
+  );
+  const orderOnlineByProvider = useMemo(
+    () => groupByProvider(orderItems.filter((it) => it.channel !== "offline")),
+    [orderItems]
+  );
+  const orderOfflineByProvider = useMemo(
+    () => groupByProvider(orderItems.filter((it) => it.channel === "offline")),
+    [orderItems]
+  );
+
   const onlineItems = useMemo(() => items.filter((it) => it.channel !== "offline"), [items]);
   const offlineItems = useMemo(() => items.filter((it) => it.channel === "offline"), [items]);
   const totalCount = items.reduce((sum, it) => sum + it.qty, 0);
@@ -487,6 +601,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         renameScheme,
         deleteScheme,
         schemesFor,
+        people,
+        orderFilter,
+        setOrderFilter,
+        orderItems,
+        orderOnlineByProvider,
+        orderOfflineByProvider,
+        consumeOrdered,
+        removeFromOrder,
+        setOrderQty,
       }}
     >
       {children}
