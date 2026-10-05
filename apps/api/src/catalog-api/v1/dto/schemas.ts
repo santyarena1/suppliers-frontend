@@ -100,8 +100,10 @@ export class ProductSummarySchema {
   ean!: string | null;
   @ApiProperty({ nullable: true, example: "DUAL-RTX4060-O8G" })
   partNumber!: string | null;
-  @ApiProperty({ nullable: true })
+  @ApiProperty({ nullable: true, description: "Foto principal." })
   imageUrl!: string | null;
+  @ApiProperty({ type: [String], description: "Todas las fotos del producto: la principal primero y después la galería del distribuidor." })
+  images!: string[];
 }
 
 export class OfferSchema {

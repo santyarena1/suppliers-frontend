@@ -106,7 +106,7 @@ export function googleFeedItem(item: FeedItem): string {
     .join("");
 }
 
-export const META_COLUMNS = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "brand", "gtin", "mpn"];
+export const META_COLUMNS = ["id", "title", "description", "availability", "condition", "price", "link", "image_link", "additional_image_link", "brand", "gtin", "mpn"];
 
 export function metaFeedLine(item: FeedItem): string {
   return csvLine(
@@ -119,6 +119,8 @@ export function metaFeedLine(item: FeedItem): string {
       item.price,
       item.link,
       item.image,
+      // Meta acepta varias URLs separadas por coma dentro de la misma celda.
+      item.extraImages.join(","),
       item.brand,
       item.gtin,
       item.mpn,

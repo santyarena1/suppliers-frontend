@@ -185,6 +185,10 @@ Todas las respuestas llevan `X-Request-Id`.
 | GET/POST/PATCH/DELETE | `/v1/webhooks…` | webhooks:manage | Alta/baja de webhooks por API; `POST /v1/webhooks/{id}/test` |
 | GET | `/v1/openapi.json` | público | OpenAPI 3.0 |
 
+### Imágenes
+
+`images` trae la foto principal y toda la galería del distribuidor (hasta 20): Grupo Núcleo `url_imagenes`, Distecna y Polytech `images`, Ceven `itemimages_detail.urls` (ver `core/gallery.ts`). Las URLs con espacios se codifican. El feed de Google suma hasta 10 `additional_image_link` y el de Meta la columna `additional_image_link`. En la vista por oferta, `product.images` trae lo mismo.
+
 ### Ids estables
 
 - `offerId` = `off_` + base62(sha256(`provider:externalId`))[:22] — no expone el distribuidor.

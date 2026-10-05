@@ -32,6 +32,7 @@ function row(patch: Partial<CatalogRow>): CatalogRow {
     longDescription: null,
     imageUrl: null,
     imageAiSelected: false,
+    gallery: [],
     productUrl: null,
     warranty: null,
     weight: null,

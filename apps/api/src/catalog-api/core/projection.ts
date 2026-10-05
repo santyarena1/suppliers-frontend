@@ -2,6 +2,7 @@ import type { ApiClientConfig } from "@nodo/shared";
 import type { CatalogRow, ProviderInfo } from "./catalog-row";
 import { cleanGtin, foldLabel, slugId } from "./ids";
 import { priceOffer, type ApiPrice, type Converter } from "./pricing";
+import { imagesOf } from "./gallery";
 
 export type StockStatus = "in_stock" | "low" | "out_of_stock" | "unknown";
 
@@ -26,6 +27,8 @@ export interface ProductSummary {
   ean: string | null;
   partNumber: string | null;
   imageUrl: string | null;
+  /** Todas las fotos: la principal primero y después la galería del distribuidor. */
+  images: string[];
 }
 
 export interface ProductView {
@@ -126,6 +129,7 @@ export function offerView(row: CatalogRow, ctx: ProjectionContext, withProduct: 
       ean: cleanGtin(row.ean) ?? row.ean,
       partNumber: row.partNumber,
       imageUrl: row.imageUrl,
+      images: imagesOf(row),
     };
   }
   return view;
@@ -202,9 +206,13 @@ export function productView(group: ProductGroup, ctx: ProjectionContext): Produc
   const images: ProductView["images"] = [];
   const seen = new Set<string>();
   for (const { row } of group.rows) {
-    if (!row.imageUrl || seen.has(row.imageUrl)) continue;
-    seen.add(row.imageUrl);
-    images.push({ url: row.imageUrl, source: row.imageAiSelected ? "ai_suggested" : "provider" });
+    for (const url of imagesOf(row)) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      // Solo la principal puede venir de la búsqueda de imágenes; la galería es del distribuidor.
+      const ai = url === row.imageUrl && row.imageAiSelected;
+      images.push({ url, source: ai ? "ai_suggested" : "provider" });
+    }
   }
   // Fotos del distribuidor primero; las sugeridas por la búsqueda de imágenes al final.
   images.sort((a, b) => Number(a.source === "ai_suggested") - Number(b.source === "ai_suggested"));

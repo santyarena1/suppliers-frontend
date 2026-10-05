@@ -23,6 +23,8 @@ export interface CatalogRow {
   longDescription: string | null;
   imageUrl: string | null;
   imageAiSelected: boolean;
+  /** Resto de la galería del distribuidor (sin la principal). Ver gallery.ts. */
+  gallery: string[];
   productUrl: string | null;
   warranty: string | null;
   weight: number | null;

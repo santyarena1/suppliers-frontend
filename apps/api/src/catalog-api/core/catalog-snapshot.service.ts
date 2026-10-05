@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { resolveCatalogDisplay, type CatalogEnrichmentContext } from "../../catalog/catalog-enrichment";
 import { CatalogEnrichmentService } from "../../catalog/catalog-enrichment.service";
 import { NO_RULES, fichaRaw, type OfferRules } from "../../providers/catalog-view";
+import { galleryFromRaw } from "./gallery";
 import { displayedStock } from "../../providers/catalog-stock";
 import { ProvidersService } from "../../providers/providers.service";
 import { pricesAreStale } from "../../providers/sync-backoff";
@@ -261,6 +262,7 @@ export function toRow(
     description: p.description,
     longDescription: p.longDescription,
     imageUrl: p.imageUrl?.trim() || null,
+    gallery: galleryFromRaw(p.raw),
     imageAiSelected: aiImages.has(`${offer.provider}:${offer.externalId}`),
     productUrl: p.productUrl,
     warranty: p.warranty,
