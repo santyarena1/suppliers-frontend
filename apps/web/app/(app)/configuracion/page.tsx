@@ -18,8 +18,9 @@ import {
 import ApiCredentialsPanel from "@/components/admin/ApiCredentialsPanel";
 import {
   Settings, Palette, DollarSign, Receipt, Check, RefreshCw, Sun, Moon, Sparkles,
-  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle, Percent, KeyRound, Compass,
+  Boxes, Building2, Image as ImageIcon, CheckCircle2, XCircle, Percent, KeyRound, Compass, Plug, ChevronRight,
 } from "lucide-react";
+import Link from "next/link";
 import { onboardingApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import OwnStoreSettings from "@/components/OwnStoreSettings";
@@ -311,6 +312,7 @@ function ConfiguracionPageInner() {
 
               <OwnStoreSettings showToast={showToast} />
 
+              {getTenant()?.type === "RETAILER" && <CatalogApiLink />}
               <HelpOnboardingSection showToast={showToast} />
             </div>
           )}
@@ -336,6 +338,27 @@ function ConfiguracionPageInner() {
         </div>
       )}
     </>
+  );
+}
+
+/** Acceso a Configuración → API de catálogo (módulo extra; incluido en Custom). */
+function CatalogApiLink() {
+  return (
+    <Link
+      href="/configuracion/api"
+      className="group flex items-center justify-between gap-4 bg-surface-900 border border-surface-800 hover:border-brand-500/40 rounded-2xl p-5 transition-colors"
+    >
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <Plug className="w-4 h-4 text-brand-400" />
+          <h2 className="text-sm font-semibold text-white">API de catálogo</h2>
+        </div>
+        <p className="text-xs text-surface-500 leading-relaxed">
+          Conectá tu catálogo a tu tienda online, tu ERP, Google o Meta. Keys, webhooks, feeds y uso.
+        </p>
+      </div>
+      <ChevronRight className="w-4 h-4 text-surface-500 group-hover:text-white flex-shrink-0" />
+    </Link>
   );
 }
 

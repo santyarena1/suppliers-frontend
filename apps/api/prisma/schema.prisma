@@ -218,6 +218,8 @@ model Tenant {
   notificationsFrom OrgNotification[] @relation("NotifFrom")
   notificationsTo   OrgNotification[] @relation("NotifTo")
   newsArticles      NewsArticle[]
+  apiClients        ApiClient[]
+  apiCatalogTracker ApiCatalogTracker?
   /// Local de venta ya sincronizado que este comercio declara como propio.
   /// Compara el costo final con el precio publicado en esa web.
   ownRetailStoreId  String?
@@ -666,6 +668,7 @@ model TenantProductOffer {
   @@unique([tenantId, provider, externalId])
   @@index([tenantId, provider, active])
   @@index([provider, externalId])
+  @@index([tenantId, updatedAt])
 }
 
 // Historial real de precio: se graba una fila solo cuando el precio cambia
@@ -2229,6 +2232,9 @@ model Subscription {
   setupFeePaidAt       DateTime?
   /// Si está prendido y la puesta en marcha está pendiente, el Custom opera como Pro.
   setupFeeBlocksCustom Boolean            @default(false)
+  /// Módulo de API de catálogo (US$ 10/mes en Base y Pro; Custom lo trae incluido).
+  catalogApiAddon      Boolean            @default(false)
+  catalogApiAddonSince DateTime?
   /// Notas internas de Administración. El comercio no las ve.
   notes                String?
   createdAt            DateTime           @default(now())
@@ -2434,4 +2440,155 @@ enum JoinRequestStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+// ---------- API de catálogo (docs/PLAN_API_CATALOGO.md) ----------
+
+enum ApiClientStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// Una credencial de la API de catálogo de un comercio: key pública + secret.
+model ApiClient {
+  id                      String          @id @default(uuid())
+  tenantId                String
+  tenant                  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name                    String
+  /// nodo_pk_…: identifica la key; no es secreta.
+  publicKey               String          @unique
+  /// HMAC-SHA256(secret, API_KEY_PEPPER) en hex. El secret no se guarda.
+  secretHash              String
+  secretLast4             String
+  /// Al rotar, el secret anterior sigue valiendo 24 h.
+  previousSecretHash      String?
+  previousSecretExpiresAt DateTime?
+  /// Token de solo lectura para los feeds (Google y Meta no mandan headers).
+  feedToken               String          @unique
+  status                  ApiClientStatus @default(ACTIVE)
+  /// ApiClientConfig (packages/shared/src/catalog-api.ts); se completa con defaults al leer.
+  config                  Json
+  scopes                  String[]
+  /// Vacío = cualquier IP. IPs o rangos CIDR.
+  ipAllowlist             String[]
+  rateLimitPerMinute      Int             @default(120)
+  lastUsedAt              DateTime?
+  lastUsedIp              String?
+  expiresAt               DateTime?
+  createdById             String
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+  revokedAt               DateTime?
+
+  webhooks ApiWebhookEndpoint[]
+  usage    ApiUsageDaily[]
+
+  @@index([tenantId, status])
+}
+
+/// Pedidos por key y por día (uso visible para el comercio).
+model ApiUsageDaily {
+  apiClientId String
+  apiClient   ApiClient @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
+  day         DateTime  @db.Date
+  requests    Int       @default(0)
+  errors      Int       @default(0)
+
+  @@id([apiClientId, day])
+}
+
+model ApiWebhookEndpoint {
+  id                  String               @id @default(uuid())
+  apiClientId         String
+  apiClient           ApiClient            @relation(fields: [apiClientId], references: [id], onDelete: Cascade)
+  url                 String
+  /// whsec_… cifrado con CryptoService (AES-256-GCM).
+  secretEncrypted     String
+  events              String[]
+  active              Boolean              @default(true)
+  /// Último ApiCatalogEvent.id ya encolado para este endpoint.
+  cursor              BigInt?
+  consecutiveFailures Int                  @default(0)
+  disabledAt          DateTime?
+  disabledReason      String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deliveries          ApiWebhookDelivery[]
+
+  @@index([apiClientId])
+}
+
+model ApiWebhookDelivery {
+  id             String             @id @default(uuid())
+  endpointId     String
+  endpoint       ApiWebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  /// evt_…: el cliente lo usa para no procesar dos veces la misma entrega.
+  eventId        String             @unique
+  type           String
+  payload        Json
+  /// PENDING | DELIVERED | FAILED
+  status         String             @default("PENDING")
+  attempts       Int                @default(0)
+  nextAttemptAt  DateTime?
+  lastStatusCode Int?
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime           @default(now())
+
+  @@index([endpointId, createdAt])
+  @@index([status, nextAttemptAt])
+}
+
+/// Hasta dónde se miró el catálogo de un comercio para registrar cambios.
+/// Solo existe para comercios con alguna key activa.
+model ApiCatalogTracker {
+  tenantId       String    @id
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Última oferta y última ficha revisadas (updatedAt).
+  offersCursor   DateTime?
+  productsCursor DateTime?
+  /// Última revisión completa (detecta ofertas borradas).
+  lastFullScanAt DateTime?
+  /// La primera pasada solo toma la foto, sin eventos.
+  baselineAt     DateTime?
+  /// Distribuidores con la sincronización pausada en la última pasada (para avisar pausa y vuelta).
+  pausedProviders String[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+/// Última versión de cada oferta que vio el rastreador: contra esto se decide
+/// qué cambió (precio, stock, ficha) sin depender de cuándo consulta cada cliente.
+model ApiOfferState {
+  tenantId    String
+  provider    String
+  externalId  String
+  price       Decimal? @db.Decimal(14, 4)
+  finalPrice  Decimal? @db.Decimal(14, 4)
+  stock       Int?
+  active      Boolean
+  /// Hash de la ficha (nombre, marca, fotos, descripción…).
+  productHash String
+  seenAt      DateTime @default(now())
+
+  @@id([tenantId, provider, externalId])
+}
+
+/// Cambio del catálogo de un comercio. El id creciente es el cursor de
+/// /v1/changes y de los webhooks. Retención: 30 días.
+model ApiCatalogEvent {
+  id         BigInt   @id @default(autoincrement())
+  tenantId   String
+  /// offer.created | offer.updated | offer.removed | provider.sync_paused | provider.sync_resumed
+  type       String
+  provider   String
+  externalId String?
+  /// Qué cambió en offer.updated: price, stock, product, active.
+  changed    String[]
+  /// Antes y después de precio y stock.
+  data       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, id])
+  @@index([createdAt])
 }

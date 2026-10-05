@@ -20,11 +20,22 @@ falta un ensayo, se prende a mano y los crons no corren ahí
 - Catálogo de distribuidores, rescate de listas: cada **30 min**.
 - Fotos Serper: 08:00 y 20:00.
 - Aviso de lista vencida: 09:00.
+- API de catálogo (rastreo de cambios y webhooks): cada **1 min**, también de noche (solo con keys activas).
+- Limpieza de la API de catálogo: 04:30.
 
 Ambos entornos viven en el mismo proyecto de Railway (`nodo`) pero en environments
 distintos, cada uno con su propio Postgres, su propio Redis y sus propios secretos.
 `JWT_SECRET` y `ENCRYPTION_KEY` son diferentes a propósito: una sesión o una
 credencial cifrada de un entorno no sirve en el otro.
+
+## Variables de la API de catálogo
+
+| Variable | Obligatoria | Para qué |
+|---|---|---|
+| `API_KEY_PEPPER` | **Sí en producción** (mín. 32 caracteres) | Pepper del HMAC con el que se guardan los secrets de las API keys. Si cambia, **todas** las keys dejan de validar. Distinta por entorno. En el servidor (producción o cualquier entorno de Railway), sin ella la API arranca igual pero la API de catálogo responde `internal_error` y se loguea un error; en local usa un valor de desarrollo y avisa. **Configurarla antes del primer deploy.** |
+| `PUBLIC_API_URL` | Recomendada | URL pública de la API (`https://api-production-f4aa.up.railway.app`). Se usa en los links de feeds, en `baseUrl` de Configuración → API de catálogo y en `servers` del OpenAPI. `CATALOG_API_PUBLIC_URL` es un alias. |
+| `PUBLIC_WEB_URL` | No | URL de la web para el link a la guía (`<web>/developers`). Default `https://nodohub.app`. `WEB_URL` es un alias. |
+| `WEBHOOKS_ALLOW_LOCALHOST` | No | Fuera de producción los webhooks pueden apuntar a `http://localhost` para probar. `false` lo apaga. En producción nunca. |
 
 ## Flujo de trabajo
 

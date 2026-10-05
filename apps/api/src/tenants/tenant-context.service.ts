@@ -26,6 +26,7 @@ export const SUBSCRIPTION_DATES_SELECT = {
   suspensionReason: true,
   setupFeeStatus: true,
   setupFeeBlocksCustom: true,
+  catalogApiAddon: true,
 } as const;
 
 type SubscriptionDatesRow = {
@@ -38,6 +39,8 @@ type SubscriptionDatesRow = {
   suspensionReason: string | null;
   setupFeeStatus: string;
   setupFeeBlocksCustom: boolean;
+  /** Opcional: filas leídas antes de existir el módulo. */
+  catalogApiAddon?: boolean;
 };
 
 export function toSubscriptionDates(row: SubscriptionDatesRow | null | undefined): SubscriptionDates | null {

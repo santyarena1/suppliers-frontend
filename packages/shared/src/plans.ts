@@ -1,4 +1,5 @@
 import type { TenantType } from "./tenants";
+import { CATALOG_API_ADDON_PRICE_USD } from "./catalog-api";
 
 /**
  * Planes comerciales de los comercios (tipo 1 / RETAILER) y su suscripción.
@@ -160,7 +161,9 @@ export type PlanCapabilityKey =
   | "advancedAnalytics"
   | "externalIntegrations"
   | "customModules"
-  | "customBranding";
+  | "customBranding"
+  /** API de catálogo: incluida en Custom; en Base y Pro es un módulo extra pago. */
+  | "catalogApi";
 
 export const PLAN_CAPABILITY_KEYS: readonly PlanCapabilityKey[] = [
   "directCheckout",
@@ -171,6 +174,7 @@ export const PLAN_CAPABILITY_KEYS: readonly PlanCapabilityKey[] = [
   "externalIntegrations",
   "customModules",
   "customBranding",
+  "catalogApi",
 ] as const;
 
 export type PlanCapabilities = Record<PlanCapabilityKey, boolean> & {
@@ -188,6 +192,7 @@ const BASE_CAPABILITIES: PlanCapabilities = {
   externalIntegrations: false,
   customModules: false,
   customBranding: false,
+  catalogApi: false,
 };
 
 const PRO_CAPABILITIES: PlanCapabilities = {
@@ -205,6 +210,7 @@ const CUSTOM_CAPABILITIES: PlanCapabilities = {
   externalIntegrations: true,
   customModules: true,
   customBranding: true,
+  catalogApi: true,
 };
 
 const CAPABILITIES_BY_PLAN: Record<TenantPlan, PlanCapabilities> = {
@@ -236,7 +242,33 @@ export const PLAN_CAPABILITY_UPSELL: Record<PlanCapabilityKey, string> = {
   externalIntegrations: "Las integraciones con ERP, CRM y sistemas externos están disponibles en NODO Custom.",
   customModules: "Los módulos personalizados están disponibles en NODO Custom.",
   customBranding: "La identidad visual adaptada está disponible en NODO Custom.",
+  catalogApi: `La API de catálogo es un módulo de US$ ${CATALOG_API_ADDON_PRICE_USD}/mes en Base y Pro, e incluido en NODO Custom.`,
 };
+
+// ---------- Módulos extra ----------
+
+/** Módulos que se contratan aparte del plan. Custom los trae incluidos. */
+export interface SubscriptionAddons {
+  catalogApi: boolean;
+}
+
+export const NO_ADDONS: SubscriptionAddons = { catalogApi: false };
+
+/** ¿El plan ya incluye la API de catálogo (sin cobrarla aparte)? */
+export function planIncludesCatalogApi(plan: TenantPlan): boolean {
+  return CAPABILITIES_BY_PLAN[plan].catalogApi;
+}
+
+/** Lo que suman los módulos activos al mes. Lo incluido en el plan no se cobra. */
+export function addonsMonthlyPrice(plan: TenantPlan, addons: SubscriptionAddons): number {
+  return addons.catalogApi && !planIncludesCatalogApi(plan) ? CATALOG_API_ADDON_PRICE_USD : 0;
+}
+
+/** Cuota mensual: precio pactado (o de lista) del plan, más los módulos activos. */
+export function monthlyAmount(plan: TenantPlan, priceOverride: number | null, addons: SubscriptionAddons): number {
+  const base = priceOverride ?? PLAN_CATALOG[plan].monthlyPrice;
+  return base + addonsMonthlyPrice(plan, addons);
+}
 
 export function searchLimitMessage(max: number): string {
   return `Tu plan Base permite buscar simultáneamente en hasta ${max} distribuidores. Desactivá uno de los actuales o pasá a NODO Pro para buscar en todos.`;
@@ -317,6 +349,8 @@ export interface SubscriptionDates {
   suspensionReason: string | null;
   setupFeeStatus?: SetupFeeStatus;
   setupFeeBlocksCustom?: boolean;
+  /** Módulo de API de catálogo contratado (Base y Pro). */
+  catalogApiAddon?: boolean;
 }
 
 export interface SubscriptionState {
@@ -452,6 +486,9 @@ export function resolveEntitlements(input: {
     input.subscription?.setupFeeBlocksCustom === true &&
     input.subscription.setupFeeStatus === "PENDING";
   const capabilities = getPlanCapabilities(pendingSetup ? "PRO" : input.plan);
+  // El módulo contratado aparte suma la capacidad sin cambiar de plan; Custom la
+  // trae aunque opere como Pro por la puesta en marcha pendiente.
+  if (input.subscription?.catalogApiAddon || planIncludesCatalogApi(input.plan)) capabilities.catalogApi = true;
   return { enforced: true, plan: input.plan, status: state.status, access: state.access, capabilities };
 }
 

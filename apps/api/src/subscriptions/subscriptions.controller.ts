@@ -10,6 +10,7 @@ import type { TenantContext } from "../tenants/tenant-context.service";
 import { TenantGuard } from "../tenants/tenant.guard";
 import {
   AdminSubscriptionsQueryDto,
+  CatalogApiAddonDto,
   BillingDateDto,
   ChangePlanDto,
   CourtesyDto,
@@ -71,6 +72,12 @@ export class AdminSubscriptionsController {
 
   @Get(":tenantId")
   detail(@Param("tenantId") tenantId: string) {
+    return this.subscriptions.adminDetail(tenantId);
+  }
+
+  @Put(":tenantId/catalog-api-addon")
+  async catalogApiAddon(@CurrentUser() user: JwtPayload, @Param("tenantId") tenantId: string, @Body() dto: CatalogApiAddonDto) {
+    await this.subscriptions.setCatalogApiAddon({ userId: user.userId }, tenantId, dto.enabled);
     return this.subscriptions.adminDetail(tenantId);
   }
 

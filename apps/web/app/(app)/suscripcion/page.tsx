@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, CreditCard, Loader2, Lock, Search, Send, Sparkles } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import PlanComparison from "@/components/subscription/PlanComparison";
+import ModulesCard from "@/components/subscription/ModulesCard";
 import { invalidateMyProviders, subscriptionApi } from "@/lib/api";
 import { formatUsd, PLAN_CATALOG, type MySubscription, type TenantPlan } from "@/lib/plans";
 import { invalidateSubscription, useSubscription } from "@/lib/subscription";
@@ -70,6 +71,7 @@ export default function SubscriptionPage() {
             <>
               <StatusNotice sub={subscription} />
               <PlanSummary sub={subscription} onMessage={setAviso} />
+              <ModulesCard sub={subscription} />
               <SearchUsageCard sub={subscription} />
               <PaymentNotice sub={subscription} onMessage={setAviso} />
               <PaymentHistory sub={subscription} />

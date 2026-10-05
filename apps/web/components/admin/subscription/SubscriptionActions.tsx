@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { adminSubscriptionsApi } from "@/lib/api";
+import { adminSubscriptionsApi, catalogApiAdmin } from "@/lib/api";
+import { CATALOG_API_ADDON_PRICE_USD } from "@/lib/catalog-api";
 import {
   PAYMENT_PROVIDER_LABELS,
   PLAN_CATALOG,
@@ -15,10 +16,11 @@ import {
 import { Field, PAYMENT_PROVIDERS, PLANS, btnCls, dateInput, fmtDate, inputCls, primaryCls, toIso, today } from "./shared";
 
 type Run = (action: () => Promise<{ data: AdminSubscriptionDetail }>, ok: string) => Promise<boolean>;
-type ActionKey = "plan" | "courtesy" | "payment" | "billing" | "status" | "setup";
+type ActionKey = "plan" | "modules" | "courtesy" | "payment" | "billing" | "status" | "setup";
 
 const ACTION_LABELS: Record<ActionKey, string> = {
   plan: "Cambiar plan",
+  modules: "Módulos",
   courtesy: "Cortesía",
   payment: "Registrar pago",
   billing: "Vencimiento",
@@ -42,7 +44,7 @@ export default function SubscriptionActions({
   version: number;
 }) {
   const hasSetup = detail.plan === "CUSTOM" || detail.setupFee.status !== "NOT_APPLICABLE";
-  const actions: ActionKey[] = ["plan", "courtesy", "payment", "billing", "status", ...(hasSetup ? (["setup"] as ActionKey[]) : [])];
+  const actions: ActionKey[] = ["plan", "modules", "courtesy", "payment", "billing", "status", ...(hasSetup ? (["setup"] as ActionKey[]) : [])];
   const [action, setAction] = useState<ActionKey>("plan");
   // Un solo "Motivo", el del formulario que está a la vista.
   const [reason, setReason] = useState("");
@@ -76,6 +78,7 @@ export default function SubscriptionActions({
       </div>
 
       {action === "plan" && <PlanForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} why={why} reasonField={reasonField} />}
+      {action === "modules" && <ModulesForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} />}
       {action === "courtesy" && <CourtesyForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} why={why} reasonField={reasonField} />}
       {action === "payment" && <PaymentForm key={version} tenantId={tenantId} busy={busy} run={run} />}
       {action === "billing" && <BillingForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} why={why} reasonField={reasonField} />}
@@ -136,6 +139,54 @@ function PlanForm({ detail, tenantId, busy, run, why, reasonField }: FormProps) 
         </button>
       </div>
     </>
+  );
+}
+
+/** El backend lo manda como booleano o como { enabled, since }. */
+type AddonField = { catalogApiAddon?: boolean | { enabled: boolean; since?: string | null } | null };
+
+function addonOf(detail: AdminSubscriptionDetail): { enabled: boolean; since: string | null } {
+  const raw = (detail as AdminSubscriptionDetail & AddonField).catalogApiAddon;
+  if (raw && typeof raw === "object") return { enabled: !!raw.enabled, since: raw.since ?? null };
+  return { enabled: !!raw, since: null };
+}
+
+function ModulesForm({ detail, tenantId, busy, run }: { detail: AdminSubscriptionDetail; tenantId: string; busy: boolean; run: Run }) {
+  const addon = addonOf(detail);
+  const included = detail.plan === "CUSTOM";
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-800 px-3 py-2.5">
+      <div className="min-w-0">
+        <p className="text-sm text-white">API de catálogo · {formatUsd(CATALOG_API_ADDON_PRICE_USD)}/mes</p>
+        <p className="text-[11px] text-surface-500">
+          {included
+            ? "Incluida en Custom: no se cobra aparte."
+            : addon.enabled
+              ? `Activa${addon.since ? ` desde el ${fmtDate(addon.since)}` : ""}. Se suma al monto mensual.`
+              : "No activa. Al prenderla, las keys del comercio empiezan a responder y se suma al monto mensual."}
+        </p>
+      </div>
+      {included ? (
+        <span className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-1 text-[11px] font-medium text-brand-300">Incluida</span>
+      ) : (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={addon.enabled}
+          aria-label="API de catálogo"
+          disabled={busy}
+          onClick={() =>
+            void run(
+              () => catalogApiAdmin.adminSetAddon(tenantId, !addon.enabled),
+              addon.enabled ? "API de catálogo desactivada" : "API de catálogo activada"
+            )
+          }
+          className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${addon.enabled ? "bg-brand-500" : "bg-surface-700"}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${addon.enabled ? "translate-x-5" : ""}`} />
+        </button>
+      )}
+    </div>
   );
 }
 

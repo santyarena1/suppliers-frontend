@@ -32,6 +32,7 @@ import { NewsModule } from "./news/news.module";
 import { ListImportModule } from "./list-import/list-import.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
 import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
+import { CatalogApiManageModule, CatalogApiModule } from "./catalog-api/catalog-api.module";
 
 @Module({
   imports: [
@@ -74,6 +75,8 @@ import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
     ListImportModule,
     OnboardingModule,
     SubscriptionsModule,
+    CatalogApiModule,
+    CatalogApiManageModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

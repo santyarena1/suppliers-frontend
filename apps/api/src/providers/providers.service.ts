@@ -1446,7 +1446,7 @@ export class ProvidersService implements OnModuleInit {
     return hidden.has(provider);
   }
 
-  private async providersHidingUnsynced(tenantId: string, providers: string[]): Promise<Set<string>> {
+  async providersHidingUnsynced(tenantId: string, providers: string[]): Promise<Set<string>> {
     if (providers.length === 0) return new Set();
     const rows = await this.prisma.providerSyncConfig.findMany({
       where: { tenantId, provider: { in: providers }, hideUnsyncedCatalog: true },
@@ -1527,7 +1527,7 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /** Igual que `rulesFor` pero para varios proveedores de una, en las vistas mezcladas. */
-  private async rulesByProvider(tenantId: string): Promise<Map<string, OfferRules>> {
+  async rulesByProvider(tenantId: string): Promise<Map<string, OfferRules>> {
     const [configs, listLinks] = await Promise.all([
       this.prisma.providerSyncConfig.findMany({
         where: { tenantId },

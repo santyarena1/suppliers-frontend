@@ -210,3 +210,8 @@ export class PaymentNoticeDto {
   @MaxLength(1000)
   message?: string;
 }
+
+export class CatalogApiAddonDto {
+  @IsBoolean()
+  enabled!: boolean;
+}

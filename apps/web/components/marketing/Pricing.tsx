@@ -6,6 +6,7 @@ import { BASE_SEARCH_LIMIT, PLAN_CATALOG, PLAN_FEATURE_GROUPS, type PlanCell, ty
 import { Reveal } from "./Reveal";
 import { SupplyPlans } from "./SupplyPlans";
 import { LaunchPromo } from "./LaunchPromo";
+import { CatalogApiPitch } from "./CatalogApiPitch";
 import { rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
 import { announceContactKind } from "@/lib/contact";
 
@@ -154,6 +155,8 @@ export function Pricing() {
             );
           })}
         </div>
+
+        <CatalogApiPitch />
 
         <div className="mt-12 flex justify-center">
           <button

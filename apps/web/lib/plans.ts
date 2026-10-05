@@ -294,6 +294,15 @@ export const PLAN_FEATURE_GROUPS: PlanFeatureGroup[] = [
     rows: [{ label: "Chat comercial con distribuidores", values: fromPro() }],
   },
   {
+    title: "API de catálogo",
+    rows: [
+      {
+        label: "Tu catálogo en tu tienda, ERP, Google y Meta (API, webhooks y feeds)",
+        values: { BASE: "+US$ 10/mes", PRO: "+US$ 10/mes", CUSTOM: "Incluida" },
+      },
+    ],
+  },
+  {
     title: "ERP / CRM",
     rows: [{ label: "Integraciones con sistemas externos", values: customOnly() }],
   },

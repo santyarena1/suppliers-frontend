@@ -9,6 +9,8 @@ import fastifyStatic from "@fastify/static";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { AppModule } from "./app.module";
+import { CatalogApiModule } from "./catalog-api/catalog-api.module";
+import { buildOpenApiDocument, OpenApiHolder } from "./catalog-api/v1/openapi";
 import { RequestMetricsService } from "./monitoring/request-metrics.service";
 
 /**
@@ -67,6 +69,8 @@ async function bootstrap() {
       callback(null, allowedOrigins.some((matches) => matches(origin)));
     },
     credentials: true,
+    // La referencia interactiva de la API de catálogo (nodohub.app/developers) lee estos headers.
+    exposedHeaders: ["X-Request-Id", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After"],
     // El navegador recuerda el permiso 10 minutos en vez de preguntar antes de
     // cada pedido (la mitad del tráfico eran estos OPTIONS).
     maxAge: 600,
@@ -79,6 +83,9 @@ async function bootstrap() {
       transform: true,
     })
   );
+
+  // Documento OpenAPI de la API de catálogo (solo /v1), servido en GET /v1/openapi.json.
+  OpenApiHolder.set(buildOpenApiDocument(app, [CatalogApiModule]));
 
   const port = Number(config.get("PORT") ?? 8080);
   await app.listen(port, "0.0.0.0");

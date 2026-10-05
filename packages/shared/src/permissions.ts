@@ -23,6 +23,7 @@ export const PERMISSION_KEYS = [
   "portfolio.edit_terms",
   "brand.manage",
   "ads.manage",
+  "integrations.manage",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -34,7 +35,8 @@ export type PermissionGroup =
   | "chat"
   | "portfolio"
   | "brand"
-  | "ads";
+  | "ads"
+  | "integrations";
 
 export const PERMISSION_GROUP_LABELS: Record<PermissionGroup, string> = {
   orders: "Pedidos",
@@ -44,6 +46,7 @@ export const PERMISSION_GROUP_LABELS: Record<PermissionGroup, string> = {
   portfolio: "Cartera de clientes",
   brand: "Marca",
   ads: "Publicidad",
+  integrations: "Integraciones",
 };
 
 export interface PermissionDefinition {
@@ -74,6 +77,7 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
   { key: "portfolio.edit_terms", group: "portfolio", label: "Condiciones comerciales", description: "Editar las condiciones de un cliente.", appliesTo: ["DISTRIBUTOR"] },
   { key: "brand.manage", group: "brand", label: "Gestionar la marca", description: "Acciones comerciales, catálogo y recursos de la marca.", appliesTo: ["BRAND"] },
   { key: "ads.manage", group: "ads", label: "Publicidad", description: "Prender y gestionar publicidad.", appliesTo: ALL_TYPES },
+  { key: "integrations.manage", group: "integrations", label: "API de catálogo", description: "Crear y administrar las API keys y los webhooks del catálogo.", appliesTo: ["RETAILER"] },
 ];
 
 const MANAGERS: readonly TenantRole[] = ["OWNER", "ADMIN"];
@@ -97,6 +101,7 @@ const DEFAULT_ROLES: Record<Exclude<PermissionKey, "chat.write">, readonly Tenan
   "portfolio.edit_terms": ["OWNER", "ADMIN", "SELLER"],
   "brand.manage": ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL"],
   "ads.manage": MANAGERS,
+  "integrations.manage": MANAGERS,
 };
 
 /** El chat depende también del tipo: el vendedor del local no escribe, el del distro sí. */

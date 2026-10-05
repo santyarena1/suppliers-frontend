@@ -5,6 +5,16 @@ import type { ShippingMethod } from "./shipping";
 import { HUMAN_ROUTES, resetHumanCheck, takeHumanToken } from "./turnstile";
 import { isCatalogUrl, normalizeCatalogPayload, payloadNeedsFx, waitArsPerUsd } from "./fx";
 import type {
+  ApiClientConfig,
+  ApiClientView,
+  CatalogApiAddonState,
+  CatalogApiOverview,
+  CatalogApiScope,
+  CatalogApiWebhookEvent,
+  DeliveryView,
+  WebhookView,
+} from "./catalog-api";
+import type {
   AdminSubscriptionDetail,
   AdminSubscriptionFilter,
   AdminSubscriptionRow,
@@ -24,7 +34,7 @@ const api = axios.create({ baseURL: BASE_URL });
  * significa que alguien anónimo tocó un endpoint con auth. Nunca redirigimos
  * desde estas rutas.
  */
-const PUBLIC_PAGES = new Set(["/login", "/register", "/verify-email", "/forgot-password", "/landing", "/preview", "/onboarding"]);
+const PUBLIC_PAGES = new Set(["/login", "/register", "/verify-email", "/forgot-password", "/landing", "/preview", "/onboarding", "/developers"]);
 
 api.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
@@ -4488,4 +4498,48 @@ export const adminSubscriptionsApi = {
     api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/notes`, { notes }),
   setSetupFee: (tenantId: string, data: { status?: SetupFeeStatus; amount?: number | null; blocksCustom?: boolean }) =>
     api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/setup-fee`, data),
+};
+
+// --- API de catálogo (docs/PLAN_API_CATALOGO.md §12) ---
+
+export const catalogApiAdmin = {
+  overview: () => api.get<CatalogApiOverview>("/my/catalog-api"),
+  setAddon: (enabled: boolean) => api.post<{ addon: CatalogApiAddonState }>("/my/catalog-api/addon", { enabled }),
+  createClient: (data: {
+    name: string;
+    scopes?: CatalogApiScope[];
+    config?: Partial<ApiClientConfig>;
+    ipAllowlist?: string[];
+    expiresAt?: string | null;
+  }) => api.post<{ client: ApiClientView; secret: string }>("/my/catalog-api/clients", data),
+  updateClient: (
+    id: string,
+    data: {
+      name?: string;
+      scopes?: CatalogApiScope[];
+      config?: ApiClientConfig;
+      ipAllowlist?: string[];
+      expiresAt?: string | null;
+    }
+  ) => api.patch<{ client: ApiClientView }>(`/my/catalog-api/clients/${id}`, data),
+  rotateSecret: (id: string) =>
+    api.post<{ client: ApiClientView; secret: string; previousValidUntil: string }>(`/my/catalog-api/clients/${id}/rotate`),
+  revoke: (id: string) => api.post<{ client: ApiClientView }>(`/my/catalog-api/clients/${id}/revoke`),
+  rotateFeedToken: (id: string) => api.post<{ client: ApiClientView }>(`/my/catalog-api/clients/${id}/feed-token/rotate`),
+  usage: (id: string, days = 30) =>
+    api.get<{ days: { day: string; requests: number; errors: number }[] }>(`/my/catalog-api/clients/${id}/usage`, { params: { days } }),
+  webhooks: (clientId: string) => api.get<{ webhooks: WebhookView[] }>(`/my/catalog-api/clients/${clientId}/webhooks`),
+  createWebhook: (clientId: string, data: { url: string; events: CatalogApiWebhookEvent[] }) =>
+    api.post<{ webhook: WebhookView; signingSecret: string }>(`/my/catalog-api/clients/${clientId}/webhooks`, data),
+  updateWebhook: (id: string, data: { url?: string; events?: CatalogApiWebhookEvent[]; active?: boolean }) =>
+    api.patch<{ webhook: WebhookView }>(`/my/catalog-api/webhooks/${id}`, data),
+  deleteWebhook: (id: string) => api.delete<{ id: string }>(`/my/catalog-api/webhooks/${id}`),
+  testWebhook: (id: string) => api.post<{ delivery: DeliveryView }>(`/my/catalog-api/webhooks/${id}/test`),
+  rotateWebhookSecret: (id: string) =>
+    api.post<{ webhook: WebhookView; signingSecret: string }>(`/my/catalog-api/webhooks/${id}/rotate-secret`),
+  deliveries: (id: string, limit = 50) =>
+    api.get<{ deliveries: DeliveryView[] }>(`/my/catalog-api/webhooks/${id}/deliveries`, { params: { limit } }),
+  /** Superadmin: prende o apaga el módulo de una organización. */
+  adminSetAddon: (tenantId: string, enabled: boolean) =>
+    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/catalog-api-addon`, { enabled }),
 };

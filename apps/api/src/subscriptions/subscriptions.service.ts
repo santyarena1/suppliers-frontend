@@ -3,8 +3,11 @@ import { InboxService } from "../inbox/inbox.service";
 import { inboxRequester } from "./subscription-inbox";
 import { Prisma } from "@prisma/client";
 import {
+  CATALOG_API_ADDON_PRICE_USD,
   addDays,
   addMonths,
+  monthlyAmount,
+  planIncludesCatalogApi,
   computeSubscriptionState,
   getPlanCapabilities,
   isTenantPlan,
@@ -52,8 +55,10 @@ export interface SubscriptionView {
   tenantName: string;
   plan: TenantPlan;
   planLabel: string;
-  /** Precio mensual vigente (pactado o de lista). */
+  /** Precio mensual del plan (pactado o de lista), sin módulos. */
   price: number;
+  /** Lo que se cobra por mes: plan + módulos activos (en Custom la API de catálogo no suma). */
+  monthlyTotal: number;
   listPrice: number;
   priceOverridden: boolean;
   currency: string;
@@ -72,6 +77,18 @@ export interface SubscriptionView {
   cancelledAt: string | null;
   setupFee: { amount: number | null; status: SetupFeeStatus; statusLabel: string; paidAt: string | null; blocksCustom: boolean };
   capabilities: PlanCapabilities;
+  /** Módulos extra. `monthlyTotal` ya los incluye; `price` no. */
+  addons: { catalogApi: CatalogApiAddonView };
+  /** Atajo del módulo de API de catálogo (mismo dato que addons.catalogApi). */
+  catalogApiAddon: CatalogApiAddonView;
+}
+
+export interface CatalogApiAddonView {
+  enabled: boolean;
+  /** Custom la trae incluida: no se cobra aparte. */
+  includedInPlan: boolean;
+  priceUsd: number;
+  since: string | null;
 }
 
 export interface AdminSubscriptionView extends SubscriptionView {
@@ -409,7 +426,7 @@ export class SubscriptionsService {
           periodEnd: parseDate(dto.periodEnd),
           now,
         });
-        const amount = dto.amount ?? this.priceOf(plan, sub) * months;
+        const amount = dto.amount ?? this.totalOf(plan, sub) * months;
         await tx.subscriptionPayment.create({
           data: {
             tenantId,
@@ -724,8 +741,71 @@ export class SubscriptionsService {
     if (!this.canManage(tenant)) throw new ForbiddenException("Solo el dueño de la organización puede cambiar el plan");
   }
 
+  /** Precio del plan (pactado o de lista), sin módulos. */
   private priceOf(plan: TenantPlan, sub: Pick<SubscriptionRow, "priceOverride"> | null): number {
     return sub?.priceOverride != null ? Number(sub.priceOverride) : PLAN_CATALOG[plan].monthlyPrice;
+  }
+
+  /** Cuota mensual: plan más los módulos activos. */
+  private totalOf(plan: TenantPlan, sub: Pick<SubscriptionRow, "priceOverride" | "catalogApiAddon"> | null): number {
+    return monthlyAmount(plan, sub?.priceOverride != null ? Number(sub.priceOverride) : null, {
+      catalogApi: Boolean(sub?.catalogApiAddon),
+    });
+  }
+
+  private catalogApiAddonOf(plan: TenantPlan, sub: Pick<SubscriptionRow, "catalogApiAddon" | "catalogApiAddonSince"> | null): CatalogApiAddonView {
+    const included = planIncludesCatalogApi(plan);
+    return {
+      enabled: included || Boolean(sub?.catalogApiAddon),
+      includedInPlan: included,
+      priceUsd: CATALOG_API_ADDON_PRICE_USD,
+      since: iso(sub?.catalogApiAddonSince),
+    };
+  }
+
+  /** Estado del módulo de API de catálogo de un comercio (para Configuración → API de catálogo). */
+  async catalogApiAddon(tenantId: string): Promise<CatalogApiAddonView> {
+    const { tenantRow, sub } = await this.load(tenantId);
+    const plan = (isTenantPlan(tenantRow.plan) ? tenantRow.plan : "PRO") as TenantPlan;
+    return this.catalogApiAddonOf(plan, sub);
+  }
+
+  /**
+   * Prende o apaga el módulo de API de catálogo. Corre desde el próximo cobro (la
+   * cuota pasa a ser plan + US$ 10). En Custom viene incluido: no cambia nada.
+   * Apagarlo no borra las keys: dejan de responder hasta que se vuelva a prender.
+   */
+  async setCatalogApiAddon(actor: SubscriptionActor, tenantId: string, enabled: boolean, opts: { fromTenant?: TenantContext } = {}) {
+    const { tenantRow, sub } = await this.loadForWrite(tenantId);
+    const plan = tenantRow.plan as TenantPlan;
+    if (planIncludesCatalogApi(plan)) return this.catalogApiAddonOf(plan, sub);
+    if (sub.catalogApiAddon === enabled) return this.catalogApiAddonOf(plan, sub);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.subscription.update({
+        where: { id: sub.id },
+        data: { catalogApiAddon: enabled, catalogApiAddonSince: enabled ? new Date() : null },
+      });
+      await this.event(tx, sub, actor, enabled ? "ADDON_ENABLED" : "ADDON_DISABLED", {
+        data: { addon: "catalogApi", priceUsd: CATALOG_API_ADDON_PRICE_USD, monthly: this.totalOf(plan, row) },
+      });
+      await this.audit(tx, actor, tenantId, enabled ? "SUBSCRIPTION_ADDON_ENABLED" : "SUBSCRIPTION_ADDON_DISABLED", { addon: "catalogApi" });
+      return row;
+    });
+    if (opts.fromTenant) {
+      const who = await inboxRequester(this.prisma, opts.fromTenant);
+      void this.inbox?.record({
+        ...who,
+        type: "PLAN_REQUEST",
+        title: `${who.company} ${enabled ? "activó" : "desactivó"} la API de catálogo`,
+        data: {
+          Módulo: "API de catálogo",
+          Precio: `US$ ${CATALOG_API_ADDON_PRICE_USD}/mes`,
+          "Cuota nueva": `US$ ${this.totalOf(plan, updated)}/mes`,
+          Plan: TENANT_PLAN_LABELS[plan],
+        },
+      });
+    }
+    return this.catalogApiAddonOf(plan, updated);
   }
 
   /** Pagar o correr la fecha levanta una suspensión por deuda; una manual solo con "Reactivar". */
@@ -845,6 +925,9 @@ export class SubscriptionsService {
       plan,
       planLabel: PLAN_CATALOG[plan].label,
       price: this.priceOf(plan, sub),
+      monthlyTotal: this.totalOf(plan, sub),
+      addons: { catalogApi: this.catalogApiAddonOf(plan, sub) },
+      catalogApiAddon: this.catalogApiAddonOf(plan, sub),
       listPrice,
       priceOverridden: sub?.priceOverride != null,
       currency: sub?.currency ?? "USD",

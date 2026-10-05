@@ -4,8 +4,8 @@ import { NextResponse, NextRequest } from "next/server";
 // logueado no tiene sentido.
 const AUTH_PATHS = new Set(["/login", "/register", "/verify-email", "/forgot-password"]);
 // Estas se ven siempre, con o sin sesión. Un usuario logueado tiene que poder
-// abrir la landing o una propuesta sin que lo manden a la app.
-const OPEN_PATHS = new Set(["/landing", "/preview"]);
+// abrir la landing, una propuesta o la documentación sin que lo manden a la app.
+const OPEN_PATHS = new Set(["/landing", "/preview", "/developers"]);
 /**
  * Direcciones públicas de la landing; por dentro se sirven desde /landing.
  * /marcas también es una sección de la app: con sesión gana la app.
@@ -58,7 +58,7 @@ export function middleware(req: NextRequest) {
   if (pathname === "/" && !auth) return rewriteTo(req, "/landing");
 
   // Lo que cuelga de la landing (fotos de las demos) es tan público como la landing.
-  if (OPEN_PATHS.has(pathname) || pathname.startsWith("/landing/")) return NextResponse.next();
+  if (OPEN_PATHS.has(pathname) || pathname.startsWith("/landing/") || pathname.startsWith("/developers/")) return NextResponse.next();
   if (AUTH_PATHS.has(pathname)) return guardLogin(req);
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
 

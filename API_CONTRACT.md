@@ -921,3 +921,23 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Auth**: Bearer token requerido (el de la contraseña temporal)
 - **Estado**: IMPLEMENTADO
 - **Notas**: `GET /admin/users`, el árbol de organizaciones y `GET /my/team` exponen `mustSetupAccount` para mostrar "Pendiente de completar cuenta".
+
+### [FEATURE] API de catálogo — gestión (Configuración → API de catálogo)
+- **Método / Ruta**: `GET /my/catalog-api` → `{ addon, canManage, clients: ApiClientView[], providers, docsUrl, baseUrl }`
+- **Método / Ruta**: `POST /my/catalog-api/addon` `{ enabled }` → `{ addon }` (dueño o admin; Custom lo trae incluido)
+- **Método / Ruta**: `POST /my/catalog-api/clients` `{ name?, scopes?, config?, ipAllowlist?, expiresAt? }` → `{ client, secret }` (el secret se devuelve una sola vez; requiere el módulo activo; hasta 20 keys activas)
+- **Método / Ruta**: `PATCH /my/catalog-api/clients/:id` (mismos campos) → `{ client }` · `POST …/:id/rotate` → `{ client, secret, previousValidUntil }` · `POST …/:id/revoke` · `POST …/:id/feed-token/rotate` · `GET …/:id/usage?days=30` → `{ days: [{ day, requests, errors }] }`
+- **Método / Ruta**: webhooks: `GET|POST /my/catalog-api/clients/:id/webhooks` (`POST` → `{ webhook, signingSecret }`), `PATCH|DELETE /my/catalog-api/webhooks/:id`, `POST …/:id/test` → `{ delivery }`, `POST …/:id/rotate-secret`, `GET …/:id/deliveries?limit=50`
+- **Método / Ruta**: superadmin: `PUT /admin/subscriptions/:tenantId/catalog-api-addon` `{ enabled }` → detalle de la suscripción
+- **Auth**: Bearer + organización comercio. Permiso `integrations.manage` (por defecto OWNER y ADMIN).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Tipos en `packages/shared/src/catalog-api.ts` (`ApiClientConfig`, `ApiClientView`, `WebhookView`, `DeliveryView`). Errores de validación de config: 400 con `details.problems[]`. `GET /my/subscription` y el detalle de admin suman `monthlyTotal` (plan + módulo; en Custom no suma), `addons.catalogApi` y `catalogApiAddon` (`{ enabled, includedInPlan, priceUsd, since }`); `price` sigue siendo solo el plan. Diseño: `docs/PLAN_API_CATALOGO.md` §12.
+
+### [FEATURE] API de catálogo — pública (/v1)
+- **Método / Ruta**: `GET /v1/me`, `/v1/products`, `/v1/products/:productId`, `/v1/offers`, `/v1/offers/:offerId`, `/v1/offers/:offerId/price-history`, `/v1/brands`, `/v1/categories`, `/v1/providers`, `/v1/fx`, `/v1/changes`, `/v1/export`, `GET|POST /v1/webhooks`, `PATCH|DELETE /v1/webhooks/:id`, `POST /v1/webhooks/:id/test`, `GET /v1/webhooks/:id/deliveries`
+- **Método / Ruta**: feeds sin headers: `GET /v1/feeds/:feedToken/google.xml` · `/v1/feeds/:feedToken/meta.csv`
+- **Método / Ruta**: documento: `GET /v1/openapi.json` (público, OpenAPI 3.0)
+- **Auth**: `X-Api-Key` + `X-Api-Secret`, o HTTP Basic (key:secret). No usa el JWT de la app.
+- **Respuesta esperada**: listados `{ data, pagination: { nextCursor, hasMore, limit }, meta: { currency, fx, generatedAt, catalogAt } }`; errores `{ error: { code, message, requestId, docs, details? } }` con `code` ∈ missing_credentials, invalid_credentials, key_revoked, key_expired, addon_required, subscription_suspended, ip_not_allowed, insufficient_scope, not_found, invalid_parameter, invalid_cursor, cursor_expired, feed_link_required, rate_limited, internal_error.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Sin el envelope `{success,data}`. Headers `X-Request-Id`, `X-RateLimit-Limit|Remaining|Reset` (120/min por key por defecto) y `Retry-After` en 429; CORS los expone. Diseño y formato de cada recurso: `docs/PLAN_API_CATALOGO.md` §3–§9 y §13.
