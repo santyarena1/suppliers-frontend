@@ -19,8 +19,15 @@ export interface SellerSession {
   sellerMode: boolean;
   /** `null` mientras se sabe. */
   canSeeCost: boolean | null;
-  /** Vendedor de verdad: no ve costos. */
+  /**
+   * La app se comporta como para un vendedor: sin compras en el menú ni en las
+   * pantallas. Es el vendedor de verdad o el dueño probando "Ver como vendedor".
+   */
   isSeller: boolean;
+  /** Vendedor de verdad: el servidor no le manda costos. */
+  isRealSeller: boolean;
+  /** Quien ve costos está probando la app como la ve un vendedor. */
+  previewingAsSeller: boolean;
   /** La pantalla se muestra como la ve un vendedor (vendedor o "Ver como vendedor"). */
   viewingAsSeller: boolean;
   /** Puede activar "Ver como vendedor". */
@@ -36,13 +43,16 @@ export function useSellerSession(): SellerSession {
   const sellerMode = Boolean(
     retailer && subscription && subscription.access === "FULL" && subscription.capabilities?.sellerMode
   );
-  const isSeller = sellerMode && canSeeCost === false;
+  const isRealSeller = sellerMode && canSeeCost === false;
   const canPreviewAsSeller = sellerMode && canSeeCost === true;
+  const previewingAsSeller = canPreviewAsSeller && viewAsSeller;
   return {
     sellerMode,
     canSeeCost,
-    isSeller,
-    viewingAsSeller: isSeller || (canPreviewAsSeller && viewAsSeller),
+    isSeller: isRealSeller || previewingAsSeller,
+    isRealSeller,
+    previewingAsSeller,
+    viewingAsSeller: isRealSeller || previewingAsSeller,
     canPreviewAsSeller,
   };
 }

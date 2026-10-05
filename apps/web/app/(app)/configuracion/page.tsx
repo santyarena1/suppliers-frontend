@@ -26,6 +26,7 @@ import { useRouter } from "next/navigation";
 import OwnStoreSettings from "@/components/OwnStoreSettings";
 import ChangePasswordCard from "@/components/ChangePasswordCard";
 import SearchDefaultsSettings from "@/components/SearchDefaultsSettings";
+import SellerModeSettings from "@/components/sale-margins/SellerModeSettings";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
   soft: Sparkles,
@@ -312,6 +313,7 @@ function ConfiguracionPageInner() {
 
               <OwnStoreSettings showToast={showToast} />
 
+              {getTenant()?.type === "RETAILER" && <SellerModeSettings />}
               {getTenant()?.type === "RETAILER" && <CatalogApiLink />}
               <HelpOnboardingSection showToast={showToast} />
             </div>

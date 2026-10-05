@@ -7,7 +7,7 @@ import { useMyProviders } from "@/lib/myProviders";
 import { useOnboarding } from "@/lib/onboarding";
 import { useCan } from "@/lib/permissions";
 import { useSellerSession } from "@/lib/sale-price";
-import { SELLER_MODE_ANNOUNCEMENT } from "@/lib/sale-margins";
+import { SELLER_MODE_ANNOUNCEMENT, SELLER_MODE_ANNOUNCEMENT_ENABLED } from "@/lib/sale-margins";
 import { useSubscription } from "@/lib/subscription";
 import SellerModeAnnouncement, { type SellerModeAudience } from "./SellerModeAnnouncement";
 
@@ -52,6 +52,7 @@ export default function AnnouncementGate() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    if (!SELLER_MODE_ANNOUNCEMENT_ENABLED) return;
     if (!userId || getImpersonator() || onboarding.active) return;
     if (subLoading || seenLocally(key, userId)) return;
     let alive = true;
@@ -91,7 +92,7 @@ export default function AnnouncementGate() {
   const manager = canManagePricing ?? (tenant?.role === "OWNER" || tenant?.role === "ADMIN");
   const audience: SellerModeAudience = !retailer
     ? "other"
-    : seller.isSeller
+    : seller.isRealSeller
       ? "seller"
       : !seller.sellerMode
         ? subscription

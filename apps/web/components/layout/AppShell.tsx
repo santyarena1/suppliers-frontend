@@ -16,6 +16,7 @@ import SubscriptionBanner from "../subscription/SubscriptionBanner";
 import SuspendedGate from "../subscription/SuspendedGate";
 import SellerRouteGate from "../sale-margins/SellerRouteGate";
 import AnnouncementGate from "../announcements/AnnouncementGate";
+import { SellerPreviewBar } from "../sale-margins/SellerModeSettings";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -54,6 +55,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <CartFloat />
         <AnnouncementGate />
+        <SellerPreviewBar />
       </OnboardingGate>
     </AuthGuard>
   );

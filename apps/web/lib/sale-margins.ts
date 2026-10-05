@@ -114,6 +114,8 @@ export const SALE_MARGIN_HIGH = 200;
 
 /** Clave del aviso de novedad del modo vendedor. */
 export const SELLER_MODE_ANNOUNCEMENT = "seller-mode-2026-10";
+/** Apagado mientras el dueño prueba el modo vendedor; se prende cuando esté listo para todos. */
+export const SELLER_MODE_ANNOUNCEMENT_ENABLED = false;
 
 /** Lee un margen escrito por la persona ("12,5", "12.5 %"). `null` si no es un número válido. */
 export function parseMarginInput(raw: string): number | null {

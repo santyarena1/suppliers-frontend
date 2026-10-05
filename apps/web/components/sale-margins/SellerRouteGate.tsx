@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Tag } from "lucide-react";
 import { useSellerSession } from "@/lib/sale-price";
+import { usePrefs } from "@/lib/prefs";
 
 /** Compra al distribuidor: tiene costos, el vendedor en modo vendedor no entra. */
 const BUYING_ROUTES = ["/cart", "/pedidos", "/proveedores"];
@@ -19,8 +20,32 @@ function isBuyingRoute(pathname: string | null): boolean {
  */
 export default function SellerRouteGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { isSeller } = useSellerSession();
+  const { isSeller, previewingAsSeller } = useSellerSession();
+  const { setViewAsSeller } = usePrefs();
   if (!isSeller || !isBuyingRoute(pathname)) return <>{children}</>;
+
+  if (previewingAsSeller) {
+    return (
+      <div className="flex-1 flex items-center justify-center px-6">
+        <div className="max-w-sm text-center">
+          <span className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400">
+            <Tag className="h-5 w-5" />
+          </span>
+          <h1 className="text-base font-semibold text-white">Estás viendo NODO como un vendedor</h1>
+          <p className="mt-2 text-sm leading-relaxed text-surface-400">
+            Un vendedor no entra a compras: ve solo precios de venta. Para volver a comprar, salí de la vista de vendedor.
+          </p>
+          <button
+            type="button"
+            onClick={() => setViewAsSeller(false)}
+            className="mt-5 inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-500"
+          >
+            Salir de la vista de vendedor
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex items-center justify-center px-6">
