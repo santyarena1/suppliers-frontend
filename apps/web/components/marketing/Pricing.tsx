@@ -118,12 +118,12 @@ export function Pricing() {
                     <span className={`font-bold tracking-tight tabular-nums text-white ${pro ? "text-5xl" : "text-4xl"}`}>
                       {price(def.monthlyPrice)}
                     </span>
-                    <span className="text-sm text-[var(--fg-3)]">por mes</span>
+                    <span className="text-sm text-[var(--fg-3)]">por mes, IVA incluido</span>
                   </p>
                   <p className="relative mt-1 h-5 text-sm text-[var(--fg-3)]">
                     {def.setupFee ? `Más ${price(def.setupFee)} de puesta en marcha, una sola vez` : "Sin costo de alta"}
                   </p>
-                  {pro && <LaunchPromo />}
+                  {pro && <LaunchPromo monthlyPrice={def.monthlyPrice} />}
 
                   <a
                     href={c.plan === "CUSTOM" ? "#contacto" : "#probar"}
@@ -211,7 +211,7 @@ export function Pricing() {
             </table>
           </div>
         )}
-        <p className="mt-6 text-center text-sm text-[var(--fg-3)]">Precios en dólares, por comercio y por mes.</p>
+        <p className="mt-6 text-center text-sm text-[var(--fg-3)]">Precios en dólares, por comercio y por mes. Todos incluyen IVA.</p>
 
         <SupplyPlans />
       </div>

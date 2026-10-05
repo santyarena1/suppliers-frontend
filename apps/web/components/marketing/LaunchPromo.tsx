@@ -7,7 +7,13 @@ import { fetchLaunchPromo, LAUNCH_PROMO_FALLBACK, type LaunchPromoState } from "
  * Promo de lanzamiento del plan Pro: barra de lugares tomados sobre el total
  * (la cuenta la lleva la API). La barra se llena al aparecer en pantalla.
  */
-export function LaunchPromo() {
+/** Precio con descuento: redondeado a dos decimales y sin ",00". */
+function usd(n: number) {
+  const v = Math.round(n * 100) / 100;
+  return `US$ ${v.toLocaleString("es-AR", { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 })}`;
+}
+
+export function LaunchPromo({ monthlyPrice }: { monthlyPrice: number }) {
   const [promo, setPromo] = useState<LaunchPromoState>(LAUNCH_PROMO_FALLBACK);
   const { discountPercent, months, spots, taken } = promo;
   const left = Math.max(0, spots - taken);
@@ -49,6 +55,13 @@ export function LaunchPromo() {
         <span className="text-[var(--accent-2)]">{discountPercent}% off</span> los primeros {months} meses
       </p>
       <p className="mt-0.5 text-xs text-[var(--fg-2)]">Para los primeros {spots} comercios que entren a Pro.</p>
+      <p className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-2xl font-bold tracking-tight tabular-nums text-white">
+          {usd(monthlyPrice * (1 - discountPercent / 100))}
+        </span>
+        <span className="text-sm text-[var(--fg-3)] line-through tabular-nums">{usd(monthlyPrice)}</span>
+        <span className="text-xs text-[var(--fg-2)]">por mes los primeros {months} meses, IVA incluido</span>
+      </p>
 
       <div
         className="mt-3.5 h-2 overflow-hidden rounded-full bg-[rgb(255_255_255/0.08)]"
