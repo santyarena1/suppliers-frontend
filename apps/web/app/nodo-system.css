@@ -237,6 +237,8 @@ a.pc__name:hover { color: var(--pc-accent); }
   max-width: 100%;
   overflow-wrap: anywhere;
 }
+/* El precio de la web propia se lee de un vistazo; el resto queda en segundo plano. */
+.pc__web .pc__web-price { color: var(--pc-ink); font-size: 0.72rem; font-weight: 650; letter-spacing: -0.01em; }
 .pc__web .is-margin { color: var(--pc-good); font-weight: 600; }
 .pc__web .is-loss { color: var(--pc-warn); font-weight: 600; }
 

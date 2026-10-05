@@ -73,7 +73,9 @@ export function OwnStorePriceHint({
 
   return (
     <p className="pc__web pc-mono" title={`${store.name}: ${quote.name}`}>
-      <span>Tu web {formatMoney(currency, compared.saleDisplay)}</span>
+      <span>
+        Tu web <b className="pc__web-price">{formatMoney(currency, compared.saleDisplay)}</b>
+      </span>
       <span className={up ? "is-margin" : "is-loss"}>
         {percentLabel(compared.percent)} · {signedMoney(currency, compared.deltaDisplay)}
       </span>
