@@ -24,6 +24,14 @@ import type {
   SubscriptionPaymentProvider,
   TenantPlan,
 } from "./plans";
+import type {
+  ProductSale,
+  ProviderSaleMargins,
+  SaleMarginBase,
+  SaleMarginHistoryEntry,
+  SaleMarginProduct,
+  SaleMarginProductsPage,
+} from "./sale-margins";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -71,6 +79,14 @@ api.interceptors.response.use(
     // Cloudflare no confirmó: el widget pide un token nuevo para el próximo intento.
     if (error?.response?.status === 403 && error?.response?.data?.code === "HUMAN_CHECK_REQUIRED") {
       resetHumanCheck();
+    }
+    // Modo vendedor: lo de compras (carrito, pedidos, cuentas) no es para el
+    // vendedor. Se avisa con un texto claro en vez de un error genérico.
+    if (error?.response?.status === 403 && error?.response?.data?.code === "COST_HIDDEN") {
+      const data = error.response.data as { message?: string };
+      if (!data.message || /^forbidden$/i.test(data.message)) {
+        data.message = "Esta sección es de compras: como vendedor ves solo los precios de venta del comercio.";
+      }
     }
     // Le regeneraron la contraseña: hasta completar la cuenta, todo lo demás
     // responde ACCOUNT_SETUP_REQUIRED y se lo lleva a completarla.
@@ -304,6 +320,16 @@ export interface ProductDTO {
   displayBrand?: string | null;
   displayCategory?: string | null;
   displaySubcategory?: string | null;
+  /**
+   * Modo vendedor: precio de venta (costo + margen). Lo manda el backend en
+   * Pro/Custom. Ver docs/PLAN_MODO_VENDEDOR.md.
+   */
+  sale?: ProductSale | null;
+  /**
+   * `"seller"`: quien mira no ve costos. `price`/`finalPrice` ya vienen con la
+   * venta y no hay impuestos de costo ni datos crudos.
+   */
+  viewerMode?: "seller" | null;
 }
 
 export interface CredentialResponse {
@@ -790,6 +816,62 @@ export interface OrgCartSnapshot {
   /** Nombre de cada integrante del comercio (para el autor de cada línea). */
   people?: Record<string, string>;
 }
+
+/** Modo vendedor: márgenes de venta (docs/PLAN_MODO_VENDEDOR.md §4). */
+type PricePair = { price: number | null; finalPrice: number | null };
+
+/**
+ * La API manda costo y venta con neto y final; la pantalla compara en final
+ * (con impuestos), igual que el resto de los precios de NODO.
+ */
+function flattenMarginProduct(row: SaleMarginProduct): SaleMarginProduct {
+  const pick = (v: unknown): number | null => {
+    if (typeof v === "number" || v === null) return v;
+    if (v && typeof v === "object") {
+      const pair = v as PricePair;
+      return pair.finalPrice ?? pair.price ?? null;
+    }
+    return null;
+  };
+  return { ...row, cost: pick(row.cost), sale: pick(row.sale) };
+}
+
+export const saleMarginsApi = {
+  settings: () => api.get<{ storePercent: number | null }>("/my/sale-margins/settings"),
+  saveSettings: (storePercent: number | null) =>
+    api.put<{ storePercent: number | null }>("/my/sale-margins/settings", { storePercent }),
+  provider: (provider: string) =>
+    api.get<ProviderSaleMargins>(`/providers/${encodeURIComponent(provider)}/sale-margins`),
+  saveProvider: (provider: string, data: { base?: SaleMarginBase; providerPercent?: number | null }) =>
+    api.put<ProviderSaleMargins>(`/providers/${encodeURIComponent(provider)}/sale-margins`, data),
+  setCategories: (provider: string, keys: string[], percent: number | null) =>
+    api.put<ProviderSaleMargins>(`/providers/${encodeURIComponent(provider)}/sale-margins/categories`, { keys, percent }),
+  products: (provider: string, params: { category?: string; q?: string; cursor?: string | null; limit?: number }) =>
+    api
+      .get<SaleMarginProductsPage>(`/providers/${encodeURIComponent(provider)}/sale-margins/products`, {
+        params: {
+          ...(params.category ? { category: params.category } : {}),
+          ...(params.q ? { q: params.q } : {}),
+          ...(params.cursor ? { cursor: params.cursor } : {}),
+          limit: params.limit ?? 50,
+        },
+      })
+      .then((res) => ({ ...res, data: { ...res.data, items: res.data.items.map(flattenMarginProduct) } })),
+  setProducts: (provider: string, externalIds: string[], percent: number | null) =>
+    api.put<{ items?: SaleMarginProduct[] }>(`/providers/${encodeURIComponent(provider)}/sale-margins/products`, {
+      externalIds,
+      percent,
+    }),
+  history: (params: { provider?: string; limit?: number } = {}) =>
+    api.get<{ items: SaleMarginHistoryEntry[] }>("/my/sale-margins/history", { params }),
+};
+
+/** Avisos de novedades que cada persona ve una sola vez. */
+export const announcementsApi = {
+  /** Claves ya vistas. */
+  seen: () => api.get<{ seen: string[] }>("/me/announcements"),
+  markSeen: (key: string) => api.post<{ seen: string[] }>(`/me/announcements/${encodeURIComponent(key)}/seen`, {}),
+};
 
 export const orgCartApi = {
   get: () => api.get<OrgCartSnapshot>("/cart/org"),

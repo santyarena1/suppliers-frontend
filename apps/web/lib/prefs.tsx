@@ -67,6 +67,12 @@ interface PrefsContextValue {
   /** Incluir percepciones/IIBB. Independiente del IVA. Default: true. Offline nunca las suma. */
   withIibb: boolean;
   setWithIibb: (v: boolean) => void;
+  /**
+   * Modo vendedor: quien ve costos puede mirar la app como la ve un vendedor
+   * (solo precio de venta). Preferencia local de este navegador.
+   */
+  viewAsSeller: boolean;
+  setViewAsSeller: (v: boolean) => void;
   /** Cómo se reparte el envío estimado entre los productos del pedido. */
   shippingSplit: ShippingSplit;
   setShippingSplit: (s: ShippingSplit) => void;
@@ -100,6 +106,7 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<Currency>("ARS");
   const [withIva, setWithIvaState] = useState<boolean>(true);
   const [withIibb, setWithIibbState] = useState<boolean>(true);
+  const [viewAsSeller, setViewAsSellerState] = useState<boolean>(false);
   const [dollarType, setDollarTypeState] = useState<DollarType>("oficial");
   const [shippingSplit, setShippingSplitState] = useState<ShippingSplit>("units");
   const [searchDefaults, setSearchDefaults] = useState<SearchDefaults>(SEARCH_DEFAULTS);
@@ -116,6 +123,7 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
     if (c) setCurrencyState(c);
     if (i != null) setWithIvaState(i === "1");
     if (iibb != null) setWithIibbState(iibb === "1");
+    setViewAsSellerState(localStorage.getItem("pref_view_as_seller") === "1");
     if (d) setDollarTypeState(d);
     const cachedRates = readCachedRates();
     if (cachedRates.length > 0) setRates((prev) => (prev.length > 0 ? prev : cachedRates));
@@ -131,6 +139,10 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   const setWithIva = useCallback((v: boolean) => {
     setWithIvaState(v);
     localStorage.setItem("pref_iva", v ? "1" : "0");
+  }, []);
+  const setViewAsSeller = useCallback((v: boolean) => {
+    setViewAsSellerState(v);
+    localStorage.setItem("pref_view_as_seller", v ? "1" : "0");
   }, []);
   const setWithIibb = useCallback((v: boolean) => {
     setWithIibbState(v);
@@ -193,6 +205,7 @@ export function PrefsProvider({ children }: { children: React.ReactNode }) {
   return (
     <PrefsContext.Provider value={{
       currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
+      viewAsSeller, setViewAsSeller,
       shippingSplit, setShippingSplit, searchDefaults, setSearchDefault,
       dollarType, setDollarType,
       rates, currentRate, refreshRates, loadingRates,

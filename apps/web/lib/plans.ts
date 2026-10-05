@@ -20,7 +20,9 @@ export type PlanCapabilityKey =
   | "advancedAnalytics"
   | "externalIntegrations"
   | "customModules"
-  | "customBranding";
+  | "customBranding"
+  /** Modo vendedor: márgenes de venta y precio de venta para el rol Vendedor (Pro y Custom). */
+  | "sellerMode";
 
 export type PlanCapabilities = Record<PlanCapabilityKey, boolean> & { maxSearchProviders: number | null };
 
@@ -101,6 +103,7 @@ export const PLAN_UPSELL: Record<PlanCapabilityKey, string> = {
   externalIntegrations: "Las integraciones con ERP, CRM y sistemas externos están disponibles en NODO Custom.",
   customModules: "Los módulos personalizados están disponibles en NODO Custom.",
   customBranding: "La identidad visual adaptada está disponible en NODO Custom.",
+  sellerMode: "El modo vendedor, con márgenes de venta por categoría y producto, está disponible en NODO Pro.",
 };
 
 export function searchLimitMessage(max = BASE_SEARCH_LIMIT): string {

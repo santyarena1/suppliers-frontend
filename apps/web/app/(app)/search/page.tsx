@@ -23,6 +23,7 @@ import { useMyProviders } from "@/lib/myProviders";
 import { useIsRetailer, usePurchasePolicies } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { displayAmountFromPricing } from "@/lib/display-price";
+import { salePresentation, useSellerSession } from "@/lib/sale-price";
 import { readSearchDefaults, usePrefs } from "@/lib/prefs";
 import { productShipping, useShippingContext } from "@/lib/product-shipping";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
@@ -79,6 +80,7 @@ function SearchPage() {
   const retailer = useIsRetailer();
   const purchasePolicies = usePurchasePolicies();
   const { withIva, withIibb } = usePrefs();
+  const viewingAsSeller = useSellerSession().viewingAsSeller;
   const iibbEpoch = useIibbRatesEpoch();
   const searchable = useMemo(() => myProviders.filter(isSearchable), [myProviders]);
   const outOfSearch = useMemo(
@@ -499,6 +501,9 @@ function SearchPage() {
   const filtered = useMemo(() => {
     void iibbEpoch;
     const sortPrice = (p: ProductDTO) => {
+      // Modo vendedor: se ordena por el precio que se ve, el de venta.
+      const present = salePresentation(p, { viewingAsSeller }, withIva);
+      if (present.mode === "sale") return present.saleUsd ?? Number.POSITIVE_INFINITY;
       const pricing = purchaseLinePricing(p, purchasePolicies[p.provider], priceMode);
       return displayAmountFromPricing(
         pricing,
@@ -566,7 +571,7 @@ function SearchPage() {
   }, [
     results, hideNoImage, onlyPriceDrops, minPrice, maxPrice, sortBy, priceMode,
     purchasePolicies, withIva, withIibb, iibbEpoch, includeShipping, shippingCtx,
-    dropsView, selectedProviders, selectedBrands, selectedCategories,
+    dropsView, selectedProviders, selectedBrands, selectedCategories, viewingAsSeller,
   ]);
 
   function toggleBrand(brand: string) {
@@ -932,7 +937,7 @@ function SearchPage() {
             </form>
 
             <div className="hidden md:flex items-center gap-2 ml-auto flex-shrink-0">
-              {retailer && (
+              {retailer && !viewingAsSeller && (
                 <span className="flex items-center gap-1">
                   {anyShipping ? (
                     <button
@@ -1122,7 +1127,7 @@ function SearchPage() {
                 Incluir sin stock
               </button>
 
-              {retailer && (
+              {retailer && !viewingAsSeller && (
                 <span className="flex items-center gap-1 flex-wrap">
                   {anyShipping ? (
                     <button
@@ -1378,7 +1383,7 @@ function SearchPage() {
                       Incluir sin stock
                     </button>
 
-                    {retailer && (
+                    {retailer && !viewingAsSeller && (
                       <span className="flex items-center gap-1">
                         {anyShipping ? (
                           <button

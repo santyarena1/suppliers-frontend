@@ -9,6 +9,8 @@ import { usePurchasePolicy } from "@/lib/purchase";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import type { FxMarked } from "@/lib/fx";
+import { salePresentation, useSellerSession, type SalePresentation } from "@/lib/sale-price";
+import { signedMargin } from "@/lib/sale-margins";
 
 interface Props {
   product?: TaxableProduct | ProductDTO;
@@ -37,6 +39,7 @@ export default function PriceTag({
   priceMode = "list",
 }: Props) {
   const { currency, convert, withIva, withIibb } = usePrefs();
+  const session = useSellerSession();
   useIibbRatesEpoch();
   const provider =
     product && typeof product === "object" && "provider" in product
@@ -56,8 +59,19 @@ export default function PriceTag({
   // Cotizado en pesos por el proveedor: en pesos se ve su precio original.
   const fx = (product ?? null) as FxMarked | null;
   const pesos = (usd: number) => (fx?.sourceCurrency === "ARS" && fx.fxRate ? usd * fx.fxRate : convert(usd).amount);
-  const primary = currency === "USD" ? formatUSD(displayUsd) : formatARS(pesos(displayUsd));
-  const secondary = currency === "USD" ? formatARS(pesos(displayUsd)) : formatUSD(displayUsd);
+  // Modo vendedor: el vendedor ve solo la venta; quien ve costos, la venta abajo.
+  const present: SalePresentation =
+    product && typeof product === "object" && ("sale" in product || "viewerMode" in product)
+      ? salePresentation(product as ProductDTO, session, withIva)
+      : { mode: "cost" };
+  const sellerView = present.mode === "sale";
+  const shownUsd = sellerView ? present.saleUsd ?? 0 : displayUsd;
+  const primary = currency === "USD" ? formatUSD(shownUsd) : formatARS(pesos(shownUsd));
+  const secondary = currency === "USD" ? formatARS(pesos(shownUsd)) : formatUSD(shownUsd);
+  const saleLine =
+    present.mode === "cost+sale"
+      ? `${currency === "USD" ? formatUSD(present.saleUsd) : formatARS(pesos(present.saleUsd))}`
+      : null;
 
   const modeBadge =
     pricing.mode === "offline"
@@ -68,7 +82,7 @@ export default function PriceTag({
 
   const canScheme = Boolean(policy?.acceptsScheme && policy.schemeIvaAdjustment);
   const schemeHint =
-    product && priceMode === "list" && canScheme
+    !sellerView && product && priceMode === "list" && canScheme
       ? (() => {
           const sp = purchaseLinePricing(product, policy, "scheme", qty);
           const sd = displayAmountFromPricing(
@@ -83,9 +97,14 @@ export default function PriceTag({
 
   return (
     <div className={className}>
+      {sellerView && (
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400 text-right">Precio de venta</p>
+      )}
       <div className="flex items-baseline gap-1.5 flex-wrap justify-end">
-        <span className={`font-bold text-white tabular-nums ${SIZES[size]}`}>{primary}</span>
-        {modeBadge && (
+        <span className={`font-bold text-white tabular-nums ${SIZES[size]}`}>
+          {sellerView && present.saleUsd == null ? "Sin precio de venta" : primary}
+        </span>
+        {!sellerView && modeBadge && (
           <span className={`text-[10px] font-semibold uppercase tracking-wider ${modeBadge.className}`}>
             {modeBadge.label}
           </span>
@@ -93,12 +112,20 @@ export default function PriceTag({
         {!withIva && (
           <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">s/IVA</span>
         )}
-        {includeIibb && shown.iibbIncluded && (
+        {!sellerView && includeIibb && shown.iibbIncluded && (
           <span className="text-[10px] font-medium text-surface-500 uppercase tracking-wider">
             +IIBB{shown.iibbPercent != null ? ` ${formatAlicuota(shown.iibbPercent)}` : ""}
           </span>
         )}
       </div>
+      {saleLine && present.mode === "cost+sale" && (
+        <p className="text-xs font-semibold text-emerald-400 tabular-nums mt-0.5 text-right" title="Precio de venta con tu margen">
+          Venta {saleLine}
+          {present.marginPercent != null && (
+            <span className="font-normal text-emerald-400/70"> · {signedMargin(present.marginPercent)}</span>
+          )}
+        </p>
+      )}
       {showSecondary && currency === "ARS" && (
         <p className="text-xs text-surface-500 tabular-nums">{formatUSD(displayUsd)} USD</p>
       )}

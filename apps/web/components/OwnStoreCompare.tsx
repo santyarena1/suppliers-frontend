@@ -54,13 +54,18 @@ function percentLabel(percent: number) {
   return `${abs}%`;
 }
 
-/** Renglón de la card: precio de la web propia contra el costo final. */
+/**
+ * Renglón de la card: precio de la web propia contra el costo final. En modo
+ * vendedor (`sale`) `costUsd` es el precio de venta y se compara contra ese.
+ */
 export function OwnStorePriceHint({
   productName,
   costUsd,
+  sale = false,
 }: {
   productName: string;
   costUsd: number | null;
+  sale?: boolean;
 }) {
   const retailer = useIsRetailer();
   const { currency, currentRate } = usePrefs();
@@ -72,7 +77,10 @@ export function OwnStorePriceHint({
   const up = compared.percent >= 0;
 
   return (
-    <p className="pc__web pc-mono" title={`${store.name}: ${quote.name}`}>
+    <p
+      className="pc__web pc-mono"
+      title={`${store.name}: ${quote.name}${sale ? " · comparado con tu precio de venta" : ""}`}
+    >
       <span>
         Tu web <b className="pc__web-price">{formatMoney(currency, compared.saleDisplay)}</b>
       </span>
@@ -93,20 +101,29 @@ function timeAgo(iso: string): string {
   return `hace ${d} d`;
 }
 
-/** Comparación en la ficha: costo final, precio de la web y la diferencia. */
+/**
+ * Comparación en la ficha: costo final, precio de la web y la diferencia. En
+ * modo vendedor (`sale`) se compara tu precio de venta, sin mostrar el costo.
+ */
 export function OwnStoreProductCompare({
   productName,
   costUsd,
+  sale = false,
 }: {
   productName: string;
   costUsd: number | null;
+  sale?: boolean;
 }) {
+  const base = sale ? "tu precio de venta" : "el costo final";
   const retailer = useIsRetailer();
   const { currency, currentRate } = usePrefs();
   const { store, loaded, quote, status } = useQuote(
     retailer && costUsd != null && costUsd > 0 ? productName : null
   );
   if (!retailer || !loaded) return null;
+
+  // Elegir el local propio es del dueño: el vendedor solo ve la comparación cuando ya hay uno.
+  if (sale && (!store || costUsd == null || !(costUsd > 0))) return null;
 
   if (store && (costUsd == null || !(costUsd > 0))) {
     return (
@@ -175,7 +192,7 @@ export function OwnStoreProductCompare({
       {quote && !compared && status === "ready" && (
         <p className="text-xs text-surface-400 leading-relaxed">
           Encontramos {quote.name} a {formatARS(quote.price)}. Falta la cotización del dólar para
-          restarlo de tu costo final.
+          compararlo con {base}.
         </p>
       )}
 
@@ -183,7 +200,7 @@ export function OwnStoreProductCompare({
         <>
           <dl className="grid grid-cols-3 gap-2">
             <div>
-              <dt className="text-[10px] uppercase tracking-wide text-surface-500">Costo final</dt>
+              <dt className="text-[10px] uppercase tracking-wide text-surface-500">{sale ? "Tu venta" : "Costo final"}</dt>
               <dd className="text-sm font-semibold text-white tabular-nums mt-0.5">{money(compared.costDisplay)}</dd>
             </div>
             <div>
@@ -210,12 +227,13 @@ export function OwnStoreProductCompare({
           </dl>
           <p className="text-[11px] text-surface-400 leading-relaxed mt-3">
             {compared.percent >= 1
-              ? `El precio de tu web queda ${Math.abs(compared.percent).toFixed(0)}% por encima del costo final.`
+              ? `El precio de tu web queda ${Math.abs(compared.percent).toFixed(0)}% por encima de ${base}.`
               : compared.percent <= -1
-                ? `El precio de tu web queda ${Math.abs(compared.percent).toFixed(0)}% por debajo del costo final.`
-                : "El precio de tu web está alineado con tu costo final."}{" "}
-            Los dos importes son finales: el costo incluye los impuestos que tenés activos y el de
-            la web es el publicado.
+                ? `El precio de tu web queda ${Math.abs(compared.percent).toFixed(0)}% por debajo de ${base}.`
+                : `El precio de tu web está alineado con ${base}.`}{" "}
+            {sale
+              ? "Tu precio de venta sale del margen que configuró el comercio; el de la web es el publicado."
+              : "Los dos importes son finales: el costo incluye los impuestos que tenés activos y el de la web es el publicado."}
           </p>
           {!quote.confident && (
             <p className="text-[11px] text-amber-300/90 leading-relaxed mt-2">

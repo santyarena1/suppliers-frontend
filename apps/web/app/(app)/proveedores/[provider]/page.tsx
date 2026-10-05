@@ -39,6 +39,7 @@ import { DemoAccountPanel, DemoCredentialsCard, DemoListsPanel, DemoSyncPanel, i
 import { useSearchParams } from "next/navigation";
 import SyncHealthBanner, { type SyncHealth } from "@/components/SyncHealthBanner";
 import PlanGate from "@/components/subscription/PlanGate";
+import SaleMarginsPanel from "@/components/sale-margins/SaleMarginsPanel";
 import {
   AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
   Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
@@ -57,12 +58,12 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
-type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account" | "demo-account";
+type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "margins" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account" | "demo-account";
 
 const CATALOG_PAGE = 50;
 
 const VALID_PROVIDER_TABS: ProviderTab[] = [
-  "lists", "orders", "credentials", "sync", "config", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account", "demo-account",
+  "lists", "orders", "credentials", "sync", "config", "margins", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account", "demo-account",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -530,6 +531,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         ]),
                     ...(listPriced ? [{ key: "orders" as const, label: "Pedidos", shortLabel: "Pedidos" }] : []),
                     { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración", shortLabel: isRetailer ? "Offline" : "Config" },
+                    ...(isRetailer && !demo ? [{ key: "margins" as const, label: "Márgenes de venta", shortLabel: "Márgenes" }] : []),
                     { key: "catalog" as const, label: "Catálogo" },
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
                     ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
@@ -722,20 +724,23 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         </div>
                         )}
 
-                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
-                          <div className="text-sm font-semibold text-white">Precio</div>
-                          <div>
-                            <label className="block text-xs font-medium text-surface-400 mb-1.5">Markup sobre el precio del proveedor (%)</label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={config.priceMarkupPercent}
-                              onChange={(e) => setConfig({ ...config, priceMarkupPercent: e.target.value })}
-                              className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
-                            />
-                            <p className="text-[11px] text-surface-500 mt-1">Se aplica al guardar cada producto. Ej: 10 = precio del proveedor + 10%.</p>
-                          </div>
-                        </div>
+                        {/* El viejo "markup sobre el precio del proveedor" ya no toca el costo:
+                            el precio de venta se arma en la pestaña Márgenes de venta. */}
+                        {isRetailer && !demo && (
+                          <button
+                            type="button"
+                            onClick={() => setTab("margins")}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] px-5 py-4 text-left transition hover:border-emerald-500/50"
+                          >
+                            <span>
+                              <span className="block text-sm font-semibold text-white">Márgenes de venta</span>
+                              <span className="mt-0.5 block text-xs text-surface-400">
+                                El precio de venta por categoría y producto ahora tiene su propia pestaña.
+                              </span>
+                            </span>
+                            <span className="text-xs font-semibold text-emerald-300">Abrir</span>
+                          </button>
+                        )}
 
                         <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="text-sm font-semibold text-white">Manejo de stock y catálogo</div>
@@ -890,6 +895,12 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     {isRetailer && canManage && !provider.startsWith("LIST_DEMO_") && (
                       <DisconnectProviderCard provider={provider} />
                     )}
+                  </div>
+                )}
+
+                {tab === "margins" && isRetailer && (
+                  <div data-tour="provider-tab-content">
+                    <SaleMarginsPanel provider={provider} providerName={providerLabel(provider)} />
                   </div>
                 )}
 

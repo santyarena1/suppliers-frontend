@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Menu, MessageSquare, ShoppingCart } from "lucide-react";
 import { getTenant } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
+import { useSellerSession } from "@/lib/sale-price";
 import { useChatUnread } from "@/lib/chat-unread";
 import NodoLogo from "../NodoLogo";
 import NodoWordmark from "../NodoWordmark";
@@ -19,6 +20,7 @@ interface Props {
  */
 export default function MobileTopBar({ onOpen }: Props) {
   const { totalCount } = useCart();
+  const { isSeller } = useSellerSession();
   const chatUnread = useChatUnread();
   const tenant = getTenant();
   const distributor = tenant?.type === "DISTRIBUTOR";
@@ -45,7 +47,7 @@ export default function MobileTopBar({ onOpen }: Props) {
             )}
           </Link>
         )}
-        {retailer && (
+        {retailer && !isSeller && (
           <Link href="/cart" className="relative w-10 h-10 flex items-center justify-center text-surface-300 hover:text-white" aria-label="Carrito">
             <ShoppingCart className="w-5 h-5" />
             {totalCount > 0 && (

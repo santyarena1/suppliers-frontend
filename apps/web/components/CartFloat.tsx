@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ShoppingCart, ChevronUp, X, Minus, Plus, Package } from "lucide-react";
 import { useCart, type CartItem, type CartRef, cartItemKey } from "@/lib/cart";
+import { useSellerSession } from "@/lib/sale-price";
 import {  } from "@/lib/api";
 import { useProviderDisplay } from "@/lib/providerDisplay";
 import { proxyImg, formatUSD, formatARS } from "@/lib/format";
@@ -301,12 +302,14 @@ function PreviewTotals({ items }: { items: CartItem[] }) {
 export default function CartFloat() {
   const pathname = usePathname();
   const { items, totalCount, hydrated } = useCart();
+  const { isSeller } = useSellerSession();
   const display = useProviderDisplay();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | string>("all");
 
   const onSearch = pathname?.startsWith("/search") ?? false;
   const hide =
+    isSeller ||
     !hydrated ||
     !onSearch ||
     pathname?.startsWith("/login") ||

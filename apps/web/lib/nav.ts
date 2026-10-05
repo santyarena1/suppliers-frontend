@@ -73,6 +73,8 @@ export interface NavItemDef {
   section?: NavSectionId;
   /** Solo el tenant de testuser1 (SISTEMA TGS). Fail-closed en el menú. */
   requiresSistemaTgs?: boolean;
+  /** Compra al distribuidor (costos): el vendedor en modo vendedor no lo ve. */
+  buyingOnly?: boolean;
 }
 
 export interface NavSectionDef {
@@ -91,7 +93,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "home", href: "/", label: "Inicio", icon: Home, exact: true },
   { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search", tenantTypes: ["RETAILER"] },
   { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
-  { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"] },
+  { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"], buyingOnly: true },
   { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"] },
   {
     id: "news",
@@ -117,6 +119,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     module: "cart",
     tenantTypes: ["RETAILER"],
     section: "providers",
+    buyingOnly: true,
   },
   {
     id: "providers",
@@ -126,6 +129,7 @@ export const NAV_ITEMS: NavItemDef[] = [
     module: "providers",
     tenantTypes: ["RETAILER"],
     section: "providers",
+    buyingOnly: true,
   },
   {
     id: "clients",
@@ -295,6 +299,8 @@ export interface NavContext {
   permissions?: ReadonlySet<string> | null;
   isSuperadmin?: boolean;
   sistemaTgs?: boolean;
+  /** Vendedor en modo vendedor (no ve costos): sin carrito, pedidos ni proveedores. */
+  seller?: boolean;
 }
 
 export function isNavItemActive(item: Pick<NavItemDef, "href" | "exact">, pathname: string): boolean {
@@ -311,6 +317,7 @@ export function findActiveNavId(items: NavItemDef[], pathname: string): NavItemI
 
 export function canSeeNavItem(item: NavItemDef, ctx: NavContext): boolean {
   if (item.requiresSistemaTgs && !ctx.sistemaTgs) return false;
+  if (item.buyingOnly && ctx.seller) return false;
 
   if (item.module && ctx.modules !== null && !ctx.modules.includes(item.module)) {
     return false;

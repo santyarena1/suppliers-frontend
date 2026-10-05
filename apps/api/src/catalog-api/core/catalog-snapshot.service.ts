@@ -12,6 +12,8 @@ import { TenantVisibilityService } from "../../tenants/tenant-visibility.service
 import type { CatalogRow, CatalogSnapshot, ProviderInfo } from "./catalog-row";
 import { foldLabel, groupKeyFor, offerIdFor, productIdFor, providerAliasId } from "./ids";
 import { costTaxLines, NO_PERCEPTIONS, type PerceptionPolicy } from "./pricing";
+import { resolveSaleMargin } from "@nodo/shared";
+import { SaleMarginRulesService, baseFor, type TenantSaleRules } from "../../pricing/sale-margin-rules.service";
 
 /** La foto se reusa este tiempo: alcanza para paginar sin rearmar en cada página. */
 const SNAPSHOT_TTL_MS = 60_000;
@@ -86,7 +88,8 @@ export class CatalogSnapshotService {
     private readonly prisma: PrismaService,
     private readonly providers: ProvidersService,
     private readonly visibility: TenantVisibilityService,
-    private readonly enrichment: CatalogEnrichmentService
+    private readonly enrichment: CatalogEnrichmentService,
+    private readonly saleRules: SaleMarginRulesService
   ) {}
 
   async get(tenantId: string): Promise<CatalogSnapshot> {
@@ -113,7 +116,7 @@ export class CatalogSnapshotService {
     const started = Date.now();
     const visibles = (await this.visibility.listFor(tenantId)).filter((v) => v.linked && !v.platformHidden);
     const keys = visibles.map((v) => v.provider as string);
-    const [rules, strict, configs, enrichment, aiImages] = await Promise.all([
+    const [rules, strict, configs, enrichment, aiImages, saleRules] = await Promise.all([
       this.providers.rulesByProvider(tenantId),
       this.providers.providersHidingUnsynced(tenantId, keys),
       this.prisma.providerSyncConfig.findMany({
@@ -135,6 +138,7 @@ export class CatalogSnapshotService {
       }),
       this.enrichment.getContext(),
       this.aiImageKeys(keys),
+      this.saleRules.get(tenantId),
     ]);
     const configBy = new Map(configs.map((c) => [c.provider, c]));
     const providers = this.providerInfos(tenantId, visibles, configBy);
@@ -164,7 +168,7 @@ export class CatalogSnapshotService {
               learnedIibbPercent: num(config.learnedIibbPercent),
             }
           : NO_PERCEPTIONS;
-        const row = toRow(offer, rules.get(offer.provider) ?? NO_RULES, strict.has(offer.provider), policy, enrichment, aiImages);
+        const row = toRow(offer, rules.get(offer.provider) ?? NO_RULES, strict.has(offer.provider), policy, enrichment, aiImages, saleRules);
         if (row) rows.push(row);
       }
       if (batch.length < BATCH) break;
@@ -227,7 +231,8 @@ export function toRow(
   strictStock: boolean,
   policy: PerceptionPolicy,
   enrichment: CatalogEnrichmentContext | undefined,
-  aiImages: Set<string>
+  aiImages: Set<string>,
+  saleRules?: TenantSaleRules
 ): CatalogRow | null {
   const p = offer.product;
   const discount = offer.source === "BASE_LIST" ? rules.baseListDiscountPercent ?? 0 : 0;
@@ -279,7 +284,11 @@ export function toRow(
     // La ficha es universal: los importes de la cuenta que la sincronizó no cuentan (igual que en la web).
     costTaxes: costTaxLines({ price: costNet, finalPrice: costListed, ivaPercent, raw: fichaRaw(offer.provider, p.raw) }, policy),
     ivaPercent,
-    markupPercent: rules.markupPercent,
+    // Margen de venta con la categoría cruda del distribuidor (como la nombra él).
+    saleMarginPercent: saleRules
+      ? resolveSaleMargin(saleRules.rules, { provider: offer.provider, externalId: offer.externalId, category: p.category }).percent
+      : 0,
+    saleMarginBase: saleRules ? baseFor(saleRules, offer.provider) : "FINAL",
     stock: displayedStock(offer.stock, rules.minStockThreshold),
     stockStatus: offer.stockStatus,
     minStockThreshold: rules.minStockThreshold,

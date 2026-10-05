@@ -110,12 +110,18 @@ export function normalizeProductFx<T extends object>(product: T, rate: number | 
   if (!rate) {
     const blank: Record<string, unknown> = { ...p, fxPending: true };
     for (const field of MONEY_FIELDS) if (field in p) blank[field] = null;
+    if (p.sale && typeof p.sale === "object") blank.sale = { ...(p.sale as object), price: null, finalPrice: null };
     return blank as T;
   }
   const out: Record<string, unknown> = { ...p, currency: "USD", sourceCurrency: "ARS", fxRate: rate, fxPending: false };
   for (const field of MONEY_FIELDS) if (field in p) out[field] = toUsd(p[field], rate);
   if (Array.isArray(p.taxes)) {
     out.taxes = p.taxes.map((t) => ({ ...t, unitAmount: Number(toUsd(t.unitAmount, rate)) }));
+  }
+  // La venta (modo vendedor) viene en la misma moneda que el costo.
+  if (p.sale && typeof p.sale === "object") {
+    const sale = p.sale as Record<string, unknown>;
+    out.sale = { ...sale, price: toUsd(sale.price, rate), finalPrice: toUsd(sale.finalPrice, rate) };
   }
   return out as T;
 }

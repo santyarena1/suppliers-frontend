@@ -9,10 +9,13 @@ import { CreateOfflineOrdersDto, UpdateOfflineOrderDto } from "./dto/offline-ord
 import { RenameOpsAliasDto, SplitOpsAliasDto, UnifyOpsAliasDto } from "./dto/ops-alias.dto";
 import { RejectOrderDto } from "./dto/reject-order.dto";
 import { OrderApprovalService } from "./order-approval.service";
+import { CostSensitive } from "../pricing/cost-visibility";
 import { OrdersService } from "./orders.service";
 
 /** Pedidos de la organización, con la aprobación interna del comercio. */
 @UseGuards(AuthGuard("jwt"), TenantGuard)
+// Modo vendedor: pedidos y analytics de compras son costos.
+@CostSensitive()
 @Controller("orders")
 export class OrdersController {
   constructor(

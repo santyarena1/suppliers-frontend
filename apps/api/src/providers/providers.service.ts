@@ -1375,7 +1375,7 @@ export class ProvidersService implements OnModuleInit {
     const fromRaw = opts.from && !Number.isNaN(opts.from.getTime()) ? opts.from : retentionStart;
     const from = fromRaw.getTime() < retentionStart.getTime() ? retentionStart : fromRaw;
 
-    const [points, before, rules, offer] = await Promise.all([
+    const [points, before, offer] = await Promise.all([
       this.prisma.productPriceHistory.findMany({
         where: {
           tenantId,
@@ -1397,7 +1397,6 @@ export class ProvidersService implements OnModuleInit {
         orderBy: { capturedAt: "desc" },
         select: { price: true, finalPrice: true, currency: true, capturedAt: true },
       }),
-      this.rulesFor(tenantId, provider),
       this.prisma.tenantProductOffer.findUnique({
         where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
         select: { price: true, finalPrice: true, currency: true, syncedAt: true },
@@ -1406,8 +1405,8 @@ export class ProvidersService implements OnModuleInit {
 
     const raw = before ? [before, ...points] : points;
     const serie = raw.map((point, idx) => ({
-      price: withMarkup(point.price, rules.markupPercent),
-      finalPrice: withMarkup(point.finalPrice, rules.markupPercent),
+      price: roundPrice(point.price),
+      finalPrice: roundPrice(point.finalPrice),
       currency: point.currency,
       // El punto “antes del rango” se ancla al inicio para no alargar la serie hacia atrás.
       capturedAt: before && idx === 0 ? from : point.capturedAt,
@@ -1418,8 +1417,8 @@ export class ProvidersService implements OnModuleInit {
       const ultimo = serie[serie.length - 1];
       const vigenteAt = offer.syncedAt.getTime() > to.getTime() ? to : offer.syncedAt;
       const hoy = {
-        price: withMarkup(offer.price, rules.markupPercent),
-        finalPrice: withMarkup(offer.finalPrice, rules.markupPercent),
+        price: roundPrice(offer.price),
+        finalPrice: roundPrice(offer.finalPrice),
         currency: offer.currency,
         capturedAt: vigenteAt,
       };
@@ -1495,18 +1494,17 @@ export class ProvidersService implements OnModuleInit {
     ];
   }
 
-  /** Markup y umbral configurados por la organización para un proveedor. */
+  /** Umbral de stock y descuento de lista configurados por la organización para un proveedor. */
   private async rulesFor(tenantId: string, provider: Provider): Promise<OfferRules> {
     const [config, baseListDiscountPercent] = await Promise.all([
       this.prisma.providerSyncConfig.findUnique({
         where: { tenantId_provider: { tenantId, provider } },
-        select: { priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
+        select: { minStockThreshold: true, zeroStockAction: true },
       }),
       this.baseListDiscountFor(tenantId, provider),
     ]);
     if (!config) return { ...NO_RULES, baseListDiscountPercent };
     return {
-      markupPercent: Number(config.priceMarkupPercent) || 0,
       minStockThreshold: config.minStockThreshold || 0,
       zeroStockAction: config.zeroStockAction || "KEEP",
       baseListDiscountPercent,
@@ -1531,7 +1529,7 @@ export class ProvidersService implements OnModuleInit {
     const [configs, listLinks] = await Promise.all([
       this.prisma.providerSyncConfig.findMany({
         where: { tenantId },
-        select: { provider: true, priceMarkupPercent: true, minStockThreshold: true, zeroStockAction: true },
+        select: { provider: true, minStockThreshold: true, zeroStockAction: true },
       }),
       this.prisma.tenantLink.findMany({
         where: {
@@ -1549,7 +1547,6 @@ export class ProvidersService implements OnModuleInit {
       configs.map((c) => [
         c.provider,
         {
-          markupPercent: Number(c.priceMarkupPercent) || 0,
           minStockThreshold: c.minStockThreshold || 0,
           zeroStockAction: c.zeroStockAction || "KEEP",
           baseListDiscountPercent: discountByProvider.get(c.provider) ?? 0,
@@ -1654,9 +1651,8 @@ export class ProvidersService implements OnModuleInit {
     const dropViews = drops
       .map((d) => {
         const view = toProductView(d.offer.product, d.offer, rules.get(d.offer.provider) ?? NO_RULES, enrichment);
-        const markup = rules.get(d.offer.provider)?.markupPercent ?? 0;
-        const prevPrice = withMarkup(d.previousPrice, markup);
-        const prevFinal = withMarkup(d.previousFinalPrice, markup);
+        const prevPrice = roundPrice(d.previousPrice);
+        const prevFinal = roundPrice(d.previousFinalPrice);
         const current = view.finalPrice ?? view.price;
         const previous = prevFinal ?? prevPrice;
         const priceDropPercent =
@@ -1969,15 +1965,14 @@ export class ProvidersService implements OnModuleInit {
           priceDroppedOn: null,
         };
       }
-      const markup = rules.get(p.provider)?.markupPercent ?? 0;
       const priceDropPercent =
         drop.dropPct != null && drop.dropPct > 0
           ? Math.round(drop.dropPct * 1000) / 10
           : null;
       return {
         ...p,
-        previousPrice: withMarkup(drop.previousPrice, markup),
-        previousFinalPrice: withMarkup(drop.previousFinalPrice, markup),
+        previousPrice: roundPrice(drop.previousPrice),
+        previousFinalPrice: roundPrice(drop.previousFinalPrice),
         priceDropPercent,
         priceDroppedOn: drop.droppedOn,
       };
@@ -2349,10 +2344,10 @@ export class ProvidersService implements OnModuleInit {
   }
 }
 
-function withMarkup(value: unknown, markupPercent: number): number | null {
+function roundPrice(value: unknown): number | null {
   const price = numberOrNull(value);
   if (price == null) return null;
-  return Math.round(price * (1 + markupPercent / 100) * 100) / 100;
+  return Math.round(price * 100) / 100;
 }
 
 function numberOrUndefined(value: unknown): number | undefined {

@@ -4,6 +4,7 @@ import type { CompareEntry } from "@/lib/compare-store";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import type { PurchasePolicy } from "@/lib/purchase-pricing";
 import { repairImplausibleSalePrice } from "@/lib/retailMatch";
+import { saleAmountUsd } from "@/lib/sale-price";
 
 export function wholesaleUnitDisplayUsd(
   product: ProductDTO,
@@ -11,6 +12,8 @@ export function wholesaleUnitDisplayUsd(
   mode: PriceMode,
   opts: { withIva: boolean; withIibb: boolean }
 ): number {
+  // Vendedor: el servidor ya mandó la venta; no se le suman impuestos ni percepciones de compra.
+  if (product.viewerMode === "seller") return saleAmountUsd(product, opts.withIva) ?? 0;
   const pricing = purchaseLinePricing(product, policy, mode);
   return displayAmountFromPricing(pricing, {
     withIva: opts.withIva,

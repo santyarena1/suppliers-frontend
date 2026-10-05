@@ -4,18 +4,17 @@ import { displayedStock } from "./catalog-stock";
 
 /** Lo que la organización decidió para un proveedor y hay que aplicar al leer. */
 export interface OfferRules {
-  markupPercent: number;
   minStockThreshold: number;
   /** KEEP = listar stock 0; HIDE/DELETE = no listarlos salvo includeOutOfStock. */
   zeroStockAction: string;
   /**
    * Descuento pactado en el vínculo con un proveedor por lista. Se aplica solo a
-   * ofertas materializadas desde la lista base (source BASE_LIST), antes del markup.
+   * ofertas materializadas desde la lista base (source BASE_LIST).
    */
   baseListDiscountPercent?: number;
 }
 
-export const NO_RULES: OfferRules = { markupPercent: 0, minStockThreshold: 0, zeroStockAction: "KEEP" };
+export const NO_RULES: OfferRules = { minStockThreshold: 0, zeroStockAction: "KEEP" };
 
 export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   price: number | null;
@@ -29,7 +28,7 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
   displayBrand?: string | null;
   displayCategory?: string | null;
   displaySubcategory?: string | null;
-  /** Solo en destacados: precio crudo anterior (con markup) cuando bajó. */
+  /** Solo en destacados: precio anterior cuando bajó. */
   previousPrice?: number | null;
   previousFinalPrice?: number | null;
   /** Porcentaje de baja (0–100), si aplica. */
@@ -44,10 +43,10 @@ export type ProductView = Omit<ProviderSyncCache, "id" | "updatedAt"> & {
  * Junta la ficha del producto con la oferta de una organización y aplica lo que
  * esa organización configuró.
  *
- * El markup y el umbral de stock se aplican acá, al leer, y no al guardar: la
- * oferta conserva siempre el valor crudo del proveedor. Por eso cambiar el markup
- * se ve al instante en toda la plataforma y volver atrás es cambiar un número, en
- * vez de tener que resincronizar el catálogo entero.
+ * El umbral de stock y el descuento de lista se aplican acá, al leer, y no al
+ * guardar: la oferta conserva siempre el valor crudo del proveedor. El costo no
+ * lleva margen: el precio de venta es una capa aparte (modo vendedor,
+ * pricing/sale-pricing.service.ts).
  */
 export function toProductView(
   product: ProviderSyncCache,
@@ -64,8 +63,8 @@ export function toProductView(
     ...ficha,
     ...display,
     raw: fichaRaw(product.provider, raw) as ProviderSyncCache["raw"],
-    price: withMarkup(withDiscount(offer.price, discount), rules.markupPercent),
-    finalPrice: withMarkup(withDiscount(offer.finalPrice, discount), rules.markupPercent),
+    price: roundPrice(withDiscount(offer.price, discount)),
+    finalPrice: roundPrice(withDiscount(offer.finalPrice, discount)),
     currency: offer.currency,
     ivaPercent: offer.ivaPercent == null ? null : Number(offer.ivaPercent),
     // Debajo del mínimo que el comercio considera vendible, es como no tener.
@@ -111,12 +110,8 @@ function withDiscount(value: unknown, discountPercent: number): number | null {
   return price * (1 - discountPercent / 100);
 }
 
-function withMarkup(value: unknown, markupPercent: number): number | null {
-  if (value == null) return null;
-  const price = Number(value);
-  if (!Number.isFinite(price)) return null;
-  if (!markupPercent) return round2(price);
-  return round2(price * (1 + markupPercent / 100));
+function roundPrice(value: number | null): number | null {
+  return value == null ? null : round2(value);
 }
 
 function round2(value: number): number {

@@ -8,6 +8,7 @@ import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
 import { useChatUnread } from "@/lib/chat-unread";
 import { useCart } from "@/lib/cart";
 import { invalidateMyModules, useMyModules, useMyPermissions } from "@/lib/permissions";
+import { useSellerSession } from "@/lib/sale-price";
 import { invalidateTgsEnabled, useTgsEnabled } from "@/lib/tgs";
 import { useResults } from "@/lib/results";
 import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
@@ -72,6 +73,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const myModules = useMyModules();
   const myPermissions = useMyPermissions();
   const sistemaTgs = useTgsEnabled();
+  const { isSeller } = useSellerSession();
   const { clearResults } = useResults();
   const { providers: myProviders } = useMyProviders();
   const { statuses, loading: statusesLoading } = useProviderStatuses();
@@ -113,8 +115,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         permissions: myPermissions,
         isSuperadmin: user?.role === "ROLE_ADMIN",
         sistemaTgs,
+        seller: isSeller,
       }),
-    [user?.role, myModules, myPermissions, tenant?.type, tenant?.role, sistemaTgs],
+    [user?.role, myModules, myPermissions, tenant?.type, tenant?.role, sistemaTgs, isSeller],
   );
 
   const pinned = items.filter((item) => !item.section);

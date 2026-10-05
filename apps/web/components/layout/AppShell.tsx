@@ -14,6 +14,8 @@ import CartFloat from "../CartFloat";
 import SessionKeepAlive from "../SessionKeepAlive";
 import SubscriptionBanner from "../subscription/SubscriptionBanner";
 import SuspendedGate from "../subscription/SuspendedGate";
+import SellerRouteGate from "../sale-margins/SellerRouteGate";
+import AnnouncementGate from "../announcements/AnnouncementGate";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -43,12 +45,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
               <TenantRouteGate>
-                <SuspendedGate>{children}</SuspendedGate>
+                <SuspendedGate>
+                  <SellerRouteGate>{children}</SellerRouteGate>
+                </SuspendedGate>
               </TenantRouteGate>
             </div>
           </div>
         </div>
         <CartFloat />
+        <AnnouncementGate />
       </OnboardingGate>
     </AuthGuard>
   );

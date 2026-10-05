@@ -1,4 +1,4 @@
-import { extractTaxLines, taxByKind, type ApiClientConfig, type CatalogApiRounding, type TaxLine } from "@nodo/shared";
+import { extractTaxLines, taxByKind, type ApiClientConfig, type CatalogApiRounding, type SaleMarginBase, type TaxLine } from "@nodo/shared";
 
 /** Tipos de impuesto que expone la API (en inglés: es un contrato para integradores). */
 export type ApiTaxType = "iva" | "internal" | "perception" | "other";
@@ -115,7 +115,10 @@ export interface PricedOfferInput {
   currency: string | null;
   costNet: number | null;
   costTaxes: TaxLine[];
-  providerMarkupPercent: number;
+  /** Margen de venta del comercio para esta oferta (reglas del modo vendedor). */
+  providerMarginPercent: number;
+  /** Base de ese margen según el distribuidor. Con margen fijo de la key, siempre NET. */
+  marginBase: SaleMarginBase;
   source: string;
 }
 
@@ -123,8 +126,11 @@ export interface PricedOfferInput {
  * Precio de una oferta según la config de la key.
  *
  * - Costo: lo que el comercio le paga al distribuidor (neto + impuestos + percepciones).
- * - Venta: neto con margen, más IVA e internos sobre ese neto. Las percepciones
- *   son un costo del comercio, no se trasladan al precio de venta.
+ * - Venta con el margen de la key (`fixed`, sobre el neto) o el del comercio
+ *   (`provider`: reglas del modo vendedor y su base por distribuidor).
+ *   NET: neto con margen, más IVA e internos sobre ese neto. FINAL: el costo
+ *   final (con percepciones) por el margen; el neto se despeja sin IVA ni
+ *   internos. Las percepciones nunca se trasladan como impuesto de la venta.
  * - El redondeo se aplica al precio de venta final (`sale.gross`).
  */
 export function priceOffer(
@@ -150,15 +156,18 @@ export function priceOffer(
   }
   const gross = round2(net + taxes.reduce((s, t) => s + t.amount, 0));
 
-  const markupPercent =
-    config.markup.mode === "fixed" ? Number(config.markup.percent ?? 0) || 0 : input.providerMarkupPercent;
-  const saleNet = net * (1 + markupPercent / 100);
-  const saleTaxes = taxes
-    .filter((t) => t.type !== "perception")
-    .map((t) => ({
-      ...t,
-      amount: round2(t.percent != null ? saleNet * (t.percent / 100) : t.amount * (1 + markupPercent / 100)),
-    }));
+  const fixedMarkup = config.markup.mode === "fixed";
+  const markupPercent = fixedMarkup ? Number(config.markup.percent ?? 0) || 0 : input.providerMarginPercent;
+  const base: SaleMarginBase = fixedMarkup ? "NET" : input.marginBase;
+  const factor = 1 + markupPercent / 100;
+  const resale = taxes.filter((t) => t.type !== "perception");
+  const rate = resale.reduce((s, t) => s + (t.percent ?? 0), 0) / 100;
+  const fixedAmounts = resale.reduce((s, t) => s + (t.percent == null ? t.amount : 0), 0);
+  const saleNet = base === "FINAL" ? (gross * factor - fixedAmounts * factor) / (1 + rate) : net * factor;
+  const saleTaxes = resale.map((t) => ({
+    ...t,
+    amount: round2(t.percent != null ? saleNet * (t.percent / 100) : t.amount * factor),
+  }));
   const saleGross = roundSalePrice(saleNet + saleTaxes.reduce((s, t) => s + t.amount, 0), config.rounding);
 
   const price: ApiPrice = { currency: config.currency, listSource: listSource(input.source) };

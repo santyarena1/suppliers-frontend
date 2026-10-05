@@ -14,6 +14,7 @@ import { usePrefs } from "@/lib/prefs";
 import { useCart } from "@/lib/cart";
 import { getRecentSearches, getTopSearches, SearchEntry, trackSearch } from "@/lib/history";
 import { useProviderDisplay } from "@/lib/providerDisplay";
+import { useSellerSession } from "@/lib/sale-price";
 import {
   Search, ArrowUpRight, ShoppingCart, Key, Package, UserCog, Loader2,
 } from "lucide-react";
@@ -56,6 +57,8 @@ function RetailerHome() {
   const router = useRouter();
   const { currency, currentRate, dollarLabel, dollarType } = usePrefs();
   const { totalCount, items: cartItems } = useCart();
+  // Modo vendedor: el vendedor no compra ni configura distribuidores.
+  const { isSeller } = useSellerSession();
   const tenant = getTenant();
   const canTeam = tenant?.role === "OWNER" || tenant?.role === "ADMIN";
   const display = useProviderDisplay();
@@ -125,28 +128,34 @@ function RetailerHome() {
           {/* El estado de tu operación, en una línea */}
           <p className="hm__state hm-mono">
             <span>
-              <Link href="/proveedores">
-                <b>{loadingProviders ? "…" : configuredCount}</b> de {myProviders.length} proveedores
-                configurados
-              </Link>
+              {isSeller ? (
+                <>
+                  <b>{loadingProviders ? "…" : configuredCount}</b> proveedores para buscar
+                </>
+              ) : (
+                <Link href="/proveedores">
+                  <b>{loadingProviders ? "…" : configuredCount}</b> de {myProviders.length} proveedores
+                  configurados
+                </Link>
+              )}
             </span>
             <span>
               dólar {dollarLabel(dollarType)}{" "}
               <b>{currentRate ? currentRate.venta.toLocaleString("es-AR") : "—"}</b>
               {currency === "USD" ? " · mostrando en USD" : ""}
             </span>
-            <span>
+            {!isSeller && <span>
               <Link href="/cart">
                 carrito <b>{totalCount}</b>
                 {cartProviders.length > 0
                   ? ` · ${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}`
                   : " · vacío"}
               </Link>
-            </span>
+            </span>}
             <span>
               <b>{top.length}</b> búsquedas guardadas
             </span>
-            {missingCount > 0 && (
+            {!isSeller && missingCount > 0 && (
               <span className="is-warn">
                 <Link href="/proveedores">
                   {missingCount} sin configurar
@@ -167,9 +176,11 @@ function RetailerHome() {
           {/* Proveedores: el estado de cada uno, tocable */}
           <div className="hm__sec">
             <h3>Tus proveedores</h3>
-            <Link href="/proveedores">
-              Administrar <ArrowUpRight className="w-3 h-3" />
-            </Link>
+            {!isSeller && (
+              <Link href="/proveedores">
+                Administrar <ArrowUpRight className="w-3 h-3" />
+              </Link>
+            )}
           </div>
 
           {loadingProviders ? (
@@ -193,7 +204,7 @@ function RetailerHome() {
                     className="hm__prov"
                     data-state="on"
                     style={color ? ({ ["--pv"]: color } as React.CSSProperties) : undefined}
-                    onClick={() => router.push(`/proveedores/${p}`)}
+                    onClick={() => router.push(isSeller ? `/search?q=${encodeURIComponent(name)}` : `/proveedores/${p}`)}
                   >
                     <span className="hm__prov-name">{name}</span>
                     <span className="hm__prov-note hm-mono">Configurado</span>
@@ -257,18 +268,18 @@ function RetailerHome() {
             <h3>Accesos</h3>
           </div>
           <div className="hm__ctas">
-            <Cta
+            {!isSeller && <Cta
               href="/proveedores"
               icon={Key}
               title="Cargar cuentas"
               description="Conectá el usuario y la contraseña de tu organización en cada proveedor"
-            />
-            <Cta
+            />}
+            {!isSeller && <Cta
               href="/cart"
               icon={ShoppingCart}
               title="Ver carrito"
               description={`${totalCount} ${totalCount === 1 ? "unidad" : "unidades"} de ${cartProviders.length} proveedor${cartProviders.length !== 1 ? "es" : ""}`}
-            />
+            />}
             <Cta
               href="/search"
               icon={Package}

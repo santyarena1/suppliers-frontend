@@ -3,7 +3,8 @@
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { tenantSeesIibbPerceptions } from "@/lib/auth";
-import { DollarSign, RefreshCw, Receipt, Check, Percent } from "lucide-react";
+import { DollarSign, RefreshCw, Receipt, Check, Percent, Tag } from "lucide-react";
+import { useSellerSession } from "@/lib/sale-price";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
@@ -11,7 +12,9 @@ export default function PrefsPanel() {
   const {
     currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
     dollarType, setDollarType, rates, currentRate, refreshRates, loadingRates, dollarLabel,
+    viewAsSeller, setViewAsSeller,
   } = usePrefs();
+  const seller = useSellerSession();
   const [seesIibb, setSeesIibb] = useState(false);
   useIibbRatesEpoch();
   useEffect(() => {
@@ -48,6 +51,11 @@ export default function PrefsPanel() {
         <span className="hidden sm:inline bg-brand-600/20 text-brand-400 text-[10px] font-semibold px-1.5 py-0.5 rounded">
           {withIva ? "IVA" : "s/IVA"}
         </span>
+        {seller.viewingAsSeller && (
+          <span className="hidden sm:inline bg-emerald-500/20 text-emerald-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+            Venta
+          </span>
+        )}
         {seesIibb && withIibb && (
           <span className="hidden sm:inline bg-amber-500/20 text-amber-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
             IIBB
@@ -162,6 +170,32 @@ export default function PrefsPanel() {
               </Link>
               )}
             </div>
+
+            {seller.canPreviewAsSeller && (
+              <div className="flex flex-col gap-1.5">
+                <label className="block text-[10px] font-semibold text-surface-500 uppercase tracking-wider">Modo vendedor</label>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={viewAsSeller}
+                  onClick={() => setViewAsSeller(!viewAsSeller)}
+                  className="w-full flex items-center justify-between border rounded-lg px-3 py-2 transition-all bg-surface-800 hover:bg-surface-700 border-surface-700"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Tag className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                    <div className="text-left min-w-0">
+                      <span className="text-xs text-surface-200 block">Ver como vendedor</span>
+                      <span className="text-[10px] text-surface-500 leading-tight block">
+                        Solo precios de venta, como los ve un vendedor de tu equipo. No cambia nada para los demás.
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`w-8 h-4 rounded-full relative transition-colors flex-shrink-0 ${viewAsSeller ? "bg-emerald-600" : "bg-surface-600"}`}>
+                    <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${viewAsSeller ? "left-4" : "left-0.5"}`} />
+                  </div>
+                </button>
+              </div>
+            )}
 
             {currentRate && (
               <div className="text-[10px] text-surface-500 border-t border-surface-800 pt-3 -mx-4 px-4">

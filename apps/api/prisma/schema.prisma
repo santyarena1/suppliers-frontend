@@ -49,6 +49,8 @@ model User {
   onboardingReplay                 Boolean     @default(false)
   /// Paso del recorrido en el que quedó. Única fuente de verdad: la app lo lee y lo guarda acá.
   onboardingStep                   String?
+  /// Avisos de novedades ya vistos (claves de ANNOUNCEMENTS en @nodo/shared).
+  seenAnnouncements                String[]    @default([])
   endDate      DateTime?
   brandId      String?
   brand        BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])
@@ -190,6 +192,8 @@ model Tenant {
   updatedAt          DateTime      @updatedAt
 
   memberships   TenantMembership[]
+  saleMarginRules   SaleMarginRule[]
+  saleMarginChanges SaleMarginChange[]
   rolePermissions TenantRolePermission[]
   accessCodes   TenantAccessCode[]
   teamInviteCodes TeamInviteCode[]
@@ -978,7 +982,10 @@ model ProviderSyncConfig {
   includeInSearch      Boolean?
   /// Cuándo lo eligió: con tope de plan, los elegidos antes tienen prioridad.
   includeInSearchAt    DateTime?
+  /// Sin uso desde el modo vendedor: el costo ya no se modifica (ver SaleMarginRule).
   priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)
+  /// Modo vendedor: el margen de venta se calcula sobre el costo final o sobre el neto.
+  saleMarginBase       SaleMarginBase       @default(FINAL)
   // Si el proveedor informa esta cantidad de stock o menos, lo tratamos como
   // sin stock (aplica zeroStockAction). 0 = desactivado. Mismo concepto que
   // el "stock mínimo del proveedor" de AcuStock.
@@ -2591,4 +2598,58 @@ model ApiCatalogEvent {
 
   @@index([tenantId, id])
   @@index([createdAt])
+}
+
+// ---------- Modo vendedor (docs/PLAN_MODO_VENDEDOR.md) ----------
+
+enum SaleMarginScope {
+  STORE
+  PROVIDER
+  CATEGORY
+  PRODUCT
+}
+
+enum SaleMarginBase {
+  FINAL
+  NET
+}
+
+/// Margen de venta del comercio. Gana el más específico: producto > categoría
+/// del distribuidor > distribuidor > comercio. El costo nunca se modifica.
+model SaleMarginRule {
+  id            String          @id @default(uuid())
+  tenantId      String
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scope         SaleMarginScope
+  /// null en STORE.
+  provider      String?
+  /// Categoría del distribuidor normalizada (saleCategoryKey). Solo CATEGORY.
+  categoryKey   String?
+  /// Cómo la nombra el distribuidor, para mostrar.
+  categoryLabel String?
+  /// Solo PRODUCT.
+  externalId    String?
+  /// STORE | P:<prov> | C:<prov>:<cat> | X:<prov>:<extId> (saleRuleKey).
+  ruleKey       String
+  percent       Decimal         @db.Decimal(7, 3)
+  updatedById   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([tenantId, ruleKey])
+  @@index([tenantId, provider])
+}
+
+/// Historial de márgenes: quién cambió qué. before/after null = no había regla / se quitó.
+model SaleMarginChange {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String?
+  ruleKey   String
+  before    Decimal? @db.Decimal(7, 3)
+  after     Decimal? @db.Decimal(7, 3)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
 }

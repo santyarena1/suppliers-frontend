@@ -14,3 +14,4 @@ export * from "./nb-cta-summary";
 export * from "./shipping";
 export * from "./catalog-api";
 export * from "./tax-lines";
+export * from "./sale-margins";

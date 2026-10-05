@@ -38,8 +38,10 @@ import {
   type CompareRetailEntry,
 } from "@/lib/compare-store";
 import { repairImplausibleSalePrice } from "@/lib/retailMatch";
+import { useSellerSession } from "@/lib/sale-price";
 
 export default function ComparadorPage() {
+  const seller = useSellerSession();
   const [entries, setEntries] = useState<CompareEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [manualOrder, setManualOrder] = useState(false);
@@ -369,7 +371,7 @@ export default function ComparadorPage() {
           <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-900 border border-surface-700 px-2.5 py-1 text-surface-300">
               <ArrowLeftRight className="w-3 h-3 text-brand-400" />
-              {summary.providers} costo{summary.providers === 1 ? "" : "s"}
+              {summary.providers} {seller.isSeller ? "precio" : "costo"}{summary.providers === 1 ? "" : "s"}{seller.isSeller ? " de venta" : ""}
               {summary.minCost != null && (
                 <>
                   <span className="text-surface-600">·</span>

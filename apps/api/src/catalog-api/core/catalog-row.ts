@@ -1,4 +1,4 @@
-import type { TaxLine } from "@nodo/shared";
+import type { TaxLine, SaleMarginBase } from "@nodo/shared";
 
 /**
  * Una oferta del catálogo del comercio, ya resuelta (ficha canónica, costo e
@@ -42,8 +42,10 @@ export interface CatalogRow {
   costNet: number | null;
   costTaxes: TaxLine[];
   ivaPercent: number | null;
-  /** Margen que el comercio usa en NODO para este distribuidor. */
-  markupPercent: number;
+  /** Margen de venta del comercio para esta oferta (modo vendedor: producto > categoría > distribuidor > comercio). */
+  saleMarginPercent: number;
+  /** Sobre qué se calcula ese margen (configuración del distribuidor). */
+  saleMarginBase: SaleMarginBase;
   /** Stock como lo ve el comercio (con su umbral mínimo). `null` = el distribuidor no informa. */
   stock: number | null;
   stockStatus: string | null;

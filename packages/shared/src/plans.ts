@@ -163,7 +163,9 @@ export type PlanCapabilityKey =
   | "customModules"
   | "customBranding"
   /** API de catálogo: incluida en Custom; en Base y Pro es un módulo extra pago. */
-  | "catalogApi";
+  | "catalogApi"
+  /** Modo vendedor: márgenes de venta y precio de venta para el rol Vendedor (docs/PLAN_MODO_VENDEDOR.md). */
+  | "sellerMode";
 
 export const PLAN_CAPABILITY_KEYS: readonly PlanCapabilityKey[] = [
   "directCheckout",
@@ -175,6 +177,7 @@ export const PLAN_CAPABILITY_KEYS: readonly PlanCapabilityKey[] = [
   "customModules",
   "customBranding",
   "catalogApi",
+  "sellerMode",
 ] as const;
 
 export type PlanCapabilities = Record<PlanCapabilityKey, boolean> & {
@@ -193,6 +196,7 @@ const BASE_CAPABILITIES: PlanCapabilities = {
   customModules: false,
   customBranding: false,
   catalogApi: false,
+  sellerMode: false,
 };
 
 const PRO_CAPABILITIES: PlanCapabilities = {
@@ -203,6 +207,7 @@ const PRO_CAPABILITIES: PlanCapabilities = {
   providerAccountAccess: true,
   integratedChat: true,
   advancedAnalytics: true,
+  sellerMode: true,
 };
 
 const CUSTOM_CAPABILITIES: PlanCapabilities = {
@@ -243,6 +248,7 @@ export const PLAN_CAPABILITY_UPSELL: Record<PlanCapabilityKey, string> = {
   customModules: "Los módulos personalizados están disponibles en NODO Custom.",
   customBranding: "La identidad visual adaptada está disponible en NODO Custom.",
   catalogApi: `La API de catálogo es un módulo de US$ ${CATALOG_API_ADDON_PRICE_USD}/mes en Base y Pro, e incluido en NODO Custom.`,
+  sellerMode: "El modo vendedor (márgenes y precios de venta) está disponible en NODO Pro.",
 };
 
 // ---------- Módulos extra ----------

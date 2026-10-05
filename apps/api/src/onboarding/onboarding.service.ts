@@ -54,6 +54,7 @@ export class OnboardingService {
         onboardingPreviewRestoreTenantId: true,
         onboardingReplay: true,
         onboardingStep: true,
+        seenAnnouncements: true,
       },
     });
     const tenant = await this.tenantContext.forUser(userId);
@@ -115,6 +116,8 @@ export class OnboardingService {
 
     return {
       needsOnboarding,
+      /** Avisos de novedades ya vistos (POST /me/announcements/:key/seen). */
+      seenAnnouncements: user.seenAnnouncements ?? [],
       completed: Boolean(user.onboardingCompletedAt) && !preview,
       completedAt: user.onboardingCompletedAt?.toISOString() ?? null,
       hasTenant: Boolean(tenant),

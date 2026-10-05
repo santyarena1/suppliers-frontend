@@ -9,6 +9,7 @@ import {
   REQUIRES_ACTIVE_SUBSCRIPTION_KEY,
 } from "./entitlements";
 import { TenantContextService, type TenantContext } from "./tenant-context.service";
+import { COST_CAPABILITIES, COST_SENSITIVE_KEY, assertCostVisible } from "../pricing/cost-visibility";
 
 export type RequestWithTenant = FastifyRequest & {
   user?: JwtPayload;
@@ -26,6 +27,9 @@ export type RequestWithTenant = FastifyRequest & {
  * Sí rechaza por plan (docs/PLAN_SUSCRIPCIONES.md): un comercio suspendido no
  * escribe, y un endpoint marcado con `@RequiresCapability` exige que el plan lo
  * incluya. Distribuidores, marcas y el superadmin en su sesión no tienen plan.
+ *
+ * Y corta por modo vendedor: una ruta de costos (`@CostSensitive` o de compra y
+ * cuenta corriente) no es para quien solo ve precios de venta.
  */
 @Injectable()
 export class TenantGuard implements CanActivate {
@@ -38,12 +42,18 @@ export class TenantGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<RequestWithTenant>();
     request.tenant = request.user ? await this.tenantContext.fromSession(request.user) : null;
     const targets = [context.getHandler(), context.getClass()];
+    const capability = this.reflector.getAllAndOverride<PlanCapabilityKey | undefined>(REQUIRED_CAPABILITY_KEY, targets);
     checkEntitlements(request.tenant, {
       method: request.method,
-      capability: this.reflector.getAllAndOverride<PlanCapabilityKey | undefined>(REQUIRED_CAPABILITY_KEY, targets),
+      capability,
       allowWhenRestricted: this.reflector.getAllAndOverride<boolean | undefined>(ALLOW_WHEN_RESTRICTED_KEY, targets),
       requiresActive: this.reflector.getAllAndOverride<boolean | undefined>(REQUIRES_ACTIVE_SUBSCRIPTION_KEY, targets),
     });
+    // Modo vendedor: quien no ve costos no entra a compras, cuenta corriente ni nada que los use.
+    const costSensitive =
+      this.reflector.getAllAndOverride<boolean | undefined>(COST_SENSITIVE_KEY, targets) ||
+      (capability != null && COST_CAPABILITIES.includes(capability));
+    if (costSensitive) assertCostVisible(request.tenant);
     return true;
   }
 }

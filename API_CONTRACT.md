@@ -941,3 +941,25 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: listados `{ data, pagination: { nextCursor, hasMore, limit }, meta: { currency, fx, generatedAt, catalogAt } }`; errores `{ error: { code, message, requestId, docs, details? } }` con `code` ∈ missing_credentials, invalid_credentials, key_revoked, key_expired, addon_required, subscription_suspended, ip_not_allowed, insufficient_scope, not_found, invalid_parameter, invalid_cursor, cursor_expired, feed_link_required, rate_limited, internal_error.
 - **Estado**: IMPLEMENTADO
 - **Notas**: Sin el envelope `{success,data}`. Headers `X-Request-Id`, `X-RateLimit-Limit|Remaining|Reset` (120/min por key por defecto) y `Retry-After` en 429; CORS los expone. Diseño y formato de cada recurso: `docs/PLAN_API_CATALOGO.md` §3–§9 y §13.
+
+### [FEATURE] Modo vendedor — márgenes de venta
+- **Método / Ruta**: `GET|PUT /my/sale-margins/settings` · `GET /my/sale-margins/history?provider=&limit=` · `GET|PUT /providers/:provider/sale-margins` · `PUT /providers/:provider/sale-margins/categories` · `GET|PUT /providers/:provider/sale-margins/products` · `PUT /providers/:provider/sale-margins/products/by-category`
+- **Auth**: Bearer, comercio con capability `sellerMode` (Pro/Custom). Leer exige `prices.viewCost`; escribir, `pricing.manage` (OWNER/ADMIN).
+- **Body / Params**: settings `{ storePercent: number|null }` · proveedor `{ base?: "FINAL"|"NET", providerPercent?: number|null }` · categorías `{ keys: string[], percent: number|null }` · productos `{ externalIds: string[], percent: number|null }` · por categoría `{ category, percent }` · listado `?category=&q=&cursor=&limit=` (≤200). `percent` de −50 a 1000; `null` quita la regla (hereda). Hasta 2000 por cambio.
+- **Respuesta esperada**: `ProviderSaleMargins`, `SaleMarginProductsPage { items, nextCursor, total }`, `SaleMarginHistoryEntry[]`, `{ storePercent }` (tipos en `packages/shared/src/sale-margins.ts`).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Margen: producto > categoría del distribuidor > distribuidor > comercio. Cada cambio queda en el historial. Diseño: `docs/PLAN_MODO_VENDEDOR.md`.
+
+### [FEATURE] Modo vendedor — precio de venta en el catálogo
+- **Método / Ruta**: las rutas de catálogo existentes (búsqueda, catálogo, ficha, historial de precios, destacados, by-category/provider/brand).
+- **Auth**: igual que hoy.
+- **Respuesta esperada**: cada producto con oferta suma `sale: { price, finalPrice, marginPercent, source, base }` (comercios Pro/Custom). Sin `prices.viewCost`: `price`/`finalPrice` pasan a ser la venta, sin `raw`, `sale.marginPercent/source/base = null` y `viewerMode: "seller"`; el historial de precios es la serie de venta.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Sin `prices.viewCost`, carrito, pedidos, checkout, cuenta corriente, listas y detalle de sync responden 403 `{ code: "COST_HIDDEN" }`. `priceMarkupPercent` ya no modifica el costo. Tabla completa: `docs/PLAN_MODO_VENDEDOR.md` §3.
+
+### [FEATURE] Avisos de novedades
+- **Método / Ruta**: `GET /me/announcements` → `{ seen, pending }` · `POST /me/announcements/:key/seen` (sin body)
+- **Auth**: Bearer.
+- **Respuesta esperada**: `{ seen: string[] }`. `GET /onboarding/status` también trae `seenAnnouncements`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Claves válidas en `ANNOUNCEMENTS` (@nodo/shared): `seller-mode-2026-10`. Idempotente.

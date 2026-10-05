@@ -43,6 +43,8 @@ import {
 } from "lucide-react";
 import ProductBuyActions from "@/components/ProductBuyActions";
 import { OwnStoreProductCompare } from "@/components/OwnStoreCompare";
+import { salePresentation, useSellerSession } from "@/lib/sale-price";
+import { signedMargin } from "@/lib/sale-margins";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
 import ArsPriceHint from "@/components/ArsPriceHint";
 import { useActiveTourStep } from "@/lib/onboarding";
@@ -58,6 +60,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const providerName = dec(provider);
   const extId = dec(externalId);
   const policy = usePurchasePolicy(providerName);
+  const sellerSession = useSellerSession();
 
   const [product, setProduct] = useState<ProductDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,7 +130,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     } catch { /**/ }
   }
 
-  const unpriced = Boolean(product && !hasOwnPrice(product));
+  // Modo vendedor: el vendedor ve solo la venta; quien ve costos, la venta en el desglose.
+  const present = product ? salePresentation(product, sellerSession, withIva) : ({ mode: "cost" } as const);
+  const sellerView = present.mode === "sale";
+  const saleUnitUsd = present.mode === "sale" || present.mode === "cost+sale" ? present.saleUsd : null;
+  const unpriced = Boolean(product && (sellerView ? saleUnitUsd == null || saleUnitUsd <= 0 : !hasOwnPrice(product)));
   const pricing = product ? purchaseLinePricing(product, policy, "list", qty) : null;
   const taxLines = pricing?.lines ?? [];
   const shown = pricing
@@ -319,29 +326,44 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   <div className="pp pp__panel">
                     <div className="pp__head">
                       <p className="pp__caption">
-                        {unpriced
-                          ? "Precio de tu cuenta"
-                          : displayTaxTitle({ withIva, withIibb, provider: providerName })}
+                        {sellerView
+                          ? `Precio de venta · ${withIva ? "con IVA" : "sin IVA"}`
+                          : unpriced
+                            ? "Precio de tu cuenta"
+                            : displayTaxTitle({ withIva, withIibb, provider: providerName })}
                         {!unpriced && qty > 1 ? ` · ${qty} u.` : ""}
                       </p>
-                      <span className="pp__amount">{unpriced ? "Sin precio" : money(displayUSD)}</span>
+                      <span className="pp__amount">
+                        {unpriced
+                          ? sellerView ? "Sin precio de venta" : "Sin precio"
+                          : money(sellerView ? (saleUnitUsd ?? 0) * qty : displayUSD)}
+                      </span>
                       {product && (product.sourceCurrency === "ARS" || product.fxPending) && <ArsPriceHint product={product} />}
                       {!unpriced && currency === "ARS" && currentRate && product?.sourceCurrency !== "ARS" && (
                         <p className="pp__sub">
                           Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
                         </p>
                       )}
-                      {!unpriced && qty > 1 && <p className="pp__sub">{money(unitDisplayUsd)} por unidad</p>}
+                      {!unpriced && qty > 1 && (
+                        <p className="pp__sub">{money(sellerView ? saleUnitUsd ?? 0 : unitDisplayUsd)} por unidad</p>
+                      )}
                     </div>
 
-                    {unpriced && (
+                    {unpriced && sellerView && (
+                      <p className="pp__note">
+                        Este producto todavía no tiene precio de venta. Lo calcula el comercio con su margen
+                        apenas haya precio del distribuidor.
+                      </p>
+                    )}
+
+                    {unpriced && !sellerView && (
                       <p className="pp__note">
                         El precio y el stock aparecen cuando cargás la cuenta de este distribuidor.
                         La ficha es la misma para todos los locales; el importe es el de tu cuenta.
                       </p>
                     )}
 
-                    {!unpriced && <div className="pp__rows">
+                    {!unpriced && !sellerView && <div className="pp__rows">
                       <p className="pp__rows-title">Desglose de costo</p>
 
                       <BreakdownRow
@@ -402,6 +424,16 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           />
                         )}
                       </div>
+                      {present.mode === "cost+sale" && (
+                        <div className="pt-2.5 mt-1" style={{ borderTop: "1px solid var(--p-line)" }}>
+                          <BreakdownRow
+                            label={present.marginPercent != null ? `Precio de venta · margen ${signedMargin(present.marginPercent)}` : "Precio de venta"}
+                            value={money(present.saleUsd)}
+                            hint="Es lo que ve un vendedor de tu equipo"
+                            strong
+                          />
+                        </div>
+                      )}
                       <p className="pp__note">
                         El desglose usa tu cotización. IVA y percepciones se eligen por separado
                         {withIva ? "" : " · sin IVA"}
@@ -410,7 +442,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       </p>
                     </div>}
 
-                    {!unpriced && payPrices.length > 0 && (
+                    {!unpriced && !sellerView && payPrices.length > 0 && (
                       <div className="pp__pay">
                         <h2 className="pp__sec-title">Formas de pago</h2>
                         <div className="pp__pay-rows">
@@ -433,7 +465,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       </div>
                     )}
 
-                    {!unpriced && shippingEstimate && (
+                    {!unpriced && !sellerView && shippingEstimate && (
                       <div className="pp__pay">
                         <h2 className="pp__sec-title">Envío estimado</h2>
                         {shippingEstimate.pickup ? (
@@ -484,7 +516,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       </div>
                     )}
 
-                    {!unpriced && <div className="pp__buy">
+                    {!unpriced && !sellerView && <div className="pp__buy">
                       <div className="pp__qty">
                         <span>Cantidad</span>
                         <span className="pp__step">
@@ -515,7 +547,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                   {product && (
                     <OwnStoreProductCompare
                       productName={product.name}
-                      costUsd={unpriced ? null : unitDisplayUsd}
+                      costUsd={unpriced ? null : sellerView ? saleUnitUsd : unitDisplayUsd}
+                      sale={sellerView}
                     />
                   )}
 
@@ -526,8 +559,9 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 </aside>
               </div>
 
-              {/* Justo debajo del precio en mobile: no queda enterrado tras hechos/descripción. */}
-              <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-3 sm:p-5">
+              {/* Justo debajo del precio en mobile: no queda enterrado tras hechos/descripción.
+                  Es la evolución del costo: el vendedor no la ve. */}
+              {!sellerView && <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-3 sm:p-5">
                 <h2 className="pp__sec-title">
                   <TrendingUp className="w-3 h-3" />
                   Evolución de precio
@@ -563,7 +597,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                     </p>
                   </div>
                 )}
-              </section>
+              </section>}
 
               {(product.description || product.longDescription) && (
                 <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
@@ -605,7 +639,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
             </div>
 
             {/* Locales: footer separado, siempre debajo de TODO el producto (mobile incluido) */}
-            <LocalesFooter seedQuery={product.name} costUsd={unitDisplayUsd} />
+            <LocalesFooter seedQuery={product.name} costUsd={sellerView ? saleUnitUsd ?? 0 : unitDisplayUsd} />
           </>
         )}
       </div>

@@ -6,7 +6,7 @@ import { Errors } from "./api-error";
 import { CatalogQueryService } from "./catalog-query.service";
 import { FxService } from "./fx.service";
 import { slugId } from "./ids";
-import { makeConverter } from "./pricing";
+import { makeConverter, priceOffer } from "./pricing";
 
 const HISTORY_DAYS = 365;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -125,15 +125,20 @@ export class CatalogInfoService {
       select: { capturedAt: true, price: true, currency: true },
     });
     const convert = makeConverter(principal.config.price.currency, meta.fx.rate);
-    const markup =
-      principal.config.price.markup.mode === "fixed" ? Number(principal.config.price.markup.percent ?? 0) || 0 : row.markupPercent;
+    // La venta del historial guarda la relación venta/costo de hoy (margen y base vigentes).
+    const today = priceOffer(
+      { currency: row.currency, costNet: row.costNet, costTaxes: row.costTaxes, providerMarginPercent: row.saleMarginPercent, marginBase: row.saleMarginBase, source: row.source },
+      { ...principal.config.price, includeCost: true, includeSalePrice: true, includeTaxes: false, rounding: "none" },
+      convert
+    );
+    const saleRatio = today?.cost?.net && today.sale ? today.sale.net / today.cost.net : 1;
     return {
       data: points.map((p) => {
         const net = p.price == null ? null : convert(Number(p.price), p.currency ?? row.currency);
         return {
           at: p.capturedAt.toISOString(),
           costNet: net == null ? null : round2(net),
-          saleNet: net == null ? null : round2(net * (1 + markup / 100)),
+          saleNet: net == null ? null : round2(net * saleRatio),
         };
       }),
       meta,

@@ -18,6 +18,7 @@ import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
+import { salePresentation, useSellerSession } from "@/lib/sale-price";
 import { formatAlicuota } from "@/lib/tax";
 import ProviderBadge from "@/components/ProviderBadge";
 import {
@@ -122,11 +123,15 @@ export function ProviderCompareColumn({
     withIibb: includeIibb,
     provider: product.provider,
   });
-  const display = shown.unitDisplayUsd;
+  // Modo vendedor: la columna compara precios de venta, sin condiciones de compra.
+  const session = useSellerSession();
+  const present = salePresentation(product, session, withIva);
+  const sellerView = present.mode === "sale";
+  const display = sellerView ? present.saleUsd ?? 0 : shown.unitDisplayUsd;
   const [imgErr, setImgErr] = useState(false);
 
-  const canOffline = retailer && hasIva && policy.acceptsOffline;
-  const canScheme = retailer && hasIva && policy.acceptsScheme;
+  const canOffline = !sellerView && retailer && hasIva && policy.acceptsOffline;
+  const canScheme = !sellerView && retailer && hasIva && policy.acceptsScheme;
   const modes: PriceMode[] = ["list"];
   if (canOffline) modes.push("offline");
   if (canScheme) modes.push("scheme");
@@ -187,7 +192,7 @@ export function ProviderCompareColumn({
         </div>
         {isCheapest && (
           <span className="absolute bottom-2 left-2 text-[10px] font-bold uppercase tracking-wide bg-emerald-500 text-black px-2 py-0.5 rounded-full">
-            Mejor costo
+            {sellerView ? "Mejor precio" : "Mejor costo"}
           </span>
         )}
       </div>
@@ -201,13 +206,20 @@ export function ProviderCompareColumn({
         <ModeChips modes={modes} active={mode} onChangeMode={onChangeMode} onLocal={onPickLocal} />
 
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-surface-500 mb-0.5">
-            {displayTaxTitle({ withIva, withIibb: includeIibb, provider: product.provider })} · {MODE_LABEL[mode]}
+          <p className={`text-[10px] uppercase tracking-wider mb-0.5 ${sellerView ? "text-emerald-400" : "text-surface-500"}`}>
+            {sellerView
+              ? `Precio de venta · ${withIva ? "con IVA" : "sin IVA"}`
+              : `${displayTaxTitle({ withIva, withIibb: includeIibb, provider: product.provider })} · ${MODE_LABEL[mode]}`}
           </p>
           <p className="text-2xl font-bold text-white tabular-nums tracking-tight">
             {money(display, currency, convert)}
           </p>
-          <p className="text-[11px] text-surface-500 tabular-nums mt-0.5">
+          {present.mode === "cost+sale" && (
+            <p className="text-[11px] font-semibold text-emerald-400 tabular-nums mt-0.5">
+              Venta {money(present.saleUsd, currency, convert)}
+            </p>
+          )}
+          {!sellerView && <p className="text-[11px] text-surface-500 tabular-nums mt-0.5">
             Neto {formatUSD(pricing.unitNet)}
             {shown.iibbIncluded && (
               <span className="text-amber-300/90">
@@ -219,7 +231,7 @@ export function ProviderCompareColumn({
             {pricing.adjusted && pricing.missingIva && (
               <span className="text-amber-400"> · sin alícuota IVA</span>
             )}
-          </p>
+          </p>}
         </div>
 
         <div className="mt-auto pt-1 border-t border-surface-800">

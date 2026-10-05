@@ -22,6 +22,7 @@ import { assertPermission } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { TenantsService } from "../tenants/tenants.service";
 import { CreateListProviderDto, EnableOwnListDto, ListCadenceDto, SaveImportProfileDto } from "./dto/list-import.dto";
+import { CostSensitive } from "../pricing/cost-visibility";
 import { ListImportService, type ImportActor } from "./list-import.service";
 
 function assertProvider(value: string): Provider {
@@ -44,6 +45,8 @@ function actorOf(user: JwtPayload, tenant: TenantContext | null): ImportActor {
  * organización pueden subir; el nivel (base o propio) lo decide el servicio.
  */
 @UseGuards(AuthGuard("jwt"), RolesGuard, TenantGuard)
+// Modo vendedor: las listas cargadas son precios de costo.
+@CostSensitive()
 @Controller()
 export class ListImportController {
   constructor(
@@ -182,6 +185,8 @@ export class ListImportController {
     return this.imports.setCadence(actorOf(user, tenant), assertProvider(provider), dto.listUpdateDays ?? null);
   }
 
+  // Solo fechas de la última lista: la búsqueda la usa para avisar listas vencidas.
+  @CostSensitive(false)
   @Get("providers/:provider/freshness")
   freshness(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("provider") provider: string) {
     return this.imports.freshness(actorOf(user, tenant), assertProvider(provider));

@@ -3,6 +3,7 @@ import { CatalogModule } from "../catalog/catalog.module";
 import { isServerRuntime } from "./core/runtime";
 import { CryptoModule } from "../common/crypto/crypto.module";
 import { ProvidersModule } from "../providers/providers.module";
+import { PricingCoreModule } from "../pricing/pricing-core.module";
 import { SubscriptionsModule } from "../subscriptions/subscriptions.module";
 import { TenantsModule } from "../tenants/tenants.module";
 import { ApiClientResolver } from "./auth/api-client-resolver.service";
@@ -48,7 +49,7 @@ const SERVICES = [
  * OpenAPI (main.ts). Diseño: docs/PLAN_API_CATALOGO.md.
  */
 @Module({
-  imports: [ProvidersModule, TenantsModule, CatalogModule, CryptoModule],
+  imports: [ProvidersModule, TenantsModule, CatalogModule, CryptoModule, PricingCoreModule],
   controllers: [V1CatalogController, V1SyncController, V1FeedsController, V1WebhooksController, OpenApiController],
   providers: SERVICES,
   exports: SERVICES,

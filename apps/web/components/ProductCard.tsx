@@ -17,6 +17,8 @@ import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options";
 import { displayAmountFromPricing, displayTaxBadge, displayTaxTitle } from "@/lib/display-price";
+import { useSalePresentation } from "@/lib/sale-price";
+import { formatMargin, signedMargin } from "@/lib/sale-margins";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { useProductShipping, type ProductShipping } from "@/lib/product-shipping";
 import { SHIPPING_DISCLAIMER, freeShippingLabel } from "@/lib/shipping";
@@ -128,7 +130,12 @@ export default function ProductCard({
   const brand = productDisplayBrand(product);
   const category = productDisplayCategory(product);
 
-  const priced = hasOwnPrice(product);
+  // Modo vendedor: el vendedor ve solo la venta; quien ve costos, la venta al lado.
+  const present = useSalePresentation(product);
+  const sellerView = present.mode === "sale";
+  const saleUsd = present.mode === "sale" || present.mode === "cost+sale" ? present.saleUsd : null;
+
+  const priced = sellerView ? saleUsd != null && saleUsd > 0 : hasOwnPrice(product);
   const pricing = purchaseLinePricing(product, policy, priceMode);
   const includeIibb = withIibb && pricing.mode !== "offline";
   const shown = displayAmountFromPricing(pricing, {
@@ -150,12 +157,15 @@ export default function ProductCard({
       ? formatUSD(usd)
       : formatARS(product.sourceCurrency === "ARS" && product.fxRate ? usd * product.fxRate : convert(usd).amount);
 
-  const primary = money(displayUsd);
-  const ship = shipping ? shippingLine(shipping, shippingIncluded, money) : null;
+  /** Lo que se cotiza al cliente: la venta para el vendedor, el costo para quien compra. */
+  const shownUsd = sellerView ? saleUsd ?? 0 : displayUsd;
+  const primary = money(shownUsd);
+  // Envío, esquema y formas de pago son condiciones de compra al distribuidor: el vendedor no las ve.
+  const ship = shipping && !sellerView ? shippingLine(shipping, shippingIncluded, money) : null;
 
   const canScheme = Boolean(policy?.acceptsScheme && policy.schemeIvaAdjustment);
   const schemeHint =
-    priced && priceMode === "list" && canScheme
+    !sellerView && priced && priceMode === "list" && canScheme
       ? (() => {
           const sp = purchaseLinePricing(product, policy, "scheme");
           const sd = displayAmountFromPricing(sp, {
@@ -175,7 +185,7 @@ export default function ProductCard({
    * Precios por forma de pago. No tachan el precio de arriba: son otra opción
    * de compra, no un reemplazo. Un recargo sube y un descuento baja.
    */
-  const payPrices = !priced ? [] : pricedPaymentOptions(policy?.paymentOptions).map((o) => ({
+  const payPrices = !priced || sellerView ? [] : pricedPaymentOptions(policy?.paymentOptions).map((o) => ({
     id: o.id,
     label: o.label,
     kind: o.kind,
@@ -192,7 +202,7 @@ export default function ProductCard({
     ? `−${product.priceDropPercent! % 1 === 0 ? product.priceDropPercent : product.priceDropPercent!.toFixed(1)}%`
     : null;
   const prevRaw = product.previousFinalPrice ?? product.previousPrice;
-  const prevFormatted = hasDrop && prevRaw != null ? money(Number(prevRaw) || 0) : null;
+  const prevFormatted = hasDrop && prevRaw != null && !sellerView ? money(Number(prevRaw) || 0) : null;
 
   const taxOpts = { withIva, withIibb: includeIibb, provider: product.provider };
   const taxTitle = displayTaxTitle(taxOpts);
@@ -295,6 +305,25 @@ export default function ProductCard({
     </Link>
   );
 
+  // Lista y grilla usan la misma línea: base e impuestos, o "Precio de venta" para el vendedor.
+  const baseLine = (
+    <p className="pc__base pc-mono" title={priced && !sellerView ? taxTitle : undefined}>
+      {sellerView ? (
+        <>
+          <span className="pc__sale-label">Precio de venta</span>
+          <span>{priced ? (withIva ? "Con IVA" : "Sin IVA") : "Sin precio de venta todavía"}</span>
+        </>
+      ) : priced ? (
+        <>
+          <span>{breakdownBase}</span>
+          <span>{breakdownTax}</span>
+        </>
+      ) : (
+        <span>Precio y stock al cargar la cuenta</span>
+      )}
+    </p>
+  );
+
   const details = (
     <>
       {layout === "row" && <ProviderPill provider={product.provider} />}
@@ -323,16 +352,7 @@ export default function ProductCard({
         )}
       </p>
 
-      <p className="pc__base pc-mono" title={priced ? taxTitle : undefined}>
-        {priced ? (
-          <>
-            <span>{breakdownBase}</span>
-            <span>{breakdownTax}</span>
-          </>
-        ) : (
-          <span>Precio y stock al cargar la cuenta</span>
-        )}
-      </p>
+      {baseLine}
 
       <p
         className={`pc__aside pc-mono${
@@ -391,6 +411,15 @@ export default function ProductCard({
       {priced ? (
         <>
           <span className="pc__amount pc-mono">{primary}</span>
+          {present.mode === "cost+sale" && (
+            <span
+              className="pc__sale pc-mono"
+              title={present.marginPercent != null ? `Precio de venta con tu margen de ${formatMargin(present.marginPercent)}` : "Precio de venta"}
+            >
+              Venta {money(present.saleUsd)}
+              {present.marginPercent != null && <em>{signedMargin(present.marginPercent)}</em>}
+            </span>
+          )}
           {prevFormatted ? (
             <span className="pc__prev pc-mono" title="Precio de la sincronización anterior">
               antes <s>{prevFormatted}</s>
@@ -398,12 +427,12 @@ export default function ProductCard({
           ) : null}
         </>
       ) : (
-        <span className="pc__amount">Sin precio</span>
+        <span className="pc__amount">{sellerView ? "Sin precio de venta" : "Sin precio"}</span>
       )}
     </p>
   );
 
-  const webHint = <OwnStorePriceHint productName={product.name} costUsd={priced ? displayUsd : null} />;
+  const webHint = <OwnStorePriceHint productName={product.name} costUsd={priced ? shownUsd : null} sale={sellerView} />;
 
   const actions = (
     <div className="pc__foot">
@@ -433,7 +462,7 @@ export default function ProductCard({
         >
           <DollarSign className="w-3.5 h-3.5" />
         </button>
-        {priced && (
+        {priced && !sellerView && (
           <AddToCartButton
             product={product}
             variant="stepper"
@@ -460,7 +489,7 @@ export default function ProductCard({
           open={saleOpen}
           onClose={() => setSaleOpen(false)}
           seedQuery={product.name}
-          costUsd={displayUsd}
+          costUsd={shownUsd}
         />
       </article>
     );
@@ -495,33 +524,11 @@ export default function ProductCard({
           )}
         </p>
 
-        <p className="pc__price">
-          {priced ? (
-            <>
-              <span className="pc__amount pc-mono">{primary}</span>
-              {prevFormatted ? (
-                <span className="pc__prev pc-mono" title="Precio de la sincronización anterior">
-                  antes <s>{prevFormatted}</s>
-                </span>
-              ) : null}
-            </>
-          ) : (
-            <span className="pc__amount">Sin precio</span>
-          )}
-        </p>
+        {priceBlock}
 
         {webHint}
 
-        <p className="pc__base pc-mono" title={priced ? taxTitle : undefined}>
-          {priced ? (
-            <>
-              <span>{breakdownBase}</span>
-              <span>{breakdownTax}</span>
-            </>
-          ) : (
-            <span>Precio y stock al cargar la cuenta</span>
-          )}
-        </p>
+        {baseLine}
 
         {/* Un solo renglón de aviso, siempre presente aunque esté vacío */}
         <p
@@ -608,7 +615,7 @@ export default function ProductCard({
             >
               <DollarSign className="w-3.5 h-3.5" />
             </button>
-            {priced && (
+            {priced && !sellerView && (
               <AddToCartButton
                 product={product}
                 variant="stepper"
@@ -630,7 +637,7 @@ export default function ProductCard({
         open={saleOpen}
         onClose={() => setSaleOpen(false)}
         seedQuery={product.name}
-        costUsd={displayUsd}
+        costUsd={shownUsd}
       />
     </article>
   );

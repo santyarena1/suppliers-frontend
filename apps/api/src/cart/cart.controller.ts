@@ -7,9 +7,12 @@ import { TenantGuard } from "../tenants/tenant.guard";
 import { CartService } from "./cart.service";
 import { AddCartItemDto } from "./dto/add-item.dto";
 import { UpdateCartItemDto } from "./dto/update-item.dto";
+import { CostSensitive } from "../pricing/cost-visibility";
 import { UpsertOrgCartDto } from "./dto/org-cart.dto";
 
 @UseGuards(AuthGuard("jwt"), TenantGuard)
+// Modo vendedor: el carrito guarda y cotiza costos.
+@CostSensitive()
 @Controller("cart")
 export class CartController {
   constructor(private readonly cartService: CartService) {}

@@ -109,7 +109,7 @@ export function offerView(row: CatalogRow, ctx: ProjectionContext, withProduct: 
     ...(visible ? { externalId: row.externalId } : {}),
     stock: { quantity: row.stock, status: stockStatus(row), minThresholdApplied: row.minStockThreshold },
     price: priceOffer(
-      { currency: row.currency, costNet: row.costNet, costTaxes: row.costTaxes, providerMarkupPercent: row.markupPercent, source: row.source },
+      { currency: row.currency, costNet: row.costNet, costTaxes: row.costTaxes, providerMarginPercent: row.saleMarginPercent, marginBase: row.saleMarginBase, source: row.source },
       ctx.config.price,
       ctx.convert
     ),
@@ -138,7 +138,7 @@ export function offerView(row: CatalogRow, ctx: ProjectionContext, withProduct: 
 /** Precio con el que se compara y ordena: venta final; si la key no la expone, costo final. */
 export function sortablePrice(row: CatalogRow, ctx: ProjectionContext): number | null {
   const price = priceOffer(
-    { currency: row.currency, costNet: row.costNet, costTaxes: row.costTaxes, providerMarkupPercent: row.markupPercent, source: row.source },
+    { currency: row.currency, costNet: row.costNet, costTaxes: row.costTaxes, providerMarginPercent: row.saleMarginPercent, marginBase: row.saleMarginBase, source: row.source },
     { ...ctx.config.price, includeCost: true, includeSalePrice: true, includeTaxes: true },
     ctx.convert
   );

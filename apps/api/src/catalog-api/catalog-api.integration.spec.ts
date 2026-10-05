@@ -8,6 +8,7 @@ import { ChangesFeedService } from "./changes/changes-feed.service";
 import { CatalogQueryService } from "./core/catalog-query.service";
 import { CatalogSnapshotService } from "./core/catalog-snapshot.service";
 import { WebhooksService } from "./webhooks/webhooks.service";
+import { SaleMarginRulesService } from "../pricing/sale-margin-rules.service";
 
 const url = process.env.INTEGRATION_DB;
 const d = url ? describe : describe.skip;
@@ -19,11 +20,12 @@ const PROVIDER = "ELIT";
 d("API de catálogo contra Postgres", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://skip@localhost/skip" } } });
   // Lo que no es de este módulo se reemplaza por lo mínimo: un distribuidor vinculado y visible.
-  const providers = { rulesByProvider: async () => new Map([[PROVIDER, { markupPercent: 20, minStockThreshold: 0, zeroStockAction: "KEEP" }]]), providersHidingUnsynced: async () => new Set<string>() };
+  const providers = { rulesByProvider: async () => new Map([[PROVIDER, { minStockThreshold: 0, zeroStockAction: "KEEP" }]]), providersHidingUnsynced: async () => new Set<string>() };
   const visibility = { listFor: async () => [{ provider: PROVIDER, name: "Elit", linked: true, platformHidden: false }] };
   const enrichment = { getContext: async () => undefined };
   const fx = { forKey: async () => ({ source: "oficial", rate: 1000, at: null, stale: false }), snapshot: async () => ({ rates: {}, at: null, stale: false }) };
-  const snapshots = new CatalogSnapshotService(prisma as never, providers as never, visibility as never, enrichment as never);
+  // El margen de venta sale de las reglas del modo vendedor (20 % para el distribuidor, base FINAL).
+  const snapshots = new CatalogSnapshotService(prisma as never, providers as never, visibility as never, enrichment as never, new SaleMarginRulesService(prisma as never));
   const query = new CatalogQueryService(snapshots, fx as never);
   const resolver = new ApiClientResolver(prisma as never);
   const tracker = new ChangeTrackerService(prisma as never, snapshots);
@@ -35,6 +37,7 @@ d("API de catálogo contra Postgres", () => {
     await prisma.apiOfferState.deleteMany({ where: { tenantId: TENANT } });
     await prisma.apiCatalogTracker.deleteMany({ where: { tenantId: TENANT } });
     await prisma.apiClient.deleteMany({ where: { tenantId: TENANT } });
+    await prisma.saleMarginRule.deleteMany({ where: { tenantId: TENANT } });
     await prisma.tenantProductOffer.deleteMany({ where: { tenantId: TENANT } });
     await prisma.providerSyncCache.deleteMany({ where: { provider: PROVIDER, externalId: { startsWith: "capi-int-" } } });
     await prisma.subscription.deleteMany({ where: { tenantId: TENANT } });
@@ -47,6 +50,7 @@ d("API de catálogo contra Postgres", () => {
     await prisma.subscription.create({
       data: { tenantId: TENANT, status: "ACTIVE", catalogApiAddon: true, nextBillingAt: new Date(Date.now() + 10 * 86_400_000) },
     });
+    await prisma.saleMarginRule.create({ data: { tenantId: TENANT, scope: "PROVIDER", provider: PROVIDER, ruleKey: `P:${PROVIDER}`, percent: 20 } });
     for (const [id, price, stock] of [["capi-int-1", 100, 5], ["capi-int-2", 50, 3]] as const) {
       await prisma.providerSyncCache.create({ data: { provider: PROVIDER, externalId: id, name: `Producto ${id}`, brand: "ASUS", raw: { iva: 21 } } });
       await prisma.tenantProductOffer.create({ data: { tenantId: TENANT, provider: PROVIDER, externalId: id, price, ivaPercent: 21, stock, currency: "USD" } });

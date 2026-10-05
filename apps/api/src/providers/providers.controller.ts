@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Post, Put, Query, Req, UseGuards, UseInterceptors } from "@nestjs/common";
 import { atCheckout, PORTAL_SHIPPING_READERS, type PortalShippingOptions } from "./portal-shipping-options";
 import { AuthGuard } from "@nestjs/passport";
 import { SkipThrottle } from "@nestjs/throttler";
@@ -11,6 +11,8 @@ import { CredentialsService } from "../credentials/credentials.service";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
 import { assertPermission } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
+import { CostSensitive } from "../pricing/cost-visibility";
+import { SalePriced, SalePricingInterceptor } from "../pricing/sale-pricing.interceptor";
 import { RequiresActiveSubscription, RequiresCapability } from "../tenants/entitlements";
 import { ProvidersService } from "./providers.service";
 import { InvidAccountService } from "./invid-account.service";
@@ -58,7 +60,9 @@ function assertProvider(value: string): Provider {
 
 // `RolesGuard` deja pasar todo lo que no declare `@Roles`, así que sumarlo acá no
 // restringe nada por sí solo: habilita marcar endpoints sueltos.
+// Modo vendedor: las rutas con `@SalePriced` llevan precio de venta (y sin costo para el Vendedor).
 @UseGuards(AuthGuard("jwt"), RolesGuard, TenantGuard)
+@UseInterceptors(SalePricingInterceptor)
 @Controller()
 export class ProvidersController {
   constructor(
@@ -191,10 +195,14 @@ export class ProvidersController {
     return this.invidOrderService.deliveryOptions();
   }
 
+  @CostSensitive()
+
   @Get("providers/INVID/drafts")
   invidDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.invidOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/INVID/drafts/:id")
   async invidDraft(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -299,10 +307,14 @@ export class ProvidersController {
     return this.newBytesOrderService.getPayments(await this.newBytesCredentials(tenant));
   }
 
+  @CostSensitive()
+
   @Get("providers/NEW_BYTES/drafts")
   newBytesDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.newBytesOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/NEW_BYTES/drafts/:id")
   async newBytesDraft(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -375,10 +387,14 @@ export class ProvidersController {
     return this.grupoNucleoOrderService.checkoutOptions();
   }
 
+  @CostSensitive()
+
   @Get("providers/GRUPO_NUCLEO/drafts")
   gnDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.grupoNucleoOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/GRUPO_NUCLEO/drafts/:id")
   async gnDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -423,10 +439,14 @@ export class ProvidersController {
     return this.airOrderService.checkoutOptions(await this.credentialsOf(tenant, "AIR"));
   }
 
+  @CostSensitive()
+
   @Get("providers/AIR/drafts")
   airDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.airOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/AIR/drafts/:id")
   async airDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -480,10 +500,14 @@ export class ProvidersController {
     return this.airOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "AIR"), dto);
   }
 
+  @CostSensitive()
+
   @Get("providers/ELIT/drafts")
   elitDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.elitOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/ELIT/drafts/:id")
   async elitDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -591,10 +615,13 @@ export class ProvidersController {
   }
 
   // ---------- New Tree (portal newtree.com.ar) ----------
+  @CostSensitive()
   @Get("providers/NEW_TREE/drafts")
   newTreeDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.newTreeOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/NEW_TREE/drafts/:id")
   async newTreeDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -648,10 +675,13 @@ export class ProvidersController {
   }
 
   // ---------- Solution Box (API interna de solutionbox.com.ar) ----------
+  @CostSensitive()
   @Get("providers/SOLUTION_BOX/drafts")
   solutionBoxDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.solutionBoxOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/SOLUTION_BOX/drafts/:id")
   async solutionBoxDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -701,10 +731,13 @@ export class ProvidersController {
   }
 
   // ---------- Distecna (API pública V1 catálogo / V2 pedidos) ----------
+  @CostSensitive()
   @Get("providers/DISTECNA/drafts")
   distecnaDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.distecnaOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/DISTECNA/drafts/:id")
   async distecnaDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -741,10 +774,14 @@ export class ProvidersController {
     return this.distecnaOrderService.submitDraft(this.author(user, tenant), await this.credentialsOf(tenant, "DISTECNA"), dto);
   }
 
+  @CostSensitive()
+
   @Get("providers/POLYTECH/drafts")
   polytechDrafts(@CurrentTenant() tenant: TenantContext) {
     return this.polytechOrderService.listDrafts(tenant.tenantId);
   }
+
+  @CostSensitive()
 
   @Get("providers/POLYTECH/drafts/:id")
   async polytechDraftById(@CurrentTenant() tenant: TenantContext, @Param("id") id: string) {
@@ -823,6 +860,8 @@ export class ProvidersController {
     );
   }
 
+  // El detalle de una corrida trae el antes y el después de cada precio.
+  @CostSensitive()
   @SkipThrottle()
   @Get("providers/:provider/sync/runs/:id")
   getSyncRun(
@@ -897,6 +936,7 @@ export class ProvidersController {
   // membresía no hay nada que mostrar (vacío, no error). El superadmin de
   // prueba ve el catálogo del Comercio de Pruebas; el carrito es el suyo.
 
+  @SalePriced()
   @RequiresActiveSubscription()
   @Get("search/provider/:provider")
   search(
@@ -914,6 +954,7 @@ export class ProvidersController {
     });
   }
 
+  @SalePriced()
   @Get("providers/:provider/catalog")
   listCatalog(
     @CurrentTenantOrNone() tenant: TenantContext | null,
@@ -933,6 +974,7 @@ export class ProvidersController {
     });
   }
 
+  @SalePriced()
   @Get("providers/:provider/products/:externalId")
   async getProduct(
     @CurrentTenant() tenant: TenantContext,
@@ -949,6 +991,7 @@ export class ProvidersController {
     return product;
   }
 
+  @SalePriced("history")
   @Get("providers/:provider/products/:externalId/price-history")
   getPriceHistory(
     @CurrentTenantOrNone() tenant: TenantContext | null,
@@ -983,6 +1026,7 @@ export class ProvidersController {
     return this.providersService.getBrands(commercialId(tenant), tenant.userId);
   }
 
+  @SalePriced()
   @Get("catalog/featured")
   getFeatured(
     @CurrentTenantOrNone() tenant: TenantContext | null,
@@ -998,6 +1042,7 @@ export class ProvidersController {
     });
   }
 
+  @SalePriced()
   @Get("catalog/by-category")
   getByCategory(
     @CurrentTenantOrNone() tenant: TenantContext | null,
@@ -1015,6 +1060,7 @@ export class ProvidersController {
     );
   }
 
+  @SalePriced()
   @Get("catalog/by-provider")
   getByProvider(
     @CurrentTenantOrNone() tenant: TenantContext | null,
@@ -1036,6 +1082,7 @@ export class ProvidersController {
     );
   }
 
+  @SalePriced()
   @Get("catalog/by-brand")
   getByBrand(
     @CurrentTenantOrNone() tenant: TenantContext | null,

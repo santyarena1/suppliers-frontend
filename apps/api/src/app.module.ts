@@ -19,6 +19,7 @@ import { CartModule } from "./cart/cart.module";
 import { OrdersModule } from "./orders/orders.module";
 import { HealthModule } from "./health/health.module";
 import { ProvidersModule } from "./providers/providers.module";
+import { PricingModule } from "./pricing/pricing.module";
 import { AdminModule } from "./admin/admin.module";
 import { TenantsModule } from "./tenants/tenants.module";
 import { ChatModule } from "./chat/chat.module";
@@ -62,6 +63,7 @@ import { CatalogApiManageModule, CatalogApiModule } from "./catalog-api/catalog-
     OrdersModule,
     HealthModule,
     ProvidersModule,
+    PricingModule,
     AdminModule,
     TenantsModule,
     ChatModule,

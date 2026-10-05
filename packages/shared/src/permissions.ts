@@ -24,6 +24,8 @@ export const PERMISSION_KEYS = [
   "brand.manage",
   "ads.manage",
   "integrations.manage",
+  "prices.viewCost",
+  "pricing.manage",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];
@@ -36,7 +38,8 @@ export type PermissionGroup =
   | "portfolio"
   | "brand"
   | "ads"
-  | "integrations";
+  | "integrations"
+  | "pricing";
 
 export const PERMISSION_GROUP_LABELS: Record<PermissionGroup, string> = {
   orders: "Pedidos",
@@ -47,6 +50,7 @@ export const PERMISSION_GROUP_LABELS: Record<PermissionGroup, string> = {
   brand: "Marca",
   ads: "Publicidad",
   integrations: "Integraciones",
+  pricing: "Precios",
 };
 
 export interface PermissionDefinition {
@@ -78,6 +82,8 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
   { key: "brand.manage", group: "brand", label: "Gestionar la marca", description: "Acciones comerciales, catálogo y recursos de la marca.", appliesTo: ["BRAND"] },
   { key: "ads.manage", group: "ads", label: "Publicidad", description: "Prender y gestionar publicidad.", appliesTo: ALL_TYPES },
   { key: "integrations.manage", group: "integrations", label: "API de catálogo", description: "Crear y administrar las API keys y los webhooks del catálogo.", appliesTo: ["RETAILER"] },
+  { key: "prices.viewCost", group: "pricing", label: "Ver costos", description: "Ver lo que cobra cada distribuidor. Sin este permiso, con el modo vendedor, solo ve precios de venta y no compra.", appliesTo: ["RETAILER"] },
+  { key: "pricing.manage", group: "pricing", label: "Márgenes de venta", description: "Configurar los márgenes de venta por distribuidor, categoría y producto.", appliesTo: ["RETAILER"] },
 ];
 
 const MANAGERS: readonly TenantRole[] = ["OWNER", "ADMIN"];
@@ -102,6 +108,9 @@ const DEFAULT_ROLES: Record<Exclude<PermissionKey, "chat.write">, readonly Tenan
   "brand.manage": ["OWNER", "ADMIN", "MARKETING", "COMMERCIAL"],
   "ads.manage": MANAGERS,
   "integrations.manage": MANAGERS,
+  // Modo vendedor: el vendedor del comercio cotiza con precio de venta, sin ver costos.
+  "prices.viewCost": ["OWNER", "ADMIN", "BUYER"],
+  "pricing.manage": MANAGERS,
 };
 
 /** El chat depende también del tipo: el vendedor del local no escribe, el del distro sí. */

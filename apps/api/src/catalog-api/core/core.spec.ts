@@ -58,7 +58,7 @@ describe("precios", () => {
 
   it("costo con impuestos; venta con margen y sin percepciones", () => {
     const lines = costTaxLines({ price: 100, finalPrice: null, ivaPercent: 21, raw: {} }, { ...NO_PERCEPTIONS, manualIibbPercent: 3 });
-    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: lines, providerMarkupPercent: 20, source: "SYNC" }, price(), usd)!;
+    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: lines, providerMarginPercent: 20, marginBase: "NET", source: "SYNC" }, price(), usd)!;
     expect(p.cost).toEqual({
       net: 100,
       taxes: [
@@ -71,29 +71,41 @@ describe("precios", () => {
     expect(p.listSource).toBe("api");
   });
 
+  it("margen del comercio con base FINAL (modo vendedor): el costo final con percepciones por el margen", () => {
+    const lines = costTaxLines({ price: 100, finalPrice: null, ivaPercent: 21, raw: {} }, { ...NO_PERCEPTIONS, manualIibbPercent: 3 });
+    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: lines, providerMarginPercent: 20, marginBase: "FINAL", source: "SYNC" }, price(), usd)!;
+    // Costo final 124 × 1,2 = 148,8; neto sin IVA = 122,98. Igual que la web (computeSalePrice).
+    expect(p.sale).toMatchObject({ net: 122.98, gross: 148.8, markupPercent: 20 });
+  });
+
+  it("con margen fijo de la key la base es siempre el neto", () => {
+    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: [], providerMarginPercent: 20, marginBase: "FINAL", source: "SYNC" }, price({ markup: { mode: "fixed", percent: 10 } }), usd)!;
+    expect(p.sale).toMatchObject({ net: 110, gross: 110, markupPercent: 10 });
+  });
+
   it("margen fijo de la key en vez del de NODO", () => {
-    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: [], providerMarkupPercent: 20, source: "OWN_LIST" }, price({ markup: { mode: "fixed", percent: 50 } }), usd)!;
+    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: [], providerMarginPercent: 20, marginBase: "NET", source: "OWN_LIST" }, price({ markup: { mode: "fixed", percent: 50 } }), usd)!;
     expect(p.sale).toMatchObject({ net: 150, gross: 150, markupPercent: 50 });
     expect(p.listSource).toBe("list");
   });
 
   it("respeta qué se expone", () => {
-    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: [], providerMarkupPercent: 0, source: "SYNC" }, price({ includeCost: false, includeTaxes: false }), usd)!;
+    const p = priceOffer({ currency: "USD", costNet: 100, costTaxes: [], providerMarginPercent: 0, marginBase: "NET", source: "SYNC" }, price({ includeCost: false, includeTaxes: false }), usd)!;
     expect(p.cost).toBeUndefined();
     expect(p.sale?.taxes).toBeUndefined();
   });
 
   it("convierte de dólares a pesos y de pesos a dólares", () => {
     const ars = makeConverter("ARS", 1000);
-    const p = priceOffer({ currency: "USD", costNet: 10, costTaxes: [], providerMarkupPercent: 0, source: "SYNC" }, price({ currency: "ARS" }), ars)!;
+    const p = priceOffer({ currency: "USD", costNet: 10, costTaxes: [], providerMarginPercent: 0, marginBase: "NET", source: "SYNC" }, price({ currency: "ARS" }), ars)!;
     expect(p.cost?.net).toBe(10_000);
     expect(p.currency).toBe("ARS");
-    const back = priceOffer({ currency: "ARS", costNet: 1500, costTaxes: [], providerMarkupPercent: 0, source: "SYNC" }, price(), makeConverter("USD", 1500))!;
+    const back = priceOffer({ currency: "ARS", costNet: 1500, costTaxes: [], providerMarginPercent: 0, marginBase: "NET", source: "SYNC" }, price(), makeConverter("USD", 1500))!;
     expect(back.cost?.net).toBe(1);
   });
 
   it("sin cotización no inventa un precio", () => {
-    expect(priceOffer({ currency: "USD", costNet: 10, costTaxes: [], providerMarkupPercent: 0, source: "SYNC" }, price({ currency: "ARS" }), makeConverter("ARS", null))).toBeNull();
+    expect(priceOffer({ currency: "USD", costNet: 10, costTaxes: [], providerMarginPercent: 0, marginBase: "NET", source: "SYNC" }, price({ currency: "ARS" }), makeConverter("ARS", null))).toBeNull();
   });
 
   it("redondeos del precio de venta", () => {

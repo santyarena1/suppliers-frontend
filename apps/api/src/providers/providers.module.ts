@@ -36,9 +36,10 @@ import { ElitAccountService } from "./elit-account.service";
 import { ElitOrderService } from "./elit-order.service";
 import { OrderApprovalService } from "../orders/order-approval.service";
 import { AccountPortalCache } from "./account-portal-cache";
+import { PricingCoreModule } from "../pricing/pricing-core.module";
 
 @Module({
-  imports: [CredentialsModule, TenantsModule, CatalogModule, ChatModule],
+  imports: [CredentialsModule, TenantsModule, CatalogModule, ChatModule, PricingCoreModule],
   controllers: [ProvidersController],
   providers: [
     ProvidersService,
