@@ -109,7 +109,7 @@ const ENDPOINTS: [string, string, string, string][] = [
   ["PATCH", "/v1/webhooks/{id}", "webhooks:manage", "Cambiar URL, eventos o pausarlo."],
   ["DELETE", "/v1/webhooks/{id}", "webhooks:manage", "Borrar un webhook."],
   ["POST", "/v1/webhooks/{id}/test", "webhooks:manage", "Mandar un evento ping de prueba."],
-  ["GET", "/v1/openapi.json", "público", "Especificación OpenAPI 3.1."],
+  ["GET", "/v1/openapi.json", "público", "Especificación OpenAPI 3.0."],
 ];
 
 const FILTERS: [string, string][] = [
@@ -150,7 +150,7 @@ export default function DevelopersPage() {
               <span>
                 Base URL <code>{API_BASE}</code>
               </span>
-              <span>JSON · UTF-8 · OpenAPI 3.1</span>
+              <span>JSON · UTF-8 · OpenAPI 3.0</span>
               <span>
                 Módulo de US$ {CATALOG_API_ADDON_PRICE_USD}/mes · incluido en Custom
               </span>

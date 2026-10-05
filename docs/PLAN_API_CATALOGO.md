@@ -183,7 +183,7 @@ Todas las respuestas llevan `X-Request-Id`.
 | GET | `/v1/export?format=csv\|xlsx\|json&view=…` | export:read | Catálogo completo con la config de la key (stream) |
 | GET | `/v1/feeds/{feedToken}/google.xml` · `/meta.csv` | feeds:read | Feeds de producto |
 | GET/POST/PATCH/DELETE | `/v1/webhooks…` | webhooks:manage | Alta/baja de webhooks por API; `POST /v1/webhooks/{id}/test` |
-| GET | `/v1/openapi.json` | público | OpenAPI 3.1 |
+| GET | `/v1/openapi.json` | público | OpenAPI 3.0 |
 
 ### Ids estables
 
