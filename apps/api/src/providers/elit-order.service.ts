@@ -5,11 +5,12 @@ import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
 import { assertPortalCartMatches } from "./cart-match";
 import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
 import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
-import {
+import { parseElitCredentials,
   ElitWebClient,
   elitData,
   mapElitCartDetails,
 } from "./elit-web-client";
+import { portalAccountKey, withPortalCartLock } from "./portal-cart-lock";
 import { asNumber, asRecord, asString, snapshotJson, unwrapList } from "./json-value";
 import { mapProviderPerceptions } from "./perceptions";
 
@@ -20,6 +21,11 @@ export interface ElitCartItems {
   saleCondition?: number;
   shippingAddress?: string;
   background?: boolean;
+}
+
+/** El carrito de Elit es de la cuenta (nro. de cliente), no de la sesión. */
+function elitAccountKey(credentials: Record<string, string>): string {
+  return portalAccountKey("ELIT", parseElitCredentials(credentials).id);
 }
 
 function publicSummary(summary: Record<string, unknown>, requested: ElitCartItems["items"]) {
@@ -198,7 +204,15 @@ export class ElitOrderService {
    * suma y lo que solo está en Elit queda pendiente en `sync`. Sin
    * `reconcileFor` (confirmar un pedido) el carrito es lo que NODO manda.
    */
-  async preview(credentials: Record<string, string>, input: ElitCartItems, reconcileFor?: PortalReconcileFor) {
+  preview(credentials: Record<string, string>, input: ElitCartItems, reconcileFor?: PortalReconcileFor) {
+    return withPortalCartLock(elitAccountKey(credentials), () => this.previewUnlocked(credentials, input, reconcileFor));
+  }
+
+  private async previewUnlocked(
+    credentials: Record<string, string>,
+    input: ElitCartItems,
+    reconcileFor?: PortalReconcileFor
+  ) {
     if (input.items.length === 0) throw new BadRequestException("No hay productos de Elit en el pedido");
     const api = await ElitWebClient.login(credentials);
     let items = input.items;
@@ -272,13 +286,25 @@ export class ElitOrderService {
     return this.fulfillDraft(author, credentials, input, orderId);
   }
 
-  private async fulfillDraft(
+  private fulfillDraft(
     author: OrderAuthor,
     credentials: Record<string, string>,
     input: ElitCartItems,
     existingId?: string
   ) {
-    const preview = await this.preview(credentials, input);
+    // Del armado del carrito a la nota de venta, nadie más toca el carrito de la cuenta.
+    return withPortalCartLock(elitAccountKey(credentials), () =>
+      this.fulfillDraftUnlocked(author, credentials, input, existingId)
+    );
+  }
+
+  private async fulfillDraftUnlocked(
+    author: OrderAuthor,
+    credentials: Record<string, string>,
+    input: ElitCartItems,
+    existingId?: string
+  ) {
+    const preview = await this.previewUnlocked(credentials, input);
     const api = await ElitWebClient.login(credentials);
     await this.syncCart(api, input.items);
     const summary = elitData<Record<string, unknown>>(await api.getJson("cart/summary"));

@@ -107,7 +107,7 @@ export default function InvidDraftPanel({
     if (next) {
       applyPreviewToCart(next);
       // Lo que cambió en el portal se refleja acá; eso cambia items y vuelve a cotizar.
-      void portalSync.apply(next.sync, items);
+      void portalSync.apply(next.sync, items, next.items);
     }
   }
 
@@ -306,10 +306,10 @@ export default function InvidDraftPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      {portalSync.notice && (
+      {portalSync.notice && portalSync.notice.lines.length > 0 && (
         <PortalSyncNotice
           providerLabel="Invid"
-          notice={portalSync.notice}
+          notice={{ ...portalSync.notice, pending: [] }}
           busyCode={portalSync.busyCode}
           onKeep={portalSync.keep}
           onDrop={portalSync.drop}

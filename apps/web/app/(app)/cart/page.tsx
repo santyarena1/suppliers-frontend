@@ -53,6 +53,7 @@ import {
 import { providerHasOrderHistory, providerOrdersHref } from "@/lib/providerOrders";
 import { SchemePicker } from "@/components/SchemePicker";
 import OrderPeopleFilter from "@/components/cart/OrderPeopleFilter";
+import PortalPendingBanner from "@/components/checkout/PortalPendingBanner";
 import LineAuthors from "@/components/cart/LineAuthors";
 import { isFiltering } from "@/lib/cartPeople";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
@@ -1439,6 +1440,8 @@ function CartPageInner() {
 
               <footer className="shrink-0 border-t border-white/5 bg-surface-950 max-lg:max-h-[40dvh] max-lg:overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <div className="px-5 lg:px-8 py-3 lg:py-4 flex flex-col gap-3">
+                  <PortalPendingBanner providers={activeTab === "all" ? undefined : [activeTab]} />
+
                   <SummaryBar
                     title={activeTab === "all" ? "Resumen" : providerLabel(activeTab)}
                     totals={shownTotals}

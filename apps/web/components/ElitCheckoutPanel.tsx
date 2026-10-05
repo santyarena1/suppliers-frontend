@@ -77,7 +77,7 @@ export default function ElitCheckoutPanel({
     setPreview(data);
     onPreviewed?.(data);
     // Lo que cambió en el carrito de la cuenta de Elit se refleja acá.
-    if (data) void portalSync.apply(data.sync, items);
+    if (data) void portalSync.apply(data.sync, items, data.items);
   }
 
   useEffect(() => {
@@ -184,10 +184,10 @@ export default function ElitCheckoutPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      {portalSync.notice && (
+      {portalSync.notice && portalSync.notice.lines.length > 0 && (
         <PortalSyncNotice
           providerLabel="Elit"
-          notice={portalSync.notice}
+          notice={{ ...portalSync.notice, pending: [] }}
           busyCode={portalSync.busyCode}
           onKeep={portalSync.keep}
           onDrop={portalSync.drop}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { catalogApi, type PortalCartSync, type Provider } from "@/lib/api";
 import { useCart, type CartItem } from "@/lib/cart";
 
@@ -17,6 +17,59 @@ export type PortalSyncNotice = {
   /** Estaba solo en el carrito del distribuidor. Hay que dejarlo o sacarlo. */
   pending: PortalPendingLine[];
 };
+
+/** Línea de la cotización del portal: lo que el distribuidor realmente está cobrando. */
+export type QuotedLine = { code: string; qty: number; name?: string };
+
+/**
+ * Lo pendiente de cada distribuidor, a la vista de todo el carrito (no solo del
+ * panel de checkout, que en la pestaña «Todos» está oculto), con sus acciones.
+ */
+export type PortalPendingEntry = {
+  pending: PortalPendingLine[];
+  busyCode: string | null;
+  keep: (item: PortalPendingLine) => void;
+  drop: (item: PortalPendingLine) => void;
+};
+
+let pendingStore: Record<string, PortalPendingEntry> = {};
+const pendingListeners = new Set<() => void>();
+const EMPTY_STORE: Record<string, PortalPendingEntry> = {};
+
+const NO_PENDING: PortalPendingLine[] = [];
+
+function publishPending(provider: string, entry: PortalPendingEntry | null) {
+  const has = entry !== null && entry.pending.length > 0;
+  if (!has && !(provider in pendingStore)) return;
+  const next = { ...pendingStore };
+  if (entry && entry.pending.length > 0) next[provider] = entry;
+  else delete next[provider];
+  pendingStore = next;
+  pendingListeners.forEach((fn) => fn());
+}
+
+/** Productos que están en el carrito del portal y no en NODO, por distribuidor. */
+export function usePortalPending(): Record<string, PortalPendingEntry> {
+  return useSyncExternalStore(
+    (fn) => {
+      pendingListeners.add(fn);
+      return () => pendingListeners.delete(fn);
+    },
+    () => pendingStore,
+    () => EMPTY_STORE
+  );
+}
+
+/**
+ * Lo que la cotización del portal cobra y NODO no tiene. Es la fuente más
+ * segura: si dos cotizaciones se cruzaron, el aviso del servidor puede venir
+ * vacío, pero el portal igual lo está sumando.
+ */
+function extrasFromQuote(provider: string, quoted: QuotedLine[] | undefined, scope: CartItem[]): QuotedLine[] {
+  if (!quoted?.length) return [];
+  const inNodo = new Set(scope.filter((it) => it.provider === provider).map((it) => it.externalId));
+  return quoted.filter((line) => line.code && line.qty > 0 && !inNodo.has(line.code));
+}
 
 function describe(code: string, name?: string) {
   return name ? `${name} (${code})` : code;
@@ -86,10 +139,18 @@ export function usePortalCartSync(
   }, [items]);
 
   const apply = useCallback(
-    async (sync: PortalCartSync | undefined, scope: CartItem[]) => {
-      if (!sync) return;
+    async (rawSync: PortalCartSync | undefined, scope: CartItem[], quoted?: QuotedLine[]) => {
+      const fromQuote = extrasFromQuote(provider, quoted, scope);
+      if (!rawSync && fromQuote.length === 0) return;
+      const sync: PortalCartSync = rawSync ?? {
+        removedInPortal: [], addedInPortal: [], qtyChangedInPortal: [], summedInBoth: [], keptNodoQty: [], restoredInPortal: [],
+      };
       const removed = sync.removedInPortal ?? [];
-      const added = sync.addedInPortal ?? [];
+      const reported = sync.addedInPortal ?? [];
+      const added = [
+        ...reported,
+        ...fromQuote.filter((line) => !reported.some((r) => r.code === line.code)),
+      ];
       const qtyChanges = sync.qtyChangedInPortal ?? [];
       const summed = sync.summedInBoth ?? [];
       const kept = sync.keptNodoQty ?? [];
@@ -239,7 +300,12 @@ export function usePortalCartSync(
     [provider]
   );
 
-  const pending = notice?.pending ?? [];
+  const pending = notice?.pending ?? NO_PENDING;
+
+  useEffect(() => {
+    publishPending(provider, { pending, busyCode, keep, drop });
+  }, [provider, pending, busyCode, keep, drop]);
+  useEffect(() => () => publishPending(provider, null), [provider]);
 
   return {
     apply,

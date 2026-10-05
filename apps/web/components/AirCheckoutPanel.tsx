@@ -97,7 +97,7 @@ export default function AirCheckoutPanel({
       setError(null);
       setLoading(false);
       // Lo que cambió en el canasto de la cuenta de Air se refleja acá.
-      void portalSync.apply(d.preview.sync, items);
+      void portalSync.apply(d.preview.sync, items, d.preview.items);
       return;
     }
     if (warm.status === "error" && seeded.current !== cartKey) {
@@ -158,10 +158,10 @@ export default function AirCheckoutPanel({
 
   return (
     <div className="flex flex-col gap-3">
-      {portalSync.notice && (
+      {portalSync.notice && portalSync.notice.lines.length > 0 && (
         <PortalSyncNotice
           providerLabel="Air"
-          notice={portalSync.notice}
+          notice={{ ...portalSync.notice, pending: [] }}
           busyCode={portalSync.busyCode}
           onKeep={portalSync.keep}
           onDrop={portalSync.drop}
