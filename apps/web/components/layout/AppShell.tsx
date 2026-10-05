@@ -17,6 +17,8 @@ import SuspendedGate from "../subscription/SuspendedGate";
 import SellerRouteGate from "../sale-margins/SellerRouteGate";
 import AnnouncementGate from "../announcements/AnnouncementGate";
 import { SellerPreviewBar } from "../sale-margins/SellerModeSettings";
+import { QuotesProvider } from "@/lib/quotes";
+import QuoteFloat from "../quotes/QuoteFloat";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -31,31 +33,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <SessionKeepAlive />
       <ChatRealtime />
       <OnboardingGate>
-        <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
-          <ImpersonationBanner />
-          <PendingBrandLinkBanner />
-          <SubscriptionBanner />
-          <div className="flex min-h-0 flex-1 overflow-hidden">
-            <MobileTopBar onOpen={() => setMobileOpen(true)} />
-            {mobileOpen && (
-              <div
-                onClick={() => setMobileOpen(false)}
-                className="lg:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
-              />
-            )}
-            <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
-              <TenantRouteGate>
-                <SuspendedGate>
-                  <SellerRouteGate>{children}</SellerRouteGate>
-                </SuspendedGate>
-              </TenantRouteGate>
+        <QuotesProvider>
+          <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
+            <ImpersonationBanner />
+            <PendingBrandLinkBanner />
+            <SubscriptionBanner />
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              <MobileTopBar onOpen={() => setMobileOpen(true)} />
+              {mobileOpen && (
+                <div
+                  onClick={() => setMobileOpen(false)}
+                  className="lg:hidden fixed inset-0 bg-black/60 z-40 backdrop-blur-sm"
+                />
+              )}
+              <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+                <TenantRouteGate>
+                  <SuspendedGate>
+                    <SellerRouteGate>{children}</SellerRouteGate>
+                  </SuspendedGate>
+                </TenantRouteGate>
+              </div>
             </div>
           </div>
-        </div>
-        <CartFloat />
-        <AnnouncementGate />
-        <SellerPreviewBar />
+          <CartFloat />
+          <QuoteFloat />
+          <AnnouncementGate />
+          <SellerPreviewBar />
+        </QuotesProvider>
       </OnboardingGate>
     </AuthGuard>
   );

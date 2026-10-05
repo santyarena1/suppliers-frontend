@@ -73,7 +73,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const myModules = useMyModules();
   const myPermissions = useMyPermissions();
   const sistemaTgs = useTgsEnabled();
-  const { isSeller } = useSellerSession();
+  const { isSeller, sellerMode } = useSellerSession();
   const { clearResults } = useResults();
   const { providers: myProviders } = useMyProviders();
   const { statuses, loading: statusesLoading } = useProviderStatuses();
@@ -116,8 +116,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         isSuperadmin: user?.role === "ROLE_ADMIN",
         sistemaTgs,
         seller: isSeller,
+        sellerMode,
       }),
-    [user?.role, myModules, myPermissions, tenant?.type, tenant?.role, sistemaTgs, isSeller],
+    [user?.role, myModules, myPermissions, tenant?.type, tenant?.role, sistemaTgs, isSeller, sellerMode],
   );
 
   const pinned = items.filter((item) => !item.section);

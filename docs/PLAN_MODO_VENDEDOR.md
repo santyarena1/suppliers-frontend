@@ -224,3 +224,58 @@ productos, historial, API de catálogo con las reglas, aviso visto.
   margen fijo de la key, siempre sobre el neto).
 - Errores para la web: 403 `{ code: "COST_HIDDEN" }` en rutas de costos; 403
   `PLAN_FEATURE_UNAVAILABLE` (capability `sellerMode`) en márgenes con plan Base.
+
+## 8. Presupuestos flotantes (carritos de venta)
+
+Pedido del dueño del producto (2026-10-05): "algo bien simple tipo carritos
+flotantes con número o iniciales", que se guarden. Es la herramienta del
+vendedor (que no usa el carrito de compra porque muestra costos).
+
+- Capacidad `sellerMode` (Pro y Custom). Los usa cualquiera del comercio; el
+  vendedor ve **solo los suyos**, dueño/admin ven todos y filtran por vendedor.
+- Cada presupuesto: número correlativo por comercio (`#12`), nombre del cliente
+  (opcional), teléfono (opcional), notas (opcional), ítems y fecha. Sin estados
+  complejos: activo o archivado.
+- Precios: **siempre de venta** (márgenes de §1), calculados en el servidor al
+  agregar (el navegador manda solo proveedor + externalId + cantidad) y
+  **congelados** en el ítem. "Actualizar precios" recalcula y muestra qué cambió.
+  Si el producto ya no tiene oferta, queda marcado "sin precio".
+  El precio se guarda en la moneda en que lo publica el distribuidor (igual que
+  en la búsqueda) y la web lo muestra en la moneda de preferencia del usuario.
+- Burbuja flotante (abajo a la derecha, como el carrito): fichas con las
+  iniciales del cliente o el número (`JP`, `#12`), la activa resaltada, y `+`
+  para uno nuevo. Al abrir una ficha: ítems con cantidad, total en la moneda de
+  preferencia, datos del cliente editables en línea, y acciones: copiar texto,
+  enviar por WhatsApp (al teléfono si lo tiene), imprimir, archivar, y — solo con
+  `prices.viewCost` — "Pasar al carrito" (agrega los productos al carrito de
+  compra).
+- En búsqueda/ficha/comparador: el vendedor ve "Agregar al presupuesto" en lugar
+  de "Agregar al carrito" (va al activo; si no hay, crea uno). Quien compra ve las
+  dos opciones.
+- Página `/presupuestos`: lista con número, cliente, ítems, total, fecha,
+  vendedor (para dueño/admin), buscador y archivados.
+
+Datos:
+
+```prisma
+model SalesQuote {
+  id          String   @id @default(uuid())
+  tenantId    String
+  number      Int                    // correlativo por comercio
+  createdById String
+  clientName  String?
+  clientPhone String?
+  notes       String?
+  items       Json     @default("[]") // [{ provider, externalId, name, imageUrl, brand, sku, qty, unitPrice, unitFinalPrice, currency, pricedAt }]
+  archivedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@unique([tenantId, number])
+  @@index([tenantId, createdById, archivedAt])
+}
+```
+
+Endpoints (JWT, `sellerMode`): `GET/POST /my/quotes`, `GET/PATCH/DELETE /my/quotes/:id`,
+`POST /my/quotes/:id/items` `{provider, externalId, qty}`, `PATCH/DELETE /my/quotes/:id/items/:index`,
+`POST /my/quotes/:id/refresh-prices`, `POST /my/quotes/:id/archive|unarchive`.
+Nunca devuelven costo.

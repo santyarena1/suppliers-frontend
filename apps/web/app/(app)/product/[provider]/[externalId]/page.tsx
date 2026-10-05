@@ -42,6 +42,8 @@ import {
   Store,
 } from "lucide-react";
 import ProductBuyActions from "@/components/ProductBuyActions";
+import AddToQuoteButton from "@/components/quotes/AddToQuoteButton";
+import { useQuotes } from "@/lib/quotes";
 import { OwnStoreProductCompare } from "@/components/OwnStoreCompare";
 import { salePresentation, useSellerSession } from "@/lib/sale-price";
 import { signedMargin } from "@/lib/sale-margins";
@@ -133,6 +135,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   // Modo vendedor: el vendedor ve solo la venta; quien ve costos, la venta en el desglose.
   const present = product ? salePresentation(product, sellerSession, withIva) : ({ mode: "cost" } as const);
   const sellerView = present.mode === "sale";
+  const quotesEnabled = useQuotes().enabled;
   const saleUnitUsd = present.mode === "sale" || present.mode === "cost+sale" ? present.saleUsd : null;
   const unpriced = Boolean(product && (sellerView ? saleUnitUsd == null || saleUnitUsd <= 0 : !hasOwnPrice(product)));
   const pricing = product ? purchaseLinePricing(product, policy, "list", qty) : null;
@@ -516,7 +519,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       </div>
                     )}
 
-                    {!unpriced && !sellerView && <div className="pp__buy">
+                    {!unpriced && (!sellerView || quotesEnabled) && <div className="pp__buy">
                       <div className="pp__qty">
                         <span>Cantidad</span>
                         <span className="pp__step">
@@ -540,7 +543,14 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         </span>
                       </div>
 
-                      <ProductBuyActions product={product} qty={qty} />
+                      {sellerView ? (
+                        <AddToQuoteButton product={product} qty={qty} variant="full" />
+                      ) : (
+                        <>
+                          <ProductBuyActions product={product} qty={qty} />
+                          <AddToQuoteButton product={product} qty={qty} variant="link" />
+                        </>
+                      )}
                     </div>}
                   </div>
 

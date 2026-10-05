@@ -1,7 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
-  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3, CreditCard,
+  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3, CreditCard, FileText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -27,6 +27,7 @@ export type NavItemId =
   | "search"
   | "compare"
   | "cart"
+  | "quotes"
   | "orders"
   | "providers"
   | "clients"
@@ -75,6 +76,8 @@ export interface NavItemDef {
   requiresSistemaTgs?: boolean;
   /** Compra al distribuidor (costos): el vendedor en modo vendedor no lo ve. */
   buyingOnly?: boolean;
+  /** Solo con modo vendedor en el plan (presupuestos). */
+  requiresSellerMode?: boolean;
 }
 
 export interface NavSectionDef {
@@ -94,6 +97,7 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "search", href: "/search", label: "Búsqueda", icon: Search, module: "search", tenantTypes: ["RETAILER"] },
   { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"], buyingOnly: true },
+  { id: "quotes", href: "/presupuestos", label: "Presupuestos", icon: FileText, tenantTypes: ["RETAILER"], requiresSellerMode: true },
   { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"] },
   {
     id: "news",
@@ -301,6 +305,8 @@ export interface NavContext {
   sistemaTgs?: boolean;
   /** Vendedor en modo vendedor (no ve costos): sin carrito, pedidos ni proveedores. */
   seller?: boolean;
+  /** El plan del comercio tiene modo vendedor. */
+  sellerMode?: boolean;
 }
 
 export function isNavItemActive(item: Pick<NavItemDef, "href" | "exact">, pathname: string): boolean {
@@ -318,6 +324,7 @@ export function findActiveNavId(items: NavItemDef[], pathname: string): NavItemI
 export function canSeeNavItem(item: NavItemDef, ctx: NavContext): boolean {
   if (item.requiresSistemaTgs && !ctx.sistemaTgs) return false;
   if (item.buyingOnly && ctx.seller) return false;
+  if (item.requiresSellerMode && !ctx.sellerMode) return false;
 
   if (item.module && ctx.modules !== null && !ctx.modules.includes(item.module)) {
     return false;

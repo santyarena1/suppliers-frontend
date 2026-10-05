@@ -194,6 +194,7 @@ model Tenant {
   memberships   TenantMembership[]
   saleMarginRules   SaleMarginRule[]
   saleMarginChanges SaleMarginChange[]
+  salesQuotes       SalesQuote[]
   rolePermissions TenantRolePermission[]
   accessCodes   TenantAccessCode[]
   teamInviteCodes TeamInviteCode[]
@@ -2652,4 +2653,28 @@ model SaleMarginChange {
   createdAt DateTime @default(now())
 
   @@index([tenantId, createdAt])
+}
+
+/// Presupuesto de venta (modo vendedor, docs/PLAN_MODO_VENDEDOR.md §8): un
+/// "carrito" del vendedor para su cliente, con precios de venta congelados al
+/// agregar. Nunca guarda costo.
+model SalesQuote {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Correlativo por comercio (#1, #2…).
+  number      Int
+  /// Quién lo armó. Sin relación: si la persona se va, el presupuesto queda.
+  createdById String
+  clientName  String?
+  clientPhone String?
+  notes       String?
+  /// [{ provider, externalId, name, imageUrl, brand, sku, qty, unitPrice, unitFinalPrice, currency, pricedAt }]
+  items       Json      @default("[]")
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([tenantId, number])
+  @@index([tenantId, createdById, archivedAt])
 }

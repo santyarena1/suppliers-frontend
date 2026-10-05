@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import AddToQuoteButton from "@/components/quotes/AddToQuoteButton";
 import {
   ExternalLink,
   GripVertical,
@@ -234,13 +235,14 @@ export function ProviderCompareColumn({
           </p>}
         </div>
 
-        <div className="mt-auto pt-1 border-t border-surface-800">
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-surface-800 pt-1.5">
           <Link
             href={href}
             className="inline-flex items-center gap-1 text-[11px] text-surface-400 hover:text-white transition-colors"
           >
             Ver ficha <ExternalLink className="w-3 h-3" />
           </Link>
+          <AddToQuoteButton product={product} tone="dark" compact />
         </div>
       </div>
     </article>

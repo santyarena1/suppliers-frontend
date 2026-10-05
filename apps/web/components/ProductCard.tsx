@@ -29,6 +29,7 @@ import {
   saveCompareEntries,
 } from "@/lib/compare-store";
 import AddToCartButton from "./AddToCartButton";
+import AddToQuoteButton from "./quotes/AddToQuoteButton";
 import SalePricePanel from "./SalePricePanel";
 import { OwnStorePriceHint } from "./OwnStoreCompare";
 import ProductSyncedAt from "./ProductSyncedAt";
@@ -462,6 +463,8 @@ export default function ProductCard({
         >
           <DollarSign className="w-3.5 h-3.5" />
         </button>
+        {priced && !sellerView && <AddToQuoteButton product={product} variant="icon" />}
+        {priced && sellerView && <AddToQuoteButton product={product} compact={layout === "row"} />}
         {priced && !sellerView && (
           <AddToCartButton
             product={product}
@@ -615,6 +618,8 @@ export default function ProductCard({
             >
               <DollarSign className="w-3.5 h-3.5" />
             </button>
+            {/* En la grilla no entra un botón más junto al carrito: quien compra lo tiene en la lista, la ficha y el comparador. */}
+            {priced && sellerView && <AddToQuoteButton product={product} />}
             {priced && !sellerView && (
               <AddToCartButton
                 product={product}

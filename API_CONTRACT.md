@@ -963,3 +963,11 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: `{ seen: string[] }`. `GET /onboarding/status` también trae `seenAnnouncements`.
 - **Estado**: IMPLEMENTADO
 - **Notas**: Claves válidas en `ANNOUNCEMENTS` (@nodo/shared): `seller-mode-2026-10`. Idempotente.
+
+### [FEATURE] Presupuestos de venta (modo vendedor)
+- **Método / Ruta**: `GET|POST /my/quotes` · `GET|PATCH|DELETE /my/quotes/:id` · `POST /my/quotes/:id/items` · `PATCH|DELETE /my/quotes/:id/items/:index` · `POST /my/quotes/:id/refresh-prices` · `POST /my/quotes/:id/archive` · `POST /my/quotes/:id/unarchive`
+- **Auth**: Bearer, comercio con capacidad `sellerMode` (Pro y Custom). No es ruta de costos: la usan los vendedores.
+- **Body / Params**: `GET ?archived=true&q=&createdById=` (`createdById` solo dueño/admin; `q` busca cliente, teléfono, notas o `#número`) · crear/editar `{ clientName?, clientPhone?, notes? }` (vacío = `null`) · ítem `{ provider, externalId, qty? }` · cantidad `{ qty }` (1–9999).
+- **Respuesta esperada**: `QuoteView { id, number, initials, clientName, clientPhone, notes, items: [{ provider, externalId, name, imageUrl, brand, sku, qty, unitPrice, unitFinalPrice, currency, pricedAt }], totals: { [moneda]: number }, itemCount, createdById, createdByName, mine, archivedAt, createdAt, updatedAt }`. Lista = `QuoteView[]` (hasta 200, más recientes primero). `refresh-prices` → `{ quote, changes: [{ index, provider, externalId, name, currency, before, after }] }` (`after: null` = ya no tiene precio; queda el anterior).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Precio de VENTA calculado en el servidor al agregar (mismo valor que ve el vendedor en la búsqueda: oferta del catálogo comercial + márgenes de venta) y congelado; nunca se guarda ni devuelve costo. Sumar el mismo producto suma cantidad y conserva el precio de la línea. Sin precio de venta → 422; producto que el comercio no ve → 404. Número correlativo por comercio (candado por comercio). Cada uno ve los suyos; OWNER/ADMIN ven todos. Hasta 200 productos por presupuesto. Diseño: `docs/PLAN_MODO_VENDEDOR.md` §8.
