@@ -2,7 +2,7 @@
 
 import { useOnboarding } from "@/lib/onboarding";
 
-import { useCallback, useEffect, useState, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { usePrefs, DollarType } from "@/lib/prefs";
 import { knownIibbRatesHint, useIibbRatesEpoch } from "@/lib/iibb-rates";
@@ -27,6 +27,8 @@ import OwnStoreSettings from "@/components/OwnStoreSettings";
 import ChangePasswordCard from "@/components/ChangePasswordCard";
 import SearchDefaultsSettings from "@/components/SearchDefaultsSettings";
 import SellerModeSettings from "@/components/sale-margins/SellerModeSettings";
+import ConfigIndex, { ConfigAnchor, ConfigGroupTitle, type ConfigIndexItem } from "@/components/config/ConfigIndex";
+import { useSellerSession } from "@/lib/sale-price";
 
 const THEME_ICONS: Record<Theme, React.ElementType> = {
   soft: Sparkles,
@@ -65,6 +67,29 @@ function ConfiguracionPageInner() {
     return "prefs";
   });
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [retailer, setRetailer] = useState(false);
+  useEffect(() => setRetailer(getTenant()?.type === "RETAILER"), []);
+  const seller = useSellerSession();
+  const sellerSettings = seller.sellerMode && !seller.isRealSeller;
+  const indexItems = useMemo<ConfigIndexItem[]>(
+    () => [
+      { id: "apariencia", label: "Apariencia", group: "Visualización" },
+      { id: "moneda", label: "Moneda y dólar", group: "Visualización" },
+      { id: "impuestos", label: "Impuestos en precios", group: "Visualización" },
+      ...(retailer
+        ? [
+            { id: "busqueda", label: "Búsqueda y envío", group: "Búsqueda" },
+            ...(sellerSettings ? [{ id: "vendedor", label: "Modo vendedor", group: "Ventas" }] : []),
+            { id: "tienda", label: "Tu tienda web", group: "Ventas" },
+            { id: "api", label: "API de catálogo", group: "Integraciones" },
+          ]
+        : []),
+      { id: "contrasena", label: "Contraseña", group: "Cuenta y ayuda" },
+      ...(retailer ? [{ id: "ayuda", label: "Ayuda y recorrido", group: "Cuenta y ayuda" }] : []),
+    ],
+    [retailer, sellerSettings]
+  );
   const { theme, setTheme } = useTheme();
   const {
     currency, setCurrency, withIva, setWithIva, withIibb, setWithIibb,
@@ -144,11 +169,14 @@ function ConfiguracionPageInner() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
-        <div className={`mx-auto px-4 sm:px-6 py-6 ${tab === "prefs" ? "max-w-2xl" : "max-w-3xl"}`}>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className={`mx-auto px-4 sm:px-6 ${tab === "prefs" ? "max-w-5xl pb-6 lg:py-6" : "max-w-3xl py-6"}`}>
           {tab === "prefs" && (
-            <div className="flex flex-col gap-6">
-              <ChangePasswordCard />
+            <div className="lg:grid lg:grid-cols-[190px_minmax(0,1fr)] lg:gap-10">
+              <ConfigIndex items={indexItems} scrollRoot={scrollRef} />
+              <div className="flex flex-col gap-6 pt-4 lg:pt-0">
+              <ConfigGroupTitle>Visualización</ConfigGroupTitle>
+              <ConfigAnchor id="apariencia">
               <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Palette className="w-4 h-4 text-brand-400" />
@@ -180,12 +208,13 @@ function ConfiguracionPageInner() {
                   })}
                 </div>
               </section>
-
+              </ConfigAnchor>
+              <ConfigAnchor id="moneda">
               <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-emerald-400" />
-                    <h2 className="text-sm font-semibold text-white">Moneda y cotizaciones</h2>
+                    <h2 className="text-sm font-semibold text-white">Moneda y dólar</h2>
                   </div>
                   <button
                     type="button"
@@ -252,10 +281,27 @@ function ConfiguracionPageInner() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-semibold text-surface-500 uppercase tracking-wider mb-2">
-                      Impuestos en precios
-                    </label>
+                  {currentRate && (
+                    <p className="text-[11px] text-surface-500 border-t border-surface-800 pt-3">
+                      Cotización actualizada:{" "}
+                      {new Date(currentRate.fechaActualizacion).toLocaleString("es-AR", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </p>
+                  )}
+                </div>
+              </section>
+              </ConfigAnchor>
+              <ConfigAnchor id="impuestos">
+              <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Receipt className="w-4 h-4 text-amber-400" />
+                  <h2 className="text-sm font-semibold text-white">Impuestos en precios</h2>
+                </div>
+                <p className="text-xs text-surface-500 mb-4 leading-relaxed">
+                  Qué impuestos se suman a los precios que ves en la búsqueda, la ficha y el carrito.
+                </p>
                     <div className="flex flex-col gap-2">
                       <button
                         type="button"
@@ -295,27 +341,43 @@ function ConfiguracionPageInner() {
                         </>
                       )}
                     </div>
-                  </div>
-
-                  {currentRate && (
-                    <p className="text-[11px] text-surface-500 border-t border-surface-800 pt-3">
-                      Cotización actualizada:{" "}
-                      {new Date(currentRate.fechaActualizacion).toLocaleString("es-AR", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
-                    </p>
-                  )}
-                </div>
               </section>
+              </ConfigAnchor>
 
-              <SearchDefaultsSettings />
+              {retailer && (
+                <>
+                  <ConfigGroupTitle>Búsqueda</ConfigGroupTitle>
+                  <ConfigAnchor id="busqueda">
+                    <SearchDefaultsSettings />
+                  </ConfigAnchor>
 
-              <OwnStoreSettings showToast={showToast} />
+                  <ConfigGroupTitle>Ventas</ConfigGroupTitle>
+                  {sellerSettings && (
+                    <ConfigAnchor id="vendedor">
+                      <SellerModeSettings />
+                    </ConfigAnchor>
+                  )}
+                  <ConfigAnchor id="tienda">
+                    <OwnStoreSettings showToast={showToast} />
+                  </ConfigAnchor>
 
-              {getTenant()?.type === "RETAILER" && <SellerModeSettings />}
-              {getTenant()?.type === "RETAILER" && <CatalogApiLink />}
-              <HelpOnboardingSection showToast={showToast} />
+                  <ConfigGroupTitle>Integraciones</ConfigGroupTitle>
+                  <ConfigAnchor id="api">
+                    <CatalogApiLink />
+                  </ConfigAnchor>
+                </>
+              )}
+
+              <ConfigGroupTitle>Cuenta y ayuda</ConfigGroupTitle>
+              <ConfigAnchor id="contrasena">
+                <ChangePasswordCard />
+              </ConfigAnchor>
+              {retailer && (
+                <ConfigAnchor id="ayuda">
+                  <HelpOnboardingSection showToast={showToast} />
+                </ConfigAnchor>
+              )}
+              </div>
             </div>
           )}
 
