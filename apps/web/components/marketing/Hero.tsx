@@ -11,7 +11,7 @@ export function Hero() {
       <div className="nl-shell relative z-10 pb-24 pt-16 lg:pt-24">
         <div className="max-w-3xl">
           <h1 className="nl-h1">
-            Todos tus distribuidores en <span className="nl-accent">una sola búsqueda</span>
+            <span className="nl-accent">+15 distribuidores</span> de tecnología conectados en un solo lugar
           </h1>
           <p className="nl-lead mt-6">
             Buscás una vez y ves quién lo tiene, con stock y precio final con impuestos. Armás un carrito y cada pedido

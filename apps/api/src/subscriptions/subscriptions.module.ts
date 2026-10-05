@@ -2,11 +2,12 @@ import { Module } from "@nestjs/common";
 import { TenantsModule } from "../tenants/tenants.module";
 import { SubscriptionRemindersService } from "./subscription-reminders.service";
 import { AdminSubscriptionsController, MySubscriptionController } from "./subscriptions.controller";
+import { LaunchPromoController } from "./launch-promo.controller";
 import { SubscriptionsService } from "./subscriptions.service";
 
 @Module({
   imports: [TenantsModule],
-  controllers: [MySubscriptionController, AdminSubscriptionsController],
+  controllers: [MySubscriptionController, AdminSubscriptionsController, LaunchPromoController],
   providers: [SubscriptionsService, SubscriptionRemindersService],
   exports: [SubscriptionsService],
 })

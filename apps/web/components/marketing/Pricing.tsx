@@ -5,6 +5,7 @@ import { Check, ChevronDown, Minus } from "lucide-react";
 import { BASE_SEARCH_LIMIT, PLAN_CATALOG, PLAN_FEATURE_GROUPS, type PlanCell, type TenantPlan } from "@/lib/plans";
 import { Reveal } from "./Reveal";
 import { SupplyPlans } from "./SupplyPlans";
+import { LaunchPromo } from "./LaunchPromo";
 import { rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
 import { announceContactKind } from "@/lib/contact";
 
@@ -121,6 +122,7 @@ export function Pricing() {
                   <p className="relative mt-1 h-5 text-sm text-[var(--fg-3)]">
                     {def.setupFee ? `Más ${price(def.setupFee)} de puesta en marcha, una sola vez` : "Sin costo de alta"}
                   </p>
+                  {pro && <LaunchPromo />}
 
                   <a
                     href={c.plan === "CUSTOM" ? "#contacto" : "#probar"}
