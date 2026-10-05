@@ -6,7 +6,7 @@
  * ejemplo: la landing no compara ni recomienda distribuidores ni marcas, porque
  * NODO también es para ellos.
  */
-const API = "https://api-production-f4aa.up.railway.app";
+const API = "https://api.nodohub.app";
 
 export interface DemoProduct {
   name: string;

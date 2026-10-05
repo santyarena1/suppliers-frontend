@@ -5,7 +5,7 @@ export function publicApiUrl(): string {
   const fromEnv = (process.env.PUBLIC_API_URL || process.env.CATALOG_API_PUBLIC_URL || "").trim().replace(/\/+$/, "");
   if (fromEnv) return fromEnv;
   return isServerRuntime()
-    ? "https://api-production-f4aa.up.railway.app"
+    ? "https://api.nodohub.app"
     : `http://localhost:${process.env.PORT || 8080}`;
 }
 

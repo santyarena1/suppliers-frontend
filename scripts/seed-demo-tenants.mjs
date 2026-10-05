@@ -11,7 +11,7 @@
  *   API_URL=... ADMIN_USER=... ADMIN_PASSWORD=... node scripts/seed-demo-tenants.mjs
  */
 
-const API_URL = process.env.API_URL ?? "https://api-production-f4aa.up.railway.app";
+const API_URL = process.env.API_URL ?? "https://api.nodohub.app";
 const ADMIN_USER = process.env.ADMIN_USER ?? "superadmin";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "password123";
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "password123";
