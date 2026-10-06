@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
 import { CurrentTenant } from "../common/decorators/current-tenant.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -21,6 +21,12 @@ export class CartController {
   @Get("org")
   org(@CurrentTenant() tenant: TenantContext) {
     return this.cartService.getOrgCart(tenant);
+  }
+
+  /** Pedidos de las últimas horas, para avisar antes de pedir dos veces lo mismo. */
+  @Get("org/recent-orders")
+  recentOrders(@CurrentTenant() tenant: TenantContext, @Query("hours") hours?: string) {
+    return this.cartService.recentOrders(tenant, Number(hours) || 6);
   }
 
   @Put("org")

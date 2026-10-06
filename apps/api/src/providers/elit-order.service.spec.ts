@@ -107,6 +107,41 @@ describe("ElitOrderService", () => {
     expect(preview.note).toMatch(/cart\/process/);
   });
 
+  it("un producto sin stock no tira abajo la cotización: se informa para sacarlo", async () => {
+    const base = api.postJson.getMockImplementation()!;
+    api.postJson.mockImplementation(async (path: string, body: { code?: number }) => {
+      if (path === "cart/add" && body?.code === 99999) {
+        throw new BadRequestException("Elit POST cart/add → 400: No stock available");
+      }
+      return base(path, body);
+    });
+    const preview = await service.preview(CREDS, { items: [...ITEMS, { code: "99999", qty: 2, name: "Sin stock" }] });
+    expect(preview.unavailable).toEqual([{ code: "99999", name: "Sin stock", qty: 2 }]);
+    expect(preview.items[0]).toMatchObject({ code: "18636" });
+  });
+
+  it("si nada tiene stock, error claro con la lista (no pide cargar la cuenta)", async () => {
+    api.postJson.mockImplementation(async (path: string) => {
+      if (path === "cart/add") throw new BadRequestException("Elit POST cart/add → 400: No stock available");
+      return { data: {} };
+    });
+    await expect(service.preview(CREDS, { items: ITEMS })).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "ELIT_NO_STOCK", details: { unavailable: [{ code: "18636", name: "AP Cudy", qty: 1 }] } }),
+    });
+  });
+
+  it("no confirma un pedido a medias si falta stock de algo", async () => {
+    const base = api.postJson.getMockImplementation()!;
+    api.postJson.mockImplementation(async (path: string, body: { code?: number }) => {
+      if (path === "cart/add" && body?.code === 99999) throw new BadRequestException("Elit POST cart/add → 400: No stock available");
+      return base(path, body);
+    });
+    await expect(
+      service.submitDraft(AUTOR, CREDS, { items: [...ITEMS, { code: "99999", qty: 1, name: "Sin stock" }], warehouse: 9 } as never)
+    ).rejects.toMatchObject({ response: expect.objectContaining({ code: "ELIT_NO_STOCK" }) });
+    expect(api.postJson.mock.calls.some((c) => c[0] === "cart/process")).toBe(false);
+  });
+
   it("al verificar concilia el carrito de la cuenta con el de NODO y avisa qué cambió", async () => {
     const snapshots = { load: jest.fn(async () => ({ "18636": 1, "555": 2 })), save: jest.fn(async () => undefined), clear: jest.fn(async () => undefined) };
     service = new ElitOrderService({ providerOrder: { create: createOrder, findMany: jest.fn() } } as never, snapshots as never);

@@ -38,6 +38,12 @@ function setup(link: Record<string, unknown> | null, supplierMembers: Record<str
         .mockResolvedValueOnce(supplierMembers),
     },
   };
+  // El carrito se reescribe bajo un candado en una transacción: se simula con el mismo cliente.
+  Object.assign(prisma, {
+    $executeRaw: jest.fn().mockResolvedValue(0),
+    $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn(prisma)),
+    providerOrder: { findMany: jest.fn().mockResolvedValue([]), updateMany: jest.fn() },
+  });
   const hub = { emitToUsers: jest.fn() };
   return { service: new CartService(prisma as never, hub as never), prisma, hub };
 }
@@ -114,5 +120,34 @@ describe("aviso en vivo al guardar el carrito", () => {
     const { service, hub } = setup(null, [{ userId: "u-owner", tenantId: "t-dist", role: "OWNER" }]);
     await service.putOrgCart(retailer, "u-retail", { items: CART.items, schemes: CART.schemes } as never);
     expect(hub.emitToUsers.mock.calls[1][0]).toEqual(["u-owner"]);
+  });
+});
+
+describe("pedidos creados salen del carrito compartido", () => {
+  it("descuenta lo pedido, guarda sin autor (lo aplican todas las PCs) y marca el pedido", async () => {
+    const { service, prisma, hub } = setup(null, []);
+    const cart = {
+      ...CART,
+      items: [
+        { provider: "ELIT", externalId: "B", qty: 2, channel: "online" },
+        { provider: "ELIT", externalId: "C", qty: 1, channel: "online" },
+      ],
+    };
+    prisma.orgCart.findUnique.mockResolvedValue(cart);
+    const update = jest.fn().mockImplementation(({ data }) => ({ ...cart, ...data }));
+    Object.assign(prisma.orgCart, { update });
+    (prisma as unknown as { providerOrder: { findMany: jest.Mock } }).providerOrder.findMany.mockResolvedValue([
+      { id: "o1", tenantId: "t-retail", provider: "ELIT", items: [{ code: "B", qty: 2 }] },
+    ]);
+    prisma.tenantMembership.findMany.mockReset().mockResolvedValue([{ userId: "u-retail", user: { username: "ana" } }]);
+    prisma.tenantLink.findMany.mockResolvedValue([]);
+
+    expect(await service.reconcileOrders()).toBe(1);
+    const saved = update.mock.calls[0][0].data;
+    expect(saved.updatedByUserId).toBeNull();
+    expect(saved.items).toEqual([{ provider: "ELIT", externalId: "C", qty: 1, channel: "online" }]);
+    const orders = (prisma as unknown as { providerOrder: { updateMany: jest.Mock } }).providerOrder.updateMany;
+    expect(orders).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: ["o1"] } } }));
+    expect(hub.emitToUsers).toHaveBeenCalledWith(["u-retail"], expect.objectContaining({ type: "cart_updated" }));
   });
 });

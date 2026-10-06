@@ -7,6 +7,10 @@ import { AddCartItemDto } from "./dto/add-item.dto";
 import { UpdateCartItemDto } from "./dto/update-item.dto";
 import { UpsertOrgCartDto } from "./dto/org-cart.dto";
 import { attributeCartItems } from "./cart-attribution";
+import { orderedLines, removeOrderedFromCart } from "./cart-order-reconcile";
+
+/** Un mismo candado para todo lo que reescribe el carrito de un comercio. */
+const cartLockKey = (tenantId: string) => `orgcart:${tenantId}`;
 
 /**
  * El carrito personal (`/cart/items`) quedó por compatibilidad.
@@ -65,15 +69,18 @@ export class CartService {
 
   async getOrgCart(tenant: TenantContext) {
     this.assertRetailer(tenant);
+    await this.reconcileOrders(tenant.tenantId);
     const row = await this.prisma.orgCart.findUnique({ where: { tenantId: tenant.tenantId } });
     return this.withPeople(this.serializeOrg(row, tenant.tenantId));
   }
 
   async putOrgCart(tenant: TenantContext, userId: string, dto: UpsertOrgCartDto) {
     this.assertRetailer(tenant);
-    const prev = await this.prisma.orgCart.findUnique({ where: { tenantId: tenant.tenantId }, select: { items: true } });
-    const items = attributeCartItems(Array.isArray(prev?.items) ? prev.items : [], dto.items, userId);
-    const row = await this.prisma.orgCart.upsert({
+    const row = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cartLockKey(tenant.tenantId)}))`;
+      const prev = await tx.orgCart.findUnique({ where: { tenantId: tenant.tenantId }, select: { items: true } });
+      const items = attributeCartItems(Array.isArray(prev?.items) ? prev.items : [], dto.items, userId);
+      return tx.orgCart.upsert({
       where: { tenantId: tenant.tenantId },
       create: {
         tenantId: tenant.tenantId,
@@ -86,6 +93,7 @@ export class CartService {
         schemes: (dto.schemes ?? []) as Prisma.InputJsonValue,
         updatedByUserId: userId,
       },
+      });
     });
     const payload = await this.withPeople(this.serializeOrg(row, tenant.tenantId));
     await this.broadcast(tenant.tenantId, payload);
@@ -126,6 +134,84 @@ export class CartService {
       updatedByUserId: row?.updatedByUserId ?? null,
       updatedAt: row?.updatedAt.toISOString() ?? null,
     };
+  }
+
+  /**
+   * Saca del carrito compartido los productos de los pedidos ya creados en el
+   * distribuidor (status CREATED) que todavía no se descontaron. Corre al pedir
+   * el carrito y cada pocos segundos (CartOrderReconcileScheduler), así lo ven
+   * todas las PCs aunque el pedido haya terminado en segundo plano.
+   * Devuelve cuántos pedidos concilió.
+   */
+  async reconcileOrders(tenantId?: string): Promise<number> {
+    const orders = await this.prisma.providerOrder.findMany({
+      where: { status: "CREATED", cartReconciledAt: null, ...(tenantId ? { tenantId } : {}) },
+      select: { id: true, tenantId: true, provider: true, items: true },
+      orderBy: { createdAt: "asc" },
+      take: 200,
+    });
+    if (orders.length === 0) return 0;
+    const byTenant = new Map<string, typeof orders>();
+    for (const order of orders) byTenant.set(order.tenantId, [...(byTenant.get(order.tenantId) ?? []), order]);
+
+    for (const [retailerId, list] of byTenant) {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cartLockKey(retailerId)}))`;
+        const row = await tx.orgCart.findUnique({ where: { tenantId: retailerId } });
+        let items: Prisma.JsonValue[] = Array.isArray(row?.items) ? row.items : [];
+        let changed = false;
+        for (const order of list) {
+          const result = removeOrderedFromCart(items, order.provider, orderedLines(order.items));
+          items = result.items;
+          changed = changed || result.changed;
+        }
+        await tx.providerOrder.updateMany({
+          where: { id: { in: list.map((o) => o.id) } },
+          data: { cartReconciledAt: new Date() },
+        });
+        if (!row || !changed) return null;
+        // Sin autor: así todas las PCs (también las de quien pidió) aplican el cambio.
+        return tx.orgCart.update({
+          where: { tenantId: retailerId },
+          data: { items: items as Prisma.InputJsonValue, updatedByUserId: null },
+        });
+      });
+      if (updated) await this.broadcast(retailerId, await this.withPeople(this.serializeOrg(updated, retailerId)));
+    }
+    return orders.length;
+  }
+
+  /**
+   * Pedidos de las últimas horas (creados o creándose), para avisar en el
+   * carrito antes de pedir dos veces lo mismo.
+   */
+  async recentOrders(tenant: TenantContext, hours: number) {
+    this.assertRetailer(tenant);
+    const since = new Date(Date.now() - Math.min(Math.max(hours, 1), 48) * 3_600_000);
+    const rows = await this.prisma.providerOrder.findMany({
+      where: { tenantId: tenant.tenantId, createdAt: { gte: since }, status: { in: ["PENDING", "CREATED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        provider: true,
+        status: true,
+        createdAt: true,
+        invidOrderNumber: true,
+        invidWebOrderNumber: true,
+        items: true,
+        user: { select: { username: true } },
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      provider: row.provider,
+      status: row.status,
+      createdAt: row.createdAt.toISOString(),
+      orderNumber: row.invidOrderNumber ?? row.invidWebOrderNumber ?? null,
+      byUsername: row.user?.username ?? null,
+      items: orderedLines(row.items),
+    }));
   }
 
   /** Nombres del equipo (también de quien ya no está, para que sus líneas sigan teniendo autor). */

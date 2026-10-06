@@ -107,6 +107,9 @@ export type WarmSnapshot<P extends WarmProvider = WarmProvider> = {
   itemsKey: string;
   status: "idle" | "loading" | "ready" | "error";
   error: string | null;
+  /** Código y datos del error de la API (p. ej. ELIT_NO_STOCK con los productos sin stock). */
+  errorCode?: string | null;
+  errorDetails?: Record<string, unknown> | null;
   data: WarmDataMap[P] | null;
 };
 
@@ -117,6 +120,8 @@ type Slot = {
   itemsKey: string;
   status: "loading" | "ready" | "error";
   error: string | null;
+  errorCode?: string | null;
+  errorDetails?: Record<string, unknown> | null;
   data: unknown;
   timer: ReturnType<typeof setTimeout> | null;
 };
@@ -145,6 +150,8 @@ function toSnap<P extends WarmProvider>(provider: P, itemsKey: string): WarmSnap
     itemsKey,
     status: slot.status,
     error: slot.error,
+    errorCode: slot.errorCode ?? null,
+    errorDetails: slot.errorDetails ?? null,
     data: slot.status === "ready" ? (slot.data as WarmDataMap[P]) : null,
   };
 }
@@ -324,6 +331,9 @@ export function ensureCheckoutWarmup(
       slot.status = "error";
       slot.data = null;
       slot.error = errMessage(err, "No se pudo armar el carrito en el distribuidor");
+      const body = (err as { response?: { data?: { code?: unknown; details?: unknown } } })?.response?.data;
+      slot.errorCode = typeof body?.code === "string" ? body.code : null;
+      slot.errorDetails = body?.details && typeof body.details === "object" ? (body.details as Record<string, unknown>) : null;
       emit();
     }
   };

@@ -23,6 +23,27 @@ export interface ElitCartItems {
   background?: boolean;
 }
 
+/** Producto que Elit no deja cargar al carrito por falta de stock. */
+export interface ElitUnavailableLine {
+  code: string;
+  name: string | null;
+  qty: number;
+}
+
+/** Elit responde 400 "No stock available" al agregar algo sin stock. */
+export function isElitStockError(err: unknown): boolean {
+  return err instanceof BadRequestException && /stock/i.test(err.message);
+}
+
+function noStockError(lines: ElitUnavailableLine[]) {
+  const names = lines.map((l) => l.name || l.code).join(", ");
+  return new BadRequestException({
+    message: `Elit no tiene stock de: ${names}. Sacalo del carrito para seguir.`,
+    code: "ELIT_NO_STOCK",
+    details: { unavailable: lines },
+  });
+}
+
 /** El carrito de Elit es de la cuenta (nro. de cliente), no de la sesión. */
 function elitAccountKey(credentials: Record<string, string>): string {
   return portalAccountKey("ELIT", parseElitCredentials(credentials).id);
@@ -159,8 +180,16 @@ export class ElitOrderService {
     return { current, lines: mapElitCartDetails(current.details, []).filter((l) => l.code) };
   }
 
-  /** Deja el carrito de la cuenta exactamente con `items` (vacía lo que había y carga). */
-  private async syncCart(api: ElitWebClient, items: ElitCartItems["items"], current?: Record<string, unknown>) {
+  /**
+   * Deja el carrito de la cuenta con `items` (vacía lo que había y carga).
+   * Lo que Elit rechaza por falta de stock no frena todo: se saltea y se
+   * devuelve, para que el comercio lo saque del carrito.
+   */
+  private async syncCart(
+    api: ElitWebClient,
+    items: ElitCartItems["items"],
+    current?: Record<string, unknown>
+  ): Promise<ElitUnavailableLine[]> {
     if (!current) current = (await this.readCart(api)).current;
     for (const row of unwrapList(current.details)) {
       const rec = asRecord(row) ?? {};
@@ -172,11 +201,18 @@ export class ElitOrderService {
         }
       }
     }
+    const unavailable: ElitUnavailableLine[] = [];
     for (const it of items) {
       const code = Number(it.code);
       if (!Number.isFinite(code)) throw new BadRequestException(`Código Elit inválido: ${it.code}`);
-      await api.postJson("cart/add", { code, quantity: it.qty });
+      try {
+        await api.postJson("cart/add", { code, quantity: it.qty });
+      } catch (err) {
+        if (!isElitStockError(err)) throw err;
+        unavailable.push({ code: String(it.code), name: it.name ?? null, qty: it.qty });
+      }
     }
+    return unavailable;
   }
 
   private async applyOptions(api: ElitWebClient, input: ElitCartItems, summary: Record<string, unknown>) {
@@ -234,7 +270,8 @@ export class ElitOrderService {
         `→ ${JSON.stringify(items.map((i) => [i.code, i.qty]))} cambios=${JSON.stringify(sync)}`
       );
     }
-    await this.syncCart(api, items, current);
+    const unavailable = await this.syncCart(api, items, current);
+    if (unavailable.length > 0 && unavailable.length >= items.length) throw noStockError(unavailable);
     if (reconcileFor && sync) {
       await this.cartSnapshots.save(reconcileFor.tenantId, "ELIT", nextCartSnapshot(items, sync, previousSnapshot));
     }
@@ -244,6 +281,7 @@ export class ElitOrderService {
     return {
       ...publicSummary(summary, items),
       sync,
+      unavailable,
       note: "Al confirmar, Elit crea una nota de venta en tu cuenta (POST /cart/process por depósito). No se puede deshacer desde Nodo.",
     };
   }
@@ -305,8 +343,10 @@ export class ElitOrderService {
     existingId?: string
   ) {
     const preview = await this.previewUnlocked(credentials, input);
+    if (preview.unavailable.length > 0) throw noStockError(preview.unavailable);
     const api = await ElitWebClient.login(credentials);
-    await this.syncCart(api, input.items);
+    const missing = await this.syncCart(api, input.items);
+    if (missing.length > 0) throw noStockError(missing);
     const summary = elitData<Record<string, unknown>>(await api.getJson("cart/summary"));
     await this.applyOptions(api, input, summary);
     // Si Elit no aceptó algo (stock, código) no sale una nota de venta distinta del carrito.

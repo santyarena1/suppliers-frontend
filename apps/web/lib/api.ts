@@ -876,8 +876,20 @@ export const announcementsApi = {
   markSeen: (key: string) => api.post<{ seen: string[] }>(`/me/announcements/${encodeURIComponent(key)}/seen`, {}),
 };
 
+/** Pedido de las últimas horas, para avisar en el carrito antes de pedir dos veces. */
+export interface RecentProviderOrder {
+  id: string;
+  provider: string;
+  status: "PENDING" | "CREATED";
+  createdAt: string;
+  orderNumber: string | null;
+  byUsername: string | null;
+  items: { code: string; qty: number }[];
+}
+
 export const orgCartApi = {
   get: () => api.get<OrgCartSnapshot>("/cart/org"),
+  recentOrders: (hours = 6) => api.get<RecentProviderOrder[]>("/cart/org/recent-orders", { params: { hours } }),
   save: (data: { items: unknown[]; schemes: unknown[] }) => api.put<OrgCartSnapshot>("/cart/org", data),
   client: (linkId: string) => api.get<OrgCartSnapshot>(`/cart/clients/${linkId}`),
 };
@@ -2338,8 +2350,17 @@ export const airCheckoutApi = {
   draftById: (id: string) => api.get<NodoProviderDraft>(`/providers/AIR/drafts/${id}`),
 };
 
+/** Producto que Elit no deja cargar por falta de stock. */
+export interface ElitUnavailableLine {
+  code: string;
+  name: string | null;
+  qty: number;
+}
+
 export interface ElitCheckoutPreview {
   sync?: PortalCartSync;
+  /** Lo que Elit rechazó por stock: no entra en la cotización. */
+  unavailable?: ElitUnavailableLine[];
   items: { code: string; qty: number; name: string; price: number; subtotal: number }[];
   warehouses: { id: number; name: string }[];
   shippingMethods: {

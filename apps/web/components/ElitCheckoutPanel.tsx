@@ -6,7 +6,9 @@ import {
   ElitCheckoutPreview,
   ElitDraftResult,
 } from "@/lib/api";
-import { CartItem } from "@/lib/cart";
+import { CartItem, useCart } from "@/lib/cart";
+import type { ElitUnavailableLine } from "@/lib/api";
+import { PackageX } from "lucide-react";
 import Link from "next/link";
 import { formatUSD } from "@/lib/format";
 import {
@@ -22,6 +24,23 @@ import { useBackgroundCheckout } from "@/lib/pendingOrders";
 import { useCheckoutWarmup } from "@/lib/checkoutWarmup";
 import { readPortalDrops, usePortalCartSync } from "@/lib/portalCartSync";
 import PortalSyncNotice from "@/components/checkout/PortalSyncNotice";
+
+/** Productos sin stock que la API informa con el error ELIT_NO_STOCK. */
+function noStockFrom(code: unknown, details: unknown): ElitUnavailableLine[] {
+  if (code !== "ELIT_NO_STOCK" || !details || typeof details !== "object") return [];
+  const list = (details as { unavailable?: unknown }).unavailable;
+  return Array.isArray(list) ? (list as ElitUnavailableLine[]) : [];
+}
+
+function noStockFromError(err: unknown): ElitUnavailableLine[] {
+  const body = (err as { response?: { data?: { code?: unknown; details?: unknown } } })?.response?.data;
+  return noStockFrom(body?.code, body?.details);
+}
+
+/** Solo un problema de cuenta o contraseña lleva a "Cargar cuenta". */
+function looksLikeCredentials(message: string): boolean {
+  return /credencial|contraseñ|usuario|login|iniciar sesi|autentic|nro\. de cliente|401|403/i.test(message);
+}
 
 function errMessage(err: unknown, fallback: string) {
   const msg = (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message;
@@ -53,6 +72,8 @@ export default function ElitCheckoutPanel({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [noStock, setNoStock] = useState<ElitUnavailableLine[]>([]);
+  const { removeFromOrder } = useCart();
   const submitLock = useRef(false);
   const seeded = useRef<string | null>(null);
   const hydrated = useRef(false);
@@ -75,6 +96,7 @@ export default function ElitCheckoutPanel({
 
   function publishPreview(data: ElitCheckoutPreview | null) {
     setPreview(data);
+    setNoStock(data?.unavailable ?? []);
     onPreviewed?.(data);
     // Lo que cambió en el carrito de la cuenta de Elit se refleja acá.
     if (data) void portalSync.apply(data.sync, items, data.items);
@@ -103,6 +125,7 @@ export default function ElitCheckoutPanel({
     }
     if (warm.status === "error" && seeded.current !== cartKey) {
       publishPreview(null);
+      setNoStock(noStockFrom(warm.errorCode, warm.errorDetails));
       setError(warm.error || "No se pudo armar el carrito de Elit.");
       setLoading(false);
       return;
@@ -119,7 +142,43 @@ export default function ElitCheckoutPanel({
   const selectedPay = preview?.saleConditions.find((p) => p.value === saleCondition);
   const selectedShip = methods.find((m) => m.value === shippingMethod) ?? methods[0];
   const portalPending = portalSync.pending.length > 0;
-  const canSubmit = Boolean(warehouse && (selectedShip || shippingMethod) && saleCondition && !submitting && !loading && !portalPending);
+  const canSubmit = Boolean(
+    warehouse && (selectedShip || shippingMethod) && saleCondition && !submitting && !loading && !portalPending && noStock.length === 0
+  );
+
+  function dropFromCart(code: string) {
+    for (const it of items) {
+      if (it.externalId !== code) continue;
+      removeFromOrder({ provider: it.provider, externalId: it.externalId, channel: it.channel, schemeId: it.schemeId });
+    }
+    setNoStock((prev) => prev.filter((line) => line.code !== code));
+  }
+
+  const noStockNotice = noStock.length > 0 && (
+    <div role="alert" className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-100">
+      <p className="flex items-center gap-2 font-semibold text-amber-50">
+        <PackageX className="w-4 h-4 text-amber-300" />
+        Elit no tiene stock de {noStock.length === 1 ? "este producto" : "estos productos"}
+      </p>
+      <p className="mt-0.5 text-amber-100/80">No entran en el pedido. Sacalos del carrito para poder confirmar.</p>
+      <ul className="mt-2 space-y-1.5">
+        {noStock.map((line) => (
+          <li key={line.code} className="flex flex-wrap items-center justify-between gap-2">
+            <span className="min-w-0">
+              {line.name || line.code} <span className="text-amber-100/60">· {line.qty} u. · #{line.code}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => dropFromCart(line.code)}
+              className="h-6 px-2 rounded-sm border border-amber-400/40 text-amber-50 hover:bg-amber-400/10"
+            >
+              Sacar del carrito
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
   function payload() {
     return {
@@ -146,7 +205,11 @@ export default function ElitCheckoutPanel({
         const res = await elitCheckoutApi.preview(payload());
         if (!cancelled) publishPreview(res.data);
       } catch (err: unknown) {
-        if (!cancelled) setError(errMessage(err, "No se pudo actualizar el carrito de Elit."));
+        if (!cancelled) {
+          setError(errMessage(err, "No se pudo actualizar el carrito de Elit."));
+          const missing = noStockFromError(err);
+          if (missing.length > 0) setNoStock(missing);
+        }
       }
     }, 400);
     return () => {
@@ -167,6 +230,8 @@ export default function ElitCheckoutPanel({
       acceptResult(res.data);
     } catch (err: unknown) {
       setError(errMessage(err, "No se pudo crear el pedido en Elit"));
+      const missing = noStockFromError(err);
+      if (missing.length > 0) setNoStock(missing);
     } finally {
       submitLock.current = false;
       setSubmitting(false);
@@ -175,15 +240,19 @@ export default function ElitCheckoutPanel({
 
   if (loading) return <CheckoutLoading label="Cargando checkout Elit…" />;
   if (error && !preview) {
-    return (
+    if (noStockNotice) return <div className="flex flex-col gap-3">{noStockNotice}</div>;
+    return looksLikeCredentials(error) ? (
       <CheckoutError href="/proveedores/ELIT?tab=credentials" hrefLabel="Cargar cuenta">
         {error}
       </CheckoutError>
+    ) : (
+      <CheckoutError>{error}</CheckoutError>
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
+      {noStockNotice}
       {portalSync.notice && portalSync.notice.lines.length > 0 && (
         <PortalSyncNotice
           providerLabel="Elit"
@@ -214,7 +283,13 @@ export default function ElitCheckoutPanel({
         <CheckoutSubmit
           onClick={() => { setError(null); openConfirm(); }}
           disabled={!canSubmit}
-          title={portalPending ? "Decidí si dejás o sacás lo que ya estaba en el carrito de Elit" : undefined}
+          title={
+            noStock.length > 0
+              ? "Sacá del carrito lo que Elit no tiene en stock"
+              : portalPending
+                ? "Decidí si dejás o sacás lo que ya estaba en el carrito de Elit"
+                : undefined
+          }
         >
           Confirmar Elit
         </CheckoutSubmit>

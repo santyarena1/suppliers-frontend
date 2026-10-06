@@ -1139,8 +1139,12 @@ model ProviderOrder {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 
+  /// Ya se sacaron sus productos del carrito compartido del comercio (cart-order-reconcile).
+  cartReconciledAt    DateTime?
+
   @@index([userId, provider, createdAt])
   @@index([tenantId, provider, createdAt])
+  @@index([status, cartReconciledAt])
   @@index([tenantId, approvalStatus])
   @@index([approvalStatus])
   @@index([tenantId, channel])
