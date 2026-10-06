@@ -4662,6 +4662,10 @@ export const catalogApiAdmin = {
   deliveries: (id: string, limit = 50) =>
     api.get<{ deliveries: DeliveryView[] }>(`/my/catalog-api/webhooks/${id}/deliveries`, { params: { limit } }),
   /** Superadmin: prende o apaga el módulo de una organización. */
-  adminSetAddon: (tenantId: string, enabled: boolean) =>
-    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/catalog-api-addon`, { enabled }),
+  /** `courtesy`: activa sin cargo (no suma a la cuota). */
+  adminSetAddon: (tenantId: string, enabled: boolean, courtesy?: boolean) =>
+    api.put<AdminSubscriptionDetail>(`/admin/subscriptions/${tenantId}/catalog-api-addon`, {
+      enabled,
+      ...(courtesy != null ? { courtesy } : {}),
+    }),
 };

@@ -142,50 +142,77 @@ function PlanForm({ detail, tenantId, busy, run, why, reasonField }: FormProps) 
   );
 }
 
-/** El backend lo manda como booleano o como { enabled, since }. */
-type AddonField = { catalogApiAddon?: boolean | { enabled: boolean; since?: string | null } | null };
+/** El backend lo manda como booleano o como { enabled, since, courtesy }. */
+type AddonField = {
+  catalogApiAddon?: boolean | { enabled: boolean; since?: string | null; courtesy?: boolean } | null;
+};
 
-function addonOf(detail: AdminSubscriptionDetail): { enabled: boolean; since: string | null } {
+function addonOf(detail: AdminSubscriptionDetail): { enabled: boolean; since: string | null; courtesy: boolean } {
   const raw = (detail as AdminSubscriptionDetail & AddonField).catalogApiAddon;
-  if (raw && typeof raw === "object") return { enabled: !!raw.enabled, since: raw.since ?? null };
-  return { enabled: !!raw, since: null };
+  if (raw && typeof raw === "object") return { enabled: !!raw.enabled, since: raw.since ?? null, courtesy: !!raw.courtesy };
+  return { enabled: !!raw, since: null, courtesy: false };
 }
+
+type AddonMode = "off" | "paid" | "courtesy";
+
+const ADDON_MODES: { mode: AddonMode; label: string; hint: string }[] = [
+  { mode: "off", label: "No", hint: "Sin API: las keys del comercio no responden." },
+  { mode: "paid", label: `Cobrada · +${formatUsd(CATALOG_API_ADDON_PRICE_USD)}`, hint: "Activa y se suma al monto mensual." },
+  { mode: "courtesy", label: "De cortesía", hint: "Activa sin cargo: no suma al monto mensual." },
+];
 
 function ModulesForm({ detail, tenantId, busy, run }: { detail: AdminSubscriptionDetail; tenantId: string; busy: boolean; run: Run }) {
   const addon = addonOf(detail);
   const included = detail.plan === "CUSTOM";
+  const mode: AddonMode = !addon.enabled ? "off" : addon.courtesy ? "courtesy" : "paid";
+  const current = ADDON_MODES.find((m) => m.mode === mode)!;
+
+  function pick(next: AddonMode) {
+    if (next === mode) return;
+    const done =
+      next === "off" ? "API de catálogo desactivada" : next === "courtesy" ? "API de catálogo de cortesía" : "API de catálogo activada (se cobra)";
+    void run(() => catalogApiAdmin.adminSetAddon(tenantId, next !== "off", next === "courtesy"), done);
+  }
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-800 px-3 py-2.5">
-      <div className="min-w-0">
-        <p className="text-sm text-white">API de catálogo · {formatUsd(CATALOG_API_ADDON_PRICE_USD)}/mes</p>
-        <p className="text-[11px] text-surface-500">
-          {included
-            ? "Incluida en Custom: no se cobra aparte."
-            : addon.enabled
-              ? `Activa${addon.since ? ` desde el ${fmtDate(addon.since)}` : ""}. Se suma al monto mensual.`
-              : "No activa. Al prenderla, las keys del comercio empiezan a responder y se suma al monto mensual."}
-        </p>
+    <div className="rounded-lg border border-surface-800 px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-white">API de catálogo · {formatUsd(CATALOG_API_ADDON_PRICE_USD)}/mes</p>
+          <p className="text-[11px] text-surface-500">
+            {included
+              ? "Incluida en Custom: no se cobra aparte."
+              : `${current.hint}${addon.enabled && addon.since ? ` Activa desde el ${fmtDate(addon.since)}.` : ""}`}
+          </p>
+        </div>
+        {included ? (
+          <span className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-1 text-[11px] font-medium text-brand-300">Incluida</span>
+        ) : (
+          <div role="radiogroup" aria-label="API de catálogo" className="flex flex-wrap gap-1 rounded-lg bg-surface-900 p-1">
+            {ADDON_MODES.map((m) => (
+              <button
+                key={m.mode}
+                type="button"
+                role="radio"
+                aria-checked={mode === m.mode}
+                disabled={busy}
+                onClick={() => pick(m.mode)}
+                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                  mode === m.mode
+                    ? m.mode === "courtesy"
+                      ? "bg-emerald-600 text-white"
+                      : m.mode === "paid"
+                        ? "bg-brand-600 text-white"
+                        : "bg-surface-700 text-white"
+                    : "text-surface-400 hover:text-white"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      {included ? (
-        <span className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-1 text-[11px] font-medium text-brand-300">Incluida</span>
-      ) : (
-        <button
-          type="button"
-          role="switch"
-          aria-checked={addon.enabled}
-          aria-label="API de catálogo"
-          disabled={busy}
-          onClick={() =>
-            void run(
-              () => catalogApiAdmin.adminSetAddon(tenantId, !addon.enabled),
-              addon.enabled ? "API de catálogo desactivada" : "API de catálogo activada"
-            )
-          }
-          className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${addon.enabled ? "bg-brand-500" : "bg-surface-700"}`}
-        >
-          <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${addon.enabled ? "translate-x-5" : ""}`} />
-        </button>
-      )}
     </div>
   );
 }
@@ -195,6 +222,9 @@ function CourtesyForm({ detail, tenantId, busy, run, why, reasonField }: FormPro
   const [plan, setPlan] = useState<TenantPlan>(detail.plan);
   const [until, setUntil] = useState(dateInput(detail.courtesy.until));
   const [nextBilling, setNextBilling] = useState(dateInput(detail.nextBillingAt ?? detail.dueAt) || today());
+  const apiNow = addonOf(detail);
+  // Con la cortesía del plan se puede regalar también la API (Custom ya la incluye).
+  const [withApi, setWithApi] = useState(apiNow.enabled && apiNow.courtesy);
 
   return (
     <>
@@ -214,13 +244,25 @@ function CourtesyForm({ detail, tenantId, busy, run, why, reasonField }: FormPro
         {reasonField}
       </div>
       <Hint>Sin cobro: el comercio ve su plan como activo{active && detail.courtesy.reason ? ` · Motivo actual: ${detail.courtesy.reason}` : ""}.</Hint>
+      {plan !== "CUSTOM" && (
+        <label className="flex items-center gap-2 text-xs text-surface-300">
+          <input type="checkbox" checked={withApi} onChange={(e) => setWithApi(e.target.checked)} className="accent-emerald-500" />
+          Incluir la API de catálogo de cortesía (sin los {formatUsd(CATALOG_API_ADDON_PRICE_USD)}/mes)
+        </label>
+      )}
       <div className="flex flex-wrap items-end gap-2">
         <button
           type="button"
           disabled={busy}
           onClick={() =>
             void run(
-              () => adminSubscriptionsApi.setCourtesy(tenantId, { plan, until: until ? toIso(until) : null, reason: why ?? detail.courtesy.reason ?? undefined }),
+              async () => {
+                const res = await adminSubscriptionsApi.setCourtesy(tenantId, { plan, until: until ? toIso(until) : null, reason: why ?? detail.courtesy.reason ?? undefined });
+                // La API de cortesía va aparte; destildarla solo saca la cortesía si la tenía.
+                if (plan !== "CUSTOM" && withApi) return catalogApiAdmin.adminSetAddon(tenantId, true, true);
+                if (plan !== "CUSTOM" && !withApi && apiNow.courtesy) return catalogApiAdmin.adminSetAddon(tenantId, false);
+                return res;
+              },
               active ? "Cortesía actualizada" : "Cortesía otorgada"
             )
           }

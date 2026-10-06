@@ -1,6 +1,6 @@
 import type { TenantType } from "@/lib/auth";
 
-const RETAILER_ONLY = ["/search", "/comparador", "/cart", "/presupuestos", "/proveedores", "/suscripcion"];
+const RETAILER_ONLY = ["/search", "/comparador", "/cart", "/presupuestos", "/proveedores", "/suscripcion", "/integracion-api"];
 const CLIENT_BRAND_PORTAL = ["/marcas", "/avisos"];
 const DISTRIBUTOR_ONLY = ["/clientes"];
 const BRAND_ONLY = ["/marca"];

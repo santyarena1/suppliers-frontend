@@ -89,6 +89,8 @@ export interface CatalogApiAddonView {
   includedInPlan: boolean;
   priceUsd: number;
   since: string | null;
+  /** Activo de cortesía: no se cobra. */
+  courtesy: boolean;
 }
 
 export interface AdminSubscriptionView extends SubscriptionView {
@@ -747,19 +749,27 @@ export class SubscriptionsService {
   }
 
   /** Cuota mensual: plan más los módulos activos. */
-  private totalOf(plan: TenantPlan, sub: Pick<SubscriptionRow, "priceOverride" | "catalogApiAddon"> | null): number {
+  private totalOf(
+    plan: TenantPlan,
+    sub: Pick<SubscriptionRow, "priceOverride" | "catalogApiAddon" | "catalogApiAddonCourtesy"> | null
+  ): number {
     return monthlyAmount(plan, sub?.priceOverride != null ? Number(sub.priceOverride) : null, {
-      catalogApi: Boolean(sub?.catalogApiAddon),
+      // De cortesía está activo pero no se cobra.
+      catalogApi: Boolean(sub?.catalogApiAddon) && !sub?.catalogApiAddonCourtesy,
     });
   }
 
-  private catalogApiAddonOf(plan: TenantPlan, sub: Pick<SubscriptionRow, "catalogApiAddon" | "catalogApiAddonSince"> | null): CatalogApiAddonView {
+  private catalogApiAddonOf(
+    plan: TenantPlan,
+    sub: Pick<SubscriptionRow, "catalogApiAddon" | "catalogApiAddonSince" | "catalogApiAddonCourtesy"> | null
+  ): CatalogApiAddonView {
     const included = planIncludesCatalogApi(plan);
     return {
       enabled: included || Boolean(sub?.catalogApiAddon),
       includedInPlan: included,
       priceUsd: CATALOG_API_ADDON_PRICE_USD,
       since: iso(sub?.catalogApiAddonSince),
+      courtesy: !included && Boolean(sub?.catalogApiAddon && sub?.catalogApiAddonCourtesy),
     };
   }
 
@@ -775,18 +785,29 @@ export class SubscriptionsService {
    * cuota pasa a ser plan + US$ 10). En Custom viene incluido: no cambia nada.
    * Apagarlo no borra las keys: dejan de responder hasta que se vuelva a prender.
    */
-  async setCatalogApiAddon(actor: SubscriptionActor, tenantId: string, enabled: boolean, opts: { fromTenant?: TenantContext } = {}) {
+  async setCatalogApiAddon(
+    actor: SubscriptionActor,
+    tenantId: string,
+    enabled: boolean,
+    opts: { fromTenant?: TenantContext; courtesy?: boolean } = {}
+  ) {
     const { tenantRow, sub } = await this.loadForWrite(tenantId);
     const plan = tenantRow.plan as TenantPlan;
     if (planIncludesCatalogApi(plan)) return this.catalogApiAddonOf(plan, sub);
-    if (sub.catalogApiAddon === enabled) return this.catalogApiAddonOf(plan, sub);
+    // La cortesía la decide Administración; el comercio al prender o apagar no la toca.
+    const courtesy = enabled ? (opts.courtesy ?? sub.catalogApiAddonCourtesy) : false;
+    if (sub.catalogApiAddon === enabled && sub.catalogApiAddonCourtesy === courtesy) return this.catalogApiAddonOf(plan, sub);
     const updated = await this.prisma.$transaction(async (tx) => {
       const row = await tx.subscription.update({
         where: { id: sub.id },
-        data: { catalogApiAddon: enabled, catalogApiAddonSince: enabled ? new Date() : null },
+        data: {
+          catalogApiAddon: enabled,
+          catalogApiAddonCourtesy: courtesy,
+          catalogApiAddonSince: enabled ? (sub.catalogApiAddon ? sub.catalogApiAddonSince : new Date()) : null,
+        },
       });
       await this.event(tx, sub, actor, enabled ? "ADDON_ENABLED" : "ADDON_DISABLED", {
-        data: { addon: "catalogApi", priceUsd: CATALOG_API_ADDON_PRICE_USD, monthly: this.totalOf(plan, row) },
+        data: { addon: "catalogApi", priceUsd: courtesy ? 0 : CATALOG_API_ADDON_PRICE_USD, courtesy, monthly: this.totalOf(plan, row) },
       });
       await this.audit(tx, actor, tenantId, enabled ? "SUBSCRIPTION_ADDON_ENABLED" : "SUBSCRIPTION_ADDON_DISABLED", { addon: "catalogApi" });
       return row;
@@ -799,7 +820,7 @@ export class SubscriptionsService {
         title: `${who.company} ${enabled ? "activó" : "desactivó"} la API de catálogo`,
         data: {
           Módulo: "API de catálogo",
-          Precio: `US$ ${CATALOG_API_ADDON_PRICE_USD}/mes`,
+          Precio: updated.catalogApiAddonCourtesy ? "De cortesía (sin cargo)" : `US$ ${CATALOG_API_ADDON_PRICE_USD}/mes`,
           "Cuota nueva": `US$ ${this.totalOf(plan, updated)}/mes`,
           Plan: TENANT_PLAN_LABELS[plan],
         },

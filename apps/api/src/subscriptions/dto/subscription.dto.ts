@@ -214,4 +214,9 @@ export class PaymentNoticeDto {
 export class CatalogApiAddonDto {
   @IsBoolean()
   enabled!: boolean;
+
+  /** Solo Administración: activo sin cargo (no suma a la cuota). */
+  @IsOptional()
+  @IsBoolean()
+  courtesy?: boolean;
 }

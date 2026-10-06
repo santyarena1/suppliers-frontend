@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, KeyRound, Plus, RefreshCw } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import AddonCard from "@/components/catalog-api/AddonCard";
+import CatalogApiShowcase from "@/components/catalog-api/CatalogApiShowcase";
 import ClientCard from "@/components/catalog-api/ClientCard";
 import CreateClientModal from "@/components/catalog-api/CreateClientModal";
 import QuickStart from "@/components/catalog-api/QuickStart";
@@ -27,6 +28,7 @@ export default function CatalogApiPage() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<{ client: ApiClientView; secret: string } | null>(null);
   const [showRevoked, setShowRevoked] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -86,7 +88,7 @@ export default function CatalogApiPage() {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div className="min-w-0">
-            <h1 className="text-base font-semibold text-white">API de catálogo</h1>
+            <h1 className="text-base font-semibold text-white">Integración API</h1>
             <p className="text-xs text-surface-500 hidden sm:block">Tu catálogo de NODO en tu tienda, tu ERP, Google y Meta</p>
           </div>
         </div>
@@ -119,7 +121,26 @@ export default function CatalogApiPage() {
             </div>
           ) : (
             <>
-              <AddonCard addon={data.addon} canManage={data.canManage} busy={addonBusy} onToggle={(v) => void toggleAddon(v)} />
+              {!enabled ? (
+                <CatalogApiShowcase
+                  included={data.addon.includedInPlan}
+                  canManage={data.canManage}
+                  docsUrl={docsUrl}
+                  activation={
+                    <AddonCard addon={data.addon} canManage={data.canManage} busy={addonBusy} onToggle={(v) => void toggleAddon(v)} />
+                  }
+                />
+              ) : (
+                <>
+                  <AddonCard addon={data.addon} canManage={data.canManage} busy={addonBusy} onToggle={(v) => void toggleAddon(v)} />
+                  <button type="button" onClick={() => setShowInfo((v) => !v)} className="self-start text-xs text-brand-300 hover:text-brand-200">
+                    {showInfo ? "Ocultar qué incluye" : "Ver todo lo que podés hacer y qué datos manda NODO"}
+                  </button>
+                  {showInfo && (
+                    <CatalogApiShowcase included={data.addon.includedInPlan} canManage={data.canManage} docsUrl={docsUrl} activation={null} />
+                  )}
+                </>
+              )}
 
               {enabled && (
                 <>
@@ -185,9 +206,7 @@ export default function CatalogApiPage() {
                 </>
               )}
 
-              {!enabled && (
-                <QuickStart baseUrl={baseUrl} docsUrl={docsUrl} />
-              )}
+
             </>
           )}
         </div>

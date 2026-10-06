@@ -33,7 +33,7 @@ export default function ModulesCard({ sub }: { sub: MySubscription }) {
   const enabled = !!addon?.enabled && !included;
   const price = addon?.priceUsd ?? CATALOG_API_ADDON_PRICE_USD;
   const fromApi = (sub as WithTotals).monthlyTotal;
-  const total = typeof fromApi === "number" ? fromApi : sub.price + (enabled ? price : 0);
+  const total = typeof fromApi === "number" ? fromApi : sub.price + (enabled && !addon?.courtesy ? price : 0);
 
   if (failed && !included) return null;
 
@@ -51,10 +51,10 @@ export default function ModulesCard({ sub }: { sub: MySubscription }) {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm tabular-nums text-surface-200">
-              {included ? "Incluida" : enabled ? `+${formatUsd(price)}/mes` : addon ? "No activa" : "…"}
+              {included ? "Incluida" : enabled ? (addon?.courtesy ? "De cortesía · sin cargo" : `+${formatUsd(price)}/mes`) : addon ? "No activa" : "…"}
             </span>
             <Link
-              href="/configuracion/api"
+              href="/integracion-api"
               className="inline-flex items-center gap-1 rounded-lg border border-surface-700 px-2.5 py-1.5 text-xs text-surface-200 hover:text-white hover:border-surface-500"
             >
               {included || enabled ? "Configurar" : `Activar · ${formatUsd(price)}/mes`}

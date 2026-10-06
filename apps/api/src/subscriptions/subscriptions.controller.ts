@@ -77,7 +77,7 @@ export class AdminSubscriptionsController {
 
   @Put(":tenantId/catalog-api-addon")
   async catalogApiAddon(@CurrentUser() user: JwtPayload, @Param("tenantId") tenantId: string, @Body() dto: CatalogApiAddonDto) {
-    await this.subscriptions.setCatalogApiAddon({ userId: user.userId }, tenantId, dto.enabled);
+    await this.subscriptions.setCatalogApiAddon({ userId: user.userId }, tenantId, dto.enabled, { courtesy: dto.courtesy });
     return this.subscriptions.adminDetail(tenantId);
   }
 

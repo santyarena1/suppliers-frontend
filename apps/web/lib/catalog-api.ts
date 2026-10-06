@@ -166,6 +166,8 @@ export interface CatalogApiAddonState {
   includedInPlan: boolean;
   priceUsd: number;
   since: string | null;
+  /** Activa sin cargo (cortesía de NODO): no suma a la cuota. */
+  courtesy?: boolean;
 }
 
 export interface CatalogApiOverview {

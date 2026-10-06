@@ -52,7 +52,7 @@ export default function AddonCard({
               </span>
             ) : addon.enabled ? (
               <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                <CheckCircle2 className="w-3 h-3" /> Activa
+                <CheckCircle2 className="w-3 h-3" /> {addon.courtesy ? "Activa · de cortesía" : "Activa"}
               </span>
             ) : (
               <span className="rounded-md border border-surface-700 bg-surface-800 px-1.5 py-0.5 text-[11px] font-medium text-surface-400">
@@ -65,7 +65,13 @@ export default function AddonCard({
             ficha completa, en una API con key y secret.
           </p>
         </div>
-        {!addon.includedInPlan && (
+        {!addon.includedInPlan && addon.courtesy && addon.enabled && (
+          <div className="flex-shrink-0 sm:text-right">
+            <p className="text-lg font-semibold text-emerald-300 leading-none">Sin cargo</p>
+            <p className="mt-1 text-[11px] text-surface-500">Te la regalamos: no se suma a tu mensualidad.</p>
+          </div>
+        )}
+        {!addon.includedInPlan && !(addon.courtesy && addon.enabled) && (
           <div className="flex-shrink-0 sm:text-right">
             <p className="text-2xl font-bold text-white tabular-nums leading-none">
               US$ {addon.priceUsd}

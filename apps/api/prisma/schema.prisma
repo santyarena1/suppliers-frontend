@@ -2247,6 +2247,8 @@ model Subscription {
   /// Módulo de API de catálogo (US$ 10/mes en Base y Pro; Custom lo trae incluido).
   catalogApiAddon      Boolean            @default(false)
   catalogApiAddonSince DateTime?
+  /// Módulo de API activo sin cargo (lo regala Administración): no suma a la cuota.
+  catalogApiAddonCourtesy Boolean           @default(false)
   /// Notas internas de Administración. El comercio no las ve.
   notes                String?
   createdAt            DateTime           @default(now())

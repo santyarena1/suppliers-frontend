@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, X } from "lucide-react";
+import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, Plug, X } from "lucide-react";
+import { useSubscription } from "@/lib/subscription";
 import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
 import { useChatUnread } from "@/lib/chat-unread";
 import { useCart } from "@/lib/cart";
@@ -402,6 +403,9 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
       </nav>
 
       <div className={`shrink-0 border-t border-surface-800 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${iconMode ? "px-2" : "px-3"}`}>
+        {tenant?.type === "RETAILER" && (
+          <ApiIntegrationLink active={pathname === "/integracion-api" || pathname.startsWith("/configuracion/api")} iconMode={iconMode} />
+        )}
         <button
           type="button"
           onClick={toggleCollapsed}
@@ -434,5 +438,40 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         </div>
       </div>
     </aside>
+  );
+}
+
+/**
+ * Integración API: a la vista de todos los comercios (lo tengan o no), abajo
+ * de todo y destacado. Lleva a la presentación del módulo o a su configuración.
+ */
+function ApiIntegrationLink({ active, iconMode }: { active: boolean; iconMode: boolean }) {
+  const { subscription } = useSubscription();
+  const caps = subscription?.capabilities as Record<string, unknown> | undefined;
+  const hasIt = caps?.catalogApi === true;
+  return (
+    <Link
+      href="/integracion-api"
+      title="Integración API"
+      className={`group relative mb-2 flex items-center rounded-lg border transition-colors ${
+        iconMode ? "justify-center p-2" : "gap-2.5 px-3 py-2"
+      } ${
+        active
+          ? "border-brand-500/60 bg-brand-600/15 text-white"
+          : "border-brand-500/25 bg-gradient-to-r from-brand-600/15 to-transparent text-surface-100 hover:border-brand-400/50 hover:text-white"
+      }`}
+    >
+      <Plug className="w-4 h-4 flex-shrink-0 text-brand-300" />
+      {!iconMode && <span className="whitespace-nowrap text-[13px] font-medium">Integración API</span>}
+      {!hasIt && (
+        <span
+          className={`rounded-full bg-brand-500 text-[9px] font-bold uppercase tracking-wide text-white ${
+            iconMode ? "absolute -right-1 -top-1 h-2.5 w-2.5" : "ml-auto px-1 py-px text-[8px]"
+          }`}
+        >
+          {iconMode ? "" : "Nuevo"}
+        </span>
+      )}
+    </Link>
   );
 }
