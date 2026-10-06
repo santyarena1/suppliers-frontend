@@ -175,6 +175,7 @@ export default function CatalogApiShowcase({
         ))}
       </section>
 
+      {activation != null && (
       <section id="activar" className="scroll-mt-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
           <Store className="w-4 h-4 text-brand-300" /> {included ? "Tu plan lo incluye" : "Cuánto cuesta"}
@@ -188,6 +189,7 @@ export default function CatalogApiShowcase({
         )}
         <div className="mt-3">{activation}</div>
       </section>
+      )}
     </div>
   );
 }

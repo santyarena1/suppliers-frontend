@@ -28,7 +28,6 @@ export default function CatalogApiPage() {
   const [creating, setCreating] = useState(false);
   const [created, setCreated] = useState<{ client: ApiClientView; secret: string } | null>(null);
   const [showRevoked, setShowRevoked] = useState(false);
-  const [showInfo, setShowInfo] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -133,12 +132,6 @@ export default function CatalogApiPage() {
               ) : (
                 <>
                   <AddonCard addon={data.addon} canManage={data.canManage} busy={addonBusy} onToggle={(v) => void toggleAddon(v)} />
-                  <button type="button" onClick={() => setShowInfo((v) => !v)} className="self-start text-xs text-brand-300 hover:text-brand-200">
-                    {showInfo ? "Ocultar qué incluye" : "Ver todo lo que podés hacer y qué datos manda NODO"}
-                  </button>
-                  {showInfo && (
-                    <CatalogApiShowcase included={data.addon.includedInPlan} canManage={data.canManage} docsUrl={docsUrl} activation={null} />
-                  )}
                 </>
               )}
 
@@ -203,6 +196,11 @@ export default function CatalogApiPage() {
                   </section>
 
                   <QuickStart baseUrl={baseUrl} docsUrl={docsUrl} publicKey={active[0]?.publicKey} />
+
+                  {/* Qué incluye el módulo: siempre a la vista, debajo de las keys y los ejemplos. */}
+                  <div className="border-t border-surface-800 pt-6">
+                    <CatalogApiShowcase included={data.addon.includedInPlan} canManage={data.canManage} docsUrl={docsUrl} activation={null} />
+                  </div>
                 </>
               )}
 
