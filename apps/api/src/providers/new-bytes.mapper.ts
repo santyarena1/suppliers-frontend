@@ -212,11 +212,39 @@ export interface NbOrderItem {
   code?: string;
   name: string;
   qty?: number;
+  /** Precio unitario neto (USD). */
   price?: number;
+  /** Precio unitario final, con IVA e internos (USD). */
+  finalPrice?: number;
   total?: number;
   iva?: number;
   ivaPercent?: number;
+  internalTaxPercent?: number;
   perception?: number;
+  /** Estado de la línea en una orden de compra (mismo código que la orden). */
+  status?: string;
+}
+
+/** Un paso del seguimiento de una orden de compra (GET …/{sucursal}/{número}/tracking). */
+export interface NbTrackingStep {
+  state: string;
+  branch?: string;
+  address?: string;
+  date?: string;
+}
+
+/**
+ * Estado de una orden de compra: New Bytes solo manda un número y lo muestra
+ * como un círculo de color (1 verde, 2 amarillo, 0 rojo), sin texto.
+ */
+export type NbStatusColor = "green" | "yellow" | "red";
+
+export function nbStatusColor(raw: unknown): NbStatusColor | undefined {
+  const v = raw == null ? "" : String(raw).trim();
+  if (v === "1") return "green";
+  if (v === "2") return "yellow";
+  if (v === "0") return "red";
+  return undefined;
 }
 
 export interface NbOrderRow {
@@ -245,6 +273,12 @@ export interface NbOrderRow {
   totalUsd?: number;
   totalArs?: number;
   exchangeRate?: number;
+  /** Quién la cargó en el portal (órdenes de compra). */
+  userName?: string;
+  statusColor?: NbStatusColor;
+  /** La orden tiene comprobantes de pago cargados. */
+  hasPaymentVoucher?: boolean;
+  tracking?: NbTrackingStep[];
   [key: string]: unknown;
 }
 
@@ -340,6 +374,7 @@ export function parseNbOrderItems(raw: unknown): NbOrderItem[] {
     const item = asRecord(row) ?? {};
     const product = asRecord(item.product) ?? item;
     const code = asString(item.productId)
+      || asString(item.itemId)
       || asString(product.id)
       || asString(item.sku)
       || asString(product.sku)
@@ -358,6 +393,9 @@ export function parseNbOrderItems(raw: unknown): NbOrderItem[] {
       ?? (price != null && qty != null ? price * qty : undefined);
     const priceObj = asRecord(product.price) ?? asRecord(item.price);
     const ivaPercent = asNumber(priceObj?.iva) ?? asNumber(item.ivaPercent);
+    const internalTaxPercent = asNumber(priceObj?.internalTax);
+    const finalPrice = asNumber(priceObj?.finalPrice);
+    const lineStatus = item.status != null ? String(item.status) : undefined;
     const perception = asNumber(priceObj?.percepcion) ?? asNumber(item.percepcion) ?? asNumber(item.perception);
     const lineNet = total ?? ((price != null && qty != null) ? price * qty : undefined);
     const iva = lineNet != null && ivaPercent != null
@@ -369,9 +407,12 @@ export function parseNbOrderItems(raw: unknown): NbOrderItem[] {
       qty,
       price,
       total,
+      ...(finalPrice != null ? { finalPrice: Math.round(finalPrice * 10000) / 10000 } : {}),
       ...(ivaPercent != null ? { ivaPercent } : {}),
       ...(iva != null ? { iva } : {}),
-      ...(perception != null ? { perception } : {}),
+      ...(internalTaxPercent ? { internalTaxPercent } : {}),
+      ...(perception ? { perception } : {}),
+      ...(lineStatus != null ? { status: lineStatus } : {}),
     };
   }).filter((it) => it.name);
 }
@@ -382,7 +423,7 @@ function extraOrderFields(rec: Record<string, unknown>): Partial<NbOrderRow> {
   const quote = asNumber(asRecord(rec.subtotal)?.currencyQuote) ?? asNumber(rec.currencyQuote) ?? asNumber(rec.cotizacion);
   const notes = asString(rec.note) || asString(rec.notes) || asString(rec.observaciones) || asString(rec.comentario);
   const payment = pickNbLabel(rec.paymentDescription ?? rec.medioDePago ?? rec.payMethod ?? rec.payment);
-  const delivery = pickNbLabel(rec.shippingDescription ?? rec.medioDeEnvio ?? rec.delivery ?? rec.envio ?? rec.shipping);
+  const delivery = pickNbLabel(rec.deliveryMethodDescription ?? rec.shippingDescription ?? rec.medioDeEnvio ?? rec.delivery ?? rec.envio ?? rec.shipping);
   const address = formatNbAddressLine(rec.shippingAddress ?? rec.address ?? rec.direccion ?? rec.destino);
   const drop = rec.dropShipping;
   return {
@@ -397,8 +438,11 @@ function extraOrderFields(rec: Record<string, unknown>): Partial<NbOrderRow> {
     perceptions: subs.perceptions,
     perceptionLabel: subs.perceptions != null ? subs.perceptionLabel : undefined,
     totalUsd: subs.totalUsd,
-    exchangeRate: quote,
-    totalArs: subs.totalUsd != null && quote != null ? subs.totalUsd * quote : undefined,
+    exchangeRate: quote ?? subs.exchangeRate,
+    // Los pesos que informó New Bytes; si no vinieron, USD × su cotización.
+    totalArs: subs.totalArs ?? (subs.totalUsd != null && quote != null ? subs.totalUsd * quote : undefined),
+    userName: asString(rec.userName),
+    hasPaymentVoucher: rec.paymentVoucher === true ? true : undefined,
   };
 }
 
@@ -407,7 +451,9 @@ export function normalizeOrderRow(raw: unknown): NbOrderRow {
   const orderNumber = asString(rec.orderNumber) || asString(rec.orderId) || asString(rec.id);
   const albNumber = asString(rec.albNumber);
   const branch = asString(rec.branch);
-  const status = asString(rec.statusDescription) || asString(rec.status) || asString(rec.estado) || "";
+  const statusText = asString(rec.statusDescription) || asString(rec.estado);
+  const statusColor = statusText ? undefined : nbStatusColor(rec.status);
+  const status = statusText || (statusColor ? "" : asString(rec.status)) || "";
   const date = asString(rec.date) || asString(rec.fecha) || asString(rec.createdAt) || "";
   const amount = rec.amount ?? rec.total ?? rec.importe;
   const extra = extraOrderFields(rec);
@@ -423,8 +469,24 @@ export function normalizeOrderRow(raw: unknown): NbOrderRow {
     clientName: asString(rec.clientName),
     trackingNumber: asString(rec.trackingNumber),
     invoice: asString(rec.invoice),
+    ...(statusColor ? { statusColor } : {}),
     ...extra,
   };
+}
+
+/** Pasos del seguimiento. New Bytes escribe la sucursal como `brach`. */
+export function parseNbTracking(raw: unknown): NbTrackingStep[] {
+  return unwrapNbList(raw)
+    .map((row) => {
+      const rec = asRecord(row) ?? {};
+      return {
+        state: asString(rec.state) || asString(rec.estado) || "",
+        branch: asString(rec.branch) || asString(rec.brach),
+        address: asString(rec.address),
+        date: asString(rec.date),
+      };
+    })
+    .filter((step) => step.state);
 }
 
 export function normalizeOrderDetail(raw: unknown): NbOrderRow {
@@ -556,6 +618,9 @@ export interface NbDatosBultos {
 export interface NbSubtotales {
   subtotalUsd?: number;
   totalUsd?: number;
+  /** Total en pesos tal como lo informó New Bytes. */
+  totalArs?: number;
+  exchangeRate?: number;
   iva?: number;
   perceptions?: number;
   perceptionLabel: string;
@@ -649,11 +714,22 @@ export function parseNbSubtotales(body: unknown): NbSubtotales {
   const nested = asRecord(rec.subtotal) ?? rec;
   const iibb = asNumber(nested.perceptionsIIBB);
   const generic = asNumber(nested.perceptions);
+  // Checkout: subTotalDollar. Listado de pedidos: subtotalDollar. GET …/total: SubtotalDollar.
+  const pick = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = asNumber(nested[key]);
+      if (value != null) return value;
+    }
+    return undefined;
+  };
+  const listPerception = pick("perception");
   return {
-    subtotalUsd: asNumber(nested.subTotalDollar) ?? asNumber(nested.subTotal),
-    totalUsd: asNumber(nested.subTotalDollarFinal) ?? asNumber(nested.subTotalFinal) ?? asNumber(nested.subTotalDollar),
+    subtotalUsd: pick("subTotalDollar", "subtotalDollar", "SubtotalDollar", "subTotal"),
+    totalUsd: pick("subTotalDollarFinal", "subtotalDollarFinal", "SubtotalDollarFinal", "subTotalFinal", "subTotalDollar", "subtotalDollar"),
+    totalArs: pick("subTotalPesosArFinal", "SubtotalPesosArFinal"),
+    exchangeRate: pick("currencyQuote", "Cotizacion"),
     iva: asNumber(nested.iva) ?? asNumber(nested.IVA),
-    perceptions: iibb ?? generic,
+    perceptions: iibb ?? generic ?? (listPerception ? listPerception : undefined),
     perceptionLabel: iibb != null ? "IIBB" : "Percepciones",
     raw: rec,
   };

@@ -1949,11 +1949,16 @@ export interface NewBytesOrder {
     code?: string;
     name: string;
     qty?: number;
+    /** Precio unitario neto (USD). */
     price?: number;
+    /** Precio unitario final, con IVA e internos (USD). */
+    finalPrice?: number;
     total?: number;
     iva?: number;
     ivaPercent?: number;
+    internalTaxPercent?: number;
     perception?: number;
+    status?: string;
   }[];
   subtotalUsd?: number;
   iva?: number;
@@ -1962,6 +1967,12 @@ export interface NewBytesOrder {
   totalUsd?: number;
   totalArs?: number;
   exchangeRate?: number;
+  /** Quién la cargó en el portal (órdenes de compra). */
+  userName?: string;
+  /** Las órdenes de compra solo traen un color de estado (1 verde, 2 amarillo, 0 rojo). */
+  statusColor?: "green" | "yellow" | "red";
+  hasPaymentVoucher?: boolean;
+  tracking?: { state: string; branch?: string; address?: string; date?: string }[];
 }
 export interface NewBytesComprobante {
   voucherId?: string | number;
@@ -2111,10 +2122,15 @@ export const newBytesAccountApi = {
       "/providers/NEW_BYTES/account-statement",
       { params: opts?.refresh ? { refresh: 1 } : undefined }
     ),
-  orderDetail: (id: string, opts?: { kind?: "orders" | "purchase" }) =>
+  orderDetail: (id: string, opts?: { kind?: "orders" | "purchase"; branch?: string | number }) =>
     api.get<NewBytesOrder & { found: boolean }>(
       `/providers/NEW_BYTES/orders/${encodeURIComponent(id)}`,
-      { params: opts?.kind ? { kind: opts.kind } : undefined }
+      {
+        params: {
+          ...(opts?.kind ? { kind: opts.kind } : {}),
+          ...(opts?.branch != null && String(opts.branch) !== "" ? { branch: String(opts.branch) } : {}),
+        },
+      }
     ),
 };
 

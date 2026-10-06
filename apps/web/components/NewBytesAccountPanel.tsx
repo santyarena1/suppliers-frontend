@@ -14,7 +14,7 @@ import { Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton, type AccountDetailDoc } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
-import { mergeNbOrder, nbOrderAmountLines, nbOrderHeaderLines, nbOrderItems } from "@/components/account/nbOrderDetail";
+import { mergeNbOrder, nbOrderAmountLines, nbOrderHeaderLines, nbOrderItems, nbStatusLabel, nbTrackingLines } from "@/components/account/nbOrderDetail";
 import { splitLumpVat, taxBreakdownLines } from "@/components/account/accountTaxBreakdown";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import { nbCtaSummary, nbCtaSummaryCards } from "@/components/account/nbCtaSummary";
@@ -82,7 +82,7 @@ export default function NewBytesAccountPanel() {
     if (!id || (detail.row.items && detail.row.items.length > 0)) return;
     let cancelled = false;
     setOrderLoading(true);
-    void newBytesAccountApi.orderDetail(id, { kind })
+    void newBytesAccountApi.orderDetail(id, { kind, branch: detail.row.branch })
       .then((res) => {
         if (cancelled || res.data.found === false) return;
         setOrderFull((prev) => mergeNbOrder(prev ?? detail.row, res.data));
@@ -325,13 +325,14 @@ export default function NewBytesAccountPanel() {
         <AccountRowDetail
           open
           title={`${detail.title} ${openOrder.orderNumber || openOrder.albNumber || ""}`.trim()}
+          extra={<NbTracking order={openOrder} />}
           lines={nbOrderHeaderLines(openOrder)}
           items={nbOrderItems(openOrder)}
           totals={openAmounts.lines}
           note={[
             orderLoading ? "Cargando ítems del portal…" : "",
             !orderLoading && !(openOrder.items && openOrder.items.length)
-              ? "New Bytes no trajo productos en este pedido. El listado a veces solo manda el encabezado."
+              ? "New Bytes no devolvió los productos de este pedido."
               : "",
             ...openAmounts.notes,
           ].filter(Boolean).join(" ")}
@@ -469,6 +470,33 @@ function DraftsTable({ drafts, onOpen }: { drafts: NewBytesNodoDraft[]; onOpen: 
   );
 }
 
+/** Mismo color que muestra New Bytes en sus órdenes de compra. */
+const STATUS_DOT: Record<NonNullable<NewBytesOrder["statusColor"]>, string> = {
+  green: "bg-emerald-500",
+  yellow: "bg-amber-400",
+  red: "bg-red-500",
+};
+
+/** Seguimiento del envío de una orden de compra. */
+function NbTracking({ order }: { order: NewBytesOrder }) {
+  const steps = nbTrackingLines(order);
+  if (steps.length === 0) return null;
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-surface-500 mb-2">Seguimiento del envío</p>
+      <ol className="relative border-l border-surface-700 ml-1.5 space-y-3">
+        {steps.map((step, i) => (
+          <li key={i} className="pl-4">
+            <span className={`absolute -left-[5px] mt-1 h-2.5 w-2.5 rounded-full ${i === 0 ? "bg-brand-500" : "bg-surface-600"}`} aria-hidden />
+            <p className={`text-sm ${i === 0 ? "text-white font-medium" : "text-surface-300"}`}>{step.value}</p>
+            <p className="text-[11px] text-surface-500">{step.label}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function OrdersTable({
   rows,
   numberKey,
@@ -487,7 +515,7 @@ function OrdersTable({
             <th className="text-left font-semibold px-2 py-2">Sucursal</th>
             <th className="text-left font-semibold px-2 py-2">Estado</th>
             <th className="text-left font-semibold px-2 py-2">Fecha</th>
-            <th className="text-right font-semibold px-2 py-2">Importe</th>
+            <th className="text-right font-semibold px-2 py-2">Total</th>
             <th></th>
           </tr>
         </thead>
@@ -499,6 +527,13 @@ function OrdersTable({
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.branch ?? "—"}</td>
               <td className="px-2 py-2">
+                {o.statusColor ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-surface-400" title={nbStatusLabel(o.statusColor)}>
+                    <span className={`h-2.5 w-2.5 rounded-full ${STATUS_DOT[o.statusColor]}`} aria-hidden />
+                    <span className="sr-only">{nbStatusLabel(o.statusColor)}</span>
+                    {o.delivery ? <span className="truncate max-w-[12rem]">{o.delivery}</span> : null}
+                  </span>
+                ) : (
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                   /cerrad|entreg|factur|complet/i.test(o.status ?? "")
                     ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
@@ -506,9 +541,21 @@ function OrdersTable({
                       ? "bg-red-500/10 text-red-400"
                       : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
                 }`}>{o.status || "—"}</span>
+                )}
               </td>
               <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date || "—"}</td>
-              <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount ?? "—"}</td>
+              <td className="px-2 py-2 text-right tabular-nums text-surface-200">
+                {o.totalUsd != null ? (
+                  <>
+                    {formatAccountSum(o.totalUsd, "USD")}
+                    {o.totalArs != null && (
+                      <span className="block text-[11px] text-surface-500">{formatAccountSum(o.totalArs, "ARS")}</span>
+                    )}
+                  </>
+                ) : (
+                  o.amount ?? "—"
+                )}
+              </td>
               <td className="px-2 py-2 text-right"><VerMasButton onClick={() => onOpen(o)} /></td>
             </tr>
           ))}

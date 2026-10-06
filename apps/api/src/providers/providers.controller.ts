@@ -290,9 +290,10 @@ export class ProvidersController {
   async newBytesOrderDetail(
     @CurrentTenant() tenant: TenantContext,
     @Param("id") id: string,
-    @Query("kind") kind?: string
+    @Query("kind") kind?: string,
+    @Query("branch") branch?: string
   ) {
-    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(tenant), id, kind);
+    return this.newBytesAccountService.getOrderDetail(await this.newBytesCredentials(tenant), id, kind, branch);
   }
 
   @RequiresCapability("directCheckout")

@@ -22,14 +22,16 @@ export function nbOrderHeaderLines(row: NewBytesOrder): AccountDetailLine[] {
     { label: "N°", value: String(row.orderNumber || row.albNumber || "") },
     { label: "Pedido web", value: row.webOrderNumber || "" },
     { label: "Sucursal", value: row.branch != null ? String(row.branch) : "" },
-    { label: "Estado", value: row.status || "" },
+    { label: "Estado", value: row.status || nbStatusLabel(row.statusColor) },
     { label: "Detalle estado", value: row.statusDescription && row.statusDescription !== row.status ? row.statusDescription : "" },
     { label: "Fecha", value: row.date || "" },
     { label: "Cliente", value: row.clientName || "" },
+    { label: "Cargada por", value: row.userName || "" },
     { label: "Pago", value: row.payment || "" },
     { label: "Entrega", value: row.delivery || "" },
     { label: "Dirección", value: row.address || "" },
-    { label: "Tracking", value: row.trackingNumber || "" },
+    { label: "Número de envío", value: row.trackingNumber || "" },
+    { label: "Comprobante de pago", value: row.hasPaymentVoucher ? "Cargado en New Bytes" : "" },
     { label: "Factura", value: row.invoice || "" },
     { label: "Dropshipping", value: row.dropShipping === true ? "Sí" : "" },
     { label: "Notas", value: row.notes || "" },
@@ -43,6 +45,24 @@ export function nbOrderItems(row: NewBytesOrder): AccountDetailItem[] {
     qty: it.qty,
     price: it.price != null ? fmtUsd(it.price) : "",
     total: it.total != null ? fmtUsd(it.total) : "",
+    iva: it.ivaPercent != null ? `${it.ivaPercent.toLocaleString("es-AR")}%` : undefined,
+    badge: it.internalTaxPercent ? `Internos ${it.internalTaxPercent.toLocaleString("es-AR")}%` : undefined,
+  }));
+}
+
+/** New Bytes no pone texto en el estado de una orden de compra: solo el color. */
+export function nbStatusLabel(color: NewBytesOrder["statusColor"]): string {
+  if (color === "green") return "Verde (así la marca New Bytes)";
+  if (color === "yellow") return "Amarilla (así la marca New Bytes)";
+  if (color === "red") return "Roja (así la marca New Bytes)";
+  return "";
+}
+
+/** Seguimiento del envío, del más reciente al más viejo. */
+export function nbTrackingLines(row: NewBytesOrder): AccountDetailLine[] {
+  return [...(row.tracking ?? [])].reverse().map((step) => ({
+    label: step.date || "Sin fecha",
+    value: [step.state, step.branch, step.address].filter(Boolean).join(" · "),
   }));
 }
 

@@ -8,8 +8,10 @@ import {
 } from "./new-bytes-client";
 import {
   normalizeComprobante,
-  normalizeOrderDetail,
   normalizeOrderRow,
+  parseNbOrderItems,
+  parseNbSubtotales,
+  parseNbTracking,
   pickBalanceFromClient,
   type NbComprobanteRow,
   type NbOrderRow,
@@ -105,22 +107,51 @@ export class NewBytesAccountService {
     return documentFile(file.buffer, file.contentType, `comprobante-${voucherId}`);
   }
 
-  async getOrderDetail(credentials: Record<string, string>, id: string, kind?: string) {
-    if (!id?.trim()) throw new BadRequestException("Falta id");
+  /**
+   * Detalle de un pedido o una orden de compra, como lo arma www.nb.com.ar:
+   * - pedido: GET miCuenta/pedidos/{sucursal}/{albarán} → líneas con producto,
+   *   cantidad y precio (neto, % IVA, % internos, final).
+   * - orden de compra: GET miCuenta/ordenesDeCompra/{sucursal}/{número} (líneas),
+   *   …/tracking (seguimiento) y …/total (cotización y totales en USD y pesos).
+   * El encabezado (estado, fecha, envío, usuario) sale de la fila del listado.
+   * Sin sucursal se busca la fila en el listado para conocerla.
+   */
+  async getOrderDetail(credentials: Record<string, string>, id: string, kind?: string, branch?: string) {
+    const number = id?.trim();
+    if (!number) throw new BadRequestException("Falta id");
     const api = await this.client(credentials);
-    const encoded = encodeURIComponent(id.trim());
-    const purchaseFirst = kind === "purchase";
-    const paths = purchaseFirst
-      ? [`miCuenta/ordenesDeCompra/${encoded}`, `miCuenta/pedidos/${encoded}`]
-      : [`miCuenta/pedidos/${encoded}`, `miCuenta/ordenesDeCompra/${encoded}`];
-    for (const path of paths) {
-      try {
-        const body = await api.get(path);
-        return { found: true as const, ...normalizeOrderDetail(body) };
-      } catch {
-        /* probar el otro recurso */
-      }
-    }
-    return { found: false as const };
+    const purchase = kind === "purchase";
+    const resource = purchase ? "miCuenta/ordenesDeCompra" : "miCuenta/pedidos";
+
+    // La web ya tiene la fila del listado y manda la sucursal; si no, se busca.
+    const header = branch?.trim()
+      ? undefined
+      : (await api.paginate(resource, 20, 200)).map(normalizeOrderRow).find((row) =>
+          purchase ? row.orderNumber === number : row.albNumber === number || row.orderNumber === number
+        );
+    const sucursal = branch?.trim() || (header?.branch != null ? String(header.branch) : "");
+    if (!sucursal) return { found: false as const };
+
+    const base = `${resource}/${encodeURIComponent(sucursal)}/${encodeURIComponent(number)}`;
+    const [linesBody, trackingBody, totalBody] = await Promise.all([
+      api.get(base).catch(() => null),
+      purchase ? api.get(`${base}/tracking`).catch(() => null) : Promise.resolve(null),
+      purchase ? api.get(`${base}/total`).catch(() => null) : Promise.resolve(null),
+    ]);
+    if (linesBody == null && !header) return { found: false as const };
+
+    const items = linesBody != null ? parseNbOrderItems(linesBody) : [];
+    const total = totalBody != null ? parseNbSubtotales(totalBody) : null;
+    const detail: NbOrderRow = {
+      ...(header ?? { orderNumber: number, branch: sucursal }),
+      ...(items.length > 0 ? { items } : {}),
+      ...(trackingBody != null && parseNbTracking(trackingBody).length > 0 ? { tracking: parseNbTracking(trackingBody) } : {}),
+      // El total de la orden pisa el del listado: es el que New Bytes calcula al abrirla.
+      ...(total?.subtotalUsd != null ? { subtotalUsd: total.subtotalUsd } : {}),
+      ...(total?.totalUsd != null ? { totalUsd: total.totalUsd } : {}),
+      ...(total?.totalArs != null ? { totalArs: total.totalArs } : {}),
+      ...(total?.exchangeRate != null ? { exchangeRate: total.exchangeRate } : {}),
+    };
+    return { found: true as const, ...detail };
   }
 }
