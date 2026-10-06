@@ -875,6 +875,7 @@ export class OnboardingService {
       if (step.requiresTenant && !opts.hasTenant) return false;
       if (step.roles && opts.role && !step.roles.includes(opts.role)) return false;
       if (step.capability && !capabilities[step.capability]) return false;
+      if (step.costSensitive && opts.role === "SELLER" && capabilities.sellerMode) return false;
       return true;
     });
   }

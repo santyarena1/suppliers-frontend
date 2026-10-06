@@ -417,6 +417,9 @@ export type OnboardingStepId =
   | "provider-config"
   | "provider-catalog"
   | "providers-stats"
+  | "sale-margins"
+  | "seller-view"
+  | "quotes"
   | "team"
   | "done";
 

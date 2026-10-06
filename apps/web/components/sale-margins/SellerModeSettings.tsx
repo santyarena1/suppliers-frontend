@@ -21,7 +21,7 @@ export default function SellerModeSettings() {
   const marginsHref = firstProvider ? `/proveedores/${encodeURIComponent(firstProvider)}?tab=margins` : "/proveedores";
 
   return (
-    <section className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
+    <section data-tour="seller-mode" className="bg-surface-900 border border-surface-800 rounded-2xl p-5">
       <div className="flex items-center gap-2 mb-1">
         <Tag className="w-4 h-4 text-emerald-400" />
         <h2 className="text-sm font-semibold text-white">Modo vendedor</h2>
@@ -34,6 +34,7 @@ export default function SellerModeSettings() {
       <button
         type="button"
         role="switch"
+        data-tour="seller-view-toggle"
         aria-checked={viewAsSeller}
         disabled={!seller.canPreviewAsSeller}
         onClick={() => setViewAsSeller(!viewAsSeller)}

@@ -275,6 +275,14 @@ export const PLAN_FEATURE_GROUPS: PlanFeatureGroup[] = [
     ],
   },
   {
+    title: "Modo vendedor y presupuestos",
+    rows: [
+      { label: "Márgenes de venta por distribuidor, categoría y producto", values: fromPro() },
+      { label: "Vendedores que ven solo el precio de venta", values: fromPro() },
+      { label: "Presupuestos para clientes (WhatsApp, impresión, pasar a compra)", values: fromPro() },
+    ],
+  },
+  {
     title: "Portales de proveedores",
     rows: [{ label: "Integración con portales y APIs", values: fromPro() }],
   },

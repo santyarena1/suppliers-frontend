@@ -150,12 +150,17 @@ interface QuotesContextValue {
   loaded: boolean;
   /** Presupuestos activos (no archivados) de quien está logueado. */
   mine: Quote[];
+  /**
+   * Presupuesto al que va lo que se agrega. Para el vendedor es la ficha
+   * resaltada de la burbuja; para el resto, el que eligió seguir armando.
+   */
   active: Quote | null;
   setActive: (id: string | null) => void;
   /** Último producto agregado (para el aviso en la ficha flotante). */
   lastAdded: { quoteId: string; name: string; at: number } | null;
   create: (data?: QuoteClientPatch) => Promise<Quote>;
-  add: (product: { provider: string; externalId: string; name?: string }, qty?: number) => Promise<Quote>;
+  /** Agrega al presupuesto `quoteId` (y lo deja activo), al activo, o crea uno nuevo. */
+  add: (product: { provider: string; externalId: string; name?: string }, qty?: number, quoteId?: string) => Promise<Quote>;
   setQty: (id: string, index: number, qty: number) => Promise<void>;
   removeItem: (id: string, index: number) => Promise<void>;
   updateClient: (id: string, data: QuoteClientPatch) => Promise<void>;
@@ -170,29 +175,35 @@ interface QuotesContextValue {
 
 const QuotesContext = createContext<QuotesContextValue | null>(null);
 
-const activeKey = (userId: string) => `nodo.quote.active:${userId}`;
+/**
+ * El vendedor guarda la ficha activa de la burbuja; quien compra, el presupuesto
+ * que eligió seguir armando. Son claves distintas: al dejar de ver la app como
+ * vendedor no aparece una barra de "armando" que nadie pidió.
+ */
+const activeKey = (userId: string, seller: boolean) =>
+  seller ? `nodo.quote.active:${userId}` : `nodo.quote.building:${userId}`;
 
-function readActive(userId: string | undefined): string | null {
+function readActive(userId: string | undefined, seller: boolean): string | null {
   if (!userId) return null;
   try {
-    return localStorage.getItem(activeKey(userId));
+    return localStorage.getItem(activeKey(userId, seller));
   } catch {
     return null;
   }
 }
 
-function writeActive(userId: string | undefined, id: string | null) {
+function writeActive(userId: string | undefined, seller: boolean, id: string | null) {
   if (!userId) return;
   try {
-    if (id) localStorage.setItem(activeKey(userId), id);
-    else localStorage.removeItem(activeKey(userId));
+    if (id) localStorage.setItem(activeKey(userId, seller), id);
+    else localStorage.removeItem(activeKey(userId, seller));
   } catch {
     /* sin storage: el activo vive en memoria */
   }
 }
 
 export function QuotesProvider({ children }: { children: React.ReactNode }) {
-  const { sellerMode } = useSellerSession();
+  const { sellerMode, isSeller } = useSellerSession();
   const userId = getUser()?.id;
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -214,9 +225,12 @@ export function QuotesProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setQuotes([]);
     setLoaded(false);
-    setActiveId(readActive(userId));
     if (sellerMode) void reload().catch(() => undefined);
   }, [sellerMode, userId, reload]);
+
+  useEffect(() => {
+    setActiveId(readActive(userId, isSeller));
+  }, [userId, isSeller]);
 
   const mine = useMemo(() => quotes.filter((q) => q.mine && !q.archivedAt), [quotes]);
   const active = useMemo(() => mine.find((q) => q.id === activeId) ?? null, [mine, activeId]);
@@ -224,9 +238,9 @@ export function QuotesProvider({ children }: { children: React.ReactNode }) {
   const setActive = useCallback(
     (id: string | null) => {
       setActiveId(id);
-      writeActive(userId, id);
+      writeActive(userId, isSeller, id);
     },
-    [userId]
+    [userId, isSeller]
   );
 
   const upsert = useCallback((q: Quote) => {
@@ -255,8 +269,9 @@ export function QuotesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const add = useCallback(
-    async (product: { provider: string; externalId: string; name?: string }, qty = 1) => {
-      let target = active;
+    async (product: { provider: string; externalId: string; name?: string }, qty = 1, quoteId?: string) => {
+      let target: Pick<Quote, "id"> | null = quoteId ? { id: quoteId } : active;
+      if (quoteId) setActive(quoteId);
       if (!target) {
         pendingCreate.current ??= create().finally(() => {
           pendingCreate.current = null;
@@ -268,7 +283,7 @@ export function QuotesProvider({ children }: { children: React.ReactNode }) {
       setLastAdded({ quoteId: q.id, name: product.name ?? "Producto", at: Date.now() });
       return q;
     },
-    [active, create, upsert]
+    [active, create, upsert, setActive]
   );
 
   const setQty = useCallback(

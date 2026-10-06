@@ -19,6 +19,7 @@ import AnnouncementGate from "../announcements/AnnouncementGate";
 import { SellerPreviewBar } from "../sale-margins/SellerModeSettings";
 import { QuotesProvider } from "@/lib/quotes";
 import QuoteFloat from "../quotes/QuoteFloat";
+import QuoteBuildingBar from "../quotes/QuoteBuildingBar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -58,6 +59,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <CartFloat />
           <QuoteFloat />
+          <QuoteBuildingBar />
           <AnnouncementGate />
           <SellerPreviewBar />
         </QuotesProvider>

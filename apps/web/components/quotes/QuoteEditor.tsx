@@ -33,11 +33,14 @@ export default function QuoteEditor({
   compact = false,
   onChanged,
   onRemoved,
+  onAddProducts,
 }: {
   quote: Quote;
   compact?: boolean;
   onChanged?: (q: Quote) => void;
   onRemoved?: (id: string) => void;
+  /** Lleva a la búsqueda con este presupuesto como destino (página de presupuestos). */
+  onAddProducts?: () => void;
 }) {
   const quotes = useQuotes();
   const cart = useCart();
@@ -170,10 +173,22 @@ export default function QuoteEditor({
 
       <div className={`min-h-0 flex-1 overflow-y-auto ${compact ? "max-h-[min(38dvh,20rem)]" : ""}`}>
         {empty ? (
-          <p className="px-4 py-8 text-center text-xs text-surface-500">
-            Todavía no tiene productos. Agregalos desde la búsqueda con el botón{" "}
-            <span className="font-semibold text-surface-300">Presupuesto</span>.
-          </p>
+          <div className="px-4 py-8 text-center">
+            <p className="text-xs text-surface-400">Todavía no tiene productos.</p>
+            {onAddProducts ? (
+              <button
+                type="button"
+                onClick={onAddProducts}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-500"
+              >
+                <Plus className="h-3.5 w-3.5" /> Buscar productos para agregar
+              </button>
+            ) : (
+              <p className="mt-1 text-[11px] text-surface-500">
+                Buscá productos y tocá <span className="font-semibold text-surface-300">Presupuesto</span> en cada uno.
+              </p>
+            )}
+          </div>
         ) : (
           <ul className="divide-y divide-surface-800/80 px-3.5">
             {quote.items.map((it, index) => (

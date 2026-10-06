@@ -8,6 +8,7 @@ import { Faq } from "@/components/marketing/Faq";
 import { Footer } from "@/components/marketing/Footer";
 import { Hero } from "@/components/marketing/Hero";
 import { MarginDemo } from "@/components/marketing/MarginDemo";
+import { SellerModeDemo } from "@/components/marketing/SellerModeDemo";
 import { Nav } from "@/components/marketing/Nav";
 import { PageField } from "@/components/marketing/PageField";
 import { Pricing } from "@/components/marketing/Pricing";
@@ -35,6 +36,7 @@ export default function LandingPage() {
         <CostDemo />
         <MarginDemo />
         <CheckoutDemo />
+        <SellerModeDemo />
         <Communications />
         <Savings />
         <Steps />

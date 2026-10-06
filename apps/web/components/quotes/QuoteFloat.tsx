@@ -14,9 +14,10 @@ const MAX_CHIPS = 4;
 const ROUTES = ["/search", "/product/", "/comparador"];
 
 /**
- * Presupuestos flotantes del modo vendedor: una ficha por presupuesto (iniciales
- * del cliente o número), la activa resaltada y "+" para uno nuevo. Convive con
- * la burbuja del carrito: si el carrito está a la vista, se corre a su izquierda.
+ * Presupuestos flotantes del vendedor (o del dueño con "Ver como vendedor"):
+ * una ficha por presupuesto (iniciales del cliente o número), la activa
+ * resaltada y "+" para uno nuevo. Quien compra no la ve: sus presupuestos están
+ * en /presupuestos y, mientras arma uno, lo indica QuoteBuildingBar.
  */
 export default function QuoteFloat() {
   const pathname = usePathname() ?? "";
@@ -62,7 +63,7 @@ export default function QuoteFloat() {
   }, [quotes.mine, quotes.active]);
   const hidden = quotes.mine.length - chips.length;
 
-  if (!quotes.enabled || !quotes.loaded || !onRoute) return null;
+  if (!isSeller || !quotes.enabled || !quotes.loaded || !onRoute) return null;
 
   async function createNew() {
     setCreating(true);

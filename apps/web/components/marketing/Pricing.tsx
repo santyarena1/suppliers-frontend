@@ -46,6 +46,7 @@ const CARDS: CardCopy[] = [
       "Tus formas de pago y percepciones de cada uno",
       "Cuenta corriente, saldos y facturas",
       "Chat con tus vendedores",
+      "Modo vendedor: márgenes de venta y presupuestos para tus clientes",
       "Análisis de compras por mes, distribuidor y producto",
       "Aprobación de pedidos con el precio del día",
     ],

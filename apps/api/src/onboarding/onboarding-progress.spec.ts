@@ -45,6 +45,31 @@ describe("Recorrido · pasos", () => {
   });
 });
 
+describe("Recorrido · modo vendedor", () => {
+  // stepsFor es privado: se prueba la regla tal como lo usa el servicio.
+  const stepsFor = (role: string, plan: string) =>
+    (OnboardingService.prototype as unknown as {
+      stepsFor: (o: unknown) => { id: string }[];
+    }).stepsFor.call({}, { type: "RETAILER", role, hasTenant: true, mode: "existing", plan }).map((s: { id: string }) => s.id);
+
+  it("con modo vendedor, al vendedor no le muestra carrito, pedidos ni factura (no ve costos)", () => {
+    const ids = stepsFor("SELLER", "PRO");
+    for (const id of ["add-to-cart", "cart", "orders", "order-online", "invoice"]) expect(ids).not.toContain(id);
+    expect(ids).toContain("quotes");
+  });
+
+  it("en Base (sin modo vendedor) el vendedor sigue viendo el carrito y no ve presupuestos", () => {
+    const ids = stepsFor("SELLER", "BASE");
+    expect(ids).toContain("cart");
+    expect(ids).not.toContain("quotes");
+  });
+
+  it("el dueño con Pro ve compras y también márgenes y presupuestos", () => {
+    const ids = stepsFor("OWNER", "PRO");
+    for (const id of ["cart", "sale-margins", "seller-view", "quotes"]) expect(ids).toContain(id);
+  });
+});
+
 describe("OnboardingService.status · paso actual", () => {
   it("un comercio nuevo arranca en el primer paso del recorrido", async () => {
     const { service } = makeService({});

@@ -3,13 +3,17 @@
 import { useState } from "react";
 import { Check, FilePlus2, Loader2, Plus } from "lucide-react";
 import { quoteBadge, quoteError, useQuotes } from "@/lib/quotes";
+import { useSellerSession } from "@/lib/sale-price";
+import QuotePicker from "./QuotePicker";
 
 type Variant = "primary" | "icon" | "full" | "link";
 
 /**
- * "Agregar al presupuesto" (modo vendedor). Va al presupuesto activo; si no hay,
- * crea uno. Para el vendedor reemplaza al carrito; para quien compra es una
- * acción secundaria. Sin modo vendedor no se muestra.
+ * "Agregar al presupuesto" (modo vendedor). Va al presupuesto activo.
+ * - Vendedor (con burbuja): si no hay activo, crea uno; reemplaza al carrito.
+ * - Quien compra: si no está armando ninguno, pregunta a cuál (o uno nuevo) y
+ *   ese queda como el que está armando. Es una acción secundaria.
+ * Sin modo vendedor no se muestra.
  */
 export default function AddToQuoteButton({
   product,
@@ -25,7 +29,9 @@ export default function AddToQuoteButton({
   compact?: boolean;
 }) {
   const quotes = useQuotes();
+  const { isSeller } = useSellerSession();
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +44,11 @@ export default function AddToQuoteButton({
     e.preventDefault();
     e.stopPropagation();
     if (busy) return;
+    // Quien compra elige el destino la primera vez.
+    if (!isSeller && !quotes.active) {
+      setPicking(true);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -52,21 +63,43 @@ export default function AddToQuoteButton({
     }
   }
 
+  async function addTo(quoteId: string | null) {
+    const id = quoteId ?? (await quotes.create()).id;
+    await quotes.add(product, qty, id);
+    setDone(true);
+    setTimeout(() => setDone(false), 1400);
+  }
+
+  const picker = picking ? (
+    <QuotePicker productName={product.name} onPick={addTo} onClose={() => setPicking(false)} />
+  ) : null;
+
   const target = quotes.active ? quoteBadge(quotes.active) : "nuevo";
-  const title = error ?? `Agregar al presupuesto ${quotes.active ? target : "(se crea uno nuevo)"}`;
+  const title =
+    error ??
+    (quotes.active
+      ? `Agregar al presupuesto ${target}`
+      : isSeller
+        ? "Agregar al presupuesto (se crea uno nuevo)"
+        : "Agregar a un presupuesto");
   const Icon = busy ? Loader2 : done ? Check : variant === "icon" ? FilePlus2 : Plus;
   const iconCls = `h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`;
 
   if (variant === "icon") {
     return (
+      <>
+      {picker}
       <button type="button" onClick={add} title={title} aria-label="Agregar al presupuesto" className={`pc__ghost ${inActive ? "is-on" : ""}`}>
         <Icon className={iconCls} />
       </button>
+      </>
     );
   }
 
   if (variant === "link") {
     return (
+      <>
+      {picker}
       <button
         type="button"
         onClick={add}
@@ -74,14 +107,23 @@ export default function AddToQuoteButton({
         className="inline-flex items-center gap-1.5 self-start text-xs font-medium text-surface-400 transition-colors hover:text-brand-300 disabled:opacity-60"
       >
         <Icon className={iconCls} />
-        {error ?? (done ? `Agregado a ${target}` : inActive ? `En el presupuesto ${target} (${inActive}) · sumar` : "Agregar a un presupuesto")}
+        {error ??
+          (done
+            ? `Agregado a ${quotes.active ? quoteBadge(quotes.active) : target}`
+            : inActive
+              ? `En el presupuesto ${target} (${inActive}) · sumar`
+              : quotes.active
+                ? `Agregar al presupuesto ${target}`
+                : "Agregar a un presupuesto")}
       </button>
+      </>
     );
   }
 
   if (variant === "full") {
     return (
       <div className="flex flex-col gap-1">
+        {picker}
         <button
           type="button"
           onClick={add}
@@ -108,6 +150,8 @@ export default function AddToQuoteButton({
         : "border-surface-700 bg-surface-800 text-surface-200 hover:text-white";
 
   return (
+    <>
+    {picker}
     <button
       type="button"
       onClick={add}
@@ -121,5 +165,6 @@ export default function AddToQuoteButton({
       <span className="truncate">{done ? "Agregado" : "Presupuesto"}</span>
       {inActive > 0 && !done && <span className="flex-shrink-0 tabular-nums opacity-70">{inActive}</span>}
     </button>
+    </>
   );
 }

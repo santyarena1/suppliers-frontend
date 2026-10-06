@@ -37,6 +37,9 @@ export type OnboardingStepId =
   | "provider-config"
   | "provider-catalog"
   | "providers-stats"
+  | "sale-margins"
+  | "seller-view"
+  | "quotes"
   | "team"
   | "done";
 
@@ -58,6 +61,11 @@ export type OnboardingStep = {
   roles?: TenantRole[];
   /** Solo si el plan del comercio lo incluye (p. ej. las estadísticas son de Pro). */
   capability?: PlanCapabilityKey;
+  /**
+   * Muestra costos (carrito, pedidos, facturas). Con modo vendedor, el vendedor
+   * no ve costos y esas pantallas le quedan cerradas: el paso no le aparece.
+   */
+  costSensitive?: boolean;
   requiresTenant: boolean;
   /** Si ya tiene organización, no se muestra (configuración inicial). */
   skipIfExisting: boolean;
@@ -126,6 +134,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   }),
   tour({
     id: "add-to-cart",
+    costSensitive: true,
     title: "Sumá un producto al carrito",
     body: "Tocá + en cualquier tarjeta. Apenas lo agregues, seguimos.",
     href: "/search?q={demoSearch}",
@@ -135,6 +144,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   }),
   tour({
     id: "cart",
+    costSensitive: true,
     title: "Tu carrito, separado por distribuidor",
     body: "Cada distribuidor tiene su pedido con precios, IVA y percepciones. El carrito es del local: lo ve todo tu equipo. Desde acá confirmás el pedido o se lo mandás al vendedor.",
     href: "/cart",
@@ -142,6 +152,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   }),
   tour({
     id: "orders",
+    costSensitive: true,
     title: "Tus pedidos",
     body: "Acá queda todo lo que pediste: los que salieron por el portal del distribuidor y los que cargaste offline. Te dejamos varios de ejemplo de los últimos meses.",
     href: "/pedidos",
@@ -149,6 +160,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   }),
   tour({
     id: "order-online",
+    costSensitive: true,
     title: "Un pedido enviado al distribuidor",
     body: "Los pedidos online llevan el número que les dio el distribuidor, la forma de pago y de envío, y el detalle con IVA. Si cambia algo, lo ves acá.",
     href: "/pedidos",
@@ -156,6 +168,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   }),
   tour({
     id: "invoice",
+    costSensitive: true,
     title: "La factura del pedido",
     body: "En la cuenta corriente de cada distribuidor ves sus facturas y tu saldo. Esta es la factura del pedido de recién: neto, IVA, percepciones y vencimiento.",
     href: "/proveedores/{demoProvider}?tab=demo-account",
@@ -225,6 +238,32 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     href: "/proveedores",
     spotlight: '[data-tour="stats-providers"]',
     capability: "advancedAnalytics",
+  }),
+  tour({
+    id: "sale-margins",
+    title: "Tus márgenes de venta",
+    body: "Con el modo vendedor ponés tu margen por distribuidor, por categoría o por producto. NODO calcula el precio de venta y tus vendedores ven solo ese precio, nunca tu costo. Los márgenes se cargan en cada distribuidor, en la pestaña Márgenes de venta.",
+    href: "/configuracion",
+    spotlight: '[data-tour="seller-mode"]',
+    roles: MANAGERS,
+    capability: "sellerMode",
+  }),
+  tour({
+    id: "seller-view",
+    title: "Mirá NODO como un vendedor",
+    body: "Prendé este interruptor para ver la app exactamente como la ve un vendedor: precios de venta y sin compras. Lo apagás desde acá o desde el aviso de abajo.",
+    href: "/configuracion",
+    spotlight: '[data-tour="seller-view-toggle"]',
+    roles: MANAGERS,
+    capability: "sellerMode",
+  }),
+  tour({
+    id: "quotes",
+    title: "Presupuestos para tus clientes",
+    body: "Armá un presupuesto con precios de venta, cargale el nombre y el teléfono del cliente y mandáselo por WhatsApp. Si lo acepta, lo pasás al carrito y comprás. Cada vendedor ve los suyos; vos, los de todo el equipo.",
+    href: "/presupuestos",
+    spotlight: '[data-tour="quotes-new"]',
+    capability: "sellerMode",
   }),
   tour({
     id: "team",
