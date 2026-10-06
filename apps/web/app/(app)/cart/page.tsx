@@ -55,6 +55,8 @@ import { SchemePicker } from "@/components/SchemePicker";
 import OrderPeopleFilter from "@/components/cart/OrderPeopleFilter";
 import PortalPendingBanner from "@/components/checkout/PortalPendingBanner";
 import RecentOrdersNotice from "@/components/checkout/RecentOrdersNotice";
+import { orderableItems, stockIssuesFor, type QuoteForStock, type StockIssue } from "@/lib/cart-stock";
+import { PackageX } from "lucide-react";
 import LineAuthors from "@/components/cart/LineAuthors";
 import { isFiltering } from "@/lib/cartPeople";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
@@ -544,6 +546,27 @@ function CartPageInner() {
       }
     : undefined;
 
+  const quoteForStock: Record<string, QuoteForStock | null> = {
+    INVID: invidQuoted,
+    ELIT: elitQuoted,
+    NEW_BYTES: nbQuoted,
+    AIR: airQuoted,
+    NEW_TREE: ntQuoted,
+    SOLUTION_BOX: sbQuoted,
+    DISTECNA: dtQuoted,
+    POLYTECH: ptQuoted,
+  } as Record<string, QuoteForStock | null>;
+  const stockIssues = useMemo(() => {
+    const m: Record<string, Map<string, StockIssue>> = {};
+    if (channelTab !== "online") return m;
+    for (const [p, its] of Object.entries(onlineByProvider)) m[p] = stockIssuesFor(its, quoteForStock[p]);
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelTab, onlineByProvider, invidQuoted, elitQuoted, nbQuoted, airQuoted, ntQuoted, sbQuoted, dtQuoted, ptQuoted]);
+  /** Lo que entra en el pedido: sin lo que el distribuidor no tiene en stock. */
+  const orderable = (p: string, its: CartItem[]) =>
+    channelTab === "online" ? orderableItems(its, stockIssues[p] ?? new Map()) : its;
+
   function extraFor(provider: string): TaxExtra | undefined {
     if (channelTab === "offline") return undefined;
     // El % de IIBB cargado en Configuración del distribuidor pisa lo que cotice
@@ -646,7 +669,7 @@ function CartPageInner() {
 
   const grand = useMemo(() => {
     const tot = totalsFor(viewItems);
-    const parts = Object.entries(viewByProvider).map(([p, its]) => totalsFor(its, extraFor(p), p));
+    const parts = Object.entries(viewByProvider).map(([p, its]) => totalsFor(orderable(p, its), extraFor(p), p));
     if (parts.length === 0) return tot;
     return parts.reduce((acc, t) => ({
       subtotalUSD: acc.subtotalUSD + t.subtotalUSD,
@@ -664,14 +687,14 @@ function CartPageInner() {
       productCount: acc.productCount + t.productCount,
       perceptionLines: [...acc.perceptionLines, ...t.perceptionLines],
     }), { ...EMPTY_TOTALS });
-  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, ntQuoted, sbQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
+  }, [viewItems, viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, ntQuoted, sbQuoted, channelTab, policies, iibbEpoch, onlineByProvider, stockIssues]);
   const providerTotals = useMemo(() => {
     const m: Record<string, Totals> = {};
     for (const [p, its] of Object.entries(viewByProvider)) {
-      m[p] = totalsFor(its, extraFor(p), p);
+      m[p] = totalsFor(orderable(p, its), extraFor(p), p);
     }
     return m;
-  }, [viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, ntQuoted, sbQuoted, channelTab, policies, iibbEpoch, onlineByProvider]);
+  }, [viewByProvider, withIva, invidQuoted, elitQuoted, nbQuoted, airQuoted, ntQuoted, sbQuoted, channelTab, policies, iibbEpoch, onlineByProvider, stockIssues]);
 
   function fmt(usd: number, digits = currency === "USD" ? 2 : 0) {
     if (currency === "USD") return formatUSD(usd);
@@ -736,9 +759,6 @@ function CartPageInner() {
         lines.push(`${percLabel}: ${fmt(tot.iibbUSD, 2)}`);
       }
       if (tot.otherUSD > 0.004) lines.push(`Otros cargos: ${fmt(tot.otherUSD, 2)}`);
-      for (const r of tot.reconciliations) {
-        lines.push(`Diferencia s/portal ${providerLabel(r.provider)}: ${r.diffUSD > 0 ? "+" : "-"}${fmt(Math.abs(r.diffUSD), 2)}`);
-      }
     }
     lines.push(`*TOTAL: ${fmt(tot.totalUSD)}*${withIva ? "" : " (sin impuestos)"}`);
     if (currency === "ARS") lines.push(`(${formatUSD(tot.totalUSD)} USD)`);
@@ -1187,6 +1207,7 @@ function CartPageInner() {
                       channel={channelTab}
                       items={viewByProvider[prov]}
                       schemes={schemes.filter((s) => s.provider === prov)}
+                      stockIssues={channelTab === "online" ? stockIssues[prov] : undefined}
                       totals={providerTotals[prov]}
                       extra={extraFor(prov)}
                       fmt={fmt}
@@ -1202,6 +1223,7 @@ function CartPageInner() {
                     channel={channelTab}
                     items={shownItems}
                     schemes={schemes.filter((s) => s.provider === activeTab)}
+                    stockIssues={channelTab === "online" ? stockIssues[activeTab] : undefined}
                     totals={shownTotals}
                     extra={extraFor(activeTab)}
                     fmt={fmt}
@@ -1442,6 +1464,14 @@ function CartPageInner() {
               <footer className="shrink-0 border-t border-white/5 bg-surface-950 max-lg:max-h-[40dvh] max-lg:overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <div className="px-5 lg:px-8 py-3 lg:py-4 flex flex-col gap-3">
                   {channelTab === "online" && (
+                    <StockIssuesNotice
+                      issuesByProvider={stockIssues}
+                      itemsByProvider={onlineByProvider}
+                      providers={activeTab === "all" ? undefined : [activeTab]}
+                      remove={remove}
+                    />
+                  )}
+                  {channelTab === "online" && (
                     <RecentOrdersNotice items={items} providers={activeTab === "all" ? undefined : [activeTab]} />
                   )}
                   <PortalPendingBanner providers={activeTab === "all" ? undefined : [activeTab]} />
@@ -1582,10 +1612,7 @@ function SummaryBar({
   historyHref?: string;
   historyLabel?: string;
 }) {
-  const [explainDiff, setExplainDiff] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
-  const diffUSD = totals.reconciliations.reduce((s, r) => s + r.diffUSD, 0);
-  const hasDiff = withIva && totals.reconciliations.length > 0;
   function breakdown() {
     return (
     <>
@@ -1618,20 +1645,6 @@ function SummaryBar({
                     {line.label} <span className="tabular-nums">{fmt(line.amount, 2)}</span>
                   </span>
                 ))}
-              {/* Lo que el portal cobra y ningún renglón explica. Nunca se suma en
-                  silencio: se nombra al distribuidor y se muestra la cuenta. */}
-              {hasDiff && (
-                <button
-                  type="button"
-                  onClick={() => setExplainDiff((v) => !v)}
-                  className="inline-flex items-center gap-1 text-amber-400/90 hover:text-amber-300 underline decoration-dotted underline-offset-2"
-                  title="Ver de dónde sale esta diferencia"
-                >
-                  Diferencia s/portal{" "}
-                  <span className="tabular-nums">{diffUSD > 0 ? "+" : "−"}{fmt(Math.abs(diffUSD), 2)}</span>
-                  <ChevronDown className={`w-3 h-3 transition-transform ${explainDiff ? "rotate-180" : ""}`} />
-                </button>
-              )}
             </>
           )}
       {withIva && showInvidNote && !totals.quotedShipping && (
@@ -1677,39 +1690,58 @@ function SummaryBar({
           {breakdown()}
         </div>
       )}
-      {hasDiff && explainDiff && (
-        <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-surface-400 flex flex-col gap-2">
-          {totals.reconciliations.map((r) => (
-            <div key={r.provider}>
-              <p className="text-surface-200">
-                El portal de <span className="font-medium">{providerLabel(r.provider)}</span> cotiza{" "}
-                <span className="tabular-nums">{fmt(r.quotedTotalUSD, 2)}</span> para este pedido.
-                {" "}NODO suma {r.breakdown.map((b) => `${b.label} ${fmt(b.amount, 2)}`).join(" + ")} ={" "}
-                <span className="tabular-nums">{fmt(r.computedTotalUSD, 2)}</span>.
-              </p>
-              <p className="mt-0.5">
-                {r.diffUSD > 0 ? (
-                  <>
-                    Los <span className="tabular-nums text-surface-200">{fmt(r.diffUSD, 2)}</span> de diferencia los cobra el
-                    portal de {providerLabel(r.provider)} y no vienen desglosados en su cotización. No es un cargo de NODO;
-                    el total muestra lo que cobra el distribuidor.
-                  </>
-                ) : (
-                  <>
-                    El portal de {providerLabel(r.provider)} cobra{" "}
-                    <span className="tabular-nums text-surface-200">{fmt(Math.abs(r.diffUSD), 2)}</span> menos de lo que
-                    suman los renglones (probablemente una percepción o impuesto que NODO estima y el portal no aplica).
-                    El total muestra lo que cobra el distribuidor.
-                  </>
-                )}
-              </p>
-            </div>
-          ))}
-          {Object.keys(totals.portalSources).length > 0 && (
-            <p className="text-surface-600">* renglón tomado de la cotización del portal, no del cálculo de NODO.</p>
+    </div>
+  );
+}
+
+/** "Sin stock": lo que cada distribuidor no cotiza, con "Sacar todos". */
+function StockIssuesNotice({
+  issuesByProvider,
+  itemsByProvider,
+  providers,
+  remove,
+}: {
+  issuesByProvider: Record<string, Map<string, StockIssue>>;
+  itemsByProvider: Record<string, CartItem[]>;
+  providers?: string[];
+  remove: (ref: CartRef) => void;
+}) {
+  const rows = Object.entries(issuesByProvider)
+    .filter(([p, m]) => m.size > 0 && (!providers || providers.includes(p)))
+    .map(([p, m]) => ({
+      provider: p,
+      out: (itemsByProvider[p] ?? []).filter((it) => it.channel !== "offline" && m.get(it.externalId)?.kind === "out"),
+      partial: [...m.values()].filter((i) => i.kind === "partial").length,
+    }))
+    .filter((row) => row.out.length > 0 || row.partial > 0);
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {rows.map(({ provider, out, partial }) => (
+        <div key={provider} role="alert" className="flex items-start gap-2.5 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-100">
+          <PackageX className="w-4 h-4 mt-0.5 flex-shrink-0 text-red-300" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-red-50">
+              {out.length > 0
+                ? `${out.length === 1 ? "1 producto" : `${out.length} productos`} sin stock en ${providerLabel(provider)}`
+                : `${providerLabel(provider)} no tiene todas las unidades`}
+            </p>
+            <p className="mt-0.5 text-red-100/80">
+              {out.length > 0 ? "No entran en el pedido ni en el total. Sacalos del carrito." : ""}
+              {partial > 0 ? ` ${partial === 1 ? "Un producto tiene" : `${partial} productos tienen`} menos stock del que pediste: entra lo que hay.` : ""}
+            </p>
+          </div>
+          {out.length > 0 && (
+            <button
+              type="button"
+              onClick={() => out.forEach((it) => remove({ provider: it.provider, externalId: it.externalId, channel: it.channel, schemeId: it.schemeId }))}
+              className="flex-shrink-0 rounded-md border border-red-400/40 px-2.5 py-1 font-medium text-red-50 hover:bg-red-400/10"
+            >
+              Sacar {out.length === 1 ? "" : "todos"}
+            </button>
           )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
@@ -1734,12 +1766,13 @@ function groupPerceptionLines(lines: PerceptionLine[]): PerceptionLine[] {
 }
 
 function ProviderSection({
-  provider, channel, items, schemes, totals, extra, fmt, withIva, setQty, remove, onClearProvider,
+  provider, channel, items, schemes, stockIssues, totals, extra, fmt, withIva, setQty, remove, onClearProvider,
 }: {
   provider: string;
   channel: "online" | "offline";
   items: CartItem[];
   schemes: CartScheme[];
+  stockIssues?: Map<string, StockIssue>;
   totals: Totals;
   extra?: TaxExtra;
   fmt: (n: number, digits?: number) => string;
@@ -1801,18 +1834,18 @@ function ProviderSection({
           <p className="pt-3 pb-1 text-[11px] uppercase tracking-wider text-surface-500">Sin esquema</p>
         )}
         {loose.map((it) => (
-          <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} />
+          <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} stockIssue={stockIssues?.get(it.externalId)} />
         ))}
         {schemeGroups.map(({ scheme, items: grouped }) => (
           <div key={scheme.id} className="pt-3">
             <SchemeGroupHeader scheme={scheme} />
             {grouped.map((it) => (
-              <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} />
+              <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} stockIssue={stockIssues?.get(it.externalId)} />
             ))}
           </div>
         ))}
         {orphanSchemeItems.map((it) => (
-          <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} />
+          <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} stockIssue={stockIssues?.get(it.externalId)} />
         ))}
       </div>
 
@@ -1959,7 +1992,7 @@ function CreateSchemeFromCart({
 }
 
 function CartLine({
-  item, siblings, extra, fmt, withIva, setQty, remove,
+  item, siblings, extra, fmt, withIva, setQty, remove, stockIssue,
 }: {
   item: CartItem;
   siblings: CartItem[];
@@ -1968,6 +2001,7 @@ function CartLine({
   withIva: boolean;
   setQty: (ref: CartRef, qty: number) => void;
   remove: (ref: CartRef) => void;
+  stockIssue?: StockIssue;
 }) {
   const { move } = useCart();
   const policy = usePurchasePolicy(item.provider);
@@ -2007,6 +2041,27 @@ function CartLine({
             {item.brand ? `${item.brand} · ` : ""}#{sku}
           </p>
           <LineAuthors item={item} />
+          {stockIssue && (
+            <p className="mt-1.5 inline-flex flex-wrap items-center gap-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-300">
+              <PackageX className="w-3.5 h-3.5" />
+              {stockIssue.kind === "out"
+                ? `Sin stock en ${providerLabel(item.provider)}: no entra en el pedido`
+                : `${providerLabel(item.provider)} tiene ${stockIssue.available} u.: el resto no entra en el pedido`}
+              {stockIssue.kind === "out" ? (
+                <button type="button" onClick={() => remove(ref)} className="font-semibold underline underline-offset-2 hover:text-white">
+                  Sacar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setQty(ref, stockIssue.available)}
+                  className="font-semibold underline underline-offset-2 hover:text-white"
+                >
+                  Dejar {stockIssue.available}
+                </button>
+              )}
+            </p>
+          )}
           {item.stockStatus?.toLowerCase().includes("bajo") && (
             <p className="text-xs text-amber-400/90 mt-0.5">Stock bajo</p>
           )}
