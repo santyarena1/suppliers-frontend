@@ -265,6 +265,35 @@ export class TenantVisibilityService {
       });
     }
 
+    // Directorio abierto: todo comercio ve todos los distribuidores integrados a
+    // NODO y se conecta cargando su cuenta (eso crea el vínculo, ver ensureLinked).
+    // Los códigos de acceso siguen funcionando igual; con PROVIDER_DIRECTORY_OPEN=false
+    // se vuelve a que solo aparezca lo vinculado por código o publicidad.
+    if (providerDirectoryOpen()) {
+      const directorio = await this.prisma.tenant.findMany({
+        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null } },
+        select: { id: true, name: true, providerKey: true },
+      });
+      for (const d of directorio) {
+        const key = d.providerKey as Provider;
+        // Solo los integrados a la plataforma: las listas son de cada comercio.
+        if (isListProviderKey(key)) continue;
+        if (isDemoDistributorKey(key) && !includeDemo) continue;
+        if (visibles.has(key) || d.id === tenantId) continue;
+        visibles.set(key, {
+          provider: key,
+          name: d.name,
+          linked: false,
+          advertised: false,
+          selfConnected: false,
+          accountManager: null,
+          discountPercent: null,
+          linkId: null,
+          purchase: purchaseFromConfig(key, configByProvider.get(key)),
+        });
+      }
+    }
+
     // El administrador de la plataforma ve todo: cada distribuidor activo con clave
     // de proveedor aparece vinculado, sin código de acceso ni vendedor asignado.
     const platformAdminOrg = await this.isPlatformAdminOrg(tenantId);
@@ -565,6 +594,11 @@ export class TenantVisibilityService {
     domainEvents.emit("tenant.linked", { clientTenantId: tenantId, supplierTenantId: supplier.id, provider });
     return { ...visible, linked: true, advertised: false };
   }
+}
+
+/** Todos los comercios ven el directorio de distribuidores integrados (por defecto, sí). */
+export function providerDirectoryOpen(): boolean {
+  return process.env.PROVIDER_DIRECTORY_OPEN !== "false";
 }
 
 function maxSearchProvidersFor(plan: string | null | undefined): number | null {

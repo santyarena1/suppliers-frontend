@@ -95,3 +95,5 @@ verificar que producción siga en `main`:
 railway api 'query($id: String!) { project(id: $id) { deploymentTriggers { edges { node { branch environmentId } } } } }' \
   --raw-var "id=dcb61a8d-81ad-4c22-983f-5b1e4770f8d0"
 ```
+
+- `PROVIDER_DIRECTORY_OPEN` (API, opcional, default prendido): todo comercio ve todos los distribuidores integrados y se conecta cargando su cuenta. `false` vuelve a mostrar solo lo vinculado por código o publicidad.
