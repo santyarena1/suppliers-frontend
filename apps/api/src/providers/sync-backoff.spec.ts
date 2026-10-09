@@ -33,10 +33,10 @@ describe("nextSyncAt / isSyncDue", () => {
     expect(at.getTime() - base.lastAttemptAt.getTime()).toBe(SYNC_BACKOFF_CAP_MS);
   });
 
-  it("pausado por error sigue probando con el backoff; deshabilitado no corre", () => {
-    expect(nextSyncAt({ ...base, pausedAt: new Date() })).not.toBeNull();
+  it("pausado por error no corre solo (se reactiva a mano); deshabilitado tampoco", () => {
+    expect(nextSyncAt({ ...base, pausedAt: new Date() })).toBeNull();
     expect(nextSyncAt({ ...base, enabled: false })).toBeNull();
-    expect(isSyncDue({ ...base, pausedAt: new Date() }, new Date("2030-01-01"))).toBe(true);
+    expect(isSyncDue({ ...base, pausedAt: new Date() }, new Date("2030-01-01"))).toBe(false);
   });
 });
 

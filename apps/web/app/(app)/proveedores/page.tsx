@@ -289,7 +289,7 @@ export default function ProveedoresPage() {
                           )}
                           {(s as { health?: SyncHealth | null } | undefined)?.health?.paused && (
                             <p className="text-[11px] text-red-300 -mt-1 leading-relaxed">
-                              <b>Sync pausado por error de {name}.</b> Cuando se restablezca, continúa solo.
+                              <b>Sync pausado por error de {name}.</b> Sus productos salieron del buscador hasta que lo reactives desde el proveedor.
                             </p>
                           )}
                           {configured === false && (

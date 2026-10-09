@@ -62,6 +62,11 @@ export interface VisibleProvider {
    * Ver docs/PLAN_SUSCRIPCIONES.md.
    */
   inSearch: boolean;
+  /**
+   * Auto-sync pausado por fallos seguidos: su catálogo (con precios viejos) sale del
+   * buscador y no ocupa lugar del plan hasta que el comercio lo reactive.
+   */
+  syncPaused: boolean;
   /** Lo que eligió el comercio: `null` = nunca tocó el interruptor. */
   includeInSearch: boolean | null;
   /**
@@ -165,6 +170,8 @@ export class TenantVisibilityService {
           purchase: purchaseFromConfig(propio.providerKey, ownConfig),
           platformHidden: hiddenForViewer(hidden, propio.providerKey, false),
           inSearch: !hiddenForViewer(hidden, propio.providerKey, false),
+          // El distribuidor ve su propio catálogo aunque la sync esté pausada.
+          syncPaused: false,
           includeInSearch: null,
           configured: true,
         },
@@ -217,12 +224,14 @@ export class TenantVisibilityService {
           schemeDiscountPercent: true,
           includeInSearch: true,
           includeInSearchAt: true,
+          pausedAt: true,
         },
       }),
     ]);
     const configByProvider = new Map(configs.map((c) => [c.provider, c]));
+    const syncPaused = (provider: string) => Boolean(configByProvider.get(provider)?.pausedAt);
 
-    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden" | "inSearch" | "includeInSearch" | "configured">>();
+    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden" | "inSearch" | "syncPaused" | "includeInSearch" | "configured">>();
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
@@ -340,7 +349,8 @@ export class TenantVisibilityService {
       rows
         // Un proveedor sin configurar no busca ni le quita el lugar a uno configurado.
         // Los demos del recorrido guiado tampoco: buscan aparte, sin ocupar lugar del plan.
-        .filter((v) => v.linked && !v.platformHidden && v.configured && !isDemoDistributorKey(v.provider))
+        // Con el sync pausado por error tampoco: sus precios quedaron viejos y fallan al comprar.
+        .filter((v) => v.linked && !v.platformHidden && v.configured && !syncPaused(v.provider) && !isDemoDistributorKey(v.provider))
         .map((v) => ({
           provider: v.provider,
           name: v.name,
@@ -350,12 +360,14 @@ export class TenantVisibilityService {
       max
     );
     for (const v of rows) {
+      if (syncPaused(v.provider)) continue;
       const choice = configByProvider.get(v.provider)?.includeInSearch ?? null;
       if (isDemoDistributorKey(v.provider) && v.linked && !v.platformHidden && choice !== false) inSearch.add(v.provider);
     }
     return rows.map((v) => ({
       ...v,
       inSearch: inSearch.has(v.provider),
+      syncPaused: syncPaused(v.provider),
       includeInSearch: configByProvider.get(v.provider)?.includeInSearch ?? null,
     }));
   }

@@ -65,7 +65,7 @@ export default function SyncHealthBanner({
   if (health.paused) {
     Icon = PauseCircle;
     title = `Sync pausado por error de ${providerName}`;
-    body = `${health.pauseReason ?? "Falló varias veces seguidas."} Cuando se restablezca, continúa solo. ${pricesFrom}`;
+    body = `${health.pauseReason ?? "Falló varias veces seguidas."} La automática quedó pausada y sus productos salieron del buscador. Reactivala cuando el problema esté resuelto.`;
   } else if (health.failing) {
     Icon = AlertTriangle;
     title = "La última sincronización falló";
@@ -111,7 +111,7 @@ export default function SyncHealthBanner({
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors active:scale-[0.98]"
           >
             {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-            {syncing ? "Sincronizando…" : "Sincronizar ahora"}
+            {syncing ? "Sincronizando…" : health.paused ? "Reactivar sincronización" : "Sincronizar ahora"}
           </button>
         </div>
       )}

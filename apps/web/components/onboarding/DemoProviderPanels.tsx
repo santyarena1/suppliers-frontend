@@ -90,8 +90,8 @@ export function DemoSyncPanel({ providerName }: { providerName: string }) {
         </div>
         <p className="text-xs text-surface-400 leading-relaxed">
           Con un distribuidor con integración, NODO trae su catálogo con tus precios cada hora. Si el portal falla, lo
-          reintenta solo y, si sigue caído, te avisa con «Sync pausado por error de {providerName}»: cuando se restablece,
-          continúa solo.
+          reintenta y, si falla 3 veces seguidas, lo pausa y te avisa con «Sync pausado por error de {providerName}»: sus
+          productos salen del buscador hasta que lo reactives.
         </p>
         <div className="flex items-center justify-between rounded-lg bg-surface-800 px-3.5 py-2.5 text-xs">
           <span className="text-surface-300">Cada 1 hora</span>

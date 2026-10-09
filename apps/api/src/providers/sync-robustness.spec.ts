@@ -42,7 +42,7 @@ describe("backoff y pausa del auto-sync", () => {
     const notif = prisma.orgNotification.create.mock.calls[0][0].data;
     expect(notif).toMatchObject({ toTenantId: "t1", kind: "SYSTEM", landingKey: "sync-paused:ELIT" });
     expect(notif.title).toMatch(/Sync pausado por error de/);
-    expect(notif.body).toMatch(/continúa sola/);
+    expect(notif.body).toMatch(/no se reintenta sola/);
   });
 
   it("ya pausado o sin auto-sync no vuelve a avisar", async () => {

@@ -1,9 +1,10 @@
-/** Fallos seguidos que marcan el sync como pausado por error (y avisan al comercio). */
-export const SYNC_MAX_FAILURES = 6;
 /**
- * Tope del backoff. Pausado no es apagado: se sigue probando cada 2 h como mucho
- * y, cuando el proveedor vuelve, la sincronización continúa sola.
+ * Fallos seguidos que pausan el auto-sync (y avisan al comercio). Pausado es como
+ * deshabilitado: el cron no lo vuelve a intentar y se reactiva a mano
+ * (sincronizar ahora con éxito o volver a guardar la cuenta).
  */
+export const SYNC_MAX_FAILURES = 3;
+/** Tope del backoff entre reintentos antes de llegar a la pausa. */
 export const SYNC_BACKOFF_CAP_MS = 2 * 60 * 60_000;
 /** Precios por API más viejos que esto se marcan desactualizados aunque el intervalo sea largo. */
 export const PRICES_STALE_FLOOR_MS = 48 * 60 * 60_000;
@@ -21,10 +22,10 @@ export interface SyncSchedule {
  * Cuándo toca el próximo sync automático. Sin fallos, el intervalo desde la
  * última sync OK. Con fallos, intervalo × 2^fallos desde el último intento
  * (tope 24 h): un portal caído o una clave mala no se reintentan en cada tick.
- * `null` = no corre (deshabilitado). Pausado por error sigue probando con el backoff.
+ * `null` = no corre (deshabilitado o pausado por error: se reactiva a mano).
  */
 export function nextSyncAt(config: SyncSchedule): Date | null {
-  if (!config.enabled) return null;
+  if (!config.enabled || config.pausedAt) return null;
   const interval = Math.max(config.syncIntervalMinutes, 1) * 60_000;
   const failures = Math.max(config.consecutiveFailures, 0);
   if (failures > 0) {

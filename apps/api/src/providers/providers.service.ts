@@ -1018,8 +1018,9 @@ export class ProvidersService implements OnModuleInit {
 
   /**
    * Una sync de proveedor falló: queda el intento y el contador para el backoff
-   * del cron. Tras SYNC_MAX_FAILURES seguidos se pausa el auto-sync y se avisa al
-   * comercio. Los precios que ya tenía siguen (con aviso de desactualizados).
+   * del cron. Tras SYNC_MAX_FAILURES seguidos se pausa el auto-sync (el cron no lo
+   * vuelve a intentar: se reactiva a mano) y se avisa al comercio. Los precios que
+   * ya tenía siguen (con aviso de desactualizados).
    */
   async recordSyncFailure(tenantId: string, provider: Provider, err: unknown, source: CatalogSyncSource = "cron") {
     if (err && typeof err === "object") recordedFailures.add(err);
@@ -1054,8 +1055,9 @@ export class ProvidersService implements OnModuleInit {
           kind: "SYSTEM",
           title: `Sync pausado por error de ${name}`,
           body:
-            `${reason} Cuando ${name} se restablezca, la sincronización continúa sola. ` +
-            `Mientras tanto, los precios de ${name} son los de la última sincronización buena. Si el problema es la cuenta, revisala en Proveedores.`,
+            `${reason} Falló ${row.consecutiveFailures} veces seguidas, así que la sincronización automática quedó pausada, no se reintenta sola y sus productos salieron del buscador. ` +
+            `Para reactivarla, entrá a ${name} en Proveedores y tocá "Reactivar sincronización" (o revisá la cuenta si el problema es la clave). ` +
+            `Al reactivarla y sincronizar bien, vuelven con precios al día.`,
           landingKey: `sync-paused:${provider}`,
         },
       })
