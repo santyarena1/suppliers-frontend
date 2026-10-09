@@ -11,6 +11,7 @@ import ProviderMergePanel from "@/components/admin/ProviderMergePanel";
 import CatalogEnrichmentPanel from "@/components/admin/CatalogEnrichmentPanel";
 import DiagnosticsPanel from "@/components/DiagnosticsPanel";
 import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
+import EnrichmentPanel from "@/components/admin/enrichment/EnrichmentPanel";
 import AdminAdsPanel from "@/components/admin/AdminAdsPanel";
 import AdminNewsPanel from "@/components/admin/AdminNewsPanel";
 import SubscriptionsPanel from "@/components/admin/SubscriptionsPanel";
@@ -19,11 +20,11 @@ import InboxPanel from "@/components/admin/inbox/InboxPanel";
 import { inboxApi } from "@/lib/inbox";
 import {
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
-  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone, Newspaper, CreditCard, HeartPulse, Inbox,
+  ChevronLeft, ChevronRight, RefreshCw, Store, Search, Image as ImageIcon, Megaphone, Newspaper, CreditCard, HeartPulse, Inbox, Sparkles,
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "inbox" | "health" | "organizations" | "subscriptions" | "retail" | "catalog" | "images" | "ads" | "news" | "diagnostics";
+type Tab = "inbox" | "health" | "organizations" | "subscriptions" | "retail" | "catalog" | "enrichment" | "images" | "ads" | "news" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "inbox", label: "Solicitudes", icon: <Inbox className="w-3.5 h-3.5" /> },
@@ -32,13 +33,14 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "subscriptions", label: "Suscripciones", icon: <CreditCard className="w-3.5 h-3.5" /> },
   { key: "retail", label: "Locales / precios", icon: <DollarSign className="w-3.5 h-3.5" /> },
   { key: "catalog", label: "Catálogo", icon: <Tags className="w-3.5 h-3.5" /> },
+  { key: "enrichment", label: "Productos enriquecidos", icon: <Sparkles className="w-3.5 h-3.5" /> },
   { key: "images", label: "Imágenes", icon: <ImageIcon className="w-3.5 h-3.5" /> },
   { key: "ads", label: "Publicidad", icon: <Megaphone className="w-3.5 h-3.5" /> },
   { key: "news", label: "Noticias", icon: <Newspaper className="w-3.5 h-3.5" /> },
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
-const TAB_KEYS: Tab[] = ["inbox", "health", "organizations", "subscriptions", "retail", "catalog", "images", "ads", "news", "diagnostics"];
+const TAB_KEYS: Tab[] = ["inbox", "health", "organizations", "subscriptions", "retail", "catalog", "enrichment", "images", "ads", "news", "diagnostics"];
 const LEGACY_TABS = new Set(["users", "permissions"]);
 
 export default function AdminPage() {
@@ -139,6 +141,7 @@ function AdminPageInner() {
             {tab === "subscriptions" && <SubscriptionsPanel showToast={showToast} />}
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
+            {tab === "enrichment" && <EnrichmentPanel showToast={showToast} />}
             {tab === "images" && <ImageSyncPanel showToast={showToast} />}
             {tab === "ads" && <AdminAdsPanel showToast={showToast} />}
             {tab === "news" && <AdminNewsPanel showToast={showToast} />}

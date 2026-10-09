@@ -35,6 +35,7 @@ import { ListImportModule } from "./list-import/list-import.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
 import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
 import { CatalogApiManageModule, CatalogApiModule } from "./catalog-api/catalog-api.module";
+import { EnrichmentModule } from "./enrichment/enrichment.module";
 
 @Module({
   imports: [
@@ -81,6 +82,7 @@ import { CatalogApiManageModule, CatalogApiModule } from "./catalog-api/catalog-
     SubscriptionsModule,
     CatalogApiModule,
     CatalogApiManageModule,
+    EnrichmentModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

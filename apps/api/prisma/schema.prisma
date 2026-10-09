@@ -16,46 +16,46 @@ enum UserRole {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  username     String        @unique
-  email        String        @unique
+  id                               String        @id @default(uuid())
+  username                         String        @unique
+  email                            String        @unique
   /// Null si la cuenta solo entra con Google.
-  passwordHash String?
+  passwordHash                     String?
   /// `sub` de Google. Unico cuando está.
-  googleId     String?       @unique
+  googleId                         String?       @unique
   /// Null hasta que confirma el mail (código) o entra con Google.
-  emailVerifiedAt DateTime?
+  emailVerifiedAt                  DateTime?
   /// Contraseñas fallidas seguidas. Se vuelve a 0 al entrar bien.
-  failedLoginCount Int       @default(0)
+  failedLoginCount                 Int           @default(0)
   /// Bloqueo temporal por intentos fallidos (ver auth/login-lockout.ts).
-  loginLockedUntil DateTime?
+  loginLockedUntil                 DateTime?
   /// Sube al cambiar la contraseña o desactivar la cuenta: invalida los JWT ya emitidos.
-  sessionVersion   Int       @default(0)
+  sessionVersion                   Int           @default(0)
   /// Le regeneraron la contraseña (superadmin o su equipo): hasta que confirme su mail
   /// y elija contraseña nueva (o conecte Google) solo puede usar /auth/account-setup.
   mustSetupAccount                 Boolean       @default(false)
-  role         UserRole      @default(ROLE_USER)
-  active       Boolean       @default(true)
+  role                             UserRole      @default(ROLE_USER)
+  active                           Boolean       @default(true)
   /// Usuario creado por la plataforma (dueño placeholder de una marca del catálogo).
-  managedByPlatform Boolean  @default(false)
+  managedByPlatform                Boolean       @default(false)
   /// Recorrido de onboarding visto y cerrado. Cada persona lo tiene, también
   /// los subusuarios: el dueño crea la org; el resto recorre la guía de su rol.
-  onboardingCompletedAt DateTime?
+  onboardingCompletedAt            DateTime?
   /// Durante el preview del superadmin: tenant al que hay que volver al salir.
   onboardingPreviewRestoreTenantId String?
   /// Rol que tenía en ese tenant antes del preview.
   onboardingPreviewRestoreRole     TenantRole?
   /// Recorrido de repaso: salta org/plan aunque onboardingCompletedAt sea null.
-  onboardingReplay                 Boolean     @default(false)
+  onboardingReplay                 Boolean       @default(false)
   /// Paso del recorrido en el que quedó. Única fuente de verdad: la app lo lee y lo guarda acá.
   onboardingStep                   String?
   /// Avisos de novedades ya vistos (claves de ANNOUNCEMENTS en @nodo/shared).
-  seenAnnouncements                String[]    @default([])
-  endDate      DateTime?
-  brandId      String?
-  brand        BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  seenAnnouncements                String[]      @default([])
+  endDate                          DateTime?
+  brandId                          String?
+  brand                            BrandAccount? @relation("BrandOwner", fields: [brandId], references: [id])
+  createdAt                        DateTime      @default(now())
+  updatedAt                        DateTime      @updatedAt
 
   savedCredentials Credential[]
   cartItems        CartItem[]
@@ -153,82 +153,82 @@ enum IvaAdjustment {
 }
 
 model Tenant {
-  id                 String        @id @default(uuid())
+  id                      String               @id @default(uuid())
   /// Nombre normalizado, es lo único que se muestra en pantalla.
-  name               String        @unique
-  type               TenantType
+  name                    String               @unique
+  type                    TenantType
   /// Distribuidores con integración por API: clave del proveedor (NEW_BYTES, ELIT…).
-  providerKey        String?       @unique
+  providerKey             String?              @unique
   /// Marcas: cuenta del módulo de Marcas que representa esta organización.
-  brandId            String?       @unique
-  brand              BrandAccount? @relation("TenantBrand", fields: [brandId], references: [id])
+  brandId                 String?              @unique
+  brand                   BrandAccount?        @relation("TenantBrand", fields: [brandId], references: [id])
   /// Término canónico de catálogo (kind=BRAND) que esta organización representa.
-  catalogTermId      String?       @unique
-  catalogTerm        PlatformCatalogTerm? @relation("BrandCatalogTerm", fields: [catalogTermId], references: [id], onDelete: SetNull)
+  catalogTermId           String?              @unique
+  catalogTerm             PlatformCatalogTerm? @relation("BrandCatalogTerm", fields: [catalogTermId], references: [id], onDelete: SetNull)
   /// Org creada sola al unificar una marca en el catálogo. El placeholder es el dueño.
-  managedByPlatform  Boolean       @default(false)
-  contactEmail       String?
-  contactPhone       String?
-  notes              String?
+  managedByPlatform       Boolean              @default(false)
+  contactEmail            String?
+  contactPhone            String?
+  notes                   String?
   /// Publicidad paga contratada: habilita que comercios no vinculados la descubran.
-  advertisingEnabled Boolean       @default(false)
+  advertisingEnabled      Boolean              @default(false)
   /// Credenciales, vínculos y catálogo se leen de esa organización. Carrito,
   /// pedidos y equipo siguen siendo de esta. Lo usa el superadmin de prueba
   /// para ver lo mismo que testuser1 sin compartir el carrito.
   mirrorsCommercialFromId String?
-  mirrorsCommercialFrom   Tenant?  @relation("CommercialMirror", fields: [mirrorsCommercialFromId], references: [id], onDelete: SetNull)
-  commercialMirrors       Tenant[] @relation("CommercialMirror")
+  mirrorsCommercialFrom   Tenant?              @relation("CommercialMirror", fields: [mirrorsCommercialFromId], references: [id], onDelete: SetNull)
+  commercialMirrors       Tenant[]             @relation("CommercialMirror")
   /// Proveedores por lista: cada cuántos días se espera una lista nueva. `null` = sin cadencia.
-  listUpdateDays     Int?
+  listUpdateDays          Int?
   /// Plan del comercio. Solo aplica a RETAILER; distros y marcas no tienen plan comercial todavía.
   /// El default queda en PRO para no recortar nada por un alta que no lo elija: el
   /// autoregistro y el alta de Administración lo eligen explícitamente.
-  plan               TenantPlan    @default(PRO)
-  subscription       Subscription?
+  plan                    TenantPlan           @default(PRO)
+  subscription            Subscription?
   /// Cuándo se sembraron productos/pedidos de demostración para este comercio.
-  demoSeededAt       DateTime?
-  active             Boolean       @default(true)
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  demoSeededAt            DateTime?
+  active                  Boolean              @default(true)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
-  memberships   TenantMembership[]
-  saleMarginRules   SaleMarginRule[]
-  saleMarginChanges SaleMarginChange[]
-  salesQuotes       SalesQuote[]
-  rolePermissions TenantRolePermission[]
-  accessCodes   TenantAccessCode[]
-  teamInviteCodes TeamInviteCode[]
-  joinRequests    TenantJoinRequest[]
-  supplierLinks TenantLink[]          @relation("LinkClient")
-  clientLinks   TenantLink[]          @relation("LinkSupplier")
-  pmScopes      ProductManagerScope[]
-  credentials   Credential[]
-  tgsSettings   TgsSettings?
-  syncConfigs   ProviderSyncConfig[]
-  catalogSyncRuns CatalogSyncRun[]
-  offers        TenantProductOffer[]
-  priceHistory  ProductPriceHistory[]
-  listImports   SupplierListImport[]
-  cartItems     CartItem[]
-  orgCart       OrgCart?
-  orders        ProviderOrder[]
-  opsAliases    TenantOpsAlias[]
-  adCampaigns   AdCampaign[]
-  brandLanding  BrandLanding?
-  brandActions  BrandAction[]
-  brandResources BrandResource[]
-  brandSignals   BrandSkuSignal[]
-  brandItems     BrandItem[]
+  memberships        TenantMembership[]
+  saleMarginRules    SaleMarginRule[]
+  saleMarginChanges  SaleMarginChange[]
+  salesQuotes        SalesQuote[]
+  rolePermissions    TenantRolePermission[]
+  accessCodes        TenantAccessCode[]
+  teamInviteCodes    TeamInviteCode[]
+  joinRequests       TenantJoinRequest[]
+  supplierLinks      TenantLink[]           @relation("LinkClient")
+  clientLinks        TenantLink[]           @relation("LinkSupplier")
+  pmScopes           ProductManagerScope[]
+  credentials        Credential[]
+  tgsSettings        TgsSettings?
+  syncConfigs        ProviderSyncConfig[]
+  catalogSyncRuns    CatalogSyncRun[]
+  offers             TenantProductOffer[]
+  priceHistory       ProductPriceHistory[]
+  listImports        SupplierListImport[]
+  cartItems          CartItem[]
+  orgCart            OrgCart?
+  orders             ProviderOrder[]
+  opsAliases         TenantOpsAlias[]
+  adCampaigns        AdCampaign[]
+  brandLanding       BrandLanding?
+  brandActions       BrandAction[]
+  brandResources     BrandResource[]
+  brandSignals       BrandSkuSignal[]
+  brandItems         BrandItem[]
   brandStockSettings BrandStockSettings?
-  notificationsFrom OrgNotification[] @relation("NotifFrom")
-  notificationsTo   OrgNotification[] @relation("NotifTo")
-  newsArticles      NewsArticle[]
-  apiClients        ApiClient[]
-  apiCatalogTracker ApiCatalogTracker?
+  notificationsFrom  OrgNotification[]      @relation("NotifFrom")
+  notificationsTo    OrgNotification[]      @relation("NotifTo")
+  newsArticles       NewsArticle[]
+  apiClients         ApiClient[]
+  apiCatalogTracker  ApiCatalogTracker?
   /// Local de venta ya sincronizado que este comercio declara como propio.
   /// Compara el costo final con el precio publicado en esa web.
-  ownRetailStoreId  String?
-  ownRetailStore    RetailStore? @relation("TenantOwnRetailStore", fields: [ownRetailStoreId], references: [id], onDelete: SetNull)
+  ownRetailStoreId   String?
+  ownRetailStore     RetailStore?           @relation("TenantOwnRetailStore", fields: [ownRetailStoreId], references: [id], onDelete: SetNull)
 
   @@index([type, active])
   @@index([mirrorsCommercialFromId])
@@ -280,22 +280,22 @@ enum CatalogEnrichmentSource {
 
 /// Término canónico de catálogo (marca, categoría o subcategoría) a nivel plataforma.
 model PlatformCatalogTerm {
-  id        String           @id @default(uuid())
-  kind      CatalogAliasKind
-  label     String
+  id          String                  @id @default(uuid())
+  kind        CatalogAliasKind
+  label       String
   /// Jerarquía: una CATEGORY puede ser padre de SUBCATEGORY (u otra CATEGORY anidada).
-  parentId  String?
-  parent    PlatformCatalogTerm?  @relation("CatalogTermTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children  PlatformCatalogTerm[] @relation("CatalogTermTree")
+  parentId    String?
+  parent      PlatformCatalogTerm?    @relation("CatalogTermTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    PlatformCatalogTerm[]   @relation("CatalogTermTree")
   /// Si false, no se muestra en el catálogo público (grilla de categorías / marcas).
-  visible   Boolean          @default(true)
+  visible     Boolean                 @default(true)
   /// Si true, aparece en el menú de Nodo (lo arma el admin desde Categorías).
-  inMenu    Boolean          @default(false)
-  source    CatalogEnrichmentSource @default(MANUAL)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  aliases   PlatformCatalogAlias[]
-  brandTenant Tenant? @relation("BrandCatalogTerm")
+  inMenu      Boolean                 @default(false)
+  source      CatalogEnrichmentSource @default(MANUAL)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  aliases     PlatformCatalogAlias[]
+  brandTenant Tenant?                 @relation("BrandCatalogTerm")
 
   @@unique([kind, label])
   @@index([kind, visible])
@@ -305,18 +305,18 @@ model PlatformCatalogTerm {
 
 /// Superadmin: vincula valores crudos de distribuidores a un término canónico.
 model PlatformCatalogAlias {
-  id        String           @id @default(uuid())
+  id        String                  @id @default(uuid())
   kind      CatalogAliasKind
   /// Vacío = cross-proveedor; set = scoped al distribuidor.
-  provider  String           @default("")
+  provider  String                  @default("")
   rawKey    String
   groupId   String
   label     String
   termId    String?
-  term      PlatformCatalogTerm? @relation(fields: [termId], references: [id], onDelete: SetNull)
+  term      PlatformCatalogTerm?    @relation(fields: [termId], references: [id], onDelete: SetNull)
   source    CatalogEnrichmentSource @default(MANUAL)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
 
   @@unique([kind, provider, rawKey])
   @@index([kind, groupId])
@@ -364,17 +364,17 @@ model CatalogEnrichmentSettings {
 }
 
 model TenantMembership {
-  id        String     @id @default(uuid())
-  tenantId  String
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      TenantRole
+  id                  String                   @id @default(uuid())
+  tenantId            String
+  tenant              Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                TenantRole
   /// Cargo visible en la interfaz cuando el rol no alcanza para describirlo.
-  title     String?
-  active    Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  title               String?
+  active              Boolean                  @default(true)
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
   permissionOverrides TenantMemberPermission[]
 
   @@unique([tenantId, userId])
@@ -469,16 +469,16 @@ enum ChatMessageKind {
 /// Un hilo entre DOS personas, dentro de un vínculo comercio↔distribuidor.
 /// El vendedor no ve el chat del PM; el dueño del local no ve el del comprador.
 model ChatThread {
-  id            String   @id @default(uuid())
+  id            String     @id @default(uuid())
   linkId        String
   link          TenantLink @relation(fields: [linkId], references: [id], onDelete: Cascade)
   distroUserId  String
-  distroUser    User     @relation("ChatDistroParticipant", fields: [distroUserId], references: [id], onDelete: Cascade)
+  distroUser    User       @relation("ChatDistroParticipant", fields: [distroUserId], references: [id], onDelete: Cascade)
   storeUserId   String
-  storeUser     User     @relation("ChatStoreParticipant", fields: [storeUserId], references: [id], onDelete: Cascade)
+  storeUser     User       @relation("ChatStoreParticipant", fields: [storeUserId], references: [id], onDelete: Cascade)
   lastMessageAt DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   messages ChatMessage[]
   reads    ChatRead[]
@@ -532,6 +532,7 @@ model ChatRead {
   thread     ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastReadAt DateTime
+
   @@id([threadId, userId])
 }
 
@@ -543,6 +544,7 @@ model ChatPin {
   message    ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user       User        @relation(fields: [pinnedById], references: [id], onDelete: Cascade)
   createdAt  DateTime    @default(now())
+
   @@id([threadId, messageId])
 }
 
@@ -850,16 +852,16 @@ model ImportRowIssue {
 // para que viajen con la DB entre máquinas/deploys (no dependen del disco local).
 // La URL pública estable es `/assets/<id>`.
 model StoredAsset {
-  id        String   @id @default(uuid())
-  mimeType  String
-  filename  String
-  byteSize  Int
-  data      Bytes
+  id            String   @id @default(uuid())
+  mimeType      String
+  filename      String
+  byteSize      Int
+  data          Bytes
   /// Adjunto del chat: no se sirve sin link firmado (ver assets/asset-signing.ts).
   isPrivate     Boolean  @default(false)
   /// Organización que lo subió. Solo ella puede adjuntarlo en una conversación.
   ownerTenantId String?
-  createdAt DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
 
 // Configuración visual + de visibilidad por proveedor, editable desde el
@@ -906,11 +908,11 @@ model HomeBanner {
 
 /// Identidad visual global de la plataforma (preset de color de marca).
 model PlatformSettings {
-  id          String   @id @default("platform")
-  brandPreset String   @default("violet")
+  id           String   @id @default("platform")
+  brandPreset  String   @default("violet")
   /// Umbrales de sanidad para auto-aplicar listas importadas (ver list-import/sanity-checks).
   importSanity Json?
-  updatedAt   DateTime @updatedAt
+  updatedAt    DateTime @updatedAt
 }
 
 enum MissingProductAction {
@@ -931,92 +933,92 @@ enum ZeroStockAction {
 // el markup y el umbral de stock son decisiones comerciales del comercio, no de
 // quien las cargó.
 model ProviderSyncConfig {
-  id                   String               @id @default(uuid())
-  tenantId             String
-  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  provider             String
-  enabled              Boolean              @default(false)
-  syncIntervalMinutes  Int                  @default(60)
+  id                       String               @id @default(uuid())
+  tenantId                 String
+  tenant                   Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider                 String
+  enabled                  Boolean              @default(false)
+  syncIntervalMinutes      Int                  @default(60)
   /// API o LIST. Un solo canal activo: nunca dos fuentes pisándose el precio.
-  priceChannel         PriceChannel         @default(API)
+  priceChannel             PriceChannel         @default(API)
   /// Proveedores que cotizan por lista: IIBB (%) sobre el neto, cargado a mano por el comercio.
-  manualIibbPercent    Decimal?             @db.Decimal(6, 2)
+  manualIibbPercent        Decimal?             @db.Decimal(6, 2)
   /// Proveedores que cotizan por lista: otras percepciones (%) sobre el neto, a mano.
-  manualPerceptionsPercent Decimal?         @db.Decimal(6, 2)
+  manualPerceptionsPercent Decimal?             @db.Decimal(6, 2)
   /// Última percepción (%) que el portal del proveedor le cotizó a este comercio.
   /// Se aprende del carrito y se guarda acá, no en el navegador: entre consultas
   /// el comercio tiene que seguir viendo la percepción que le corresponde, y desde
   /// cualquier sesión. El % cargado a mano le sigue ganando a esto.
-  learnedIibbPercent   Decimal?             @db.Decimal(6, 2)
-  learnedIibbAt        DateTime?
+  learnedIibbPercent       Decimal?             @db.Decimal(6, 2)
+  learnedIibbAt            DateTime?
   /// Formas de pago del proveedor con su descuento o recargo, tal como las ve
   /// este comercio. Es información para decidir la compra: NODO no elige la
   /// forma de pago ni la manda al confirmar el carrito, igual que pasa con
   /// esquema y offline. Lista de objetos con label, percent, kind y origen.
-  paymentOptions       Json?
+  paymentOptions           Json?
   /// Formas de envío que el comercio cargó para este distribuidor, con su
   /// valor por pedido (`{ label, amount, currency, habitual }`). Con esto y lo
   /// aprendido de sus pedidos se estima el envío en la búsqueda. Una sola
   /// puede ser habitual: esa manda sobre lo que digan los pedidos.
-  shippingMethods      Json?
+  shippingMethods          Json?
   /// Envío gratis desde este total del pedido a este distribuidor (con su moneda).
   /// Solo afecta a las formas de envío propias / estimadas, nunca al envío que cotiza el portal.
-  freeShippingFrom     Decimal?             @db.Decimal(14, 2)
+  freeShippingFrom         Decimal?             @db.Decimal(14, 2)
   /// ARS | USD
-  freeShippingCurrency String?
+  freeShippingCurrency     String?
   /// Foto del carrito del portal tal como NODO lo dejó en la última verificación
   /// (`{ codigo: cantidad }`). El carrito del portal y el de NODO son el mismo:
   /// con la foto se distingue "lo borraron en el portal" de "lo agregaron en
   /// NODO" y cada verificación concilia en las dos direcciones.
-  portalCartSnapshot   Json?
-  portalCartSyncedAt   DateTime?
-  missingProductAction MissingProductAction @default(KEEP)
-  zeroStockAction      ZeroStockAction      @default(KEEP)
+  portalCartSnapshot       Json?
+  portalCartSyncedAt       DateTime?
+  missingProductAction     MissingProductAction @default(KEEP)
+  zeroStockAction          ZeroStockAction      @default(KEEP)
   /// Si está activo, el buscador no lista fichas de este distribuidor que este
   /// local todavía no sincronizó (sin precio ni stock propios).
-  hideUnsyncedCatalog  Boolean              @default(false)
+  hideUnsyncedCatalog      Boolean              @default(false)
   /// Cada cuántos días espera este comercio una lista nueva de este proveedor
   /// (su lista propia). null = usa la del proveedor (Tenant.listUpdateDays).
-  listUpdateDays       Int?
+  listUpdateDays           Int?
   /// "Incluir en búsqueda" que eligió el comercio. `null` = nunca eligió: entra si
   /// el plan tiene lugar. Apagarlo no desconecta nada: solo sale del buscador.
-  includeInSearch      Boolean?
+  includeInSearch          Boolean?
   /// Cuándo lo eligió: con tope de plan, los elegidos antes tienen prioridad.
-  includeInSearchAt    DateTime?
+  includeInSearchAt        DateTime?
   /// Sin uso desde el modo vendedor: el costo ya no se modifica (ver SaleMarginRule).
-  priceMarkupPercent   Decimal              @default(0) @db.Decimal(6, 2)
+  priceMarkupPercent       Decimal              @default(0) @db.Decimal(6, 2)
   /// Modo vendedor: el margen de venta se calcula sobre el costo final o sobre el neto.
-  saleMarginBase       SaleMarginBase       @default(FINAL)
+  saleMarginBase           SaleMarginBase       @default(FINAL)
   // Si el proveedor informa esta cantidad de stock o menos, lo tratamos como
   // sin stock (aplica zeroStockAction). 0 = desactivado. Mismo concepto que
   // el "stock mínimo del proveedor" de AcuStock.
-  minStockThreshold    Int                  @default(0)
+  minStockThreshold        Int                  @default(0)
   /// El comercio (tipo 1) marca si este distribuidor acepta pedido offline (sin facturar).
-  acceptsOffline       Boolean              @default(false)
+  acceptsOffline           Boolean              @default(false)
   /// El comercio marca si este distribuidor acepta compra en esquema (facturado, con descuento extra).
-  acceptsScheme        Boolean              @default(false)
+  acceptsScheme            Boolean              @default(false)
   /// Obligatorio si acceptsOffline. No se comparte con esquema.
-  offlineIvaAdjustment IvaAdjustment?
+  offlineIvaAdjustment     IvaAdjustment?
   /// Obligatorio si acceptsScheme. No se comparte con offline.
-  schemeIvaAdjustment  IvaAdjustment?
+  schemeIvaAdjustment      IvaAdjustment?
   /// % extra que informó el vendedor, solo para ítems en esquema (no para sueltos online).
-  schemeDiscountPercent Decimal?            @db.Decimal(6, 2)
-  lastSyncedAt         DateTime?
-  lastSyncError        String?
-  lastSyncCreated      Int                  @default(0)
-  lastSyncUpdated      Int                  @default(0)
+  schemeDiscountPercent    Decimal?             @db.Decimal(6, 2)
+  lastSyncedAt             DateTime?
+  lastSyncError            String?
+  lastSyncCreated          Int                  @default(0)
+  lastSyncUpdated          Int                  @default(0)
   /// Último intento de sync automático o manual (salga bien o mal). Con
   /// consecutiveFailures arma el backoff: un proveedor que falla no se
   /// reintenta en cada tick del cron.
-  lastAttemptAt        DateTime?
+  lastAttemptAt            DateTime?
   /// Fallos seguidos. Una sync OK lo vuelve a 0.
-  consecutiveFailures  Int                  @default(0)
+  consecutiveFailures      Int                  @default(0)
   /// Auto-sync pausado tras muchos fallos seguidos. Se despausa con una sync
   /// manual que salga bien. El motivo queda en criollo para mostrarlo.
-  pausedAt             DateTime?
-  pauseReason          String?
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
+  pausedAt                 DateTime?
+  pauseReason              String?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
 
   @@unique([tenantId, provider])
 }
@@ -1025,30 +1027,30 @@ model ProviderSyncConfig {
 /// proveedor para una organización. El POST de sync sigue siendo bloqueante;
 /// esta fila se actualiza en cada tanda para que el front pueda pollear avance.
 model CatalogSyncRun {
-  id                 String   @id @default(uuid())
-  tenantId           String
-  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  provider           String
+  id                String    @id @default(uuid())
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider          String
   /// RUNNING | OK | ERROR
-  status             String   @default("RUNNING")
+  status            String    @default("RUNNING")
   /// manual | cron | import
-  source             String   @default("manual")
-  processed          Int      @default(0)
-  created            Int      @default(0)
-  updated            Int      @default(0)
-  unchanged          Int      @default(0)
-  missingAffected    Int      @default(0)
-  zeroStockAffected  Int      @default(0)
+  source            String    @default("manual")
+  processed         Int       @default(0)
+  created           Int       @default(0)
+  updated           Int       @default(0)
+  unchanged         Int       @default(0)
+  missingAffected   Int       @default(0)
+  zeroStockAffected Int       @default(0)
   /// Ofertas que había al empezar: sirve de denominador de la barra. En el
   /// primer sync es 0 y el front muestra conteo sin porcentaje.
-  expectedTotal      Int      @default(0)
+  expectedTotal     Int       @default(0)
   /// Filas de CatalogSyncChange realmente guardadas (tope, no el total).
-  changesStored      Int      @default(0)
-  changesTruncated   Boolean  @default(false)
-  errorMessage       String?
-  startedAt          DateTime @default(now())
-  finishedAt         DateTime?
-  heartbeatAt        DateTime @default(now())
+  changesStored     Int       @default(0)
+  changesTruncated  Boolean   @default(false)
+  errorMessage      String?
+  startedAt         DateTime  @default(now())
+  finishedAt        DateTime?
+  heartbeatAt       DateTime  @default(now())
 
   changes CatalogSyncChange[]
 
@@ -1140,7 +1142,7 @@ model ProviderOrder {
   updatedAt           DateTime            @updatedAt
 
   /// Ya se sacaron sus productos del carrito compartido del comercio (cart-order-reconcile).
-  cartReconciledAt    DateTime?
+  cartReconciledAt DateTime?
 
   @@index([userId, provider, createdAt])
   @@index([tenantId, provider, createdAt])
@@ -1194,30 +1196,30 @@ enum OrgNotificationKind {
 
 /// Landing pública de una marca. La URL usa publicKey opaca; en el panel B2B se ve el nombre.
 model BrandLanding {
-  id          String   @id @default(uuid())
-  tenantId    String   @unique
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  publicKey   String   @unique
-  published   Boolean  @default(false)
-  headline    String?
-  about       String?
-  logoUrl     String?
-  heroUrl     String?
-  websiteUrl  String?
-  supportEmail String?
-  supportPhone String?
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  publicKey       String   @unique
+  published       Boolean  @default(false)
+  headline        String?
+  about           String?
+  logoUrl         String?
+  heroUrl         String?
+  websiteUrl      String?
+  supportEmail    String?
+  supportPhone    String?
   /// Bloques [{ type: "text"|"image"|"faq", title?, body?, url? }]
-  blocks      Json     @default("[]")
+  blocks          Json     @default("[]")
   /// HTML del espacio in-app. Placeholders {{productos}} {{acciones}} {{materiales}} {{capacitaciones}} {{semaforos}} {{hablar}}.
-  html             String? @db.Text
-  primaryColor     String?
-  backgroundColor  String?
-  textColor        String?
-  fontFamily       String?
+  html            String?  @db.Text
+  primaryColor    String?
+  backgroundColor String?
+  textColor       String?
+  fontFamily      String?
   /// El link público permite que un comercio o distro se vincule con la marca.
-  allowPublicLink  Boolean @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  allowPublicLink Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 enum BrandResourceKind {
@@ -1353,22 +1355,22 @@ model BrandItemLink {
 
 /// Acción comercial medible: comprar X en Y distribuidores para Z comercios, con vigencia y rebate.
 model BrandAction {
-  id              String                 @id @default(uuid())
+  id              String                @id @default(uuid())
   tenantId        String
-  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   kind            BrandActionKind
-  status          BrandActionStatus      @default(DRAFT)
+  status          BrandActionStatus     @default(DRAFT)
   title           String
   description     String?
   startsAt        DateTime
   endsAt          DateTime
-  targetQty       Decimal?               @db.Decimal(14, 4)
-  targetAmountUsd Decimal?               @db.Decimal(14, 4)
-  rewardKind      BrandActionRewardKind  @default(NONE)
-  rewardUsd       Decimal?               @db.Decimal(14, 4)
-  notifyRetailers Boolean                @default(true)
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
+  targetQty       Decimal?              @db.Decimal(14, 4)
+  targetAmountUsd Decimal?              @db.Decimal(14, 4)
+  rewardKind      BrandActionRewardKind @default(NONE)
+  rewardUsd       Decimal?              @db.Decimal(14, 4)
+  notifyRetailers Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
   scopes          BrandActionScope[]
 
   @@index([tenantId, status, startsAt])
@@ -1389,18 +1391,18 @@ model BrandActionScope {
 
 /// Aviso a un comercio. Lo mandan marca, distro o el sistema. No cruza locales.
 model OrgNotification {
-  id           String               @id @default(uuid())
+  id           String              @id @default(uuid())
   toTenantId   String
-  toTenant     Tenant               @relation("NotifTo", fields: [toTenantId], references: [id], onDelete: Cascade)
+  toTenant     Tenant              @relation("NotifTo", fields: [toTenantId], references: [id], onDelete: Cascade)
   fromTenantId String?
-  fromTenant   Tenant?              @relation("NotifFrom", fields: [fromTenantId], references: [id], onDelete: SetNull)
+  fromTenant   Tenant?             @relation("NotifFrom", fields: [fromTenantId], references: [id], onDelete: SetNull)
   kind         OrgNotificationKind
   title        String
   body         String
   actionId     String?
   landingKey   String?
   readAt       DateTime?
-  createdAt    DateTime             @default(now())
+  createdAt    DateTime            @default(now())
 
   @@index([toTenantId, createdAt])
   @@index([toTenantId, readAt])
@@ -1485,16 +1487,16 @@ model NewsArticle {
 }
 
 model NewsAttachment {
-  id         String                    @id @default(uuid())
+  id         String                   @id @default(uuid())
   articleId  String
-  article    NewsArticle               @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  article    NewsArticle              @relation(fields: [articleId], references: [id], onDelete: Cascade)
   kind       NewsAttachmentKind
   title      String
   fileUrl    String?
   contentUrl String?
   resourceId String?
-  visibility NewsAttachmentVisibility  @default(IN_APP)
-  sortOrder  Int                       @default(0)
+  visibility NewsAttachmentVisibility @default(IN_APP)
+  sortOrder  Int                      @default(0)
 
   @@index([articleId, sortOrder])
 }
@@ -1950,44 +1952,44 @@ model AuditLogEntry {
 // externa en vivo: siempre lee estas tablas.
 
 model RetailStore {
-  id           String   @id @default(uuid())
+  id           String          @id @default(uuid())
   /// ID numérico de la tienda en la fuente externa.
-  externalId   Int      @unique
+  externalId   Int             @unique
   name         String
   logoUrl      String?
-  active       Boolean  @default(true)
+  active       Boolean         @default(true)
   /// Algunos locales publican centavos (*100). 100 = dividir al normalizar.
-  priceDivisor Int      @default(1)
+  priceDivisor Int             @default(1)
   raw          Json?
-  syncedAt     DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  syncedAt     DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
   products     RetailProduct[]
-  ownerTenants Tenant[] @relation("TenantOwnRetailStore")
+  ownerTenants Tenant[]        @relation("TenantOwnRetailStore")
 
   @@index([active, name])
 }
 
 model RetailProduct {
-  id              String   @id @default(uuid())
+  id           String               @id @default(uuid())
   /// ID del producto en la fuente externa.
-  externalId      Int      @unique
-  storeId         String
-  store           RetailStore @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  name            String
-  description     String?
-  price           Decimal  @db.Decimal(14, 4)
-  currency        String   @default("ARS")
-  productUrl      String?
-  imageUrl        String?
-  categoryName    String?
+  externalId   Int                  @unique
+  storeId      String
+  store        RetailStore          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  price        Decimal              @db.Decimal(14, 4)
+  currency     String               @default("ARS")
+  productUrl   String?
+  imageUrl     String?
+  categoryName String?
   /// Nombre normalizado en minúsculas sin acentos, para búsqueda amplia.
-  searchText      String
-  active          Boolean  @default(true)
+  searchText   String
+  active       Boolean              @default(true)
   /// Payload crudo omitido a propósito (pesado); no se persiste en ingest.
-  raw             Json?
-  syncedAt        DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  priceHistory    RetailPriceHistory[]
+  raw          Json?
+  syncedAt     DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  priceHistory RetailPriceHistory[]
 
   @@index([storeId])
   @@index([active, price])
@@ -1997,33 +1999,33 @@ model RetailProduct {
 }
 
 model RetailPriceHistory {
-  id              String   @id @default(uuid())
-  productId       String
-  product         RetailProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id            String        @id @default(uuid())
+  productId     String
+  product       RetailProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
   /// ID del cambio en la fuente (si viene).
-  externalId      Int?
-  previousPrice   Decimal? @db.Decimal(14, 4)
-  price           Decimal  @db.Decimal(14, 4)
-  changedAt       DateTime
-  createdAt       DateTime @default(now())
+  externalId    Int?
+  previousPrice Decimal?      @db.Decimal(14, 4)
+  price         Decimal       @db.Decimal(14, 4)
+  changedAt     DateTime
+  createdAt     DateTime      @default(now())
 
   @@unique([productId, externalId])
   @@index([productId, changedAt])
 }
 
 model RetailIngestRun {
-  id               String   @id @default(uuid())
-  startedAt        DateTime @default(now())
+  id               String    @id @default(uuid())
+  startedAt        DateTime  @default(now())
   finishedAt       DateTime?
   /// RUNNING | OK | ERROR | CANCELLED | DEGRADED
-  status           String   @default("RUNNING")
+  status           String    @default("RUNNING")
   /// full | batch
-  mode             String   @default("full")
-  storesTotal      Int      @default(0)
-  storesDone       Int      @default(0)
-  productsUpserted Int      @default(0)
+  mode             String    @default("full")
+  storesTotal      Int       @default(0)
+  storesDone       Int       @default(0)
+  productsUpserted Int       @default(0)
   currentStoreName String?
-  heartbeatAt      DateTime @default(now())
+  heartbeatAt      DateTime  @default(now())
   errorMessage     String?
 }
 
@@ -2071,9 +2073,9 @@ model ImageSyncRun {
 
 /// Una ficha tocada por Primera foto. Unique por producto: si se edita, se actualiza.
 model ImageSyncFill {
-  id         String          @id @default(uuid())
+  id         String            @id @default(uuid())
   runId      String?
-  run        ImageSyncRun?   @relation(fields: [runId], references: [id], onDelete: SetNull)
+  run        ImageSyncRun?     @relation(fields: [runId], references: [id], onDelete: SetNull)
   productId  String
   product    ProviderSyncCache @relation(fields: [productId], references: [id], onDelete: Cascade)
   provider   String
@@ -2083,12 +2085,12 @@ model ImageSyncFill {
   query      String
   imageUrl   String?
   /// serper | serper_pick | upload
-  source     String          @default("serper")
+  source     String            @default("serper")
   /// filled | skipped | failed
   status     String
   error      String?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
 
   @@unique([productId])
   @@index([createdAt])
@@ -2116,16 +2118,16 @@ enum AdCampaignStatus {
 
 /// Espacio publicitario. El superadmin los prende y les pone precio.
 model AdSlot {
-  id               String       @id @default(uuid())
-  key              String       @unique
-  name             String
-  description      String       @default("")
+  id              String       @id @default(uuid())
+  key             String       @unique
+  name            String
+  description     String       @default("")
   /// search | home | discovery
-  placement        String
-  monthlyPriceUsd  Decimal      @db.Decimal(10, 2)
-  maxConcurrent    Int          @default(1)
-  enabled          Boolean      @default(false)
-  campaigns        AdCampaign[]
+  placement       String
+  monthlyPriceUsd Decimal      @db.Decimal(10, 2)
+  maxConcurrent   Int          @default(1)
+  enabled         Boolean      @default(false)
+  campaigns       AdCampaign[]
 }
 
 model AdCampaign {
@@ -2213,46 +2215,46 @@ enum SubscriptionPaymentProvider {
 /// Suscripción de la organización (una por comercio). Nunca se borra ni borra nada:
 /// suspender o cancelar deja intactos proveedores, credenciales, listas y pedidos.
 model Subscription {
-  id                   String             @id @default(uuid())
-  tenantId             String             @unique
-  tenant               Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                      String             @id @default(uuid())
+  tenantId                String             @unique
+  tenant                  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   /// Estado guardado. El efectivo lo corrigen las fechas (vencimiento, gracia, cortesía).
-  status               SubscriptionStatus @default(ACTIVE)
-  startedAt            DateTime           @default(now())
-  currentPeriodStart   DateTime?
+  status                  SubscriptionStatus @default(ACTIVE)
+  startedAt               DateTime           @default(now())
+  currentPeriodStart      DateTime?
   /// Hasta cuándo está pago.
-  currentPeriodEnd     DateTime?
+  currentPeriodEnd        DateTime?
   /// Próximo cobro. `null` = coincide con currentPeriodEnd.
-  nextBillingAt        DateTime?
+  nextBillingAt           DateTime?
   /// Suspensión pactada distinta de vencimiento + días de gracia (ej. al reactivar).
-  gracePeriodEnd       DateTime?
-  trialEndsAt          DateTime?
-  suspendedAt          DateTime?
+  gracePeriodEnd          DateTime?
+  trialEndsAt             DateTime?
+  suspendedAt             DateTime?
   /// MANUAL (Administración, queda hasta reactivar) u OVERDUE (por falta de pago, se levanta al pagar).
-  suspensionReason     String?
-  cancelledAt          DateTime?
-  cancellationReason   String?
+  suspensionReason        String?
+  cancelledAt             DateTime?
+  cancellationReason      String?
   /// Cortesía: `null` con status COURTESY = sin vencimiento.
-  courtesyUntil        DateTime?
-  courtesyReason       String?
+  courtesyUntil           DateTime?
+  courtesyReason          String?
   /// Precio pactado distinto del de lista. `null` = precio del plan.
-  priceOverride        Decimal?           @db.Decimal(10, 2)
-  currency             String             @default("USD")
+  priceOverride           Decimal?           @db.Decimal(10, 2)
+  currency                String             @default("USD")
   /// Puesta en marcha (Custom). Monto y estado administrables.
-  setupFee             Decimal?           @db.Decimal(10, 2)
-  setupFeeStatus       SetupFeeStatus     @default(NOT_APPLICABLE)
-  setupFeePaidAt       DateTime?
+  setupFee                Decimal?           @db.Decimal(10, 2)
+  setupFeeStatus          SetupFeeStatus     @default(NOT_APPLICABLE)
+  setupFeePaidAt          DateTime?
   /// Si está prendido y la puesta en marcha está pendiente, el Custom opera como Pro.
-  setupFeeBlocksCustom Boolean            @default(false)
+  setupFeeBlocksCustom    Boolean            @default(false)
   /// Módulo de API de catálogo (US$ 10/mes en Base y Pro; Custom lo trae incluido).
-  catalogApiAddon      Boolean            @default(false)
-  catalogApiAddonSince DateTime?
+  catalogApiAddon         Boolean            @default(false)
+  catalogApiAddonSince    DateTime?
   /// Módulo de API activo sin cargo (lo regala Administración): no suma a la cuota.
-  catalogApiAddonCourtesy Boolean           @default(false)
+  catalogApiAddonCourtesy Boolean            @default(false)
   /// Notas internas de Administración. El comercio no las ve.
-  notes                String?
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  notes                   String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
 
   payments  SubscriptionPayment[]
   events    SubscriptionEvent[]
@@ -2556,19 +2558,19 @@ model ApiWebhookDelivery {
 /// Hasta dónde se miró el catálogo de un comercio para registrar cambios.
 /// Solo existe para comercios con alguna key activa.
 model ApiCatalogTracker {
-  tenantId       String    @id
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId        String    @id
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   /// Última oferta y última ficha revisadas (updatedAt).
-  offersCursor   DateTime?
-  productsCursor DateTime?
+  offersCursor    DateTime?
+  productsCursor  DateTime?
   /// Última revisión completa (detecta ofertas borradas).
-  lastFullScanAt DateTime?
+  lastFullScanAt  DateTime?
   /// La primera pasada solo toma la foto, sin eventos.
-  baselineAt     DateTime?
+  baselineAt      DateTime?
   /// Distribuidores con la sincronización pausada en la última pasada (para avisar pausa y vuelta).
   pausedProviders String[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 /// Última versión de cada oferta que vio el rastreador: contra esto se decide
@@ -2683,4 +2685,146 @@ model SalesQuote {
 
   @@unique([tenantId, number])
   @@index([tenantId, createdById, archivedAt])
+}
+
+// ─── Enriquecimiento del catálogo (docs/PLAN_ENRIQUECIMIENTO.md) ───────────
+// Solo lo usa el módulo de superadmin "Productos enriquecidos". El buscador y
+// lo que leen los comercios NO leen estas tablas: nada de esto se ve afuera
+// hasta que se aplique (y en la primera entrega no se aplica nada).
+
+enum EnrichmentStatus {
+  NEW
+  ENRICHING
+  ENRICHED
+  REVIEW
+  FAILED
+}
+
+enum EnrichmentProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+enum EnrichmentRunStatus {
+  RUNNING
+  DONE
+  CANCELLED
+  FAILED
+}
+
+/// Producto maestro: agrupa las fichas de distintos distribuidores que son el
+/// mismo artículo (por EAN válido, o marca + part number, o la ficha sola).
+model CatalogMaster {
+  id                 String           @id @default(uuid())
+  /// ean:<gtin14> | pn:<brandKey>:<pn> | single:<provider>:<externalId> | manual:<uuid>
+  key                String           @unique
+  /// EAN | PN | SINGLE | MANUAL
+  matchKind          String
+  brand              String?
+  brandKey           String?
+  partNumber         String?
+  ean                String?
+  name               String
+  categoryRaw        String?
+  /// Clave de la taxonomía unificada (src/enrichment/taxonomy.ts).
+  categoryKey        String?
+  status             EnrichmentStatus @default(NEW)
+  doubtful           Boolean          @default(false)
+  doubtReason        String?
+  memberCount        Int              @default(0)
+  hasAiImage         Boolean          @default(false)
+  missingDescription Boolean          @default(false)
+  /// Mejor confianza entre sus propuestas (0–1).
+  bestConfidence     Float?
+  enrichedAt         DateTime?
+  /// Lo tocó un superadmin (separar/unir): reagrupar no lo deshace.
+  lockedManual       Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  members   CatalogMasterMember[]
+  proposals EnrichmentProposal[]
+
+  @@index([status])
+  @@index([categoryKey])
+  @@index([brandKey])
+  @@index([doubtful])
+  @@index([memberCount])
+}
+
+model CatalogMasterMember {
+  id         String        @id @default(uuid())
+  masterId   String
+  master     CatalogMaster @relation(fields: [masterId], references: [id], onDelete: Cascade)
+  provider   String
+  externalId String
+  /// Asignado a mano (separar/unir): reagrupar lo respeta.
+  manual     Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+
+  @@unique([provider, externalId])
+  @@index([masterId])
+}
+
+/// Propuesta por maestro y campo: images | description | longDescription |
+/// attributes | category. No se copia a ninguna ficha hasta "Aplicar".
+model EnrichmentProposal {
+  id          String                   @id @default(uuid())
+  masterId    String
+  master      CatalogMaster            @relation(fields: [masterId], references: [id], onDelete: Cascade)
+  field       String
+  value       Json
+  /// icecat | manufacturer | distributor | ai (o varias, separadas por coma)
+  source      String
+  confidence  Float
+  evidence    Json?
+  status      EnrichmentProposalStatus @default(PENDING)
+  runId       String?
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@unique([masterId, field])
+  @@index([status])
+  @@index([field, status])
+}
+
+/// Respuesta cruda de cada fuente externa, para no repetir llamadas.
+model EnrichmentSourceCache {
+  id        String   @id @default(uuid())
+  source    String
+  key       String
+  status    Int
+  body      Json
+  fetchedAt DateTime @default(now())
+
+  @@unique([source, key])
+}
+
+/// Corrida en segundo plano (un producto, una muestra o un filtro).
+model EnrichmentRun {
+  id              String              @id @default(uuid())
+  /// one | sample | filter
+  kind            String
+  filter          Json?
+  status          EnrichmentRunStatus @default(RUNNING)
+  total           Int                 @default(0)
+  processed       Int                 @default(0)
+  failed          Int                 @default(0)
+  proposals       Int                 @default(0)
+  aiCalls         Int                 @default(0)
+  estCostUsd      Float               @default(0)
+  maxItems        Int
+  maxCostUsd      Float
+  cancelRequested Boolean             @default(false)
+  startedById     String?
+  startedAt       DateTime            @default(now())
+  finishedAt      DateTime?
+  error           String?
+  log             Json?
+
+  @@index([startedAt])
 }

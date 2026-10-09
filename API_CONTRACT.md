@@ -971,3 +971,20 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: `QuoteView { id, number, initials, clientName, clientPhone, notes, items: [{ provider, externalId, name, imageUrl, brand, sku, qty, unitPrice, unitFinalPrice, currency, pricedAt }], totals: { [moneda]: number }, itemCount, createdById, createdByName, mine, archivedAt, createdAt, updatedAt }`. Lista = `QuoteView[]` (hasta 200, más recientes primero). `refresh-prices` → `{ quote, changes: [{ index, provider, externalId, name, currency, before, after }] }` (`after: null` = ya no tiene precio; queda el anterior).
 - **Estado**: IMPLEMENTADO
 - **Notas**: Precio de VENTA calculado en el servidor al agregar (mismo valor que ve el vendedor en la búsqueda: oferta del catálogo comercial + márgenes de venta) y congelado; nunca se guarda ni devuelve costo. Sumar el mismo producto suma cantidad y conserva el precio de la línea. Sin precio de venta → 422; producto que el comercio no ve → 404. Número correlativo por comercio (candado por comercio). Cada uno ve los suyos; OWNER/ADMIN ven todos. Hasta 200 productos por presupuesto. Diseño: `docs/PLAN_MODO_VENDEDOR.md` §8.
+
+### [FEATURE] Productos enriquecidos (superadmin)
+- **Método / Ruta** (todas bajo `/admin/enrichment`, `ROLE_ADMIN`):
+  - `GET /overview`: totales, estados, categorías unificadas con conteo, fuentes activas (`icecat`, `ai`, conectores de fabricantes). `applyEnabled: false`.
+  - `GET /taxonomy`: categorías unificadas y esquemas de atributos (clave, tipo, unidad, valores, versión).
+  - `POST /regroup`: recalcula los productos maestros (idempotente; respeta lo separado/unido a mano). Respuesta `{ fichas, masters, created, updated, deleted, membersMoved, doubtful, ms }`.
+  - `GET /masters?q&category&brand&provider&status&hasAiImage&missingDescription&doubtful&multiProvider&minConfidence&maxConfidence&page&pageSize&sort`: lista paginada `{ items, total, page, pageSize }`. `category=none` = sin categoría; `sort` = `name|members|confidence|updated`.
+  - `GET /masters/:id`: `{ master, fichas[] (de ProviderSyncCache, con aiImage y manual), proposals[], schema, applyEnabled: false, applyNote }`.
+  - `POST /masters/:id/enrich`: enriquece ese producto y espera (≤ ~1 min). `{ run, detail }`.
+  - `POST /masters/:id/proposals/:field/decision` body `{ decision: APPROVED|REJECTED|PENDING }`. `field` = `images|description|longDescription|attributes|category`. Aprobar `images` copia las fotos a `StoredAsset` (`assetUrl` en cada foto).
+  - `POST /proposals/bulk-decision` body `{ decision, minConfidence, field?, filter?, confirm? }`: sin `confirm` solo cuenta (`{ matched, updated: 0 }`).
+  - `POST /masters/:id/split` body `{ members: [{ provider, externalId }] }` → `{ originalId, newId }`. `POST /masters/merge` body `{ targetId, sourceIds[] }`.
+  - `GET /masters/:id/apply-preview`: por ficha y campo, valor de hoy, propuesto y si cambiaría con "solo completar vacíos" (`fillEmpty`) o "reemplazar" (`overwrite`). No escribe.
+  - `GET /runs` · `POST /runs` body `{ kind: sample|filter|ids, filter?, masterIds?, maxItems, maxCostUsd, onlyNew? }` · `GET /runs/:id` · `POST /runs/:id/cancel`.
+- **Auth**: Bearer, `ROLE_ADMIN`.
+- **Estado**: IMPLEMENTADO (primera entrega).
+- **Notas**: Todo queda como propuesta en `EnrichmentProposal`; nada escribe en `ProviderSyncCache` ni en lo que lee el buscador. "Aplicar a las fichas" está deshabilitado hasta elegir la regla (spec `docs/PLAN_ENRIQUECIMIENTO.md`). Una corrida a la vez; al llegar al tope de costo sigue sin IA. Fuentes: Open Icecat (`ICECAT_USERNAME`), webs oficiales (ASUS, Lenovo PSREF, TP-Link, HyperX, Redragon), fichas de distribuidores, IA de `CatalogEnrichmentSettings`.
