@@ -12,6 +12,9 @@ import { cleanCredentialValues } from "./credential-values";
  * cuenta en el distribuidor la abrió el comercio. `savedById` queda solo como
  * rastro de quién la tocó por última vez.
  */
+/** Sincronización automática por defecto al cargar una cuenta. */
+const DEFAULT_SYNC_MINUTES = 60;
+
 @Injectable()
 export class CredentialsService {
   constructor(
@@ -67,20 +70,20 @@ export class CredentialsService {
         where: { tenantId, provider: dto.providerName, priceChannel: { not: "API" } },
         data: { priceChannel: "API" },
       });
-      // Por defecto la sincronización automática queda prendida cada 1 h. Solo la
-      // primera vez (nunca sincronizó): si después la apagó, se respeta.
+      // Cargar (o volver a cargar) la cuenta deja la sincronización automática
+      // prendida: cada 1 h, o el intervalo que el comercio ya había elegido.
       const config = await this.prisma.providerSyncConfig.findUnique({
         where: { tenantId_provider: { tenantId, provider: dto.providerName } },
-        select: { lastSyncedAt: true, enabled: true },
+        select: { syncIntervalMinutes: true },
       });
       if (!config) {
         await this.prisma.providerSyncConfig.create({
-          data: { tenantId, provider: dto.providerName, priceChannel: "API", enabled: true, syncIntervalMinutes: 60 },
+          data: { tenantId, provider: dto.providerName, priceChannel: "API", enabled: true, syncIntervalMinutes: DEFAULT_SYNC_MINUTES },
         });
-      } else if (!config.lastSyncedAt && !config.enabled) {
+      } else {
         await this.prisma.providerSyncConfig.update({
           where: { tenantId_provider: { tenantId, provider: dto.providerName } },
-          data: { enabled: true, syncIntervalMinutes: 60 },
+          data: { enabled: true, syncIntervalMinutes: config.syncIntervalMinutes > 0 ? config.syncIntervalMinutes : DEFAULT_SYNC_MINUTES },
         });
       }
       // Cuenta nueva o corregida: se levanta la pausa por fallos y se vuelve a intentar.

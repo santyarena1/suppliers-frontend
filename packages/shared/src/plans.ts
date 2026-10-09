@@ -131,7 +131,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     plan: "CUSTOM",
     label: "NODO Custom",
     shortLabel: "Custom",
-    monthlyPrice: 150,
+    monthlyPrice: 100,
     currency: "USD",
     setupFee: 300,
     tagline: "NODO adaptado a tu empresa.",
