@@ -3246,6 +3246,8 @@ export interface ProviderDisplay {
   visible: boolean;
   logoUrl: string | null;
   textColor: string | null;
+  /** Solo en Administración: con `visible: false`, organizaciones que igual lo ven. */
+  allowedTenantIds?: string[];
 }
 
 export interface BrandDisplay {
@@ -3293,7 +3295,7 @@ export const adminApi = {
   deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
 
   listProviderDisplay: () => api.get<ProviderDisplay[]>("/admin/providers/display"),
-  updateProviderDisplay: (provider: Provider, data: Partial<Pick<ProviderDisplay, "visible" | "logoUrl" | "textColor">>) =>
+  updateProviderDisplay: (provider: Provider, data: Partial<Pick<ProviderDisplay, "visible" | "logoUrl" | "textColor" | "allowedTenantIds">>) =>
     api.put<ProviderDisplay>(`/admin/providers/${provider}/display`, data),
 
   listBrandDisplay: () => api.get<BrandDisplay[]>("/admin/brands/display"),

@@ -869,7 +869,10 @@ model StoredAsset {
 // logo/color custom (se usan los defaults de providerColors.ts).
 model ProviderDisplayConfig {
   provider  String   @id
+  /// false = oculto para todos los comercios (Administración lo sigue viendo).
   visible   Boolean  @default(true)
+  /// Con `visible = false`: organizaciones que igual lo ven ("solo visible para").
+  allowedTenantIds String[] @default([])
   logoUrl   String?
   textColor String?
   updatedAt DateTime @updatedAt

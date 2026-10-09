@@ -120,7 +120,7 @@ export class AdminController {
   // Visibilidad / display de proveedores
   @Get("providers/display")
   listProviderDisplay() {
-    return this.adminService.listProviderDisplay();
+    return this.adminService.listProviderDisplay(true);
   }
 
   @Put("providers/:provider/display")

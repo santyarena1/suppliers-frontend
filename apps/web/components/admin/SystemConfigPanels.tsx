@@ -7,8 +7,8 @@ import {
   BrandDisplay,
   Banner,
   ALL_PROVIDERS,
-  isListProvider,
 } from "@/lib/api";
+import ProviderVisibilityControl from "@/components/admin/ProviderVisibilityControl";
 import {
   Loader2, Plus, Trash2, X,
 } from "lucide-react";
@@ -67,7 +67,8 @@ export function ProvidersTab({ showToast }: { showToast: ConfigToast }) {
     <div className="max-w-3xl flex flex-col gap-2">
       <h2 className="text-sm font-semibold text-white mb-2">Visibilidad y marca de proveedores</h2>
       {rows.map((r) => (
-        <div key={r.provider} className="flex items-center gap-3 border border-surface-800 rounded-xl px-4 py-3">
+        <div key={r.provider} className="flex flex-col gap-3 border border-surface-800 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-3">
           <div className="w-6 h-6 rounded bg-surface-800 flex-shrink-0 overflow-hidden flex items-center justify-center">
             {r.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -90,24 +91,8 @@ export function ProvidersTab({ showToast }: { showToast: ConfigToast }) {
             onChange={(e) => update(r.provider, { textColor: e.target.value })}
             className="w-8 h-8 rounded cursor-pointer bg-transparent border border-surface-700"
           />
-          {isListProvider(r.provider) ? (
-            <span
-              className="text-xs text-surface-500 px-2.5 py-1.5 flex-shrink-0"
-              title="Un proveedor por lista lo ve el comercio que lo cargó o se vinculó; no se oculta desde acá."
-            >
-              Por vínculo
-            </span>
-          ) : (
-            <button
-              onClick={() => update(r.provider, { visible: !r.visible })}
-              title="Oculto no afecta a los comercios que cargan su propia lista de este proveedor."
-              className={`text-xs font-medium px-2.5 py-1.5 rounded-md border flex-shrink-0 ${
-                r.visible ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-red-500/10 border-red-500/25 text-red-400"
-              }`}
-            >
-              {r.visible ? "Visible" : "Oculto"}
-            </button>
-          )}
+          </div>
+          <ProviderVisibilityControl row={r} onChange={(patch) => update(r.provider, patch)} />
         </div>
       ))}
     </div>

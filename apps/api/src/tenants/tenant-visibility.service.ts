@@ -53,7 +53,7 @@ export interface VisibleProvider {
   /**
    * El administrador lo ocultó en toda la plataforma: el vínculo sigue, pero su
    * catálogo no aparece en el buscador ni en ninguna vista. Nunca aplica a lo que
-   * el comercio cargó con su propia lista (ver `hiddenForViewer`).
+   * excepciones: oculto es para todos, salvo las organizaciones habilitadas (ver `hiddenForViewer`).
    */
   platformHidden: boolean;
   /**
@@ -168,8 +168,9 @@ export class TenantVisibilityService {
           discountPercent: null,
           linkId: null,
           purchase: purchaseFromConfig(propio.providerKey, ownConfig),
-          platformHidden: hiddenForViewer(hidden, propio.providerKey, false),
-          inSearch: !hiddenForViewer(hidden, propio.providerKey, false),
+          // El distribuidor siempre ve su propio catálogo.
+          platformHidden: false,
+          inSearch: true,
           // El distribuidor ve su propio catálogo aunque la sync esté pausada.
           syncPaused: false,
           includeInSearch: null,
@@ -335,7 +336,7 @@ export class TenantVisibilityService {
     const rows = [...visibles.values()]
       .map((v) => ({
         ...v,
-        platformHidden: hiddenForViewer(hidden, v.provider, v.selfConnected),
+        platformHidden: hiddenForViewer(hidden, v.provider, tenantId),
         configured: priced === null || priced.has(v.provider),
       }))
       // Oculto por la plataforma = para un comercio no existe: ni búsqueda, ni
@@ -457,12 +458,13 @@ export class TenantVisibilityService {
     return new Set(rows.map((r) => r.provider));
   }
 
-  private async platformHiddenProviders(): Promise<Set<string>> {
+  /** Ocultos por la plataforma → organizaciones que igual los ven. */
+  private async platformHiddenProviders(): Promise<HiddenProviders> {
     const rows = await this.prisma.providerDisplayConfig.findMany({
       where: { visible: false },
-      select: { provider: true },
+      select: { provider: true, allowedTenantIds: true },
     });
-    return new Set(rows.map((r) => r.provider));
+    return new Map(rows.map((r) => [r.provider, new Set(r.allowedTenantIds)]));
   }
 
   /**
@@ -687,8 +689,15 @@ function purchaseFromConfig(
  * cargando su propio Excel existen porque ese comercio los trajo: ocultarlos
  * desde el admin le borraba del buscador su propia lista sin decirle nada.
  */
-export function hiddenForViewer(hidden: Set<string>, provider: string, selfConnected: boolean): boolean {
-  if (!hidden.has(provider)) return false;
-  if (selfConnected || isListProviderKey(provider)) return false;
-  return true;
+/** Proveedor oculto → organizaciones habilitadas a verlo igual. */
+export type HiddenProviders = Map<string, Set<string>>;
+
+/**
+ * Oculto por la plataforma es oculto para todos los comercios (también los por
+ * lista o con lista propia), salvo las organizaciones habilitadas.
+ */
+export function hiddenForViewer(hidden: HiddenProviders, provider: string, tenantId: string): boolean {
+  const allowed = hidden.get(provider);
+  if (!allowed) return false;
+  return !allowed.has(tenantId);
 }

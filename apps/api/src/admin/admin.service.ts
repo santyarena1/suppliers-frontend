@@ -182,7 +182,8 @@ export class AdminService {
 
   // ---------- Visibilidad / display de proveedores ----------
 
-  async listProviderDisplay() {
+  /** `withAccess`: incluye las organizaciones habilitadas (solo para Administración). */
+  async listProviderDisplay(withAccess = false) {
     const [configs, listSuppliers] = await Promise.all([
       this.prisma.providerDisplayConfig.findMany(),
       this.prisma.tenant.findMany({
@@ -205,17 +206,27 @@ export class AdminService {
         visible: c?.visible ?? true,
         logoUrl: c?.logoUrl ?? null,
         textColor: c?.textColor ?? null,
+        ...(withAccess ? { allowedTenantIds: c?.allowedTenantIds ?? [] } : {}),
       };
     });
   }
 
   async updateProviderDisplay(provider: Provider, dto: UpdateProviderDisplayDto) {
-    const config = await this.prisma.providerDisplayConfig.upsert({
+    const data = { ...dto };
+    if (dto.allowedTenantIds) {
+      // Solo organizaciones que existen, sin repetir.
+      const ids = [...new Set(dto.allowedTenantIds)];
+      const found = ids.length
+        ? await this.prisma.tenant.findMany({ where: { id: { in: ids } }, select: { id: true } })
+        : [];
+      const existing = new Set(found.map((t) => t.id));
+      data.allowedTenantIds = ids.filter((id) => existing.has(id));
+    }
+    return this.prisma.providerDisplayConfig.upsert({
       where: { provider },
-      create: { provider, ...dto },
-      update: { ...dto },
+      create: { provider, ...data },
+      update: data,
     });
-    return config;
   }
 
   // ---------- Visibilidad / display de marcas ----------
