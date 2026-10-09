@@ -248,7 +248,9 @@ export class OrdersService {
         ? {}
         : {
             provider: { notIn: DEMO_DISTRIBUTORS.map((d) => d.providerKey) as string[] },
-            NOT: { notes: { contains: "[DEMO]" } },
+            // Sin notas también cuenta: en SQL, NOT (NULL LIKE …) da NULL y dejaba
+            // afuera de las estadísticas a la mayoría de los pedidos reales.
+            OR: [{ notes: null }, { NOT: { notes: { contains: "[DEMO]" } } }],
           }),
     };
 
