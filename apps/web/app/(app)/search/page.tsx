@@ -6,6 +6,7 @@ import ProductCard from "@/components/ProductCard";
 import PrefsPanel from "@/components/PrefsPanel";
 import SearchLanding from "@/components/search/SearchLanding";
 import SearchFilterDropdown from "@/components/search/SearchFilterDropdown";
+import OutOfSearchNotice from "@/components/search/OutOfSearchNotice";
 import SponsoredStrip from "@/components/ads/SponsoredStrip";
 import { OfflinePricesHelpButton } from "@/components/OfflinePricesHelp";
 import {
@@ -1092,25 +1093,21 @@ function SearchPage() {
                     : "Sin marcas en el catálogo"
                 }
               />
-              <SearchFilterDropdown
-                label="Distribuidor"
-                options={distributorOptions}
-                selected={new Set([...selectedProviders])}
-                onToggle={(value) => toggleProvider(value as Provider)}
-                onSelectAll={() => applyProviders(new Set(searchable.map((p) => p.provider)))}
-                onClear={() => applyProviders(new Set())}
-                emptyText="Todavía no estás conectado con ningún distribuidor"
-              />
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <SearchFilterDropdown
+                    label="Distribuidor"
+                    options={distributorOptions}
+                    selected={new Set([...selectedProviders])}
+                    onToggle={(value) => toggleProvider(value as Provider)}
+                    onSelectAll={() => applyProviders(new Set(searchable.map((p) => p.provider)))}
+                    onClear={() => applyProviders(new Set())}
+                    emptyText="Todavía no estás conectado con ningún distribuidor"
+                  />
+                </div>
+                <OutOfSearchNotice providers={outOfSearch} autoOpen={tourStep == null} />
+              </div>
             </div>
-            {outOfSearch.length > 0 && (
-              <p className="mt-2 text-[11px] text-surface-400">
-                {outOfSearch.length === 1 ? "1 distribuidor conectado no participa" : `${outOfSearch.length} distribuidores conectados no participan`}{" "}
-                de la búsqueda.{" "}
-                <Link href="/proveedores" className="font-semibold text-brand-300 hover:text-brand-200">
-                  Elegir cuáles
-                </Link>
-              </p>
-            )}
 
             {/* Controles secundarios solo en mobile (en desktop viven en el header / sticky) */}
             <div className="md:hidden mt-2.5 flex flex-wrap items-center gap-2">

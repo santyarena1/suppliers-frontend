@@ -577,6 +577,8 @@ export interface VisibleProvider {
   inSearch?: boolean;
   /** Tiene precios del comercio (cuenta sincronizada o lista aplicada). Sin esto no se muestra ni busca. */
   configured?: boolean;
+  /** Auto-sync pausado por errores seguidos: sale de la búsqueda hasta reactivarlo. */
+  syncPaused?: boolean;
   /** Lo que eligió el comercio en "Incluir en búsqueda". `null` = nunca lo tocó. */
   includeInSearch?: boolean | null;
   accountManager: { name: string; email: string } | null;
