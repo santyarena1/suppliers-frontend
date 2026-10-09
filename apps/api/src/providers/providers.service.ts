@@ -1165,6 +1165,11 @@ export class ProvidersService implements OnModuleInit {
       OR: [
         { name: { contains: t, mode: "insensitive" as const } },
         { brand: { contains: t, mode: "insensitive" as const } },
+        // También por código: SKU, part number, EAN o el código del distribuidor.
+        { sku: { contains: t, mode: "insensitive" as const } },
+        { partNumber: { contains: t, mode: "insensitive" as const } },
+        { ean: { contains: t, mode: "insensitive" as const } },
+        { externalId: { contains: t, mode: "insensitive" as const } },
       ],
     }));
     const buscaPorNombre = (distinctQ || (!brand && q)) && tokenClauses.length > 0;
@@ -1283,6 +1288,11 @@ export class ProvidersService implements OnModuleInit {
       OR: [
         { name: { contains: t, mode: "insensitive" as const } },
         { brand: { contains: t, mode: "insensitive" as const } },
+        // También por código: SKU, part number, EAN o el código del distribuidor.
+        { sku: { contains: t, mode: "insensitive" as const } },
+        { partNumber: { contains: t, mode: "insensitive" as const } },
+        { ean: { contains: t, mode: "insensitive" as const } },
+        { externalId: { contains: t, mode: "insensitive" as const } },
       ],
     }));
 

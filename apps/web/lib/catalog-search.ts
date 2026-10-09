@@ -28,13 +28,22 @@ export function searchTokens(query: string, max = 8): string[] {
   return out;
 }
 
-/** true si el producto tiene todas las palabras buscadas, en nombre o marca. */
+/** true si el producto tiene todas las palabras buscadas, en nombre, marca o algún código (SKU, part number, EAN). */
 export function matchesSearchTokens(
-  product: { name?: string | null; brand?: string | null },
+  product: {
+    name?: string | null;
+    brand?: string | null;
+    sku?: string | null;
+    partNumber?: string | null;
+    ean?: string | null;
+    externalId?: string | null;
+  },
   tokens: string[]
 ): boolean {
   if (tokens.length === 0) return true;
-  const texto = `${product.name ?? ""} ${product.brand ?? ""}`
+  const texto = [product.name, product.brand, product.sku, product.partNumber, product.ean, product.externalId]
+    .map((v) => v ?? "")
+    .join(" ")
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .toLowerCase();

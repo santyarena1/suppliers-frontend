@@ -35,16 +35,35 @@ export function searchTokens(query: string, max = 8): string[] {
  * importar: primero lo que dice la frase tal cual, después lo que tiene las
  * palabras en el nombre —y no en la marca—, y recién ahí el resto.
  */
+/** Un código sin espacios ni signos, para comparar "B550M-A" con "b550ma". */
+function foldCode(value: string | null | undefined): string {
+  return (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 export function scoreCatalogMatch(
-  product: { name?: string | null; brand?: string | null },
+  product: {
+    name?: string | null;
+    brand?: string | null;
+    sku?: string | null;
+    partNumber?: string | null;
+    ean?: string | null;
+    externalId?: string | null;
+  },
   query: string,
   tokens: string[]
 ): number {
   const name = (product.name ?? "").toLowerCase();
-  if (!name) return 0;
   const frase = query.trim().toLowerCase();
 
   let score = 0;
+  // Buscar por SKU o part number: si el código coincide, ese producto va primero.
+  const code = foldCode(query);
+  if (code.length >= 3) {
+    const codes = [product.sku, product.partNumber, product.ean, product.externalId].map(foldCode).filter(Boolean);
+    if (codes.some((c) => c === code)) score += 1000;
+    else if (codes.some((c) => c.includes(code))) score += 200;
+  }
+  if (!name) return score;
   if (frase && name.includes(frase)) score += 100;
   for (const t of tokens) {
     if (name.includes(t)) score += 10;

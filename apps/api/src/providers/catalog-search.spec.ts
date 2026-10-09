@@ -53,3 +53,27 @@ describe("scoreCatalogMatch", () => {
     expect(scoreCatalogMatch({}, q, tokens)).toBe(0);
   });
 });
+
+describe("buscar por código (SKU, part number, EAN)", () => {
+  const product = { name: "Placa de video ASUS Dual RTX 4060", brand: "ASUS", sku: "ELI-19922", partNumber: "DUAL-RTX4060-O8G", ean: "4711081976386", externalId: "19922" };
+
+  it("el código exacto va primero, aunque se escriba sin guiones o en minúsculas", () => {
+    const exact = scoreCatalogMatch(product, "dual-rtx4060-o8g", searchTokens("dual-rtx4060-o8g"));
+    const loose = scoreCatalogMatch(product, "dualrtx4060o8g", searchTokens("dualrtx4060o8g"));
+    const byName = scoreCatalogMatch({ name: "Placa de video MSI RTX 4060 Ventus" }, "rtx 4060", searchTokens("rtx 4060"));
+    expect(exact).toBeGreaterThanOrEqual(1000);
+    expect(loose).toBeGreaterThanOrEqual(1000);
+    expect(exact).toBeGreaterThan(byName);
+  });
+
+  it("también por EAN o por el código del distribuidor", () => {
+    expect(scoreCatalogMatch(product, "4711081976386", searchTokens("4711081976386"))).toBeGreaterThanOrEqual(1000);
+    expect(scoreCatalogMatch(product, "19922", searchTokens("19922"))).toBeGreaterThanOrEqual(1000);
+  });
+
+  it("un pedazo del código suma, pero menos que el código entero", () => {
+    const part = scoreCatalogMatch(product, "rtx4060", searchTokens("rtx4060"));
+    expect(part).toBeGreaterThanOrEqual(200);
+    expect(part).toBeLessThan(1000);
+  });
+});
