@@ -7,21 +7,19 @@ import type { ProductDTO } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
 import { purchaseLinePricing } from "@/lib/purchase-price";
-import { formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
+import { hasOwnPrice } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { displayAmountFromPricing } from "@/lib/display-price";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { SchemePicker } from "@/components/SchemePicker";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
-
+import type { TaxLine } from "@/lib/tax";
+import ChannelPriceBreakdown from "@/components/ChannelPriceBreakdown";
 import { providerLabel } from "@/components/ProviderBadge";
-/** Una sola moneda: la que el comercio eligio. Antes mostraba las dos. */
-function FinalPriceLine({ usd, className }: { usd: number; className?: string }) {
-  const { currency, convert } = usePrefs();
-  const shown = currency === "USD" ? formatUSD(usd) : formatARS(convert(usd).amount);
-  return (
-    <p className={`pp-mono text-[11px] text-center leading-relaxed ${className ?? ""}`}>{shown}</p>
-  );
+
+/** Las líneas de impuesto que suman al precio mostrado según IVA/percepciones elegidos. */
+function shownLines(lines: TaxLine[], withIva: boolean, withIibb: boolean): TaxLine[] {
+  return lines.filter((l) => (l.kind === "iibb" ? withIibb : withIva));
 }
 
 export default function ProductBuyActions({ product, qty }: { product: ProductDTO; qty: number }) {
@@ -62,6 +60,12 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
     { withIva, withIibb: false, provider: product.provider },
     qty
   );
+  const onlineShown = displayAmountFromPricing(
+    purchaseLinePricing(product, policy, "list", qty),
+    { withIva, withIibb, provider: product.provider },
+    qty
+  );
+  const schemeDiscount = Number(policy.schemeDiscountPercent ?? 0);
   const showScheme = retailer && hasIva && policy.acceptsScheme;
   const showOffline = retailer && hasIva && policy.acceptsOffline;
 
@@ -126,7 +130,16 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             {flash === "scheme" ? "Agregado al esquema" : "Agregar como esquema"}
           </button>
           {schemePricing.adjusted && (
-            <FinalPriceLine usd={schemeShown.displayUsd} className="text-violet-200/90" />
+            <ChannelPriceBreakdown
+              title="Precio en esquema"
+              tone="violet"
+              unitNet={schemePricing.unitNet}
+              lines={shownLines(schemePricing.lines, withIva, withIibb)}
+              unitFinal={schemeShown.unitDisplayUsd}
+              qty={qty}
+              onlineUnitFinal={onlineShown.unitDisplayUsd}
+              note={schemeDiscount > 0 ? `Incluye ${schemeDiscount}% de descuento de esquema.` : undefined}
+            />
           )}
         </>
       )}
@@ -146,7 +159,16 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
             {flash === "offline" ? "Agregado al pedido offline" : "Agregar a carrito offline"}
           </button>
           {offlinePricing.adjusted && (
-            <FinalPriceLine usd={offlineShown.displayUsd} className="text-amber-100/90" />
+            <ChannelPriceBreakdown
+              title="Precio offline"
+              tone="amber"
+              unitNet={offlinePricing.unitNet}
+              lines={shownLines(offlinePricing.lines, withIva, false)}
+              unitFinal={offlineShown.unitDisplayUsd}
+              qty={qty}
+              onlineUnitFinal={onlineShown.unitDisplayUsd}
+              note="Sin facturar: con el ajuste de IVA de este distribuidor y sin percepciones."
+            />
           )}
           {offlineItem && (
             <p className="text-[11px] text-amber-400 text-center">Ya tenés {offlineItem.qty} en el pedido offline</p>
