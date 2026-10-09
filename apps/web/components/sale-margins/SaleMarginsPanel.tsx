@@ -40,7 +40,10 @@ function inheritedOf(data: Pick<ProviderSaleMargins, "providerPercent" | "storeP
   return { value: 0, source: "none" };
 }
 
-/** Recalcula margen efectivo, origen y ejemplo de cada categoría (cambio optimista). */
+/**
+ * Recalcula margen efectivo, origen y ejemplo de cada categoría y sus
+ * subcategorías (cambio optimista). La subcategoría hereda de su categoría.
+ */
 function recompute(data: ProviderSaleMargins): ProviderSaleMargins {
   const inherited = inheritedOf(data);
   return {
@@ -49,10 +52,37 @@ function recompute(data: ProviderSaleMargins): ProviderSaleMargins {
       const effective = c.percent ?? inherited.value;
       const source: SaleMarginSource = c.percent != null ? "category" : inherited.source;
       const sample = c.sample ? { ...c.sample, sale: rescaleSale(c.sample.sale, c.effective, effective) } : c.sample;
-      return { ...c, effective, source, sample };
+      const subcategories = (c.subcategories ?? []).map((sub) => ({
+        ...sub,
+        effective: sub.percent ?? effective,
+        source: (sub.percent != null ? "subcategory" : source) as SaleMarginSource,
+      }));
+      return { ...c, effective, source, sample, subcategories };
     }),
   };
 }
+
+/** Aplica `percent` a las categorías y subcategorías cuyas claves estén en `keys`. */
+function withPercent(categories: SaleMarginCategory[], keys: Set<string>, percent: number | null): SaleMarginCategory[] {
+  return categories.map((c) => ({
+    ...c,
+    ...(keys.has(c.key) ? { percent } : {}),
+    subcategories: (c.subcategories ?? []).map((sub) => (keys.has(sub.key) ? { ...sub, percent } : sub)),
+  }));
+}
+
+/** Margen propio actual de cada clave pedida (categoría o subcategoría). */
+function currentPercents(categories: SaleMarginCategory[], keys: Set<string>): Map<string, number | null> {
+  const out = new Map<string, number | null>();
+  for (const c of categories) {
+    if (keys.has(c.key)) out.set(c.key, c.percent);
+    for (const sub of c.subcategories ?? []) if (keys.has(sub.key)) out.set(sub.key, sub.percent);
+  }
+  return out;
+}
+
+/** La categoría abierta en el panel de productos (y su categoría, si es una subcategoría). */
+type OpenCategory = { row: SaleMarginCategory; parent: SaleMarginCategory | null };
 
 function SkeletonRows() {
   return (
@@ -78,7 +108,7 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
   const [data, setData] = useState<ProviderSaleMargins | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [open, setOpen] = useState<SaleMarginCategory | null>(null);
+  const [open, setOpen] = useState<OpenCategory | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
 
@@ -134,10 +164,20 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
   function setCategories(keys: string[], percent: number | null) {
     if (!data || keys.length === 0) return;
     const keySet = new Set(keys);
-    const previous = new Map(data.categories.filter((c) => keySet.has(c.key)).map((c) => [c.key, c.percent]));
-    const what = keys.length === 1 ? "1 categoría" : `${keys.length} categorías`;
+    const previous = currentPercents(data.categories, keySet);
+    const subs = keys.filter((k) => k.includes(">")).length;
+    const what =
+      keys.length === 1
+        ? subs === 1
+          ? "1 subcategoría"
+          : "1 categoría"
+        : subs === keys.length
+          ? `${keys.length} subcategorías`
+          : subs > 0
+            ? `${keys.length} categorías y subcategorías`
+            : `${keys.length} categorías`;
     void mutate(
-      { ...data, categories: data.categories.map((c) => (keySet.has(c.key) ? { ...c, percent } : c)) },
+      { ...data, categories: withPercent(data.categories, keySet, percent) },
       async () => (await saleMarginsApi.setCategories(provider, keys, percent)).data ?? null,
       percent == null ? `${what} vuelven a heredar el margen.` : `${what} con ${formatMargin(percent)}.`,
       async () => {
@@ -223,10 +263,19 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
   }
 
   const inherited = inheritedOf(data);
+  // Lo que hereda un producto de la fila abierta: la subcategoría, si no su categoría, si no el distribuidor.
   const drawerInherited: Inherited | null = open
-    ? open.percent != null
-      ? { value: open.percent, source: "category" }
-      : inherited
+    ? open.row.percent != null
+      ? { value: open.row.percent, source: open.parent ? "subcategory" : "category" }
+      : open.parent?.percent != null
+        ? { value: open.parent.percent, source: "category" }
+        : inherited
+    : null;
+  // El panel muestra "Hardware › Placas de video" cuando es una subcategoría.
+  const drawerCategory = open
+    ? open.parent
+      ? { ...open.row, label: `${open.parent.label} › ${open.row.label}` }
+      : open.row
     : null;
 
   return (
@@ -252,14 +301,14 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
         canEdit={canEdit}
         saving={saving}
         onSet={setCategories}
-        onOpen={setOpen}
+        onOpen={(row, parent) => setOpen({ row, parent })}
       />
       <MarginHistory provider={provider} refreshKey={historyKey} />
 
-      {open && drawerInherited && (
+      {drawerCategory && drawerInherited && (
         <CategoryProductsDrawer
           provider={provider}
-          category={open}
+          category={drawerCategory}
           inherited={drawerInherited}
           canEdit={canEdit}
           onClose={() => setOpen(null)}
@@ -286,7 +335,7 @@ function Intro({ providerName }: { providerName: string }) {
         <h2 className="text-base font-semibold text-white">Márgenes de venta · {providerName}</h2>
         <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-surface-400">
           El costo de {providerName} no cambia: el margen arma el precio de venta que ve tu equipo de ventas. Gana el más
-          específico: producto, categoría, este distribuidor y, por último, el general del comercio.
+          específico: producto, subcategoría, categoría, este distribuidor y, por último, el general del comercio.
         </p>
       </div>
     </div>

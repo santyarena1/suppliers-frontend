@@ -5,6 +5,8 @@ import {
   resolveSaleMargin,
   saleCategoryKey,
   saleRuleKey,
+  saleSubcategoryKey,
+  splitSaleCategoryKey,
   type TaxLine,
 } from "@nodo/shared";
 
@@ -48,6 +50,40 @@ describe("resolución del margen (producto > categoría > distribuidor > comerci
   it("un margen 0 explícito es una regla (no hereda)", () => {
     const zero = new Map([[saleRuleKey.product("ELIT", "A1"), 0], [saleRuleKey.store(), 10]]);
     expect(resolveSaleMargin(zero, item)).toEqual({ percent: 0, source: "product" });
+  });
+});
+
+describe("subcategoría del distribuidor (Hardware › Placas de video)", () => {
+  const item = { provider: "ELIT", externalId: "A1", category: "Hardware", subcategory: "Placas de Video" };
+  const rules = new Map<string, number>([
+    [saleRuleKey.provider("ELIT"), 20],
+    [saleRuleKey.category("ELIT", "hardware"), 15],
+    [saleRuleKey.subcategory("ELIT", "hardware", "placas de video"), 25],
+  ]);
+
+  it("la subcategoría gana sobre la categoría", () => {
+    expect(resolveSaleMargin(rules, item)).toEqual({ percent: 25, source: "subcategory" });
+  });
+
+  it("el producto sigue ganando sobre la subcategoría", () => {
+    const r = new Map(rules).set(saleRuleKey.product("ELIT", "A1"), 40);
+    expect(resolveSaleMargin(r, item)).toEqual({ percent: 40, source: "product" });
+  });
+
+  it("otra subcategoría de la misma categoría hereda la categoría", () => {
+    expect(resolveSaleMargin(rules, { ...item, subcategory: "Fuentes" })).toEqual({ percent: 15, source: "category" });
+  });
+
+  it("sin subcategoría en el producto, la categoría", () => {
+    expect(resolveSaleMargin(rules, { ...item, subcategory: null })).toEqual({ percent: 15, source: "category" });
+  });
+
+  it("la clave es la misma que guarda la tabla (categoryKey \"cat>sub\")", () => {
+    const key = saleSubcategoryKey(" HARDWARE ", "Placas de Vídeo");
+    expect(key).toBe("hardware>placas de video");
+    expect(saleRuleKey.category("ELIT", key!)).toBe(saleRuleKey.subcategory("ELIT", "hardware", "placas de video"));
+    expect(splitSaleCategoryKey(key!)).toEqual({ category: "hardware", subcategory: "placas de video" });
+    expect(splitSaleCategoryKey("hardware")).toEqual({ category: "hardware", subcategory: null });
   });
 });
 

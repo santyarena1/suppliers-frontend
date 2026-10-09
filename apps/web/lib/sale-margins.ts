@@ -5,7 +5,7 @@
  */
 
 /** De dónde sale el margen que se aplica (gana el más específico). */
-export type SaleMarginSource = "product" | "category" | "provider" | "store" | "none";
+export type SaleMarginSource = "product" | "subcategory" | "category" | "provider" | "store" | "none";
 
 /** Sobre qué costo se calcula el margen en este distribuidor. */
 export type SaleMarginBase = "FINAL" | "NET";
@@ -44,6 +44,11 @@ export interface SaleMarginCategory {
   effective: number;
   source: SaleMarginSource;
   sample?: SaleMarginSample | null;
+  /**
+   * Subcategorías del distribuidor dentro de esta categoría (key "cat>sub").
+   * Gana sobre la categoría: producto > subcategoría > categoría > distribuidor > comercio.
+   */
+  subcategories?: SaleMarginCategory[];
 }
 
 export interface ProviderSaleMargins {
@@ -89,6 +94,7 @@ export interface SaleMarginHistoryEntry {
 
 export const SALE_MARGIN_SOURCE_LABELS: Record<SaleMarginSource, string> = {
   product: "Propio",
+  subcategory: "Subcategoría",
   category: "Categoría",
   provider: "Distribuidor",
   store: "Comercio",

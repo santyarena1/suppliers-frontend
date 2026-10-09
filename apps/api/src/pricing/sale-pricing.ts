@@ -45,6 +45,7 @@ export function saleOf(item: ProductLike, rules: TenantSaleRules): (SalePriceVie
     provider: item.provider,
     externalId: item.externalId,
     category: typeof item.category === "string" ? item.category : null,
+    subcategory: typeof item.subcategory === "string" ? item.subcategory : null,
   });
   const base = baseFor(rules, item.provider);
   const taxes = costTaxLines(

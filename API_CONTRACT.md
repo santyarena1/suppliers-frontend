@@ -948,7 +948,7 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Body / Params**: settings `{ storePercent: number|null }` · proveedor `{ base?: "FINAL"|"NET", providerPercent?: number|null }` · categorías `{ keys: string[], percent: number|null }` · productos `{ externalIds: string[], percent: number|null }` · por categoría `{ category, percent }` · listado `?category=&q=&cursor=&limit=` (≤200). `percent` de −50 a 1000; `null` quita la regla (hereda). Hasta 2000 por cambio.
 - **Respuesta esperada**: `ProviderSaleMargins`, `SaleMarginProductsPage { items, nextCursor, total }`, `SaleMarginHistoryEntry[]`, `{ storePercent }` (tipos en `packages/shared/src/sale-margins.ts`).
 - **Estado**: IMPLEMENTADO
-- **Notas**: Margen: producto > categoría del distribuidor > distribuidor > comercio. Cada cambio queda en el historial. Diseño: `docs/PLAN_MODO_VENDEDOR.md`.
+- **Notas**: Margen: producto > subcategoría > categoría del distribuidor > distribuidor > comercio. Cada categoría trae `subcategories` (key `"cat>sub"`, `source: "subcategory"` cuando tiene margen propio); `PUT …/categories` acepta claves `"cat>sub"` y `?category=cat>sub` filtra los productos de esa subcategoría. Cada cambio queda en el historial ("Hardware › Placas de video"). Diseño: `docs/PLAN_MODO_VENDEDOR.md`.
 
 ### [FEATURE] Modo vendedor — precio de venta en el catálogo
 - **Método / Ruta**: las rutas de catálogo existentes (búsqueda, catálogo, ficha, historial de precios, destacados, by-category/provider/brand).

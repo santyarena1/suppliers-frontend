@@ -286,7 +286,7 @@ export function toRow(
     ivaPercent,
     // Margen de venta con la categoría cruda del distribuidor (como la nombra él).
     saleMarginPercent: saleRules
-      ? resolveSaleMargin(saleRules.rules, { provider: offer.provider, externalId: offer.externalId, category: p.category }).percent
+      ? resolveSaleMargin(saleRules.rules, { provider: offer.provider, externalId: offer.externalId, category: p.category, subcategory: p.subcategory }).percent
       : 0,
     saleMarginBase: saleRules ? baseFor(saleRules, offer.provider) : "FINAL",
     stock: displayedStock(offer.stock, rules.minStockThreshold),

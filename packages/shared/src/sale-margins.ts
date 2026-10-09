@@ -17,7 +17,7 @@ export type SaleMarginScope = "STORE" | "PROVIDER" | "CATEGORY" | "PRODUCT";
 /** FINAL = sobre el costo final con impuestos; NET = sobre el neto (+ IVA después). */
 export type SaleMarginBase = "FINAL" | "NET";
 /** De dónde sale el margen que se aplicó. `none` = no hay regla: venta = costo. */
-export type SaleMarginSource = "product" | "category" | "provider" | "store" | "none";
+export type SaleMarginSource = "product" | "subcategory" | "category" | "provider" | "store" | "none";
 
 /** Límites del margen (en puntos: 25 = 25 %). */
 export const SALE_MARGIN_MIN = -50;
@@ -51,23 +51,52 @@ export const saleRuleKey = {
   store: () => "STORE",
   provider: (provider: string) => `P:${provider}`,
   category: (provider: string, categoryKey: string) => `C:${provider}:${categoryKey}`,
+  /** Subcategoría dentro de una categoría del distribuidor (scope CATEGORY, categoryKey "cat>sub"). */
+  subcategory: (provider: string, categoryKey: string, subKey: string) => `C:${provider}:${categoryKey}>${subKey}`,
   product: (provider: string, externalId: string) => `X:${provider}:${externalId}`,
 };
+
+/** Separador de categoría y subcategoría en la clave ("hardware>placas de video"). */
+export const SALE_SUBCATEGORY_SEPARATOR = ">";
+
+/** Clave de una subcategoría: "cat>sub". `null` si falta alguna de las dos. */
+export function saleSubcategoryKey(category: string | null | undefined, subcategory: string | null | undefined): string | null {
+  const cat = saleCategoryKey(category);
+  const sub = saleCategoryKey(subcategory);
+  return cat && sub ? `${cat}${SALE_SUBCATEGORY_SEPARATOR}${sub}` : null;
+}
+
+/** Separa "cat>sub" en sus partes; una clave sin subcategoría devuelve `sub: null`. */
+export function splitSaleCategoryKey(key: string): { category: string; subcategory: string | null } {
+  const i = key.indexOf(SALE_SUBCATEGORY_SEPARATOR);
+  return i < 0 ? { category: key, subcategory: null } : { category: key.slice(0, i), subcategory: key.slice(i + 1) };
+}
 
 /** Reglas de un comercio ya indexadas por clave (`saleRuleKey`). */
 export type SaleMarginRuleSet = ReadonlyMap<string, number>;
 
 /**
  * Margen de un producto: gana el más específico.
- * Producto > categoría del distribuidor > distribuidor > comercio > sin regla (0).
+ * Producto > subcategoría > categoría del distribuidor > distribuidor > comercio > sin regla (0).
+ * Categoría y subcategoría son las crudas del distribuidor (no las de NODO).
  */
 export function resolveSaleMargin(
   rules: SaleMarginRuleSet,
-  item: { provider: string; externalId: string; category: string | null | undefined }
+  item: {
+    provider: string;
+    externalId: string;
+    category: string | null | undefined;
+    subcategory?: string | null;
+  }
 ): { percent: number; source: SaleMarginSource } {
   const product = rules.get(saleRuleKey.product(item.provider, item.externalId));
   if (product != null) return { percent: product, source: "product" };
   const cat = saleCategoryKey(item.category);
+  const sub = saleCategoryKey(item.subcategory);
+  if (cat && sub) {
+    const subcategory = rules.get(saleRuleKey.subcategory(item.provider, cat, sub));
+    if (subcategory != null) return { percent: subcategory, source: "subcategory" };
+  }
   if (cat) {
     const category = rules.get(saleRuleKey.category(item.provider, cat));
     if (category != null) return { percent: category, source: "category" };
@@ -130,6 +159,11 @@ export interface SaleMarginCategoryRow {
   source: SaleMarginSource;
   /** Un producto típico de la categoría para el ejemplo costo → venta. */
   sample: { name: string; cost: number | null; sale: number | null; currency: string } | null;
+  /**
+   * Subcategorías del distribuidor dentro de esta categoría (key "cat>sub").
+   * Vacío en las subcategorías y en categorías que no tienen.
+   */
+  subcategories: SaleMarginCategoryRow[];
 }
 
 export interface ProviderSaleMargins {

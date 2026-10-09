@@ -6,6 +6,8 @@ import {
   resolveSaleMargin,
   saleCategoryKey,
   saleRuleKey,
+  saleSubcategoryKey,
+  splitSaleCategoryKey,
   type ProviderSaleMargins,
   type SaleMarginBase,
   type SaleMarginCategoryRow,
@@ -124,18 +126,26 @@ export class SaleMarginsService {
     const wanted = [...new Set(keys.map((k) => saleCategoryKey(k)).filter((k): k is string => Boolean(k)))];
     if (wanted.length === 0) throw new BadRequestException("Elegí al menos una categoría.");
     if (wanted.length > MAX_BULK) throw new BadRequestException(`Como máximo ${MAX_BULK} categorías por vez.`);
-    const labels = await this.categoryLabels(writer.tenantId, provider);
-    const unknown = wanted.filter((k) => !labels.has(k));
+    const [labels, subs] = await Promise.all([
+      this.categoryLabels(writer.tenantId, provider),
+      this.subcategoryRawLabels(writer.tenantId, provider),
+    ]);
+    const known = (k: string) => (splitSaleCategoryKey(k).subcategory != null ? subs.has(k) : labels.has(k));
+    const unknown = wanted.filter((k) => !known(k));
     if (unknown.length > 0) throw new BadRequestException(`Categorías que este distribuidor no tiene: ${unknown.slice(0, 5).join(", ")}`);
     await this.write(
       writer,
-      wanted.map((key) => ({
-        ruleKey: saleRuleKey.category(provider, key),
-        scope: "CATEGORY" as const,
-        provider,
-        categoryKey: key,
-        categoryLabel: labels.get(key) ?? key,
-      })),
+      wanted.map((key) => {
+        const sub = subs.get(key);
+        return {
+          // Misma forma que saleRuleKey.subcategory: "C:prov:cat>sub".
+          ruleKey: saleRuleKey.category(provider, key),
+          scope: "CATEGORY" as const,
+          provider,
+          categoryKey: key,
+          categoryLabel: sub ? `${sub.categoryLabel} › ${sub.label}` : labels.get(key) ?? key,
+        };
+      }),
       percent
     );
     return this.providerMargins(writer.tenantId, provider);
@@ -158,8 +168,15 @@ export class SaleMarginsService {
     const productWhere: Prisma.ProviderSyncCacheWhereInput = {};
     if (opts.category) {
       const key = saleCategoryKey(opts.category);
-      const rawLabels = key ? (await this.categoryRawLabels(tenantId, provider)).get(key) ?? [] : [];
-      productWhere.category = { in: rawLabels.length ? rawLabels : ["__sin_categoria__"] };
+      const isSub = key != null && splitSaleCategoryKey(key).subcategory != null;
+      if (isSub) {
+        const sub = (await this.subcategoryRawLabels(tenantId, provider)).get(key);
+        productWhere.category = { in: sub?.categories.length ? sub.categories : ["__sin_categoria__"] };
+        productWhere.subcategory = { in: sub?.subcategories.length ? sub.subcategories : ["__sin_subcategoria__"] };
+      } else {
+        const rawLabels = key ? (await this.categoryRawLabels(tenantId, provider)).get(key) ?? [] : [];
+        productWhere.category = { in: rawLabels.length ? rawLabels : ["__sin_categoria__"] };
+      }
     }
     const q = opts.q?.trim();
     if (q) {
@@ -194,6 +211,7 @@ export class SaleMarginsService {
         provider,
         externalId: offer.externalId,
         category: view.category,
+        subcategory: view.subcategory,
       });
       return {
         externalId: offer.externalId,
@@ -329,24 +347,34 @@ export class SaleMarginsService {
 
   /** Categorías crudas del distribuidor agrupadas por clave, con cantidad y un producto de ejemplo. */
   private async categories(tenantId: string, provider: string): Promise<SaleMarginCategoryRow[]> {
-    const grouped = await this.prisma.$queryRaw<{ category: string | null; products: number }[]>`
-      SELECT c.category AS category, count(*)::int AS products
+    const grouped = await this.prisma.$queryRaw<{ category: string | null; subcategory: string | null; products: number }[]>`
+      SELECT c.category AS category, c.subcategory AS subcategory, count(*)::int AS products
       FROM "TenantProductOffer" o
       JOIN "ProviderSyncCache" c ON c.provider = o.provider AND c."externalId" = o."externalId"
       WHERE o."tenantId" = ${tenantId} AND o.provider = ${provider} AND o.active = true
         AND (o.price > 0 OR o."finalPrice" > 0)
-      GROUP BY c.category`;
-    const byKey = new Map<string, { label: string; labelCount: number; products: number }>();
+      GROUP BY c.category, c.subcategory`;
+    type Bucket = { label: string; labelCount: number; products: number };
+    const add = (map: Map<string, Bucket>, key: string, label: string, n: number) => {
+      const cur = map.get(key);
+      if (!cur) map.set(key, { label, labelCount: n, products: n });
+      else {
+        cur.products += n;
+        // El nombre que se muestra es el que más productos tiene.
+        if (n > cur.labelCount) Object.assign(cur, { label, labelCount: n });
+      }
+    };
+    const byKey = new Map<string, Bucket>();
+    // Subcategorías por categoría: "cat" → ("cat>sub" → datos).
+    const subsByCat = new Map<string, Map<string, Bucket>>();
     for (const g of grouped) {
       const key = saleCategoryKey(g.category);
       if (!key || !g.category) continue;
-      const cur = byKey.get(key);
-      if (!cur) byKey.set(key, { label: g.category.trim(), labelCount: g.products, products: g.products });
-      else {
-        cur.products += g.products;
-        // El nombre que se muestra es el que más productos tiene.
-        if (g.products > cur.labelCount) Object.assign(cur, { label: g.category.trim(), labelCount: g.products });
-      }
+      add(byKey, key, g.category.trim(), g.products);
+      const subKey = saleSubcategoryKey(g.category, g.subcategory);
+      if (!subKey || !g.subcategory) continue;
+      if (!subsByCat.has(key)) subsByCat.set(key, new Map());
+      add(subsByCat.get(key)!, subKey, g.subcategory.trim(), g.products);
     }
     if (byKey.size === 0) return [];
 
@@ -377,6 +405,28 @@ export class SaleMarginsService {
         const display = resolveCatalogDisplay(sampleOffer.product, enrichment).displayCategory;
         if (display && saleCategoryKey(display) !== key) nodoLabel = display;
       }
+      const subcategories: SaleMarginCategoryRow[] = [...(subsByCat.get(key) ?? new Map<string, Bucket>()).entries()]
+        .map(([subKey, sub]) => {
+          const resolved = resolveSaleMargin(rules.rules, {
+            provider,
+            externalId: "",
+            category: info.label,
+            subcategory: sub.label,
+          });
+          return {
+            key: subKey,
+            label: sub.label,
+            nodoLabel: null,
+            products: sub.products,
+            percent: rules.rules.get(saleRuleKey.category(provider, subKey)) ?? null,
+            effective: resolved.percent,
+            source: resolved.source,
+            // El ejemplo va en la categoría; por subcategoría sería una consulta más por fila.
+            sample: null,
+            subcategories: [],
+          };
+        })
+        .sort((a, b) => b.products - a.products || a.label.localeCompare(b.label));
       rows.push({
         key,
         label: info.label,
@@ -386,6 +436,7 @@ export class SaleMarginsService {
         effective: percent,
         source,
         sample,
+        subcategories,
       });
     }
     return rows.sort((a, b) => b.products - a.products || a.label.localeCompare(b.label));
@@ -428,6 +479,29 @@ export class SaleMarginsService {
     return out;
   }
 
+  /** "cat>sub" → cómo las escribe el distribuidor (puede haber variantes de mayúsculas). */
+  private async subcategoryRawLabels(
+    tenantId: string,
+    provider: string
+  ): Promise<Map<string, { categories: string[]; subcategories: string[]; label: string; categoryLabel: string }>> {
+    const rows = await this.prisma.$queryRaw<{ category: string; subcategory: string }[]>`
+      SELECT DISTINCT c.category AS category, c.subcategory AS subcategory
+      FROM "TenantProductOffer" o
+      JOIN "ProviderSyncCache" c ON c.provider = o.provider AND c."externalId" = o."externalId"
+      WHERE o."tenantId" = ${tenantId} AND o.provider = ${provider}
+        AND c.category IS NOT NULL AND c.subcategory IS NOT NULL`;
+    const out = new Map<string, { categories: string[]; subcategories: string[]; label: string; categoryLabel: string }>();
+    for (const r of rows) {
+      const key = saleSubcategoryKey(r.category, r.subcategory);
+      if (!key) continue;
+      const cur = out.get(key) ?? { categories: [], subcategories: [], label: r.subcategory.trim(), categoryLabel: r.category.trim() };
+      if (!cur.categories.includes(r.category)) cur.categories.push(r.category);
+      if (!cur.subcategories.includes(r.subcategory)) cur.subcategories.push(r.subcategory);
+      out.set(key, cur);
+    }
+    return out;
+  }
+
   private async categoryLabels(tenantId: string, provider: string): Promise<Map<string, string>> {
     const raw = await this.categoryRawLabels(tenantId, provider);
     return new Map([...raw.entries()].map(([key, labels]) => [key, labels[0].trim()]));
@@ -465,6 +539,6 @@ export function parseRuleKey(ruleKey: string): {
   const [kind, provider, ...rest] = ruleKey.split(":");
   const id = rest.join(":") || null;
   if (kind === "P") return { scope: "PROVIDER", provider, id: null, fallbackLabel: "Todo el distribuidor" };
-  if (kind === "C") return { scope: "CATEGORY", provider, id, fallbackLabel: id ?? "Categoría" };
+  if (kind === "C") return { scope: "CATEGORY", provider, id, fallbackLabel: id ? id.split(">").join(" › ") : "Categoría" };
   return { scope: "PRODUCT", provider, id, fallbackLabel: id ?? "Producto" };
 }

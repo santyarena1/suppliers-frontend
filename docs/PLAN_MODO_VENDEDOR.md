@@ -26,10 +26,18 @@ reemplaza por el margen general de venta del distribuidor.
 Margen de cada producto, gana el más específico:
 
 1. **Producto** (distribuidor + externalId)
-2. **Categoría del distribuidor** (la categoría cruda del distribuidor, normalizada)
-3. **General del distribuidor**
-4. **General del comercio**
-5. Sin regla → 0 % (venta = costo) y se marca `source: "none"`.
+2. **Subcategoría del distribuidor** (2026-10-08). Elit y otros agrupan todo en
+   categorías grandes ("Hardware", "Periféricos") y lo útil está en la
+   subcategoría. Regla scope `CATEGORY` con `categoryKey = "cat>sub"`
+   (`saleRuleKey.subcategory` = `C:<prov>:<cat>><sub>`), `categoryLabel`
+   "Hardware › Placas de video", `source: "subcategory"`. Sin migración.
+3. **Categoría del distribuidor** (la categoría cruda del distribuidor, normalizada)
+4. **General del distribuidor**
+5. **General del comercio**
+6. Sin regla → 0 % (venta = costo) y se marca `source: "none"`.
+
+Categoría y subcategoría son siempre las crudas del distribuidor
+(`ProviderSyncCache.category/subcategory`), no las unificadas de NODO.
 
 Base por distribuidor (`saleMarginBase`):
 
@@ -147,7 +155,7 @@ matriz de permisos (y entonces ve costos). Con plan Base no cambia nada.
 |---|---|---|
 | GET | `/my/sale-margins/settings` | margen general del comercio |
 | PUT | `/my/sale-margins/settings` | `{ storePercent }` |
-| GET | `/providers/:provider/sale-margins` | `ProviderSaleMargins`: `{ provider, base, providerPercent, storePercent, categories: [{ key, label, nodoLabel, products, percent, effective, source, sample }] }` |
+| GET | `/providers/:provider/sale-margins` | `ProviderSaleMargins`: `{ provider, base, providerPercent, storePercent, categories: [{ key, label, nodoLabel, products, percent, effective, source, sample, subcategories: [mismas filas, key "cat>sub", sample null] }] }`. `PUT …/categories` acepta claves de categoría y de subcategoría mezcladas; `GET …/products?category=cat>sub` filtra por las dos |
 | PUT | `/providers/:provider/sale-margins` | `{ base?, providerPercent? }` |
 | PUT | `/providers/:provider/sale-margins/categories` | `{ keys: string[], percent: number \| null }` (null = quitar, vuelve a heredar) |
 | GET | `/providers/:provider/sale-margins/products?category=&q=&cursor=&limit=` | productos con `cost`, `percent?`, `effective`, `source`, `sale` |

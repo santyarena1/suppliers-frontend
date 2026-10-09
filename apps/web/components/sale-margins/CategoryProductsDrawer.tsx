@@ -176,7 +176,7 @@ export default function CategoryProductsDrawer({
       >
         <header className="flex items-start justify-between gap-3 border-b border-surface-800 px-5 py-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">Productos de la categoría</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-surface-500">{category.key.includes(">") ? "Productos de la subcategoría" : "Productos de la categoría"}</p>
             <h2 className="mt-0.5 truncate text-lg font-semibold text-white">{category.label}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-surface-400">
               {category.nodoLabel && (
