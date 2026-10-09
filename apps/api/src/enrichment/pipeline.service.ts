@@ -18,12 +18,12 @@ import {
 } from "./ai-extract";
 import { ImageCandidate, MIN_IMAGE_SIDE, PrefixFetcher, verifyImages, VerifiedImage } from "./image-verify";
 import { httpGetPrefix } from "./sources/http";
-import { modelTokens, pnKey } from "./keys";
+import { modelTokens, pnKey, manufacturerCodeCandidates } from "./keys";
 import { buildProposals, ProposalDraft } from "./proposal-builder";
 import { CategorySchema, schemaFor } from "./schemas";
 import { SourceCacheService } from "./source-cache.service";
 import { distributorAttributes, distributorImages, distributorTexts, DistributorFicha } from "./sources/distributor";
-import { lookupIcecat } from "./sources/icecat";
+import { lookupIcecat, IcecatClosedBrandError } from "./sources/icecat";
 import { connectorFor } from "./sources/manufacturers";
 import { LookupQuery, SourceResult } from "./sources/types";
 import { detectCategory } from "./taxonomy";
@@ -35,7 +35,7 @@ const MIN_ATTRS_FOR_AI_TEXT = 3;
 /** Confianza debajo de la cual un maestro queda "para revisar". */
 export const REVIEW_CONFIDENCE = 0.6;
 
-export type SourceStatus = "found" | "unverified" | "not_found" | "error" | "disabled" | "no_connector";
+export type SourceStatus = "found" | "unverified" | "not_found" | "error" | "disabled" | "no_connector" | "closed_brand";
 
 export interface PipelineBudget {
   /** Si devuelve false, no se hacen más llamadas a la IA (tope de costo de la corrida). */
@@ -160,15 +160,27 @@ export class EnrichmentPipelineService {
     master: { brand: string | null; brandKey: string | null; partNumber: string | null; ean: string | null; name: string },
     fichas: DistributorFicha[]
   ): LookupQuery {
-    const rawPn = fichas.map((f) => f.partNumber).find((p) => p && master.partNumber && pnKey(p) === master.partNumber) ?? master.partNumber;
+    // Primero los part numbers que son del fabricante; los códigos internos de un
+    // distribuidor ("39445-APF73554") no existen afuera. Si no hay, el modelo del nombre.
+    const codes = manufacturerCodeCandidates(
+      [
+        fichas.map((f) => f.partNumber).find((p) => p && master.partNumber && pnKey(p) === master.partNumber),
+        master.partNumber,
+        ...fichas.map((f) => f.partNumber),
+      ],
+      [master.name, ...fichas.map((f) => f.name)]
+    );
+    const rawPn = codes[0] ?? null;
     return {
       brand: master.brand,
       brandKey: master.brandKey,
-      partNumber: rawPn ?? null,
-      pnKey: master.partNumber,
+      partNumber: rawPn,
+      pnKey: rawPn ? pnKey(rawPn) : null,
+      altPartNumbers: codes.slice(1),
       gtin: master.ean,
       name: master.name,
-      hints: uniq(fichas.flatMap((f) => modelTokens(f.name))).slice(0, 6),
+      // Los conectores de fabricantes buscan por estos códigos: van también los candidatos.
+      hints: uniq([...codes, ...[master.name, ...fichas.map((f) => f.name)].flatMap((n) => modelTokens(n))]).slice(0, 8),
     };
   }
 
@@ -188,6 +200,11 @@ export class EnrichmentPipelineService {
       if (res && !res.verified) outcome.notes.push(`Icecat descartado: ${res.matchNote}`);
       return res;
     } catch (err) {
+      if (err instanceof IcecatClosedBrandError) {
+        outcome.sources.icecat = "closed_brand";
+        outcome.notes.push(err.message);
+        return null;
+      }
       outcome.sources.icecat = "error";
       outcome.notes.push(`Icecat: ${err instanceof Error ? err.message : String(err)}`);
       return null;

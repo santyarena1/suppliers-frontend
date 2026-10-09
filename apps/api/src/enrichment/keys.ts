@@ -54,6 +54,36 @@ export function pnKey(raw: string | null | undefined): string | null {
   return key;
 }
 
+/**
+ * Código interno de un distribuidor, no del fabricante: "39445-APF73554",
+ * "216959-ABT74541", "M20-PF56082". Prefijo corto, guion y 2–4 letras seguidas
+ * de 4+ dígitos. Con eso Icecat y los fabricantes responden "no existe".
+ */
+export function looksLikeDistributorSku(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  return /^[A-Z0-9]{1,8}-[A-Z]{2,4}\d{4,}$/i.test(String(raw).trim());
+}
+
+/**
+ * Códigos del fabricante candidatos para buscar en fuentes externas, en orden:
+ * part numbers de las fichas que no son códigos internos, y después códigos de
+ * modelo que aparecen en el nombre. Sin repetir (por clave normalizada).
+ */
+export function manufacturerCodeCandidates(partNumbers: (string | null | undefined)[], names: (string | null | undefined)[], max = 3): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (code: string | null | undefined) => {
+    if (!code || looksLikeDistributorSku(code)) return;
+    const key = pnKey(code);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(code.trim());
+  };
+  partNumbers.forEach(push);
+  for (const name of names) modelTokens(name).forEach(push);
+  return out.slice(0, max);
+}
+
 /** Igual que `normalizeBrandKey` del catálogo, sin depender de él. */
 export function brandKeyOf(raw: string | null | undefined): string | null {
   if (!raw) return null;

@@ -56,6 +56,8 @@ export interface LookupQuery {
   name: string;
   /** Códigos de modelo candidatos (del nombre del distribuidor y de Icecat). */
   hints: string[];
+  /** Otros códigos del fabricante para probar si el primero no existe. */
+  altPartNumbers?: string[];
 }
 
 export interface ManufacturerConnector {

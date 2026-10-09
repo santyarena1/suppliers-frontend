@@ -1,4 +1,4 @@
-import { brandKeyOf, gtin14, isValidGtin, modelTokens, nameSimilarity, pnKey } from "./keys";
+import { looksLikeDistributorSku, manufacturerCodeCandidates, brandKeyOf, gtin14, isValidGtin, modelTokens, nameSimilarity, pnKey } from "./keys";
 
 describe("claves de agrupación", () => {
   it("acepta GTIN con dígito verificador correcto y lo lleva a 14 dígitos", () => {
@@ -43,5 +43,28 @@ describe("claves de agrupación", () => {
   it("parecido de nombres por tokens", () => {
     expect(nameSimilarity("Mouse Logitech G203", "MOUSE LOGITECH G203 LIGHTSYNC")).toBeGreaterThan(0.5);
     expect(nameSimilarity("Mouse Logitech G203", "Fuente 650W")).toBe(0);
+  });
+});
+
+describe("códigos del fabricante vs. códigos internos del distribuidor", () => {
+  it("reconoce los códigos internos de un distribuidor", () => {
+    for (const code of ["39445-APF73554", "216959-ABT74541", "M20-PF56082", "54227-CX62615"]) {
+      expect(looksLikeDistributorSku(code)).toBe(true);
+    }
+    for (const code of ["DUAL-RTX5060TI-O8G", "SA400S37/480G", "YD3400C5M4MFH", "82YU012PAR"]) {
+      expect(looksLikeDistributorSku(code)).toBe(false);
+    }
+  });
+
+  it("descarta el código interno y toma el del fabricante del nombre", () => {
+    const codes = manufacturerCodeCandidates(["39445-APF73554"], ["Procesador AMD Ryzen 5 3400G YD3400C5M4MFH"]);
+    expect(codes).toContain("YD3400C5M4MFH");
+    expect(codes).not.toContain("39445-APF73554");
+  });
+
+  it("prefiere el part number real y agrega candidatos del nombre sin repetir", () => {
+    const codes = manufacturerCodeCandidates(["DUAL-RTX5060TI-O8G"], ["ASUS DUAL RTX5060TI O8G DUAL-RTX5060TI-O8G"]);
+    expect(codes[0]).toBe("DUAL-RTX5060TI-O8G");
+    expect(codes.filter((c) => c.toUpperCase() === "DUAL-RTX5060TI-O8G")).toHaveLength(1);
   });
 });

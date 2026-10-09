@@ -121,13 +121,41 @@ export function parseIcecat(payload: unknown, q: LookupQuery, by: "gtin" | "code
   };
 }
 
-/** Busca en Icecat por GTIN y después por marca + código. */
-export async function lookupIcecat(q: LookupQuery, username: string, fetcher: SourceFetcher): Promise<SourceResult | null> {
-  for (const attempt of icecatUrls(q, username)) {
-    const res = await fetcher("icecat", attempt.url, { json: true });
-    if (res.status !== 200) continue;
-    const parsed = parseIcecat(res.body, q, attempt.by);
-    if (parsed) return parsed;
+/**
+ * La marca no está en Open Icecat (gratis): Icecat pide el app_key de la
+ * versión completa. No es un "no existe": no tiene sentido seguir probando.
+ */
+export class IcecatClosedBrandError extends Error {
+  constructor(readonly brand: string | null) {
+    super(`${brand ?? "La marca"} no está en Open Icecat (solo en Icecat completo, pago)`);
   }
+}
+
+function isClosedBrand(status: number, body: unknown): boolean {
+  if (status !== 403) return false;
+  const text = typeof body === "string" ? body : JSON.stringify(body ?? "");
+  return /app_key/i.test(text);
+}
+
+/** Busca en Icecat por GTIN y después por marca + cada código candidato. */
+export async function lookupIcecat(q: LookupQuery, username: string, fetcher: SourceFetcher): Promise<SourceResult | null> {
+  const codes = [q.partNumber, ...(q.altPartNumbers ?? [])].filter((c): c is string => Boolean(c));
+  const variants: LookupQuery[] = codes.length
+    ? codes.map((code, i) => (i === 0 ? q : { ...q, partNumber: code, pnKey: pnKey(code), gtin: null }))
+    : [q];
+  let closed = false;
+  for (const variant of variants) {
+    for (const attempt of icecatUrls(variant, username)) {
+      const res = await fetcher("icecat", attempt.url, { json: true });
+      if (isClosedBrand(res.status, res.body)) {
+        closed = true;
+        continue;
+      }
+      if (res.status !== 200) continue;
+      const parsed = parseIcecat(res.body, variant, attempt.by);
+      if (parsed) return parsed;
+    }
+  }
+  if (closed) throw new IcecatClosedBrandError(q.brand);
   return null;
 }
