@@ -586,6 +586,8 @@ export interface VisibleProvider {
    * del plan y no aparece en Proveedores. `name` es el nombre del comercio.
    */
   storefront?: boolean;
+  /** Tienda de otro comercio: cómo contactarla. */
+  storefrontContact?: { phone: string | null; note: string | null } | null;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */

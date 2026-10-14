@@ -15,7 +15,7 @@ import { SchemePicker } from "@/components/SchemePicker";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import type { TaxLine } from "@/lib/tax";
 import ChannelPriceBreakdown from "@/components/ChannelPriceBreakdown";
-import { providerLabel } from "@/components/ProviderBadge";
+import { isStorefrontProvider, providerLabel } from "@/components/ProviderBadge";
 
 /** Las líneas de impuesto que suman al precio mostrado según IVA/percepciones elegidos. */
 function shownLines(lines: TaxLine[], withIva: boolean, withIibb: boolean): TaxLine[] {
@@ -176,7 +176,7 @@ export default function ProductBuyActions({ product, qty }: { product: ProductDT
         </>
       )}
 
-      {retailer && hasIva && !showScheme && !showOffline && (
+      {retailer && hasIva && !showScheme && !showOffline && !isStorefrontProvider(product.provider) && (
         <p className="text-[11px] text-surface-400 text-center leading-relaxed">
           Pedido offline y esquema se activan en{" "}
           <Link href={`/proveedores/${product.provider}?tab=config`} className="text-amber-300 hover:text-amber-200 underline">

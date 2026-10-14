@@ -1,4 +1,4 @@
-import { detectNumberFormat, interpretAvailabilityText, normalizeRows, parseNumber } from "./row-normalizer";
+import { detectNumberFormat, httpUrlOrUndefined, interpretAvailabilityText, normalizeRows, parseNumber } from "./row-normalizer";
 import type { ImportProfileSpec, SheetAnalysis } from "./types";
 
 function sheetOf(headers: string[], rows: (string | number | null)[][], dividers: (string | null)[] = []): SheetAnalysis {
@@ -146,5 +146,18 @@ describe("normalizeRows", () => {
     expect(issues.map((i) => i.row)).toEqual([3, 4]);
     expect(issues.some((i) => i.message.includes("repetido"))).toBe(true);
     expect(issues.some((i) => i.message.includes("sin nombre"))).toBe(true);
+  });
+});
+
+describe("links de la planilla", () => {
+  it("solo guarda http(s); completa www.; descarta javascript: y data:", () => {
+    expect(httpUrlOrUndefined("https://tienda.com/p/1")).toBe("https://tienda.com/p/1");
+    expect(httpUrlOrUndefined("  http://tienda.com/p/1 ")).toBe("http://tienda.com/p/1");
+    expect(httpUrlOrUndefined("www.tienda.com/img.jpg")).toBe("https://www.tienda.com/img.jpg");
+    expect(httpUrlOrUndefined("javascript:alert(1)")).toBeUndefined();
+    expect(httpUrlOrUndefined("JaVaScRiPt:alert(1)")).toBeUndefined();
+    expect(httpUrlOrUndefined("data:text/html,<b>x</b>")).toBeUndefined();
+    expect(httpUrlOrUndefined("no es un link")).toBeUndefined();
+    expect(httpUrlOrUndefined(123)).toBeUndefined();
   });
 });

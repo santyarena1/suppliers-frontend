@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpUrl } from "@/lib/providerLinks";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Store } from "lucide-react";
@@ -241,9 +242,9 @@ export function OwnStoreProductCompare({
               tomar este margen.
             </p>
           )}
-          {quote.productUrl && (
+          {safeHttpUrl(quote.productUrl) && (
             <a
-              href={quote.productUrl}
+              href={safeHttpUrl(quote.productUrl)!}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 mt-3 text-xs font-medium text-brand-300 hover:text-brand-200"

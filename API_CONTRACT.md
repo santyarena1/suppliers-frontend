@@ -1014,7 +1014,7 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
   - `GET /my/upgrade-requests` · `POST /my/upgrade-requests` body `{ kind: DISTRIBUTOR|BRAND, message?, contact? }`: entra a la bandeja Solicitudes (`SUPPLIER_JOIN`).
   - Superadmin: `GET /admin/storefronts` · `PUT /admin/storefronts/:id/status` body `{ status: ACTIVE|SUSPENDED, reason? }` (frenar exige motivo).
 - **Cambios en endpoints existentes**:
-  - `GET /my/providers`: las tiendas de otros comercios vienen con `storefront: true`, `name` = nombre del comercio, `selfConnected: true`, sin `linkId` ni vendedor; no ocupan lugar del plan.
+  - `GET /my/providers`: las tiendas de otros comercios vienen con `storefront: true`, `name` = nombre del comercio, `selfConnected: true`, sin `linkId` ni vendedor; no ocupan lugar del plan. Traen `storefrontContact: { phone, note }` (lo que cargó el dueño) para el botón de WhatsApp de la ficha.
   - `POST /orders/offline` a una tienda: valida que lo pedido esté publicado y no supere el stock; el pedido sale con `storefrontStatus: PENDING` y no es editable. `GET /orders` agrega `storefrontStatus`, `storefrontNote`, `storefrontRespondedAt`.
   - `GET /providers/:p/freshness` de una tienda: cualquier comercio lee las fechas; cargarle listas es solo del dueño (403 para el resto).
   - `GET /my/catalog-api` y la foto del catálogo no incluyen tiendas de otros comercios.

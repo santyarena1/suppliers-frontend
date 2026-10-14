@@ -81,6 +81,8 @@ export interface VisibleProvider {
    * Proveedores. `name` es el nombre del comercio.
    */
   storefront: boolean;
+  /** Tienda de otro comercio: cómo contactarla (lo cargó el dueño para quien le compra). */
+  storefrontContact?: { phone: string | null; note: string | null } | null;
 }
 
 /** Cuántos proveedores buscan a la vez y cuántos permite el plan. */
@@ -359,6 +361,9 @@ export class TenantVisibilityService {
         platformHidden: hiddenForViewer(hidden, v.provider, tenantId),
         configured: priced === null || priced.has(v.provider),
         storefront: storefronts.has(v.provider),
+        storefrontContact: storefronts.has(v.provider)
+          ? { phone: storefronts.get(v.provider)!.contactPhone, note: storefronts.get(v.provider)!.contactNote }
+          : null,
       }))
       // Oculto por la plataforma = para un comercio no existe: ni búsqueda, ni
       // Proveedores, ni avisos. Solo Administración lo sigue viendo para gestionarlo.
@@ -404,13 +409,24 @@ export class TenantVisibilityService {
         stockConfirmedAt: true,
         stockValidDays: true,
         retailerTenantId: true,
+        contactPhone: true,
+        contactNote: true,
         retailerTenant: { select: { name: true, active: true } },
         supplierTenant: { select: { providerKey: true } },
       },
     });
     const map = new Map<
       string,
-      { status: StorefrontStatusValue; stockConfirmedAt: Date | null; stockValidDays: number; retailerTenantId: string; name: string; ownerActive: boolean }
+      {
+        status: StorefrontStatusValue;
+        stockConfirmedAt: Date | null;
+        stockValidDays: number;
+        retailerTenantId: string;
+        name: string;
+        ownerActive: boolean;
+        contactPhone: string | null;
+        contactNote: string | null;
+      }
     >();
     for (const r of rows) {
       if (!r.supplierTenant.providerKey) continue;
@@ -421,6 +437,8 @@ export class TenantVisibilityService {
         retailerTenantId: r.retailerTenantId,
         name: r.retailerTenant.name,
         ownerActive: r.retailerTenant.active,
+        contactPhone: r.contactPhone,
+        contactNote: r.contactNote,
       });
     }
     return map;

@@ -164,6 +164,9 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
 
     const item: NormalizedProduct = {
       ...(mapped as Partial<NormalizedProduct>),
+      // Links de una planilla: solo http(s). Lo demás (javascript:, data:…) no se guarda.
+      productUrl: httpUrlOrUndefined(mapped.productUrl),
+      imageUrl: httpUrlOrUndefined(mapped.imageUrl),
       externalId,
       name,
       price: prices.price ?? undefined,
@@ -176,6 +179,21 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
   }
 
   return { items, issues };
+}
+
+/** Un link solo si es http(s) bien formado; si no, `undefined`. */
+export function httpUrlOrUndefined(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  let text = value.trim();
+  if (!text || text.length > 2000) return undefined;
+  // "www.sitio.com/…" sin protocolo es un link común en las planillas.
+  if (/^www\./i.test(text)) text = `https://${text}`;
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function applyDivider(

@@ -12,6 +12,8 @@ import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint, productDisplayBrand, productDisplayCategory, productDisplaySubcategory } from "@/lib/api";
 import { proxyImg, formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
+import ProductProviderLinks from "@/components/ProductProviderLinks";
+import { safeHttpUrl } from "@/lib/providerLinks";
 import ProductSyncedAt from "@/components/ProductSyncedAt";
 import AiImageDisclaimer from "@/components/AiImageDisclaimer";
 import {
@@ -287,6 +289,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                     ) : null}
                     {product.stockStatus && <span>{product.stockStatus}</span>}
                   </p>
+                )}
+                {/* Ir al proveedor: no para el vendedor en modo vendedor (el portal es la compra, con costos). */}
+                {!sellerSession.isSeller && (
+                  <ProductProviderLinks provider={providerName} productUrl={product.productUrl} productName={product.name} />
                 )}
               </div>
 
@@ -866,11 +872,13 @@ function productFacts(
   if (present(product.volume)) push("Volumen", String(product.volume));
   push("Tags", product.tags);
 
-  if (product.productUrl) {
-    push("Ficha del proveedor", "Abrir enlace", { href: product.productUrl });
+  const fichaUrl = safeHttpUrl(product.productUrl);
+  if (fichaUrl) {
+    push("Ficha del proveedor", "Abrir enlace", { href: fichaUrl });
   }
-  if (product.imageUrl) {
-    push("Imagen original", "Ver imagen", { href: product.imageUrl });
+  const imageUrl = safeHttpUrl(product.imageUrl);
+  if (imageUrl) {
+    push("Imagen original", "Ver imagen", { href: imageUrl });
   }
   if (product.syncedAt) {
     const d = new Date(product.syncedAt);

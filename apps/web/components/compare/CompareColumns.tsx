@@ -1,5 +1,6 @@
 "use client";
 
+import { safeHttpUrl } from "@/lib/providerLinks";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -382,9 +383,9 @@ export function RetailCompareColumn({
         </div>
 
         <div className="mt-auto pt-1 border-t border-surface-800">
-          {entry.hit.productUrl ? (
+          {safeHttpUrl(entry.hit.productUrl) ? (
             <a
-              href={entry.hit.productUrl}
+              href={safeHttpUrl(entry.hit.productUrl)!}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-[11px] text-surface-400 hover:text-white transition-colors"
