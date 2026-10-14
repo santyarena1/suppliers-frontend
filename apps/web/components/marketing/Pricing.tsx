@@ -66,6 +66,30 @@ function price(n: number) {
   return `US$ ${n.toLocaleString("es-AR")}`;
 }
 
+const CUSTOM_STEPS = ["Nos contás cómo trabajás", "Te armamos la propuesta", "Lo desarrollamos para tu empresa"];
+
+/** Precio de Custom: se cotiza, así que el "desde" va chico y lo que se ve es el proceso. */
+function QuotedPrice({ from }: { from: number }) {
+  return (
+    <div className="relative mt-7">
+      <p className="text-3xl font-semibold tracking-tight text-white">A consultar</p>
+      <p className="mt-1.5 text-sm text-[var(--fg-3)]">
+        Se cotiza según lo que haya que desarrollar. Desde {price(from)} por mes.
+      </p>
+      <ol className="mt-5 flex flex-col gap-2.5 rounded-[calc(var(--r)-6px)] border border-[var(--line)] p-4">
+        {CUSTOM_STEPS.map((step, i) => (
+          <li key={step} className="flex items-center gap-3 text-sm text-[var(--fg-2)]">
+            <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border border-[var(--line)] text-xs font-semibold tabular-nums text-white">
+              {i + 1}
+            </span>
+            {step}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function Cell({ value, strong }: { value: PlanCell; strong: boolean }) {
   if (value === true) return <Check className={`mx-auto h-4 w-4 ${strong ? "text-[var(--accent-2)]" : "text-[var(--fg-2)]"}`} aria-label="Incluido" />;
   if (value === false) return <Minus className="mx-auto h-4 w-4 text-[#4a4e66]" aria-label="No incluido" />;
@@ -107,16 +131,22 @@ export function Pricing() {
                     {pro && <span className="nl-chip nl-chip--accent">Recomendado</span>}
                   </div>
                   <p className="relative mt-2 text-sm text-[var(--fg-2)]">{c.forWho}</p>
-                  <p className="relative mt-7 flex items-baseline gap-2">
-                    {def.priceFrom && <span className="text-sm text-[var(--fg-3)]">desde</span>}
-                    <span className={`font-bold tracking-tight tabular-nums text-white ${pro ? "text-5xl" : "text-4xl"}`}>
-                      {price(def.monthlyPrice)}
-                    </span>
-                    <span className="text-sm text-[var(--fg-3)]">por mes, IVA incluido</span>
-                  </p>
-                  <p className="relative mt-1 h-5 text-sm text-[var(--fg-3)]">
-                    {def.setupFee ? `Más ${price(def.setupFee)} de puesta en marcha, una sola vez` : def.priceFrom ? "Según el desarrollo que necesites" : "Sin costo de alta"}
-                  </p>
+                  {def.priceFrom ? (
+                    <QuotedPrice from={def.monthlyPrice} />
+                  ) : (
+                    <>
+                      <p className="relative mt-7 flex items-baseline gap-1.5">
+                        <span className="self-start pt-1.5 text-lg font-semibold text-[var(--fg-2)]">US$</span>
+                        <span className="text-5xl font-bold tracking-tight tabular-nums text-white">
+                          {def.monthlyPrice.toLocaleString("es-AR")}
+                        </span>
+                        <span className="ml-1 text-sm text-[var(--fg-3)]">por mes</span>
+                      </p>
+                      <p className="relative mt-1.5 text-sm text-[var(--fg-3)]">
+                        {def.setupFee ? `Más ${price(def.setupFee)} de puesta en marcha, una sola vez` : "Sin costo de alta"}
+                      </p>
+                    </>
+                  )}
                   {pro && <RetailersJoined />}
 
                   <a
@@ -203,7 +233,7 @@ export function Pricing() {
             </table>
           </div>
         )}
-        <p className="mt-6 text-center text-sm text-[var(--fg-3)]">Precios en dólares, por comercio y por mes. Todos incluyen IVA.</p>
+        <p className="mt-6 text-center text-sm text-[var(--fg-3)]">Precios en dólares, por comercio y por mes.</p>
 
         <SupplyPlans />
       </div>
