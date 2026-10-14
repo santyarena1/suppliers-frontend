@@ -651,6 +651,15 @@ export class TenantVisibilityService {
     });
     if (!supplier) throw new NotFoundException("Proveedor no encontrado");
 
+    // Una suspensión la decide el distribuidor: cargar la cuenta no la levanta.
+    const current = await this.prisma.tenantLink.findUnique({
+      where: { clientTenantId_supplierTenantId: { clientTenantId: tenantId, supplierTenantId: supplier.id } },
+      select: { status: true },
+    });
+    if (current?.status === "SUSPENDED") {
+      throw new ForbiddenException("Este distribuidor suspendió tu cuenta en NODO. Consultalo con tu vendedor.");
+    }
+
     await this.prisma.tenantLink.upsert({
       where: {
         clientTenantId_supplierTenantId: { clientTenantId: tenantId, supplierTenantId: supplier.id },

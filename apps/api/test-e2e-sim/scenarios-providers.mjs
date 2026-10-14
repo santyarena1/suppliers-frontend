@@ -138,13 +138,23 @@ export async function p2Integrated(ctx) {
   ctx.pInt = r;
 
   const pre = await api("POST", "/credentials", { token: r.token, body: { providerName: "INVID", credentials: { username: "falso", password: "falso" } } });
-  s.check("credenciales de un proveedor NO vinculado (INVID) → 404, no se guardan", pre.status === 404, pre);
+  // Directorio abierto: INVID se ve sin vínculo, y cargar la cuenta es la forma de conectarse.
+  const invidLink = await ctx.prisma.tenantLink.findFirst({ where: { clientTenantId: r.tenantId, supplierTenant: { providerKey: "INVID" } } });
+  s.check("cargar la cuenta de un distribuidor del directorio (INVID) lo conecta", pre.status === 201 && invidLink?.status === "ACTIVE", { status: pre.status, link: invidLink?.status });
+  if (invidLink) {
+    // El distribuidor suspende al comercio: volver a cargar la cuenta no lo reactiva.
+    await ctx.prisma.tenantLink.update({ where: { id: invidLink.id }, data: { status: "SUSPENDED" } });
+    const again = await api("POST", "/credentials", { token: r.token, body: { providerName: "INVID", credentials: { username: "falso", password: "falso" } } });
+    const after = await ctx.prisma.tenantLink.findUnique({ where: { id: invidLink.id } });
+    s.check("con el vínculo suspendido, cargar la cuenta → 403 y sigue suspendido", again.status === 403 && after?.status === "SUSPENDED", { status: again.status, link: after?.status });
+    await ctx.prisma.tenantLink.update({ where: { id: invidLink.id }, data: { status: "ACTIVE" } });
+  }
 
   const dir = await api("GET", "/my/suppliers/search?q=Elit", { token: r.token });
   const elitRow = (dir.data ?? []).find((x) => x.providerKey === "ELIT");
   s.check("directorio /my/suppliers/search?q=Elit → ELIT con hasApi=true, sin vínculo", elitRow?.hasApi === true && elitRow.linkStatus === null, { status: dir.status, elitRow });
   const before = await myProvider(r.token, "ELIT");
-  s.check("antes de conectar, ELIT no está en /my/providers", before === null, { before });
+  s.check("antes de conectar, ELIT figura en el directorio sin vínculo ni precios", before && before.linked === false && before.configured === false, { before: compact(before) });
 
   const conn = await api("POST", `/my/suppliers/${elitRow?.id}/connect-by-list`, { token: r.token });
   s.check("conectarse a ELIT desde el directorio → 201 LIST_CONNECTED", conn.status === 201 && conn.data?.status === "LIST_CONNECTED", conn);
@@ -203,7 +213,10 @@ export async function p2Integrated(ctx) {
   const row4 = await myProvider(r.token, "ELIT");
   s.note(`ELIT sin credenciales después de borrarlas: sigue vinculado en /my/providers → ${JSON.stringify(compact(row4))}; no hay forma de desconectarse (no existe DELETE de vínculo para el comercio)`);
   const sync = await api("POST", "/providers/INVID/sync", { token: r.token });
-  s.check("sync de un proveedor no vinculado → 4xx", sync.status >= 400 && sync.status < 500, sync);
+  // INVID quedó vinculado al cargar su cuenta (arriba): sincronizar se acepta y falla en el portal.
+  s.check("sync de INVID (vinculado al cargar la cuenta) → aceptado", sync.status < 300, sync);
+  const ghostSync = await api("POST", "/providers/LIST_NO_EXISTE_SIM/sync", { token: r.token });
+  s.check("sync de un proveedor que no ve → 4xx", ghostSync.status >= 400 && ghostSync.status < 500, ghostSync);
 }
 
 // ---------- P3: proveedores por lista, variantes de planilla ----------
@@ -509,7 +522,7 @@ export async function p8ExtendedTour(ctx) {
 
   const st = await api("GET", "/onboarding/status", { token: r.token });
   const ids = (st.data?.steps ?? []).map((x) => x.id);
-  const expected = ["welcome", "search", "filters", "price-drops", "local-prices", "compare", "add-to-cart", "cart", "orders", "order-online", "invoice", "orders-stats", "providers", "provider-lists", "provider-account", "provider-sync", "provider-config", "provider-catalog", "providers-stats", "team", "done"];
+  const expected = ["welcome", "search", "filters", "price-drops", "local-prices", "compare", "add-to-cart", "cart", "orders", "order-online", "invoice", "orders-stats", "providers", "provider-lists", "provider-account", "provider-sync", "provider-config", "provider-catalog", "providers-stats", "sale-margins", "seller-view", "quotes", "team", "done"];
   s.check("PRO dueño: el recorrido tiene todos los pasos en orden", JSON.stringify(ids) === JSON.stringify(expected), { ids });
   const hrefs = (st.data?.steps ?? []).map((x) => x.href).filter(Boolean);
   s.check("ningún paso queda con marcadores sin completar", hrefs.every((h) => !/[{}]/.test(h)), { hrefs });

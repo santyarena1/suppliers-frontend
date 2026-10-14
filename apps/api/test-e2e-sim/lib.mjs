@@ -34,7 +34,14 @@ export async function api(method, path, { token, body, form, ip, raw } = {}) {
     headers["content-type"] = "application/json";
     payload = JSON.stringify(body);
   }
-  const res = await fetch(`${BASE_URL}${path}`, { method, headers, body: payload });
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, { method, headers, body: payload });
+  } catch (err) {
+    // "fetch failed" solo no dice nada: se agrega la causa (timeout, conexión cortada…).
+    const cause = err?.cause ? ` (${err.cause.code ?? ""} ${err.cause.message ?? err.cause})` : "";
+    throw new Error(`${method} ${path}: ${err?.message ?? err}${cause}`);
+  }
   const text = await res.text();
   let json = null;
   try {

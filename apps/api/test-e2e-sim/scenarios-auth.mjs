@@ -158,7 +158,12 @@ export async function s3Session(ctx) {
   // Comercio sin ningún vínculo: se borran los vínculos demo del tercer comercio.
   await ctx.prisma.tenantLink.deleteMany({ where: { clientTenantId: ctx.third.tenantId } });
   const empty = await api("GET", "/my/providers", { token: ctx.third.token });
-  s.check("comercio sin vínculos → /my/providers 200 []", empty.status === 200 && Array.isArray(empty.data) && empty.data.length === 0, empty);
+  // Con el directorio abierto (PROVIDER_DIRECTORY_OPEN) igual ve los distribuidores integrados, sin vínculo.
+  s.check(
+    "comercio sin vínculos → /my/providers 200 sin ninguno vinculado",
+    empty.status === 200 && Array.isArray(empty.data) && empty.data.every((p) => !p.linked && !p.configured),
+    { status: empty.status, linked: (empty.data ?? []).filter((p) => p.linked).map((p) => p.provider) }
+  );
   const subEmpty = await api("GET", "/my/subscription", { token: ctx.third.token });
   s.check("comercio sin vínculos → /my/subscription 200", subEmpty.status === 200, subEmpty);
   const ship = await api("GET", "/my/shipping-estimates", { token: o.token });
@@ -267,11 +272,9 @@ export async function s4bTeamRemoval(ctx) {
   if (wait > 0) await sleep(wait);
   if (ctx.listItem) {
     const order = await api("POST", "/orders/offline", { token: seller.token, body: { orders: [{ provider: ctx.dist.providerKey, items: [{ ...ctx.listItem, qty: 1 }] }] } });
-    const row = Array.isArray(order.data) ? order.data[0] : null;
-    s.check("SELLER registra un pedido por lista → 201", order.status === 201, order);
-    s.check("pedido del SELLER (sin orders.confirm) queda pendiente de aprobación", row && row.approvalStatus !== "APPROVED", { approvalStatus: row?.approvalStatus, status: row?.status }, {
-      hint: "orders.service.ts:113-159 createOffline graba approvalStatus APPROVED y approvedByUserId = quien lo creó, sin mirar needsApproval()",
-    });
+    // Pro trae modo vendedor: el SELLER ve precios de venta y no compra (docs/PLAN_MODO_VENDEDOR.md).
+    // La aprobación de pedidos de quien sí compra sin "orders.confirm" la cubre V5 (scenarios-storefront).
+    s.check("SELLER en modo vendedor no compra → 403 COST_HIDDEN", order.status === 403 && order.body?.code === "COST_HIDDEN", order);
   }
 
   // Desactivar la membresía (no borrar): el token del vendedor tiene que dejar de servir para la org.
