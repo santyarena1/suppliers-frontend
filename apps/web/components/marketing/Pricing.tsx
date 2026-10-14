@@ -21,7 +21,7 @@ interface CardCopy {
   trialNote: string;
 }
 
-const CUSTOM_WHATSAPP_TEXT = "Hola, quiero consultar por NODO Custom (desarrollo a medida).";
+const CUSTOM_WHATSAPP_TEXT = "Hola, quiero el relevamiento sin cargo de NODO Custom (desarrollo a medida).";
 
 const CARDS: CardCopy[] = [
   {
@@ -58,7 +58,7 @@ const CARDS: CardCopy[] = [
     ],
     cta: "Consultar por WhatsApp",
     trialPlan: "PRO",
-    trialNote: `Consultanos por el desarrollo a medida al ${NODO_WHATSAPP_LABEL}.`,
+    trialNote: `Sin cargo y sin compromiso. Escribinos al ${NODO_WHATSAPP_LABEL}.`,
   },
 ];
 
@@ -66,7 +66,7 @@ function price(n: number) {
   return `US$ ${n.toLocaleString("es-AR")}`;
 }
 
-const CUSTOM_STEPS = ["Nos contás cómo trabajás", "Te armamos la propuesta", "Lo desarrollamos para tu empresa"];
+const CUSTOM_STEPS = ["Nos contás cómo trabajás", "Relevamos tu operación y te armamos la propuesta", "Lo desarrollamos para tu empresa"];
 
 /** Precio de Custom: se cotiza, así que el "desde" va chico y lo que se ve es el proceso. */
 function QuotedPrice({ from }: { from: number }) {
@@ -76,7 +76,11 @@ function QuotedPrice({ from }: { from: number }) {
       <p className="mt-1.5 text-sm text-[var(--fg-3)]">
         Se cotiza según lo que haya que desarrollar. Desde {price(from)} por mes.
       </p>
-      <ol className="mt-5 flex flex-col gap-2.5 rounded-[calc(var(--r)-6px)] border border-[var(--line)] p-4">
+      <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-[rgb(157_159_255/0.35)] bg-[rgb(106_108_246/0.1)] px-3 py-1 text-xs font-semibold text-[var(--accent-2)]">
+        <Check className="h-3.5 w-3.5" aria-hidden />
+        Relevamiento y propuesta sin cargo
+      </p>
+      <ol className="mt-3 flex flex-col gap-2.5 rounded-[calc(var(--r)-6px)] border border-[var(--line)] p-4">
         {CUSTOM_STEPS.map((step, i) => (
           <li key={step} className="flex items-center gap-3 text-sm text-[var(--fg-2)]">
             <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border border-[var(--line)] text-xs font-semibold tabular-nums text-white">
