@@ -24,6 +24,9 @@ export function Hero() {
             <a href="#como-funciona" className="nl-btn nl-btn--ghost">
               <Play className="h-4 w-4" aria-hidden /> Ver la demo · 2 min
             </a>
+            <a href="#planes" className="nl-btn nl-btn--ghost">
+              Ver planes
+            </a>
           </div>
         </div>
         <div className="mt-14 lg:mt-16">
