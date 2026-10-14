@@ -3,9 +3,6 @@
  * Diseño en docs/PLAN_API_CATALOGO.md. Mantener en sincronía.
  */
 
-/** Módulo extra en Base y Pro. Incluido en Custom. */
-export const CATALOG_API_ADDON_PRICE_USD = 10;
-
 export const CATALOG_API_SCOPES = [
   "catalog:read",
   "changes:read",

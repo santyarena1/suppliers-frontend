@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { ArrowRight, Plug, ShieldCheck, Zap } from "lucide-react";
-import { CATALOG_API_ADDON_PRICE_USD } from "@/lib/catalog-api";
 import { Reveal } from "./Reveal";
 
 const POINTS = [
@@ -39,7 +38,7 @@ const SAMPLE = `GET /v1/products?inStock=true
   "pagination": { "nextCursor": "…", "hasMore": true }
 }`;
 
-/** Bloque de la API de catálogo dentro de Planes: módulo extra, incluido en Custom. */
+/** Bloque de la API de catálogo dentro de Planes: incluida en todos los planes. */
 export function CatalogApiPitch() {
   return (
     <Reveal>
@@ -47,7 +46,7 @@ export function CatalogApiPitch() {
         <div className="nl-glow" style={{ width: 420, height: 300, top: -180, right: -120 }} aria-hidden />
         <div className="relative grid items-center gap-10 lg:grid-cols-[1.05fr_1fr]">
           <div>
-            <p className="nl-kicker">Módulo extra · API de catálogo</p>
+            <p className="nl-kicker">Incluida en todos los planes · API de catálogo</p>
             <h3 className="mt-3 text-[1.75rem] font-semibold leading-tight tracking-tight text-white sm:text-[2rem]">
               Tu catálogo de NODO, en tu tienda y tu sistema
             </h3>
@@ -69,11 +68,7 @@ export function CatalogApiPitch() {
               ))}
             </ul>
             <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
-              <p className="text-white">
-                <span className="text-2xl font-bold tabular-nums">+US$ {CATALOG_API_ADDON_PRICE_USD}</span>
-                <span className="ml-1 text-sm text-[var(--fg-3)]">por mes en Base y Pro</span>
-              </p>
-              <span className="nl-chip nl-chip--accent">Incluida en Custom</span>
+              <span className="nl-chip nl-chip--accent">Incluida en Pro y Custom, sin costo extra</span>
             </div>
             <Link href="/developers" className="nl-btn nl-btn--ghost mt-6">
               Ver la documentación <ArrowRight className="h-4 w-4" aria-hidden />

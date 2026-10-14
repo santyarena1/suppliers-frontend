@@ -1,9 +1,10 @@
 /**
  * El plan que eligió en la landing para la prueba gratis. Vive entre el clic en
- * el plan y el alta de la organización en el onboarding.
+ * el plan y el alta de la organización en el onboarding. Hoy la prueba es
+ * siempre de Pro (NODO Base se discontinuó).
  */
 
-export type TrialPlan = "BASE" | "PRO";
+export type TrialPlan = "PRO";
 
 const KEY = "nodo.trialPlan";
 
@@ -13,14 +14,14 @@ export function rememberTrialPlan(plan: TrialPlan): void {
   try {
     localStorage.setItem(KEY, plan);
   } catch {
-    /* sin almacenamiento la prueba arranca en Base */
+    /* sin almacenamiento la prueba arranca igual en Pro */
   }
 }
 
 export function readTrialPlan(): TrialPlan | undefined {
   try {
     const value = localStorage.getItem(KEY);
-    return value === "BASE" || value === "PRO" ? value : undefined;
+    return value === "PRO" ? value : undefined;
   } catch {
     return undefined;
   }

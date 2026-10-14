@@ -86,7 +86,7 @@ describe("precio de venta en respuestas de catálogo", () => {
   });
 });
 
-function tenant(role: TenantContext["tenantRole"], plan: "BASE" | "PRO" | "CUSTOM", permissions: string[]): TenantContext {
+function tenant(role: TenantContext["tenantRole"], plan: "PRO" | "CUSTOM", permissions: string[]): TenantContext {
   return {
     userId: "u1",
     tenantId: "t1",
@@ -104,11 +104,6 @@ describe("quién ve costos", () => {
   it("con Pro, el que no tiene «Ver costos» solo ve venta", () => {
     expect(hidesCost(tenant("SELLER", "PRO", []))).toBe(true);
     expect(hidesCost(tenant("BUYER", "PRO", ["prices.viewCost"]))).toBe(false);
-  });
-
-  it("con Base no hay modo vendedor: todo como antes", () => {
-    expect(sellerModeOn(tenant("SELLER", "BASE", []))).toBe(false);
-    expect(hidesCost(tenant("SELLER", "BASE", []))).toBe(false);
   });
 
   it("distribuidores y marcas no tienen modo vendedor", () => {
@@ -145,10 +140,6 @@ describe("TenantGuard con rutas de costos", () => {
 
   it("quien ve costos entra", async () => {
     await expect(run(tenant("BUYER", "PRO", ["prices.viewCost"]), { costSensitive: true })).resolves.toBe(true);
-  });
-
-  it("en Base el vendedor sigue como antes", async () => {
-    await expect(run(tenant("SELLER", "BASE", []), { costSensitive: true })).resolves.toBe(true);
   });
 
 });

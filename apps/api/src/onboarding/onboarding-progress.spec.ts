@@ -58,12 +58,6 @@ describe("Recorrido · modo vendedor", () => {
     expect(ids).toContain("quotes");
   });
 
-  it("en Base (sin modo vendedor) el vendedor sigue viendo el carrito y no ve presupuestos", () => {
-    const ids = stepsFor("SELLER", "BASE");
-    expect(ids).toContain("cart");
-    expect(ids).not.toContain("quotes");
-  });
-
   it("el dueño con Pro ve compras y también márgenes y presupuestos", () => {
     const ids = stepsFor("OWNER", "PRO");
     for (const id of ["cart", "sale-margins", "seller-view", "quotes"]) expect(ids).toContain(id);

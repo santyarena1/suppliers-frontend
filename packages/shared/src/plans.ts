@@ -1,5 +1,4 @@
 import type { TenantType } from "./tenants";
-import { CATALOG_API_ADDON_PRICE_USD } from "./catalog-api";
 
 /**
  * Planes comerciales de los comercios (tipo 1 / RETAILER) y su suscripción.
@@ -12,12 +11,25 @@ import { CATALOG_API_ADDON_PRICE_USD } from "./catalog-api";
  * Diseño: docs/PLAN_SUSCRIPCIONES.md
  */
 
-export type TenantPlan = "BASE" | "PRO" | "CUSTOM";
+export type TenantPlan = "PRO" | "CUSTOM";
 
-export const TENANT_PLANS: readonly TenantPlan[] = ["BASE", "PRO", "CUSTOM"] as const;
+export const TENANT_PLANS: readonly TenantPlan[] = ["PRO", "CUSTOM"] as const;
 
 export function isTenantPlan(value: unknown): value is TenantPlan {
   return typeof value === "string" && (TENANT_PLANS as readonly string[]).includes(value);
+}
+
+/**
+ * NODO Base ya no existe: los comercios pasaron a Pro (migración
+ * 20261013120000_remove_base_plan). El valor queda en la base solo en el
+ * historial (pagos y eventos viejos), así que se nombra para mostrarlo.
+ */
+const LEGACY_PLAN_LABELS: Record<string, string> = { BASE: "NODO Base" };
+
+/** Nombre de pantalla de cualquier plan guardado, incluido el histórico. */
+export function planLabelOf(plan: string | null | undefined): string | null {
+  if (!plan) return null;
+  return isTenantPlan(plan) ? PLAN_CATALOG[plan].label : LEGACY_PLAN_LABELS[plan] ?? plan;
 }
 
 export type SubscriptionStatus =
@@ -105,24 +117,17 @@ export interface PlanDefinition {
   currency: "USD";
   /** Pago único de puesta en marcha. `null` si el plan no lo tiene. */
   setupFee: number | null;
+  /** `true` = `monthlyPrice` es un piso ("desde"): el precio final se cotiza. */
+  priceFrom?: boolean;
   tagline: string;
 }
 
 export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
-  BASE: {
-    plan: "BASE",
-    label: "NODO Base",
-    shortLabel: "Base",
-    monthlyPrice: 35,
-    currency: "USD",
-    setupFee: null,
-    tagline: "Centralizá y prepará tus compras.",
-  },
   PRO: {
     plan: "PRO",
     label: "NODO Pro",
     shortLabel: "Pro",
-    monthlyPrice: 45,
+    monthlyPrice: 38,
     currency: "USD",
     setupFee: null,
     tagline: "Gestioná tus compras y proveedores directamente desde NODO.",
@@ -131,22 +136,21 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     plan: "CUSTOM",
     label: "NODO Custom",
     shortLabel: "Custom",
-    monthlyPrice: 100,
+    monthlyPrice: 80,
     currency: "USD",
-    setupFee: 300,
-    tagline: "NODO adaptado a tu empresa.",
+    setupFee: null,
+    priceFrom: true,
+    tagline: "Desarrollo a medida para tu empresa.",
   },
 };
 
 /** Nombres de pantalla. */
 export const TENANT_PLAN_LABELS: Record<TenantPlan, string> = {
-  BASE: PLAN_CATALOG.BASE.label,
   PRO: PLAN_CATALOG.PRO.label,
   CUSTOM: PLAN_CATALOG.CUSTOM.label,
 };
 
 export const TENANT_PLAN_DESCRIPTIONS: Record<TenantPlan, string> = {
-  BASE: PLAN_CATALOG.BASE.tagline,
   PRO: PLAN_CATALOG.PRO.tagline,
   CUSTOM: PLAN_CATALOG.CUSTOM.tagline,
 };
@@ -162,7 +166,7 @@ export type PlanCapabilityKey =
   | "externalIntegrations"
   | "customModules"
   | "customBranding"
-  /** API de catálogo: incluida en Custom; en Base y Pro es un módulo extra pago. */
+  /** API de catálogo: incluida en todos los planes. */
   | "catalogApi"
   /** Modo vendedor: márgenes de venta y precio de venta para el rol Vendedor (docs/PLAN_MODO_VENDEDOR.md). */
   | "sellerMode";
@@ -185,28 +189,17 @@ export type PlanCapabilities = Record<PlanCapabilityKey, boolean> & {
   maxSearchProviders: number | null;
 };
 
-const BASE_CAPABILITIES: PlanCapabilities = {
-  maxSearchProviders: 5,
-  directCheckout: false,
-  providerPortalAccess: false,
-  providerAccountAccess: false,
-  integratedChat: false,
-  advancedAnalytics: false,
-  externalIntegrations: false,
-  customModules: false,
-  customBranding: false,
-  catalogApi: false,
-  sellerMode: false,
-};
-
 const PRO_CAPABILITIES: PlanCapabilities = {
-  ...BASE_CAPABILITIES,
   maxSearchProviders: null,
   directCheckout: true,
   providerPortalAccess: true,
   providerAccountAccess: true,
   integratedChat: true,
   advancedAnalytics: true,
+  externalIntegrations: false,
+  customModules: false,
+  customBranding: false,
+  catalogApi: true,
   sellerMode: true,
 };
 
@@ -215,11 +208,9 @@ const CUSTOM_CAPABILITIES: PlanCapabilities = {
   externalIntegrations: true,
   customModules: true,
   customBranding: true,
-  catalogApi: true,
 };
 
 const CAPABILITIES_BY_PLAN: Record<TenantPlan, PlanCapabilities> = {
-  BASE: BASE_CAPABILITIES,
   PRO: PRO_CAPABILITIES,
   CUSTOM: CUSTOM_CAPABILITIES,
 };
@@ -247,13 +238,17 @@ export const PLAN_CAPABILITY_UPSELL: Record<PlanCapabilityKey, string> = {
   externalIntegrations: "Las integraciones con ERP, CRM y sistemas externos están disponibles en NODO Custom.",
   customModules: "Los módulos personalizados están disponibles en NODO Custom.",
   customBranding: "La identidad visual adaptada está disponible en NODO Custom.",
-  catalogApi: `La API de catálogo es un módulo de US$ ${CATALOG_API_ADDON_PRICE_USD}/mes en Base y Pro, e incluido en NODO Custom.`,
+  catalogApi: "La API de catálogo está incluida en todos los planes de NODO.",
   sellerMode: "El modo vendedor (márgenes y precios de venta) está disponible en NODO Pro.",
 };
 
 // ---------- Módulos extra ----------
 
-/** Módulos que se contratan aparte del plan. Custom los trae incluidos. */
+/**
+ * Módulos que se contratan aparte del plan. Hoy ninguno se cobra: la API de
+ * catálogo viene en todos los planes. Se conserva la forma para las
+ * suscripciones que la tenían activada como módulo.
+ */
 export interface SubscriptionAddons {
   catalogApi: boolean;
 }
@@ -266,8 +261,8 @@ export function planIncludesCatalogApi(plan: TenantPlan): boolean {
 }
 
 /** Lo que suman los módulos activos al mes. Lo incluido en el plan no se cobra. */
-export function addonsMonthlyPrice(plan: TenantPlan, addons: SubscriptionAddons): number {
-  return addons.catalogApi && !planIncludesCatalogApi(plan) ? CATALOG_API_ADDON_PRICE_USD : 0;
+export function addonsMonthlyPrice(_plan: TenantPlan, _addons: SubscriptionAddons): number {
+  return 0;
 }
 
 /** Cuota mensual: precio pactado (o de lista) del plan, más los módulos activos. */
@@ -277,7 +272,7 @@ export function monthlyAmount(plan: TenantPlan, priceOverride: number | null, ad
 }
 
 export function searchLimitMessage(max: number): string {
-  return `Tu plan Base permite buscar simultáneamente en hasta ${max} distribuidores. Desactivá uno de los actuales o pasá a NODO Pro para buscar en todos.`;
+  return `Tu plan permite buscar simultáneamente en hasta ${max} distribuidores. Desactivá uno de los actuales para sumar otro.`;
 }
 
 // ---------- Vencimientos ----------
@@ -355,7 +350,7 @@ export interface SubscriptionDates {
   suspensionReason: string | null;
   setupFeeStatus?: SetupFeeStatus;
   setupFeeBlocksCustom?: boolean;
-  /** Módulo de API de catálogo contratado (Base y Pro). */
+  /** Módulo de API de catálogo contratado (histórico: hoy viene en todos los planes). */
   catalogApiAddon?: boolean;
 }
 

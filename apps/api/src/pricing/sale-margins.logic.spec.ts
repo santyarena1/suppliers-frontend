@@ -138,8 +138,7 @@ describe("precio de venta", () => {
 });
 
 describe("plan y permisos del modo vendedor", () => {
-  it("solo Pro y Custom lo incluyen", () => {
-    expect(getPlanCapabilities("BASE").sellerMode).toBe(false);
+  it("Pro y Custom lo incluyen", () => {
     expect(getPlanCapabilities("PRO").sellerMode).toBe(true);
     expect(getPlanCapabilities("CUSTOM").sellerMode).toBe(true);
   });

@@ -133,7 +133,7 @@ describe("validación de la key", () => {
     expect(await codeOf(resolverWith(clientRow({ expiresAt: new Date(Date.now() - 1000) })).byCredentials(key, "nodo_sk_bueno", "1.1.1.1", null))).toBe("key_expired");
     expect(await codeOf(resolverWith(clientRow({ ipAllowlist: ["10.0.0.0/8"] })).byCredentials(key, "nodo_sk_bueno", "1.1.1.1", null))).toBe("ip_not_allowed");
     expect(await codeOf(resolverWith(clientRow()).byCredentials(key, "nodo_sk_bueno", "1.1.1.1", "webhooks:manage"))).toBe("insufficient_scope");
-    expect(await codeOf(resolverWith(clientRow({}, {}, { catalogApiAddon: false })).byCredentials(key, "nodo_sk_bueno", "1.1.1.1", null))).toBe("addon_required");
+    expect(await codeOf(resolverWith(clientRow({}, {}, { catalogApiAddon: false })).byCredentials(key, "nodo_sk_bueno", "1.1.1.1", null))).toBe("ok");
     expect(await codeOf(resolverWith(clientRow({}, {}, { status: "SUSPENDED", suspensionReason: "MANUAL" })).byCredentials(key, "nodo_sk_bueno", "1.1.1.1", null))).toBe("subscription_suspended");
     expect(await codeOf(resolverWith(clientRow({}, { active: false })).byCredentials(key, "nodo_sk_bueno", "1.1.1.1", null))).toBe("invalid_credentials");
   });

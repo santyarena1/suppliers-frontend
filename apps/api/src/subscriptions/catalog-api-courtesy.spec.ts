@@ -6,15 +6,15 @@ const svc = SubscriptionsService.prototype as unknown as {
   catalogApiAddonOf: (plan: string, sub: Record<string, unknown> | null) => { enabled: boolean; courtesy: boolean; includedInPlan: boolean };
 };
 
-describe("API de catálogo: cobrada o de cortesía", () => {
-  it("activa y cobrada suma US$ 10 a la cuota", () => {
-    expect(svc.totalOf.call(svc, "PRO", { priceOverride: null, catalogApiAddon: true, catalogApiAddonCourtesy: false })).toBe(55);
+describe("API de catálogo: incluida en todos los planes", () => {
+  it("en Pro viene incluida y no suma a la cuota aunque estuviera activada como módulo", () => {
+    const sub = { priceOverride: null, catalogApiAddon: true, catalogApiAddonCourtesy: false, catalogApiAddonSince: null };
+    expect(svc.totalOf.call(svc, "PRO", sub)).toBe(38);
+    expect(svc.catalogApiAddonOf.call(svc, "PRO", sub)).toMatchObject({ enabled: true, includedInPlan: true, courtesy: false });
   });
 
-  it("de cortesía queda activa pero no suma", () => {
-    const sub = { priceOverride: null, catalogApiAddon: true, catalogApiAddonCourtesy: true, catalogApiAddonSince: null };
-    expect(svc.totalOf.call(svc, "PRO", sub)).toBe(45);
-    expect(svc.catalogApiAddonOf.call(svc, "PRO", sub)).toMatchObject({ enabled: true, courtesy: true });
+  it("en Pro sin el módulo activado igual está habilitada", () => {
+    expect(svc.catalogApiAddonOf.call(svc, "PRO", null)).toMatchObject({ enabled: true, includedInPlan: true });
   });
 
   it("en Custom viene incluida: no es cortesía ni se cobra aparte", () => {

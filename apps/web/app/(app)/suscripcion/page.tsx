@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, CreditCard, Loader2, Lock, Search, Send, Sparkles } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, ChevronDown, CreditCard, Loader2, Lock, Search, Send } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import PlanComparison from "@/components/subscription/PlanComparison";
 import ModulesCard from "@/components/subscription/ModulesCard";
@@ -71,7 +71,7 @@ export default function SubscriptionPage() {
             <>
               <StatusNotice sub={subscription} />
               <PlanSummary sub={subscription} onMessage={setAviso} />
-              <ModulesCard sub={subscription} />
+              <ModulesCard />
               <SearchUsageCard sub={subscription} />
               <PaymentNotice sub={subscription} onMessage={setAviso} />
               <PaymentHistory sub={subscription} />
@@ -209,17 +209,6 @@ function PlanSummary({ sub, onMessage }: { sub: MySubscription; onMessage: (m: {
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-surface-800 pt-4">
           {sub.canManage ? (
             <>
-              {sub.plan === "BASE" && (
-                <button
-                  type="button"
-                  onClick={() => upgrade("PRO")}
-                  disabled={busy !== null}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
-                >
-                  {busy === "PRO" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  Pasar a NODO Pro · {formatUsd(PLAN_CATALOG.PRO.monthlyPrice)}/mes
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => upgrade("CUSTOM")}

@@ -40,7 +40,7 @@ describe("OnboardingService.createRetailerForAdmin", () => {
     expect(tx.subscription.create.mock.calls[0][0].data).toMatchObject({ tenantId: "t-new", status: "ACTIVE" });
   });
 
-  it("Administración elige el plan y la modalidad (Base, Custom, cortesía)", async () => {
+  it("Administración elige el plan y la modalidad (Custom, cortesía)", async () => {
     const { service, tx } = makeService();
     await service.createRetailerForAdmin({ ...dto, plan: "CUSTOM", billing: "COURTESY", courtesyReason: "Piloto" });
     expect(tx.tenant.create.mock.calls[0][0].data).toMatchObject({ plan: "CUSTOM" });
@@ -48,7 +48,7 @@ describe("OnboardingService.createRetailerForAdmin", () => {
       status: "COURTESY",
       courtesyUntil: null,
       courtesyReason: "Piloto",
-      setupFeeStatus: "PENDING",
+      setupFeeStatus: "NOT_APPLICABLE",
     });
     expect(tx.subscriptionEvent.create.mock.calls[0][0].data).toMatchObject({ type: "CREATED", toPlan: "CUSTOM" });
   });

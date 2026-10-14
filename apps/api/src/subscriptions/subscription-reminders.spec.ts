@@ -49,13 +49,13 @@ describe("statusSyncPatch", () => {
 
 describe("initialSubscription", () => {
   it("self-serve: prueba de 14 días", () => {
-    const data = initialSubscription({ plan: "BASE", mode: "TRIAL", now: NOW });
+    const data = initialSubscription({ plan: "PRO", mode: "TRIAL", now: NOW });
     expect(data.status).toBe("TRIAL");
     expect(data.trialEndsAt?.toISOString()).toBe(addDays(NOW, 14).toISOString());
     expect(data.setupFeeStatus).toBe("NOT_APPLICABLE");
   });
 
-  it("Custom arranca con la puesta en marcha pendiente", () => {
-    expect(initialSubscription({ plan: "CUSTOM", mode: "ACTIVE", now: NOW })).toMatchObject({ setupFee: 300, setupFeeStatus: "PENDING" });
+  it("Custom arranca sin puesta en marcha", () => {
+    expect(initialSubscription({ plan: "CUSTOM", mode: "ACTIVE", now: NOW })).toMatchObject({ setupFee: null, setupFeeStatus: "NOT_APPLICABLE" });
   });
 });

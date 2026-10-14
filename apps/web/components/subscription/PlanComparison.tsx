@@ -1,9 +1,7 @@
 "use client";
 
 import { Check, Minus } from "lucide-react";
-import { PLAN_CATALOG, PLAN_FEATURE_GROUPS, type PlanCell, type TenantPlan } from "@/lib/plans";
-
-const PLANS: TenantPlan[] = ["BASE", "PRO", "CUSTOM"];
+import { PLAN_CATALOG, PLAN_FEATURE_GROUPS, TENANT_PLANS as PLANS, type PlanCell, type TenantPlan } from "@/lib/plans";
 
 function Cell({ value }: { value: PlanCell }) {
   if (value === true) return <Check className="mx-auto h-4 w-4 text-emerald-400" aria-label="Incluido" />;
@@ -44,7 +42,7 @@ function GroupRows({ group, highlight }: { group: (typeof PLAN_FEATURE_GROUPS)[n
   return (
     <>
       <tr className="bg-surface-900/30">
-        <td colSpan={4} className="px-4 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-surface-400">
+        <td colSpan={PLANS.length + 1} className="px-4 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-surface-400">
           {group.title}
         </td>
       </tr>

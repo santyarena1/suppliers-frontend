@@ -79,7 +79,7 @@ export async function s1Register(ctx) {
 }
 
 export async function s2Onboarding(ctx) {
-  const s = scenario("S2", "Onboarding y prueba de 14 días (PRO y BASE)");
+  const s = scenario("S2", "Onboarding y prueba de 14 días (siempre PRO)");
   const o = ctx.owner;
   const st = await api("GET", "/onboarding/status", { token: o.token });
   s.check("estado inicial: needsOnboarding, sin org, canBootstrap", st.status === 200 && st.data?.needsOnboarding === true && st.data?.hasTenant === false && st.data?.canBootstrap === true, st);
@@ -109,26 +109,20 @@ export async function s2Onboarding(ctx) {
   const chatPro = await api("GET", "/my/chat/threads", { token: o.token });
   s.check("PRO: /my/chat/threads → 200", chatPro.status === 200, chatPro);
 
-  // Segundo comercio con BASE.
+  // Segundo comercio: un navegador viejo todavía manda trialPlan BASE (discontinuado) → arranca en PRO.
   const b = await registerVerified(ctx, "base");
   const bootB = await api("POST", "/onboarding/bootstrap", { token: b.token, body: { name: `Comercio ${ctx.prefix} Base`, trialPlan: "BASE" } });
-  s.check("bootstrap BASE → 201 plan BASE", bootB.status === 201 && bootB.data?.org?.plan === "BASE", bootB);
+  s.check("bootstrap con trialPlan BASE (viejo) → 201 plan PRO", bootB.status === 201 && bootB.data?.org?.plan === "PRO", bootB);
   b.token = bootB.data?.token ?? b.token;
   b.tenantId = bootB.data?.org?.id;
   ctx.base = b;
   const subB = await ctx.prisma.subscription.findUnique({ where: { tenantId: b.tenantId ?? "" } });
-  s.check("BASE: TRIAL y trialEndsAt a 14 días", subB?.status === "TRIAL" && subB.trialEndsAt && near(subB.trialEndsAt, Date.now() + 14 * DAY, 10 * 60_000), { subB });
+  s.check("segundo comercio: TRIAL y trialEndsAt a 14 días", subB?.status === "TRIAL" && subB.trialEndsAt && near(subB.trialEndsAt, Date.now() + 14 * DAY, 10 * 60_000), { subB });
   const mineB = await api("GET", "/my/subscription", { token: b.token });
   const capB = mineB.data?.capabilities ?? {};
-  s.check("capabilities BASE: tope 5, sin checkout/chat/analytics", capB.maxSearchProviders === 5 && !capB.directCheckout && !capB.integratedChat && !capB.advancedAnalytics, { capB, usage: mineB.data?.usage });
-  const insightsB = await api("GET", "/orders/insights", { token: b.token });
-  s.check("BASE: /orders/insights → 403 PLAN_FEATURE_UNAVAILABLE", insightsB.status === 403 && insightsB.body?.code === "PLAN_FEATURE_UNAVAILABLE", insightsB);
-  const chatB = await api("GET", "/my/chat/threads", { token: b.token });
-  s.check("BASE: /my/chat/threads → 403 PLAN_FEATURE_UNAVAILABLE", chatB.status === 403 && chatB.body?.code === "PLAN_FEATURE_UNAVAILABLE", chatB);
-  const checkoutB = await api("GET", "/providers/INVID/checkout/addresses", { token: b.token });
-  s.check("BASE: checkout directo (INVID addresses) → 403 PLAN_FEATURE_UNAVAILABLE", checkoutB.status === 403 && checkoutB.body?.code === "PLAN_FEATURE_UNAVAILABLE", checkoutB);
+  s.check("capabilities PRO: sin tope, con checkout/chat/analytics y API de catálogo", capB.maxSearchProviders === null && capB.directCheckout && capB.integratedChat && capB.advancedAnalytics && capB.catalogApi, { capB, usage: mineB.data?.usage });
 
-  // Sin trialPlan → BASE; nombre repetido con otra capitalización → 409.
+  // Sin trialPlan → PRO; nombre repetido con otra capitalización → 409.
   const c = await registerVerified(ctx, "nopl");
   const dupName = await api("POST", "/onboarding/bootstrap", { token: c.token, body: { name: name.toUpperCase() } });
   s.check("bootstrap con nombre de comercio existente (otra capitalización) → 409", dupName.status === 409, dupName);
@@ -142,7 +136,7 @@ export async function s2Onboarding(ctx) {
   const memberships = await ctx.prisma.tenantMembership.count({ where: { userId: c.userId } });
   s.check("doble bootstrap simultáneo → una sola organización", memberships === 1, { statuses: [r1.status, r2.status], memberships, r1: r1.body?.message ?? r1.data?.org, r2: r2.body?.message ?? r2.data?.org });
   const okBoot = [r1, r2].find((r) => r.status === 201);
-  s.check("bootstrap sin trialPlan → plan BASE", okBoot?.data?.org?.plan === "BASE", okBoot ?? r1);
+  s.check("bootstrap sin trialPlan → plan PRO", okBoot?.data?.org?.plan === "PRO", okBoot ?? r1);
   c.token = okBoot?.data?.token ?? c.token;
   c.tenantId = okBoot?.data?.org?.id;
   ctx.third = c;

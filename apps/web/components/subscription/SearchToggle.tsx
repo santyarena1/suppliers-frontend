@@ -12,7 +12,7 @@ function errMsg(err: unknown, fallback: string) {
 
 /**
  * "Incluir en búsqueda" ON/OFF de un proveedor. Apagarlo no desconecta nada:
- * credenciales, lista y vínculo quedan igual. Con NODO Base, prender un 6º abre
+ * credenciales, lista y vínculo quedan igual. Con un plan con tope, prender uno de más abre
  * el aviso del tope con la opción de pasar a Pro.
  */
 export default function SearchToggle({
@@ -39,7 +39,7 @@ export default function SearchToggle({
     } catch (err) {
       const plan = planErrorOf(err);
       if (plan?.code === "PLAN_SEARCH_LIMIT") {
-        const max = Number(plan.details?.maxSearchProviders) || undefined;
+        const max = Number(plan.details?.maxSearchProviders) || 0;
         setLimit(plan.message || searchLimitMessage(max));
       } else {
         setError(errMsg(err, "No se pudo cambiar"));

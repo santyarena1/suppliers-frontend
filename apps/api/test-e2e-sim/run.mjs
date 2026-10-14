@@ -102,7 +102,7 @@ async function s10Probes(ctx) {
   const badExt = await api("POST", `/providers/${dist.providerKey}/imports`, { token: dist.token, form });
   s.check("subir planilla .exe → 400", badExt.status === 400, badExt);
   const upg = await api("POST", "/my/subscription/upgrade", { token: base.token, body: { plan: "PRO" } });
-  s.note(`BASE en prueba → upgrade a PRO self-serve: ${upg.status} applied=${upg.data?.applied} plan=${upg.data?.subscription?.plan}`);
+  s.note(`PRO en prueba → pedir PRO otra vez queda como solicitud: ${upg.status} applied=${upg.data?.applied} plan=${upg.data?.subscription?.plan}`);
 }
 
 function report(started) {

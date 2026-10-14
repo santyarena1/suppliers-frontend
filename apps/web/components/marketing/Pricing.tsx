@@ -2,13 +2,13 @@
 
 import { Fragment, useState } from "react";
 import { Check, ChevronDown, Minus } from "lucide-react";
-import { BASE_SEARCH_LIMIT, PLAN_CATALOG, PLAN_FEATURE_GROUPS, type PlanCell, type TenantPlan } from "@/lib/plans";
+import { PLAN_CATALOG, PLAN_FEATURE_GROUPS, TENANT_PLANS, type PlanCell, type TenantPlan } from "@/lib/plans";
 import { Reveal } from "./Reveal";
 import { SupplyPlans } from "./SupplyPlans";
 import { LaunchPromo } from "./LaunchPromo";
 import { CatalogApiPitch } from "./CatalogApiPitch";
 import { rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
-import { announceContactKind } from "@/lib/contact";
+import { NODO_WHATSAPP_LABEL, whatsappUrl } from "@/lib/contact";
 
 interface CardCopy {
   plan: TenantPlan;
@@ -21,27 +21,16 @@ interface CardCopy {
   trialNote: string;
 }
 
+const CUSTOM_WHATSAPP_TEXT = "Hola, quiero consultar por NODO Custom (desarrollo a medida).";
+
 const CARDS: CardCopy[] = [
-  {
-    plan: "BASE",
-    forWho: "Para ordenar la compra y preparar los pedidos.",
-    items: [
-      "Todos tus distribuidores conectados",
-      `Búsqueda en hasta ${BASE_SEARCH_LIMIT} a la vez`,
-      "Precio final con impuestos y stock",
-      "Carrito con varios distribuidores",
-      "Pedido listo para mandar por WhatsApp",
-    ],
-    cta: `Probar Base ${TRIAL_DAYS} días gratis`,
-    trialPlan: "BASE",
-    trialNote: `${TRIAL_DAYS} días gratis. Después elegís tu plan.`,
-  },
   {
     plan: "PRO",
     forWho: "Para comprar desde NODO sin entrar a ningún portal.",
-    intro: "Todo lo de Base, y además:",
     items: [
-      "Búsqueda en todos tus distribuidores a la vez",
+      "Todos tus distribuidores conectados y en búsqueda a la vez",
+      "Precio final con impuestos y stock",
+      "Carrito con varios distribuidores",
       "Pedidos directos en el portal de cada distribuidor integrado",
       "Tus formas de pago y percepciones de cada uno",
       "Cuenta corriente, saldos y facturas",
@@ -49,6 +38,7 @@ const CARDS: CardCopy[] = [
       "Modo vendedor: márgenes de venta y presupuestos para tus clientes",
       "Análisis de compras por mes, distribuidor y producto",
       "Aprobación de pedidos con el precio del día",
+      "API de catálogo para tu tienda, ERP, Google y Meta",
     ],
     cta: `Probar Pro ${TRIAL_DAYS} días gratis`,
     trialPlan: "PRO",
@@ -56,17 +46,19 @@ const CARDS: CardCopy[] = [
   },
   {
     plan: "CUSTOM",
-    forWho: "Para empresas con sistemas y procesos propios.",
+    forWho: "Desarrollo a medida para empresas con sistemas y procesos propios.",
     intro: "Todo lo de Pro, y además:",
     items: [
+      "Creación de agentes",
+      "Automatización de compras",
+      "Análisis del mercado diario",
       "Integración con tu ERP o CRM",
       "Módulos y flujos para tu operación",
       "NODO con la identidad de tu empresa",
-      "Nos escribís y lo armamos con vos",
     ],
-    cta: "Pedir NODO Custom",
+    cta: "Consultar por WhatsApp",
     trialPlan: "PRO",
-    trialNote: `Te respondemos en 24 h hábiles. Mientras, podés probar Pro ${TRIAL_DAYS} días gratis.`,
+    trialNote: `Consultanos por el desarrollo a medida al ${NODO_WHATSAPP_LABEL}.`,
   },
 ];
 
@@ -82,7 +74,7 @@ function Cell({ value, strong }: { value: PlanCell; strong: boolean }) {
 
 export function Pricing() {
   const [open, setOpen] = useState(false);
-  const order: TenantPlan[] = ["BASE", "PRO", "CUSTOM"];
+  const order = TENANT_PLANS;
 
   return (
     <section id="planes" className="nl-section nl-divider scroll-mt-16">
@@ -90,18 +82,18 @@ export function Pricing() {
         <Reveal>
           <h2 className="nl-h2 max-w-3xl">Un precio fijo por comercio, sin límite de usuarios</h2>
           <p className="nl-lead mt-5">
-            La diferencia entre planes es hasta dónde llega NODO: con Base preparás la compra, con Pro la hacés entera
-            desde acá. Todos incluyen a tu equipo completo y arrancan con {TRIAL_DAYS} días gratis: al terminar la
-            prueba elegís el plan para seguir.
+            Con Pro hacés la compra entera desde NODO, con la API de catálogo incluida. Si tu empresa necesita más,
+            Custom es un desarrollo a medida. Todos incluyen a tu equipo completo y Pro arranca con {TRIAL_DAYS} días
+            gratis.
           </p>
         </Reveal>
 
-        <div className="mt-14 grid items-stretch gap-5 lg:grid-cols-[1fr_1.18fr_1fr]">
+        <div className="mx-auto mt-14 grid max-w-5xl items-stretch gap-5 lg:grid-cols-[1.12fr_1fr]">
           {CARDS.map((c, i) => {
             const def = PLAN_CATALOG[c.plan];
             const pro = c.plan === "PRO";
             return (
-              <Reveal key={c.plan} delay={i * 90} className={pro ? "order-first lg:order-none lg:-my-4" : ""}>
+              <Reveal key={c.plan} delay={i * 90} className={pro ? "lg:-my-4" : ""}>
                 <article
                   className={`relative flex h-full flex-col rounded-[var(--r)] p-7 sm:p-8 ${
                     pro
@@ -116,23 +108,22 @@ export function Pricing() {
                   </div>
                   <p className="relative mt-2 text-sm text-[var(--fg-2)]">{c.forWho}</p>
                   <p className="relative mt-7 flex items-baseline gap-2">
+                    {def.priceFrom && <span className="text-sm text-[var(--fg-3)]">desde</span>}
                     <span className={`font-bold tracking-tight tabular-nums text-white ${pro ? "text-5xl" : "text-4xl"}`}>
                       {price(def.monthlyPrice)}
                     </span>
                     <span className="text-sm text-[var(--fg-3)]">por mes, IVA incluido</span>
                   </p>
                   <p className="relative mt-1 h-5 text-sm text-[var(--fg-3)]">
-                    {def.setupFee ? `Más ${price(def.setupFee)} de puesta en marcha, una sola vez` : "Sin costo de alta"}
+                    {def.setupFee ? `Más ${price(def.setupFee)} de puesta en marcha, una sola vez` : def.priceFrom ? "Según el desarrollo que necesites" : "Sin costo de alta"}
                   </p>
                   {pro && <LaunchPromo monthlyPrice={def.monthlyPrice} />}
 
                   <a
-                    href={c.plan === "CUSTOM" ? "#contacto" : "#probar"}
+                    href={c.plan === "CUSTOM" ? whatsappUrl(CUSTOM_WHATSAPP_TEXT) : "#probar"}
+                    {...(c.plan === "CUSTOM" ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                     onClick={() => {
-                      if (c.plan === "CUSTOM") {
-                        announceContactKind("CUSTOM");
-                        return;
-                      }
+                      if (c.plan === "CUSTOM") return;
                       rememberTrialPlan(c.trialPlan);
                       window.dispatchEvent(new Event("nodo:trial-plan"));
                     }}
@@ -192,7 +183,7 @@ export function Pricing() {
                 {PLAN_FEATURE_GROUPS.map((g) => (
                   <Fragment key={g.title}>
                     <tr>
-                      <td colSpan={4} className="bg-[var(--bg-2)] px-5 pb-2 pt-6 text-sm font-semibold text-white">
+                      <td colSpan={order.length + 1} className="bg-[var(--bg-2)] px-5 pb-2 pt-6 text-sm font-semibold text-white">
                         {g.title}
                       </td>
                     </tr>

@@ -105,7 +105,7 @@ export async function s6Link(ctx) {
 
   // Carrera: tres comercios canjean a la vez un código de un solo uso.
   const fourth = await registerVerified(ctx, "race");
-  const b4 = await api("POST", "/onboarding/bootstrap", { token: fourth.token, body: { name: `Comercio ${ctx.prefix} Race`, trialPlan: "BASE" } });
+  const b4 = await api("POST", "/onboarding/bootstrap", { token: fourth.token, body: { name: `Comercio ${ctx.prefix} Race`, trialPlan: "PRO" } });
   fourth.token = b4.data?.token;
   fourth.tenantId = b4.data?.org?.id;
   ctx.fourth = fourth;
@@ -118,7 +118,7 @@ export async function s6Link(ctx) {
   s.check("código de 1 uso canjeado en paralelo por 3 comercios → 1 solo canje", wins === 1, { wins, statuses: race.map((r) => r.status), usedCount: row?.usedCount, maxUses: row?.maxUses }, {
     hint: "tenants.service.ts:634-673 redeemAccessCode valida usedCount < maxUses y después incrementa sin condición en la misma transacción (check-then-act)",
   });
-  // Que el comercio BASE quede vinculado sí o sí para S8/S9.
+  // Que el segundo comercio quede vinculado sí o sí para S8/S9.
   const baseLinked = await ctx.prisma.tenantLink.findFirst({ where: { clientTenantId: ctx.base.tenantId, supplierTenantId: dist.tenantId } });
   if (!baseLinked) {
     const c2 = await newCode(s, dist);
@@ -224,16 +224,16 @@ export async function s8CartOrder(ctx) {
   });
   await api("PUT", "/cart/org", { token: o.token, body: { items: cartItems } });
 
-  // El comercio BASE también puede mandar su pedido por lista (manualOnly).
+  // El segundo comercio también puede mandar su pedido por lista (manualOnly).
   const baseOrder = await api("POST", "/orders/offline", { token: ctx.base.token, body: { orders: [{ provider: dist.providerKey, items: [{ ...item, qty: 3 }] }] } });
-  s.check("comercio BASE registra un pedido por lista → 201", baseOrder.status === 201, baseOrder);
+  s.check("segundo comercio registra un pedido por lista → 201", baseOrder.status === 201, baseOrder);
 }
 
 export async function s9Plan(ctx) {
-  const s = scenario("S9", "Plan BASE (tope 5) y vencimiento de la prueba");
+  const s = scenario("S9", "Plan PRO sin tope de búsqueda y vencimiento de la prueba");
   const b = ctx.base;
-  // Un proveedor cuenta para el tope solo si está configurado (tiene precios del
-  // comercio): a cada lista creada se le carga una oferta con precio.
+  // Un proveedor solo participa del buscador si está configurado (tiene precios
+  // del comercio): a cada lista creada se le carga una oferta con precio.
   const tenantId = (await api("GET", "/my/org", { token: b.token })).data?.id;
   async function priceIt(provider) {
     await ctx.prisma.providerSyncCache.create({ data: { provider, externalId: "s9-1", name: `Producto ${provider}`, raw: {} } });
@@ -244,7 +244,7 @@ export async function s9Plan(ctx) {
   const created = [];
   for (let i = 1; linked + created.length < 7 && i <= 7; i++) {
     const r = await api("POST", "/providers", { token: b.token, body: { name: `Prov Lista ${ctx.prefix} ${i}`, type: "DISTRIBUTOR" } });
-    s.check(`BASE crea proveedor por lista #${i} → 201`, r.status === 201 && r.data?.providerKey, r);
+    s.check(`PRO crea proveedor por lista #${i} → 201`, r.status === 201 && r.data?.providerKey, r);
     if (r.data?.providerKey) {
       created.push(r.data.providerKey);
       await priceIt(r.data.providerKey);
@@ -252,33 +252,28 @@ export async function s9Plan(ctx) {
   }
   const provs = await api("GET", "/my/providers", { token: b.token });
   const list = provs.data ?? [];
-  // Los demos del recorrido guiado no cuentan para el tope.
+  // Los demos del recorrido guiado no cuentan.
   const real = (p) => !p.provider.startsWith("LIST_DEMO_");
   linked = list.filter((p) => p.linked && p.configured !== false && real(p)).length;
   const inSearch = list.filter((p) => p.inSearch && real(p));
-  s.check("BASE con ≥6 proveedores conectados", linked >= 6, { linked, providers: list.map((p) => `${p.provider}:${p.inSearch ? "on" : "off"}`) });
-  s.check("BASE: como máximo 5 en búsqueda", inSearch.length <= 5, { inSearch: inSearch.map((p) => p.provider) });
+  s.check("PRO con ≥6 proveedores conectados", linked >= 6, { linked, providers: list.map((p) => `${p.provider}:${p.inSearch ? "on" : "off"}`) });
+  s.check("PRO: todos los configurados en búsqueda (sin tope)", inSearch.length === linked, { inSearch: inSearch.map((p) => p.provider), linked });
   const sub = await api("GET", "/my/subscription", { token: b.token });
-  s.check("/my/subscription usage coherente (activos ≤ 5, máx 5)", sub.data?.usage?.maxSearchProviders === 5 && sub.data?.usage?.activeSearchProviders <= 5 && sub.data?.usage?.connectedProviders === linked, sub.data?.usage);
-  const off = list.find((p) => p.linked && p.configured !== false && !p.inSearch);
-  if (off) {
-    const on = await api("PUT", `/my/providers/${off.provider}/search`, { token: b.token, body: { enabled: true } });
-    s.check("prender el 6.º proveedor → 409 PLAN_SEARCH_LIMIT", on.status === 409 && on.body?.code === "PLAN_SEARCH_LIMIT", on);
-  }
+  s.check("/my/subscription usage coherente (sin tope)", sub.data?.usage?.maxSearchProviders === null && sub.data?.usage?.activeSearchProviders === linked && sub.data?.usage?.connectedProviders === linked, sub.data?.usage);
   // Lista propia (nivel TENANT) en un proveedor creado por el comercio.
   const own = created[0];
   if (own) {
-    await uploadList(s, b.token, own, csvFor(ctx.prefix, "OWN"), "lista propia del comercio BASE");
+    await uploadList(s, b.token, own, csvFor(ctx.prefix, "OWN"), "lista propia del segundo comercio");
     const visible = (await api("GET", "/my/providers", { token: b.token })).data?.find((p) => p.provider === own);
     const r = await api("GET", `/search/provider/${own}?name=router%20simulado`, { token: b.token });
     if (visible?.inSearch) s.check("búsqueda en la lista propia → resultados", (r.data?.length ?? 0) >= 1, { status: r.status, count: r.data?.length });
-    else s.check("lista propia fuera del tope → búsqueda vacía (no error)", r.status === 200 && (r.data?.length ?? 0) === 0, r);
+    else s.check("lista propia fuera de búsqueda → búsqueda vacía (no error)", r.status === 200 && (r.data?.length ?? 0) === 0, r);
   }
   // Apagar uno y volver a prenderlo.
   const active = (await api("GET", "/my/providers", { token: b.token })).data?.find((p) => p.inSearch && p.provider === ctx.dist.providerKey);
   if (active) {
     const r0 = await api("GET", `/search/provider/${active.provider}?name=mouse%20simulado`, { token: b.token });
-    s.check("BASE busca en SimDist (activo) → resultados", (r0.data?.length ?? 0) >= 1, { status: r0.status, count: r0.data?.length });
+    s.check("PRO busca en SimDist (activo) → resultados", (r0.data?.length ?? 0) >= 1, { status: r0.status, count: r0.data?.length });
     const turnOff = await api("PUT", `/my/providers/${active.provider}/search`, { token: b.token, body: { enabled: false } });
     s.check("apagar SimDist en búsqueda → 200 inSearch=false", turnOff.status === 200 && turnOff.data?.inSearch === false, turnOff);
     const r1 = await api("GET", `/search/provider/${active.provider}?name=mouse%20simulado`, { token: b.token });

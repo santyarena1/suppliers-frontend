@@ -10,6 +10,7 @@ import { Prisma, type TenantRole as PrismaTenantRole } from "@prisma/client";
 import {
   TENANT_PLAN_DESCRIPTIONS,
   TENANT_PLAN_LABELS,
+  planLabelOf,
   TENANT_ROLE_LABELS,
   type TenantPlan,
   type TenantRole,
@@ -181,10 +182,9 @@ export class OnboardingService {
     });
     if (taken) throw new ConflictException("Ya existe una organización con ese nombre");
 
-    // Self-serve arranca con prueba en el plan que eligió en la landing (Base
-    // si no eligió). El preview del superadmin no cobra ni corta nada: Pro en
-    // cortesía, para poder recorrer todo.
-    const plan: TenantPlan = preview ? "PRO" : (dto.trialPlan ?? "BASE");
+    // Self-serve arranca con prueba de Pro (el único plan self-serve). El preview
+    // del superadmin no cobra ni corta nada: Pro en cortesía, para poder recorrer todo.
+    const plan: TenantPlan = "PRO";
     const subscription: InitialSubscriptionInput = preview
       ? { plan, mode: "COURTESY", courtesyReason: "Preview del onboarding (superadmin)" }
       : { plan, mode: "TRIAL" };
@@ -244,7 +244,7 @@ export class OnboardingService {
         name: tenant.name,
         type: tenant.type as TenantType,
         plan: tenant.plan as TenantPlan,
-        planLabel: TENANT_PLAN_LABELS[tenant.plan as TenantPlan],
+        planLabel: planLabelOf(tenant.plan),
       },
       onboarding: status,
     };

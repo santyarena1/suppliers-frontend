@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { adminSubscriptionsApi, catalogApiAdmin } from "@/lib/api";
-import { CATALOG_API_ADDON_PRICE_USD } from "@/lib/catalog-api";
+import { adminSubscriptionsApi } from "@/lib/api";
 import {
   PAYMENT_PROVIDER_LABELS,
   PLAN_CATALOG,
   SETUP_FEE_STATUS_LABELS,
   formatUsd,
+  planPriceLabel,
   type AdminSubscriptionDetail,
   type SetupFeeStatus,
   type SubscriptionPaymentProvider,
@@ -16,11 +16,10 @@ import {
 import { Field, PAYMENT_PROVIDERS, PLANS, btnCls, dateInput, fmtDate, inputCls, primaryCls, toIso, today } from "./shared";
 
 type Run = (action: () => Promise<{ data: AdminSubscriptionDetail }>, ok: string) => Promise<boolean>;
-type ActionKey = "plan" | "modules" | "courtesy" | "payment" | "billing" | "status" | "setup";
+type ActionKey = "plan" | "courtesy" | "payment" | "billing" | "status" | "setup";
 
 const ACTION_LABELS: Record<ActionKey, string> = {
   plan: "Cambiar plan",
-  modules: "Módulos",
   courtesy: "Cortesía",
   payment: "Registrar pago",
   billing: "Vencimiento",
@@ -43,8 +42,9 @@ export default function SubscriptionActions({
   /** Sube con cada cambio guardado: los formularios se rearman con los datos nuevos. */
   version: number;
 }) {
-  const hasSetup = detail.plan === "CUSTOM" || detail.setupFee.status !== "NOT_APPLICABLE";
-  const actions: ActionKey[] = ["plan", "modules", "courtesy", "payment", "billing", "status", ...(hasSetup ? (["setup"] as ActionKey[]) : [])];
+  // Custom ya no tiene puesta en marcha: la pestaña queda solo para las que tenían una registrada.
+  const hasSetup = detail.setupFee.status !== "NOT_APPLICABLE";
+  const actions: ActionKey[] = ["plan", "courtesy", "payment", "billing", "status", ...(hasSetup ? (["setup"] as ActionKey[]) : [])];
   const [action, setAction] = useState<ActionKey>("plan");
   // Un solo "Motivo", el del formulario que está a la vista.
   const [reason, setReason] = useState("");
@@ -78,7 +78,6 @@ export default function SubscriptionActions({
       </div>
 
       {action === "plan" && <PlanForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} why={why} reasonField={reasonField} />}
-      {action === "modules" && <ModulesForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} />}
       {action === "courtesy" && <CourtesyForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} why={why} reasonField={reasonField} />}
       {action === "payment" && <PaymentForm key={version} tenantId={tenantId} busy={busy} run={run} />}
       {action === "billing" && <BillingForm key={version} detail={detail} tenantId={tenantId} busy={busy} run={run} why={why} reasonField={reasonField} />}
@@ -114,7 +113,7 @@ function PlanForm({ detail, tenantId, busy, run, why, reasonField }: FormProps) 
           <select value={plan} onChange={(e) => setPlan(e.target.value as TenantPlan)} className={inputCls}>
             {PLANS.map((p) => (
               <option key={p} value={p}>
-                {PLAN_CATALOG[p].label} · {formatUsd(PLAN_CATALOG[p].monthlyPrice)}
+                {PLAN_CATALOG[p].label} · {planPriceLabel(p)}
               </option>
             ))}
           </select>
@@ -124,10 +123,7 @@ function PlanForm({ detail, tenantId, busy, run, why, reasonField }: FormProps) 
         </Field>
         {reasonField}
       </div>
-      {plan === "BASE" && detail.plan !== "BASE" && (
-        <Hint>Al bajar a Base se conservan todos los distribuidores; quedan en búsqueda los 5 más usados y el comercio puede cambiarlos.</Hint>
-      )}
-      {plan === "CUSTOM" && detail.plan !== "CUSTOM" && <Hint>Pasar a Custom deja la puesta en marcha (USD 300) como pendiente.</Hint>}
+      {plan === "CUSTOM" && detail.plan !== "CUSTOM" && <Hint>Custom es desde {formatUsd(PLAN_CATALOG.CUSTOM.monthlyPrice)}/mes: cargá el precio pactado del desarrollo.</Hint>}
       <div>
         <button
           type="button"
@@ -142,89 +138,11 @@ function PlanForm({ detail, tenantId, busy, run, why, reasonField }: FormProps) 
   );
 }
 
-/** El backend lo manda como booleano o como { enabled, since, courtesy }. */
-type AddonField = {
-  catalogApiAddon?: boolean | { enabled: boolean; since?: string | null; courtesy?: boolean } | null;
-};
-
-function addonOf(detail: AdminSubscriptionDetail): { enabled: boolean; since: string | null; courtesy: boolean } {
-  const raw = (detail as AdminSubscriptionDetail & AddonField).catalogApiAddon;
-  if (raw && typeof raw === "object") return { enabled: !!raw.enabled, since: raw.since ?? null, courtesy: !!raw.courtesy };
-  return { enabled: !!raw, since: null, courtesy: false };
-}
-
-type AddonMode = "off" | "paid" | "courtesy";
-
-const ADDON_MODES: { mode: AddonMode; label: string; hint: string }[] = [
-  { mode: "off", label: "No", hint: "Sin API: las keys del comercio no responden." },
-  { mode: "paid", label: `Cobrada · +${formatUsd(CATALOG_API_ADDON_PRICE_USD)}`, hint: "Activa y se suma al monto mensual." },
-  { mode: "courtesy", label: "De cortesía", hint: "Activa sin cargo: no suma al monto mensual." },
-];
-
-function ModulesForm({ detail, tenantId, busy, run }: { detail: AdminSubscriptionDetail; tenantId: string; busy: boolean; run: Run }) {
-  const addon = addonOf(detail);
-  const included = detail.plan === "CUSTOM";
-  const mode: AddonMode = !addon.enabled ? "off" : addon.courtesy ? "courtesy" : "paid";
-  const current = ADDON_MODES.find((m) => m.mode === mode)!;
-
-  function pick(next: AddonMode) {
-    if (next === mode) return;
-    const done =
-      next === "off" ? "API de catálogo desactivada" : next === "courtesy" ? "API de catálogo de cortesía" : "API de catálogo activada (se cobra)";
-    void run(() => catalogApiAdmin.adminSetAddon(tenantId, next !== "off", next === "courtesy"), done);
-  }
-
-  return (
-    <div className="rounded-lg border border-surface-800 px-3 py-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm text-white">API de catálogo · {formatUsd(CATALOG_API_ADDON_PRICE_USD)}/mes</p>
-          <p className="text-[11px] text-surface-500">
-            {included
-              ? "Incluida en Custom: no se cobra aparte."
-              : `${current.hint}${addon.enabled && addon.since ? ` Activa desde el ${fmtDate(addon.since)}.` : ""}`}
-          </p>
-        </div>
-        {included ? (
-          <span className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-1 text-[11px] font-medium text-brand-300">Incluida</span>
-        ) : (
-          <div role="radiogroup" aria-label="API de catálogo" className="flex flex-wrap gap-1 rounded-lg bg-surface-900 p-1">
-            {ADDON_MODES.map((m) => (
-              <button
-                key={m.mode}
-                type="button"
-                role="radio"
-                aria-checked={mode === m.mode}
-                disabled={busy}
-                onClick={() => pick(m.mode)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                  mode === m.mode
-                    ? m.mode === "courtesy"
-                      ? "bg-emerald-600 text-white"
-                      : m.mode === "paid"
-                        ? "bg-brand-600 text-white"
-                        : "bg-surface-700 text-white"
-                    : "text-surface-400 hover:text-white"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function CourtesyForm({ detail, tenantId, busy, run, why, reasonField }: FormProps) {
   const active = detail.courtesy.active;
   const [plan, setPlan] = useState<TenantPlan>(detail.plan);
   const [until, setUntil] = useState(dateInput(detail.courtesy.until));
   const [nextBilling, setNextBilling] = useState(dateInput(detail.nextBillingAt ?? detail.dueAt) || today());
-  const apiNow = addonOf(detail);
-  // Con la cortesía del plan se puede regalar también la API (Custom ya la incluye).
-  const [withApi, setWithApi] = useState(apiNow.enabled && apiNow.courtesy);
 
   return (
     <>
@@ -244,25 +162,13 @@ function CourtesyForm({ detail, tenantId, busy, run, why, reasonField }: FormPro
         {reasonField}
       </div>
       <Hint>Sin cobro: el comercio ve su plan como activo{active && detail.courtesy.reason ? ` · Motivo actual: ${detail.courtesy.reason}` : ""}.</Hint>
-      {plan !== "CUSTOM" && (
-        <label className="flex items-center gap-2 text-xs text-surface-300">
-          <input type="checkbox" checked={withApi} onChange={(e) => setWithApi(e.target.checked)} className="accent-emerald-500" />
-          Incluir la API de catálogo de cortesía (sin los {formatUsd(CATALOG_API_ADDON_PRICE_USD)}/mes)
-        </label>
-      )}
       <div className="flex flex-wrap items-end gap-2">
         <button
           type="button"
           disabled={busy}
           onClick={() =>
             void run(
-              async () => {
-                const res = await adminSubscriptionsApi.setCourtesy(tenantId, { plan, until: until ? toIso(until) : null, reason: why ?? detail.courtesy.reason ?? undefined });
-                // La API de cortesía va aparte; destildarla solo saca la cortesía si la tenía.
-                if (plan !== "CUSTOM" && withApi) return catalogApiAdmin.adminSetAddon(tenantId, true, true);
-                if (plan !== "CUSTOM" && !withApi && apiNow.courtesy) return catalogApiAdmin.adminSetAddon(tenantId, false);
-                return res;
-              },
+              () => adminSubscriptionsApi.setCourtesy(tenantId, { plan, until: until ? toIso(until) : null, reason: why ?? detail.courtesy.reason ?? undefined }),
               active ? "Cortesía actualizada" : "Cortesía otorgada"
             )
           }

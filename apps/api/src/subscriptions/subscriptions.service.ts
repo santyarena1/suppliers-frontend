@@ -3,7 +3,7 @@ import { InboxService } from "../inbox/inbox.service";
 import { inboxRequester } from "./subscription-inbox";
 import { Prisma } from "@prisma/client";
 import {
-  CATALOG_API_ADDON_PRICE_USD,
+  planLabelOf,
   addDays,
   addMonths,
   monthlyAmount,
@@ -166,7 +166,7 @@ export class SubscriptionsService {
         id: p.id,
         kind: p.kind,
         plan: p.plan,
-        planLabel: p.plan ? PLAN_CATALOG[p.plan as TenantPlan].label : null,
+        planLabel: planLabelOf(p.plan),
         amount: Number(p.amount),
         currency: p.currency,
         paidAt: iso(p.paidAt),
@@ -280,23 +280,13 @@ export class SubscriptionsService {
   // ---------- Acciones del comercio ----------
 
   /**
-   * Base → Pro se aplica al instante si la suscripción está al día: el precio nuevo
-   * corre desde el próximo cobro. Cualquier otro cambio (Custom, bajar de plan, o
-   * con la cuenta vencida) queda como solicitud para Administración.
+   * Con un solo plan self-serve (Pro), cualquier cambio (pasar a Custom o volver
+   * a Pro) queda como solicitud para Administración.
    */
   async upgradeMine(tenant: TenantContext, dto: PlanRequestDto) {
     this.assertCanManage(tenant);
-    const { tenantRow, sub } = await this.load(tenant.tenantId);
-    const current = tenantRow.plan as TenantPlan;
-    const state = computeSubscriptionState(sub ? toSubscriptionDates(sub) : null);
-    const selfServe =
-      current === "BASE" && dto.plan === "PRO" && ["ACTIVE", "TRIAL", "COURTESY"].includes(state.status);
-    if (!selfServe) {
-      await this.request(tenant, dto);
-      return { applied: false, requested: true, subscription: await this.mine(await this.refreshContext(tenant)) };
-    }
-    await this.changePlan({ userId: tenant.userId }, tenant.tenantId, { plan: "PRO", reason: "Upgrade desde Plan y facturación" });
-    return { applied: true, requested: false, subscription: await this.mine(await this.refreshContext(tenant)) };
+    await this.request(tenant, dto);
+    return { applied: false, requested: true, subscription: await this.mine(await this.refreshContext(tenant)) };
   }
 
   async request(tenant: TenantContext, dto: PlanRequestDto) {
@@ -320,7 +310,7 @@ export class SubscriptionsService {
       type: "PLAN_REQUEST",
       title: `${who.company} pide pasar a ${TENANT_PLAN_LABELS[dto.plan]}`,
       message: dto.message,
-      data: { "Plan actual": TENANT_PLAN_LABELS[tenantRow.plan as TenantPlan], "Plan pedido": TENANT_PLAN_LABELS[dto.plan] },
+      data: { "Plan actual": planLabelOf(tenantRow.plan), "Plan pedido": TENANT_PLAN_LABELS[dto.plan] },
     });
     return { requested: true };
   }
@@ -363,8 +353,8 @@ export class SubscriptionsService {
       await tx.tenant.update({ where: { id: tenantId }, data: { plan: to } });
       const data: Prisma.SubscriptionUpdateInput = {};
       if (dto.price !== undefined) data.priceOverride = dto.price == null ? null : new Prisma.Decimal(dto.price);
-      if (to === "CUSTOM" && sub.setupFeeStatus === "NOT_APPLICABLE") {
-        data.setupFee = new Prisma.Decimal(PLAN_CATALOG.CUSTOM.setupFee ?? 0);
+      if (to === "CUSTOM" && sub.setupFeeStatus === "NOT_APPLICABLE" && PLAN_CATALOG.CUSTOM.setupFee != null) {
+        data.setupFee = new Prisma.Decimal(PLAN_CATALOG.CUSTOM.setupFee);
         data.setupFeeStatus = "PENDING";
       }
       if (Object.keys(data).length) await tx.subscription.update({ where: { id: sub.id }, data });
@@ -767,7 +757,7 @@ export class SubscriptionsService {
     return {
       enabled: included || Boolean(sub?.catalogApiAddon),
       includedInPlan: included,
-      priceUsd: CATALOG_API_ADDON_PRICE_USD,
+      priceUsd: 0,
       since: iso(sub?.catalogApiAddonSince),
       courtesy: !included && Boolean(sub?.catalogApiAddon && sub?.catalogApiAddonCourtesy),
     };
@@ -781,52 +771,17 @@ export class SubscriptionsService {
   }
 
   /**
-   * Prende o apaga el módulo de API de catálogo. Corre desde el próximo cobro (la
-   * cuota pasa a ser plan + US$ 10). En Custom viene incluido: no cambia nada.
-   * Apagarlo no borra las keys: dejan de responder hasta que se vuelva a prender.
+   * La API de catálogo viene incluida en todos los planes: ya no se prende ni se
+   * cobra aparte. Se mantiene el endpoint para las pantallas viejas; responde el
+   * estado (siempre incluida) sin tocar nada.
    */
   async setCatalogApiAddon(
-    actor: SubscriptionActor,
+    _actor: SubscriptionActor,
     tenantId: string,
-    enabled: boolean,
-    opts: { fromTenant?: TenantContext; courtesy?: boolean } = {}
+    _enabled: boolean,
+    _opts: { fromTenant?: TenantContext; courtesy?: boolean } = {}
   ) {
-    const { tenantRow, sub } = await this.loadForWrite(tenantId);
-    const plan = tenantRow.plan as TenantPlan;
-    if (planIncludesCatalogApi(plan)) return this.catalogApiAddonOf(plan, sub);
-    // La cortesía la decide Administración; el comercio al prender o apagar no la toca.
-    const courtesy = enabled ? (opts.courtesy ?? sub.catalogApiAddonCourtesy) : false;
-    if (sub.catalogApiAddon === enabled && sub.catalogApiAddonCourtesy === courtesy) return this.catalogApiAddonOf(plan, sub);
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const row = await tx.subscription.update({
-        where: { id: sub.id },
-        data: {
-          catalogApiAddon: enabled,
-          catalogApiAddonCourtesy: courtesy,
-          catalogApiAddonSince: enabled ? (sub.catalogApiAddon ? sub.catalogApiAddonSince : new Date()) : null,
-        },
-      });
-      await this.event(tx, sub, actor, enabled ? "ADDON_ENABLED" : "ADDON_DISABLED", {
-        data: { addon: "catalogApi", priceUsd: courtesy ? 0 : CATALOG_API_ADDON_PRICE_USD, courtesy, monthly: this.totalOf(plan, row) },
-      });
-      await this.audit(tx, actor, tenantId, enabled ? "SUBSCRIPTION_ADDON_ENABLED" : "SUBSCRIPTION_ADDON_DISABLED", { addon: "catalogApi" });
-      return row;
-    });
-    if (opts.fromTenant) {
-      const who = await inboxRequester(this.prisma, opts.fromTenant);
-      void this.inbox?.record({
-        ...who,
-        type: "PLAN_REQUEST",
-        title: `${who.company} ${enabled ? "activó" : "desactivó"} la API de catálogo`,
-        data: {
-          Módulo: "API de catálogo",
-          Precio: updated.catalogApiAddonCourtesy ? "De cortesía (sin cargo)" : `US$ ${CATALOG_API_ADDON_PRICE_USD}/mes`,
-          "Cuota nueva": `US$ ${this.totalOf(plan, updated)}/mes`,
-          Plan: TENANT_PLAN_LABELS[plan],
-        },
-      });
-    }
-    return this.catalogApiAddonOf(plan, updated);
+    return this.catalogApiAddon(tenantId);
   }
 
   /** Pagar o correr la fecha levanta una suspensión por deuda; una manual solo con "Reactivar". */

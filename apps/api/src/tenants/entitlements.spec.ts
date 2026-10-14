@@ -38,18 +38,11 @@ function codeOf(fn: () => void): string | undefined {
 }
 
 describe("capacidades por plan", () => {
-  it("Base: 5 proveedores en búsqueda y sin checkout directo", () => {
-    const base = getPlanCapabilities("BASE");
-    expect(base.maxSearchProviders).toBe(5);
-    expect(base.directCheckout).toBe(false);
-    expect(base.providerAccountAccess).toBe(false);
-    expect(base.integratedChat).toBe(false);
-  });
-
-  it("Pro: sin tope y con todo lo operativo", () => {
+  it("Pro: sin tope, con todo lo operativo y la API de catálogo", () => {
     const pro = getPlanCapabilities("PRO");
     expect(pro.maxSearchProviders).toBeNull();
     expect(pro.directCheckout && pro.providerAccountAccess && pro.integratedChat && pro.advancedAnalytics).toBe(true);
+    expect(pro.catalogApi).toBe(true);
     expect(pro.externalIntegrations).toBe(false);
   });
 
@@ -130,14 +123,14 @@ describe("estado de la suscripción", () => {
 describe("entitlements", () => {
   it("distribuidores y marcas no tienen plan comercial", () => {
     for (const tenantType of ["DISTRIBUTOR", "BRAND"] as const) {
-      const e = resolveEntitlements({ tenantType, plan: "BASE", subscription: sub({ status: "SUSPENDED", suspensionReason: "MANUAL" }), now: NOW });
+      const e = resolveEntitlements({ tenantType, plan: "PRO", subscription: sub({ status: "SUSPENDED", suspensionReason: "MANUAL" }), now: NOW });
       expect(e.enforced).toBe(false);
       expect(e.access).toBe("FULL");
     }
   });
 
   it("el superadmin en su sesión opera sin topes", () => {
-    const e = resolveEntitlements({ tenantType: "RETAILER", plan: "BASE", subscription: null, platformAdmin: true, now: NOW });
+    const e = resolveEntitlements({ tenantType: "RETAILER", plan: "PRO", subscription: null, platformAdmin: true, now: NOW });
     expect(e.enforced).toBe(false);
     expect(e.capabilities.maxSearchProviders).toBeNull();
   });
@@ -155,22 +148,22 @@ describe("entitlements", () => {
 });
 
 describe("TenantGuard: checkEntitlements", () => {
-  const tenantOf = (plan: "BASE" | "PRO", subscription: SubscriptionDates | null = sub()) => ({
+  const tenantOf = (plan: "PRO" | "CUSTOM", subscription: SubscriptionDates | null = sub()) => ({
     entitlements: resolveEntitlements({ tenantType: "RETAILER", plan, subscription, now: NOW }),
   });
 
-  it("Base no puede usar el checkout directo (lo rechaza el backend)", () => {
-    expect(codeOf(() => checkEntitlements(tenantOf("BASE"), { method: "POST", capability: "directCheckout" }))).toBe(
+  it("Pro no puede usar las integraciones externas de Custom (lo rechaza el backend)", () => {
+    expect(codeOf(() => checkEntitlements(tenantOf("PRO"), { method: "POST", capability: "externalIntegrations" }))).toBe(
       ENTITLEMENT_ERROR_CODES.featureUnavailable
     );
   });
 
-  it("Pro sí", () => {
+  it("Pro usa el checkout directo", () => {
     expect(() => checkEntitlements(tenantOf("PRO"), { method: "POST", capability: "directCheckout" })).not.toThrow();
   });
 
-  it("Base arma carrito y pedidos manuales (endpoints sin capacidad)", () => {
-    expect(() => checkEntitlements(tenantOf("BASE"), { method: "POST" })).not.toThrow();
+  it("Pro arma carrito y pedidos manuales (endpoints sin capacidad)", () => {
+    expect(() => checkEntitlements(tenantOf("PRO"), { method: "POST" })).not.toThrow();
   });
 
   it("suspendido: lee, pero no escribe ni busca", () => {

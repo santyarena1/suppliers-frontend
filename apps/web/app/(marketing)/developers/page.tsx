@@ -20,7 +20,7 @@ import {
   pagination,
   verifySignature,
 } from "@/components/developers/docs-content";
-import { CATALOG_API_ADDON_PRICE_USD, CATALOG_API_SCOPE_LABELS, CATALOG_API_SCOPES, CATALOG_API_WEBHOOK_EVENT_LABELS, CATALOG_API_WEBHOOK_EVENTS } from "@/lib/catalog-api";
+import { CATALOG_API_SCOPE_LABELS, CATALOG_API_SCOPES, CATALOG_API_WEBHOOK_EVENT_LABELS, CATALOG_API_WEBHOOK_EVENTS } from "@/lib/catalog-api";
 
 export const metadata: Metadata = {
   title: "API de catálogo | NODO para desarrolladores",
@@ -152,7 +152,7 @@ export default function DevelopersPage() {
               </span>
               <span>JSON · UTF-8 · OpenAPI 3.0</span>
               <span>
-                Módulo de US$ {CATALOG_API_ADDON_PRICE_USD}/mes · incluido en Custom
+                Incluida en todos los planes de NODO
               </span>
             </div>
           </div>

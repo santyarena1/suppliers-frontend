@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
@@ -12,7 +12,7 @@ import { enterAuthenticated } from "@/lib/enter-session";
 import { invalidateMyModules } from "@/lib/permissions";
 import { invalidateTgsEnabled } from "@/lib/tgs";
 import { Reveal } from "./Reveal";
-import { readTrialPlan, rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
+import { rememberTrialPlan, TRIAL_DAYS } from "@/lib/trial-plan";
 import GoogleSignInButton, { googleSignInEnabled } from "@/components/GoogleSignInButton";
 
 /** Con la clave de superadmin, el formulario abre el onboarding en modo preview. */
@@ -34,21 +34,7 @@ export function Signup() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const isPreviewLogin = username.trim().toLowerCase() === PREVIEW_USER;
-  const [trialPlan, setTrialPlan] = useState<TrialPlan>("PRO");
   const showGoogle = googleSignInEnabled();
-
-  // El plan elegido en las tarjetas de planes llega acá.
-  useEffect(() => {
-    const sync = () => setTrialPlan(readTrialPlan() ?? "PRO");
-    sync();
-    window.addEventListener("nodo:trial-plan", sync);
-    return () => window.removeEventListener("nodo:trial-plan", sync);
-  }, []);
-
-  function pickPlan(plan: TrialPlan) {
-    setTrialPlan(plan);
-    rememberTrialPlan(plan);
-  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,7 +59,7 @@ export function Signup() {
         router.push("/onboarding");
         return;
       }
-      rememberTrialPlan(trialPlan);
+      rememberTrialPlan("PRO");
       await authApi.register(username.trim(), email.trim(), password);
       router.push(`/verify-email?email=${encodeURIComponent(email.trim())}`);
     } catch (err: unknown) {
@@ -86,7 +72,7 @@ export function Signup() {
   async function handleGoogle(idToken: string) {
     setError("");
     setLoading(true);
-    rememberTrialPlan(trialPlan);
+    rememberTrialPlan("PRO");
     try {
       const res = await authApi.google(idToken);
       await enterAuthenticated(res.data.token, "");
@@ -136,28 +122,9 @@ export function Signup() {
             )}
             <div className="flex flex-col gap-5">
               {!isPreviewLogin && (
-                <div className="flex flex-col gap-2">
-                  <span className="text-sm font-medium text-[var(--fg)]">Plan para probar</span>
-                  <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Plan para probar">
-                    {(["BASE", "PRO"] as const).map((plan) => (
-                      <button
-                        key={plan}
-                        type="button"
-                        role="radio"
-                        aria-checked={trialPlan === plan}
-                        onClick={() => pickPlan(plan)}
-                        className={`rounded-[10px] border px-3 py-2.5 text-sm font-medium transition-colors ${
-                          trialPlan === plan
-                            ? "border-[rgb(139_127_255/0.6)] bg-[var(--accent-soft)] text-white"
-                            : "border-[var(--line)] text-[var(--fg-2)] hover:text-white"
-                        }`}
-                      >
-                        NODO {plan === "PRO" ? "Pro" : "Base"}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-[var(--fg-3)]">{TRIAL_DAYS} días gratis. Después elegís el plan para seguir.</p>
-                </div>
+                <p className="rounded-[10px] bg-[var(--accent-soft)] px-3.5 py-2.5 text-sm text-[var(--fg-2)]">
+                  Probás NODO Pro {TRIAL_DAYS} días gratis. Después elegís el plan para seguir.
+                </p>
               )}
               <div className="flex flex-col gap-2">
                 <label htmlFor="nl-user" className="text-sm font-medium text-[var(--fg)]">

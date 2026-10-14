@@ -1,6 +1,6 @@
 // Escenarios P1–P6: un comercio nuevo arma solo sus proveedores (integración y por lista),
 // qué ve en búsqueda y en /my/providers cuando un proveedor NO está bien configurado,
-// y cómo se cruza todo con el tope de 5 proveedores del plan BASE.
+// y que con PRO (sin tope) todos los configurados entran al buscador.
 //
 // No sale a internet a propósito: con credenciales falsas NO se aprieta "Sincronizar"
 // (POST /providers/:p/sync), que es lo único que llama al portal real. El API se
@@ -432,11 +432,11 @@ export async function p5SharedProviderIsolated(ctx) {
   }
 }
 
-// ---------- P6: tope BASE ----------
+// ---------- P6: buscador sin tope ----------
 
-export async function p6BaseLimit(ctx) {
-  const s = scenario("P6", "Plan BASE (5 en búsqueda) con proveedores configurados y sin configurar");
-  const r = await newRetailer(ctx, "pbase", "BASE");
+export async function p6NoSearchLimit(ctx) {
+  const s = scenario("P6", "PRO sin tope de búsqueda con proveedores configurados y sin configurar");
+  const r = await newRetailer(ctx, "pbase", "PRO");
   const tag = `${ctx.pTag}b`;
   const v5 = (t) => listVariants(t).find((v) => v.key === "V5");
   const configured = [];
@@ -446,62 +446,28 @@ export async function p6BaseLimit(ctx) {
     const up = await uploadAndApply(r.token, key, v5(`${tag}${suf.toLowerCase()}`));
     if (up.final.data?.status === "APPLIED") configured.push(key);
   }
-  s.check("BASE: 4 proveedores por lista configurados (con lista aplicada)", configured.length === 4, { configured });
-  const lastZulu = configured[3];
-  const before = await myProvider(r.token, lastZulu);
-  s.check("con 4 proveedores, todos en búsqueda", before?.inSearch === true, { row: compact(before) });
+  s.check("PRO: 4 proveedores por lista configurados (con lista aplicada)", configured.length === 4, { configured });
 
-  // Conectar dos integrados SIN configurar (nombres que ordenan antes que "Zulu").
+  // Conectar dos integrados SIN configurar no saca a nadie del buscador.
   const air = await connectByListKey(r.token, "AIR", "Air");
   const elit = await connectByListKey(r.token, "ELIT", "Elit");
-  s.check("BASE se conecta a AIR y ELIT (sin credenciales) → 201", air.conn?.status === 201 && elit.conn?.status === 201, { air: air.conn?.status, elit: elit.conn?.status });
+  s.check("PRO se conecta a AIR y ELIT (sin credenciales) → 201", air.conn?.status === 201 && elit.conn?.status === 201, { air: air.conn?.status, elit: elit.conn?.status });
   const list = (await api("GET", "/my/providers", { token: r.token })).data ?? [];
   const inSearch = list.filter((p) => p.inSearch).map((p) => p.provider);
-  s.note(`BASE con 4 configurados + 2 sin configurar → en búsqueda: ${inSearch.join(", ")}`);
   const evicted = configured.filter((k) => !inSearch.includes(k));
-  s.check("conectar proveedores SIN configurar no saca de búsqueda a uno configurado", evicted.length === 0, { evicted, inSearch }, {
-    hint: "selectSearchProviders (packages/shared/src/plans.ts:482-491) ordena los 'sin tocar' por nombre: Air/Elit (vacíos) le ganan el lugar a 'Zulu D' (con lista) y nadie le avisa al comercio",
-  });
-  if (evicted[0]) {
-    const sr = await search(r.token, evicted[0], `${tag}de1`);
-    s.note(`el configurado desalojado (${evicted[0]}) → búsqueda devuelve ${sr.data?.length ?? sr.status} resultados`);
-    const on = await api("PUT", `/my/providers/${evicted[0]}/search`, { token: r.token, body: { enabled: true } });
-    s.check("prender el configurado desalojado con 5 activos → 409 PLAN_SEARCH_LIMIT", on.status === 409 && on.body?.code === "PLAN_SEARCH_LIMIT", on);
-  }
+  s.check("todos los configurados siguen en búsqueda", evicted.length === 0, { evicted, inSearch });
   const usage = await api("GET", "/my/subscription", { token: r.token });
-  s.note(`usage: ${JSON.stringify(usage.data?.usage)} — cuenta como 'conectados' y 'activos' a los que no tienen credenciales ni lista`);
+  s.check("usage sin tope", usage.data?.usage?.maxSearchProviders === null, usage.data?.usage);
 
-  // Guardar credenciales de un 7.º proveedor no choca con el tope ni avisa.
+  // Guardar credenciales de un 7.º proveedor.
   const inv = await connectByListKey(r.token, "INVID", "Invid");
   const cred = await api("POST", "/credentials", { token: r.token, body: { providerName: "INVID", credentials: { username: "falso", password: "falso" } } });
   const invRow = await myProvider(r.token, "INVID");
-  s.note(`7.º proveedor (INVID) conectado + credenciales: connect ${inv.conn?.status}, credenciales ${cred.status}, inSearch=${invRow?.inSearch} (sin aviso de tope en ninguna de las dos respuestas)`);
+  s.note(`7.º proveedor (INVID) conectado + credenciales: connect ${inv.conn?.status}, credenciales ${cred.status}, inSearch=${invRow?.inSearch}`);
   const cfg = await ctx.prisma.providerSyncConfig.findUnique({ where: { tenantId_provider: { tenantId: r.tenantId, provider: "INVID" } }, select: { priceChannel: true, enabled: true } });
   s.check("INVID con credenciales queda con canal API (para que el sync lo tome)", cfg?.priceChannel === "API", { cfg }, {
     hint: "connectByList (tenants.service.ts:365-369) fija priceChannel LIST y enabled=false; guardar credenciales no lo cambia → findDueConfigs (providers.service.ts:2130-2134) nunca lo sincroniza",
   });
-
-  // BASE durante el onboarding: los DEMO ocupan 2 de los 5 lugares.
-  const r2 = await newRetailer(ctx, "pbase2", "BASE", { complete: false });
-  const mine = [];
-  for (const suf of ["A", "B", "C", "D"]) {
-    const c = await createListProvider(r2.token, `Yankee ${suf} ${ctx.prefix}`);
-    const key = c.data?.providerKey;
-    if (!key) continue;
-    const up = await uploadAndApply(r2.token, key, v5(`${tag}y${suf.toLowerCase()}`));
-    if (up.final.data?.status === "APPLIED") mine.push(key);
-  }
-  s.check("BASE en onboarding: 4 listas propias aplicadas", mine.length === 4, { mine });
-  const l2 = (await api("GET", "/my/providers", { token: r2.token })).data ?? [];
-  const in2 = l2.filter((p) => p.inSearch).map((p) => p.provider);
-  const mineOut = mine.filter((k) => !in2.includes(k));
-  s.check("BASE en onboarding: los 2 DEMO no ocupan lugares de los proveedores propios", mineOut.length === 0, { inSearch: in2, propiosFuera: mineOut }, {
-    hint: "listFor incluye LIST_DEMO_* mientras viewerSeesDemoCatalog (tenant-visibility.service.ts:168,223) y entran al tope igual que los reales",
-  });
-  await completeOnboarding(r2);
-  const l3 = (await api("GET", "/my/providers", { token: r2.token })).data ?? [];
-  const in3 = l3.filter((p) => p.inSearch).map((p) => p.provider);
-  s.check("BASE completado: los 4 propios quedan en búsqueda", mine.every((k) => in3.includes(k)), { inSearch: in3 });
 }
 
 /** Desconectarse de un proveedor y volver a conectarse. */
@@ -590,11 +556,6 @@ export async function p8ExtendedTour(ctx) {
   const drops2 = await api("GET", "/catalog/featured?take=24", { token: r.token });
   s.check("al terminar: 'Bajaron de precio' sin demos", (drops2.data ?? []).filter((p) => String(p.provider).startsWith("LIST_DEMO_")).length === 0, { count: drops2.data?.length });
 
-  // Plan Base en prueba: sin estadísticas (son de Pro), el resto igual.
-  const b = await newRetailer(ctx, "ptourb", "BASE", { complete: false });
-  const stb = await api("GET", "/onboarding/status", { token: b.token });
-  const idsB = (stb.data?.steps ?? []).map((x) => x.id);
-  s.check("Base: el recorrido no muestra estadísticas (son de Pro)", !idsB.includes("orders-stats") && !idsB.includes("providers-stats") && idsB.includes("invoice"), { idsB });
 }
 
-export const providerScenarios = [p1OnboardingDemo, p2Integrated, p3ListVariants, p4ReuploadFreshness, p5SharedProviderIsolated, p6BaseLimit, p7Disconnect, p8ExtendedTour];
+export const providerScenarios = [p1OnboardingDemo, p2Integrated, p3ListVariants, p4ReuploadFreshness, p5SharedProviderIsolated, p6NoSearchLimit, p7Disconnect, p8ExtendedTour];

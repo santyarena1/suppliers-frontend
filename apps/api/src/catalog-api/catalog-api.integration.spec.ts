@@ -46,7 +46,7 @@ d("API de catálogo contra Postgres", () => {
 
   beforeAll(async () => {
     await cleanup();
-    await prisma.tenant.create({ data: { id: TENANT, name: "CAPI Integración", type: "RETAILER", plan: "BASE" } });
+    await prisma.tenant.create({ data: { id: TENANT, name: "CAPI Integración", type: "RETAILER", plan: "PRO" } });
     await prisma.subscription.create({
       data: { tenantId: TENANT, status: "ACTIVE", catalogApiAddon: true, nextBillingAt: new Date(Date.now() + 10 * 86_400_000) },
     });

@@ -24,7 +24,7 @@ import {
 import Link from "next/link";
 import { CreditCard } from "lucide-react";
 import GeneratedPassword from "./GeneratedPassword";
-import { PLAN_CATALOG, formatUsd, type TenantPlan } from "@/lib/plans";
+import { PLAN_CATALOG, TENANT_PLANS, formatUsd, planPriceLabel, type TenantPlan } from "@/lib/plans";
 import EnterAsButton from "./EnterAsButton";
 import PlatformAccountPanel, { PLATFORM_ROLE_LABELS } from "./PlatformAccountPanel";
 import PermissionsMatrix, { type PermissionsSource } from "../team/PermissionsMatrix";
@@ -1857,9 +1857,9 @@ function CreateTenantModal({
               <div>
                 <label className={labelClass}>Plan</label>
                 <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value as TenantPlan })} className={inputClass}>
-                  {(["BASE", "PRO", "CUSTOM"] as TenantPlan[]).map((plan) => (
+                  {TENANT_PLANS.map((plan) => (
                     <option key={plan} value={plan}>
-                      {PLAN_CATALOG[plan].label} · {formatUsd(PLAN_CATALOG[plan].monthlyPrice)} / mes
+                      {PLAN_CATALOG[plan].label} · {planPriceLabel(plan)} / mes
                     </option>
                   ))}
                 </select>
@@ -1895,7 +1895,7 @@ function CreateTenantModal({
                 </>
               )}
               {form.plan === "CUSTOM" && (
-                <p className="text-[11px] text-surface-500 leading-relaxed">La puesta en marcha (USD 300) queda pendiente; se gestiona en Suscripciones.</p>
+                <p className="text-[11px] text-surface-500 leading-relaxed">Custom es desde {formatUsd(PLAN_CATALOG.CUSTOM.monthlyPrice)}/mes: el precio pactado del desarrollo se carga en Suscripciones.</p>
               )}
             </fieldset>
           )}

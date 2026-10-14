@@ -18,7 +18,6 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
-import { CATALOG_API_ADDON_PRICE_USD } from "@/lib/catalog-api";
 
 const USES = [
   { icon: ShoppingBag, title: "Tu tienda online", body: "Tiendanube, WooCommerce, Shopify o tu web propia: productos, fotos, precio de venta y stock siempre al día." },
@@ -108,9 +107,7 @@ export default function CatalogApiShowcase({
             Ver la documentación <ArrowRight className="w-3.5 h-3.5" />
           </Link>
           <span className="text-xs text-surface-400">
-            {included
-              ? "Incluido en tu plan Custom."
-              : `US$ ${CATALOG_API_ADDON_PRICE_USD} por mes, se suma a tu mensualidad. Incluido en Custom.`}
+            Incluida en todos los planes de NODO, sin costo extra.
           </span>
         </div>
       </section>
@@ -182,8 +179,7 @@ export default function CatalogApiShowcase({
         </h3>
         {!included && (
           <p className="mt-1 text-xs text-surface-400">
-            Es un módulo aparte: US$ {CATALOG_API_ADDON_PRICE_USD} por mes que se suma a tu mensualidad de NODO, en el
-            mismo pago. Lo activás y lo desactivás cuando quieras.
+            Viene incluida en todos los planes de NODO, sin costo extra.
             {!canManage && " Lo activa el dueño o un administrador del comercio."}
           </p>
         )}

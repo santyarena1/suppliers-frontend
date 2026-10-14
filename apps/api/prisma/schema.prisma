@@ -111,6 +111,7 @@ enum TenantType {
 
 /// Plan comercial del comercio (solo RETAILER). Capacidades en packages/shared/src/plans.ts.
 /// Si pagó o no vive en `Subscription`, no acá. Ver docs/PLAN_SUSCRIPCIONES.md.
+/// BASE está discontinuado (20261013120000_remove_base_plan): queda solo en el historial.
 enum TenantPlan {
   BASE
   PRO
@@ -2249,7 +2250,7 @@ model Subscription {
   setupFeePaidAt          DateTime?
   /// Si está prendido y la puesta en marcha está pendiente, el Custom opera como Pro.
   setupFeeBlocksCustom    Boolean            @default(false)
-  /// Módulo de API de catálogo (US$ 10/mes en Base y Pro; Custom lo trae incluido).
+  /// Módulo de API de catálogo (histórico: hoy viene incluida en todos los planes).
   catalogApiAddon         Boolean            @default(false)
   catalogApiAddonSince    DateTime?
   /// Módulo de API activo sin cargo (lo regala Administración): no suma a la cuota.

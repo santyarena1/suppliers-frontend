@@ -5,7 +5,10 @@
  * esto solo arma la pantalla. Ver docs/PLAN_SUSCRIPCIONES.md.
  */
 
-export type TenantPlan = "BASE" | "PRO" | "CUSTOM";
+export type TenantPlan = "PRO" | "CUSTOM";
+
+/** Planes que se ofrecen, en orden. */
+export const TENANT_PLANS: TenantPlan[] = ["PRO", "CUSTOM"];
 
 export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAST_DUE" | "GRACE_PERIOD" | "SUSPENDED" | "COURTESY" | "CANCELLED";
 export type SubscriptionAccess = "FULL" | "RESTRICTED";
@@ -33,24 +36,17 @@ export interface PlanDefinition {
   monthlyPrice: number;
   currency: "USD";
   setupFee: number | null;
+  /** `true` = `monthlyPrice` es un piso ("desde"): el precio final se cotiza. */
+  priceFrom?: boolean;
   tagline: string;
 }
 
 export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
-  BASE: {
-    plan: "BASE",
-    label: "NODO Base",
-    shortLabel: "Base",
-    monthlyPrice: 35,
-    currency: "USD",
-    setupFee: null,
-    tagline: "Centralizá y prepará tus compras.",
-  },
   PRO: {
     plan: "PRO",
     label: "NODO Pro",
     shortLabel: "Pro",
-    monthlyPrice: 45,
+    monthlyPrice: 38,
     currency: "USD",
     setupFee: null,
     tagline: "Gestioná tus compras y proveedores directamente desde NODO.",
@@ -59,14 +55,26 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     plan: "CUSTOM",
     label: "NODO Custom",
     shortLabel: "Custom",
-    monthlyPrice: 100,
+    monthlyPrice: 80,
     currency: "USD",
-    setupFee: 300,
-    tagline: "NODO adaptado a tu empresa.",
+    setupFee: null,
+    priceFrom: true,
+    tagline: "Desarrollo a medida para tu empresa.",
   },
 };
 
-export const BASE_SEARCH_LIMIT = 5;
+/** Nombre de pantalla de cualquier plan guardado, incluido NODO Base (discontinuado, queda en el historial). */
+export function planLabelOf(plan: string | null | undefined): string | null {
+  if (!plan) return null;
+  if (plan === "PRO" || plan === "CUSTOM") return PLAN_CATALOG[plan].label;
+  return plan === "BASE" ? "NODO Base" : plan;
+}
+
+/** Precio de lista para mostrar: "USD 38" o "desde USD 80". */
+export function planPriceLabel(plan: TenantPlan): string {
+  const def = PLAN_CATALOG[plan];
+  return `${def.priceFrom ? "desde " : ""}${formatUsd(def.monthlyPrice)}`;
+}
 
 export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
   TRIAL: "Prueba",
@@ -106,8 +114,8 @@ export const PLAN_UPSELL: Record<PlanCapabilityKey, string> = {
   sellerMode: "El modo vendedor, con márgenes de venta por categoría y producto, está disponible en NODO Pro.",
 };
 
-export function searchLimitMessage(max = BASE_SEARCH_LIMIT): string {
-  return `Tu plan Base permite buscar simultáneamente en hasta ${max} distribuidores. Desactivá uno de los actuales o pasá a NODO Pro para buscar en todos.`;
+export function searchLimitMessage(max: number): string {
+  return `Tu plan permite buscar simultáneamente en hasta ${max} distribuidores. Desactivá uno de los actuales para sumar otro.`;
 }
 
 export function formatUsd(amount: number): string {
@@ -243,16 +251,15 @@ export interface PlanFeatureGroup {
   rows: { label: string; values: Record<TenantPlan, PlanCell> }[];
 }
 
-const all = (value: PlanCell): Record<TenantPlan, PlanCell> => ({ BASE: value, PRO: value, CUSTOM: value });
-const fromPro = (): Record<TenantPlan, PlanCell> => ({ BASE: false, PRO: true, CUSTOM: true });
-const customOnly = (value: PlanCell = true): Record<TenantPlan, PlanCell> => ({ BASE: false, PRO: false, CUSTOM: value });
+const all = (value: PlanCell): Record<TenantPlan, PlanCell> => ({ PRO: value, CUSTOM: value });
+const customOnly = (value: PlanCell = true): Record<TenantPlan, PlanCell> => ({ PRO: false, CUSTOM: value });
 
 export const PLAN_FEATURE_GROUPS: PlanFeatureGroup[] = [
   {
     title: "Búsqueda y catálogo",
     rows: [
       { label: "Distribuidores conectados", values: all("Ilimitados") },
-      { label: "Distribuidores activos en búsqueda", values: { BASE: `Hasta ${BASE_SEARCH_LIMIT} a la vez`, PRO: "Todos", CUSTOM: "Todos" } },
+      { label: "Distribuidores activos en búsqueda", values: all("Todos") },
       { label: "Buscador unificado y comparación de precios", values: all(true) },
       { label: "Ficha de producto, catálogo y favoritos", values: all(true) },
       { label: "Carga de listas de precios", values: all(true) },
@@ -263,53 +270,53 @@ export const PLAN_FEATURE_GROUPS: PlanFeatureGroup[] = [
     rows: [
       { label: "Carrito multi-proveedor", values: all(true) },
       { label: "Generar pedido, copiarlo o enviarlo por WhatsApp", values: all(true) },
-      { label: "Checkout directo al distribuidor", values: fromPro() },
-      { label: "Formas de pago y percepciones del proveedor", values: fromPro() },
+      { label: "Checkout directo al distribuidor", values: all(true) },
+      { label: "Formas de pago y percepciones del proveedor", values: all(true) },
     ],
   },
   {
     title: "Pedidos",
     rows: [
-      { label: "Historial de pedidos", values: { BASE: "Básico", PRO: "Avanzado", CUSTOM: "Avanzado" } },
+      { label: "Historial de pedidos", values: all("Avanzado") },
       { label: "Aprobación de pedidos del equipo", values: all(true) },
     ],
   },
   {
     title: "Modo vendedor y presupuestos",
     rows: [
-      { label: "Márgenes de venta por distribuidor, categoría y producto", values: fromPro() },
-      { label: "Vendedores que ven solo el precio de venta", values: fromPro() },
-      { label: "Presupuestos para clientes (WhatsApp, impresión, pasar a compra)", values: fromPro() },
+      { label: "Márgenes de venta por distribuidor, categoría y producto", values: all(true) },
+      { label: "Vendedores que ven solo el precio de venta", values: all(true) },
+      { label: "Presupuestos para clientes (WhatsApp, impresión, pasar a compra)", values: all(true) },
     ],
   },
   {
     title: "Portales de proveedores",
-    rows: [{ label: "Integración con portales y APIs", values: fromPro() }],
+    rows: [{ label: "Integración con portales y APIs", values: all(true) }],
   },
   {
     title: "Cuenta corriente y documentos",
     rows: [
-      { label: "Cuenta corriente integrada", values: fromPro() },
-      { label: "Facturas y comprobantes", values: fromPro() },
+      { label: "Cuenta corriente integrada", values: all(true) },
+      { label: "Facturas y comprobantes", values: all(true) },
     ],
   },
   {
     title: "Analytics",
     rows: [
       { label: "Resumen de compras", values: all(true) },
-      { label: "Analytics avanzados y automatizaciones", values: fromPro() },
+      { label: "Analytics avanzados y automatizaciones", values: all(true) },
     ],
   },
   {
     title: "Chat",
-    rows: [{ label: "Chat comercial con distribuidores", values: fromPro() }],
+    rows: [{ label: "Chat comercial con distribuidores", values: all(true) }],
   },
   {
     title: "API de catálogo",
     rows: [
       {
         label: "Tu catálogo en tu tienda, ERP, Google y Meta (API, webhooks y feeds)",
-        values: { BASE: "+US$ 10/mes", PRO: "+US$ 10/mes", CUSTOM: "Incluida" },
+        values: all("Incluida"),
       },
     ],
   },
@@ -324,6 +331,14 @@ export const PLAN_FEATURE_GROUPS: PlanFeatureGroup[] = [
   {
     title: "Personalización",
     rows: [{ label: "Identidad visual y configuración adaptada", values: customOnly() }],
+  },
+  {
+    title: "Agentes y automatización",
+    rows: [
+      { label: "Creación de agentes", values: customOnly() },
+      { label: "Automatización de compras", values: customOnly() },
+      { label: "Análisis del mercado diario", values: customOnly() },
+    ],
   },
   {
     title: "Gestión de equipo",
@@ -341,17 +356,6 @@ export interface PlanCard {
 
 export const PLAN_CARDS: PlanCard[] = [
   {
-    plan: "BASE",
-    bullets: [
-      "Todos tus distribuidores conectados",
-      `Buscá en hasta ${BASE_SEARCH_LIMIT} a la vez`,
-      "Carrito multi-proveedor",
-      "Generá pedidos y envialos por WhatsApp",
-      "Equipo y permisos completos",
-    ],
-    cta: "Empezar con Base",
-  },
-  {
     plan: "PRO",
     highlight: "MÁS ELEGIDO",
     bullets: [
@@ -359,17 +363,19 @@ export const PLAN_CARDS: PlanCard[] = [
       "Pedidos directos al distribuidor",
       "Cuenta corriente y facturas integradas",
       "Chat comercial y analytics avanzados",
+      "API de catálogo incluida",
     ],
     cta: "Elegir Pro",
   },
   {
     plan: "CUSTOM",
     bullets: [
-      "Una versión de NODO adaptada a la operación de tu empresa.",
-      "Personalización, integraciones y flujos diseñados para tu operación.",
+      "Desarrollo a medida para la operación de tu empresa.",
+      "Creación de agentes, automatización de compras y análisis del mercado diario.",
+      "Integraciones con tu ERP o CRM y flujos diseñados para tu operación.",
       "Todo lo de NODO Pro",
     ],
-    cta: "Hablar con NODO",
-    footnote: "Puesta en marcha: USD 300 (pago único)",
+    cta: "Consultar por WhatsApp",
+    footnote: "Desde USD 80 por mes. Consultanos por el desarrollo a medida.",
   },
 ];

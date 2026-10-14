@@ -16,7 +16,7 @@ export const STATUS_TONE: Record<SubscriptionStatus, string> = {
 };
 
 export const PAYMENT_PROVIDERS: SubscriptionPaymentProvider[] = ["MANUAL", "TRANSFER", "COURTESY", "OTHER"];
-export const PLANS: TenantPlan[] = ["BASE", "PRO", "CUSTOM"];
+export { TENANT_PLANS as PLANS } from "@/lib/plans";
 
 export function fmtDate(iso: string | null | undefined): string {
   return iso ? new Date(iso).toLocaleDateString("es-AR") : "—";
