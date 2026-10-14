@@ -70,7 +70,8 @@ export default function ProveedoresPage() {
 
   const load = useCallback(async (force = false) => {
     if (force) invalidateMyProviders();
-    const mine = await loadMyProviders(force);
+    // Las tiendas de otros comercios (Vender en NODO) se ven en el buscador, no acá.
+    const mine = (await loadMyProviders(force)).filter((p) => !p.storefront);
     setVisible(mine);
     const linked = mine.filter((p) => p.linked).map((p) => p.provider);
     await loadStatuses(linked);

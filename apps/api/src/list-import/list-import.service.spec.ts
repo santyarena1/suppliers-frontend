@@ -5,8 +5,14 @@ import type { TenantContext } from "../tenants/tenant-context.service";
 
 const SUPPLIER = { id: "sup-1", name: "Acme", active: true };
 
-function service(overrides: { isLinked?: boolean; supplier?: typeof SUPPLIER | null; hasAdapter?: boolean } = {}) {
-  const prisma = { tenant: { findUnique: jest.fn().mockResolvedValue(overrides.supplier === undefined ? SUPPLIER : overrides.supplier) } };
+function service(
+  overrides: { isLinked?: boolean; supplier?: typeof SUPPLIER | null; hasAdapter?: boolean; storefrontOf?: string | null } = {}
+) {
+  const prisma = {
+    tenant: { findUnique: jest.fn().mockResolvedValue(overrides.supplier === undefined ? SUPPLIER : overrides.supplier) },
+    // Vender en NODO: la clave es la tienda del comercio indicado.
+    storefront: { findUnique: jest.fn().mockResolvedValue(overrides.storefrontOf ? { retailerTenantId: overrides.storefrontOf } : null) },
+  };
   const registry = { get: jest.fn().mockReturnValue(overrides.hasAdapter ? {} : undefined) };
   const visibility = { isLinked: jest.fn().mockResolvedValue(overrides.isLinked ?? true) };
   return new ListImportService(prisma as never, {} as never, registry as never, visibility as never, {} as never, {} as never);
@@ -49,6 +55,22 @@ describe("ListImportService.resolveAccess", () => {
     await expect(
       service({ isLinked: false }).resolveAccess({ userId: "u", isSuperadmin: false, tenant: tenant({}) }, "LIST_ACME")
     ).rejects.toThrow(/vinculado/);
+  });
+
+  test("el comercio dueño de una tienda (Vender en NODO) escribe su lista base", async () => {
+    const access = await service({ storefrontOf: "t1" }).resolveAccess({ userId: "u", isSuperadmin: false, tenant: tenant({}) }, "LIST_ACME");
+    expect(access).toMatchObject({ level: "BASE", tenantId: "sup-1", supplierTenantId: "sup-1" });
+  });
+
+  test("otro comercio no le carga precios a la tienda de un local, aunque esté vinculado", async () => {
+    await expect(
+      service({ storefrontOf: "otro-comercio" }).resolveAccess({ userId: "u", isSuperadmin: false, tenant: tenant({}) }, "LIST_ACME")
+    ).rejects.toThrow(/otro comercio/);
+  });
+
+  test("el superadmin sigue pudiendo cargar la base de una tienda", async () => {
+    const access = await service({ storefrontOf: "t1" }).resolveAccess({ userId: "u", isSuperadmin: true, tenant: null }, "LIST_ACME");
+    expect(access.level).toBe("BASE");
   });
 
   test("un vendedor (rol sin permiso) no puede", async () => {

@@ -29,6 +29,8 @@ import {
 } from "./offline-order";
 import { OrderApprovalService } from "./order-approval.service";
 import { ChatService } from "../chat/chat.service";
+import { domainEvents } from "../common/events/domain-events";
+import { StorefrontService } from "../storefront/storefront.service";
 import {
   catalogKey,
   computePurchaseInsights,
@@ -63,7 +65,8 @@ export class OrdersService {
     private readonly solutionBox: SolutionBoxOrderService,
     private readonly distecna: DistecnaOrderService,
     private readonly polytech: PolytechOrderService,
-    @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService
+    @Optional() @Inject(forwardRef(() => ChatService)) private readonly chat?: ChatService,
+    @Optional() private readonly storefronts?: StorefrontService
   ) {}
 
   list(tenant: TenantContext) {
@@ -84,6 +87,7 @@ export class OrdersService {
     // Un pedido offline no sale al portal: aprobarlo solo lo deja confirmado en Nodo.
     if (isOfflineChannel(order.channel)) {
       await this.approval.markApproved(order.id, userId);
+      if (order.storefrontStatus === "PENDING") domainEvents.emit("storefront.order", { orderId: order.id });
       return { orderId: order.id, approved: true, offline: true };
     }
     assertCapability(tenant, "directCheckout");
@@ -136,6 +140,8 @@ export class OrdersService {
       if (items.length === 0) {
         throw new BadRequestException(`No hay productos de ${providerLabel(provider)} en el pedido`);
       }
+      // Pedido a la tienda de otro comercio: que lo publicado alcance, y queda a confirmar por la tienda.
+      const toStorefront = (await this.storefronts?.validatePurchase(commercialId(tenant), provider, items)) ?? false;
       const snap = snapshotOfflineOrder(items, group.notes, group.quoteRate);
       const row = await this.prisma.providerOrder.create({
         data: {
@@ -158,6 +164,7 @@ export class OrdersService {
           items: snap.items as unknown as Prisma.InputJsonValue,
           addressSnapshot: {},
           draftInput: snap as unknown as Prisma.InputJsonValue,
+          storefrontStatus: toStorefront ? "PENDING" : null,
         },
         include: {
           createdBy: { select: { id: true, username: true } },
@@ -165,6 +172,7 @@ export class OrdersService {
         },
       });
       created.push(this.approval.serialize(row));
+      if (toStorefront && !held) domainEvents.emit("storefront.order", { orderId: row.id });
       void this.chat?.notifyOrderCreated({
         tenantId: row.tenantId,
         provider: row.provider,

@@ -272,7 +272,7 @@ export class CatalogApiManageService {
   /** Distribuidores que la API puede exponer (los mismos que entran en la foto del catálogo). */
   private async connectedProviders(tenant: TenantContext) {
     const visibles = await this.visibility.listFor(commercialId(tenant));
-    return visibles.filter((v) => v.linked && !v.platformHidden).map((v) => ({ key: v.provider as string, label: v.name }));
+    return visibles.filter((v) => v.linked && !v.platformHidden && !v.storefront).map((v) => ({ key: v.provider as string, label: v.name }));
   }
 
   private async parse(tenant: TenantContext, input: ClientInput, current: ApiClient | null) {

@@ -33,10 +33,15 @@ type Props = {
   /** Nivel al que impacta lo que suba esta sesión: lo explica el backend por permisos, acá solo se muestra. */
   uploadsAsBase: boolean;
   onApplied?: () => void;
+  /** Donde cuelgan perfil y revisión. Por defecto, la ficha del proveedor; la tienda propia usa `/vender`. */
+  basePath?: string;
+  /** Oculta la cadencia de actualización (la tienda propia tiene su propio vencimiento de stock). */
+  hideCadence?: boolean;
 };
 
 /** Pestaña "Listas" de un proveedor por lista: frescura, subida e historial. */
-export default function ListImportsPanel({ provider, uploadsAsBase, onApplied }: Props) {
+export default function ListImportsPanel({ provider, uploadsAsBase, onApplied, basePath, hideCadence = false }: Props) {
+  const base = basePath ?? `/proveedores/${provider}`;
   const [rows, setRows] = useState<ListImportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -124,20 +129,22 @@ export default function ListImportsPanel({ provider, uploadsAsBase, onApplied }:
   return (
     <div className="flex flex-col gap-5">
       {/* Frescura */}
-      <div className={`border rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm ${fresh ? TONE_CLS[fresh.tone] : TONE_CLS.muted}`}>
-        <span className="flex items-center gap-2 font-semibold">
-          <CalendarClock className="w-4 h-4" />
-          {fresh?.text ?? "Cargando…"}
-        </span>
+      <div className={`border rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm ${fresh && !hideCadence ? TONE_CLS[fresh.tone] : TONE_CLS.muted}`}>
+        {!hideCadence && (
+          <span className="flex items-center gap-2 font-semibold">
+            <CalendarClock className="w-4 h-4" />
+            {fresh?.text ?? "Cargando…"}
+          </span>
+        )}
         {freshness?.lastImportAt && (
           <span className="flex items-center gap-1.5 text-xs opacity-90">
             <Clock className="w-3.5 h-3.5" /> Última lista: {fmtDate(freshness.lastImportAt)}
           </span>
         )}
-        {freshness?.expectedAt && (
+        {freshness?.expectedAt && !hideCadence && (
           <span className="text-xs opacity-90">Próxima esperada: {fmtDate(freshness.expectedAt, false)}</span>
         )}
-        {freshness && (
+        {freshness && !hideCadence && (
           <ListCadenceEditor
             provider={provider}
             current={freshness.listUpdateDays}
@@ -145,10 +152,10 @@ export default function ListImportsPanel({ provider, uploadsAsBase, onApplied }:
           />
         )}
         <Link
-          href={`/proveedores/${provider}/listas/perfil`}
+          href={`${base}/listas/perfil`}
           className="ml-auto flex items-center gap-1.5 text-xs font-medium underline-offset-2 hover:underline"
         >
-          <Settings2 className="w-3.5 h-3.5" /> Perfil de lectura
+          <Settings2 className="w-3.5 h-3.5" /> {hideCadence ? "Qué columna es cada dato" : "Perfil de lectura"}
         </Link>
       </div>
 
@@ -244,7 +251,7 @@ export default function ListImportsPanel({ provider, uploadsAsBase, onApplied }:
                       <td className="px-3 py-2 text-right tabular-nums text-red-400">{r.summary?.missing ?? "—"}</td>
                       <td className="px-3 py-2">
                         <Link
-                          href={`/proveedores/${provider}/listas/${r.id}`}
+                          href={`${base}/listas/${r.id}`}
                           className={`inline-flex items-center gap-1 text-[11px] font-semibold border rounded-md px-2 py-0.5 ${st.cls}`}
                           title={r.error ?? undefined}
                         >

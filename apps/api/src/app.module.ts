@@ -32,6 +32,7 @@ import { BrandsModule } from "./brands/brands.module";
 import { TgsModule } from "./tgs/tgs.module";
 import { NewsModule } from "./news/news.module";
 import { ListImportModule } from "./list-import/list-import.module";
+import { StorefrontModule } from "./storefront/storefront.module";
 import { OnboardingModule } from "./onboarding/onboarding.module";
 import { SubscriptionsModule } from "./subscriptions/subscriptions.module";
 import { CatalogApiManageModule, CatalogApiModule } from "./catalog-api/catalog-api.module";
@@ -78,6 +79,7 @@ import { EnrichmentModule } from "./enrichment/enrichment.module";
     TgsModule,
     NewsModule,
     ListImportModule,
+    StorefrontModule,
     OnboardingModule,
     SubscriptionsModule,
     CatalogApiModule,

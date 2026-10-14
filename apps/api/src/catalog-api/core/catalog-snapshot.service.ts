@@ -114,7 +114,8 @@ export class CatalogSnapshotService {
 
   private async build(tenantId: string): Promise<CatalogSnapshot> {
     const started = Date.now();
-    const visibles = (await this.visibility.listFor(tenantId)).filter((v) => v.linked && !v.platformHidden);
+    // Las tiendas de otros comercios (Vender en NODO) no se reexportan: no son catálogo propio.
+    const visibles = (await this.visibility.listFor(tenantId)).filter((v) => v.linked && !v.platformHidden && !v.storefront);
     const keys = visibles.map((v) => v.provider as string);
     const [rules, strict, configs, enrichment, aiImages, saleRules] = await Promise.all([
       this.providers.rulesByProvider(tenantId),

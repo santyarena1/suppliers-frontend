@@ -267,7 +267,7 @@ export class BrandItemsService {
     const yourProviders = new Set<string>();
     if (tenant.tenantType === "RETAILER") {
       const mine = await this.visibility.listFor(commercialId(tenant), tenant.userId);
-      for (const p of mine) if (p.linked) yourProviders.add(p.provider);
+      for (const p of mine) if (p.linked && !p.storefront) yourProviders.add(p.provider);
     }
     const settings = await this.settingsFor(brandId);
     const items = await this.availability(brandId, settings, { kind: "client", yourProviders });

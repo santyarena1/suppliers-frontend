@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { StorefrontModule } from "../storefront/storefront.module";
 import { CredentialsModule } from "../credentials/credentials.module";
 import { ProvidersModule } from "../providers/providers.module";
 import { TenantsModule } from "../tenants/tenants.module";
@@ -7,7 +8,7 @@ import { OrdersController } from "./orders.controller";
 import { OrdersService } from "./orders.service";
 
 @Module({
-  imports: [ProvidersModule, CredentialsModule, TenantsModule, ChatModule],
+  imports: [ProvidersModule, CredentialsModule, TenantsModule, ChatModule, StorefrontModule],
   controllers: [OrdersController],
   providers: [OrdersService],
 })

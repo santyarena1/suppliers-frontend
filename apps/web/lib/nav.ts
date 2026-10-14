@@ -1,7 +1,7 @@
 import {
   Home, Search, ShoppingCart, Boxes, Building2, ClipboardList,
   Settings, Users, GitCompare, Handshake, QrCode, UserCog, MessageSquare, Megaphone,
-  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3, CreditCard, FileText,
+  Bell, Palette, Target, CircleDot, FolderOpen, GraduationCap, Gamepad2, Newspaper, BarChart3, CreditCard, FileText, Store,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ModuleKey, TenantRole, TenantType } from "@/lib/api";
@@ -28,6 +28,7 @@ export type NavItemId =
   | "compare"
   | "cart"
   | "quotes"
+  | "storefront"
   | "orders"
   | "providers"
   | "clients"
@@ -98,6 +99,8 @@ export const NAV_ITEMS: NavItemDef[] = [
   { id: "compare", href: "/comparador", label: "Comparador", icon: GitCompare, module: "search", tenantTypes: ["RETAILER"] },
   { id: "cart", href: "/cart", label: "Carrito", icon: ShoppingCart, module: "cart", badge: "cart", sublabel: "providers", tenantTypes: ["RETAILER"], buyingOnly: true },
   { id: "quotes", href: "/presupuestos", label: "Presupuestos", icon: FileText, tenantTypes: ["RETAILER"], requiresSellerMode: true },
+  // Vender en NODO (docs/PLAN_VENDER_EN_NODO.md): la tienda del comercio para los demás comercios.
+  { id: "storefront", href: "/vender", label: "Vender en NODO", icon: Store, tenantTypes: ["RETAILER"], permission: "providers.manage", buyingOnly: true },
   { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"] },
   {
     id: "news",

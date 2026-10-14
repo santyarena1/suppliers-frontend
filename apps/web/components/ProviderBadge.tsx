@@ -23,6 +23,11 @@ export function providerLabel(provider: string, override?: string): string {
     .join(" ");
 }
 
+/** Es la tienda de otro comercio (Vender en NODO). */
+export function isStorefrontProvider(provider: string): boolean {
+  return Boolean(cachedMyProviders()?.find((p) => p.provider === provider)?.storefront);
+}
+
 const LOGO: Record<ProviderBadgeSize, string> = {
   sm: "w-4 h-4",
   md: "w-7 h-7",
@@ -117,10 +122,15 @@ export default function ProviderBadge({
       className={`inline-flex items-center gap-2 min-w-0 ${
         size === "sm" ? "h-5" : ""
       } ${chip ? `rounded-md border px-2 py-1 ${chipClass}` : ""} ${className}`}
-      title={name}
+      title={isStorefrontProvider(provider) ? `${name} · local que vende en NODO` : name}
     >
       {logo}
       {nameEl}
+      {isStorefrontProvider(provider) && (
+        <span className="flex-shrink-0 rounded border border-emerald-500/40 bg-emerald-500/10 px-1 text-[9px] font-semibold uppercase tracking-wide leading-[14px] text-emerald-300">
+          Local
+        </span>
+      )}
     </span>
   );
 }

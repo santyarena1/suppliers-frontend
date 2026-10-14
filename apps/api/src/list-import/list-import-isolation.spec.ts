@@ -35,6 +35,7 @@ function setup() {
       findUnique: jest.fn().mockResolvedValue({ listUpdateDays: 7 }),
     },
     tenantProductOffer: { updateMany: jest.fn().mockResolvedValue({ count: 3 }) },
+    storefront: { findUnique: jest.fn().mockResolvedValue(null), findFirst: jest.fn().mockResolvedValue(null) },
   };
   const providers = { applyListOffers: jest.fn().mockResolvedValue({}) };
   const registry = { get: jest.fn().mockReturnValue(undefined) };

@@ -102,7 +102,7 @@ export default function AnnouncementGate() {
           ? "manager"
           : "buyer";
 
-  const firstConfigured = providers.find((p) => p.configured && !p.platformHidden);
+  const firstConfigured = providers.find((p) => p.configured && !p.platformHidden && !p.storefront);
   const marginsHref = firstConfigured
     ? `/proveedores/${encodeURIComponent(firstConfigured.provider)}?tab=margins`
     : "/proveedores";

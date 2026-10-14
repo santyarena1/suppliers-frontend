@@ -17,6 +17,7 @@ import AdminNewsPanel from "@/components/admin/AdminNewsPanel";
 import SubscriptionsPanel from "@/components/admin/SubscriptionsPanel";
 import SystemHealthPanel from "@/components/admin/health/SystemHealthPanel";
 import InboxPanel from "@/components/admin/inbox/InboxPanel";
+import AdminStorefrontsPanel from "@/components/admin/AdminStorefrontsPanel";
 import { inboxApi } from "@/lib/inbox";
 import {
   Loader2, CheckCircle2, XCircle, Zap, Network, DollarSign, Activity, Tags,
@@ -24,13 +25,14 @@ import {
 } from "lucide-react";
 import { formatARS, proxyImg } from "@/lib/format";
 
-type Tab = "inbox" | "health" | "organizations" | "subscriptions" | "retail" | "catalog" | "enrichment" | "images" | "ads" | "news" | "diagnostics";
+type Tab = "inbox" | "health" | "organizations" | "subscriptions" | "storefronts" | "retail" | "catalog" | "enrichment" | "images" | "ads" | "news" | "diagnostics";
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "inbox", label: "Solicitudes", icon: <Inbox className="w-3.5 h-3.5" /> },
   { key: "health", label: "Salud del sistema", icon: <HeartPulse className="w-3.5 h-3.5" /> },
   { key: "organizations", label: "Directorio", icon: <Network className="w-3.5 h-3.5" /> },
   { key: "subscriptions", label: "Suscripciones", icon: <CreditCard className="w-3.5 h-3.5" /> },
+  { key: "storefronts", label: "Tiendas de locales", icon: <Store className="w-3.5 h-3.5" /> },
   { key: "retail", label: "Locales / precios", icon: <DollarSign className="w-3.5 h-3.5" /> },
   { key: "catalog", label: "Catálogo", icon: <Tags className="w-3.5 h-3.5" /> },
   { key: "enrichment", label: "Productos enriquecidos", icon: <Sparkles className="w-3.5 h-3.5" /> },
@@ -40,7 +42,7 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "diagnostics", label: "Diagnóstico", icon: <Activity className="w-3.5 h-3.5" /> },
 ];
 
-const TAB_KEYS: Tab[] = ["inbox", "health", "organizations", "subscriptions", "retail", "catalog", "enrichment", "images", "ads", "news", "diagnostics"];
+const TAB_KEYS: Tab[] = ["inbox", "health", "organizations", "subscriptions", "storefronts", "retail", "catalog", "enrichment", "images", "ads", "news", "diagnostics"];
 const LEGACY_TABS = new Set(["users", "permissions"]);
 
 export default function AdminPage() {
@@ -139,6 +141,7 @@ function AdminPageInner() {
               </>
             )}
             {tab === "subscriptions" && <SubscriptionsPanel showToast={showToast} />}
+            {tab === "storefronts" && <AdminStorefrontsPanel showToast={showToast} />}
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
             {tab === "enrichment" && <EnrichmentPanel showToast={showToast} />}

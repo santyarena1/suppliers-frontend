@@ -51,5 +51,5 @@ export function useMyProviders(): { providers: VisibleProvider[]; loading: boole
 /** Solo los vinculados, que son los que tienen catálogo. */
 export function useLinkedProviders(): { providers: Provider[]; loading: boolean } {
   const { providers, loading } = useMyProviders();
-  return { providers: providers.filter((p) => p.linked).map((p) => p.provider), loading };
+  return { providers: providers.filter((p) => p.linked && !p.storefront).map((p) => p.provider), loading };
 }

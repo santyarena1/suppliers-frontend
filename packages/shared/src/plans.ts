@@ -169,7 +169,9 @@ export type PlanCapabilityKey =
   /** API de catálogo: incluida en todos los planes. */
   | "catalogApi"
   /** Modo vendedor: márgenes de venta y precio de venta para el rol Vendedor (docs/PLAN_MODO_VENDEDOR.md). */
-  | "sellerMode";
+  | "sellerMode"
+  /** Vender en NODO: tienda del comercio para los demás comercios (docs/PLAN_VENDER_EN_NODO.md). */
+  | "storefront";
 
 export const PLAN_CAPABILITY_KEYS: readonly PlanCapabilityKey[] = [
   "directCheckout",
@@ -182,6 +184,7 @@ export const PLAN_CAPABILITY_KEYS: readonly PlanCapabilityKey[] = [
   "customBranding",
   "catalogApi",
   "sellerMode",
+  "storefront",
 ] as const;
 
 export type PlanCapabilities = Record<PlanCapabilityKey, boolean> & {
@@ -201,6 +204,7 @@ const PRO_CAPABILITIES: PlanCapabilities = {
   customBranding: false,
   catalogApi: true,
   sellerMode: true,
+  storefront: true,
 };
 
 const CUSTOM_CAPABILITIES: PlanCapabilities = {
@@ -240,6 +244,7 @@ export const PLAN_CAPABILITY_UPSELL: Record<PlanCapabilityKey, string> = {
   customBranding: "La identidad visual adaptada está disponible en NODO Custom.",
   catalogApi: "La API de catálogo está incluida en todos los planes de NODO.",
   sellerMode: "El modo vendedor (márgenes y precios de venta) está disponible en NODO Pro.",
+  storefront: "Vender en NODO está disponible en NODO Pro.",
 };
 
 // ---------- Módulos extra ----------

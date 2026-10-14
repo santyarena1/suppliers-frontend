@@ -25,7 +25,9 @@ export type PlanCapabilityKey =
   | "customModules"
   | "customBranding"
   /** Modo vendedor: márgenes de venta y precio de venta para el rol Vendedor (Pro y Custom). */
-  | "sellerMode";
+  | "sellerMode"
+  /** Vender en NODO: tienda del comercio para los demás comercios (Pro y Custom). */
+  | "storefront";
 
 export type PlanCapabilities = Record<PlanCapabilityKey, boolean> & { maxSearchProviders: number | null };
 
@@ -112,6 +114,7 @@ export const PLAN_UPSELL: Record<PlanCapabilityKey, string> = {
   customModules: "Los módulos personalizados están disponibles en NODO Custom.",
   customBranding: "La identidad visual adaptada está disponible en NODO Custom.",
   sellerMode: "El modo vendedor, con márgenes de venta por categoría y producto, está disponible en NODO Pro.",
+  storefront: "Vender en NODO, tu tienda para los demás comercios, está disponible en NODO Pro.",
 };
 
 export function searchLimitMessage(max: number): string {

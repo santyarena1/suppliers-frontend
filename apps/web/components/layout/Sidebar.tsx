@@ -79,7 +79,8 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
   const { providers: myProviders } = useMyProviders();
   const { statuses, loading: statusesLoading } = useProviderStatuses();
   const linkedProviders = useMemo(
-    () => myProviders.filter((p) => p.linked && p.configured !== false),
+    // Las tiendas de otros comercios (Vender en NODO) no son proveedores propios.
+    () => myProviders.filter((p) => p.linked && p.configured !== false && !p.storefront),
     [myProviders],
   );
 

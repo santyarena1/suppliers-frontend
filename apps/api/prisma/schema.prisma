@@ -226,6 +226,10 @@ model Tenant {
   newsArticles       NewsArticle[]
   apiClients         ApiClient[]
   apiCatalogTracker  ApiCatalogTracker?
+  /// Tienda de este comercio en Vender en NODO (docs/PLAN_VENDER_EN_NODO.md).
+  storefront         Storefront?            @relation("StorefrontRetailer")
+  /// Proveedor por lista que es la tienda de un comercio.
+  storefrontOf       Storefront?            @relation("StorefrontSupplier")
   /// Local de venta ya sincronizado que este comercio declara como propio.
   /// Compara el costo final con el precio publicado en esa web.
   ownRetailStoreId   String?
@@ -869,14 +873,14 @@ model StoredAsset {
 // panel de superadmin. Ausencia de fila para un proveedor = visible, sin
 // logo/color custom (se usan los defaults de providerColors.ts).
 model ProviderDisplayConfig {
-  provider  String   @id
+  provider         String   @id
   /// false = oculto para todos los comercios (Administración lo sigue viendo).
-  visible   Boolean  @default(true)
+  visible          Boolean  @default(true)
   /// Con `visible = false`: organizaciones que igual lo ven ("solo visible para").
   allowedTenantIds String[] @default([])
-  logoUrl   String?
-  textColor String?
-  updatedAt DateTime @updatedAt
+  logoUrl          String?
+  textColor        String?
+  updatedAt        DateTime @updatedAt
 }
 
 // Excepciones puntuales de acceso a un módulo del sistema para un usuario.
@@ -1148,12 +1152,18 @@ model ProviderOrder {
   /// Ya se sacaron sus productos del carrito compartido del comercio (cart-order-reconcile).
   cartReconciledAt DateTime?
 
+  /// Pedido a la tienda de otro comercio (Vender en NODO): la tienda lo confirma o lo rechaza.
+  storefrontStatus      StorefrontOrderStatus?
+  storefrontRespondedAt DateTime?
+  storefrontNote        String?
+
   @@index([userId, provider, createdAt])
   @@index([tenantId, provider, createdAt])
   @@index([status, cartReconciledAt])
   @@index([tenantId, approvalStatus])
   @@index([approvalStatus])
   @@index([tenantId, channel])
+  @@index([provider, storefrontStatus])
 }
 
 enum OrderApprovalStatus {
@@ -2831,4 +2841,47 @@ model EnrichmentRun {
   log             Json?
 
   @@index([startedAt])
+}
+
+// ---------- Vender en NODO (docs/PLAN_VENDER_EN_NODO.md) ----------
+
+enum StorefrontStatus {
+  ACTIVE
+  /// La pausó el dueño: no se ve hasta que la reactive.
+  PAUSED
+  /// La frenó NODO: el dueño no la puede reactivar.
+  SUSPENDED
+}
+
+enum StorefrontOrderStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  /// Lo canceló el comprador antes de que la tienda respondiera.
+  CANCELLED
+}
+
+/// Tienda de un comercio: un proveedor por lista (sin miembros) que le pertenece
+/// y que los demás comercios ven en el buscador.
+model Storefront {
+  id               String           @id @default(uuid())
+  retailerTenantId String           @unique
+  retailerTenant   Tenant           @relation("StorefrontRetailer", fields: [retailerTenantId], references: [id], onDelete: Cascade)
+  supplierTenantId String           @unique
+  supplierTenant   Tenant           @relation("StorefrontSupplier", fields: [supplierTenantId], references: [id], onDelete: Cascade)
+  status           StorefrontStatus @default(ACTIVE)
+  /// Última vez que el dueño confirmó el stock (a mano, con una planilla o editando productos).
+  stockConfirmedAt DateTime?
+  /// Días que vale el stock confirmado: después la tienda deja de verse.
+  stockValidDays   Int              @default(3)
+  /// Ya se le avisó que el stock está por vencer (se limpia al confirmar).
+  staleWarnedAt    DateTime?
+  contactPhone     String?
+  /// Zona, retiro, horarios: lo que el comprador tiene que saber.
+  contactNote      String?
+  suspendedReason  String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([status])
 }

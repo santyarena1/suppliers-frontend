@@ -17,7 +17,8 @@ export default function SellerModeSettings() {
   const { providers } = useMyProviders();
   if (!seller.sellerMode || seller.isRealSeller) return null;
 
-  const firstProvider = (providers.find((p) => p.configured && !p.platformHidden) ?? providers[0])?.provider;
+  const own = providers.filter((p) => !p.storefront);
+  const firstProvider = (own.find((p) => p.configured && !p.platformHidden) ?? own[0])?.provider;
   const marginsHref = firstProvider ? `/proveedores/${encodeURIComponent(firstProvider)}?tab=margins` : "/proveedores";
 
   return (

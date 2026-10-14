@@ -68,7 +68,8 @@ function RetailerHome() {
   const [top, setTop] = useState<SearchEntry[]>([]);
   const { providers: allProviders, loading: loadingProviders } = useMyProviders();
   // Solo los vinculados de verdad; "configurado" = ya tiene precios del comercio.
-  const myProviders = useMemo(() => allProviders.filter((p) => p.linked), [allProviders]);
+  // Las tiendas de otros comercios (Vender en NODO) se ven en el buscador, no acá.
+  const myProviders = useMemo(() => allProviders.filter((p) => p.linked && !p.storefront), [allProviders]);
   const readyProviders = useMemo(() => myProviders.filter((p) => p.configured !== false), [myProviders]);
 
   useEffect(() => {

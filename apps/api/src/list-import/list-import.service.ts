@@ -9,6 +9,7 @@ import {
 import { isListProviderKey, type Provider } from "@nodo/shared";
 import { Prisma, type ImportProfile, type ListImportLevel, type SupplierListImport } from "@prisma/client";
 import { CatalogEnrichmentService } from "../catalog/catalog-enrichment.service";
+import { domainEvents } from "../common/events/domain-events";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProvidersService } from "../providers/providers.service";
 import { ProviderRegistry } from "../providers/provider-registry";
@@ -134,6 +135,18 @@ export class ListImportService {
         );
       }
       return { level: "BASE", tenantId: supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name };
+    }
+    // Vender en NODO: la tienda es de un comercio. Su dueño sube la lista base;
+    // los demás comercios la ven pero no le cargan precios propios.
+    const storefront = await this.prisma.storefront.findUnique({
+      where: { supplierTenantId: supplier.id },
+      select: { retailerTenantId: true },
+    });
+    if (storefront) {
+      if (tenant.tenantType === "RETAILER" && storefront.retailerTenantId === tenant.tenantId) {
+        return { level: "BASE", tenantId: supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name };
+      }
+      throw new ForbiddenException("Es la tienda de otro comercio: los precios los publica ese comercio");
     }
     if (tenant.tenantType === "RETAILER") {
       const linked = await this.visibility.isLinked(commercialId(tenant), provider);
@@ -471,6 +484,7 @@ export class ListImportService {
         : []),
     ]);
     this.logger.log(`Carga ${importId} aplicada (${record.level}, ${items.length} filas)`);
+    domainEvents.emit("list.applied", { provider: record.provider, level: record.level });
     return this.get(importId, actor);
   }
 
@@ -873,6 +887,15 @@ export class ListImportService {
   // ---------- Frescura ----------
 
   async freshness(actor: ImportActor, provider: Provider) {
+    // La tienda de un comercio (Vender en NODO): los compradores ven solo las fechas de
+    // la lista base, sin pasar por el permiso de carga (que es solo del dueño).
+    if (actor.tenant || actor.isSuperadmin) {
+      const storefront = await this.prisma.storefront.findFirst({
+        where: { supplierTenant: { providerKey: provider } },
+        select: { retailerTenantId: true },
+      });
+      if (storefront && storefront.retailerTenantId !== actor.tenant?.tenantId) return this.freshnessFor(provider, null);
+    }
     const access = await this.resolveAccess(actor, provider);
     return this.freshnessFor(provider, access.level === "TENANT" ? access.tenantId : null);
   }
@@ -945,7 +968,17 @@ export class ListImportService {
 
   private async notifyReview(record: SupplierListImport, reasons: string[]) {
     const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: record.provider }, select: { id: true, name: true } });
-    const toTenantIds = [...new Set([record.tenantId, supplier?.id].filter((x): x is string => Boolean(x)))];
+    // La tienda de un comercio no tiene miembros: el aviso va al comercio dueño.
+    const storefront = supplier
+      ? await this.prisma.storefront.findUnique({ where: { supplierTenantId: supplier.id }, select: { retailerTenantId: true } })
+      : null;
+    const toTenantIds = [
+      ...new Set(
+        [record.tenantId, supplier?.id]
+          .filter((x): x is string => Boolean(x))
+          .map((id) => (storefront && id === supplier?.id ? storefront.retailerTenantId : id))
+      ),
+    ];
     await this.prisma.orgNotification.createMany({
       data: toTenantIds.map((toTenantId) => ({
         toTenantId,

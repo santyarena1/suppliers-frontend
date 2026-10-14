@@ -34,14 +34,17 @@ export interface SearchDefaults {
   offline: boolean;
   scheme: boolean;
   outOfStock: boolean;
+  /** Buscar también en las tiendas de otros comercios (Vender en NODO). En el filtro se pueden elegir igual. */
+  storefronts: boolean;
 }
 
-const SEARCH_DEFAULTS: SearchDefaults = { shipping: false, offline: false, scheme: false, outOfStock: false };
+const SEARCH_DEFAULTS: SearchDefaults = { shipping: false, offline: false, scheme: false, outOfStock: false, storefronts: true };
 const SEARCH_DEFAULT_KEYS: Record<keyof SearchDefaults, string> = {
   shipping: "pref_filter_shipping",
   offline: "pref_filter_offline",
   scheme: "pref_filter_scheme",
   outOfStock: "pref_filter_nostock",
+  storefronts: "pref_filter_storefronts",
 };
 
 /** Lectura directa, para inicializar la búsqueda al montar. */

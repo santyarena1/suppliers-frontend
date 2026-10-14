@@ -164,8 +164,11 @@ export function isOrderItemEditable(order: {
   channel?: string | null;
   status?: string | null;
   approvalStatus?: string | null;
+  storefrontStatus?: string | null;
 }): boolean {
   if (order.approvalStatus === "REJECTED") return false;
+  // A la tienda de otro comercio: lo que se pidió es lo que la tienda confirma.
+  if (order.storefrontStatus) return false;
   if (isOfflineChannel(order.channel)) return true;
   // Online ya creado en el portal (o aprobado): se pueden anotar ajustes de costo.
   return order.status === "CREATED" || order.approvalStatus === "APPROVED";

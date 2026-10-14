@@ -808,7 +808,7 @@ export class SubscriptionsService {
       return;
     }
     if (fromMax != null && fromMax <= toMax) return;
-    const visibles = (await this.visibility.listFor(tenantId)).filter((v) => v.linked && !v.platformHidden);
+    const visibles = (await this.visibility.listFor(tenantId)).filter((v) => v.linked && !v.platformHidden && !v.storefront);
     if (visibles.length <= toMax) return;
     const lastOrders = await tx.providerOrder.groupBy({
       by: ["provider"],

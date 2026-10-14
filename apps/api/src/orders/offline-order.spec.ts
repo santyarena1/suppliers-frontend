@@ -66,3 +66,14 @@ describe("offline-order", () => {
     expect(isOrderItemEditable({ channel: "OFFLINE", approvalStatus: "REJECTED", status: "OFFLINE" })).toBe(false);
   });
 });
+
+describe("pedido a la tienda de otro comercio (Vender en NODO)", () => {
+  it("no se edita: lo que se pidió es lo que la tienda confirma", () => {
+    expect(isOrderItemEditable({ channel: "OFFLINE", status: "OFFLINE", approvalStatus: "APPROVED", storefrontStatus: "PENDING" })).toBe(false);
+    expect(isOrderItemEditable({ channel: "OFFLINE", status: "OFFLINE", approvalStatus: "APPROVED", storefrontStatus: "CONFIRMED" })).toBe(false);
+  });
+
+  it("un pedido offline común sigue siendo editable", () => {
+    expect(isOrderItemEditable({ channel: "OFFLINE", status: "OFFLINE", approvalStatus: "APPROVED", storefrontStatus: null })).toBe(true);
+  });
+});

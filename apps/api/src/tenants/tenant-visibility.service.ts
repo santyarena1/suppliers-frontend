@@ -16,6 +16,7 @@ import { domainEvents } from "../common/events/domain-events";
 import { isDemoDistributorKey, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { PrismaService } from "../prisma/prisma.service";
 import { snapshotJson } from "../providers/json-value";
+import { storefrontHiddenReason, type StorefrontStatusValue } from "../storefront/storefront-rules";
 
 export type PurchasePolicyView = {
   /** API o LIST: con LIST los precios salen de una planilla y el carrito solo arma un mensaje. */
@@ -74,6 +75,12 @@ export interface VisibleProvider {
    * distribuidor vinculado. Sin esto no entra al buscador ni ocupa lugar del plan.
    */
   configured: boolean;
+  /**
+   * Es la tienda de otro comercio (Vender en NODO, docs/PLAN_VENDER_EN_NODO.md):
+   * se compra a confirmar por la tienda, no ocupa lugar del plan y no aparece en
+   * Proveedores. `name` es el nombre del comercio.
+   */
+  storefront: boolean;
 }
 
 /** Cuántos proveedores buscan a la vez y cuántos permite el plan. */
@@ -175,6 +182,7 @@ export class TenantVisibilityService {
           syncPaused: false,
           includeInSearch: null,
           configured: true,
+          storefront: false,
         },
       ];
     }
@@ -232,7 +240,7 @@ export class TenantVisibilityService {
     const configByProvider = new Map(configs.map((c) => [c.provider, c]));
     const syncPaused = (provider: string) => Boolean(configByProvider.get(provider)?.pausedAt);
 
-    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden" | "inSearch" | "syncPaused" | "includeInSearch" | "configured">>();
+    const visibles = new Map<string, Omit<VisibleProvider, "platformHidden" | "inSearch" | "syncPaused" | "includeInSearch" | "configured" | "storefront">>();
 
     for (const link of links) {
       const key = link.supplierTenant.providerKey as Provider;
@@ -331,6 +339,18 @@ export class TenantVisibilityService {
       }
     }
 
+    // Vender en NODO: la tienda de otro comercio se ve con el nombre del comercio,
+    // y solo mientras está activa y con el stock confirmado. La propia no se ve.
+    const storefronts = await this.storefrontsByKey();
+    for (const [key, sf] of storefronts) {
+      if (!visibles.has(key)) continue;
+      if (sf.retailerTenantId === tenantId || storefrontHiddenReason(sf, now) !== null) {
+        visibles.delete(key);
+        continue;
+      }
+      visibles.set(key, { ...visibles.get(key)!, name: sf.name, linked: true, selfConnected: true, linkId: null, accountManager: null, advertised: false });
+    }
+
     // Administración ve todo lo vinculado como configurado: opera sin cuenta propia.
     const priced = platformAdminOrg ? null : await this.providersWithPrices(tenantId, [...visibles.keys()]);
     const rows = [...visibles.values()]
@@ -338,6 +358,7 @@ export class TenantVisibilityService {
         ...v,
         platformHidden: hiddenForViewer(hidden, v.provider, tenantId),
         configured: priced === null || priced.has(v.provider),
+        storefront: storefronts.has(v.provider),
       }))
       // Oculto por la plataforma = para un comercio no existe: ni búsqueda, ni
       // Proveedores, ni avisos. Solo Administración lo sigue viendo para gestionarlo.
@@ -351,7 +372,7 @@ export class TenantVisibilityService {
         // Un proveedor sin configurar no busca ni le quita el lugar a uno configurado.
         // Los demos del recorrido guiado tampoco: buscan aparte, sin ocupar lugar del plan.
         // Con el sync pausado por error tampoco: sus precios quedaron viejos y fallan al comprar.
-        .filter((v) => v.linked && !v.platformHidden && v.configured && !syncPaused(v.provider) && !isDemoDistributorKey(v.provider))
+        .filter((v) => v.linked && !v.platformHidden && v.configured && !syncPaused(v.provider) && !isDemoDistributorKey(v.provider) && !v.storefront)
         .map((v) => ({
           provider: v.provider,
           name: v.name,
@@ -364,6 +385,8 @@ export class TenantVisibilityService {
       if (syncPaused(v.provider)) continue;
       const choice = configByProvider.get(v.provider)?.includeInSearch ?? null;
       if (isDemoDistributorKey(v.provider) && v.linked && !v.platformHidden && choice !== false) inSearch.add(v.provider);
+      // Las tiendas de otros comercios buscan aparte, sin ocupar lugar del plan.
+      if (v.storefront && v.linked && !v.platformHidden && v.configured && choice !== false) inSearch.add(v.provider);
     }
     return rows.map((v) => ({
       ...v,
@@ -373,6 +396,36 @@ export class TenantVisibilityService {
     }));
   }
 
+  /** Tiendas de comercios (Vender en NODO) por clave de proveedor. Son pocas: se leen todas. */
+  private async storefrontsByKey() {
+    const rows = await this.prisma.storefront.findMany({
+      select: {
+        status: true,
+        stockConfirmedAt: true,
+        stockValidDays: true,
+        retailerTenantId: true,
+        retailerTenant: { select: { name: true, active: true } },
+        supplierTenant: { select: { providerKey: true } },
+      },
+    });
+    const map = new Map<
+      string,
+      { status: StorefrontStatusValue; stockConfirmedAt: Date | null; stockValidDays: number; retailerTenantId: string; name: string; ownerActive: boolean }
+    >();
+    for (const r of rows) {
+      if (!r.supplierTenant.providerKey) continue;
+      map.set(r.supplierTenant.providerKey, {
+        status: r.status,
+        stockConfirmedAt: r.stockConfirmedAt,
+        stockValidDays: r.stockValidDays,
+        retailerTenantId: r.retailerTenantId,
+        name: r.retailerTenant.name,
+        ownerActive: r.retailerTenant.active,
+      });
+    }
+    return map;
+  }
+
   /** Conectados y activos en búsqueda, para el contador del panel y `/my/subscription`. */
   async searchUsage(tenantId: string, viewerUserId?: string): Promise<SearchUsage> {
     const [visibles, tenant, platformAdminOrg] = await Promise.all([
@@ -380,7 +433,7 @@ export class TenantVisibilityService {
       this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true, type: true } }),
       this.isPlatformAdminOrg(tenantId),
     ]);
-    const linked = visibles.filter((v) => v.linked && v.configured && !isDemoDistributorKey(v.provider));
+    const linked = visibles.filter((v) => v.linked && v.configured && !isDemoDistributorKey(v.provider) && !v.storefront);
     return {
       connectedProviders: linked.length,
       activeSearchProviders: linked.filter((v) => v.inSearch).length,

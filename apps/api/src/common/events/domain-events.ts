@@ -11,6 +11,10 @@ import { EventEmitter } from "node:events";
 export interface DomainEvents {
   /** Un comercio quedó vinculado (ACTIVE) con un distribuidor o marca. */
   "tenant.linked": { clientTenantId: string; supplierTenantId: string; provider: string | null };
+  /** Se aplicó una lista de precios (base o propia) de un proveedor por lista. */
+  "list.applied": { provider: string; level: "BASE" | "TENANT" };
+  /** Un pedido a la tienda de un comercio quedó a la vista de la tienda (creado ya aprobado, o aprobado después). */
+  "storefront.order": { orderId: string };
 }
 
 class TypedEmitter {

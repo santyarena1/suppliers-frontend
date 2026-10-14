@@ -581,6 +581,11 @@ export interface VisibleProvider {
   syncPaused?: boolean;
   /** Lo que eligió el comercio en "Incluir en búsqueda". `null` = nunca lo tocó. */
   includeInSearch?: boolean | null;
+  /**
+   * Tienda de otro comercio (Vender en NODO): se le pide a confirmar, no ocupa lugar
+   * del plan y no aparece en Proveedores. `name` es el nombre del comercio.
+   */
+  storefront?: boolean;
   accountManager: { name: string; email: string } | null;
   discountPercent: number | null;
   /** Vínculo comercial, para abrir el chat. Ausente si solo hay publicidad. */
@@ -1092,6 +1097,10 @@ export interface TenantOrder {
   approvedBy: string | null;
   approvalDecidedAt: string | null;
   createdAt: string;
+  /** Pedido a la tienda de otro comercio: lo confirma o lo rechaza la tienda. */
+  storefrontStatus?: StorefrontOrderStatus | null;
+  storefrontNote?: string | null;
+  storefrontRespondedAt?: string | null;
 }
 
 export type PurchaseChannel = "ONLINE" | "OFFLINE";
@@ -1371,7 +1380,7 @@ if (typeof window !== "undefined") {
 
 /** Solo los vinculados: de los publicitados todavía no hay catálogo que traer. */
 export async function loadLinkedProviders(): Promise<Provider[]> {
-  return (await loadMyProviders()).filter((p) => p.linked).map((p) => p.provider);
+  return (await loadMyProviders()).filter((p) => p.linked && !p.storefront).map((p) => p.provider);
 }
 
 /**
@@ -4672,4 +4681,142 @@ export const catalogApiAdmin = {
       enabled,
       ...(courtesy != null ? { courtesy } : {}),
     }),
+};
+
+// ---------- Vender en NODO (docs/PLAN_VENDER_EN_NODO.md) ----------
+
+export type StorefrontStatus = "ACTIVE" | "PAUSED" | "SUSPENDED";
+export type StorefrontOrderStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "CANCELLED";
+export type StorefrontHiddenReason =
+  | "PAUSED"
+  | "SUSPENDED"
+  | "STOCK_EXPIRED"
+  | "NO_STOCK_CONFIRMED"
+  | "OWNER_INACTIVE"
+  | "NO_PRODUCTS";
+
+export type MyStorefront =
+  | { exists: false }
+  | {
+      exists: true;
+      id: string;
+      name: string;
+      provider: Provider;
+      status: StorefrontStatus;
+      suspendedReason: string | null;
+      stockConfirmedAt: string | null;
+      stockExpiresAt: string | null;
+      stockValidDays: number;
+      hiddenReason: StorefrontHiddenReason | null;
+      visible: boolean;
+      contactPhone: string | null;
+      contactNote: string | null;
+      productCount: number;
+      inStockCount: number;
+      pendingOrders: number;
+      /** Comercios que pueden ver la tienda. */
+      reach: number;
+      createdAt: string;
+    };
+
+export interface StorefrontProduct {
+  externalId: string;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  sku: string | null;
+  ean: string | null;
+  imageUrl: string | null;
+  /** Neto, sin IVA, en `currency`. */
+  price: number | null;
+  finalPrice: number | null;
+  currency: string | null;
+  ivaPercent: number | null;
+  stock: number | null;
+  /** Cargado a mano (no vino de la planilla). */
+  manual: boolean;
+  updatedAt: string;
+}
+
+export interface StorefrontProductInput {
+  name: string;
+  brand?: string | null;
+  category?: string | null;
+  sku?: string | null;
+  ean?: string | null;
+  imageUrl?: string | null;
+  description?: string | null;
+  price: number;
+  currency: "USD" | "ARS";
+  ivaPercent?: number;
+  stock: number;
+}
+
+export interface StorefrontOrder {
+  id: string;
+  status: StorefrontOrderStatus;
+  note: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+  buyer: { name: string; phone: string | null; email: string | null; person: string | null };
+  notes: string | null;
+  /** Total en USD como lo vio el comprador. */
+  total: number | null;
+  quoteRate: number | null;
+  items: { externalId: string; name: string; sku: string | null; qty: number; unitPrice: number | null; stockNow: number | null }[];
+}
+
+export type UpgradeKind = "DISTRIBUTOR" | "BRAND";
+/** PENDING = en la bandeja de NODO; CONTACTED = ya la atendieron; DONE = cerrada. */
+export type UpgradeStatus = "PENDING" | "CONTACTED" | "DONE";
+
+export interface UpgradeRequest {
+  id: string;
+  kind: UpgradeKind;
+  status: UpgradeStatus;
+  message: string | null;
+  contact: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+export interface AdminStorefront {
+  id: string;
+  retailerTenantId: string;
+  name: string;
+  provider: Provider;
+  status: StorefrontStatus;
+  suspendedReason: string | null;
+  hiddenReason: StorefrontHiddenReason | null;
+  stockConfirmedAt: string | null;
+  contactPhone: string | null;
+  products: number;
+  orders: number;
+  pendingOrders: number;
+  createdAt: string;
+}
+
+export const storefrontApi = {
+  mine: () => api.get<MyStorefront>("/my/storefront"),
+  open: (data: { contactPhone?: string | null; contactNote?: string | null }) => api.post<MyStorefront>("/my/storefront", data),
+  update: (data: { contactPhone?: string | null; contactNote?: string | null; status?: "ACTIVE" | "PAUSED" }) =>
+    api.put<MyStorefront>("/my/storefront", data),
+  confirmStock: () => api.post<MyStorefront>("/my/storefront/confirm-stock"),
+  products: (q?: string) => api.get<{ items: StorefrontProduct[]; total: number }>("/my/storefront/products", { params: q ? { q } : {} }),
+  addProduct: (data: StorefrontProductInput) => api.post<{ externalId: string }>("/my/storefront/products", data),
+  updateProduct: (externalId: string, data: Partial<StorefrontProductInput>) =>
+    api.put<{ externalId: string }>(`/my/storefront/products/${encodeURIComponent(externalId)}`, data),
+  removeProduct: (externalId: string) => api.delete<{ removed: true }>(`/my/storefront/products/${encodeURIComponent(externalId)}`),
+  orders: (status?: StorefrontOrderStatus) =>
+    api.get<StorefrontOrder[]>("/my/storefront/orders", { params: status ? { status } : {} }),
+  respond: (id: string, action: "CONFIRM" | "REJECT", note?: string) =>
+    api.post<{ id: string; status: StorefrontOrderStatus }>(`/my/storefront/orders/${id}/respond`, { action, note }),
+  cancelPurchase: (id: string) => api.post<{ id: string; status: "CANCELLED" }>(`/my/storefront-purchases/${id}/cancel`),
+  upgradeRequests: () => api.get<UpgradeRequest[]>("/my/upgrade-requests"),
+  requestUpgrade: (data: { kind: UpgradeKind; message?: string | null; contact?: string | null }) =>
+    api.post<UpgradeRequest>("/my/upgrade-requests", data),
+  adminList: () => api.get<AdminStorefront[]>("/admin/storefronts"),
+  adminSetStatus: (id: string, status: "ACTIVE" | "SUSPENDED", reason?: string) =>
+    api.put<{ id: string; status: StorefrontStatus }>(`/admin/storefronts/${id}/status`, { status, reason }),
 };

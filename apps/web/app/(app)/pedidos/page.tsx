@@ -12,6 +12,7 @@ import ProviderBadge from "@/components/ProviderBadge";
 import { buildSellerMessageFromOrder } from "@/lib/seller-message";
 import { formatUSD } from "@/lib/format";
 import { usePurchasePolicy } from "@/lib/purchase";
+import StorefrontPurchaseStatus from "@/components/storefront/StorefrontPurchaseStatus";
 import {
   applySchemeToLine,
   lineAmounts,
@@ -553,11 +554,11 @@ function OrderCard({
             <div className="flex items-center gap-2 flex-wrap">
               <ProviderBadge
                 provider={order.provider}
-                label={order.providerName}
+                label={order.storefrontStatus ? undefined : order.providerName}
                 variant="inline"
                 size="md"
               />
-              {offline && (
+              {offline && !order.storefrontStatus && (
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-200 bg-amber-500/15 border border-amber-500/25 rounded-md px-1.5 py-0.5">
                   Offline
                 </span>
@@ -596,7 +597,7 @@ function OrderCard({
               <span title={new Date(order.createdAt).toLocaleString("es-AR")}>{fecha(order.createdAt)}</span>
             </div>
           </div>
-          <Estado esperando={esperando} creado={creado} rechazado={rechazado} offline={offline} />
+          <Estado esperando={esperando} creado={creado} rechazado={rechazado} offline={offline} storefront={order.storefrontStatus} />
         </div>
 
         {/* Meta del pedido (como en carrito / checkout) */}
@@ -628,6 +629,10 @@ function OrderCard({
           <p className="text-xs text-red-300 leading-snug rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
             {order.errorMessage}
           </p>
+        )}
+
+        {order.storefrontStatus && !esperando && !rechazado && (
+          <StorefrontPurchaseStatus order={order} onUpdated={onUpdated} onAviso={onAviso} />
         )}
 
         {/* Ítems */}
@@ -1049,7 +1054,7 @@ function OrderCard({
                   </button>
                 )
               )}
-              {offline && (
+              {offline && !order.storefrontStatus && (
                 <button
                   type="button"
                   onClick={() => void copyMessage()}
@@ -1059,7 +1064,7 @@ function OrderCard({
                   {copied ? "Copiado" : "Copiar mensaje"}
                 </button>
               )}
-              {!editing && (
+              {!editing && !order.storefrontStatus && (
                 <button
                   type="button"
                   onClick={() => void shareInChat()}
@@ -1121,11 +1126,30 @@ function MetaChip({
 }
 
 function Estado({
-  esperando, creado, rechazado, offline,
+  esperando, creado, rechazado, offline, storefront,
 }: {
   esperando: boolean; creado: boolean; rechazado: boolean; offline: boolean;
+  /** Pedido a la tienda de otro comercio: manda lo que respondió la tienda. */
+  storefront?: TenantOrder["storefrontStatus"];
 }) {
   const base = "inline-flex items-center gap-1 text-[10px] font-semibold flex-shrink-0 rounded-full px-2 py-1";
+  if (storefront && !esperando && !rechazado) {
+    const tone =
+      storefront === "CONFIRMED"
+        ? "text-emerald-300 bg-emerald-500/10 ring-emerald-500/20"
+        : storefront === "PENDING"
+          ? "text-sky-300 bg-sky-500/10 ring-sky-500/25"
+          : storefront === "REJECTED"
+            ? "text-red-300 bg-red-500/10 ring-red-500/20"
+            : "text-surface-400 bg-surface-800 ring-surface-700";
+    const label = { PENDING: "Por confirmar", CONFIRMED: "Confirmado", REJECTED: "Rechazado por la tienda", CANCELLED: "Cancelado" }[storefront];
+    const Icon = storefront === "CONFIRMED" ? CheckCircle2 : storefront === "PENDING" ? Clock : XCircle;
+    return (
+      <span className={`${base} ring-1 ${tone}`}>
+        <Icon className="w-3 h-3" /> {label}
+      </span>
+    );
+  }
   if (esperando) {
     return (
       <span className={`${base} text-amber-300 bg-amber-500/15 ring-1 ring-amber-500/25`}>

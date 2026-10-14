@@ -997,3 +997,26 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: `{ count: number }`
 - **Estado**: IMPLEMENTADO
 - **Notas**: Base fija de 6 más los comercios (`RETAILER`, activos, no `managedByPlatform`) dados de alta desde el 2026-10-05. Cache de 5 min. Reemplaza a `/public/launch-promo` (se sacó la promo de 15% off).
+
+### [FEATURE] Vender en NODO (tienda del comercio)
+- **Método / Ruta** (comercio, dueño o administrador con `providers.manage`; las de escritura requieren la capacidad `storefront` del plan):
+  - `GET /my/storefront` → `{ exists: false }` o `{ exists: true, id, name, provider, status, suspendedReason, stockConfirmedAt, stockExpiresAt, stockValidDays, hiddenReason, visible, contactPhone, contactNote, productCount, inStockCount, pendingOrders, reach, createdAt }`.
+  - `POST /my/storefront` body `{ contactPhone?, contactNote? }`: abre la tienda (idempotente; reactiva si estaba pausada; 403 si NODO la frenó).
+  - `PUT /my/storefront` body `{ contactPhone?, contactNote?, status?: ACTIVE|PAUSED }`.
+  - `POST /my/storefront/confirm-stock`: el stock vale `stockValidDays` (3) días más.
+  - `GET /my/storefront/products?q=` → `{ items: [{ externalId, name, brand, category, sku, ean, imageUrl, price (neto), finalPrice, currency, ivaPercent, stock, manual, updatedAt }], total }`.
+  - `POST /my/storefront/products` body `{ name, brand?, category?, sku?, ean?, imageUrl? (https), description?, price (neto > 0), currency: USD|ARS, ivaPercent?: 0|10.5|21|27, stock (entero ≥ 0) }` → `{ externalId }` (`M-…`).
+  - `PUT /my/storefront/products/:externalId` body parcial `{ name?, brand?, category?, price?, currency?, ivaPercent?, stock? }`. `DELETE /my/storefront/products/:externalId`.
+  - La planilla va por el importador de listas (`/providers/:provider/imports`, perfil de lectura, revisión): el dueño escribe la lista **base** de su tienda. Aplicarla confirma el stock.
+  - `GET /my/storefront/orders?status=PENDING|CONFIRMED|REJECTED|CANCELLED` → pedidos aprobados por el comprador: `{ id, status, note, respondedAt, createdAt, buyer: { name, phone, email, person }, notes, total, quoteRate, items: [{ externalId, name, sku, qty, unitPrice, stockNow }] }`.
+  - `POST /my/storefront/orders/:id/respond` body `{ action: CONFIRM|REJECT, note? }` (rechazar exige motivo; confirmar descuenta stock; 409 si ya se respondió).
+  - Comprador: `POST /my/storefront-purchases/:id/cancel` (solo mientras está `PENDING`).
+  - `GET /my/upgrade-requests` · `POST /my/upgrade-requests` body `{ kind: DISTRIBUTOR|BRAND, message?, contact? }`: entra a la bandeja Solicitudes (`SUPPLIER_JOIN`).
+  - Superadmin: `GET /admin/storefronts` · `PUT /admin/storefronts/:id/status` body `{ status: ACTIVE|SUSPENDED, reason? }` (frenar exige motivo).
+- **Cambios en endpoints existentes**:
+  - `GET /my/providers`: las tiendas de otros comercios vienen con `storefront: true`, `name` = nombre del comercio, `selfConnected: true`, sin `linkId` ni vendedor; no ocupan lugar del plan.
+  - `POST /orders/offline` a una tienda: valida que lo pedido esté publicado y no supere el stock; el pedido sale con `storefrontStatus: PENDING` y no es editable. `GET /orders` agrega `storefrontStatus`, `storefrontNote`, `storefrontRespondedAt`.
+  - `GET /providers/:p/freshness` de una tienda: cualquier comercio lee las fechas; cargarle listas es solo del dueño (403 para el resto).
+  - `GET /my/catalog-api` y la foto del catálogo no incluyen tiendas de otros comercios.
+- **Estado**: IMPLEMENTADO.
+- **Notas**: Diseño en `docs/PLAN_VENDER_EN_NODO.md`. La tienda es un `Tenant` DISTRIBUTOR `LIST_*` (nombre "<comercio> (local)") vinculado por `Storefront` al comercio, y con vínculo `LIST_CONNECTED` a cada comercio activo (al abrirla, al aplicar una lista y cada 15 min).

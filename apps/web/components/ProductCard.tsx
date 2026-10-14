@@ -36,7 +36,7 @@ import ProductSyncedAt from "./ProductSyncedAt";
 import { ListOverdueHint } from "@/components/list-import/ListFreshnessHints";
 import ArsPriceHint from "./ArsPriceHint";
 
-import { providerLabel } from "@/components/ProviderBadge";
+import { isStorefrontProvider, providerLabel } from "@/components/ProviderBadge";
 /**
  * Tarjeta de producto.
  *
@@ -59,12 +59,13 @@ function ProviderPill({ provider }: { provider: string }) {
   const customColor = display.textColor(provider);
   const name = providerLabel(provider);
   const initials = name.slice(0, 2).toUpperCase();
+  const local = isStorefrontProvider(provider);
 
   return (
     <span
       className="pc__prov"
       style={customColor ? ({ ["--pv"]: customColor } as React.CSSProperties) : undefined}
-      title={name}
+      title={local ? `${name} · local que vende en NODO` : name}
     >
       <span>
         {logoUrl ? (
@@ -75,6 +76,11 @@ function ProviderPill({ provider }: { provider: string }) {
         )}
       </span>
       {name}
+      {local && (
+        <span className="flex-shrink-0 rounded border border-emerald-300 bg-emerald-50 px-1 text-[9px] font-semibold uppercase leading-[14px] tracking-wide text-emerald-700">
+          Local
+        </span>
+      )}
     </span>
   );
 }

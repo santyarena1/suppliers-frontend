@@ -120,6 +120,12 @@ export default function SearchDefaultsSettings() {
             title="Incluir sin stock"
             hint="Listar también los productos con stock 0."
           />
+          <Toggle
+            on={searchDefaults.storefronts}
+            onClick={() => set("storefronts", !searchDefaults.storefronts)}
+            title="Incluir lo que publican otros locales"
+            hint="Comercios de NODO que venden parte de su stock. Apagado, no entran en la búsqueda al empezar, pero los elegís igual en el filtro Distribuidor."
+          />
         </div>
       </section>
     </>

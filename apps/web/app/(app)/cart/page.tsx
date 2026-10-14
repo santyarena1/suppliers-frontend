@@ -62,6 +62,7 @@ import { isFiltering } from "@/lib/cartPeople";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
 import type { PendingOrderProvider } from "@/lib/pendingOrders";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
+import StorefrontCartAction from "@/components/storefront/StorefrontCartAction";
 import { capabilityAllowed, useSubscription } from "@/lib/subscription";
 
 type PerceptionLine = { label: string; amount: number };
@@ -817,12 +818,22 @@ function CartPageInner() {
     if (groups.length === 0) return;
     setConfirmingList(provider);
     setNotice(null);
+    const store = myProviders.find((mp) => mp.provider === provider);
     try {
       const res = await ordersApi.createOffline(groups);
       const held = heldForApproval(res.data);
-      if (!held) await copySellerMessage();
       clearProvider(provider, channelTab);
       setActiveTab("all");
+      // Tienda de otro comercio: el pedido le llega por NODO y la tienda lo confirma.
+      if (store?.storefront) {
+        setNotice(
+          held
+            ? `Pedido guardado, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, le llega a ${store.name}.`
+            : `Le enviamos el pedido a ${store.name}. Te avisamos cuando lo confirme; lo seguís en Pedidos.`
+        );
+        return;
+      }
+      if (!held) await copySellerMessage();
       setNotice(held ? "Pedido guardado en Nodo, esperando la aprobación del dueño o un administrador. Cuando lo aprueben, lo ves en Pedidos y ahí copiás el mensaje para el vendedor." : "Pedido guardado en Nodo. El mensaje quedó copiado para mandárselo al vendedor. Si cambia algo, lo editás en Pedidos.");
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -1039,7 +1050,7 @@ function CartPageInner() {
                 {pedidosOpen && (
                   <div className="absolute right-0 top-full mt-1.5 w-64 bg-surface-950 border border-surface-800 shadow-xl z-30 py-1 max-h-80 overflow-y-auto">
                     <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Historial</p>
-                    {myProviders.filter((mp) => mp.linked && mp.configured !== false && providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && mp.configured !== false && !mp.storefront && providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
                         href={providerOrdersHref(p, pricesFromList(p))}
@@ -1052,7 +1063,7 @@ function CartPageInner() {
                     ))}
                     <div className="h-px bg-surface-800 my-1" />
                     <p className="px-3 pt-1.5 pb-1 text-[10px] uppercase tracking-[0.16em] text-surface-500">Distribuidores</p>
-                    {myProviders.filter((mp) => mp.linked && mp.configured !== false && !providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
+                    {myProviders.filter((mp) => mp.linked && mp.configured !== false && !mp.storefront && !providerHasOrderHistory(mp.provider, pricesFromList(mp.provider))).map((mp) => mp.provider).map((p) => (
                       <Link
                         key={p}
                         href={providerOrdersHref(p)}
@@ -1271,7 +1282,15 @@ function CartPageInner() {
                       <UpsellNotice capability="directCheckout" compact className="self-start" />
                     </div>
                   )}
-                  {activeTab !== "all" && pricesFromList(activeTab) && viewItems.length > 0 && (
+                  {activeTab !== "all" && viewItems.length > 0 && myProviders.find((mp) => mp.provider === activeTab)?.storefront && (
+                    <StorefrontCartAction
+                      name={myProviders.find((mp) => mp.provider === activeTab)?.name ?? providerLabel(activeTab)}
+                      sending={confirmingList === activeTab}
+                      disabled={confirmingList !== null}
+                      onSend={() => void confirmListOrder(activeTab)}
+                    />
+                  )}
+                  {activeTab !== "all" && pricesFromList(activeTab) && viewItems.length > 0 && !myProviders.find((mp) => mp.provider === activeTab)?.storefront && (
                     <div className="cart-action flex flex-col gap-2">
                       <p className="text-xs text-sky-200/80">
                         {myProviders.find((mp) => mp.provider === activeTab)?.name ?? activeTab} cotiza por lista: el pedido se guarda en Nodo y el mensaje queda copiado para el vendedor. No se carga en ningún portal.

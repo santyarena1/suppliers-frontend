@@ -84,8 +84,15 @@ function SearchPage() {
   const viewingAsSeller = useSellerSession().viewingAsSeller;
   const iibbEpoch = useIibbRatesEpoch();
   const searchable = useMemo(() => myProviders.filter(isSearchable), [myProviders]);
+  // Las tiendas de otros comercios (Vender en NODO) entran a la búsqueda inicial
+  // según Configuración → Búsqueda; en el filtro Distribuidor se eligen igual.
+  const [storefrontsByDefault] = useState(() => readSearchDefaults().storefronts);
+  const defaultProviders = useMemo(
+    () => (storefrontsByDefault ? searchable : searchable.filter((p) => !p.storefront)),
+    [searchable, storefrontsByDefault]
+  );
   const outOfSearch = useMemo(
-    () => myProviders.filter((p) => p.linked && !p.platformHidden && p.inSearch === false),
+    () => myProviders.filter((p) => p.linked && !p.platformHidden && p.inSearch === false && !p.storefront),
     [myProviders]
   );
   const anyOffline = searchable.some((p) => purchasePolicies[p.provider]?.acceptsOffline);
@@ -327,7 +334,7 @@ function SearchPage() {
     if (!q && brands.size === 0 && categories.size === 0 && !onlyProviders) return;
     const providerList =
       chosenProviders.size === 0 && !touchedFilters
-        ? searchable.map((p) => p.provider)
+        ? defaultProviders.map((p) => p.provider)
         : searchable.filter((p) => chosenProviders.has(p.provider)).map((p) => p.provider);
     const brandProviders = providerList.length > 0 && providerList.length < searchable.length ? providerList : undefined;
 
@@ -657,10 +664,10 @@ function SearchPage() {
   // Al entrar, todos los proveedores del comercio están seleccionados. Si la lista
   // llega después, se completa sola; si ya tocaste los filtros, no se pisa.
   useEffect(() => {
-    if (touchedFilters || searchable.length === 0) return;
-    setSelectedProviders(new Set(searchable.map((p) => p.provider)));
+    if (touchedFilters || defaultProviders.length === 0) return;
+    setSelectedProviders(new Set(defaultProviders.map((p) => p.provider)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchable.length, touchedFilters]);
+  }, [defaultProviders.length, touchedFilters]);
 
   // Si la URL pedía buscar y los proveedores todavía no habían llegado, la
   // primera corrida sale vacía. Cuando aparece el listado, se reintenta una vez.
@@ -677,7 +684,7 @@ function SearchPage() {
       brand: urlMarca || undefined,
       brands: urlMarca ? new Set([urlMarca]) : new Set(),
       categories: urlCategoria ? new Set([urlCategoria]) : new Set(),
-      providers: new Set(searchable.map((p) => p.provider)),
+      providers: new Set(defaultProviders.map((p) => p.provider)),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchable.length, hydrated]);
@@ -829,7 +836,7 @@ function SearchPage() {
   const activeFilterCount =
     selectedBrands.size +
     selectedCategories.size +
-    (selectedProviders.size < searchable.length ? 1 : 0) +
+    (selectedProviders.size !== defaultProviders.length ? 1 : 0) +
     (includeOutOfStock ? 1 : 0) +
     (priceView !== "list" ? 1 : 0) +
     (hideNoImage ? 1 : 0) +
@@ -873,7 +880,8 @@ function SearchPage() {
     () =>
       searchable.map((p) => ({
         value: p.provider,
-        label: p.name || p.provider,
+        // Cada local que vende en NODO aparece como un proveedor más, marcado.
+        label: p.storefront ? `${p.name || p.provider} · Local` : p.name || p.provider,
       })),
     [searchable]
   );
