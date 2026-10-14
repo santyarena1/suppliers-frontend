@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Play } from "lucide-react";
 import { SearchDemo } from "./SearchDemo";
 
 /**
@@ -21,8 +21,8 @@ export function Hero() {
             <a href="#probar" className="nl-btn nl-btn--primary">
               Probar 14 días gratis <ArrowRight className="h-4 w-4" aria-hidden />
             </a>
-            <a href="#planes" className="nl-btn nl-btn--ghost">
-              Ver planes
+            <a href="#como-funciona" className="nl-btn nl-btn--ghost">
+              <Play className="h-4 w-4" aria-hidden /> Ver la demo · 2 min
             </a>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import "./nodo-landing.css";
-import { BeforeAfter } from "@/components/marketing/BeforeAfter";
+import { DemoVideo } from "@/components/marketing/DemoVideo";
 import { CheckoutDemo } from "@/components/marketing/CheckoutDemo";
 import { Communications } from "@/components/marketing/Communications";
 import { Contact } from "@/components/marketing/Contact";
@@ -15,13 +15,12 @@ import { Pricing } from "@/components/marketing/Pricing";
 import { Savings } from "@/components/marketing/Savings";
 import { Signup } from "@/components/marketing/Signup";
 import { StackedSections } from "@/components/marketing/StackedSections";
-import { StatsDemo } from "@/components/marketing/StatsDemo";
 import { Steps } from "@/components/marketing/Steps";
 
 /**
  * Landing de NODO: qué resuelve (comparar y comprar a todos los distribuidores
  * en un lugar), cuánto ahorra (calculadora con los números del visitante),
- * cómo se ve (demos del producto) y cuánto cuesta (Pro destacado).
+ * cómo se ve (video y demos del producto) y cuánto cuesta (Pro destacado).
  */
 export default function LandingPage() {
   return (
@@ -32,7 +31,7 @@ export default function LandingPage() {
         {/* Cada sección es una hoja que sube y tapa a la anterior. */}
         <StackedSections>
         <Hero />
-        <BeforeAfter />
+        <DemoVideo />
         <CostDemo />
         <MarginDemo />
         <CheckoutDemo />
@@ -41,7 +40,6 @@ export default function LandingPage() {
         <Savings />
         <Steps />
         <Pricing />
-        <StatsDemo />
         <Faq />
         <Signup />
         <Contact />
