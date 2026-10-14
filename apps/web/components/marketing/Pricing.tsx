@@ -5,7 +5,7 @@ import { Check, ChevronDown, Minus } from "lucide-react";
 import { PLAN_CATALOG, PLAN_FEATURE_GROUPS, TENANT_PLANS, type PlanCell, type TenantPlan } from "@/lib/plans";
 import { Reveal } from "./Reveal";
 import { SupplyPlans } from "./SupplyPlans";
-import { LaunchPromo } from "./LaunchPromo";
+import { RetailersJoined } from "./RetailersJoined";
 import { CatalogApiPitch } from "./CatalogApiPitch";
 import { rememberTrialPlan, TRIAL_DAYS, type TrialPlan } from "@/lib/trial-plan";
 import { NODO_WHATSAPP_LABEL, whatsappUrl } from "@/lib/contact";
@@ -117,7 +117,7 @@ export function Pricing() {
                   <p className="relative mt-1 h-5 text-sm text-[var(--fg-3)]">
                     {def.setupFee ? `Más ${price(def.setupFee)} de puesta en marcha, una sola vez` : def.priceFrom ? "Según el desarrollo que necesites" : "Sin costo de alta"}
                   </p>
-                  {pro && <LaunchPromo monthlyPrice={def.monthlyPrice} />}
+                  {pro && <RetailersJoined />}
 
                   <a
                     href={c.plan === "CUSTOM" ? whatsappUrl(CUSTOM_WHATSAPP_TEXT) : "#probar"}

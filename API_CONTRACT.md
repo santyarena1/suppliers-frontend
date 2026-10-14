@@ -988,3 +988,12 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Auth**: Bearer, `ROLE_ADMIN`.
 - **Estado**: IMPLEMENTADO (primera entrega).
 - **Notas**: Todo queda como propuesta en `EnrichmentProposal`; nada escribe en `ProviderSyncCache` ni en lo que lee el buscador. "Aplicar a las fichas" está deshabilitado hasta elegir la regla (spec `docs/PLAN_ENRIQUECIMIENTO.md`). Una corrida a la vez; al llegar al tope de costo sigue sin IA. Fuentes: Open Icecat (`ICECAT_USERNAME`), webs oficiales (ASUS, Lenovo PSREF, TP-Link, HyperX, Redragon), fichas de distribuidores, IA de `CatalogEnrichmentSettings`.
+
+### [FEATURE] Comercios que ya usan NODO (landing)
+- **Método**: GET
+- **Ruta**: `/public/retailers-joined`
+- **Auth**: no requerido (público, 30 pedidos/min)
+- **Body / Params**: ninguno
+- **Respuesta esperada**: `{ count: number }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Base fija de 6 más los comercios (`RETAILER`, activos, no `managedByPlatform`) dados de alta desde el 2026-10-05. Cache de 5 min. Reemplaza a `/public/launch-promo` (se sacó la promo de 15% off).
