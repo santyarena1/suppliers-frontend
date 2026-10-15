@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, FileSpreadsheet, Loader2, Plug, Plus, Search, Ticket, X } from "lucide-react";
 import RedeemAccessCode from "@/components/RedeemAccessCode";
@@ -80,8 +81,10 @@ export default function AddSupplierDialog({ open, onClose, kind, onConnected }: 
   }
 
   const exactExists = rows.some((r) => r.name.trim().toLowerCase() === query.trim().toLowerCase());
+  if (typeof document === "undefined") return null;
 
-  return (
+  // Portal al body: abierto desde el sidebar (que tiene transform) quedaba encerrado adentro.
+  return createPortal(
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={onClose}>
         <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg bg-surface-950 border border-surface-800 rounded-2xl shadow-2xl flex flex-col max-h-[90dvh]">
@@ -231,6 +234,7 @@ export default function AddSupplierDialog({ open, onClose, kind, onConnected }: 
           onClose();
         }}
       />
-    </>
+    </>,
+    document.body
   );
 }

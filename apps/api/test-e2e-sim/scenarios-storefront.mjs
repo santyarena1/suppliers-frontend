@@ -753,4 +753,49 @@ async function v12Sheets(ctx) {
   s.check("desconectar → sin planilla", off.status === 200 && off.data?.sheet === null, off.data);
 }
 
-export const storefrontScenarios = [v1Open, v2Publish, v3Manual, v4Orders, v5Approval, v6Visibility, v7NewRetailer, v10Profile, v11Private, v12Sheets, v8Upgrade, v9Probes];
+async function v13Directory(ctx) {
+  const s = scenario("V13", "Comercio nuevo: distribuidores para conectar");
+  const fresh = await retailer(ctx, "sfg", `Recien Llegado ${ctx.stamp}`);
+  const empty = await ctx.prisma.tenant.create({
+    data: { name: `Sin Catalogo ${ctx.stamp}`, type: "DISTRIBUTOR", providerKey: `LIST_SIN_CATALOGO_${ctx.stamp}` },
+  });
+  const rows = await providersOf(fresh.token);
+  const unlinked = rows.filter((r) => !r.linked);
+  s.check("ve distribuidores para conectar (sin estar vinculado)", unlinked.length > 0, unlinked.map((r) => r.provider));
+  const keys = unlinked.map((r) => r.provider);
+  const withCache = await ctx.prisma.providerSyncCache.groupBy({ by: ["provider"], where: { provider: { in: keys } } });
+  const cached = new Set(withCache.map((r) => r.provider));
+  s.check("todos tienen catálogo obtenido por alguien", keys.every((k) => cached.has(k)), keys.filter((k) => !cached.has(k)));
+  s.check("no aparece un distribuidor del que nadie obtuvo catálogo", !keys.includes(empty.providerKey), null);
+  const stores = await ctx.prisma.storefront.findMany({ select: { supplierTenant: { select: { providerKey: true } } } });
+  const storeKeys = new Set(stores.map((x) => x.supplierTenant.providerKey));
+  s.check("nunca aparece la tienda de un local", !rows.some((r) => storeKeys.has(r.provider) && !r.storefront) && !unlinked.some((r) => storeKeys.has(r.provider)), rows.filter((r) => storeKeys.has(r.provider)));
+  s.check("tampoco aparecen tiendas como conectadas sin aceptarlas", !rows.some((r) => r.storefront), rows.filter((r) => r.storefront).map((r) => r.provider));
+  const listKey = keys.find((k) => k.startsWith("LIST_"));
+  s.check("aparecen proveedores por lista (los que alguien subió)", Boolean(listKey), keys);
+  // Los distribuidores demo del recorrido inicial sí traen productos de ejemplo: esos no cuentan.
+  const offersBefore = await ctx.prisma.tenantProductOffer.count({ where: { tenantId: fresh.tenantId, active: true, NOT: { provider: { startsWith: "LIST_DEMO_" } } } });
+  s.check("sin conectar nada no tiene productos (fuera de los demo del recorrido)", offersBefore === 0, { offersBefore });
+  if (listKey) {
+    const baseRows = await ctx.prisma.supplierBaseOffer.count({ where: { provider: listKey } });
+    const conn = await api("POST", `/my/providers/${listKey}/connect-list`, { token: fresh.token });
+    s.check("«Cargar mi lista» lo conecta por lista", conn.status === 201 && conn.data?.provider === listKey, conn);
+    await sleep(800);
+    const mine = await ctx.prisma.tenantProductOffer.count({ where: { tenantId: fresh.tenantId, provider: listKey, active: true } });
+    s.check("y no le trae precios de otro comercio (solo la lista base pública, si la hay)", baseRows > 0 ? mine <= baseRows : mine === 0, { mine, baseRows });
+    const row = (await providersOf(fresh.token)).find((r) => r.provider === listKey);
+    s.check("queda conectado para subir su lista", row?.linked === true, row);
+  }
+  const storeKey = [...storeKeys][0];
+  if (storeKey) {
+    const viaList = await api("POST", `/my/providers/${storeKey}/connect-list`, { token: fresh.token });
+    s.check("una tienda no se conecta por ese camino (404)", viaList.status === 404, viaList);
+  }
+  for (const bad of ["../../x", "elit", "%00"]) {
+    const r = await api("POST", `/my/providers/${encodeURIComponent(bad)}/connect-list`, { token: fresh.token });
+    s.check(`clave inválida (${bad}) → 4xx`, r.status >= 400 && r.status < 500, r);
+  }
+  await ctx.prisma.tenant.delete({ where: { id: empty.id } });
+}
+
+export const storefrontScenarios = [v1Open, v2Publish, v3Manual, v4Orders, v5Approval, v6Visibility, v7NewRetailer, v10Profile, v11Private, v12Sheets, v13Directory, v8Upgrade, v9Probes];

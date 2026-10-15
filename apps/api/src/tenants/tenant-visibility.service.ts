@@ -285,21 +285,25 @@ export class TenantVisibilityService {
       });
     }
 
-    // Directorio abierto: todo comercio ve todos los distribuidores integrados a
-    // NODO y se conecta cargando su cuenta (eso crea el vínculo, ver ensureLinked).
+    // Directorio abierto: todo comercio ve los distribuidores de NODO de los que
+    // alguien ya obtuvo el catálogo (sincronizando su cuenta o subiendo una lista) y
+    // se conecta con su cuenta o con su propia lista; ve sus precios, no los de otro.
     // Los códigos de acceso siguen funcionando igual; con PROVIDER_DIRECTORY_OPEN=false
     // se vuelve a que solo aparezca lo vinculado por código o publicidad.
     if (providerDirectoryOpen()) {
       const directorio = await this.prisma.tenant.findMany({
-        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null } },
+        // Las tiendas de comercios no van al directorio: se ven solo si el comercio las acepta.
+        where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null }, storefrontOf: { is: null } },
         select: { id: true, name: true, providerKey: true },
       });
+      const withCatalog = await this.providersWithCatalog(
+        directorio.map((d) => d.providerKey as string).filter((k) => !visibles.has(k))
+      );
       for (const d of directorio) {
         const key = d.providerKey as Provider;
-        // Solo los integrados a la plataforma: las listas son de cada comercio.
-        if (isListProviderKey(key)) continue;
-        if (isDemoDistributorKey(key) && !includeDemo) continue;
+        if (isDemoDistributorKey(key)) continue;
         if (visibles.has(key) || d.id === tenantId) continue;
+        if (!withCatalog.has(key)) continue;
         visibles.set(key, {
           provider: key,
           name: d.name,
@@ -347,6 +351,11 @@ export class TenantVisibilityService {
     const storefronts = await this.storefrontsByKey();
     for (const [key, sf] of storefronts) {
       if (!visibles.has(key)) continue;
+      // Una tienda solo se ve con su vínculo (la aceptó). Sin él, no existe para este comercio.
+      if (!visibles.get(key)!.linked) {
+        visibles.delete(key);
+        continue;
+      }
       if (sf.retailerTenantId === tenantId || storefrontHiddenReason(sf, now) !== null) {
         visibles.delete(key);
         continue;
@@ -521,6 +530,18 @@ export class TenantVisibilityService {
       }),
     ]);
     return { provider, disconnected: true };
+  }
+
+  /**
+   * Proveedores de los que alguien ya obtuvo el catálogo (hay fichas). Una
+   * consulta por clave con el índice (provider, name): no recorre la tabla.
+   */
+  private async providersWithCatalog(providers: string[]): Promise<Set<string>> {
+    if (providers.length === 0) return new Set();
+    const rows = await this.prisma.$queryRaw<{ provider: string }[]>`
+      SELECT k AS provider FROM unnest(${providers}::text[]) AS k
+      WHERE EXISTS (SELECT 1 FROM "ProviderSyncCache" c WHERE c."provider" = k)`;
+    return new Set(rows.map((r) => r.provider));
   }
 
   /** Proveedores con al menos una oferta activa con precio de este comercio. */

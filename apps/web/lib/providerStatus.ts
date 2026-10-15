@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadLinkedProviders, providersApi, type ProviderStatus } from "@/lib/api";
+import { listImportsApi, loadLinkedProviders, providersApi, type FreshnessStatus, type ProviderStatus } from "@/lib/api";
+import { connectsByList } from "@/lib/providerDot";
 
-export type ProviderStatusMap = Partial<Record<string, ProviderStatus>>;
+/** Estado de cada proveedor; los de lista traen además la vigencia de la lista. */
+export type ProviderStatusMap = Partial<Record<string, ProviderStatus & { listFreshness?: FreshnessStatus }>>;
 
 let cache: ProviderStatusMap | null = null;
 let inflight: Promise<ProviderStatusMap> | null = null;
@@ -16,10 +18,18 @@ async function load(force = false): Promise<ProviderStatusMap> {
 
   inflight = loadLinkedProviders()
     .then(async (providers) => {
-      const results = await Promise.allSettled(providers.map((p) => providersApi.status(p)));
+      const [results, fresh] = await Promise.all([
+        Promise.allSettled(providers.map((p) => providersApi.status(p))),
+        Promise.allSettled(providers.map((p) => (connectsByList(p) ? listImportsApi.freshness(p) : Promise.resolve(null)))),
+      ]);
       const map: ProviderStatusMap = {};
       results.forEach((r, i) => {
-        if (r.status === "fulfilled") map[providers[i]] = r.value.data;
+        if (r.status !== "fulfilled") return;
+        const f = fresh[i];
+        map[providers[i]] = {
+          ...r.value.data,
+          ...(f.status === "fulfilled" && f.value ? { listFreshness: f.value.data.status } : {}),
+        };
       });
       cache = map;
       fetchedAt = Date.now();

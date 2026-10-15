@@ -12,7 +12,8 @@ import { invalidateMyModules, useMyModules, useMyPermissions } from "@/lib/permi
 import { useSellerSession } from "@/lib/sale-price";
 import { invalidateTgsEnabled, useTgsEnabled } from "@/lib/tgs";
 import { useResults } from "@/lib/results";
-import { canSyncProvider, type Provider, type ProviderStatus } from "@/lib/api";
+import { type Provider } from "@/lib/api";
+import { DOT_CLASS, providerDotTitle, providerDotTone } from "@/lib/providerDot";
 import { useMyProviders } from "@/lib/myProviders";
 import { useProviderStatuses } from "@/lib/providerStatus";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -51,12 +52,6 @@ function persistOpenSection(id: NavSectionId | null) {
   else localStorage.removeItem(OPEN_SECTION_KEY);
 }
 
-function statusDot(status: ProviderStatus | undefined, loading: boolean) {
-  if (loading && !status) return "bg-surface-700 animate-pulse";
-  if (!canSyncProvider(status)) return "bg-surface-600";
-  if (status?.lastSyncedAt) return "bg-emerald-500";
-  return "bg-amber-500";
-}
 
 interface Props {
   mobileOpen: boolean;
@@ -293,7 +288,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
             {linkedProviders.length === 0 ? (
               <p className="px-2.5 py-1.5 text-[11px] text-surface-600">Sin proveedores vinculados</p>
             ) : (
-              linkedProviders.map(({ provider, name }) => {
+              linkedProviders.map(({ provider, name, inSearch }) => {
                 const href = `/proveedores/${provider}`;
                 const active = isNavItemActive({ href, exact: true }, pathname);
                 return (
@@ -307,7 +302,16 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
                         : "text-surface-400 hover:text-surface-100 hover:bg-surface-800"
                     }`}
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot(statuses[provider as Provider], statusesLoading)}`} />
+                    {(() => {
+                      const st = statuses[provider as Provider];
+                      const tone = providerDotTone(provider, st, st?.listFreshness, statusesLoading, inSearch !== false);
+                      return (
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${DOT_CLASS[tone]}`}
+                          title={tone === "loading" ? undefined : providerDotTitle(provider, tone, st?.listFreshness)}
+                        />
+                      );
+                    })()}
                     <ProviderBadge
                       provider={provider}
                       label={name}

@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
+import AvailableProviders from "@/components/AvailableProviders";
 import { ListFreshnessChip } from "@/components/list-import/ListFreshnessHints";
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
@@ -21,7 +22,7 @@ import SearchToggle from "@/components/subscription/SearchToggle";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import { capabilityAllowed, invalidateSubscription, useSubscription } from "@/lib/subscription";
 import { type SyncHealth } from "@/components/SyncHealthBanner";
-import { Boxes, CheckCircle2, Clock, FileSpreadsheet, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Settings, Sparkles, StickyNote, XCircle } from "lucide-react";
+import { Boxes, CheckCircle2, Clock, FileSpreadsheet, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Settings, StickyNote, XCircle } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
@@ -192,6 +193,8 @@ export default function ProveedoresPage() {
 
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
+              {/* Lo primero que ve un comercio nuevo: con quién se puede conectar. */}
+              {retailer && <AvailableProviders providers={advertised} onConnected={() => void load(true)} />}
               {analyticsAllowed ? <LocalPurchaseDashboard /> : <UpsellNotice capability="advancedAnalytics" compact />}
               {retailer && (
                 <div className="border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100">
@@ -386,28 +389,6 @@ export default function ProveedoresPage() {
                   </div>
                 )}
               </section>
-
-              {advertised.length > 0 && (
-                <section>
-                  <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-widest mb-3">
-                    Podés conectarte — {advertised.length}
-                  </h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {advertised.map(({ provider, name }) => (
-                      <Link
-                        key={provider}
-                        href={`/proveedores/${provider}?tab=credentials`}
-                        className="bg-surface-900 border border-surface-800 hover:border-surface-600 rounded-xl p-4 flex items-center justify-between gap-3 transition-all"
-                      >
-                        <ProviderBadge provider={provider} label={name} variant="inline" size="md" />
-                        <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400">
-                          <Sparkles className="w-3 h-3" /> Cargá tu cuenta
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </section>
-              )}
 
               <section>
                 <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-widest mb-3">

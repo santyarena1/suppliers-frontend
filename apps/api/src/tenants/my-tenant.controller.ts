@@ -190,6 +190,14 @@ export class MyTenantController {
     return this.tenants.connectByList(tenant, supplierTenantId);
   }
 
+  /** "Cargar mi lista" desde el directorio: se conecta por lista con ese proveedor. */
+  @Post("providers/:provider/connect-list")
+  connectByListKey(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string) {
+    assertPermission(tenant, "providers.manage");
+    if (!/^[A-Z0-9_]{2,80}$/.test(provider)) throw new BadRequestException("Proveedor inválido");
+    return this.tenants.connectByListKey(tenant, provider);
+  }
+
   @Post("redeem-code")
   redeemCode(
     @CurrentTenant() tenant: TenantContext,

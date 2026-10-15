@@ -629,6 +629,11 @@ export const suppliersApi = {
     api.post<{ linkId: string; status: TenantLinkStatus; provider: Provider; tenantName: string; tenantType: TenantType }>(
       `/my/suppliers/${tenantId}/connect-by-list`
     ),
+  /** "Cargar mi lista" desde el directorio, por la clave del proveedor. */
+  connectListByProvider: (provider: string) =>
+    api.post<{ linkId: string; status: TenantLinkStatus; provider: Provider; tenantName: string; tenantType: TenantType }>(
+      `/my/providers/${encodeURIComponent(provider)}/connect-list`
+    ),
 };
 
 export interface ProviderMergeCandidate {

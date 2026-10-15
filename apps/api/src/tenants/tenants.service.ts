@@ -373,6 +373,21 @@ export class TenantsService {
     return { linkId: link.id, status: link.status, provider: providerKey, tenantName: supplier.name, tenantType: supplier.type };
   }
 
+  /**
+   * Conectarse por lista desde el directorio ("Cargar mi lista"), por la clave del
+   * proveedor. Las tiendas de comercios no: esas se aceptan aparte.
+   */
+  async connectByListKey(tenant: TenantContext, providerKey: string) {
+    const supplier = await this.prisma.tenant.findUnique({
+      where: { providerKey },
+      select: { id: true, type: true, active: true, storefrontOf: { select: { id: true } } },
+    });
+    if (!supplier || !supplier.active || supplier.type !== "DISTRIBUTOR" || supplier.storefrontOf) {
+      throw new NotFoundException("Proveedor no encontrado");
+    }
+    return this.connectByList(tenant, supplier.id);
+  }
+
   /** Clave `LIST_<SLUG>` libre: si el slug ya está tomado, agrega un sufijo numérico. */
   private async freeListProviderKey(name: string): Promise<string> {
     const base = makeListProviderKey(name);
