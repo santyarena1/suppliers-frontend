@@ -160,6 +160,23 @@ export class ListImportService {
 
   async upload(actor: ImportActor, provider: Provider, file: { buffer: Buffer; filename: string }) {
     const access = await this.resolveAccess(actor, provider);
+    return this.createImport(provider, access, actor.userId, file);
+  }
+
+  /**
+   * Lista base de la tienda de un comercio que entra sola desde su Google Sheets
+   * (`StorefrontSheetService`). La sube quien conectó la planilla; mismo pipeline
+   * que una subida a mano: perfil, revisión si algo no cierra, aplicar, revertir.
+   */
+  async uploadStorefrontSheet(provider: Provider, userId: string, file: { buffer: Buffer; filename: string }) {
+    const supplier = await this.prisma.tenant.findUnique({ where: { providerKey: provider }, select: { id: true, name: true, active: true } });
+    if (!supplier || !supplier.active) throw new NotFoundException("Proveedor no encontrado");
+    const storefront = await this.prisma.storefront.findUnique({ where: { supplierTenantId: supplier.id }, select: { id: true } });
+    if (!storefront) throw new ForbiddenException("Solo las tiendas de comercios se sincronizan desde Google Sheets");
+    return this.createImport(provider, { level: "BASE", tenantId: supplier.id, supplierTenantId: supplier.id, supplierName: supplier.name }, userId, file);
+  }
+
+  private async createImport(provider: Provider, access: ImportAccess, userId: string, file: { buffer: Buffer; filename: string }) {
     const ext = (file.filename.split(".").pop() ?? "").toLowerCase();
     if (!MIME_BY_EXT[ext]) throw new BadRequestException("Se aceptan archivos .xlsx, .xls o .csv");
     if (file.buffer.length === 0) throw new BadRequestException("El archivo está vacío");
@@ -172,7 +189,7 @@ export class ListImportService {
       data: {
         provider,
         tenantId: access.tenantId,
-        uploadedByUserId: actor.userId,
+        uploadedByUserId: userId,
         level: access.level,
         originalFileName: file.filename,
         storedAssetId: asset.id,
@@ -484,7 +501,11 @@ export class ListImportService {
         : []),
     ]);
     this.logger.log(`Carga ${importId} aplicada (${record.level}, ${items.length} filas)`);
-    domainEvents.emit("list.applied", { provider: record.provider, level: record.level });
+    domainEvents.emit("list.applied", {
+      provider: record.provider,
+      level: record.level,
+      rows: items.map((i) => ({ externalId: i.externalId, raw: (i.raw ?? {}) as Record<string, unknown> })),
+    });
     return this.get(importId, actor);
   }
 

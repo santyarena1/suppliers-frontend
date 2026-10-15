@@ -9,10 +9,14 @@ Marca siguen siendo organizaciones aparte, que se piden y aprueba NODO.
 
 - Le venden **locales a locales**, dentro de NODO. Nada de consumidor final ni cobros: el pago lo arreglan entre ellos.
 - Entra en **Pro** (y Custom): capacidad `storefront`.
-- **Todos los comercios** ven las publicaciones de todos los locales (menos las propias).
+- **Cada comercio elige** qué tiendas ve: a cada uno se le pregunta "X está vendiendo en NODO, ¿querés ver sus productos?" (aviso, tarjeta en Inicio y Búsqueda) y lo cambia cuando quiera en **Configuración → Tiendas de locales**. Una tienda **privada** no se ofrece: entra quien abre su **link de invitación** (`/tienda/<token>`, regenerable). La tienda ve quiénes la ven y puede sacar a alguien.
 - En el buscador, cada local es una opción más del filtro **Distribuidor**, marcada como local.
 - En **Configuración → Búsqueda**: "Incluir lo que publican otros locales" (prendido por defecto). Apagado, los locales no entran en la búsqueda inicial pero siguen en el filtro para elegirlos a mano.
-- **El stock vence a los 3 días** sin confirmar: la tienda deja de verse hasta que el dueño confirma ("Mi stock está al día") o sube una planilla nueva. NODO le avisa un día antes. Editar un producto suelto no confirma el resto.
+- **Stock: lo configura el dueño.** Cada cuántos días se le pide confirmarlo (1, 2, 3, 7, 15, 30 o nunca; por defecto 3) y qué pasa si no lo hace: **seguir visible** avisándole al comprador que no está confirmado (por defecto) u **ocultarse**. Recordatorio en NODO, por mail y en una barra arriba de toda la app; vencido, se repite cada tantos días como la vigencia durante un mes. Subir una planilla o "Mi stock está al día" lo confirma; publicar el primer producto también.
+- **Perfil público:** nombre propio (no puede ser el de otra organización ni un distribuidor), logo (es el logo del proveedor en todo NODO), presentación, formas de pago, entrega, facturación, garantía general, condiciones, "también vendo por fuera de NODO" y un **mail para recibir los pedidos**.
+- **Ficha del producto:** hasta 8 fotos (se achican en el navegador a ~1200 px WebP, sin EXIF, y se guardan como `/assets/<id>`), descripción, garantía propia y estado (nuevo, caja abierta, reacondicionado, usado). Marca y categoría se eligen de las vigentes o se crean.
+- **Cerrar y reabrir** cuando quiera (los pedidos pendientes se rechazan avisando); opcionalmente borrando productos y fotos.
+- **Google Sheets:** la tienda conecta una planilla compartida como lector; NODO la lee cada 15 min (o "Sincronizar ahora") y, si cambió, entra por el importador de listas. Columnas extra "Estado" y "Fotos" (varios links). NODO arma la URL de exportación, solo sigue redirecciones a Google y solo acepta CSV.
 - Lo que tiene **stock 0 no se muestra** a los compradores (al vincularse, su configuración de esa tienda queda en ocultar sin stock).
 - **Todo pedido es "a confirmar"**: el vendedor lo confirma o lo rechaza. Confirmar descuenta el stock publicado.
 - La conexión con el sistema de gestión queda como **Próximamente**.

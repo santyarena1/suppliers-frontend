@@ -26,6 +26,7 @@ import { useRouter } from "next/navigation";
 import OwnStoreSettings from "@/components/OwnStoreSettings";
 import ChangePasswordCard from "@/components/ChangePasswordCard";
 import SearchDefaultsSettings from "@/components/SearchDefaultsSettings";
+import { StorefrontSubscriptions } from "@/components/storefront/StorefrontOffers";
 import SellerModeSettings from "@/components/sale-margins/SellerModeSettings";
 import ConfigIndex, { ConfigAnchor, ConfigGroupTitle, type ConfigIndexItem } from "@/components/config/ConfigIndex";
 import { useSellerSession } from "@/lib/sale-price";
@@ -80,6 +81,7 @@ function ConfiguracionPageInner() {
       ...(retailer
         ? [
             { id: "busqueda", label: "Búsqueda y envío", group: "Búsqueda" },
+            { id: "tiendas", label: "Tiendas de locales", group: "Búsqueda" },
             ...(sellerSettings ? [{ id: "vendedor", label: "Modo vendedor", group: "Ventas" }] : []),
             { id: "tienda", label: "Tu tienda web", group: "Ventas" },
             { id: "api", label: "API de catálogo", group: "Integraciones" },
@@ -349,6 +351,9 @@ function ConfiguracionPageInner() {
                   <ConfigGroupTitle>Búsqueda</ConfigGroupTitle>
                   <ConfigAnchor id="busqueda">
                     <SearchDefaultsSettings />
+                  </ConfigAnchor>
+                  <ConfigAnchor id="tiendas">
+                    <StorefrontSubscriptions />
                   </ConfigAnchor>
 
                   <ConfigGroupTitle>Ventas</ConfigGroupTitle>

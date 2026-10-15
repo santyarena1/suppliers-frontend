@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, ClipboardList, Eye, EyeOff, Loader2, Package, PlugZap, RefreshCw, Store, Users } from "lucide-react";
 import { storefrontApi, type MyStorefront } from "@/lib/api";
-import { ago, apiError, hiddenReasonText, untilText } from "@/lib/storefront";
+import { ago, apiError, hiddenReasonText, STOCK_DAY_OPTIONS, untilText } from "@/lib/storefront";
 
 type StoreView = Extract<MyStorefront, { exists: true }>;
 
@@ -22,6 +22,7 @@ export default function StorefrontOverview({
   const reason = hiddenReasonText(store.hiddenReason, store.suspendedReason);
   const expiresIn = untilText(store.stockExpiresAt);
   const paused = store.status === "PAUSED";
+  const stockWarn = store.stockState === "EXPIRED" || store.stockState === "DUE_SOON" || store.stockState === "UNCONFIRMED";
 
   async function confirmStock() {
     setWorking("confirm");
@@ -29,7 +30,10 @@ export default function StorefrontOverview({
     try {
       const res = await storefrontApi.confirmStock();
       onChange(res.data);
-      setAviso({ ok: true, text: `Stock confirmado. Vale por ${store.stockValidDays} días.` });
+      setAviso({
+        ok: true,
+        text: store.stockValidDays > 0 ? `Stock confirmado. Te lo volvemos a pedir en ${store.stockValidDays} ${store.stockValidDays === 1 ? "día" : "días"}.` : "Stock confirmado.",
+      });
     } catch (err) {
       setAviso({ ok: false, text: apiError(err, "No se pudo confirmar el stock") });
     } finally {
@@ -53,7 +57,13 @@ export default function StorefrontOverview({
   const stats = [
     { icon: Package, label: "Productos", value: store.productCount, sub: `${store.inStockCount} con stock`, tab: "productos" as const },
     { icon: ClipboardList, label: "Pedidos por confirmar", value: store.pendingOrders, sub: "de otros comercios", tab: "pedidos" as const },
-    { icon: Users, label: "Comercios que la ven", value: store.reach, sub: "en NODO", tab: null },
+    {
+      icon: Users,
+      label: "Comercios que la ven",
+      value: store.reach,
+      sub: store.visibility === "PRIVATE" ? "tienda privada · con tu link" : `${store.audience.pending} todavía no eligieron`,
+      tab: "datos" as const,
+    },
   ];
 
   return (
@@ -78,12 +88,12 @@ export default function StorefrontOverview({
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-surface-300">
                 {store.visible
-                  ? `Aparece como "${store.name}" en el buscador de los demás comercios.`
+                  ? `Aparece como "${store.name}" en el buscador de los comercios que la aceptaron${store.visibility === "PRIVATE" ? " (privada: entran con tu link)" : ""}.`
                   : reason ?? "Cargá productos con stock para que aparezca."}
               </p>
             </div>
           </div>
-          {store.status !== "SUSPENDED" && (
+          {(store.status === "ACTIVE" || store.status === "PAUSED") && (
             <button
               type="button"
               onClick={() => void togglePause()}
@@ -97,23 +107,35 @@ export default function StorefrontOverview({
         </div>
 
         {store.status === "ACTIVE" && store.productCount > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-surface-800 bg-surface-950/40 px-4 py-3">
+          <div
+            className={`mt-4 flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 ${
+              stockWarn ? "border-amber-500/40 bg-amber-500/10" : "border-surface-800 bg-surface-950/40"
+            }`}
+          >
             <RefreshCw className="hidden h-4 w-4 text-surface-400 sm:block" aria-hidden />
             <div className="min-w-[220px] flex-1 basis-72 text-xs leading-relaxed">
               <p className="text-surface-200">
                 Stock confirmado <span className="font-semibold text-white">{ago(store.stockConfirmedAt)}</span>
-                {expiresIn ? (
+                {store.stockValidDays === 0 ? null : expiresIn ? (
                   <>
                     {" "}
-                    · vence <span className="font-semibold text-white">{expiresIn}</span>
+                    · {store.stockState === "DUE_SOON" ? "hay que confirmarlo" : "próximo aviso"}{" "}
+                    <span className="font-semibold text-white">{expiresIn}</span>
                   </>
                 ) : store.stockConfirmedAt ? (
-                  <span className="text-amber-300"> · vencido</span>
+                  <span className="font-semibold text-amber-300"> · sin confirmar</span>
                 ) : null}
               </p>
-              <p className="text-surface-500">
-                Si vendés algo por otro lado, actualizalo. Cada {store.stockValidDays} días te pedimos que lo confirmes para que
-                nadie pida algo que ya no tenés.
+              <p className={stockWarn ? "text-amber-100/80" : "text-surface-500"}>
+                {store.stockState === "EXPIRED"
+                  ? store.staleAction === "HIDE"
+                    ? "Tu tienda está oculta hasta que confirmes el stock."
+                    : "Los compradores ven que tu stock no está confirmado. Actualizá lo que vendiste por otro lado y confirmalo."
+                  : store.stockValidDays === 0
+                    ? "No te pedimos confirmarlo (lo cambiás en Configuración). Si vendés algo por otro lado, bajá el stock en Productos."
+                    : `Si vendés algo por otro lado, bajá el stock en Productos. Te lo pedimos ${
+                        STOCK_DAY_OPTIONS.find((o) => o.value === store.stockValidDays)?.label.toLowerCase() ?? `cada ${store.stockValidDays} días`
+                      } (lo cambiás en Configuración).`}
               </p>
             </div>
             <button
@@ -144,19 +166,15 @@ export default function StorefrontOverview({
               <p className="text-[11px] text-surface-500">{s.sub}</p>
             </>
           );
-          return s.tab ? (
+          return (
             <button
               key={s.label}
               type="button"
-              onClick={() => onGo(s.tab!)}
+              onClick={() => onGo(s.tab)}
               className="rounded-2xl border border-surface-800 bg-surface-900 p-4 text-left transition-colors hover:border-surface-600"
             >
               {body}
             </button>
-          ) : (
-            <div key={s.label} className="rounded-2xl border border-surface-800 bg-surface-900 p-4">
-              {body}
-            </div>
           );
         })}
       </div>

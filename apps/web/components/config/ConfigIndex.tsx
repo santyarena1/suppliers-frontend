@@ -56,6 +56,24 @@ export default function ConfigIndex({
     };
   }, [ids, scrollRoot]);
 
+  // Entrar con un ancla (/configuracion#tiendas, desde un aviso) lleva a esa sección.
+  // Las secciones cargan datos: se espera a que el ancla exista y se reintenta un par de veces.
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (!id || !ids.split(",").includes(id)) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const el = document.getElementById(id);
+      tries++;
+      if (el) {
+        el.scrollIntoView({ block: "start" });
+        setActive(id);
+      }
+      if (tries >= 4) window.clearInterval(timer);
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, [ids]);
+
   // En celular, la ficha activa siempre a la vista.
   useEffect(() => {
     // Solo se mueve la fila de fichas: un scrollIntoView cortaría el scroll de la página.

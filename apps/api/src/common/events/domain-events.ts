@@ -12,7 +12,12 @@ export interface DomainEvents {
   /** Un comercio quedó vinculado (ACTIVE) con un distribuidor o marca. */
   "tenant.linked": { clientTenantId: string; supplierTenantId: string; provider: string | null };
   /** Se aplicó una lista de precios (base o propia) de un proveedor por lista. */
-  "list.applied": { provider: string; level: "BASE" | "TENANT" };
+  "list.applied": {
+    provider: string;
+    level: "BASE" | "TENANT";
+    /** Filas crudas de la planilla (encabezado → celda), para lo que el importador no mapea. */
+    rows?: { externalId: string; raw: Record<string, unknown> }[];
+  };
   /** Un pedido a la tienda de un comercio quedó a la vista de la tienda (creado ya aprobado, o aprobado después). */
   "storefront.order": { orderId: string };
 }

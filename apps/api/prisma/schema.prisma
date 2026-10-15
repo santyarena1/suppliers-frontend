@@ -230,6 +230,8 @@ model Tenant {
   storefront         Storefront?            @relation("StorefrontRetailer")
   /// Proveedor por lista que es la tienda de un comercio.
   storefrontOf       Storefront?            @relation("StorefrontSupplier")
+  /// Tiendas de otros comercios que se le ofrecieron y qué eligió.
+  storefrontAudiences StorefrontAudience[]  @relation("StorefrontAudienceBuyer")
   /// Local de venta ya sincronizado que este comercio declara como propio.
   /// Compara el costo final con el precio publicado en esa web.
   ownRetailStoreId   String?
@@ -866,7 +868,11 @@ model StoredAsset {
   isPrivate     Boolean  @default(false)
   /// Organización que lo subió. Solo ella puede adjuntarlo en una conversación.
   ownerTenantId String?
+  /// Para qué se subió: "storefront" = fotos de una tienda (se cuentan y se limpian).
+  purpose       String?
   createdAt     DateTime @default(now())
+
+  @@index([ownerTenantId, purpose])
 }
 
 // Configuración visual + de visibilidad por proveedor, editable desde el
@@ -2851,6 +2857,25 @@ enum StorefrontStatus {
   PAUSED
   /// La frenó NODO: el dueño no la puede reactivar.
   SUSPENDED
+  /// La cerró el dueño. La puede volver a abrir cuando quiera.
+  CLOSED
+}
+
+enum StorefrontVisibility {
+  /// Todos los comercios reciben la propuesta de verla.
+  PUBLIC
+  /// Solo la ven los comercios que entran con el link de invitación.
+  PRIVATE
+}
+
+enum StorefrontAudienceStatus {
+  /// Se le ofreció ver la tienda y todavía no eligió.
+  PENDING
+  ACCEPTED
+  /// El comercio eligió no verla.
+  DECLINED
+  /// La tienda lo sacó de sus compradores.
+  REMOVED
 }
 
 enum StorefrontOrderStatus {
@@ -2872,16 +2897,89 @@ model Storefront {
   status           StorefrontStatus @default(ACTIVE)
   /// Última vez que el dueño confirmó el stock (a mano, con una planilla o editando productos).
   stockConfirmedAt DateTime?
-  /// Días que vale el stock confirmado: después la tienda deja de verse.
+  /// Cada cuántos días se le pide confirmar el stock. 0 = no se le pide.
   stockValidDays   Int              @default(3)
-  /// Ya se le avisó que el stock está por vencer (se limpia al confirmar).
+  /// Qué pasa si no lo confirma a tiempo: KEEP = sigue visible avisando que el
+  /// stock puede no estar al día; HIDE = deja de verse hasta que lo confirme.
+  staleAction      String           @default("KEEP")
+  /// Último recordatorio de stock (se limpia al confirmar).
   staleWarnedAt    DateTime?
   contactPhone     String?
+  /// Adónde le llegan los pedidos y avisos de la tienda. Sin esto, a dueño y administradores.
+  ordersEmail      String?
   /// Zona, retiro, horarios: lo que el comprador tiene que saber.
   contactNote      String?
   suspendedReason  String?
+  /// Nombre con el que la ven los demás comercios. Sin esto, el del comercio.
+  displayName      String?
+  /// Presentación de la tienda.
+  about            String?
+  logoUrl          String?
+  visibility       StorefrontVisibility @default(PUBLIC)
+  /// Link de invitación (`/tienda/<token>`). Regenerarlo invalida el anterior.
+  inviteToken      String?          @unique
+  paymentMethods   String[]         @default([])
+  deliveryOptions  String[]         @default([])
+  invoiceTypes     String[]         @default([])
+  /// Garantía de todos los productos, salvo los que digan otra.
+  defaultWarranty  String?
+  /// Condiciones de venta: seña, mínimos, cambios, plazos.
+  salesTerms       String?
+  /// También vende estos productos por fuera de NODO (el stock puede moverse).
+  sellsOffline     Boolean          @default(false)
+  closedAt         DateTime?
+  /// Google Sheets conectado: id de la planilla y de la pestaña (NODO arma la URL).
+  sheetId          String?
+  sheetGid         String?
+  /// Quien la conectó: figura como autor de cada carga que entra sola.
+  sheetLinkedByUserId String?
+  sheetCheckedAt   DateTime?
+  /// Última vez que cambió el contenido (y entró una carga).
+  sheetChangedAt   DateTime?
+  /// sha256 del último CSV bajado: si no cambió, no se procesa nada.
+  sheetHash        String?
+  sheetError       String?
+  sheetImportId    String?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
+  items            StorefrontItem[]
+  audience         StorefrontAudience[]
+
   @@index([status])
+}
+
+/// Lo que la planilla no trae: fotos y estado de un producto de la tienda.
+/// Sobrevive a las planillas nuevas (si el producto vuelve, vuelven sus fotos).
+model StorefrontItem {
+  id           String     @id @default(uuid())
+  storefrontId String
+  storefront   Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  externalId   String
+  /// `/assets/<id>` subidas por la tienda o links https. La primera es la principal.
+  images       String[]   @default([])
+  /// NEW | USED | REFURBISHED | OPEN_BOX
+  condition    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([storefrontId, externalId])
+}
+
+/// Qué comercios ven la tienda: la aceptaron (propuesta o invitación), la
+/// rechazaron o todavía no eligieron.
+model StorefrontAudience {
+  id            String                   @id @default(uuid())
+  storefrontId  String
+  storefront    Storefront               @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  buyerTenantId String
+  buyerTenant   Tenant                   @relation("StorefrontAudienceBuyer", fields: [buyerTenantId], references: [id], onDelete: Cascade)
+  status        StorefrontAudienceStatus @default(PENDING)
+  /// PUBLIC = se lo ofreció NODO; INVITE = entró con el link de la tienda.
+  source        String                   @default("PUBLIC")
+  decidedAt     DateTime?
+  createdAt     DateTime                 @default(now())
+
+  @@unique([storefrontId, buyerTenantId])
+  @@index([buyerTenantId, status])
 }

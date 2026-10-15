@@ -24,6 +24,7 @@ import { formatUSD, proxyImg } from "@/lib/format";
 import ProviderBadge from "@/components/ProviderBadge";
 import { ChannelPie, MixPie, MonthDayChart, RankBarChart, ShippingMonthChart, SpendAreaChart, WeekdayBars } from "./InsightCharts";
 import { UnifyNamedTable } from "./UnifyNamedTable";
+import { csvText } from "@/lib/csv";
 
 const PERIODS: { days: number; label: string }[] = [
   { days: 30, label: "30 días" },
@@ -89,7 +90,8 @@ function when(iso: string | null | undefined) {
 }
 
 function downloadCsv(filename: string, rows: string[][]) {
-  const body = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  // Los números quedan como números; el texto, a salvo de fórmulas.
+  const body = rows.map((r) => r.map((c) => (/^-?\d+([.,]\d+)?$/.test(String(c)) ? `"${c}"` : csvText(c))).join(",")).join("\n");
   const blob = new Blob([`\uFEFF${body}`], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

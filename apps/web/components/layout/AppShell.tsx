@@ -13,6 +13,7 @@ import ChatRealtime from "../chat/ChatRealtime";
 import CartFloat from "../CartFloat";
 import SessionKeepAlive from "../SessionKeepAlive";
 import SubscriptionBanner from "../subscription/SubscriptionBanner";
+import StorefrontStockBanner from "../storefront/StorefrontStockBanner";
 import SuspendedGate from "../subscription/SuspendedGate";
 import SellerRouteGate from "../sale-margins/SellerRouteGate";
 import AnnouncementGate from "../announcements/AnnouncementGate";
@@ -39,6 +40,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <ImpersonationBanner />
             <PendingBrandLinkBanner />
             <SubscriptionBanner />
+            <StorefrontStockBanner />
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <MobileTopBar onOpen={() => setMobileOpen(true)} />
               {mobileOpen && (

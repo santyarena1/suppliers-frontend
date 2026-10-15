@@ -15,6 +15,17 @@ function isSubscriptionNotice(n: OrgNotice) {
   return n.landingKey?.startsWith("subscription:") ?? false;
 }
 
+/** Avisos de Vender en NODO: a dónde lleva cada uno. */
+function storefrontLink(n: OrgNotice): { href: string; label: string } | null {
+  const key = n.landingKey ?? "";
+  if (key.startsWith("storefront-order:")) return { href: "/vender?tab=pedidos", label: "Ver pedidos de tu tienda" };
+  if (key.startsWith("storefront-purchase:")) return { href: "/pedidos", label: "Ver en Pedidos" };
+  if (key.startsWith("storefront-offer:")) return { href: "/configuracion#tiendas", label: "Elegir en Configuración" };
+  if (key === "storefront:audience") return { href: "/vender?tab=datos", label: "Ver quién ve tu tienda" };
+  if (key.startsWith("storefront:")) return { href: "/vender", label: "Ir a Vender en NODO" };
+  return null;
+}
+
 export default function AvisosPage() {
   const [items, setItems] = useState<OrgNotice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +102,11 @@ export default function AvisosPage() {
                     Ir a Noticias
                   </Link>
                 )}
-                {isSubscriptionNotice(n) ? (
+                {storefrontLink(n) ? (
+                  <Link href={storefrontLink(n)!.href} className="inline-block mt-2 text-[11px] text-brand-400">
+                    {storefrontLink(n)!.label}
+                  </Link>
+                ) : isSubscriptionNotice(n) ? (
                   <Link href="/suscripcion" className="inline-block mt-2 text-[11px] text-brand-400">
                     Ver suscripción
                   </Link>

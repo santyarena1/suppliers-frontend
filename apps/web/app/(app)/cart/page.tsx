@@ -64,6 +64,7 @@ import type { PendingOrderProvider } from "@/lib/pendingOrders";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import StorefrontCartAction from "@/components/storefront/StorefrontCartAction";
 import { capabilityAllowed, useSubscription } from "@/lib/subscription";
+import { csvText } from "@/lib/csv";
 
 type PerceptionLine = { label: string; amount: number };
 
@@ -912,7 +913,7 @@ function CartPageInner() {
         const onProduct = (taxByKind(taxLines, "iibb")?.unitAmount ?? 0) > 0.0001;
         const gross = pricing.gross + (!onProduct && iibb ? iibb.unitAmount * it.qty : 0);
         return [
-          it.provider, it.externalId, `"${it.name.replace(/"/g, '""')}"`,
+          csvText(it.provider), csvText(it.externalId), csvText(it.name),
           String(it.qty),
           pricing.net.toFixed(2),
           iva?.percent ?? "",

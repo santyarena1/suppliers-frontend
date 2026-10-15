@@ -1,0 +1,4 @@
+﻿Código,Nombre,Marca,Categoría,Precio neto,Moneda,IVA,Stock,Estado,Garantía,Descripción,Fotos
+TGS-001,Placa de video ASUS Dual RTX 4060 8GB,ASUS,Placas de video,320,USD,21,2,Nuevo,6 meses oficial,Sellada,"https://ejemplo.com/rtx4060-frente.jpg https://ejemplo.com/rtx4060-caja.jpg"
+TGS-002,Mouse Logitech G203 Lightsync,Logitech,Periféricos,18.5,USD,21,10,Nuevo,12 meses,,
+TGS-003,Fuente Thermaltake 650W 80 Plus Bronze,Thermaltake,Fuentes,45,USD,21,1,Usado,3 meses en el local,Probada. Sin caja original.,

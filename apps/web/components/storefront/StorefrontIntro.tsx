@@ -20,15 +20,18 @@ export default function StorefrontIntro({
   allowed,
   orgName,
   defaultPhone,
+  defaultEmail,
   onOpened,
 }: {
   allowed: boolean;
   orgName: string;
   defaultPhone: string | null;
+  defaultEmail: string | null;
   onOpened: (next: MyStorefront) => void;
 }) {
   const [phone, setPhone] = useState(defaultPhone ?? "");
   const [note, setNote] = useState("");
+  const [email, setEmail] = useState(defaultEmail ?? "");
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +39,7 @@ export default function StorefrontIntro({
     setOpening(true);
     setError(null);
     try {
-      const res = await storefrontApi.open({ contactPhone: phone.trim() || null, contactNote: note.trim() || null });
+      const res = await storefrontApi.open({ contactPhone: phone.trim() || null, contactNote: note.trim() || null, ordersEmail: email.trim() || null });
       onOpened(res.data);
     } catch (err) {
       setError(apiError(err, "No se pudo abrir la tienda"));
@@ -82,6 +85,18 @@ export default function StorefrontIntro({
               <input value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} placeholder="11 5555-5555" className={inputCls} />
             </label>
             <label className="flex flex-col gap-1 text-[11px] text-surface-400">
+              Mail para recibir los pedidos
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                maxLength={200}
+                placeholder="pedidos@tulocal.com"
+                className={inputCls}
+              />
+              <span className="text-surface-500">Te avisamos ahí cada pedido nuevo y cuando haya que confirmar el stock.</span>
+            </label>
+            <label className="sm:col-span-2 flex flex-col gap-1 text-[11px] text-surface-400">
               Zona, retiro y horarios (opcional)
               <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Retiro en Palermo, de 10 a 18" className={inputCls} />
             </label>

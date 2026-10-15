@@ -79,6 +79,8 @@ export interface NavItemDef {
   buyingOnly?: boolean;
   /** Solo con modo vendedor en el plan (presupuestos). */
   requiresSellerMode?: boolean;
+  /** Todavía no está: se muestra con la etiqueta «Pronto». */
+  soon?: boolean;
 }
 
 export interface NavSectionDef {
@@ -102,14 +104,6 @@ export const NAV_ITEMS: NavItemDef[] = [
   // Vender en NODO (docs/PLAN_VENDER_EN_NODO.md): la tienda del comercio para los demás comercios.
   { id: "storefront", href: "/vender", label: "Vender en NODO", icon: Store, tenantTypes: ["RETAILER"], permission: "providers.manage", buyingOnly: true },
   { id: "chat", href: "/mensajes", label: "Mensajes", icon: MessageSquare, badge: "chat", tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"] },
-  {
-    id: "news",
-    href: "/noticias",
-    label: "Novedades",
-    icon: Newspaper,
-    module: "news",
-    tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"],
-  },
   {
     id: "sistema-tgs",
     href: "/sistema-tgs",
@@ -268,6 +262,17 @@ export const NAV_ITEMS: NavItemDef[] = [
     section: "brands",
   },
 
+  // Novedades: todavía nadie publica notas; queda a la vista como lo que viene.
+  {
+    id: "news",
+    href: "/noticias",
+    label: "Novedades",
+    icon: Newspaper,
+    module: "news",
+    tenantTypes: ["RETAILER", "DISTRIBUTOR", "BRAND"],
+    section: "system",
+    soon: true,
+  },
   { id: "settings", href: "/configuracion", label: "Configuración", icon: Settings, section: "system" },
   {
     id: "team",

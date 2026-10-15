@@ -16,7 +16,7 @@ import { domainEvents } from "../common/events/domain-events";
 import { isDemoDistributorKey, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { PrismaService } from "../prisma/prisma.service";
 import { snapshotJson } from "../providers/json-value";
-import { storefrontHiddenReason, type StorefrontStatusValue } from "../storefront/storefront-rules";
+import { storefrontHiddenReason, storefrontPublicName, type StorefrontStatusValue } from "../storefront/storefront-rules";
 
 export type PurchasePolicyView = {
   /** API o LIST: con LIST los precios salen de una planilla y el carrito solo arma un mensaje. */
@@ -341,8 +341,9 @@ export class TenantVisibilityService {
       }
     }
 
-    // Vender en NODO: la tienda de otro comercio se ve con el nombre del comercio,
-    // y solo mientras está activa y con el stock confirmado. La propia no se ve.
+    // Vender en NODO: la tienda de otro comercio se ve con su nombre público y solo
+    // mientras está abierta (y con el stock al día si el dueño eligió ocultarla al
+    // vencer). La propia no se ve.
     const storefronts = await this.storefrontsByKey();
     for (const [key, sf] of storefronts) {
       if (!visibles.has(key)) continue;
@@ -408,6 +409,8 @@ export class TenantVisibilityService {
         status: true,
         stockConfirmedAt: true,
         stockValidDays: true,
+        staleAction: true,
+        displayName: true,
         retailerTenantId: true,
         contactPhone: true,
         contactNote: true,
@@ -421,6 +424,7 @@ export class TenantVisibilityService {
         status: StorefrontStatusValue;
         stockConfirmedAt: Date | null;
         stockValidDays: number;
+        staleAction: string;
         retailerTenantId: string;
         name: string;
         ownerActive: boolean;
@@ -434,8 +438,9 @@ export class TenantVisibilityService {
         status: r.status,
         stockConfirmedAt: r.stockConfirmedAt,
         stockValidDays: r.stockValidDays,
+        staleAction: r.staleAction,
         retailerTenantId: r.retailerTenantId,
-        name: r.retailerTenant.name,
+        name: storefrontPublicName(r, r.retailerTenant.name),
         ownerActive: r.retailerTenant.active,
         contactPhone: r.contactPhone,
         contactNote: r.contactNote,
@@ -508,6 +513,11 @@ export class TenantVisibilityService {
       this.prisma.tenantLink.updateMany({
         where: { clientTenantId: tenantId, supplierTenantId: supplier.id },
         data: { status: "REVOKED" },
+      }),
+      // Si es la tienda de un local, queda como que eligió no verla (no se le vuelve a ofrecer).
+      this.prisma.storefrontAudience.updateMany({
+        where: { buyerTenantId: tenantId, storefront: { supplierTenantId: supplier.id }, status: { in: ["PENDING", "ACCEPTED"] } },
+        data: { status: "DECLINED", decidedAt: new Date() },
       }),
     ]);
     return { provider, disconnected: true };

@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Power } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import StorefrontIntro from "@/components/storefront/StorefrontIntro";
 import StorefrontOrders from "@/components/storefront/StorefrontOrders";
@@ -19,7 +19,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "resumen", label: "Resumen" },
   { key: "productos", label: "Productos" },
   { key: "pedidos", label: "Pedidos" },
-  { key: "datos", label: "Datos de la tienda" },
+  { key: "datos", label: "Configuración" },
 ];
 
 export default function VenderPage() {
@@ -38,7 +38,7 @@ function VenderInner() {
   const tab: Tab = TABS.some((t) => t.key === raw) ? (raw as Tab) : "resumen";
   const { subscription, loading: subLoading } = useSubscription();
   const [store, setStore] = useState<MyStorefront | null>(null);
-  const [org, setOrg] = useState<{ name: string; phone: string | null } | null>(null);
+  const [org, setOrg] = useState<{ name: string; phone: string | null; email: string | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -55,7 +55,7 @@ function VenderInner() {
     void reload();
     myApi
       .org()
-      .then((r) => setOrg({ name: r.data.name, phone: r.data.contactPhone }))
+      .then((r) => setOrg({ name: r.data.name, phone: r.data.contactPhone, email: r.data.contactEmail ?? null }))
       .catch(() => setOrg(null));
   }, [reload]);
 
@@ -96,6 +96,7 @@ function VenderInner() {
               allowed={allowed}
               orgName={org?.name ?? "tu comercio"}
               defaultPhone={org?.phone ?? null}
+              defaultEmail={org?.email ?? null}
               onOpened={(next) => {
                 changed(next);
                 go("productos");
@@ -121,8 +122,18 @@ function VenderInner() {
                   </button>
                 ))}
               </nav>
+              {store.status === "CLOSED" && <ReopenCard onReopened={changed} />}
               {tab === "resumen" && <StorefrontOverview store={store} onChange={changed} onGo={go} />}
-              {tab === "productos" && <StorefrontProducts provider={store.provider} onChanged={() => changed()} />}
+              {tab === "productos" && (
+                <StorefrontProducts
+                  provider={store.provider}
+                  sellsOffline={store.sellsOffline}
+                  defaultWarranty={store.defaultWarranty}
+                  sheet={store.sheet}
+                  onStoreChange={changed}
+                  onChanged={() => changed()}
+                />
+              )}
               {tab === "pedidos" && <StorefrontOrders storeName={store.name} onChanged={() => changed()} />}
               {tab === "datos" && <StorefrontSettings store={store} onChange={changed} />}
             </>
@@ -131,5 +142,41 @@ function VenderInner() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Tienda cerrada por el dueño: se reabre cuando quiera, con lo que tenga cargado. */
+function ReopenCard({ onReopened }: { onReopened: (next: MyStorefront) => void }) {
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function reopen() {
+    setWorking(true);
+    setError(null);
+    try {
+      onReopened((await storefrontApi.open({})).data);
+    } catch (err) {
+      setError(apiError(err, "No se pudo abrir la tienda"));
+    } finally {
+      setWorking(false);
+    }
+  }
+  return (
+    <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-surface-700 bg-surface-900 p-4">
+      <Power className="h-5 w-5 text-surface-400" aria-hidden />
+      <div className="min-w-0 flex-1 basis-60">
+        <p className="text-sm font-semibold text-white">Tu tienda está cerrada</p>
+        <p className="text-xs text-surface-400">Nadie la ve. Abrila de nuevo cuando quieras: vuelve con tus productos y tus compradores.</p>
+        {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
+      </div>
+      <button
+        type="button"
+        onClick={() => void reopen()}
+        disabled={working}
+        className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
+      >
+        {working && <Loader2 className="h-4 w-4 animate-spin" />}
+        Abrir la tienda
+      </button>
+    </section>
   );
 }

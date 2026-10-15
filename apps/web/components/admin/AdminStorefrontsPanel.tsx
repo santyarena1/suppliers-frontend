@@ -93,12 +93,20 @@ export default function AdminStorefrontsPanel({ showToast }: { showToast: (msg: 
                 <tr key={r.id} className="align-top">
                   <td className="px-3 py-2.5">
                     <p className="font-semibold text-white">{r.name}</p>
+                    {r.orgName !== r.name && <p className="text-[11px] text-surface-400">Comercio: {r.orgName}</p>}
+                    <p className="text-[11px] text-surface-500">
+                      {r.visibility === "PRIVATE" ? "Privada" : "Pública"} · {r.buyers} {r.buyers === 1 ? "comercio la ve" : "comercios la ven"}
+                    </p>
                     <p className="font-mono text-[10px] text-surface-500">{r.provider}</p>
                     {r.contactPhone && <p className="text-[11px] text-surface-400">{r.contactPhone}</p>}
                   </td>
                   <td className="px-3 py-2.5">
                     <p className={r.hiddenReason ? "text-amber-300" : "text-emerald-300"}>{r.hiddenReason ? "No se ve" : "Visible"}</p>
-                    {r.hiddenReason && <p className="max-w-[220px] text-[11px] text-surface-500">{hiddenReasonText(r.hiddenReason, r.suspendedReason)}</p>}
+                    {r.hiddenReason && (
+                      <p className="max-w-[220px] text-[11px] text-surface-500">
+                        {r.hiddenReason === "CLOSED" ? "La cerró el dueño." : hiddenReasonText(r.hiddenReason, r.suspendedReason)}
+                      </p>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 tabular-nums text-surface-200">{r.products}</td>
                   <td className="px-3 py-2.5 tabular-nums text-surface-200">
@@ -107,7 +115,7 @@ export default function AdminStorefrontsPanel({ showToast }: { showToast: (msg: 
                   </td>
                   <td className="px-3 py-2.5 text-surface-300">{ago(r.stockConfirmedAt)}</td>
                   <td className="px-3 py-2.5 text-right">
-                    {r.status === "SUSPENDED" ? (
+                    {r.status === "CLOSED" ? null : r.status === "SUSPENDED" ? (
                       <button
                         type="button"
                         onClick={() => void setStatus(r, "ACTIVE")}

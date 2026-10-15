@@ -18,6 +18,7 @@ import { useSellerSession } from "@/lib/sale-price";
 import {
   Search, ArrowUpRight, ShoppingCart, Key, Package, UserCog, Loader2,
 } from "lucide-react";
+import { StorefrontOffersPrompt } from "@/components/storefront/StorefrontOffers";
 
 /**
  * Módulo Inicio.
@@ -107,6 +108,7 @@ function RetailerHome() {
       <div className="flex-1 overflow-y-auto">
         <div className="hm max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
           <div className="hm__mesh" aria-hidden="true" />
+          <StorefrontOffersPrompt className="relative mb-6" />
 
           <h2 className="hm__q">Buscá una vez. Te responden todos.</h2>
 

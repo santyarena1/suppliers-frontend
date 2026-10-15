@@ -40,6 +40,7 @@ import {
   List, ArrowUpDown, AlertCircle, Package, Filter,
   ChevronDown, ChevronRight, SlidersHorizontal, TrendingDown, Truck,
 } from "lucide-react";
+import { StorefrontOffersPrompt } from "@/components/storefront/StorefrontOffers";
 
 type SortKey = "default" | "price_asc" | "price_desc" | "name_asc" | "name_desc";
 type ViewMode = "grid" | "list" | "grouped";
@@ -1496,6 +1497,7 @@ function SearchPage() {
             )}
 
             <div className="px-3 sm:px-6 py-3 sm:py-5">
+              <StorefrontOffersPrompt className="mb-4" />
               {(!hydrated || loading) && (
                 <div className="flex flex-col items-center justify-center py-32 gap-3">
                   <div className="w-10 h-10 rounded-full border-2 border-surface-700 border-t-brand-500 animate-spin" />

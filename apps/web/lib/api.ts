@@ -4687,39 +4687,92 @@ export const catalogApiAdmin = {
 
 // ---------- Vender en NODO (docs/PLAN_VENDER_EN_NODO.md) ----------
 
-export type StorefrontStatus = "ACTIVE" | "PAUSED" | "SUSPENDED";
+export type StorefrontStatus = "ACTIVE" | "PAUSED" | "SUSPENDED" | "CLOSED";
 export type StorefrontOrderStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "CANCELLED";
 export type StorefrontHiddenReason =
   | "PAUSED"
   | "SUSPENDED"
+  | "CLOSED"
   | "STOCK_EXPIRED"
   | "NO_STOCK_CONFIRMED"
   | "OWNER_INACTIVE"
   | "NO_PRODUCTS";
+/** NO_EXPIRY = el dueño eligió que no se le pida confirmar. */
+export type StorefrontStockState = "NO_EXPIRY" | "UNCONFIRMED" | "FRESH" | "DUE_SOON" | "EXPIRED";
+export type StorefrontVisibility = "PUBLIC" | "PRIVATE";
+export type StorefrontStaleAction = "KEEP" | "HIDE";
+export type StorefrontAudienceStatus = "PENDING" | "ACCEPTED" | "DECLINED" | "REMOVED";
 
 export type MyStorefront =
   | { exists: false }
   | {
       exists: true;
       id: string;
+      /** Nombre con el que la ven los demás (el público o el del comercio). */
       name: string;
+      orgName: string;
+      displayName: string | null;
       provider: Provider;
       status: StorefrontStatus;
       suspendedReason: string | null;
+      closedAt: string | null;
       stockConfirmedAt: string | null;
       stockExpiresAt: string | null;
       stockValidDays: number;
+      staleAction: StorefrontStaleAction;
+      stockState: StorefrontStockState;
       hiddenReason: StorefrontHiddenReason | null;
       visible: boolean;
+      visibility: StorefrontVisibility;
+      inviteToken: string | null;
       contactPhone: string | null;
       contactNote: string | null;
+      ordersEmail: string | null;
+      about: string | null;
+      logoUrl: string | null;
+      paymentMethods: string[];
+      deliveryOptions: string[];
+      invoiceTypes: string[];
+      defaultWarranty: string | null;
+      salesTerms: string | null;
+      sellsOffline: boolean;
+      /** Google Sheets conectado (solo lo ve el dueño). */
+      sheet: StorefrontSheet | null;
       productCount: number;
       inStockCount: number;
       pendingOrders: number;
-      /** Comercios que pueden ver la tienda. */
+      /** Comercios que la aceptaron y la ven. */
       reach: number;
+      audience: { accepted: number; pending: number; declined: number };
       createdAt: string;
     };
+
+export interface StorefrontSheet {
+  url: string;
+  checkedAt: string | null;
+  changedAt: string | null;
+  error: string | null;
+  importId: string | null;
+}
+
+export interface StorefrontSettingsInput {
+  contactPhone?: string | null;
+  ordersEmail?: string | null;
+  contactNote?: string | null;
+  status?: "ACTIVE" | "PAUSED";
+  displayName?: string | null;
+  about?: string | null;
+  logoUrl?: string | null;
+  visibility?: StorefrontVisibility;
+  stockValidDays?: number;
+  staleAction?: StorefrontStaleAction;
+  paymentMethods?: string[];
+  deliveryOptions?: string[];
+  invoiceTypes?: string[];
+  defaultWarranty?: string | null;
+  salesTerms?: string | null;
+  sellsOffline?: boolean;
+}
 
 export interface StorefrontProduct {
   externalId: string;
@@ -4728,7 +4781,12 @@ export interface StorefrontProduct {
   category: string | null;
   sku: string | null;
   ean: string | null;
+  /** La primera de `images`. */
   imageUrl: string | null;
+  images: string[];
+  description: string | null;
+  warranty: string | null;
+  condition: string | null;
   /** Neto, sin IVA, en `currency`. */
   price: number | null;
   finalPrice: number | null;
@@ -4746,8 +4804,10 @@ export interface StorefrontProductInput {
   category?: string | null;
   sku?: string | null;
   ean?: string | null;
-  imageUrl?: string | null;
   description?: string | null;
+  warranty?: string | null;
+  condition?: string | null;
+  images?: string[];
   price: number;
   currency: "USD" | "ARS";
   ivaPercent?: number;
@@ -4766,6 +4826,55 @@ export interface StorefrontOrder {
   total: number | null;
   quoteRate: number | null;
   items: { externalId: string; name: string; sku: string | null; qty: number; unitPrice: number | null; stockNow: number | null }[];
+}
+
+/** La cara pública de una tienda, como la ve otro comercio. */
+export interface StorefrontPublicProfile {
+  storefrontId: string;
+  provider: Provider;
+  name: string;
+  logoUrl: string | null;
+  about: string | null;
+  contactPhone: string | null;
+  contactNote: string | null;
+  paymentMethods: string[];
+  deliveryOptions: string[];
+  invoiceTypes: string[];
+  defaultWarranty: string | null;
+  salesTerms: string | null;
+  sellsOffline: boolean;
+  visibility: StorefrontVisibility;
+  stockConfirmedAt: string | null;
+  stockValidDays: number;
+  stockState: StorefrontStockState;
+  /** Productos con stock. */
+  productCount: number;
+  categories: string[];
+}
+
+export interface StorefrontOffer extends StorefrontPublicProfile {
+  audienceStatus: StorefrontAudienceStatus;
+  source: "PUBLIC" | "INVITE";
+  decidedAt: string | null;
+}
+
+export interface StorefrontInvitePreview extends StorefrontPublicProfile {
+  own: boolean;
+  canAccept: boolean;
+  open: boolean;
+  audienceStatus: StorefrontAudienceStatus | null;
+}
+
+export interface StorefrontItemInfo {
+  store: StorefrontPublicProfile;
+  item: { images: string[]; condition: string | null; warranty: string | null };
+}
+
+export interface StorefrontAudienceList {
+  accepted: { tenantId: string; name: string; source: "PUBLIC" | "INVITE"; since: string }[];
+  pending: number;
+  declined: number;
+  removed: number;
 }
 
 export type UpgradeKind = "DISTRIBUTOR" | "BRAND";
@@ -4787,8 +4896,10 @@ export interface AdminStorefront {
   id: string;
   retailerTenantId: string;
   name: string;
+  orgName: string;
   provider: Provider;
   status: StorefrontStatus;
+  visibility: StorefrontVisibility;
   suspendedReason: string | null;
   hiddenReason: StorefrontHiddenReason | null;
   stockConfirmedAt: string | null;
@@ -4796,15 +4907,26 @@ export interface AdminStorefront {
   products: number;
   orders: number;
   pendingOrders: number;
+  buyers: number;
   createdAt: string;
 }
 
 export const storefrontApi = {
   mine: () => api.get<MyStorefront>("/my/storefront"),
-  open: (data: { contactPhone?: string | null; contactNote?: string | null }) => api.post<MyStorefront>("/my/storefront", data),
-  update: (data: { contactPhone?: string | null; contactNote?: string | null; status?: "ACTIVE" | "PAUSED" }) =>
-    api.put<MyStorefront>("/my/storefront", data),
+  open: (data: { contactPhone?: string | null; contactNote?: string | null; ordersEmail?: string | null }) =>
+    api.post<MyStorefront>("/my/storefront", data),
+  update: (data: StorefrontSettingsInput) => api.put<MyStorefront>("/my/storefront", data),
   confirmStock: () => api.post<MyStorefront>("/my/storefront/confirm-stock"),
+  close: (deleteProducts: boolean) => api.post<MyStorefront>("/my/storefront/close", { deleteProducts }),
+  regenerateInvite: () => api.post<MyStorefront>("/my/storefront/invite-link"),
+  linkSheet: (url: string) =>
+    api.put<{ changed: boolean; importId: string | null; error: string | null; store: MyStorefront }>("/my/storefront/sheet", { url }),
+  unlinkSheet: () => api.delete<MyStorefront>("/my/storefront/sheet"),
+  syncSheet: () => api.post<{ changed: boolean; importId: string | null; error: string | null; store: MyStorefront }>("/my/storefront/sheet/sync"),
+  audience: () => api.get<StorefrontAudienceList>("/my/storefront/audience"),
+  removeBuyer: (tenantId: string) => api.delete<{ removed: true }>(`/my/storefront/audience/${tenantId}`),
+  /** Foto ya achicada (ver `lib/imageCompress.ts`). Devuelve `/assets/<id>`. */
+  uploadImage: (file: File) => uploadAuthedFile("/my/storefront/images", file) as Promise<{ url: string; bytes: number }>,
   products: (q?: string) => api.get<{ items: StorefrontProduct[]; total: number }>("/my/storefront/products", { params: q ? { q } : {} }),
   addProduct: (data: StorefrontProductInput) => api.post<{ externalId: string }>("/my/storefront/products", data),
   updateProduct: (externalId: string, data: Partial<StorefrontProductInput>) =>
@@ -4815,6 +4937,15 @@ export const storefrontApi = {
   respond: (id: string, action: "CONFIRM" | "REJECT", note?: string) =>
     api.post<{ id: string; status: StorefrontOrderStatus }>(`/my/storefront/orders/${id}/respond`, { action, note }),
   cancelPurchase: (id: string) => api.post<{ id: string; status: "CANCELLED" }>(`/my/storefront-purchases/${id}/cancel`),
+  // Del lado del comprador.
+  offers: () => api.get<StorefrontOffer[]>("/my/storefront-offers"),
+  decide: (storefrontId: string, decision: "ACCEPT" | "DECLINE") =>
+    api.post<{ storefrontId: string; provider: Provider; audienceStatus: StorefrontAudienceStatus }>(`/my/storefront-offers/${storefrontId}`, { decision }),
+  invite: (token: string) => api.get<StorefrontInvitePreview>(`/my/storefront-invites/${encodeURIComponent(token)}`),
+  acceptInvite: (token: string) =>
+    api.post<{ storefrontId: string; provider: Provider; name: string }>(`/my/storefront-invites/${encodeURIComponent(token)}/accept`),
+  itemInfo: (provider: string, externalId: string) =>
+    api.get<StorefrontItemInfo>("/my/storefront-item", { params: { provider, externalId } }),
   upgradeRequests: () => api.get<UpgradeRequest[]>("/my/upgrade-requests"),
   requestUpgrade: (data: { kind: UpgradeKind; message?: string | null; contact?: string | null }) =>
     api.post<UpgradeRequest>("/my/upgrade-requests", data),

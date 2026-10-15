@@ -1020,3 +1020,23 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
   - `GET /my/catalog-api` y la foto del catálogo no incluyen tiendas de otros comercios.
 - **Estado**: IMPLEMENTADO.
 - **Notas**: Diseño en `docs/PLAN_VENDER_EN_NODO.md`. La tienda es un `Tenant` DISTRIBUTOR `LIST_*` (nombre "<comercio> (local)") vinculado por `Storefront` al comercio, y con vínculo `LIST_CONNECTED` a cada comercio activo (al abrirla, al aplicar una lista y cada 15 min).
+
+### [FEATURE] Vender en NODO v2: perfil, condiciones, fotos, quién la ve, cerrar/reabrir y Google Sheets
+- **Método / Ruta** (dueño de la tienda, `providers.manage` + capacidad `storefront`):
+  - `GET /my/storefront` suma `orgName`, `displayName`, `closedAt`, `staleAction: KEEP|HIDE`, `stockState: NO_EXPIRY|UNCONFIRMED|FRESH|DUE_SOON|EXPIRED`, `visibility: PUBLIC|PRIVATE`, `inviteToken`, `ordersEmail`, `about`, `logoUrl`, `paymentMethods[]`, `deliveryOptions[]`, `invoiceTypes[]`, `defaultWarranty`, `salesTerms`, `sellsOffline`, `sheet: { url, checkedAt, changedAt, error, importId } | null`, `audience: { accepted, pending, declined }`. `name` es el nombre público; `reach` = comercios que la aceptaron. `status` suma `CLOSED`.
+  - `POST /my/storefront` body `{ contactPhone?, contactNote?, ordersEmail? }`: abre, o reabre si estaba pausada o cerrada.
+  - `PUT /my/storefront` body parcial: los de arriba más `displayName` (2–60, no puede ser el de otra organización, distribuidor o "NODO"), `about`, `logoUrl` (`/assets/<id>` subido por la tienda; pasa a ser el logo del proveedor), `visibility`, `stockValidDays: 0|1|2|3|7|15|30` (0 = no se pide), `staleAction`, `paymentMethods` (CASH, TRANSFER, MERCADOPAGO, CARD, CHECK, CRYPTO, CURRENT_ACCOUNT), `deliveryOptions` (PICKUP, OWN_DELIVERY, MOTO, CARRIER), `invoiceTypes` (A, B, NONE), `defaultWarranty`, `salesTerms`, `sellsOffline`, `ordersEmail`.
+  - `POST /my/storefront/close` body `{ deleteProducts?: boolean }`: cierra (rechaza los pedidos pendientes con aviso). `POST /my/storefront` la reabre.
+  - `POST /my/storefront/invite-link`: link nuevo (`/tienda/<inviteToken>`); el anterior deja de servir.
+  - `GET /my/storefront/audience` → `{ accepted: [{ tenantId, name, source: PUBLIC|INVITE, since }], pending, declined, removed }` · `DELETE /my/storefront/audience/:tenantId`.
+  - `POST /my/storefront/images` (multipart `file`, JPG/PNG/WebP por sus bytes, ≤ 1,5 MB; el navegador las achica antes) → `{ url: "/assets/<id>", bytes }`. Tope 3000 por tienda; las que no usa nadie se borran.
+  - Productos: alta y `PUT` suman `images[]` (hasta 8: `/assets/<id>` de la tienda o links http(s)), `condition: NEW|OPEN_BOX|REFURBISHED|USED`, `warranty`, `description`; el `PUT` también `sku`. `GET /my/storefront/products` devuelve `images`, `condition`, `warranty`, `description`.
+  - Google Sheets: `PUT /my/storefront/sheet` body `{ url }` (link de compartir "cualquier persona con el enlace · lector"; se prueba en el momento) → `{ changed, importId, error, store }` · `DELETE /my/storefront/sheet` · `POST /my/storefront/sheet/sync` (un minuto entre uno y otro). Se lee sola cada 15 min; si cambió, entra como carga del importador de listas.
+- **Comprador** (comercio):
+  - `GET /my/storefront-offers` → `[{ storefrontId, provider, name, logoUrl, about, contactPhone, contactNote, paymentMethods, deliveryOptions, invoiceTypes, defaultWarranty, salesTerms, sellsOffline, visibility, stockConfirmedAt, stockValidDays, stockState, productCount, categories, audienceStatus: PENDING|ACCEPTED|DECLINED, source, decidedAt }]`.
+  - `POST /my/storefront-offers/:storefrontId` body `{ decision: ACCEPT|DECLINE }` (`providers.manage`).
+  - `GET /my/storefront-invites/:token` → perfil público + `{ own, canAccept, open, audienceStatus }` · `POST /my/storefront-invites/:token/accept`.
+  - `GET /my/storefront-item?provider=&externalId=` → `{ store: <perfil público>, item: { images, condition, warranty } }` (404 si no ve esa tienda).
+- **Cambios en endpoints existentes**: una tienda solo aparece en `GET /my/providers` de los comercios que la aceptaron (vínculo `LIST_CONNECTED`); `DELETE /my/providers/:p` de una tienda la deja como rechazada. `POST /orders/offline` a una tienda exige que esté abierta y aceptada. `list.applied` lleva las filas crudas: las columnas "Estado" y "Fotos" (varios links por celda) se aplican a la tienda.
+- **Estado**: IMPLEMENTADO.
+- **Notas**: Migraciones `20261015120000_storefront_profile_audience` (a los comercios que veían una tienda sin haberla elegido les queda la propuesta pendiente; los que ya le compraron, aceptada), `20261015130000_storefront_sheet_sync`, `20261015140000_storefront_orders_email`.

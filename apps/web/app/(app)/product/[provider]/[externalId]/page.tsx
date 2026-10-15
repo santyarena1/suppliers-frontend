@@ -13,6 +13,7 @@ import { ProductDTO, Provider, searchApi, catalogApi, PricePoint, productDisplay
 import { proxyImg, formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import ProductProviderLinks from "@/components/ProductProviderLinks";
+import StorefrontProductInfo, { useStorefrontItem } from "@/components/storefront/StorefrontProductInfo";
 import { safeHttpUrl } from "@/lib/providerLinks";
 import ProductSyncedAt from "@/components/ProductSyncedAt";
 import AiImageDisclaimer from "@/components/AiImageDisclaimer";
@@ -74,9 +75,13 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const [qty, setQty] = useState(1);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [copied, setCopied] = useState(false);
+  // Tienda de un local: todas sus fotos y sus condiciones.
+  const storefrontItem = useStorefrontItem(providerName, extId);
+  const [imgIdx, setImgIdx] = useState(0);
 
   useEffect(() => {
     setImgErr(false);
+    setImgIdx(0);
     let cancelled = false;
     const found = find(providerName, extId);
     if (found) {
@@ -137,6 +142,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   // Modo vendedor: el vendedor ve solo la venta; quien ve costos, la venta en el desglose.
   const present = product ? salePresentation(product, sellerSession, withIva) : ({ mode: "cost" } as const);
   const sellerView = present.mode === "sale";
+  const gallery = storefrontItem?.item.images.length ? storefrontItem.item.images : product?.imageUrl ? [product.imageUrl] : [];
+  const mainImage = gallery[imgIdx] ?? product?.imageUrl ?? null;
   const quotesEnabled = useQuotes().enabled;
   const saleUnitUsd = present.mode === "sale" || present.mode === "cost+sale" ? present.saleUsd : null;
   const unpriced = Boolean(product && (sellerView ? saleUnitUsd == null || saleUnitUsd <= 0 : !hasOwnPrice(product)));
@@ -292,17 +299,21 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 )}
                 {/* Ir al proveedor: no para el vendedor en modo vendedor (el portal es la compra, con costos). */}
                 {!sellerSession.isSeller && (
-                  <ProductProviderLinks provider={providerName} productUrl={product.productUrl} productName={product.name} />
+                  <>
+                    <ProductProviderLinks provider={providerName} productUrl={product.productUrl} />
+                    {storefrontItem && <StorefrontProductInfo info={storefrontItem} productName={product.name} />}
+                  </>
                 )}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
                 <div className="flex flex-col gap-2">
                   <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm">
-                  {product.imageUrl && !imgErr ? (
+                  {mainImage && !imgErr ? (
                     <>
                       <Image
-                        src={proxyImg(product.imageUrl, { trim: false })}
+                        key={mainImage}
+                        src={proxyImg(mainImage, { trim: false })}
                         alt={product.name}
                         fill
                         className="object-contain p-6 sm:p-8"
@@ -326,6 +337,29 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                     </div>
                   )}
                   </div>
+                  {gallery.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto pb-1" role="list" aria-label="Fotos del producto">
+                      {gallery.map((src, i) => (
+                        <button
+                          key={src}
+                          type="button"
+                          role="listitem"
+                          onClick={() => {
+                            setImgIdx(i);
+                            setImgErr(false);
+                          }}
+                          aria-label={`Foto ${i + 1}`}
+                          aria-current={i === imgIdx}
+                          className={`relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border bg-white ${
+                            i === imgIdx ? "border-brand-500 ring-2 ring-brand-500/40" : "border-surface-700 hover:border-surface-500"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={proxyImg(src, { trim: false })} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {product.imageAiSelected && product.imageUrl && !imgErr && (
                     <AiImageDisclaimer className="text-surface-500 px-0.5" />
                   )}
@@ -660,7 +694,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         )}
       </div>
 
-      {zoom && product?.imageUrl && (
+      {zoom && mainImage && (
         <div
           role="dialog"
           aria-modal
@@ -676,8 +710,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
           </button>
           <div className="relative w-full h-full max-w-4xl max-h-[90dvh] bg-white rounded-xl overflow-hidden">
             <Image
-              src={proxyImg(product.imageUrl, { trim: false })}
-              alt={product.name}
+              src={proxyImg(mainImage, { trim: false })}
+              alt={product?.name ?? ""}
               fill
               className="object-contain p-4"
               unoptimized

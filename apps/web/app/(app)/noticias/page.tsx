@@ -72,7 +72,7 @@ export default function NoticiasPage() {
               Administrar
             </Link>
           )}
-          {canWrite && (
+          {canWrite && admin && (
             <Link href="/noticias/nueva" className="text-[13px] text-white border border-surface-600 px-3 py-1.5 hover:bg-white hover:text-black">
               Publicar novedad
             </Link>
@@ -81,7 +81,10 @@ export default function NoticiasPage() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="relative flex-1 overflow-y-auto">
+        {/* Todavía nadie publica: el resto ve lo que viene, con la demo borrosa detrás. */}
+        {!admin && <ComingSoon />}
+        <div className={admin ? "" : "pointer-events-none select-none blur-md opacity-60"} aria-hidden={!admin || undefined} inert={!admin || undefined}>
         {aviso && <p className="text-sm text-red-400 px-6 py-4">{aviso}</p>}
         <NewsHero slides={slides} />
 
@@ -198,6 +201,7 @@ export default function NoticiasPage() {
             </>
           )}
         </div>
+        </div>
       </div>
     </div>
   );
@@ -237,6 +241,37 @@ function Empty({ canWrite }: { canWrite: boolean }) {
           Escribir una nota
         </Link>
       )}
+    </div>
+  );
+}
+
+/** Lo que va a ser Novedades, mientras nadie publique. */
+function ComingSoon() {
+  const points = [
+    ["Lanzamientos", "Productos nuevos de las marcas y distribuidores con los que trabajás, con fotos y precio sugerido."],
+    ["Eventos y capacitaciones", "Presentaciones, cursos y fechas, para anotarte desde NODO."],
+    ["Avisos de tus proveedores", "Cambios de listas, ofertas por tiempo limitado, horarios y novedades de envío."],
+  ];
+  return (
+    <div className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto px-4 py-16">
+      <section className="w-full max-w-lg rounded-2xl border border-surface-700 bg-surface-950/95 p-6 shadow-2xl">
+        <span className="rounded-full border border-surface-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-surface-300">
+          Próximamente
+        </span>
+        <h2 className="news-serif mt-3 text-2xl text-white">Novedades de tu red</h2>
+        <p className="mt-2 text-sm leading-relaxed text-surface-300">
+          Un lugar para enterarte de lo que publican las marcas y los distribuidores con los que trabajás, sin perderlo en el
+          WhatsApp.
+        </p>
+        <ul className="mt-4 flex flex-col gap-3">
+          {points.map(([title, body]) => (
+            <li key={title} className="rounded-xl border border-surface-800 bg-surface-900 p-3">
+              <p className="text-sm font-semibold text-white">{title}</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-surface-400">{body}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }

@@ -231,6 +231,11 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
               </span>
             )}
             {sublabel && <span className="text-[10px] text-surface-500">{sublabel}</span>}
+            {item.soon && (
+              <span className="rounded-full border border-surface-600 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-surface-400">
+                Pronto
+              </span>
+            )}
           </>
         )}
         {opts?.collapsed && badge != null && (
