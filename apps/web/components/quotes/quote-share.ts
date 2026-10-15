@@ -17,6 +17,7 @@ export function quoteText(model: QuotePdfModel): string {
   if (model.validUntil) lines.push(`Válido hasta el ${model.validUntil}.`);
   if (model.currencyNote) lines.push(model.currencyNote);
   if (model.notes) lines.push("", model.notes);
+  if (model.terms?.trim()) lines.push("", `Condiciones: ${model.terms.trim()}`);
   return lines.join("\n");
 }
 

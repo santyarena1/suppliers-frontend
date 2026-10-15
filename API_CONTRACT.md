@@ -1039,7 +1039,7 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
   - `GET /my/storefront-item?provider=&externalId=` → `{ store: <perfil público>, item: { images, condition, warranty } }` (404 si no ve esa tienda).
 - **Cambios en endpoints existentes**: una tienda solo aparece en `GET /my/providers` de los comercios que la aceptaron (vínculo `LIST_CONNECTED`); `DELETE /my/providers/:p` de una tienda la deja como rechazada. `POST /orders/offline` a una tienda exige que esté abierta y aceptada. `list.applied` lleva las filas crudas: las columnas "Estado" y "Fotos" (varios links por celda) se aplican a la tienda.
 - **Estado**: IMPLEMENTADO.
-- **Notas**: Migraciones `20261015120000_storefront_profile_audience` (a los comercios que veían una tienda sin haberla elegido les queda la propuesta pendiente; los que ya le compraron, aceptada), `20261015130000_storefront_sheet_sync`, `20261015140000_storefront_orders_email`.
+- **Notas**: Migraciones `20261015120000_storefront_profile_audience` (a los comercios que veían una tienda sin haberla elegido les queda la propuesta pendiente; los que ya le compraron, aceptada), `20261015130000_storefront_sheet_sync`, `20261015140000_storefront_orders_email`.
 ### [FEATURE] Directorio: distribuidores para conectar (comercio nuevo)
 - **Método**: POST
 - **Ruta**: /my/providers/:provider/connect-list
@@ -1075,6 +1075,6 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 ### [FEATURE] Fotos de internet para los productos de la tienda
 - **Método / Ruta**: `POST /my/storefront/images/search` body `{ query }` (3–200 caracteres)
 - **Auth**: Bearer, dueño de la tienda (capacidad `storefront`).
-- **Respuesta esperada**: `{ query, images: [{ imageUrl, thumbnailUrl, title, source }], left }` (`left` = búsquedas que quedan hoy).
+- **Respuesta esperada**: `{ query, images: [{ imageUrl, thumbnailUrl, title, source }], left }` (hasta 10 fotos: Serper cobra 1 crédito hasta 10 resultados; `left` = búsquedas que quedan hoy).
 - **Estado**: IMPLEMENTADO
 - **Notas**: Serper, como «Primera foto». Tope de 25 búsquedas por tienda y por día (hora argentina; 429 al pasarlo); si Serper falla, 503 y no cuenta. El servidor no baja ninguna foto: la web baja la elegida por `/img-proxy`, la achica y la sube con `POST /my/storefront/images`. `GET /my/storefront/products` suma `autoImage` (la foto la encontró NODO solo) y al editar se puede conservar esa foto. Migración `20261016140000_storefront_image_search`.

@@ -230,7 +230,7 @@ function WebImageSearch({
       {error && <p className="mt-2 text-[11px] text-red-300">{error}</p>}
       {images && shown.length === 0 && !loading && <p className="mt-2 text-[11px] text-surface-400">No encontramos fotos. Probá con la marca y el modelo exacto.</p>}
       {shown.length > 0 && (
-        <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
+        <div className="mt-2 grid grid-cols-5 gap-2">
           {shown.map((img) => (
             <button
               key={img.imageUrl}

@@ -6,6 +6,7 @@ import ListImportsPanel from "@/components/list-import/ListImportsPanel";
 import ComboField from "@/components/storefront/ComboField";
 import ImagePicker from "@/components/storefront/ImagePicker";
 import StorefrontSheetCard from "@/components/storefront/StorefrontSheetCard";
+import { warrantyOptions } from "@/components/storefront/warranty-options";
 import { catalogApi, storefrontApi, type MyStorefront, type Provider, type StorefrontProduct, type StorefrontProductInput, type StorefrontSheet } from "@/lib/api";
 import { proxyImg } from "@/lib/format";
 import { apiError, money, PRODUCT_CONDITION_LABEL } from "@/lib/storefront";
@@ -113,8 +114,9 @@ export default function StorefrontProducts({
     () => ({
       brands: mergeOptions(catalog.brands, items.map((p) => p.brand)),
       categories: mergeOptions(catalog.categories, items.map((p) => p.category)),
+      warranties: warrantyOptions([...items.map((p) => p.warranty), defaultWarranty]),
     }),
-    [catalog, items]
+    [catalog, items, defaultWarranty]
   );
   const withoutPhotos = items.filter((p) => p.images.length === 0).length;
 
@@ -258,7 +260,7 @@ function ProductRow({
 }: {
   product: StorefrontProduct;
   defaultWarranty: string | null;
-  options: { brands: Option[]; categories: Option[] };
+  options: { brands: Option[]; categories: Option[]; warranties: Option[] };
   onSaved: (text?: string) => void;
   onError: (t: string) => void;
 }) {
@@ -441,7 +443,7 @@ function ProductForm({
 }: {
   product?: StorefrontProduct;
   defaultWarranty: string | null;
-  options: { brands: Option[]; categories: Option[] };
+  options: { brands: Option[]; categories: Option[]; warranties: Option[] };
   onCancel: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -578,16 +580,17 @@ function ProductForm({
             <input value={form.stock} onChange={set("stock")} inputMode="numeric" className={inputCls} />
           </label>
         </div>
-        <label className="sm:col-span-2 flex flex-col gap-1 text-[11px] text-surface-400">
-          Garantía de este producto
-          <input
+        <div className="sm:col-span-2">
+          <ComboField
+            label="Garantía de este producto (elegí una o creá otra)"
             value={form.warranty}
-            onChange={set("warranty")}
+            onChange={(v) => setForm((f) => ({ ...f, warranty: v }))}
+            options={options.warranties}
             maxLength={300}
-            placeholder={defaultWarranty ? `Si la dejás vacía: ${defaultWarranty}` : "6 meses oficial / 3 meses en el local"}
-            className={inputCls}
+            placeholder={defaultWarranty ? `Si la dejás vacía: ${defaultWarranty}` : "6 meses oficial"}
+            newLabel="Crear garantía"
           />
-        </label>
+        </div>
         <label className="sm:col-span-2 flex flex-col gap-1 text-[11px] text-surface-400">
           Descripción
           <textarea

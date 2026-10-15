@@ -273,27 +273,29 @@ export function useQuoteMoney() {
   );
 }
 
-/** Total del presupuesto en la moneda elegida (puede mezclar USD y pesos). */
+/**
+ * Total del presupuesto en la moneda elegida (puede mezclar USD y pesos). Mismo
+ * cálculo que el PDF: convierte cada línea, suma y recién ahí aplica el
+ * descuento, así la lista muestra el mismo número que ve el cliente.
+ */
 export function useQuoteTotal() {
   const { currency, currentRate } = usePrefs();
   return useCallback(
-    (q: Pick<Quote, "items"> & Partial<Pick<Quote, "totals" | "currency">>): string => {
+    (q: Pick<Quote, "items"> & Partial<Pick<Quote, "currency" | "discountPercent">>): string => {
       const rate = currentRate?.venta ?? getArsPerUsd();
       const target = q.currency ?? (currency === "ARS" ? "ARS" : "USD");
-      // Con descuento: los totales por moneda que calcula el servidor.
-      const byCurrency: Record<string, number> = q.totals ?? {};
-      if (!q.totals) {
-        for (const it of q.items) {
-          if (it.unitFinalPrice == null) continue;
-          byCurrency[it.currency] = (byCurrency[it.currency] ?? 0) + it.unitFinalPrice * it.qty;
-        }
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      let subtotal = 0;
+      for (const it of q.items) {
+        if (it.unitFinalPrice == null) continue;
+        const amount = it.unitFinalPrice * it.qty;
+        const ars = isArsCurrency(it.currency);
+        if (target === "ARS") subtotal += ars ? amount : rate ? amount * rate : 0;
+        else subtotal += ars ? (rate ? amount / rate : 0) : amount;
       }
-      let total = 0;
-      for (const [cur, amount] of Object.entries(byCurrency)) {
-        const ars = isArsCurrency(cur);
-        if (target === "ARS") total += ars ? amount : rate ? amount * rate : 0;
-        else total += ars ? (rate ? amount / rate : 0) : amount;
-      }
+      subtotal = round2(subtotal);
+      const pct = q.discountPercent && q.discountPercent > 0 ? Math.min(100, q.discountPercent) / 100 : 0;
+      const total = round2(subtotal - round2(subtotal * pct));
       return target === "ARS" ? formatARS(total) : formatUSD(total);
     },
     [currency, currentRate]

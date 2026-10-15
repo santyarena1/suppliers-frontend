@@ -229,7 +229,12 @@ export function atCostLines(items: QuoteItem[]): number {
 
 /** Iniciales del cliente para la ficha flotante ("Juan Pérez" → "JP"). */
 export function initialsOf(name: string | null | undefined): string | null {
-  const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  // Solo letras y números, sin lo que va entre paréntesis: "Casa & Co. (local)" → "CC".
+  const words = (name ?? "")
+    .replace(/\([^)]*\)/g, " ")
+    .split(/\s+/)
+    .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(Boolean);
   if (words.length === 0) return null;
   const letters = words.length === 1 ? words[0].slice(0, 2) : words[0][0] + words[words.length - 1][0];
   return letters.toUpperCase();

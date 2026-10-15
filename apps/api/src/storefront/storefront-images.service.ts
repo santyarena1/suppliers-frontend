@@ -64,7 +64,7 @@ export class StorefrontImagesService {
     }
     const used = rows[0].imageSearchCount;
     try {
-      const images = await this.imageSync.searchImages(q, 12);
+      const images = await this.imageSync.searchImages(q, 10);
       return { query: q, images, left: Math.max(0, IMAGE_SEARCHES_PER_DAY - used) };
     } catch (err) {
       // Si Serper falla, la búsqueda no cuenta.

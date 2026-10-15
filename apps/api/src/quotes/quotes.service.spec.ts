@@ -410,6 +410,10 @@ describe("ítems de presupuesto", () => {
     expect(summarize(lines, null).discounts).toEqual({});
     expect(initialsOf("ana")).toBe("AN");
     expect(initialsOf("  ")).toBeNull();
+    expect(initialsOf("PRUEBA CLAUDE (borrar)")).toBe("PC");
+    expect(initialsOf("Casa & Co.")).toBe("CC");
+    expect(initialsOf("Ñandú SRL")).toBe("ÑS");
+    expect(initialsOf("(—)")).toBeNull();
   });
 
   it("línea libre: el neto sale del IVA", () => {

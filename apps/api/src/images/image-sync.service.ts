@@ -312,7 +312,7 @@ export class ImageSyncService implements OnModuleInit {
    * los resultados de Serper. Nadie del servidor baja esas fotos: la web las
    * muestra y sube por el proxy de imágenes la que se elige.
    */
-  async searchImages(query: string, num = 12) {
+  async searchImages(query: string, num = 10) {
     const q = query.trim().slice(0, 220);
     if (!q) throw new BadRequestException("Escribí qué buscar");
     const apiKey = await this.readApiKey();

@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Globe2, Link2, Loader2, Lock, MessageCircle, Power, RefreshCw, Save, UserMinus } from "lucide-react";
+import ComboField from "@/components/storefront/ComboField";
 import ImagePicker from "@/components/storefront/ImagePicker";
+import { warrantyOptions } from "@/components/storefront/warranty-options";
 import { storefrontApi, type MyStorefront, type StorefrontAudienceList, type StorefrontSettingsInput } from "@/lib/api";
 import {
   ago,
@@ -175,16 +177,15 @@ function ProfileAndTerms({ store, onChange }: { store: StoreView; onChange: (nex
             />
             <span className="text-surface-500">Solo lo usa NODO para avisarte (no lo ven los compradores). Vacío: al dueño y administradores.</span>
           </label>
-          <label className="flex flex-col gap-1 text-[11px] text-surface-400">
-            Garantía (para todos los productos)
-            <input
-              value={form.defaultWarranty}
-              onChange={(e) => set("defaultWarranty", e.target.value)}
-              maxLength={300}
-              placeholder="3 meses en el local. Cada producto puede decir otra."
-              className={inputCls}
-            />
-          </label>
+          <ComboField
+            label="Garantía para todos los productos (elegí una o creá otra)"
+            value={form.defaultWarranty}
+            onChange={(v) => set("defaultWarranty", v)}
+            options={warrantyOptions([])}
+            maxLength={300}
+            placeholder="3 meses en el local. Cada producto puede decir otra."
+            newLabel="Crear garantía"
+          />
           <label className="sm:col-span-2 flex flex-col gap-1 text-[11px] text-surface-400">
             Zona, retiro y horarios
             <textarea
