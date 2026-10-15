@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ImagesModule } from "../images/images.module";
 import { ListImportModule } from "../list-import/list-import.module";
 import { ProvidersModule } from "../providers/providers.module";
 import { TenantsModule } from "../tenants/tenants.module";
@@ -11,7 +12,7 @@ import { UpgradeRequestsService } from "./upgrade-requests.service";
 
 /** Vender en NODO: tiendas de comercios y solicitudes para ser distribuidor o marca. */
 @Module({
-  imports: [ProvidersModule, TenantsModule, ListImportModule],
+  imports: [ProvidersModule, TenantsModule, ListImportModule, ImagesModule],
   controllers: [StorefrontController, StorefrontAdminController],
   providers: [StorefrontService, StorefrontAudienceService, StorefrontImagesService, StorefrontSheetService, UpgradeRequestsService],
   exports: [StorefrontService],

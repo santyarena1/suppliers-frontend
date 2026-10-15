@@ -11,7 +11,7 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
-import { SALE_MARGIN_MAX, SALE_MARGIN_MIN, type SaleMarginBase } from "@nodo/shared";
+import { PRODUCT_CONDITIONS, SALE_MARGIN_MAX, SALE_MARGIN_MIN, type SaleMarginBase } from "@nodo/shared";
 import { MAX_BULK } from "../sale-margins.service";
 
 /** `null` = quitar la regla y volver a heredar. */
@@ -69,6 +69,17 @@ export class SetMarginByCategoryDto {
   @IsString()
   @MaxLength(300)
   category!: string;
+
+  @Percent()
+  percent!: number | null;
+}
+
+export class SetConditionMarginsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(PRODUCT_CONDITIONS.length)
+  @IsIn(PRODUCT_CONDITIONS as unknown as string[], { each: true })
+  conditions!: string[];
 
   @Percent()
   percent!: number | null;

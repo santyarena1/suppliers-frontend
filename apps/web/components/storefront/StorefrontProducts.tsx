@@ -508,7 +508,13 @@ function ProductForm({
           <ImagePicker
             value={images}
             onChange={setImages}
-            hint="Hasta 8 fotos. Se achican solas antes de subir (quedan livianas y sin datos del teléfono)."
+            searchQuery={[form.brand, form.name].filter((s) => s && s.trim()).join(" ")}
+            autoImage={product?.autoImage ? product.imageUrl : null}
+            hint={
+              product?.autoImage && images.includes(product.imageUrl ?? "")
+                ? "La foto marcada «NODO» la encontró NODO sola. Podés dejarla, cambiarla o sumar las tuyas."
+                : "Hasta 8 fotos. Se achican solas antes de subir (quedan livianas y sin datos del teléfono)."
+            }
           />
         </div>
         <label className="sm:col-span-2 flex flex-col gap-1 text-[11px] text-surface-400">

@@ -9,5 +9,6 @@ import { SerperImagesClient } from "./serper-images.client";
   imports: [AssetsModule],
   controllers: [ImagesController],
   providers: [ImageSyncService, SerperImagesClient, ImageSyncSchedulerService],
+  exports: [ImageSyncService],
 })
 export class ImagesModule {}

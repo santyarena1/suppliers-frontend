@@ -2,10 +2,23 @@ import type { Metadata } from "next";
 import "./landing.css";
 import { archivo, chivoMono } from "./fonts";
 
+const TITLE = "NODO | Todos tus distribuidores en una sola búsqueda";
+const DESCRIPTION =
+  "Buscá una vez en todos tus distribuidores: stock y precio final con impuestos. Un carrito, un pedido por distribuidor, directo en su portal.";
+
 export const metadata: Metadata = {
-  title: "NODO | Todos tus distribuidores en una sola búsqueda",
-  description:
-    "Buscá una vez en todos tus distribuidores: stock y precio final con impuestos. Un carrito, un pedido por distribuidor, directo en su portal.",
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: "NODO",
+    locale: "es_AR",
+    url: "/",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [{ url: "/og/og-nodo.jpg", width: 1200, height: 630, alt: "NODO: todos tus distribuidores en una sola búsqueda" }],
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og/og-nodo.jpg"] },
 };
 
 /**

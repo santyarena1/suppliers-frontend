@@ -16,7 +16,9 @@ import {
 } from "@/lib/sale-margins";
 import { useSubscription } from "@/lib/subscription";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
+import { PRODUCT_CONDITION_LABEL } from "@/lib/storefront";
 import CategoryProductsDrawer, { type Inherited } from "./CategoryProductsDrawer";
+import ConditionMargins from "./ConditionMargins";
 import CategoryTable from "./CategoryTable";
 import MarginHistory from "./MarginHistory";
 import MarginsHeader from "./MarginsHeader";
@@ -97,7 +99,16 @@ function SkeletonRows() {
  * Márgenes de venta de un distribuidor (modo vendedor, Pro y Custom). Ver
  * docs/PLAN_MODO_VENDEDOR.md §5.
  */
-export default function SaleMarginsPanel({ provider, providerName }: { provider: string; providerName: string }) {
+export default function SaleMarginsPanel({
+  provider,
+  providerName,
+  store = false,
+}: {
+  provider: string;
+  providerName: string;
+  /** Tienda de un comercio (no un distribuidor): suma el margen por estado. */
+  store?: boolean;
+}) {
   const { sellerMode } = useSellerSession();
   const { subscription, loading: subLoading } = useSubscription();
   const can = useCan("pricing.manage");
@@ -224,6 +235,18 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
     );
   }
 
+  function setCondition(condition: string, percent: number | null) {
+    if (!data?.conditions) return;
+    const prev = data.conditions.find((c) => c.condition === condition)?.percent ?? null;
+    const label = PRODUCT_CONDITION_LABEL[condition] ?? condition;
+    void mutate(
+      { ...data, conditions: data.conditions.map((c) => (c.condition === condition ? { ...c, percent } : c)) },
+      async () => (await saleMarginsApi.setConditions(provider, [condition], percent)).data ?? null,
+      percent == null ? `${label}: vuelve a heredar el margen.` : `${label}: margen ${formatMargin(percent)}.`,
+      async () => (await saleMarginsApi.setConditions(provider, [condition], prev)).data ?? null
+    );
+  }
+
   function setBase(base: SaleMarginBase) {
     if (!data) return;
     const prev = data.base;
@@ -238,7 +261,7 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
   if (!subLoading && subscription && !sellerMode) {
     return (
       <div className="flex max-w-2xl flex-col gap-4">
-        <Intro providerName={providerName} />
+        <Intro providerName={providerName} store={store} />
         <UpsellNotice capability="sellerMode" />
       </div>
     );
@@ -247,7 +270,7 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
   if (!data) {
     return (
       <div className="flex flex-col gap-4">
-        <Intro providerName={providerName} />
+        <Intro providerName={providerName} store={store} />
         {error ? (
           <div className="rounded-xl border border-surface-800 px-4 py-8 text-center">
             <p className="text-sm text-surface-300">{error}</p>
@@ -280,7 +303,7 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
 
   return (
     <div className="flex flex-col gap-4">
-      <Intro providerName={providerName} />
+      <Intro providerName={providerName} store={store} />
       {!canEdit && (
         <p className="flex items-center gap-2 rounded-lg border border-surface-800 bg-surface-900/60 px-3 py-2 text-xs text-surface-400">
           <Lock className="h-3.5 w-3.5" />
@@ -291,10 +314,14 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
         data={data}
         canEdit={canEdit}
         saving={saving}
+        store={store}
         onBase={setBase}
         onProviderPercent={setProviderPercent}
         onStorePercent={setStorePercent}
       />
+      {data.conditions && (
+        <ConditionMargins rows={data.conditions} inherited={inherited.value} canEdit={canEdit} saving={saving} onSet={setCondition} />
+      )}
       <CategoryTable
         categories={data.categories}
         inheritedValue={inherited.value}
@@ -325,7 +352,7 @@ export default function SaleMarginsPanel({ provider, providerName }: { provider:
   );
 }
 
-function Intro({ providerName }: { providerName: string }) {
+function Intro({ providerName, store = false }: { providerName: string; store?: boolean }) {
   return (
     <div className="flex items-start gap-3">
       <span className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
@@ -334,8 +361,9 @@ function Intro({ providerName }: { providerName: string }) {
       <div className="min-w-0">
         <h2 className="text-base font-semibold text-white">Márgenes de venta · {providerName}</h2>
         <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-surface-400">
-          El costo de {providerName} no cambia: el margen arma el precio de venta que ve tu equipo de ventas. Gana el más
-          específico: producto, subcategoría, categoría, este distribuidor y, por último, el general del comercio.
+          {store
+            ? `Lo que le comprás a ${providerName} lo podés revender igual que lo de un distribuidor. Gana el más específico: producto, estado, subcategoría, categoría, esta tienda y, por último, el general del comercio.`
+            : `El costo de ${providerName} no cambia: el margen arma el precio de venta que ve tu equipo de ventas. Gana el más específico: producto, subcategoría, categoría, este distribuidor y, por último, el general del comercio.`}
         </p>
       </div>
     </div>

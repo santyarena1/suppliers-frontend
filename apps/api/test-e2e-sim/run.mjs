@@ -6,7 +6,7 @@
 //   [SIM_OUT=<reporte.json>] [SIM_ONLY=providers] node test-e2e-sim/run.mjs
 //
 // SIM_ONLY=providers corre solo P1–P6 (scenarios-providers.mjs); SIM_ONLY=storefront, V1–V9
-// (Vender en NODO, scenarios-storefront.mjs). Levantar el API
+// (Vender en NODO, scenarios-storefront.mjs); SIM_ONLY=quotes, Q1–Q7 (presupuestos y márgenes por estado). Levantar el API
 // con CRON_DISABLED=true: así nada sale a los portales reales con credenciales falsas.
 //
 // El API tiene que estar corriendo sin RESEND/SMTP (el código de mail sale por
@@ -21,6 +21,7 @@ import { s11AccountSetup } from "./scenarios-account-setup.mjs";
 import { providerScenarios } from "./scenarios-providers.mjs";
 import { t1TeamInvite } from "./scenarios-team.mjs";
 import { storefrontScenarios } from "./scenarios-storefront.mjs";
+import { quoteScenarios } from "./scenarios-quotes.mjs";
 
 const { PrismaClient } = prismaPkg;
 const SESSION_CACHE_WAIT_MS = 31_000;
@@ -153,12 +154,17 @@ async function main() {
       for (const step of storefrontScenarios) await runStep(step, ctx);
       return;
     }
+    if (process.env.SIM_ONLY === "quotes") {
+      for (const step of quoteScenarios) await runStep(step, ctx);
+      return;
+    }
     const steps = [s1Register, s2Onboarding, s3Session, s4Team, s5Security];
     for (const step of steps) await runStep(step, ctx);
     const deferredFrom = Date.now();
     for (const step of [s6Link, s7PriceList, s8CartOrder, s4bTeamRemoval, s5bCrossOrg, s9Plan, s10Probes, s11AccountSetup]) await runStep(step, ctx);
     for (const step of providerScenarios) await runStep(step, ctx);
     for (const step of storefrontScenarios) await runStep(step, ctx);
+    for (const step of quoteScenarios) await runStep(step, ctx);
     await runStep(t1TeamInvite, ctx);
     const wait = SESSION_CACHE_WAIT_MS - (Date.now() - deferredFrom);
     if (wait > 0) await sleep(wait);

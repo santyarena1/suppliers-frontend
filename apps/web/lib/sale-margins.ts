@@ -5,7 +5,17 @@
  */
 
 /** De dónde sale el margen que se aplica (gana el más específico). */
-export type SaleMarginSource = "product" | "subcategory" | "category" | "provider" | "store" | "none";
+export type SaleMarginSource = "product" | "condition" | "subcategory" | "category" | "provider" | "store" | "none";
+
+/** Estado del producto: solo en las tiendas de comercios (los distribuidores venden nuevo). */
+export type ProductCondition = "NEW" | "OPEN_BOX" | "REFURBISHED" | "USED";
+
+export interface SaleMarginConditionRow {
+  condition: ProductCondition;
+  products: number;
+  /** Margen propio del estado. `null` = hereda. */
+  percent: number | null;
+}
 
 /** Sobre qué costo se calcula el margen en este distribuidor. */
 export type SaleMarginBase = "FINAL" | "NET";
@@ -58,6 +68,8 @@ export interface ProviderSaleMargins {
   /** Margen general del comercio. `null` = sin margen general. */
   storePercent: number | null;
   categories: SaleMarginCategory[];
+  /** Solo tiendas de comercios: margen por estado. `null` en distribuidores. */
+  conditions?: SaleMarginConditionRow[] | null;
 }
 
 export interface SaleMarginProduct {
@@ -94,6 +106,7 @@ export interface SaleMarginHistoryEntry {
 
 export const SALE_MARGIN_SOURCE_LABELS: Record<SaleMarginSource, string> = {
   product: "Propio",
+  condition: "Estado",
   subcategory: "Subcategoría",
   category: "Categoría",
   provider: "Distribuidor",

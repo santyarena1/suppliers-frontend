@@ -12,6 +12,7 @@ import {
   AdminStorefrontStatusDto,
   CloseStorefrontDto,
   CreateUpgradeRequestDto,
+  ImageSearchDto,
   LinkSheetDto,
   OpenStorefrontDto,
   ProductsQueryDto,
@@ -120,6 +121,13 @@ export class StorefrontController {
     if (!file) throw new BadRequestException("No se recibió ninguna foto");
     const buffer = await file.toBuffer();
     return this.storefront.uploadImage(tenant, { filename: file.filename, buffer });
+  }
+
+  /** Fotos de internet para un producto (Serper). Tope de búsquedas por día y por tienda. */
+  @RequiresCapability("storefront")
+  @Post("storefront/images/search")
+  searchImages(@CurrentTenant() tenant: TenantContext, @Body() dto: ImageSearchDto) {
+    return this.storefront.searchImages(tenant, dto.query);
   }
 
   @RequiresCapability("storefront")

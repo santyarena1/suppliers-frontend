@@ -87,6 +87,34 @@ describe("subcategoría del distribuidor (Hardware › Placas de video)", () => 
   });
 });
 
+describe("estado del producto (tiendas de comercios)", () => {
+  const item = { provider: "LIST_LOCAL", externalId: "U1", category: "Notebooks", condition: "USED" };
+  const rules = new Map<string, number>([
+    [saleRuleKey.provider("LIST_LOCAL"), 20],
+    [saleRuleKey.category("LIST_LOCAL", "notebooks"), 25],
+    [saleRuleKey.condition("LIST_LOCAL", "USED"), 8],
+  ]);
+
+  it("el estado gana sobre la categoría y el proveedor", () => {
+    expect(resolveSaleMargin(rules, item)).toEqual({ percent: 8, source: "condition" });
+  });
+
+  it("el producto sigue ganando sobre el estado", () => {
+    const withProduct = new Map(rules).set(saleRuleKey.product("LIST_LOCAL", "U1"), 3);
+    expect(resolveSaleMargin(withProduct, item)).toEqual({ percent: 3, source: "product" });
+  });
+
+  it("otro estado (o sin estado) hereda la categoría", () => {
+    expect(resolveSaleMargin(rules, { ...item, condition: "NEW" })).toEqual({ percent: 25, source: "category" });
+    expect(resolveSaleMargin(rules, { ...item, condition: null })).toEqual({ percent: 25, source: "category" });
+    expect(resolveSaleMargin(rules, { ...item, condition: "INVENTADO" })).toEqual({ percent: 25, source: "category" });
+  });
+
+  it("el margen por estado de una tienda no se aplica a otra", () => {
+    expect(resolveSaleMargin(rules, { ...item, provider: "LIST_OTRO" })).toEqual({ percent: 0, source: "none" });
+  });
+});
+
 describe("saleCategoryKey", () => {
   it("normaliza espacios, mayúsculas y tildes", () => {
     expect(saleCategoryKey("  Monitores   Gamer ")).toBe("monitores gamer");

@@ -7,7 +7,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import {
   IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
   MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
-  invalidateMyProviders, loadMyProviders,
+  invalidateMyProviders, loadMyProviders, storefrontApi,
   isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, isProviderKey,
 } from "@/lib/api";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
@@ -40,6 +40,7 @@ import { useSearchParams } from "next/navigation";
 import SyncHealthBanner, { type SyncHealth } from "@/components/SyncHealthBanner";
 import PlanGate from "@/components/subscription/PlanGate";
 import SaleMarginsPanel from "@/components/sale-margins/SaleMarginsPanel";
+import StoreProviderDetail from "@/components/storefront/StoreProviderDetail";
 import {
   AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
   Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
@@ -102,6 +103,24 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const pendingRunId = useRef<string | null>(null);
 
   const queryTab = useSearchParams().get("tab");
+  // Un proveedor por lista puede ser la tienda de un local: tiene su propia ficha.
+  const [storeKind, setStoreKind] = useState<"unknown" | "store" | "other">(listBased ? "unknown" : "other");
+  useEffect(() => {
+    if (!listBased) {
+      setStoreKind("other");
+      return;
+    }
+    let alive = true;
+    setStoreKind("unknown");
+    void Promise.all([loadMyProviders(), storefrontApi.offers().then((r) => r.data).catch(() => [])]).then(([mine, offers]) => {
+      if (!alive) return;
+      const store = mine.some((p) => p.provider === provider && p.storefront) || offers.some((o) => o.provider === provider);
+      setStoreKind(store ? "store" : "other");
+    });
+    return () => {
+      alive = false;
+    };
+  }, [provider, listBased]);
   useEffect(() => {
     tabFromQuery.current = false;
     autoTabDone.current = false;
@@ -418,6 +437,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   if (!valid) {
     return <div className="flex-1 flex items-center justify-center text-surface-500 text-sm">Proveedor inválido.</div>;
   }
+  if (storeKind === "unknown") {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <NodoSpinner />
+      </div>
+    );
+  }
+  if (storeKind === "store") return <StoreProviderDetail provider={provider} initialTab={queryTab} />;
 
   return (
     <>

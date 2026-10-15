@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import api from "@/lib/api";
+import api, { uploadAuthedFile } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { getArsPerUsd, isArsCurrency } from "@/lib/fx";
 import { formatARS, formatUSD } from "@/lib/format";
@@ -14,7 +14,22 @@ import { useSellerSession } from "@/lib/sale-price";
  * calcula y congela el servidor; acá solo se muestran y se mandan.
  */
 
+/** De dónde sale el margen de una línea (para quien ve costos; al vendedor le llega `null`, `none` o `manual`). */
+export type QuoteMarginSource =
+  | "product"
+  | "condition"
+  | "subcategory"
+  | "category"
+  | "provider"
+  | "store"
+  | "none"
+  | "line"
+  | "quote"
+  | "manual";
+
 export interface QuoteItem {
+  /** `custom` = línea libre con precio a mano (armado, envío…). */
+  kind: "product" | "custom";
   provider: string;
   externalId: string;
   name: string;
@@ -29,7 +44,13 @@ export interface QuoteItem {
   /** Moneda en que lo publica el distribuidor. */
   currency: string;
   pricedAt: string;
+  /** Margen propio de la línea (solo para quien ve costos). */
+  marginPercent: number | null;
+  marginSource: QuoteMarginSource | null;
 }
+
+/** `EXPIRED`: venció sin que el cliente decidiera. */
+export type QuoteStatus = "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
 
 export interface Quote {
   id: string;
@@ -37,10 +58,29 @@ export interface Quote {
   initials: string | null;
   clientName: string | null;
   clientPhone: string | null;
+  clientEmail: string | null;
   notes: string | null;
+  /** Condiciones de este presupuesto; `null` = las de la plantilla. */
+  terms: string | null;
   items: QuoteItem[];
+  /** Total con descuento, por moneda. */
   totals: Record<string, number>;
+  subtotals: Record<string, number>;
+  discounts: Record<string, number>;
   itemCount: number;
+  status: QuoteStatus;
+  validUntil: string | null;
+  /** Margen de todo el presupuesto (solo para quien ve costos). */
+  marginPercent: number | null;
+  discountPercent: number | null;
+  /** Moneda para el cliente; `null` = la que elija quien lo mira. */
+  currency: "ARS" | "USD" | null;
+  /** Líneas que van al costo: sin margen configurado. */
+  atCostLines: number;
+  /** Quien mira ve costos: puede cambiar márgenes. */
+  canEditMargins: boolean;
+  sentAt: string | null;
+  decidedAt: string | null;
   createdById: string;
   createdByName: string | null;
   mine: boolean;
@@ -60,23 +100,83 @@ export interface QuotePriceChange {
   after: number | null;
 }
 
-export type QuoteClientPatch = Partial<Pick<Quote, "clientName" | "clientPhone" | "notes">>;
+export type QuoteClientPatch = Partial<
+  Pick<Quote, "clientName" | "clientPhone" | "clientEmail" | "notes" | "terms" | "currency" | "validUntil" | "marginPercent" | "discountPercent">
+> & { status?: Exclude<QuoteStatus, "EXPIRED"> };
+
+export interface QuoteItemPatch {
+  qty?: number;
+  marginPercent?: number | null;
+  name?: string;
+  unitFinalPrice?: number;
+  currency?: "ARS" | "USD";
+  ivaPercent?: number;
+}
+
+export interface QuoteCustomInput {
+  name: string;
+  unitFinalPrice: number;
+  currency: "ARS" | "USD";
+  qty?: number;
+  ivaPercent?: number;
+}
+
+export type QuoteTheme = "modern" | "classic" | "minimal" | "bold";
+export type QuoteFont = "sans" | "serif" | "mono";
+
+/** Plantilla del PDF y valores por defecto de los presupuestos del comercio. */
+export interface QuoteSettings {
+  theme: QuoteTheme;
+  accentColor: string;
+  font: QuoteFont;
+  logoUrl: string | null;
+  businessName: string;
+  taxId: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  intro: string | null;
+  terms: string | null;
+  footer: string | null;
+  validityDays: number;
+  numberPrefix: string;
+  showImages: boolean;
+  showSku: boolean;
+  showBrand: boolean;
+  priceDisplay: "FINAL" | "NET";
+  maxSellerDiscount: number | null;
+  updatedAt: string | null;
+}
+
+export type QuoteSettingsPatch = Partial<Omit<QuoteSettings, "logoUrl" | "updatedAt">>;
 
 export const quotesApi = {
-  list: (params: { archived?: boolean; q?: string; createdById?: string } = {}) =>
+  list: (params: { archived?: boolean; q?: string; createdById?: string; status?: string } = {}) =>
     api.get<Quote[]>("/my/quotes", {
       params: {
         ...(params.archived ? { archived: "true" } : {}),
         ...(params.q ? { q: params.q } : {}),
         ...(params.createdById ? { createdById: params.createdById } : {}),
+        ...(params.status ? { status: params.status } : {}),
       },
     }),
+  get: (id: string) => api.get<Quote>(`/my/quotes/${id}`),
   create: (data: QuoteClientPatch = {}) => api.post<Quote>("/my/quotes", data),
   update: (id: string, data: QuoteClientPatch) => api.patch<Quote>(`/my/quotes/${id}`, data),
   remove: (id: string) => api.delete<{ id: string }>(`/my/quotes/${id}`),
   addItem: (id: string, data: { provider: string; externalId: string; qty?: number }) =>
     api.post<Quote>(`/my/quotes/${id}/items`, data),
   setQty: (id: string, index: number, qty: number) => api.patch<Quote>(`/my/quotes/${id}/items/${index}`, { qty }),
+  updateItem: (id: string, index: number, data: QuoteItemPatch) => api.patch<Quote>(`/my/quotes/${id}/items/${index}`, data),
+  moveItem: (id: string, index: number, to: number) => api.post<Quote>(`/my/quotes/${id}/items/${index}/move`, { to }),
+  addCustom: (id: string, data: QuoteCustomInput) => api.post<Quote>(`/my/quotes/${id}/items/custom`, data),
+  duplicate: (id: string) => api.post<Quote>(`/my/quotes/${id}/duplicate`, {}),
+  markSent: (id: string) => api.post<Quote>(`/my/quotes/${id}/sent`, {}),
+  settings: () => api.get<QuoteSettings>("/my/quote-settings"),
+  saveSettings: (data: QuoteSettingsPatch) => api.put<QuoteSettings>("/my/quote-settings", data),
+  uploadLogo: (file: File) => uploadAuthedFile("/my/quote-settings/logo", file) as Promise<QuoteSettings>,
+  removeLogo: () => api.delete<QuoteSettings>("/my/quote-settings/logo"),
   removeItem: (id: string, index: number) => api.delete<Quote>(`/my/quotes/${id}/items/${index}`),
   refreshPrices: (id: string) => api.post<{ quote: Quote; changes: QuotePriceChange[] }>(`/my/quotes/${id}/refresh-prices`, {}),
   archive: (id: string) => api.post<Quote>(`/my/quotes/${id}/archive`, {}),
@@ -99,6 +199,55 @@ export function quoteError(err: unknown, fallback: string): string {
   if (typeof msg === "string" && msg.trim()) return msg;
   if (Array.isArray(msg) && typeof msg[0] === "string") return msg[0];
   return fallback;
+}
+
+export const QUOTE_STATUS_LABEL: Record<QuoteStatus, string> = {
+  DRAFT: "Borrador",
+  SENT: "Enviado",
+  ACCEPTED: "Aceptado",
+  REJECTED: "Rechazado",
+  EXPIRED: "Vencido",
+};
+
+export const QUOTE_STATUS_TONE: Record<QuoteStatus, string> = {
+  DRAFT: "bg-surface-800 text-surface-300 border-surface-700",
+  SENT: "bg-sky-500/10 text-sky-300 border-sky-500/30",
+  ACCEPTED: "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
+  REJECTED: "bg-red-500/10 text-red-300 border-red-500/30",
+  EXPIRED: "bg-amber-500/10 text-amber-300 border-amber-500/30",
+};
+
+/** Número para el cliente: "P-0012" (el prefijo lo elige el comercio). */
+export function quoteCode(prefix: string | null | undefined, number: number): string {
+  return `${prefix ?? ""}${String(number).padStart(4, "0")}`;
+}
+
+/** Fecha corta argentina ("15/10/2026"). */
+export function shortDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+/**
+ * Pasa importes a la moneda del presupuesto (o la que eligió quien mira) con la
+ * cotización del día. Devuelve números para el PDF y el texto, y el formato.
+ */
+export function useQuoteConverter(target: "ARS" | "USD" | null | undefined) {
+  const { currency: pref, currentRate } = usePrefs();
+  const currency: "ARS" | "USD" = target ?? (pref === "ARS" ? "ARS" : "USD");
+  const rate = currentRate?.venta ?? getArsPerUsd() ?? null;
+  const convert = useCallback(
+    (amount: number | null, source: string): number | null => {
+      if (amount == null) return null;
+      const fromArs = isArsCurrency(source);
+      if (currency === "ARS") return fromArs ? amount : rate ? amount * rate : null;
+      return fromArs ? (rate ? amount / rate : null) : amount;
+    },
+    [currency, rate]
+  );
+  const format = useCallback((n: number | null) => (n == null ? "—" : currency === "ARS" ? formatARS(n) : formatUSD(n)), [currency]);
+  return { currency, rate, convert, format };
 }
 
 /**
@@ -128,17 +277,24 @@ export function useQuoteMoney() {
 export function useQuoteTotal() {
   const { currency, currentRate } = usePrefs();
   return useCallback(
-    (q: Pick<Quote, "items">): string => {
+    (q: Pick<Quote, "items"> & Partial<Pick<Quote, "totals" | "currency">>): string => {
       const rate = currentRate?.venta ?? getArsPerUsd();
-      let total = 0;
-      for (const it of q.items) {
-        if (it.unitFinalPrice == null) continue;
-        const line = it.unitFinalPrice * it.qty;
-        const ars = isArsCurrency(it.currency);
-        if (currency === "ARS") total += ars ? line : rate ? line * rate : 0;
-        else total += ars ? (rate ? line / rate : 0) : line;
+      const target = q.currency ?? (currency === "ARS" ? "ARS" : "USD");
+      // Con descuento: los totales por moneda que calcula el servidor.
+      const byCurrency: Record<string, number> = q.totals ?? {};
+      if (!q.totals) {
+        for (const it of q.items) {
+          if (it.unitFinalPrice == null) continue;
+          byCurrency[it.currency] = (byCurrency[it.currency] ?? 0) + it.unitFinalPrice * it.qty;
+        }
       }
-      return currency === "ARS" ? formatARS(total) : formatUSD(total);
+      let total = 0;
+      for (const [cur, amount] of Object.entries(byCurrency)) {
+        const ars = isArsCurrency(cur);
+        if (target === "ARS") total += ars ? amount : rate ? amount * rate : 0;
+        else total += ars ? (rate ? amount / rate : 0) : amount;
+      }
+      return target === "ARS" ? formatARS(total) : formatUSD(total);
     },
     [currency, currentRate]
   );

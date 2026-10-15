@@ -22,7 +22,15 @@ const LANDING_REDIRECTS: Record<string, string> = {
 /** El dominio de NODO. Los anteriores redirigen acá con la misma ruta. */
 const CANONICAL_HOST = "nodohub.app";
 const LEGACY_HOSTS = new Set(["suppliers-frontend.vercel.app", "www.nodohub.app"]);
-const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/banners", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n"];
+const PUBLIC_PREFIXES = ["/_next", "/api", "/img-proxy", "/banners", "/favicon", "/static", "/icon", "/logo-", "/apple-icon", "/m", "/n", "/og/"];
+/**
+ * Lectores de vista previa de links (WhatsApp, redes, chats). Entran sin
+ * sesión: en las páginas que se comparten (invitación a una tienda) tienen que
+ * ver la página con su título e imagen, no el login. No reciben datos: la
+ * vista previa de esas páginas es fija.
+ */
+const LINK_PREVIEW_BOTS = /WhatsApp|facebookexternalhit|Facebot|Twitterbot|TelegramBot|Slackbot|LinkedInBot|Discordbot|SkypeUriPreview|Pinterest|redditbot|Applebot|Googlebot|bingbot/i;
+const SHAREABLE_PREFIXES = ["/tienda/"];
 
 function isPrefetch(req: NextRequest): boolean {
   return (
@@ -61,6 +69,10 @@ export function middleware(req: NextRequest) {
   if (OPEN_PATHS.has(pathname) || pathname.startsWith("/landing/") || pathname.startsWith("/developers/")) return NextResponse.next();
   if (AUTH_PATHS.has(pathname)) return guardLogin(req);
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) return NextResponse.next();
+
+  if (!auth && SHAREABLE_PREFIXES.some((p) => pathname.startsWith(p)) && LINK_PREVIEW_BOTS.test(req.headers.get("user-agent") || "")) {
+    return NextResponse.next();
+  }
 
   if (!auth) {
     // Un prefetch sin cookie no puede cachear el redirect a /login: Next lo

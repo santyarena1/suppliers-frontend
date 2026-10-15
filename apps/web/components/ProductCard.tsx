@@ -30,6 +30,7 @@ import {
 } from "@/lib/compare-store";
 import AddToCartButton from "./AddToCartButton";
 import AddToQuoteButton from "./quotes/AddToQuoteButton";
+import { useQuotes } from "@/lib/quotes";
 import SalePricePanel from "./SalePricePanel";
 import { OwnStorePriceHint } from "./OwnStoreCompare";
 import ProductSyncedAt from "./ProductSyncedAt";
@@ -140,6 +141,8 @@ export default function ProductCard({
   // Modo vendedor: el vendedor ve solo la venta; quien ve costos, la venta al lado.
   const present = useSalePresentation(product);
   const sellerView = present.mode === "sale";
+  // Armando un presupuesto (quien compra): cada tarjeta dice a cuál va.
+  const quoteBuilding = Boolean(useQuotes().active);
   const saleUsd = present.mode === "sale" || present.mode === "cost+sale" ? present.saleUsd : null;
 
   const priced = sellerView ? saleUsd != null && saleUsd > 0 : hasOwnPrice(product);
@@ -624,8 +627,9 @@ export default function ProductCard({
             >
               <DollarSign className="w-3.5 h-3.5" />
             </button>
-            {/* En la grilla no entra un botón más junto al carrito: quien compra lo tiene en la lista, la ficha y el comparador. */}
             {priced && sellerView && <AddToQuoteButton product={product} />}
+            {/* Quien compra: el ícono abre «¿a qué presupuesto?»; armando uno, va la franja de abajo. */}
+            {priced && !sellerView && !quoteBuilding && <AddToQuoteButton product={product} variant="icon" />}
             {priced && !sellerView && (
               <AddToCartButton
                 product={product}
@@ -636,6 +640,11 @@ export default function ProductCard({
             )}
           </div>
         </div>
+        {priced && !sellerView && quoteBuilding && (
+          <div className="mt-2">
+            <AddToQuoteButton product={product} variant="bar" />
+          </div>
+        )}
 
         <div className="pc__sync pc-mono">
           <ProductSyncedAt syncedAt={product.syncedAt} className="pc__sync-line" />

@@ -196,6 +196,7 @@ model Tenant {
   saleMarginRules    SaleMarginRule[]
   saleMarginChanges  SaleMarginChange[]
   salesQuotes        SalesQuote[]
+  quoteSettings      QuoteSettings?
   rolePermissions    TenantRolePermission[]
   accessCodes        TenantAccessCode[]
   teamInviteCodes    TeamInviteCode[]
@@ -2635,6 +2636,8 @@ enum SaleMarginScope {
   STORE
   PROVIDER
   CATEGORY
+  /// Estado del producto en una tienda de comercio (E:<prov>:<NEW|USED…>).
+  CONDITION
   PRODUCT
 }
 
@@ -2696,15 +2699,74 @@ model SalesQuote {
   createdById String
   clientName  String?
   clientPhone String?
+  clientEmail String?
   notes       String?
-  /// [{ provider, externalId, name, imageUrl, brand, sku, qty, unitPrice, unitFinalPrice, currency, pricedAt }]
+  /// [{ kind, provider, externalId, name, imageUrl, brand, sku, qty, unitPrice, unitFinalPrice, currency, pricedAt, marginPercent, marginSource }]
   items       Json      @default("[]")
+  status      SalesQuoteStatus @default(DRAFT)
+  /// Hasta cuándo valen los precios (se renueva al actualizarlos).
+  validUntil  DateTime?
+  /// Margen para todo el presupuesto; pisa los márgenes de los proveedores. Lo ve y lo cambia solo quien ve costos.
+  marginPercent   Decimal? @db.Decimal(7, 3)
+  /// Descuento sobre el total (lo ve el cliente).
+  discountPercent Decimal? @db.Decimal(5, 2)
+  /// Moneda del presupuesto para el cliente: ARS | USD. null = la que elija quien lo mira.
+  currency    String?
+  /// Condiciones de este presupuesto (si no, las de la plantilla).
+  terms       String?
+  sentAt      DateTime?
+  decidedAt   DateTime?
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   @@unique([tenantId, number])
   @@index([tenantId, createdById, archivedAt])
+}
+
+enum SalesQuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+/// Plantilla de los presupuestos del comercio: cómo se ve el PDF y qué valores
+/// trae cada presupuesto nuevo.
+model QuoteSettings {
+  id              String   @id @default(uuid())
+  tenantId        String   @unique
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// classic | modern | minimal | bold
+  theme           String   @default("modern")
+  /// #RRGGBB
+  accentColor     String   @default("#4f46e5")
+  /// sans | serif | mono
+  font            String   @default("sans")
+  logoUrl         String?
+  businessName    String?
+  taxId           String?
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  /// Texto arriba de la tabla (saludo, presentación).
+  intro           String?
+  /// Condiciones por defecto (pago, entrega, garantía).
+  terms           String?
+  /// Pie de página.
+  footer          String?
+  validityDays    Int      @default(7)
+  numberPrefix    String   @default("P-")
+  showImages      Boolean  @default(true)
+  showSku         Boolean  @default(true)
+  showBrand       Boolean  @default(true)
+  /// FINAL = precios con IVA | NET = sin IVA y el IVA aparte
+  priceDisplay    String   @default("FINAL")
+  /// Descuento máximo que puede dar quien no ve costos. null = sin tope.
+  maxSellerDiscount Decimal? @db.Decimal(5, 2)
+  updatedById     String?
+  updatedAt       DateTime @updatedAt
 }
 
 // ─── Enriquecimiento del catálogo (docs/PLAN_ENRIQUECIMIENTO.md) ───────────
@@ -2928,6 +2990,9 @@ model Storefront {
   /// También vende estos productos por fuera de NODO (el stock puede moverse).
   sellsOffline     Boolean          @default(false)
   closedAt         DateTime?
+  /// Búsquedas de fotos con Serper del día (cuestan créditos): día (YYYY-MM-DD, hora argentina) y cuántas.
+  imageSearchDay   String?
+  imageSearchCount Int              @default(0)
   /// Google Sheets conectado: id de la planilla y de la pestaña (NODO arma la URL).
   sheetId          String?
   sheetGid         String?

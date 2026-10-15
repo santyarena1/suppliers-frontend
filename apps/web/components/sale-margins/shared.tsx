@@ -23,6 +23,7 @@ export function useMoney() {
 
 const SOURCE_TONE: Record<SaleMarginSource, string> = {
   product: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  condition: "bg-sky-500/10 text-sky-300 border-sky-500/25",
   subcategory: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25",
   category: "bg-emerald-500/10 text-emerald-300 border-emerald-500/25",
   provider: "bg-brand-500/10 text-brand-300 border-brand-500/25",

@@ -307,6 +307,18 @@ export class ImageSyncService implements OnModuleInit {
     };
   }
 
+  /**
+   * Búsqueda de fotos para otra pantalla (tiendas de comercios): solo devuelve
+   * los resultados de Serper. Nadie del servidor baja esas fotos: la web las
+   * muestra y sube por el proxy de imágenes la que se elige.
+   */
+  async searchImages(query: string, num = 12) {
+    const q = query.trim().slice(0, 220);
+    if (!q) throw new BadRequestException("Escribí qué buscar");
+    const apiKey = await this.readApiKey();
+    return this.serper.searchImages(apiKey, q, num);
+  }
+
   async searchProductImages(productId: string, queryOverride?: string) {
     const product = await this.prisma.providerSyncCache.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException("Producto no encontrado");

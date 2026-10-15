@@ -1049,3 +1049,32 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Estado**: IMPLEMENTADO
 - **Notas**: `GET /my/providers` (directorio abierto) ahora trae como `linked: false` a todo distribuidor del que alguien ya obtuvo el catálogo (hay fichas en `ProviderSyncCache`), incluidos los proveedores por lista; nunca las tiendas de comercios ni los demo. Conectarse no trae precios de otro comercio: el comercio ve los suyos al conectar su cuenta o subir su lista (o la lista base pública del distribuidor, si la publicó).
 
+
+### [FEATURE] Presupuestos v2: estados, margen propio, descuento, líneas libres y plantilla del PDF
+- **Método / Ruta** (además de las de "Presupuestos de venta"):
+  - `PATCH /my/quotes/:id` suma `clientEmail`, `terms`, `currency: ARS|USD|null`, `validUntil` (ISO o `null`), `marginPercent` (−50 a 1000 o `null`; solo con `prices.viewCost`, recalcula todas las líneas), `discountPercent` (0–100 o `null`; sin `prices.viewCost` tiene el tope `maxSellerDiscount` de la plantilla → 403), `status: DRAFT|SENT|ACCEPTED|REJECTED`.
+  - `POST /my/quotes/:id/sent`: lo marca enviado si era borrador (la web lo llama al bajar o mandar el PDF y al abrir WhatsApp).
+  - `POST /my/quotes/:id/duplicate` → presupuesto nuevo (otro número, borrador) con cliente, líneas y precios de hoy.
+  - `POST /my/quotes/:id/items/custom` body `{ name, unitFinalPrice (con IVA), currency: ARS|USD, qty?, ivaPercent?: 0|10.5|21|27 }`: línea libre (armado, envío…).
+  - `PATCH /my/quotes/:id/items/:index` body `{ qty?, marginPercent?, name?, unitFinalPrice?, currency?, ivaPercent? }`: margen propio de la línea (solo `prices.viewCost`; `null` vuelve al del presupuesto o las reglas) o, en líneas libres, nombre y precio.
+  - `POST /my/quotes/:id/items/:index/move` body `{ to }`: orden de las líneas.
+  - `GET /my/quotes?status=DRAFT|SENT|ACCEPTED|REJECTED`; `q` también busca por mail.
+  - Plantilla: `GET /my/quote-settings` (todo el equipo) · `PUT /my/quote-settings` (OWNER/ADMIN) body parcial `{ theme: modern|classic|minimal|bold, accentColor: "#rrggbb", font: sans|serif|mono, businessName, taxId, address, phone, email, website, intro, terms, footer, validityDays (1–90), numberPrefix (≤ 8), showImages, showSku, showBrand, priceDisplay: FINAL|NET, maxSellerDiscount (0–100|null) }` · `POST /my/quote-settings/logo` (multipart `file`, JPG/PNG/WebP por sus bytes, ≤ 1,5 MB; reemplaza y borra el anterior) · `DELETE /my/quote-settings/logo`.
+- **Auth**: Bearer, capacidad `sellerMode`.
+- **Respuesta esperada**: `QuoteView` suma `clientEmail, terms, subtotals, discounts, totals (con descuento), status (también EXPIRED: venció sin que el cliente decidiera), validUntil, marginPercent, discountPercent, currency, atCostLines, canEditMargins, sentAt, decidedAt`. Cada ítem suma `kind: product|custom`, `marginPercent`, `marginSource: product|condition|subcategory|category|provider|store|none|line|quote|manual`. Sin `prices.viewCost` los márgenes llegan en `null` y `marginSource` solo distingue `none` (al costo) y `manual`. Plantilla: `QuoteSettingsView` con los campos de arriba, `logoUrl` y `updatedAt` (`businessName` cae en el nombre del comercio).
+- **Estado**: IMPLEMENTADO
+- **Notas**: El PDF lo arma la web (react-pdf, `components/quotes/pdf`). Un presupuesto nuevo vence a los `validityDays` de la plantilla; "Actualizar precios" lo renueva. `atCostLines` = productos sin margen configurado (la web avisa y explica cómo configurarlo). Migración `20261016130000_sales_quote_v2` (solo agrega).
+
+### [FEATURE] Márgenes por estado (tiendas de locales)
+- **Método / Ruta**: `PUT /providers/:provider/sale-margins/conditions` body `{ conditions: ("NEW"|"OPEN_BOX"|"REFURBISHED"|"USED")[], percent: number|null }`
+- **Auth**: Bearer, `sellerMode` + `pricing.manage`.
+- **Respuesta esperada**: `ProviderSaleMargins` (suma `conditions: [{ condition, products, percent }]` en las tiendas de locales; `null` en distribuidores). Los productos de `GET …/sale-margins/products` suman `condition`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: Solo para proveedores que son la tienda de un comercio (400 en distribuidores). Orden: producto > estado > subcategoría > categoría > proveedor > comercio. Lo usan la búsqueda, los presupuestos y la API de catálogo. Historial: "Estado: Usado". Migración `20261016120000_sale_margin_condition`.
+
+### [FEATURE] Fotos de internet para los productos de la tienda
+- **Método / Ruta**: `POST /my/storefront/images/search` body `{ query }` (3–200 caracteres)
+- **Auth**: Bearer, dueño de la tienda (capacidad `storefront`).
+- **Respuesta esperada**: `{ query, images: [{ imageUrl, thumbnailUrl, title, source }], left }` (`left` = búsquedas que quedan hoy).
+- **Estado**: IMPLEMENTADO
+- **Notas**: Serper, como «Primera foto». Tope de 25 búsquedas por tienda y por día (hora argentina; 429 al pasarlo); si Serper falla, 503 y no cuenta. El servidor no baja ninguna foto: la web baja la elegida por `/img-proxy`, la achica y la sube con `POST /my/storefront/images`. `GET /my/storefront/products` suma `autoImage` (la foto la encontró NODO solo) y al editar se puede conservar esa foto. Migración `20261016140000_storefront_image_search`.

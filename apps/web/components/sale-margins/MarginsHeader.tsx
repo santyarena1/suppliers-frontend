@@ -26,6 +26,7 @@ export default function MarginsHeader({
   data,
   canEdit,
   saving,
+  store = false,
   onBase,
   onProviderPercent,
   onStorePercent,
@@ -33,13 +34,16 @@ export default function MarginsHeader({
   data: ProviderSaleMargins;
   canEdit: boolean;
   saving: boolean;
+  /** Tienda de un comercio: el margen va sobre su precio final (no se elige la base). */
+  store?: boolean;
   onBase: (base: SaleMarginBase) => void;
   onProviderPercent: (percent: number | null) => void;
   onStorePercent: (percent: number | null) => void;
 }) {
   const providerEffective = data.providerPercent ?? data.storePercent ?? 0;
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+    <div className={store ? "grid gap-4" : "grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]"}>
+      {!store && (
       <fieldset className="rounded-xl border border-surface-800 p-4">
         <legend className="px-1 text-sm font-semibold text-white">Cómo se calcula</legend>
         <div className="mt-1 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Base del margen">
@@ -76,10 +80,11 @@ export default function MarginsHeader({
           })}
         </div>
       </fieldset>
+      )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+      <div className={store ? "grid gap-3 sm:grid-cols-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"}>
         <div className="rounded-xl border border-surface-800 p-4">
-          <p className="text-sm font-semibold text-white">Margen de este distribuidor</p>
+          <p className="text-sm font-semibold text-white">{store ? "Margen de esta tienda" : "Margen de este distribuidor"}</p>
           <p className="mt-0.5 text-[11px] leading-snug text-surface-500">
             Para las categorías y productos sin margen propio.
             {data.providerPercent == null && ` Hoy hereda ${formatMargin(data.storePercent ?? 0)} del comercio.`}

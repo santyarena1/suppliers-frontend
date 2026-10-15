@@ -1,3 +1,5 @@
+import { PRODUCT_CONDITIONS } from "@nodo/shared";
+
 /**
  * Reglas de Vender en NODO que no tocan la base (docs/PLAN_VENDER_EN_NODO.md).
  * Viven aparte para testearlas sin Prisma.
@@ -146,7 +148,8 @@ export function displayNameProblem(name: string, taken: Set<string>): string | n
 export const PAYMENT_METHODS = ["CASH", "TRANSFER", "MERCADOPAGO", "CARD", "CHECK", "CRYPTO", "CURRENT_ACCOUNT"] as const;
 export const DELIVERY_OPTIONS = ["PICKUP", "OWN_DELIVERY", "MOTO", "CARRIER"] as const;
 export const INVOICE_TYPES = ["A", "B", "NONE"] as const;
-export const PRODUCT_CONDITIONS = ["NEW", "OPEN_BOX", "REFURBISHED", "USED"] as const;
+/** Nuevo, caja abierta, reacondicionado, usado (también arma los márgenes por estado). */
+export { PRODUCT_CONDITIONS };
 
 /** Solo valores conocidos, sin repetir, en el orden de la lista. */
 export function pickAllowed<T extends string>(values: unknown, allowed: readonly T[]): T[] {

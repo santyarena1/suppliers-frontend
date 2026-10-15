@@ -1,6 +1,8 @@
-import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { Cron } from "@nestjs/schedule";
 import { shouldRunScheduledJob } from "../common/cron-window";
+import { ImageSyncService } from "../images/image-sync.service";
+import type { SerperImageHit } from "../images/product-image";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   assetIdOf,
@@ -11,6 +13,14 @@ import {
 } from "./storefront-rules";
 
 const EXT: Record<string, string> = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" };
+/** Búsquedas de fotos con Serper por tienda y por día. */
+export const IMAGE_SEARCHES_PER_DAY = 25;
+
+/** Día calendario en Argentina (UTC−3, sin horario de verano): el cupo se renueva a la medianoche local. */
+export function argentinaDay(now: Date): string {
+  return new Date(now.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 /** Una foto recién subida y todavía sin guardar en un producto no se borra antes de esto. */
 const UPLOAD_GRACE_MS = 6 * 60 * 60 * 1000;
 
@@ -24,7 +34,48 @@ const UPLOAD_GRACE_MS = 6 * 60 * 60 * 1000;
 export class StorefrontImagesService {
   private readonly logger = new Logger(StorefrontImagesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly imageSync: ImageSyncService
+  ) {}
+
+  /**
+   * Fotos de internet para un producto (Serper, como «Primera foto»). Cada
+   * búsqueda cuesta créditos: hay un tope por tienda y por día. Solo devuelve
+   * links; la web baja la elegida por el proxy, la achica y la sube con `upload`.
+   */
+  async search(storefrontId: string, query: string): Promise<{ query: string; images: SerperImageHit[]; left: number }> {
+    const q = query.replace(/\s+/g, " ").trim().slice(0, 200);
+    if (q.length < 3) throw new BadRequestException("Escribí al menos 3 letras para buscar la foto");
+    const day = argentinaDay(new Date());
+    // Suma una búsqueda solo si queda cupo hoy (atómico: dos pedidos a la vez no pasan el tope).
+    const rows = await this.prisma.$queryRaw<{ imageSearchCount: number }[]>`
+      UPDATE "Storefront"
+      SET "imageSearchCount" = CASE WHEN "imageSearchDay" = ${day} THEN "imageSearchCount" + 1 ELSE 1 END,
+          "imageSearchDay" = ${day}
+      WHERE id = ${storefrontId}
+        AND ("imageSearchDay" IS DISTINCT FROM ${day} OR "imageSearchCount" < ${IMAGE_SEARCHES_PER_DAY})
+      RETURNING "imageSearchCount"`;
+    if (rows.length === 0) {
+      throw new HttpException(
+        `Llegaste a las ${IMAGE_SEARCHES_PER_DAY} búsquedas de fotos de hoy. Mañana podés seguir, o subí la foto desde tu celular o PC.`,
+        HttpStatus.TOO_MANY_REQUESTS
+      );
+    }
+    const used = rows[0].imageSearchCount;
+    try {
+      const images = await this.imageSync.searchImages(q, 12);
+      return { query: q, images, left: Math.max(0, IMAGE_SEARCHES_PER_DAY - used) };
+    } catch (err) {
+      // Si Serper falla, la búsqueda no cuenta.
+      await this.prisma.storefront.updateMany({
+        where: { id: storefrontId, imageSearchDay: day, imageSearchCount: { gt: 0 } },
+        data: { imageSearchCount: { decrement: 1 } },
+      });
+      this.logger.warn(`Búsqueda de fotos de tienda falló: ${err instanceof Error ? err.message : String(err)}`);
+      throw new ServiceUnavailableException("La búsqueda de fotos no está disponible ahora. Probá en un rato o subí la foto.");
+    }
+  }
 
   async upload(retailerTenantId: string, file: { filename: string; buffer: Buffer }): Promise<{ url: string; bytes: number }> {
     if (file.buffer.length === 0) throw new BadRequestException("La foto llegó vacía");

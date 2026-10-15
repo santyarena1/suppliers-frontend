@@ -6,7 +6,7 @@ import { quoteBadge, quoteError, useQuotes } from "@/lib/quotes";
 import { useSellerSession } from "@/lib/sale-price";
 import QuotePicker from "./QuotePicker";
 
-type Variant = "primary" | "icon" | "full" | "link";
+type Variant = "primary" | "icon" | "full" | "link" | "bar";
 
 /**
  * "Agregar al presupuesto" (modo vendedor). Va al presupuesto activo.
@@ -85,11 +85,65 @@ export default function AddToQuoteButton({
   const Icon = busy ? Loader2 : done ? Check : variant === "icon" ? FilePlus2 : Plus;
   const iconCls = `h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`;
 
+  // Franja de la tarjeta mientras se arma un presupuesto: dice a cuál va y cuántos tiene ya.
+  if (variant === "bar" && quotes.active) {
+    const who = quotes.active.clientName ? ` · ${quotes.active.clientName}` : "";
+    return (
+      <>
+        {picker}
+        <button
+          type="button"
+          onClick={add}
+          disabled={busy}
+          title={title}
+          className={`flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border px-2 text-[11px] font-semibold transition-colors disabled:opacity-60 ${
+            error
+              ? "border-red-300 text-red-500"
+              : done
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                : inActive
+                  ? "border-brand-300 bg-brand-50 text-brand-700"
+                  : "border-brand-200 bg-white text-brand-600 hover:border-brand-400 hover:bg-brand-50"
+          }`}
+        >
+          <Icon className={`flex-shrink-0 ${iconCls}`} />
+          <span className="truncate">
+            {error ?? (done ? `Agregado a #${quotes.active.number}` : inActive ? `Sumar a #${quotes.active.number} · ya tiene ${inActive}` : `Agregar a #${quotes.active.number}${who}`)}
+          </span>
+        </button>
+      </>
+    );
+  }
+
   if (variant === "icon") {
+    // Armando un presupuesto: el botón dice a cuál va (un ícono solo no se entendía).
+    if (quotes.active) {
+      return (
+        <>
+          {picker}
+          <button
+            type="button"
+            onClick={add}
+            title={title}
+            aria-label={`Agregar al presupuesto ${target}`}
+            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2 text-[11px] font-semibold transition-colors ${
+              error
+                ? "border-red-300 text-red-500"
+                : inActive || done
+                  ? "border-brand-300 bg-brand-50 text-brand-700"
+                  : "border-brand-200 bg-white text-brand-600 hover:border-brand-400"
+            }`}
+          >
+            <Icon className={iconCls} />
+            <span className="tabular-nums">{done ? "Listo" : inActive ? `${target} · ${inActive}` : target}</span>
+          </button>
+        </>
+      );
+    }
     return (
       <>
       {picker}
-      <button type="button" onClick={add} title={title} aria-label="Agregar al presupuesto" className={`pc__ghost ${inActive ? "is-on" : ""}`}>
+      <button type="button" onClick={add} title={title} aria-label="Agregar a un presupuesto" className={`pc__ghost ${inActive ? "is-on" : ""}`}>
         <Icon className={iconCls} />
       </button>
       </>

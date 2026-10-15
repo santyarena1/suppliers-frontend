@@ -13,11 +13,22 @@ export function isAnnouncementKey(value: string): value is AnnouncementKey {
   return (ANNOUNCEMENTS as readonly string[]).includes(value);
 }
 
-export type SaleMarginScope = "STORE" | "PROVIDER" | "CATEGORY" | "PRODUCT";
+export type SaleMarginScope = "STORE" | "PROVIDER" | "CATEGORY" | "CONDITION" | "PRODUCT";
 /** FINAL = sobre el costo final con impuestos; NET = sobre el neto (+ IVA después). */
 export type SaleMarginBase = "FINAL" | "NET";
 /** De dónde sale el margen que se aplicó. `none` = no hay regla: venta = costo. */
-export type SaleMarginSource = "product" | "subcategory" | "category" | "provider" | "store" | "none";
+export type SaleMarginSource = "product" | "condition" | "subcategory" | "category" | "provider" | "store" | "none";
+
+/**
+ * Estado del producto en las tiendas de comercios (Vender en NODO). Los
+ * distribuidores venden todo nuevo: el estado solo existe en las tiendas.
+ */
+export const PRODUCT_CONDITIONS = ["NEW", "OPEN_BOX", "REFURBISHED", "USED"] as const;
+export type ProductCondition = (typeof PRODUCT_CONDITIONS)[number];
+
+export function isProductCondition(value: unknown): value is ProductCondition {
+  return typeof value === "string" && (PRODUCT_CONDITIONS as readonly string[]).includes(value);
+}
 
 /** Límites del margen (en puntos: 25 = 25 %). */
 export const SALE_MARGIN_MIN = -50;
@@ -54,6 +65,8 @@ export const saleRuleKey = {
   /** Subcategoría dentro de una categoría del distribuidor (scope CATEGORY, categoryKey "cat>sub"). */
   subcategory: (provider: string, categoryKey: string, subKey: string) => `C:${provider}:${categoryKey}>${subKey}`,
   product: (provider: string, externalId: string) => `X:${provider}:${externalId}`,
+  /** Estado del producto en una tienda de comercio (nuevo, usado…). */
+  condition: (provider: string, condition: ProductCondition) => `E:${provider}:${condition}`,
 };
 
 /** Separador de categoría y subcategoría en la clave ("hardware>placas de video"). */
@@ -77,7 +90,8 @@ export type SaleMarginRuleSet = ReadonlyMap<string, number>;
 
 /**
  * Margen de un producto: gana el más específico.
- * Producto > subcategoría > categoría del distribuidor > distribuidor > comercio > sin regla (0).
+ * Producto > estado (solo tiendas de comercios) > subcategoría > categoría del
+ * distribuidor > distribuidor > comercio > sin regla (0).
  * Categoría y subcategoría son las crudas del distribuidor (no las de NODO).
  */
 export function resolveSaleMargin(
@@ -87,10 +101,16 @@ export function resolveSaleMargin(
     externalId: string;
     category: string | null | undefined;
     subcategory?: string | null;
+    /** Estado del producto (tiendas de comercios). */
+    condition?: string | null;
   }
 ): { percent: number; source: SaleMarginSource } {
   const product = rules.get(saleRuleKey.product(item.provider, item.externalId));
   if (product != null) return { percent: product, source: "product" };
+  if (isProductCondition(item.condition)) {
+    const condition = rules.get(saleRuleKey.condition(item.provider, item.condition));
+    if (condition != null) return { percent: condition, source: "condition" };
+  }
   const cat = saleCategoryKey(item.category);
   const sub = saleCategoryKey(item.subcategory);
   if (cat && sub) {
@@ -166,12 +186,21 @@ export interface SaleMarginCategoryRow {
   subcategories: SaleMarginCategoryRow[];
 }
 
+export interface SaleMarginConditionRow {
+  condition: ProductCondition;
+  products: number;
+  /** Margen propio del estado; `null` = hereda. */
+  percent: number | null;
+}
+
 export interface ProviderSaleMargins {
   provider: string;
   base: SaleMarginBase;
   providerPercent: number | null;
   storePercent: number | null;
   categories: SaleMarginCategoryRow[];
+  /** Solo tiendas de comercios: margen por estado del producto. `null` en distribuidores. */
+  conditions: SaleMarginConditionRow[] | null;
 }
 
 export interface SaleMarginProductRow {
@@ -182,6 +211,8 @@ export interface SaleMarginProductRow {
   imageUrl: string | null;
   category: string | null;
   categoryKey: string | null;
+  /** Estado (solo productos de tiendas de comercios). */
+  condition: ProductCondition | null;
   currency: string;
   /** Costo final (con impuestos) y neto. */
   cost: { price: number | null; finalPrice: number | null };

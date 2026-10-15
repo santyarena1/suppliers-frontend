@@ -1,6 +1,6 @@
 import { computeSalePrice, resolveSaleMargin, type SalePriceView } from "@nodo/shared";
 import { costTaxLines } from "../catalog-api/core/pricing";
-import { baseFor, policyFor, type TenantSaleRules } from "./sale-margin-rules.service";
+import { baseFor, conditionKey, policyFor, type TenantSaleRules } from "./sale-margin-rules.service";
 
 /**
  * Precio de venta en las respuestas del catálogo (docs/PLAN_MODO_VENDEDOR.md §3).
@@ -37,16 +37,26 @@ const num = (v: unknown): number | null => {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Venta de un producto con oferta. `null` si no tiene costo (ficha sin precio). */
-export function saleOf(item: ProductLike, rules: TenantSaleRules): (SalePriceView & { costFinal: number | null }) | null {
+/**
+ * Venta de un producto con oferta. `null` si no tiene costo (ficha sin precio).
+ * `percentOverride` pisa el margen de las reglas (presupuestos con margen propio).
+ */
+export function saleOf(
+  item: ProductLike,
+  rules: TenantSaleRules,
+  percentOverride?: number | null
+): (SalePriceView & { costFinal: number | null }) | null {
   const net = num(item.price);
   if (net == null || !(net > 0)) return null;
-  const { percent, source } = resolveSaleMargin(rules.rules, {
+  const resolved = resolveSaleMargin(rules.rules, {
     provider: item.provider,
     externalId: item.externalId,
     category: typeof item.category === "string" ? item.category : null,
     subcategory: typeof item.subcategory === "string" ? item.subcategory : null,
+    condition: rules.conditions?.get(conditionKey(item.provider, item.externalId)) ?? null,
   });
+  const percent = percentOverride ?? resolved.percent;
+  const source = resolved.source;
   const base = baseFor(rules, item.provider);
   const taxes = costTaxLines(
     { price: net, finalPrice: num(item.finalPrice), ivaPercent: num(item.ivaPercent), raw: item.raw },

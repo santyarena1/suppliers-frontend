@@ -1,27 +1,22 @@
-import type { Quote } from "@/lib/quotes";
-import { quoteTitle } from "@/lib/quotes";
+"use client";
 
-type Money = (amount: number | null, currency: string) => string;
+import { useEffect, useState } from "react";
+import { quotesApi, type QuoteSettings } from "@/lib/quotes";
+import type { QuotePdfModel } from "./pdf/quote-pdf-model";
 
-function today(): string {
-  return new Date().toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-/** Texto para WhatsApp o para copiar: corto, legible en el celular del cliente. */
-export function quoteText(q: Quote, opts: { storeName: string | null; money: Money; total: string }): string {
-  const head = [opts.storeName, `Presupuesto #${q.number}`].filter(Boolean).join(" · ");
-  const lines = [head];
-  if (q.clientName) lines.push(`Para: ${q.clientName}`);
+/** Texto para WhatsApp o para copiar: corto, legible en el celular del cliente. Sale del mismo modelo que el PDF. */
+export function quoteText(model: QuotePdfModel): string {
+  const lines = [[model.business.name, `Presupuesto ${model.code}`].filter(Boolean).join(" · ")];
+  if (model.client.name) lines.push(`Para: ${model.client.name}`);
   lines.push("");
-  for (const it of q.items) {
-    const unit = opts.money(it.unitFinalPrice, it.currency);
-    const line = it.unitFinalPrice != null ? opts.money(it.unitFinalPrice * it.qty, it.currency) : "consultar";
-    lines.push(it.qty > 1 ? `• ${it.qty} × ${it.name} — ${unit} c/u = ${line}` : `• ${it.name} — ${line}`);
+  for (const l of model.lines) {
+    lines.push(l.qty > 1 ? `• ${l.qty} × ${l.name} — ${l.unit} c/u = ${l.total}` : `• ${l.name} — ${l.total}`);
   }
   lines.push("");
-  lines.push(`Total: ${opts.total}`);
-  lines.push(`Precios finales con IVA, válidos al ${today()}.`);
-  if (q.notes) lines.push("", q.notes);
+  for (const t of model.totals) lines.push(`${t.strong ? "*" : ""}${t.label}: ${t.value}${t.strong ? "*" : ""}`);
+  if (model.validUntil) lines.push(`Válido hasta el ${model.validUntil}.`);
+  if (model.currencyNote) lines.push(model.currencyNote);
+  if (model.notes) lines.push("", model.notes);
   return lines.join("\n");
 }
 
@@ -36,44 +31,38 @@ export function whatsappUrl(text: string, phone: string | null): string {
   return `${base}?text=${encodeURIComponent(text)}`;
 }
 
-function esc(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+let cached: { at: number; value: Promise<QuoteSettings> } | null = null;
+const listeners = new Set<(s: QuoteSettings) => void>();
+
+/** Plantilla del comercio (un minuto en memoria; quien la guarda la refresca para todos). */
+export function loadQuoteSettings(force = false): Promise<QuoteSettings> {
+  if (!force && cached && Date.now() - cached.at < 60_000) return cached.value;
+  const value = quotesApi.settings().then((r) => r.data);
+  cached = { at: Date.now(), value };
+  value.catch(() => {
+    cached = null;
+  });
+  return value;
 }
 
-/** Hoja simple para imprimir o guardar como PDF desde el navegador. */
-export function printQuote(q: Quote, opts: { storeName: string | null; money: Money; total: string }) {
-  const rows = q.items
-    .map(
-      (it) => `<tr>
-        <td>${esc(it.name)}${it.sku ? `<div class="sku">${esc(it.sku)}</div>` : ""}</td>
-        <td class="n">${it.qty}</td>
-        <td class="n">${esc(opts.money(it.unitFinalPrice, it.currency))}</td>
-        <td class="n">${esc(it.unitFinalPrice != null ? opts.money(it.unitFinalPrice * it.qty, it.currency) : "—")}</td>
-      </tr>`
-    )
-    .join("");
-  const client = [q.clientName, q.clientPhone].filter(Boolean).map((s) => esc(s as string)).join(" · ");
-  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(quoteTitle(q))}</title>
-<style>
-  body{font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif;color:#14172a;margin:40px}
-  h1{font-size:20px;margin:0}.muted{color:#646c85}.head{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #14172a;padding-bottom:12px;margin-bottom:18px}
-  table{width:100%;border-collapse:collapse}th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#646c85;border-bottom:1px solid #d8dbe6;padding:8px 6px}
-  td{padding:9px 6px;border-bottom:1px solid #eceef4;vertical-align:top}.n{text-align:right;white-space:nowrap}.sku{font-size:11px;color:#8a90a6}
-  .total{display:flex;justify-content:flex-end;gap:24px;margin-top:16px;font-size:18px;font-weight:700}.notes{margin-top:22px;white-space:pre-wrap}
-  @media print{body{margin:16mm}}
-</style></head><body>
-<div class="head"><div><div class="muted">${esc(opts.storeName ?? "")}</div><h1>Presupuesto #${q.number}</h1>${client ? `<div>${client}</div>` : ""}</div>
-<div class="muted">${today()}</div></div>
-<table><thead><tr><th>Producto</th><th class="n">Cant.</th><th class="n">Unitario</th><th class="n">Subtotal</th></tr></thead><tbody>${rows}</tbody></table>
-<div class="total"><span>Total</span><span>${esc(opts.total)}</span></div>
-<p class="muted">Precios finales con IVA, válidos al ${today()}.</p>
-${q.notes ? `<div class="notes">${esc(q.notes)}</div>` : ""}
-<script>window.onload=function(){window.print()}</script>
-</body></html>`;
-  const win = window.open("", "_blank", "noopener=no,width=820,height=960");
-  if (!win) return false;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  return true;
+export function publishQuoteSettings(s: QuoteSettings) {
+  cached = { at: Date.now(), value: Promise.resolve(s) };
+  for (const fn of listeners) fn(s);
+}
+
+export function useQuoteSettings(): QuoteSettings | null {
+  const [settings, setSettings] = useState<QuoteSettings | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void loadQuoteSettings()
+      .then((s) => alive && setSettings(s))
+      .catch(() => undefined);
+    const fn = (s: QuoteSettings) => setSettings(s);
+    listeners.add(fn);
+    return () => {
+      alive = false;
+      listeners.delete(fn);
+    };
+  }, []);
+  return settings;
 }

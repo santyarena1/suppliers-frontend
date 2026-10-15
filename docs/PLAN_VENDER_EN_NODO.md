@@ -74,3 +74,21 @@ Entra a la bandeja **Solicitudes** del superadmin como `SUPPLIER_JOIN` (con avis
 
 - `apps/api/src/storefront/storefront-rules.spec.ts` (vigencia, motivos, avisos, stock) y `list-import.service.spec.ts` (acceso de dueño y de terceros).
 - Simulación de punta a punta contra el API local: `SIM_ONLY=storefront node test-e2e-sim/run.mjs` (V1–V9: abrir, publicar por planilla y a mano, pedidos con confirmación, rechazo y cancelación, aprobación interna, vencimiento/pausa/moderación, comercios nuevos y desconexión, solicitudes, entradas inválidas). La corrida completa da las mismas fallas previas que sin este cambio.
+
+## Para el comprador: «Tiendas de locales» en Proveedores (2026-10-16)
+
+- En `/proveedores` hay una sección "Tiendas de locales" con las tiendas que el
+  comercio acepta, las que esperan respuesta y (plegadas) las que no quiso ver.
+- Cada tienda tiene su ficha en `/proveedores/<LIST_…>`: Productos, La tienda
+  (condiciones, contacto, dejar de verla) y Márgenes de venta, igual que un
+  distribuidor y con margen **por estado** (nuevo, caja abierta,
+  reacondicionado, usado).
+
+## Fotos de internet (2026-10-16)
+
+- En la ficha del producto, «Buscar en internet» busca con Serper (como la
+  «Primera foto»), con tope de 25 búsquedas por tienda y por día. El servidor
+  no baja nada: la web baja la elegida por `/img-proxy`, la achica a WebP y la
+  sube como una foto propia de la tienda.
+- La foto que NODO le encontró sola a un producto se marca «NODO» y se puede
+  conservar al editar (antes daba "Alguna foto no es de tu tienda").

@@ -11,7 +11,15 @@ export interface TenantSaleRules {
   bases: Map<string, SaleMarginBase>;
   /** Percepciones del comercio por distribuidor (entran en el costo final). */
   policies: Map<string, PerceptionPolicy>;
+  /**
+   * Estado de cada producto de las tiendas de comercios ("prov:externalId" →
+   * NEW, USED…). Solo se carga si el comercio tiene márgenes por estado.
+   */
+  conditions?: Map<string, string>;
 }
+
+/** Clave del mapa de estados. */
+export const conditionKey = (provider: string, externalId: string) => `${provider}:${externalId}`;
 
 const TTL_MS = 60_000;
 const MAX_TENANTS = 500;
@@ -80,7 +88,23 @@ export class SaleMarginRulesService {
         learnedIibbPercent: num(c.learnedIibbPercent),
       });
     }
-    return { rules, bases, policies };
+    return { rules, bases, policies, conditions: await this.conditions(rows.map((r) => r.ruleKey)) };
+  }
+
+  /** Estados de los productos de las tiendas a las que el comercio les puso margen por estado. */
+  private async conditions(ruleKeys: string[]): Promise<Map<string, string>> {
+    const providers = [...new Set(ruleKeys.filter((k) => k.startsWith("E:")).map((k) => k.split(":")[1]).filter(Boolean))];
+    const out = new Map<string, string>();
+    if (providers.length === 0) return out;
+    const items = await this.prisma.storefrontItem.findMany({
+      where: { condition: { not: null }, storefront: { supplierTenant: { providerKey: { in: providers } } } },
+      select: { externalId: true, condition: true, storefront: { select: { supplierTenant: { select: { providerKey: true } } } } },
+    });
+    for (const it of items) {
+      const provider = it.storefront.supplierTenant.providerKey;
+      if (provider && it.condition) out.set(conditionKey(provider, it.externalId), it.condition);
+    }
+    return out;
   }
 }
 

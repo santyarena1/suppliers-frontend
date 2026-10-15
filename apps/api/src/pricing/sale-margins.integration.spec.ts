@@ -202,6 +202,90 @@ d("Márgenes por subcategoría contra Postgres (Elit: Hardware › …)", () => 
   });
 });
 
+d("Margen por estado de una tienda de comercio contra Postgres", () => {
+  const prisma = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://skip@localhost/skip" } } });
+  const rules = new SaleMarginRulesService(prisma as never);
+  const providers = { rulesByProvider: async () => new Map() };
+  const enrichment = { getContext: async () => undefined };
+  const service = new SaleMarginsService(prisma as never, rules, providers as never, enrichment as never);
+  const BUYER = "sm-cond-buyer";
+  const SELLER_TENANT = "sm-cond-seller";
+  const SUPPLIER = "sm-cond-supplier";
+  const STORE = "LIST_SM_COND_LOCAL";
+  const writer = { tenantId: BUYER, userId: USER };
+
+  async function cleanup() {
+    await prisma.saleMarginChange.deleteMany({ where: { tenantId: BUYER } });
+    await prisma.saleMarginRule.deleteMany({ where: { tenantId: BUYER } });
+    await prisma.tenantProductOffer.deleteMany({ where: { tenantId: BUYER } });
+    await prisma.providerSyncCache.deleteMany({ where: { provider: STORE } });
+    await prisma.storefront.deleteMany({ where: { retailerTenantId: SELLER_TENANT } });
+    await prisma.user.deleteMany({ where: { id: USER } });
+    await prisma.tenant.deleteMany({ where: { id: { in: [BUYER, SELLER_TENANT, SUPPLIER] } } });
+  }
+
+  beforeAll(async () => {
+    await cleanup();
+    await prisma.user.create({ data: { id: USER, username: "sm-cond-dueno", email: "sm-cond@nodo.test" } });
+    await prisma.tenant.createMany({
+      data: [
+        { id: BUYER, name: "Comprador Estado", type: "RETAILER", plan: "PRO" },
+        { id: SELLER_TENANT, name: "Local Estado", type: "RETAILER", plan: "PRO" },
+        { id: SUPPLIER, name: "Local Estado (local)", type: "DISTRIBUTOR", providerKey: STORE },
+      ],
+    });
+    const sf = await prisma.storefront.create({ data: { retailerTenantId: SELLER_TENANT, supplierTenantId: SUPPLIER } });
+    const products: [string, string | null][] = [
+      ["n1", "NEW"],
+      ["u1", "USED"],
+      ["u2", "USED"],
+      ["x1", null],
+    ];
+    for (const [id, condition] of products) {
+      await prisma.providerSyncCache.create({ data: { provider: STORE, externalId: id, name: `Notebook ${id}`, category: "Notebooks", raw: {} } });
+      await prisma.tenantProductOffer.create({ data: { tenantId: BUYER, provider: STORE, externalId: id, price: 100, ivaPercent: 21, currency: "USD" } });
+      if (condition) await prisma.storefrontItem.create({ data: { storefrontId: sf.id, externalId: id, condition } });
+    }
+  });
+
+  afterAll(async () => {
+    await cleanup();
+    await prisma.$disconnect();
+  });
+
+  it("cuenta los productos de cada estado y aplica el margen al estado", async () => {
+    const before = await service.providerMargins(BUYER, STORE);
+    expect(before.conditions).toEqual([
+      { condition: "NEW", products: 1, percent: null },
+      { condition: "OPEN_BOX", products: 0, percent: null },
+      { condition: "REFURBISHED", products: 0, percent: null },
+      { condition: "USED", products: 2, percent: null },
+    ]);
+    await service.setProvider(writer, STORE, { providerPercent: 20 });
+    const res = await service.setConditions(writer, STORE, ["USED"], 5);
+    expect(res.conditions?.find((c) => c.condition === "USED")).toMatchObject({ percent: 5 });
+
+    const page = await service.products(BUYER, STORE, {});
+    const byId = new Map(page.items.map((p) => [p.externalId, p]));
+    expect(byId.get("u1")).toMatchObject({ condition: "USED", effective: 5, source: "condition", sale: { finalPrice: 127.05 } });
+    expect(byId.get("n1")).toMatchObject({ condition: "NEW", effective: 20, source: "provider" });
+    expect(byId.get("x1")).toMatchObject({ condition: null, effective: 20, source: "provider" });
+
+    // El precio de venta de todo NODO (búsqueda, presupuestos) usa el estado.
+    rules.invalidate(BUYER);
+    const loaded = await rules.get(BUYER);
+    expect(loaded.conditions?.get(`${STORE}:u2`)).toBe("USED");
+
+    const history = await service.history(BUYER, { provider: STORE });
+    expect(history.find((h) => h.scope === "CONDITION")).toMatchObject({ label: "Estado: Usado", after: 5 });
+  });
+
+  it("a un distribuidor no se le pone margen por estado", async () => {
+    expect((await service.providerMargins(BUYER, "ELIT")).conditions).toBeNull();
+    await expect(service.setConditions(writer, "ELIT", ["USED"], 5)).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
 describe("parseRuleKey", () => {
   it("lee las claves de regla", () => {
     expect(parseRuleKey("STORE").scope).toBe("STORE");

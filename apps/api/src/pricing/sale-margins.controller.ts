@@ -9,6 +9,7 @@ import { TenantGuard } from "../tenants/tenant.guard";
 import { CostSensitive } from "./cost-visibility";
 import {
   SetCategoryMarginsDto,
+  SetConditionMarginsDto,
   SetMarginByCategoryDto,
   SetProductMarginsDto,
   SetProviderMarginsDto,
@@ -98,6 +99,13 @@ export class SaleMarginsController {
   setProducts(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string, @Body() dto: SetProductMarginsDto) {
     assertPermission(tenant, "pricing.manage");
     return this.margins.setProducts(this.writer(tenant), assertProvider(provider), dto.externalIds, dto.percent ?? null);
+  }
+
+  /** Tiendas de comercios: margen por estado del producto (nuevo, usado…). */
+  @Put("providers/:provider/sale-margins/conditions")
+  setConditions(@CurrentTenant() tenant: TenantContext, @Param("provider") provider: string, @Body() dto: SetConditionMarginsDto) {
+    assertPermission(tenant, "pricing.manage");
+    return this.margins.setConditions(this.writer(tenant), assertProvider(provider), dto.conditions, dto.percent ?? null);
   }
 
   /** Atajo: el mismo margen para toda una categoría es la regla de esa categoría. */

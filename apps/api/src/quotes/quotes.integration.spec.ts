@@ -3,6 +3,7 @@
 import { PrismaClient } from "@prisma/client";
 import { saleRuleKey } from "@nodo/shared";
 import { SaleMarginRulesService } from "../pricing/sale-margin-rules.service";
+import { QuoteSettingsService } from "./quote-settings.service";
 import { QuotesService } from "./quotes.service";
 
 const url = process.env.INTEGRATION_DB;
@@ -27,7 +28,8 @@ d("Presupuestos contra Postgres", () => {
       raw: {},
     }),
   };
-  const service = new QuotesService(prisma as never, providers as never, rules);
+  const settings = new QuoteSettingsService(prisma as never);
+  const service = new QuotesService(prisma as never, providers as never, rules, settings);
   const seller = { tenantId: TENANT, commercialTenantId: TENANT, userId: SELLER, tenantRole: "SELLER" } as never;
   const owner = { tenantId: TENANT, commercialTenantId: TENANT, userId: OWNER, tenantRole: "OWNER" } as never;
 
@@ -80,5 +82,37 @@ d("Presupuestos contra Postgres", () => {
     await service.setArchived(seller, quote.id, true);
     expect((await service.list(seller)).some((q) => q.id === quote.id)).toBe(false);
     expect((await service.list(seller, { archived: true })).map((q) => q.id)).toEqual([quote.id]);
+  });
+
+  it("plantilla, margen del presupuesto, descuento, líneas libres y estado se guardan en la base", async () => {
+    const ownerFull = {
+      tenantId: TENANT,
+      commercialTenantId: TENANT,
+      userId: OWNER,
+      tenantRole: "OWNER",
+      tenantType: "RETAILER",
+      permissions: ["prices.viewCost", "pricing.manage"],
+      entitlements: { enforced: true, capabilities: { sellerMode: true } },
+    } as never;
+    const tpl = await settings.update(TENANT, OWNER, { validityDays: 15, accentColor: "#FF0055", theme: "bold", terms: "Pago contado" });
+    expect(tpl).toMatchObject({ validityDays: 15, accentColor: "#ff0055", theme: "bold", terms: "Pago contado", businessName: "Presupuestos Integración" });
+    await expect(settings.update(TENANT, OWNER, { accentColor: "rojo" })).rejects.toThrow("Color inválido");
+
+    const quote = await service.create(ownerFull, { clientName: "Beto", clientEmail: "beto@cliente.test" });
+    expect((new Date(quote.validUntil!).getTime() - Date.now()) / 86_400_000).toBeGreaterThan(14.9);
+    await service.addItem(ownerFull, quote.id, { provider: "ELIT", externalId: "MON-24", qty: 1 });
+    const withMargin = await service.updateClient(ownerFull, quote.id, { marginPercent: 10, discountPercent: 5, currency: "ARS" });
+    expect(withMargin.items[0]).toMatchObject({ unitFinalPrice: 133.1, marginSource: "quote" });
+    const custom = await service.addCustom(ownerFull, quote.id, { name: "Armado", unitFinalPrice: 12.1, currency: "USD" });
+    expect(custom.subtotals).toEqual({ USD: 145.2 });
+    expect(custom.totals).toEqual({ USD: 137.94 });
+    const sent = await service.markSent(ownerFull, quote.id);
+    expect(sent.status).toBe("SENT");
+
+    const stored = await prisma.salesQuote.findUniqueOrThrow({ where: { id: quote.id } });
+    expect(Number(stored.marginPercent)).toBe(10);
+    expect(Number(stored.discountPercent)).toBe(5);
+    expect(stored).toMatchObject({ currency: "ARS", status: "SENT", clientEmail: "beto@cliente.test" });
+    expect(JSON.stringify(stored.items)).not.toContain("121");
   });
 });

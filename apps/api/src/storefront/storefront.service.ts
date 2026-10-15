@@ -407,6 +407,12 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
     return this.images.upload(sf.retailerTenantId, file);
   }
 
+  /** Buscar fotos en internet (Serper), con tope diario por tienda. */
+  async searchImages(tenant: TenantContext, query: string) {
+    const sf = await this.requireOwn(tenant);
+    return this.images.search(sf.id, query);
+  }
+
   // ---------- Productos ----------
 
   async products(tenant: TenantContext, q?: string) {
@@ -440,6 +446,8 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
           ean: f?.ean ?? null,
           imageUrl: images[0] ?? null,
           images,
+          /** La foto no la subió la tienda: la encontró NODO solo («Primera foto»). */
+          autoImage: !it?.images.length && Boolean(f?.imageUrl),
           description: f?.description ?? null,
           warranty: f?.warranty ?? null,
           condition: it?.condition ?? null,
@@ -458,11 +466,19 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Fotos validadas: las subidas tienen que ser de esta tienda. */
-  private async checkImages(sf: { retailerTenantId: string }, value: unknown): Promise<string[]> {
+  /**
+   * Fotos de un producto: links https o fotos subidas por esta tienda.
+   * `autoImage` es la foto que NODO le buscó solo al producto («Primera foto»):
+   * no es de la tienda, pero la puede conservar.
+   */
+  private async checkImages(sf: { retailerTenantId: string }, value: unknown, autoImage?: string | null): Promise<string[]> {
     const res = normalizeImageRefs(value);
     if ("error" in res) throw new BadRequestException(res.error);
     const owned = await this.images.ownedIds(sf.retailerTenantId, res.assetIds);
-    if (res.assetIds.some((id) => !owned.has(id))) throw new BadRequestException("Alguna foto no es de tu tienda. Subila de nuevo.");
+    const autoId = autoImage ? assetIdOf(autoImage) : null;
+    if (res.assetIds.some((id) => !owned.has(id) && id !== autoId)) {
+      throw new BadRequestException("Alguna foto no es de tu tienda. Subila de nuevo.");
+    }
     return res.refs;
   }
 
@@ -524,7 +540,14 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
       where: { provider_externalId: { provider: sf.providerKey, externalId } },
     });
     if (!row) throw new NotFoundException("Ese producto no está en tu tienda");
-    const images = dto.images !== undefined ? await this.checkImages(sf, dto.images) : undefined;
+    let images: string[] | undefined;
+    if (dto.images !== undefined) {
+      const ficha = await this.prisma.providerSyncCache.findUnique({
+        where: { provider_externalId: { provider: sf.providerKey, externalId } },
+        select: { imageUrl: true },
+      });
+      images = await this.checkImages(sf, dto.images, ficha?.imageUrl);
+    }
     const condition = dto.condition !== undefined ? this.checkCondition(dto.condition) : undefined;
     const price = dto.price ?? num(row.price);
     const iva = dto.ivaPercent ?? num(row.ivaPercent) ?? 21;

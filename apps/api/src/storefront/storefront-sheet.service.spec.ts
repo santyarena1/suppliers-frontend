@@ -2,6 +2,12 @@ import { createHash } from "node:crypto";
 import { SheetFetchError } from "./sheet-source";
 import { StorefrontSheetService } from "./storefront-sheet.service";
 
+// La ronda programada no corre de 23 a 6 (hora argentina): el test no depende del reloj.
+jest.mock("../common/cron-window", () => ({
+  ...jest.requireActual("../common/cron-window"),
+  shouldRunScheduledJob: () => process.env.CRON_DISABLED !== "true",
+}));
+
 const CSV = Buffer.from("Codigo,Nombre,Precio,Stock\nA1,Mouse,10,3\n");
 const hash = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 

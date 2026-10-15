@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
+import StoreProvidersSection from "@/components/storefront/StoreProvidersSection";
 import AvailableProviders from "@/components/AvailableProviders";
 import { ListFreshnessChip } from "@/components/list-import/ListFreshnessHints";
 import ProviderBadge from "@/components/ProviderBadge";
@@ -389,6 +390,8 @@ export default function ProveedoresPage() {
                   </div>
                 )}
               </section>
+
+              <StoreProvidersSection onChanged={() => void load(true)} />
 
               <section>
                 <h2 className="text-xs font-semibold text-surface-500 uppercase tracking-widest mb-3">

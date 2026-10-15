@@ -287,3 +287,33 @@ Endpoints (JWT, `sellerMode`): `GET/POST /my/quotes`, `GET/PATCH/DELETE /my/quot
 `POST /my/quotes/:id/items` `{provider, externalId, qty}`, `PATCH/DELETE /my/quotes/:id/items/:index`,
 `POST /my/quotes/:id/refresh-prices`, `POST /my/quotes/:id/archive|unarchive`.
 Nunca devuelven costo.
+
+### 8.1 Presupuestos v2 (2026-10-16)
+
+Pedido: "mejorar muchísimo la lógica, PDF con plantilla y estilos, que el flujo
+no sea confuso, margen individual o por presupuesto, y avisar si va al costo".
+
+- **Flujo**: el presupuesto se arma desde su propia pantalla (buscador adentro:
+  «Agregar productos») y con «Línea libre» (armado, envío). Ya no hace falta
+  "Ver como vendedor": en la búsqueda, quien compra ve el ícono de presupuesto
+  en cada tarjeta y, mientras arma uno, una franja «Agregar a #7 · cliente».
+- **Estados**: borrador → enviado (al bajar/mandar el PDF o abrir WhatsApp) →
+  aceptado / rechazado; `EXPIRED` se calcula (venció sin decisión). Vence a los
+  `validityDays` de la plantilla y "Actualizar precios" lo renueva.
+- **Márgenes**: margen del presupuesto y margen por línea (pisan las reglas;
+  orden línea > presupuesto > reglas). Solo los ve y cambia quien tiene
+  `prices.viewCost`; al vendedor le llegan en `null`. `atCostLines` cuenta los
+  productos sin margen y la pantalla explica cómo configurarlo (link a los
+  márgenes de cada proveedor) o pide al vendedor que avise a quien administra.
+- **Descuento** sobre el total (lo ve el cliente). Tope opcional para vendedores
+  (`maxSellerDiscount` de la plantilla).
+- **Moneda** del presupuesto (pesos, dólares o la preferencia de quien mira).
+- **PDF** en el navegador (react-pdf, se carga recién al usarlo): 4 estilos
+  (moderno, clásico, minimalista, destacado), color, letra, logo, datos del
+  comercio, saludo, condiciones, pie, fotos/marca/código opcionales y precios
+  con IVA o sin IVA + IVA aparte. Las fotos pasan por `/img-proxy` y se
+  convierten a JPEG (react-pdf no lee WebP). En el celular se manda directo a
+  WhatsApp con la hoja de compartir. Plantilla en `/presupuestos/plantilla`
+  con vista previa real.
+- **Márgenes por estado** para las tiendas de locales (`E:<prov>:<NEW|USED…>`):
+  producto > estado > subcategoría > categoría > proveedor > comercio.

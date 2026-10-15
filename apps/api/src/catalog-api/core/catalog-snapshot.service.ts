@@ -13,7 +13,7 @@ import type { CatalogRow, CatalogSnapshot, ProviderInfo } from "./catalog-row";
 import { foldLabel, groupKeyFor, offerIdFor, productIdFor, providerAliasId } from "./ids";
 import { costTaxLines, NO_PERCEPTIONS, type PerceptionPolicy } from "./pricing";
 import { resolveSaleMargin } from "@nodo/shared";
-import { SaleMarginRulesService, baseFor, type TenantSaleRules } from "../../pricing/sale-margin-rules.service";
+import { SaleMarginRulesService, baseFor, conditionKey, type TenantSaleRules } from "../../pricing/sale-margin-rules.service";
 
 /** La foto se reusa este tiempo: alcanza para paginar sin rearmar en cada página. */
 const SNAPSHOT_TTL_MS = 60_000;
@@ -287,7 +287,13 @@ export function toRow(
     ivaPercent,
     // Margen de venta con la categoría cruda del distribuidor (como la nombra él).
     saleMarginPercent: saleRules
-      ? resolveSaleMargin(saleRules.rules, { provider: offer.provider, externalId: offer.externalId, category: p.category, subcategory: p.subcategory }).percent
+      ? resolveSaleMargin(saleRules.rules, {
+          provider: offer.provider,
+          externalId: offer.externalId,
+          category: p.category,
+          subcategory: p.subcategory,
+          condition: saleRules.conditions?.get(conditionKey(offer.provider, offer.externalId)) ?? null,
+        }).percent
       : 0,
     saleMarginBase: saleRules ? baseFor(saleRules, offer.provider) : "FINAL",
     stock: displayedStock(offer.stock, rules.minStockThreshold),

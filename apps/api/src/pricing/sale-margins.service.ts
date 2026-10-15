@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import {
+  PRODUCT_CONDITIONS,
   SALE_MARGIN_MAX,
   SALE_MARGIN_MIN,
+  isProductCondition,
   resolveSaleMargin,
   saleCategoryKey,
   saleRuleKey,
@@ -86,13 +88,14 @@ export class SaleMarginsService {
   // ---------- Distribuidor ----------
 
   async providerMargins(tenantId: string, provider: string): Promise<ProviderSaleMargins> {
-    const [rules, config, categories] = await Promise.all([
+    const [rules, config, categories, conditions] = await Promise.all([
       this.rules.get(tenantId),
       this.prisma.providerSyncConfig.findUnique({
         where: { tenantId_provider: { tenantId, provider } },
         select: { saleMarginBase: true },
       }),
       this.categories(tenantId, provider),
+      this.conditionCounts(tenantId, provider),
     ]);
     return {
       provider,
@@ -100,7 +103,65 @@ export class SaleMarginsService {
       providerPercent: rules.rules.get(saleRuleKey.provider(provider)) ?? null,
       storePercent: rules.rules.get(saleRuleKey.store()) ?? null,
       categories,
+      conditions: conditions
+        ? PRODUCT_CONDITIONS.map((condition) => ({
+            condition,
+            products: conditions.get(condition) ?? 0,
+            percent: rules.rules.get(saleRuleKey.condition(provider, condition)) ?? null,
+          }))
+        : null,
     };
+  }
+
+  // ---------- Estado (solo tiendas de comercios) ----------
+
+  async setConditions(writer: Writer, provider: string, conditions: string[], percent: number | null) {
+    const wanted = [...new Set(conditions)];
+    if (wanted.length === 0) throw new BadRequestException("Elegí al menos un estado.");
+    if (!wanted.every(isProductCondition)) throw new BadRequestException("Estado inválido.");
+    if (!(await this.storefrontId(provider))) {
+      throw new BadRequestException("El margen por estado es solo para tiendas de comercios.");
+    }
+    await this.write(
+      writer,
+      wanted.map((condition) => ({ ruleKey: saleRuleKey.condition(provider, condition), scope: "CONDITION" as const, provider })),
+      percent
+    );
+    return this.providerMargins(writer.tenantId, provider);
+  }
+
+  /** Tienda de comercio detrás de un proveedor `LIST_…` (o `null` si es un distribuidor). */
+  private async storefrontId(provider: string): Promise<string | null> {
+    if (!provider.startsWith("LIST_")) return null;
+    const sf = await this.prisma.storefront.findFirst({
+      where: { supplierTenant: { providerKey: provider } },
+      select: { id: true },
+    });
+    return sf?.id ?? null;
+  }
+
+  /** Estado de cada producto de una página (solo tiendas). */
+  private async pageConditions(provider: string, externalIds: string[]): Promise<Map<string, string>> {
+    const storefrontId = externalIds.length ? await this.storefrontId(provider) : null;
+    if (!storefrontId) return new Map();
+    const items = await this.prisma.storefrontItem.findMany({
+      where: { storefrontId, externalId: { in: externalIds }, condition: { not: null } },
+      select: { externalId: true, condition: true },
+    });
+    return new Map(items.map((i) => [i.externalId, i.condition as string]));
+  }
+
+  /** Cuántos productos que este comercio ve hay de cada estado. `null` si no es una tienda. */
+  private async conditionCounts(tenantId: string, provider: string): Promise<Map<string, number> | null> {
+    const storefrontId = await this.storefrontId(provider);
+    if (!storefrontId) return null;
+    const rows = await this.prisma.$queryRaw<{ condition: string; products: number }[]>`
+      SELECT i.condition AS condition, count(*)::int AS products
+      FROM "TenantProductOffer" o
+      JOIN "StorefrontItem" i ON i."storefrontId" = ${storefrontId} AND i."externalId" = o."externalId"
+      WHERE o."tenantId" = ${tenantId} AND o.provider = ${provider} AND o.active = true AND i.condition IS NOT NULL
+      GROUP BY i.condition`;
+    return new Map(rows.map((r) => [r.condition, r.products]));
   }
 
   async setProvider(writer: Writer, provider: string, input: { base?: SaleMarginBase; providerPercent?: number | null }) {
@@ -203,15 +264,18 @@ export class SaleMarginsService {
     ]);
     const page = offers.slice(0, take);
     const offerRules = providerRules.get(provider) ?? NO_RULES;
+    const conditions = await this.pageConditions(provider, page.map((o) => o.externalId));
     const items: SaleMarginProductRow[] = page.map((offer) => {
       const view = toProductView(offer.product, offer, offerRules);
       const sale = saleOf(view as never, rules);
       const own = rules.rules.get(saleRuleKey.product(provider, offer.externalId));
+      const condition = conditions.get(offer.externalId) ?? null;
       const { percent, source } = resolveSaleMargin(rules.rules, {
         provider,
         externalId: offer.externalId,
         category: view.category,
         subcategory: view.subcategory,
+        condition,
       });
       return {
         externalId: offer.externalId,
@@ -221,6 +285,7 @@ export class SaleMarginsService {
         imageUrl: view.imageUrl,
         category: view.category,
         categoryKey: saleCategoryKey(view.category),
+        condition: isProductCondition(condition) ? condition : null,
         currency: (view.currency || "USD").toUpperCase(),
         cost: { price: view.price, finalPrice: sale?.costFinal ?? view.finalPrice },
         percent: own ?? null,
@@ -258,6 +323,7 @@ export class SaleMarginsService {
         { ruleKey: saleRuleKey.provider(opts.provider) },
         { ruleKey: { startsWith: `C:${opts.provider}:` } },
         { ruleKey: { startsWith: `X:${opts.provider}:` } },
+        { ruleKey: { startsWith: `E:${opts.provider}:` } },
         { ruleKey: saleRuleKey.store() },
       ];
     }
@@ -528,6 +594,13 @@ export class SaleMarginsService {
   }
 }
 
+const CONDITION_LABELS: Record<string, string> = {
+  NEW: "Nuevo",
+  OPEN_BOX: "Caja abierta",
+  REFURBISHED: "Reacondicionado",
+  USED: "Usado",
+};
+
 /** Lee una clave de regla (`saleRuleKey`). */
 export function parseRuleKey(ruleKey: string): {
   scope: SaleMarginScope;
@@ -540,5 +613,6 @@ export function parseRuleKey(ruleKey: string): {
   const id = rest.join(":") || null;
   if (kind === "P") return { scope: "PROVIDER", provider, id: null, fallbackLabel: "Todo el distribuidor" };
   if (kind === "C") return { scope: "CATEGORY", provider, id, fallbackLabel: id ? id.split(">").join(" › ") : "Categoría" };
+  if (kind === "E") return { scope: "CONDITION", provider, id, fallbackLabel: `Estado: ${CONDITION_LABELS[id ?? ""] ?? id ?? "?"}` };
   return { scope: "PRODUCT", provider, id, fallbackLabel: id ?? "Producto" };
 }

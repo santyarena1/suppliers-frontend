@@ -312,3 +312,9 @@ export class LinkSheetDto {
   @MaxLength(2000)
   url!: string;
 }
+
+export class ImageSearchDto {
+  @IsString()
+  @MaxLength(200)
+  query!: string;
+}

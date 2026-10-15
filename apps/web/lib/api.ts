@@ -863,6 +863,9 @@ export const saleMarginsApi = {
     api.put<ProviderSaleMargins>(`/providers/${encodeURIComponent(provider)}/sale-margins`, data),
   setCategories: (provider: string, keys: string[], percent: number | null) =>
     api.put<ProviderSaleMargins>(`/providers/${encodeURIComponent(provider)}/sale-margins/categories`, { keys, percent }),
+  /** Tiendas de comercios: margen por estado (nuevo, caja abierta, reacondicionado, usado). */
+  setConditions: (provider: string, conditions: string[], percent: number | null) =>
+    api.put<ProviderSaleMargins>(`/providers/${encodeURIComponent(provider)}/sale-margins/conditions`, { conditions, percent }),
   products: (provider: string, params: { category?: string; q?: string; cursor?: string | null; limit?: number }) =>
     api
       .get<SaleMarginProductsPage>(`/providers/${encodeURIComponent(provider)}/sale-margins/products`, {
@@ -4789,6 +4792,8 @@ export interface StorefrontProduct {
   /** La primera de `images`. */
   imageUrl: string | null;
   images: string[];
+  /** La foto no la subió la tienda: la encontró NODO sola («Primera foto»). */
+  autoImage?: boolean;
   description: string | null;
   warranty: string | null;
   condition: string | null;
@@ -4932,6 +4937,12 @@ export const storefrontApi = {
   removeBuyer: (tenantId: string) => api.delete<{ removed: true }>(`/my/storefront/audience/${tenantId}`),
   /** Foto ya achicada (ver `lib/imageCompress.ts`). Devuelve `/assets/<id>`. */
   uploadImage: (file: File) => uploadAuthedFile("/my/storefront/images", file) as Promise<{ url: string; bytes: number }>,
+  /** Fotos de internet (Serper) para un producto. Tope de búsquedas por día y por tienda. */
+  searchImages: (query: string) =>
+    api.post<{ query: string; images: { imageUrl: string; thumbnailUrl: string | null; title: string | null; source: string | null }[]; left: number }>(
+      "/my/storefront/images/search",
+      { query }
+    ),
   products: (q?: string) => api.get<{ items: StorefrontProduct[]; total: number }>("/my/storefront/products", { params: q ? { q } : {} }),
   addProduct: (data: StorefrontProductInput) => api.post<{ externalId: string }>("/my/storefront/products", data),
   updateProduct: (externalId: string, data: Partial<StorefrontProductInput>) =>
