@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf } from "class-validator";
 import { MAX_IMAGES_PER_ITEM, PRODUCT_CONDITIONS, STALE_ACTIONS, STOCK_DAY_OPTIONS } from "../storefront-rules";
 
 const CURRENCIES = ["USD", "ARS"] as const;
@@ -311,6 +311,13 @@ export class LinkSheetDto {
   @IsString()
   @MaxLength(2000)
   url!: string;
+}
+
+export class SheetTabDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  tab!: string;
 }
 
 export class ImageSearchDto {

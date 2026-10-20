@@ -14,6 +14,7 @@ import {
   CreateUpgradeRequestDto,
   ImageSearchDto,
   LinkSheetDto,
+  SheetTabDto,
   OpenStorefrontDto,
   ProductsQueryDto,
   RespondStorefrontOrderDto,
@@ -105,6 +106,13 @@ export class StorefrontController {
   @Delete("storefront/sheet")
   unlinkSheet(@CurrentTenant() tenant: TenantContext) {
     return this.storefront.unlinkSheet(tenant);
+  }
+
+  /** Elige qué pestaña de la planilla es la de productos (por nombre) y la lee en el momento. */
+  @RequiresCapability("storefront")
+  @Put("storefront/sheet/tab")
+  chooseSheetTab(@CurrentTenant() tenant: TenantContext, @Body() dto: SheetTabDto) {
+    return this.storefront.chooseSheetTab(tenant, dto.tab);
   }
 
   @RequiresCapability("storefront")

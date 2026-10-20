@@ -81,6 +81,25 @@ export function storefrontHiddenReason(
   return null;
 }
 
+/** Lo que el dueño ve como motivo: las reglas del buscador más lo que tiene cargado. */
+export type StorefrontOwnerHiddenReason = StorefrontHiddenReason | "NO_PRODUCTS" | "NO_STOCK";
+
+/**
+ * Por qué los demás comercios no ven nada de la tienda, dicho para el dueño. A
+ * un comprador no se le muestran productos sin stock (y la tienda no se le
+ * ofrece a nadie si no hay ninguno con stock), así que con todo en 0 la tienda
+ * no se ve aunque esté abierta. `null` = se ve.
+ */
+export function ownerHiddenReason(
+  rulesReason: StorefrontHiddenReason | null,
+  counts: { productCount: number; inStockCount: number }
+): StorefrontOwnerHiddenReason | null {
+  if (rulesReason) return rulesReason;
+  if (counts.productCount === 0) return "NO_PRODUCTS";
+  if (counts.inStockCount === 0) return "NO_STOCK";
+  return null;
+}
+
 /**
  * Hay que recordarle al dueño el stock: entró en la ventana previa al
  * vencimiento y no se le avisó desde la última confirmación. Ya vencido, se

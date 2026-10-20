@@ -229,7 +229,7 @@ export class ListImportService {
     }
 
     const owner = await this.ownerOfRecord(record);
-    const resolved = await this.resolveProfile(record.provider, owner, analysis);
+    const resolved = await this.resolveProfile(record.provider, owner, analysis, record.sheetIndex);
     const sheet = resolved.sheet;
     const normalized = normalizeRows(sheet, resolved.spec);
     const matched = await matchAgainstCatalog(this.prisma, record.provider, normalized.items);
@@ -317,25 +317,30 @@ export class ListImportService {
    * Perfil a usar: el activo si la huella coincide; el activo con revisión si
    * solo coinciden las columnas clave; si no, uno propuesto (reutilizando una
    * propuesta pendiente con la misma huella antes de volver a preguntarle a la IA).
+   *
+   * `sheetIndex`: la hoja que eligió el usuario para esta carga. Manda sobre la
+   * del perfil y sobre la de más filas; si el perfil activo sirve para esa hoja,
+   * queda una versión nueva que la recuerda para las próximas cargas.
    */
-  private async resolveProfile(provider: string, owner: string, analysis: StructureAnalysis) {
-    const chosen = analysis.chosen!;
+  private async resolveProfile(provider: string, owner: string, analysis: StructureAnalysis, sheetIndex: number | null = null) {
+    const picked = sheetIndex != null ? this.sheetForProfile(analysis, sheetIndex) : null;
+    const chosen = picked ?? analysis.chosen!;
+    const sheetCount = analysis.sheets.length;
     const active = await this.prisma.importProfile.findFirst({
       where: { provider, tenantId: owner, status: "ACTIVE" },
       orderBy: { version: "desc" },
     });
     if (active) {
-      const sheet = this.sheetForProfile(analysis, active.sheetIndex) ?? chosen;
-      const fingerprint = fingerprintOf(analysis.sheets.length, sheet);
-      if (active.fingerprint === fingerprint) {
-        return { profile: active, spec: specOf(active), sheet, match: "EXACT" as const };
-      }
-      if (keyColumnsPresent(specOf(active), sheet.headers)) {
-        return { profile: active, spec: specOf(active), sheet, match: "PARTIAL" as const };
+      const sheet = picked ?? this.sheetForProfile(analysis, active.sheetIndex) ?? chosen;
+      const fingerprint = fingerprintOf(sheetCount, sheet);
+      const match = active.fingerprint === fingerprint ? ("EXACT" as const) : keyColumnsPresent(specOf(active), sheet.headers) ? ("PARTIAL" as const) : null;
+      if (match) {
+        const profile = picked && picked.sheetIndex !== active.sheetIndex ? await this.rememberSheet(active, picked) : active;
+        return { profile, spec: specOf(profile), sheet, match };
       }
     }
     const pending = await this.prisma.importProfile.findFirst({
-      where: { provider, tenantId: owner, status: "PROPOSED", fingerprint: analysis.fingerprint },
+      where: { provider, tenantId: owner, status: "PROPOSED", fingerprint: fingerprintOf(sheetCount, chosen) },
       orderBy: { version: "desc" },
     });
     if (pending) {
@@ -349,6 +354,45 @@ export class ListImportService {
       approvedByUserId: null,
     });
     return { profile: created, spec: learned.spec, sheet: chosen, match: "PROPOSED" as const };
+  }
+
+  /**
+   * Versión nueva del perfil activo que lee otra hoja: mismas columnas y misma
+   * huella (si las columnas solo coincidían en parte, la próxima carga vuelve a
+   * pasar por revisión igual que antes).
+   */
+  private async rememberSheet(active: ImportProfile, sheet: SheetAnalysis): Promise<ImportProfile> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.importProfile.updateMany({ where: { provider: active.provider, tenantId: active.tenantId, status: "ACTIVE" }, data: { status: "ARCHIVED" } });
+      const last = await tx.importProfile.findFirst({
+        where: { provider: active.provider, tenantId: active.tenantId },
+        orderBy: { version: "desc" },
+        select: { version: true },
+      });
+      return tx.importProfile.create({
+        data: {
+          provider: active.provider,
+          tenantId: active.tenantId,
+          version: (last?.version ?? active.version) + 1,
+          status: "ACTIVE",
+          fingerprint: active.fingerprint,
+          headers: active.headers as Prisma.InputJsonValue,
+          sheetIndex: sheet.sheetIndex,
+          sheetName: sheet.sheetName,
+          headerRow: sheet.headerRow ?? active.headerRow,
+          columnMap: active.columnMap as Prisma.InputJsonValue,
+          currency: active.currency,
+          priceIncludesIva: active.priceIncludesIva,
+          ivaPercent: active.ivaPercent,
+          numberFormat: active.numberFormat,
+          dividerMeaning: active.dividerMeaning,
+          sampleRows: { headers: sheet.headers, rows: sheet.dataRows.slice(0, PREVIEW_ROWS).map((r) => r.cells) } as Prisma.InputJsonValue,
+          proposedByAi: active.proposedByAi,
+          aiReasoning: active.aiReasoning,
+          approvedByUserId: active.approvedByUserId,
+        },
+      });
+    });
   }
 
   private sheetForProfile(analysis: StructureAnalysis, sheetIndex: number): SheetAnalysis | null {
@@ -735,6 +779,7 @@ export class ListImportService {
       rowsData: record.rowsData,
       summary: record.summary,
       error: record.error,
+      sheet: sheetInfoOf(record.preview),
       createdAt: record.createdAt,
       appliedAt: record.appliedAt,
       revertedAt: record.revertedAt,
@@ -804,6 +849,53 @@ export class ListImportService {
     });
     this.kick(record.id);
     return this.serialize(record);
+  }
+
+  /**
+   * Vuelve a leer una carga con otra hoja del mismo archivo. Si estaba en
+   * revisión o falló, se reprocesa esa misma carga; si es la última y ya se
+   * aplicó, entra una carga nueva con el mismo archivo. La hoja queda recordada
+   * en el perfil para las próximas planillas.
+   */
+  async chooseSheet(actor: ImportActor, provider: Provider, importId: string, sheetIndex: number) {
+    const access = await this.resolveAccess(actor, provider);
+    const record = await this.prisma.supplierListImport.findUnique({ where: { id: importId } });
+    if (!record || record.provider !== provider || !isInScope(record, access)) throw new NotFoundException("Carga no encontrada");
+    if (!record.storedAssetId) throw new BadRequestException("Esta carga ya no tiene el archivo guardado. Subilo de nuevo.");
+    if (record.status === "PROCESSING") throw new ConflictException("Esperá a que termine de procesarse y elegí la hoja después.");
+    const { analysis } = await this.analyzeStoredFile(record);
+    const sheet = analysis.sheets.find((s) => s.sheetIndex === sheetIndex);
+    if (!sheet) throw new BadRequestException("Esa hoja no está en el archivo");
+    if (sheet.dataRows.length === 0) throw new BadRequestException(`La hoja «${sheet.sheetName}» no tiene una tabla de productos`);
+
+    if (record.status === "NEEDS_REVIEW" || record.status === "FAILED") {
+      const updated = await this.prisma.supplierListImport.update({
+        where: { id: record.id },
+        data: { sheetIndex, status: "PROCESSING", error: null },
+      });
+      this.kick(updated.id);
+      return this.serialize(updated);
+    }
+    const latest = await this.prisma.supplierListImport.findFirst({
+      where: { provider, ...this.importScope(access) },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    });
+    if (latest?.id !== record.id) throw new BadRequestException("Solo se puede cambiar la hoja de la última carga. Subí el archivo de nuevo.");
+    const created = await this.prisma.supplierListImport.create({
+      data: {
+        provider,
+        tenantId: access.tenantId,
+        uploadedByUserId: actor.userId,
+        level: access.level,
+        originalFileName: record.originalFileName,
+        storedAssetId: record.storedAssetId,
+        sheetIndex,
+        status: "PROCESSING",
+      },
+    });
+    this.kick(created.id);
+    return this.serialize(created);
   }
 
   /** Guarda una versión nueva del perfil como activa y, si se pide, reprocesa una carga en revisión. */
@@ -1093,6 +1185,29 @@ export function specOf(profile: ImportProfile): ImportProfileSpec {
     numberFormat: profile.numberFormat,
     dividerMeaning: profile.dividerMeaning,
   };
+}
+
+export interface ImportSheetInfo {
+  /** Hojas del archivo. */
+  count: number;
+  /** La hoja que se leyó. */
+  index: number;
+  name: string;
+  dataRows: number;
+  sheets: { index: number; name: string; dataRows: number }[];
+}
+
+/** Qué hoja se leyó de un archivo y cuáles más tenía, desde la vista previa guardada. */
+export function sheetInfoOf(preview: unknown): ImportSheetInfo | null {
+  if (!preview || typeof preview !== "object") return null;
+  const p = preview as Partial<ImportPreview>;
+  if (!Array.isArray(p.sheets) || p.sheets.length === 0) return null;
+  const sheets = p.sheets
+    .filter((s) => s && typeof s.name === "string" && Number.isInteger(s.index))
+    .map((s) => ({ index: s.index, name: s.name, dataRows: Number(s.dataRows) || 0 }));
+  const read = sheets.find((s) => s.index === p.sheetIndex) ?? sheets[0];
+  if (!read) return null;
+  return { count: sheets.length, index: read.index, name: read.name, dataRows: read.dataRows, sheets };
 }
 
 /** Coincidencia parcial: las columnas mapeadas a nombre y precio siguen estando. */

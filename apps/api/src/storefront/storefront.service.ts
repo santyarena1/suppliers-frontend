@@ -39,6 +39,7 @@ import {
   linesOverStock,
   nameKey,
   normalizeImageRefs,
+  ownerHiddenReason,
   PAYMENT_METHODS,
   pickAllowed,
   PRODUCT_CONDITIONS,
@@ -131,14 +132,23 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
   private async view(sf: StorefrontWithTenants) {
     const key = sf.supplierTenant.providerKey ?? "";
     const now = new Date();
-    const [productCount, inStock, pendingOrders, audience] = await Promise.all([
+    const [productCount, inStock, pendingOrders, audience, latestImport] = await Promise.all([
       this.prisma.supplierBaseOffer.count({ where: { provider: key } }),
       this.prisma.supplierBaseOffer.count({ where: { provider: key, OR: [{ stock: null }, { stock: { gt: 0 } }] } }),
       this.prisma.providerOrder.count({ where: { ...this.visibleOrderWhere(key), storefrontStatus: "PENDING" } }),
       this.prisma.storefrontAudience.groupBy({ by: ["status"], where: { storefrontId: sf.id }, _count: { _all: true } }),
+      // La última planilla (subida o de Google Sheets): si quedó en revisión o falló, los productos no se actualizaron.
+      key
+        ? this.prisma.supplierListImport.findFirst({
+            where: { provider: key, level: "BASE" },
+            orderBy: { createdAt: "desc" },
+            select: { id: true, status: true, error: true, originalFileName: true, createdAt: true },
+          })
+        : null,
     ]);
     const counted = (s: string) => audience.find((a) => a.status === s)?._count._all ?? 0;
-    const hiddenReason = storefrontHiddenReason({ ...sf, ownerActive: sf.retailerTenant.active }, now);
+    const rulesReason = storefrontHiddenReason({ ...sf, ownerActive: sf.retailerTenant.active }, now);
+    const hiddenReason = ownerHiddenReason(rulesReason, { productCount, inStockCount: inStock });
     return {
       exists: true as const,
       id: sf.id,
@@ -155,8 +165,8 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
       stockValidDays: sf.stockValidDays,
       staleAction: sf.staleAction === "HIDE" ? ("HIDE" as const) : ("KEEP" as const),
       stockState: stockState(sf, now),
-      hiddenReason: hiddenReason ?? (productCount === 0 ? ("NO_PRODUCTS" as const) : null),
-      visible: hiddenReason == null && inStock > 0,
+      hiddenReason,
+      visible: hiddenReason == null,
       visibility: sf.visibility,
       inviteToken: sf.inviteToken,
       contactPhone: sf.contactPhone,
@@ -176,6 +186,15 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
       pendingOrders,
       reach: counted("ACCEPTED"),
       audience: { accepted: counted("ACCEPTED"), pending: counted("PENDING"), declined: counted("DECLINED") },
+      latestImport: latestImport
+        ? {
+            id: latestImport.id,
+            status: latestImport.status,
+            error: latestImport.error,
+            fileName: latestImport.originalFileName,
+            createdAt: latestImport.createdAt.toISOString(),
+          }
+        : null,
       createdAt: sf.createdAt.toISOString(),
     };
   }
@@ -394,6 +413,12 @@ export class StorefrontService implements OnModuleInit, OnModuleDestroy {
     const sf = await this.requireOwn(tenant);
     await this.sheets.unlink(sf.id);
     return this.view((await this.findOwn(tenant))!);
+  }
+
+  async chooseSheetTab(tenant: TenantContext, tab: string) {
+    const sf = await this.requireOwn(tenant);
+    const result = await this.sheets.chooseTab(sf.id, tab);
+    return { ...result, store: await this.view((await this.findOwn(tenant))!) };
   }
 
   async syncSheet(tenant: TenantContext) {

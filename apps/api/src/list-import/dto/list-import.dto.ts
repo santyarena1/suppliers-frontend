@@ -124,3 +124,11 @@ export class SaveImportProfileDto {
   @IsString()
   reprocessImportId?: string;
 }
+
+/** Hoja del archivo a leer en una carga (índice base 0). */
+export class ChooseImportSheetDto {
+  @IsInt()
+  @Min(0)
+  @Max(500)
+  sheetIndex!: number;
+}

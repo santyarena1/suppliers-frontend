@@ -830,6 +830,8 @@ model SupplierListImport {
   diff             Json?
   /// Vista previa cruda para el editor de perfil: encabezados, primeras filas, hojas.
   preview          Json?
+  /// Hoja elegida a mano para esta carga (índice base 0). Vacía: la del perfil o la de más filas.
+  sheetIndex       Int?
   /// Filas normalizadas listas para aplicar (se conservan hasta aplicar/descartar).
   normalizedRows   Json?
   /// Ofertas previas afectadas, para revertir.
@@ -3009,6 +3011,10 @@ model Storefront {
   sheetHash        String?
   sheetError       String?
   sheetImportId    String?
+  /// Pestaña que se lee, por nombre. Vacía: la del gid del link (tiendas vinculadas antes de elegir pestaña).
+  sheetTab         String?
+  /// Pestañas vistas en la última lectura: { tabs: [{ name, rows }], linkTab, autoPicked }.
+  sheetTabs        Json?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 

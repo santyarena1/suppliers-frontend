@@ -21,7 +21,7 @@ import { commercialId, type TenantContext } from "../tenants/tenant-context.serv
 import { assertPermission } from "../tenants/tenant-roles";
 import { TenantGuard } from "../tenants/tenant.guard";
 import { TenantsService } from "../tenants/tenants.service";
-import { CreateListProviderDto, EnableOwnListDto, ListCadenceDto, SaveImportProfileDto } from "./dto/list-import.dto";
+import { ChooseImportSheetDto, CreateListProviderDto, EnableOwnListDto, ListCadenceDto, SaveImportProfileDto } from "./dto/list-import.dto";
 import { CostSensitive } from "../pricing/cost-visibility";
 import { ListImportService, type ImportActor } from "./list-import.service";
 
@@ -138,6 +138,19 @@ export class ListImportController {
   discard(@CurrentUser() user: JwtPayload, @CurrentTenantOrNone() tenant: TenantContext | null, @Param("id") id: string) {
     assertManagesProviders(user, tenant);
     return this.imports.discard(id, actorOf(user, tenant));
+  }
+
+  /** Vuelve a leer la carga con otra hoja del mismo archivo (y la recuerda para las próximas). */
+  @Post("providers/:provider/imports/:id/sheet")
+  chooseSheet(
+    @CurrentUser() user: JwtPayload,
+    @CurrentTenantOrNone() tenant: TenantContext | null,
+    @Param("provider") provider: string,
+    @Param("id") id: string,
+    @Body() dto: ChooseImportSheetDto
+  ) {
+    assertManagesProviders(user, tenant);
+    return this.imports.chooseSheet(actorOf(user, tenant), assertProvider(provider), id, dto.sheetIndex);
   }
 
   @Post("providers/:provider/imports/:id/revert")

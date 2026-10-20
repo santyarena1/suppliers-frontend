@@ -1040,6 +1040,18 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Cambios en endpoints existentes**: una tienda solo aparece en `GET /my/providers` de los comercios que la aceptaron (vínculo `LIST_CONNECTED`); `DELETE /my/providers/:p` de una tienda la deja como rechazada. `POST /orders/offline` a una tienda exige que esté abierta y aceptada. `list.applied` lleva las filas crudas: las columnas "Estado" y "Fotos" (varios links por celda) se aplican a la tienda.
 - **Estado**: IMPLEMENTADO.
 - **Notas**: Migraciones `20261015120000_storefront_profile_audience` (a los comercios que veían una tienda sin haberla elegido les queda la propuesta pendiente; los que ya le compraron, aceptada), `20261015130000_storefront_sheet_sync`, `20261015140000_storefront_orders_email`.
+
+### [FEATURE] Vender en NODO: pestañas de Google Sheets, hojas de Excel y qué falta para que se vea
+- **Método / Ruta**:
+  - `PUT /my/storefront/sheet/tab` body `{ tab }` (nombre de la pestaña; dueño, `providers.manage` + capacidad `storefront`) → `{ changed, importId, error, store }`. Baja la planilla entera (`export?format=xlsx`), guarda la pestaña por nombre, descarta la carga en revisión de la pestaña anterior y lee la nueva en el momento. 400 "La pestaña «X» ya no está en la planilla…" si no existe.
+  - `POST /providers/:key/imports/:id/sheet` body `{ sheetIndex }` (mismos permisos que subir listas) → la carga serializada. En revisión o fallida: se reprocesa esa carga con esa hoja. Aplicada: solo la última, y entra una carga nueva con el mismo archivo. Si el perfil activo sirve para esa hoja, queda una versión nueva que la recuerda. 400 si la hoja no existe o no tiene tabla; 409 mientras procesa.
+- **Cambios en endpoints existentes**:
+  - `GET /my/storefront`: `hiddenReason` suma `NO_STOCK` (hay productos pero ninguno con stock; `visible` = sin motivo). Suma `latestImport: { id, status, error, fileName, createdAt } | null` (última carga de la lista base). `sheet` suma `tab` (pestaña que se lee; `null` = la del link sin nombre conocido), `tabSource: CHOSEN|MOST_ROWS|LINK` y `tabs: [{ name, rows }]`.
+  - Las cargas (`GET /providers/:key/imports`, `…/:id`) suman `sheet: { count, index, name, dataRows, sheets: [{ index, name, dataRows }] } | null` (qué hoja se leyó y cuáles más tiene el archivo).
+  - Conectar un link sin pestaña lee la de más filas (antes, la primera). Con `#gid=` en el link, o tiendas conectadas antes: se sigue leyendo esa pestaña como CSV hasta que el dueño elija otra. Una pestaña elegida se carga como xlsx de una hoja (`Google Sheets - <pestaña>.xlsx`), no CSV, para que los números no dependan del formato del perfil.
+- **Estado**: IMPLEMENTADO.
+- **Notas**: Migración `20261019120000_sheet_tabs` (`Storefront.sheetTab`, `Storefront.sheetTabs`, `SupplierListImport.sheetIndex`; solo aditiva).
+
 ### [FEATURE] Directorio: distribuidores para conectar (comercio nuevo)
 - **Método**: POST
 - **Ruta**: /my/providers/:provider/connect-list

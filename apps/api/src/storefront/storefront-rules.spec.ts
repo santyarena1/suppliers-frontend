@@ -2,6 +2,7 @@ import {
   finalFromNet,
   isStockFresh,
   linesOverStock,
+  ownerHiddenReason,
   shouldWarnStale,
   stockAfterOrder,
   stockExpiresAt,
@@ -79,6 +80,19 @@ describe("por qué una tienda no se ve", () => {
     expect(storefrontHiddenReason(hide, now)).toBeNull();
     // Sin vencimiento no hay nada que ocultar.
     expect(storefrontHiddenReason({ ...hide, stockValidDays: 0, stockConfirmedAt: null }, now)).toBeNull();
+  });
+});
+
+describe("motivo que ve el dueño", () => {
+  it("sin productos, o con productos pero ninguno con stock, no se ve", () => {
+    expect(ownerHiddenReason(null, { productCount: 0, inStockCount: 0 })).toBe("NO_PRODUCTS");
+    expect(ownerHiddenReason(null, { productCount: 40, inStockCount: 0 })).toBe("NO_STOCK");
+    expect(ownerHiddenReason(null, { productCount: 40, inStockCount: 1 })).toBeNull();
+  });
+
+  it("una regla del buscador (pausada, cerrada…) va primero", () => {
+    expect(ownerHiddenReason("PAUSED", { productCount: 0, inStockCount: 0 })).toBe("PAUSED");
+    expect(ownerHiddenReason("STOCK_EXPIRED", { productCount: 40, inStockCount: 0 })).toBe("STOCK_EXPIRED");
   });
 });
 
