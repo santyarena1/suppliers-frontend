@@ -7,10 +7,14 @@ import type { TaxLine } from "./tax-lines";
 
 /** Avisos de novedades que la web muestra una sola vez por persona. */
 export const ANNOUNCEMENTS = ["seller-mode-2026-10"] as const;
-export type AnnouncementKey = (typeof ANNOUNCEMENTS)[number];
+/** "Qué hay de nuevo" de cada versión de la web: `changelog:2.7.0`. */
+export type ChangelogAnnouncementKey = `changelog:${number}.${number}.${number}`;
+export type AnnouncementKey = (typeof ANNOUNCEMENTS)[number] | ChangelogAnnouncementKey;
+
+const CHANGELOG_KEY = /^changelog:\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
 export function isAnnouncementKey(value: string): value is AnnouncementKey {
-  return (ANNOUNCEMENTS as readonly string[]).includes(value);
+  return (ANNOUNCEMENTS as readonly string[]).includes(value) || CHANGELOG_KEY.test(value);
 }
 
 export type SaleMarginScope = "STORE" | "PROVIDER" | "CATEGORY" | "CONDITION" | "PRODUCT";

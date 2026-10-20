@@ -19,6 +19,7 @@ import { useProviderStatuses } from "@/lib/providerStatus";
 import ProviderBadge from "@/components/ProviderBadge";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
 import CustomPlanModal from "@/components/custom/CustomPlanModal";
+import { APP_VERSION, compareVersions, readSeenVersion } from "@/lib/changelog";
 import { Plus as PlusIcon } from "lucide-react";
 import {
   NAV_SECTIONS,
@@ -448,20 +449,48 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
             <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
+        <VersionLink iconMode={iconMode} active={pathname.startsWith("/actualizaciones")} />
       </div>
     </aside>
   );
 }
 
 /**
+ * Versión de NODO, chiquita abajo a la izquierda: lleva a "Qué hay de nuevo".
+ * Con un punto mientras haya una versión que la persona no vio.
+ */
+function VersionLink({ iconMode, active }: { iconMode: boolean; active: boolean }) {
+  const [unseen, setUnseen] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      const seen = readSeenVersion(getUser()?.id);
+      setUnseen(!seen || compareVersions(APP_VERSION, seen) > 0);
+    };
+    sync();
+    window.addEventListener("nodo:changelog-seen", sync);
+    return () => window.removeEventListener("nodo:changelog-seen", sync);
+  }, []);
+  return (
+    <Link
+      href="/actualizaciones"
+      title="Qué hay de nuevo en NODO"
+      className={`mt-2 flex items-center gap-1.5 rounded px-1 py-0.5 text-[10px] transition-colors ${iconMode ? "justify-center" : ""} ${
+        active ? "text-surface-200" : "text-surface-500 hover:text-surface-200"
+      }`}
+    >
+      {unseen && <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand-400" aria-label="Hay novedades sin ver" />}
+      <span className="font-mono">v{APP_VERSION}</span>
+      {!iconMode && <span>· Qué hay de nuevo</span>}
+    </Link>
+  );
+}
+
+/**
  * "Conectá tu sistema de gestión": abre la presentación de NODO Custom con el
- * pedido de relevamiento. Fijo arriba de Integración API; no se muestra a quien ya
- * tiene Custom.
+ * pedido de relevamiento. Fijo arriba de Integración API.
  */
 function ConnectErpLink({ iconMode }: { iconMode: boolean }) {
-  const { subscription } = useSubscription();
   const [open, setOpen] = useState(false);
-  if (subscription?.plan === "CUSTOM") return null;
   return (
     <>
       <button

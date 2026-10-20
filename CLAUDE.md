@@ -21,3 +21,7 @@ producto.
 ## Proveedores
 
 `NEW_BYTES, ELIT, GRUPO_NUCLEO, AIR, NEW_TREE, INVID, GC, POLYTECH, ASHIR, HDC, SOLUTION_BOX, DISTECNA, CEVEN, DIAPSTORE` — `KNOWN_PROVIDERS` en `packages/shared/src/providers.ts`. Además existen **proveedores por lista** (`LIST_<SLUG>`, `Tenant.providerKey` generado al crearlos desde el panel) cuyo catálogo entra por planillas: módulo `apps/api/src/list-import` (spec en `docs/superpowers/specs/2026-09-03-supplier-list-import-design.md`). `Provider` es `string`; validar con `isProviderKey`, etiquetar con `providerLabel`. La integración real con cada proveedor (auth, endpoint, formato de respuesta) se documenta por proveedor a medida que se implementa; no asumir nada sin confirmarlo. New Tree va por emulación del portal WebForms (PageMethods `wsNRW_*` + páginas HTML), no por su SOAP: `docs/superpowers/specs/2026-09-05-new-tree-portal-integration-design.md`.
+
+## Qué hay de nuevo (changelog)
+
+Cada push con un cambio que nota el comercio suma una entrada ARRIBA en `apps/web/lib/changelog.ts` y sube la versión (función nueva → 2.7.0 → 2.8.0; solo arreglos → 2.7.1). El modal "Qué hay de nuevo" se abre una vez por versión y la versión se ve abajo a la izquierda del sidebar (lleva a `/actualizaciones`). Textos para el comercio, concretos; nada interno ni del superadmin.
