@@ -5,7 +5,7 @@ import { MailService } from "../mail/mail.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { inboxMail } from "./inbox-mail";
 import { INBOX_TYPES, type InboxInput, type InboxStatus, type InboxType } from "./inbox-types";
-import type { ContactKind, ContactRequestDto, SupplierJoinDto, UpdateInboxDto } from "./dto/inbox.dto";
+import type { ContactKind, ContactRequestDto, CustomPlanRequestDto, IntegrationRequestDto, SupplierJoinDto, UpdateInboxDto } from "./dto/inbox.dto";
 
 const PAGE_SIZE = 50;
 
@@ -123,6 +123,54 @@ export class InboxService {
       data: { Origen: "Alta en la app", Tipo: KIND_LABELS[dto.kind], Web: dto.website ?? null },
     });
     return { received: true };
+  }
+
+  /** Comercio con sesión: "quiero sumar un distribuidor que no está". Le llega por mail al equipo de NODO. */
+  async integrationRequest(from: { userId: string; tenantId?: string | null }, dto: IntegrationRequestDto) {
+    const who = await this.requester(from);
+    await this.record({
+      type: "INTEGRATION_REQUEST",
+      title: `${who.company} quiere sumar a ${dto.providerName}`,
+      message: dto.message,
+      contactName: who.name,
+      contactEmail: who.email,
+      contactPhone: dto.phone,
+      company: who.company,
+      userId: from.userId,
+      tenantId: from.tenantId ?? null,
+      data: {
+        Distribuidor: dto.providerName,
+        Web: dto.website ?? null,
+        "Tiene cuenta con el distribuidor": dto.hasAccount == null ? null : dto.hasAccount ? "Sí" : "Todavía no",
+      },
+    });
+    return { received: true };
+  }
+
+  /** Comercio con sesión: pide NODO Custom para conectar su sistema de gestión. */
+  async customPlanRequest(from: { userId: string; tenantId?: string | null }, dto: CustomPlanRequestDto) {
+    const who = await this.requester(from);
+    await this.record({
+      type: "PLAN_REQUEST",
+      title: `${who.company} pide NODO Custom para conectar ${dto.system}`,
+      message: dto.message,
+      contactName: who.name,
+      contactEmail: who.email,
+      contactPhone: dto.phone,
+      company: who.company,
+      userId: from.userId,
+      tenantId: from.tenantId ?? null,
+      data: { Plan: "NODO Custom", Sistema: dto.system, "Quiere conectar": dto.needs?.length ? dto.needs.join(", ") : null },
+    });
+    return { received: true };
+  }
+
+  private async requester(from: { userId: string; tenantId?: string | null }) {
+    const [user, tenant] = await Promise.all([
+      this.prisma.user.findUniqueOrThrow({ where: { id: from.userId }, select: { username: true, email: true } }),
+      from.tenantId ? this.prisma.tenant.findUnique({ where: { id: from.tenantId }, select: { name: true } }) : null,
+    ]);
+    return { name: user.username, email: user.email, company: tenant?.name ?? user.username };
   }
 
   // ---------- Administración ----------

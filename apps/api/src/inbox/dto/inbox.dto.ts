@@ -1,5 +1,5 @@
 import { Transform } from "class-transformer";
-import { IsEmail, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength, ValidateIf } from "class-validator";
+import { IsBoolean, IsEmail, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, MinLength, ValidateIf } from "class-validator";
 import { INBOX_STATUSES, INBOX_TYPES, type InboxStatus, type InboxType } from "../inbox-types";
 
 const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
@@ -104,4 +104,70 @@ export class UpdateInboxDto {
   @IsString()
   @MaxLength(1000)
   note?: string | null;
+}
+
+/** Un comercio pide sumar un distribuidor que NODO todavía no tiene integrado. */
+export class IntegrationRequestDto {
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  providerName!: string;
+
+  /** Página o portal del distribuidor. */
+  @IsOptional()
+  @Transform(trim)
+  @ValidateIf((_, v) => v !== null && v !== "")
+  @IsString()
+  @MaxLength(200)
+  website?: string | null;
+
+  /** Si el comercio ya tiene cuenta (usuario) en ese distribuidor. */
+  @IsOptional()
+  @IsBoolean()
+  hasAccount?: boolean;
+
+  @IsOptional()
+  @Transform(trim)
+  @ValidateIf((_, v) => v !== null && v !== "")
+  @IsString()
+  @MaxLength(40)
+  phone?: string | null;
+
+  @IsOptional()
+  @Transform(trim)
+  @ValidateIf((_, v) => v !== null && v !== "")
+  @IsString()
+  @MaxLength(1000)
+  message?: string | null;
+}
+
+/** Un comercio pide NODO Custom para conectar su sistema de gestión. */
+export class CustomPlanRequestDto {
+  /** Sistema de gestión o ERP que usa ("Tango", "Bejerman", uno propio…). */
+  @Transform(trim)
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  system!: string;
+
+  /** Qué quiere conectar (stock, precios, pedidos, facturación…). */
+  @IsOptional()
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  needs?: string[];
+
+  @IsOptional()
+  @Transform(trim)
+  @ValidateIf((_, v) => v !== null && v !== "")
+  @IsString()
+  @MaxLength(40)
+  phone?: string | null;
+
+  @IsOptional()
+  @Transform(trim)
+  @ValidateIf((_, v) => v !== null && v !== "")
+  @IsString()
+  @MaxLength(1000)
+  message?: string | null;
 }

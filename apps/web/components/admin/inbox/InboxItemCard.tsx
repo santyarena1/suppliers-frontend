@@ -11,6 +11,7 @@ export const TYPE_TONE: Record<InboxType, string> = {
   PAYMENT_NOTICE: "bg-amber-500/15 text-amber-200 border-amber-500/30",
   PLAN_REQUEST: "bg-brand-500/15 text-brand-300 border-brand-500/30",
   SUPPLIER_JOIN: "bg-sky-500/15 text-sky-300 border-sky-500/30",
+  INTEGRATION_REQUEST: "bg-teal-500/15 text-teal-300 border-teal-500/30",
   CONTACT: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30",
 };
 

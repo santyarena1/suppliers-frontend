@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, Plug, X } from "lucide-react";
+import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, Plug, Workflow, X } from "lucide-react";
 import { useSubscription } from "@/lib/subscription";
 import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
 import { useChatUnread } from "@/lib/chat-unread";
@@ -18,6 +18,7 @@ import { useMyProviders } from "@/lib/myProviders";
 import { useProviderStatuses } from "@/lib/providerStatus";
 import ProviderBadge from "@/components/ProviderBadge";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
+import CustomPlanModal from "@/components/custom/CustomPlanModal";
 import { Plus as PlusIcon } from "lucide-react";
 import {
   NAV_SECTIONS,
@@ -413,6 +414,7 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
       </nav>
 
       <div className={`shrink-0 border-t border-surface-800 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] ${iconMode ? "px-2" : "px-3"}`}>
+        {tenant?.type === "RETAILER" && <ConnectErpLink iconMode={iconMode} />}
         {tenant?.type === "RETAILER" && (
           <ApiIntegrationLink active={pathname === "/integracion-api" || pathname.startsWith("/configuracion/api")} iconMode={iconMode} />
         )}
@@ -448,6 +450,38 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         </div>
       </div>
     </aside>
+  );
+}
+
+/**
+ * "Conectá tu sistema de gestión": abre la presentación de NODO Custom con el
+ * pedido de relevamiento. Fijo arriba de Integración API; no se muestra a quien ya
+ * tiene Custom.
+ */
+function ConnectErpLink({ iconMode }: { iconMode: boolean }) {
+  const { subscription } = useSubscription();
+  const [open, setOpen] = useState(false);
+  if (subscription?.plan === "CUSTOM") return null;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Conectá tu sistema de gestión (ERP) con NODO Custom"
+        className={`group mb-2 flex w-full items-center rounded-lg border border-emerald-500/25 bg-gradient-to-r from-emerald-500/10 to-transparent text-left text-surface-100 transition-colors hover:border-emerald-400/50 hover:text-white ${
+          iconMode ? "justify-center p-2" : "gap-2.5 px-3 py-2"
+        }`}
+      >
+        <Workflow className="h-4 w-4 flex-shrink-0 text-emerald-300" />
+        {!iconMode && (
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-medium">Conectá tu sistema</span>
+            <span className="block truncate text-[10px] text-surface-400">ERP o gestión · NODO Custom</span>
+          </span>
+        )}
+      </button>
+      <CustomPlanModal open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }
 

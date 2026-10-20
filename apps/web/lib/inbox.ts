@@ -2,7 +2,7 @@ import api from "@/lib/api";
 
 /** Bandeja "Solicitudes" del superadmin y los formularios que la alimentan. */
 
-export const INBOX_TYPES = ["SIGNUP", "NEW_STORE", "PAYMENT_NOTICE", "PLAN_REQUEST", "SUPPLIER_JOIN", "CONTACT"] as const;
+export const INBOX_TYPES = ["SIGNUP", "NEW_STORE", "PAYMENT_NOTICE", "PLAN_REQUEST", "SUPPLIER_JOIN", "INTEGRATION_REQUEST", "CONTACT"] as const;
 export type InboxType = (typeof INBOX_TYPES)[number];
 export type InboxStatus = "NEW" | "HANDLED" | "ARCHIVED";
 
@@ -12,6 +12,7 @@ export const INBOX_TYPE_LABELS: Record<InboxType, string> = {
   PAYMENT_NOTICE: "Aviso de pago",
   PLAN_REQUEST: "Pedido de plan",
   SUPPLIER_JOIN: "Distribuidor o marca",
+  INTEGRATION_REQUEST: "Distribuidor a integrar",
   CONTACT: "Consulta",
 };
 
@@ -80,4 +81,10 @@ export const inboxApi = {
 export const contactApi = {
   send: (body: ContactPayload) => api.post<{ received: true }>("/contact", body),
   joinRequest: (body: JoinRequestPayload) => api.post<{ received: true }>("/my/join-request", body),
+  /** Un distribuidor que NODO no tiene: le llega al equipo de NODO para integrarlo. */
+  integration: (body: { providerName: string; website?: string | null; hasAccount?: boolean; phone?: string | null; message?: string | null }) =>
+    api.post<{ received: true }>("/my/requests/integration", body),
+  /** NODO Custom para conectar el sistema de gestión del comercio. */
+  customPlan: (body: { system: string; needs?: string[]; phone?: string | null; message?: string | null }) =>
+    api.post<{ received: true }>("/my/requests/custom", body),
 };

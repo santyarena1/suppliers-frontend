@@ -17,7 +17,7 @@ function setup(opts: { mailFails?: boolean; dbFails?: boolean; notifyEmail?: str
       groupBy: jest.fn().mockResolvedValue([]),
     },
     user: { findUniqueOrThrow: jest.fn().mockResolvedValue({ username: "ana", email: "ana@x.com" }) },
-    tenant: { findMany: jest.fn().mockResolvedValue([]) },
+    tenant: { findMany: jest.fn().mockResolvedValue([]), findUnique: jest.fn().mockResolvedValue({ name: "Gaming Point" }) },
   };
   const mail = {
     send: jest.fn().mockImplementation(async () => {
@@ -95,6 +95,30 @@ describe("InboxService", () => {
       contactName: "ana",
       contactEmail: "ana@x.com",
       userId: "u1",
+    });
+  });
+
+  it("un distribuidor que no está llega con el comercio, quién lo pide y si ya tiene cuenta", async () => {
+    const { service, prisma, mail } = setup();
+    await service.integrationRequest({ userId: "u1", tenantId: "t1" }, { providerName: "Megacomputación", website: "megacomp.com.ar", hasAccount: true });
+    expect(prisma.inboxRequest.create.mock.calls[0][0].data).toMatchObject({
+      type: "INTEGRATION_REQUEST",
+      title: "Gaming Point quiere sumar a Megacomputación",
+      contactEmail: "ana@x.com",
+      company: "Gaming Point",
+      tenantId: "t1",
+      data: { Distribuidor: "Megacomputación", Web: "megacomp.com.ar", "Tiene cuenta con el distribuidor": "Sí" },
+    });
+    expect(mail.send).toHaveBeenCalledWith(expect.objectContaining({ to: "duenio@nodohub.app", subject: expect.stringContaining("Megacomputación") }));
+  });
+
+  it("NODO Custom desde la app dice qué sistema quiere conectar", async () => {
+    const { service, prisma } = setup();
+    await service.customPlanRequest({ userId: "u1", tenantId: "t1" }, { system: "Tango Gestión", needs: ["Stock", "Precios"] });
+    expect(prisma.inboxRequest.create.mock.calls[0][0].data).toMatchObject({
+      type: "PLAN_REQUEST",
+      title: "Gaming Point pide NODO Custom para conectar Tango Gestión",
+      data: { Plan: "NODO Custom", Sistema: "Tango Gestión", "Quiere conectar": "Stock, Precios" },
     });
   });
 

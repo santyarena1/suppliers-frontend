@@ -1,4 +1,4 @@
-export const INBOX_TYPES = ["SIGNUP", "NEW_STORE", "PAYMENT_NOTICE", "PLAN_REQUEST", "SUPPLIER_JOIN", "CONTACT"] as const;
+export const INBOX_TYPES = ["SIGNUP", "NEW_STORE", "PAYMENT_NOTICE", "PLAN_REQUEST", "SUPPLIER_JOIN", "INTEGRATION_REQUEST", "CONTACT"] as const;
 export type InboxType = (typeof INBOX_TYPES)[number];
 
 export const INBOX_STATUSES = ["NEW", "HANDLED", "ARCHIVED"] as const;
@@ -10,6 +10,7 @@ export const INBOX_TYPE_LABELS: Record<InboxType, string> = {
   PAYMENT_NOTICE: "Aviso de pago",
   PLAN_REQUEST: "Pedido de plan",
   SUPPLIER_JOIN: "Distribuidor o marca",
+  INTEGRATION_REQUEST: "Distribuidor a integrar",
   CONTACT: "Consulta",
 };
 
