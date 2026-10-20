@@ -32,6 +32,16 @@ describe("backoff y pausa del auto-sync", () => {
     expect(prisma.orgNotification.create).not.toHaveBeenCalled();
   });
 
+  it("Solution Box se pausa en el primer 429/403: insistir agrava la suspensión", async () => {
+    const { svc, prisma } = setup({ enabled: true, consecutiveFailures: 1, pausedAt: null });
+    await svc.recordSyncFailure("t1", "SOLUTION_BOX", new Error("Solution Box limitó los pedidos (429): se reintenta en la próxima sincronización"));
+    expect(prisma.providerSyncConfig.updateMany).toHaveBeenCalledWith({
+      where: { id: "cfg1", pausedAt: null },
+      data: { pausedAt: expect.any(Date), pauseReason: expect.stringMatching(/limitó/) },
+    });
+    expect(prisma.orgNotification.create.mock.calls[0][0].data.body).toMatch(/El portal frenó el acceso/);
+  });
+
   it("al llegar al tope pausa el auto-sync y avisa al comercio en criollo", async () => {
     const { svc, prisma } = setup({ enabled: true, consecutiveFailures: SYNC_MAX_FAILURES, pausedAt: null });
     await svc.recordSyncFailure("t1", "ELIT", new Error("Request failed with status code 403"));

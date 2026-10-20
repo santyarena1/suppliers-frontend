@@ -1,3 +1,5 @@
+import { effectiveSyncMinutes } from "./provider-rate-limits";
+
 /**
  * Fallos seguidos que pausan el auto-sync (y avisan al comercio). Pausado es como
  * deshabilitado: el cron no lo vuelve a intentar y se reactiva a mano
@@ -10,6 +12,8 @@ export const SYNC_BACKOFF_CAP_MS = 2 * 60 * 60_000;
 export const PRICES_STALE_FLOOR_MS = 48 * 60 * 60_000;
 
 export interface SyncSchedule {
+  /** Con el distribuidor se aplica su intervalo mínimo (provider-rate-limits). */
+  provider?: string;
   enabled: boolean;
   syncIntervalMinutes: number;
   lastSyncedAt: Date | null;
@@ -26,7 +30,7 @@ export interface SyncSchedule {
  */
 export function nextSyncAt(config: SyncSchedule): Date | null {
   if (!config.enabled || config.pausedAt) return null;
-  const interval = Math.max(config.syncIntervalMinutes, 1) * 60_000;
+  const interval = effectiveSyncMinutes(config.provider ?? "", config.syncIntervalMinutes) * 60_000;
   const failures = Math.max(config.consecutiveFailures, 0);
   if (failures > 0) {
     const from = config.lastAttemptAt ?? config.lastSyncedAt;
@@ -49,11 +53,12 @@ export function isSyncDue(config: SyncSchedule, now = new Date()): boolean {
  * alarmar por una corrida que viene un rato atrasada.
  */
 export function pricesAreStale(
-  config: { enabled: boolean; syncIntervalMinutes: number; lastSyncedAt: Date | null },
+  config: { provider?: string; enabled: boolean; syncIntervalMinutes: number; lastSyncedAt: Date | null },
   now = new Date()
 ): boolean {
   if (!config.lastSyncedAt) return false;
-  const byInterval = config.enabled ? Math.max(config.syncIntervalMinutes, 1) * 60_000 * 2 : PRICES_STALE_FLOOR_MS;
+  const minutes = effectiveSyncMinutes(config.provider ?? "", config.syncIntervalMinutes);
+  const byInterval = config.enabled ? minutes * 60_000 * 2 : PRICES_STALE_FLOOR_MS;
   const limit = Math.max(Math.min(byInterval, PRICES_STALE_FLOOR_MS), 2 * 60 * 60_000);
   return now.getTime() - config.lastSyncedAt.getTime() > limit;
 }

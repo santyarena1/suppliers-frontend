@@ -206,7 +206,7 @@ export class CatalogSnapshotService {
         aliasId: providerAliasId(tenantId, v.provider),
         aliasName: `Proveedor ${i + 1}`,
         lastSyncedAt: c?.lastSyncedAt ?? null,
-        stale: c ? pricesAreStale(c) : false,
+        stale: c ? pricesAreStale({ ...c, provider: v.provider }) : false,
         status: c?.pausedAt ? "paused" : c && c.consecutiveFailures > 0 && c.lastSyncError ? "error" : "ok",
         pauseReason: c?.pauseReason ?? null,
       });

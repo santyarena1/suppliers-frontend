@@ -13,3 +13,13 @@ export const SKU_PREFIX: Record<string, string> = {
   DISTECNA: "DT_",
   GC: "GC_",
 };
+
+/**
+ * Intervalo mínimo de sync automática (minutos). Espejo de
+ * apps/api/src/providers/provider-rate-limits.ts: estos portales suspenden la
+ * cuenta si se consultan seguido.
+ */
+export const MIN_SYNC_MINUTES: Record<string, number> = {
+  GRUPO_NUCLEO: 360,
+  SOLUTION_BOX: 240,
+};

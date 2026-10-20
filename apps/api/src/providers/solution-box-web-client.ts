@@ -180,9 +180,14 @@ export class SolutionBoxWebClient {
     return new SolutionBoxWebClient(token, customer);
   }
 
+  /**
+   * Sin reintento ante 429: la sync hace cientos de GET y reintentar cada uno
+   * justo cuando el portal pide parar terminó en la suspensión de la cuenta.
+   * Se corta la corrida y el cron la pausa (provider-rate-limits).
+   */
   async get<T = unknown>(path: string, params?: Record<string, unknown>): Promise<T> {
     try {
-      const res = await withRateLimitRetry(() => this.http.get<T>(path, { params }));
+      const res = await this.http.get<T>(path, { params });
       if (res.status === 401) throw new BadGatewayException("La sesión de Solution Box expiró");
       if (res.status === 429) throw new BadGatewayException("Solution Box limitó los pedidos (429): se reintenta en la próxima sincronización");
       if (res.status >= 400) throw new BadGatewayException(`Solution Box ${path} → HTTP ${res.status}`);

@@ -19,7 +19,7 @@ import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { invalidateShippingEstimates } from "@/lib/shipping";
 import { parsePrice, proxyImg } from "@/lib/format";
-import { SKU_PREFIX } from "@/lib/providerMeta";
+import { MIN_SYNC_MINUTES, SKU_PREFIX } from "@/lib/providerMeta";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
@@ -725,14 +725,20 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           <div>
                             <label className="block text-xs font-medium text-surface-400 mb-1.5">Intervalo de sincronización</label>
                             <select
-                              value={config.syncIntervalMinutes}
+                              value={Math.max(config.syncIntervalMinutes, MIN_SYNC_MINUTES[provider] ?? 0)}
                               onChange={(e) => setConfig({ ...config, syncIntervalMinutes: Number(e.target.value) })}
                               className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
                             >
-                              {INTERVAL_OPTIONS.map((o) => (
+                              {INTERVAL_OPTIONS.filter((o) => o.minutes >= (MIN_SYNC_MINUTES[provider] ?? 0)).map((o) => (
                                 <option key={o.minutes} value={o.minutes}>{o.label}</option>
                               ))}
                             </select>
+                            {MIN_SYNC_MINUTES[provider] && (
+                              <p className="text-[11px] text-amber-400/90 mt-1.5 leading-relaxed">
+                                {providerLabel(provider)} suspende la cuenta si se consulta seguido: se sincroniza como mucho cada{" "}
+                                {MIN_SYNC_MINUTES[provider] / 60} horas y “Sincronizar ahora” espera 30 minutos entre intentos.
+                              </p>
+                            )}
                             <p className="text-[11px] text-surface-500 mt-1.5 leading-relaxed">
                               La sincronización automática corre entre las 6:00 y las 23:00 (hora Argentina) y se revisa cada
                               30 minutos. De noche no se sincroniza sola; si necesitás precios al momento, usá “Sincronizar ahora”.

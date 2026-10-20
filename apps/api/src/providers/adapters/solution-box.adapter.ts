@@ -8,13 +8,16 @@ import {
   type SolutionBoxCategory,
 } from "../solution-box.parser";
 import { asRecord, unwrapList } from "../json-value";
+import { isAccessBlockedError } from "../provider-rate-limits";
 
 /** El sitio pagina de a 1000 como máximo por rubro. */
 const PAGE_LIMIT = 1000;
 const MAX_PAGES_PER_CATEGORY = 20;
-/** Fichas en paralelo durante el enriquecimiento en background. */
-const DETAIL_CONCURRENCY = 2;
-const DETAIL_PAUSE_MS = 250;
+/** Fichas de a una y con pausa: el portal suspendió la cuenta por exceso de pedidos. */
+const DETAIL_CONCURRENCY = 1;
+const DETAIL_PAUSE_MS = 1_000;
+/** Pausa entre listados de rubro durante la sync. */
+const LIST_PAUSE_MS = 500;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,6 +58,7 @@ export class SolutionBoxAdapter implements ProviderAdapter {
         const params: Record<string, unknown> = { limit: PAGE_LIMIT, offset: page * PAGE_LIMIT };
         if (withStock) params.Stock = 1;
         const body = await api.get(`/articulos/info/categoria/${encodeURIComponent(cat.code)}`, params);
+        await sleep(LIST_PAUSE_MS);
         const rows = unwrapList(asRecord(body)?.articulos);
         for (const row of rows) {
           const item = mapSolutionBoxArticle(row, cat);
@@ -83,12 +87,17 @@ export class SolutionBoxAdapter implements ProviderAdapter {
         const code = queue.shift();
         if (!code) return;
         try {
-          const patch = mapSolutionBoxDetail(await api.get("/articulos/detalle", { sku: code }));
-          if (Object.keys(patch).length > 0) await onItem(code, patch);
+          const detail = mapSolutionBoxDetail(await api.get("/articulos/detalle", { sku: code }));
+          // Sin descripción en el portal: queda "" para no volver a pedirla en cada sync.
+          await onItem(code, { longDescription: "", ...detail });
         } catch (err) {
           failures++;
           if (failures <= 5) this.logger.warn(`Solution Box ficha ${code}: ${err instanceof Error ? err.message : String(err)}`);
-          if (failures > 50) return;
+          // Un 429/403 no se insiste: el resto queda para la próxima sync.
+          if (failures > 10 || isAccessBlockedError(err instanceof Error ? err.message : String(err))) {
+            queue.length = 0;
+            return;
+          }
         }
         await sleep(DETAIL_PAUSE_MS);
       }

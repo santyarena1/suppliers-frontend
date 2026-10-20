@@ -51,12 +51,13 @@ import {
   type CatalogSyncSource,
 } from "./catalog-sync-progress";
 import { SYNC_MAX_FAILURES, isSyncDue, pricesAreStale, syncFailureReason } from "./sync-backoff";
+import { manualSyncWaitMinutes, shouldPauseOnFirstFailure } from "./provider-rate-limits";
 
 /** Corridas RUNNING con latido más viejo que esto se dan por muertas al arrancar. */
 const RESTART_GRACE_MS = 30_000;
 const RESTART_RECHECK_MS = 60_000;
 /** Fichas de Solution Box que se enriquecen por corrida (el portal limita con 429). */
-const ENRICH_BATCH_SOLUTION_BOX = 150;
+const ENRICH_BATCH_SOLUTION_BOX = 50;
 /** Con "faltantes = sin stock", lo que no aparece hace esta cantidad de días se da de baja. */
 const ZOMBIE_DAYS = 14;
 const DAY_MS = 24 * 60 * 60_000;
@@ -271,6 +272,7 @@ export class ProvidersService implements OnModuleInit {
       return this.executeProviderSync(tenantId, provider, adapter, credentials, source);
     }
 
+    await this.assertManualSyncAllowed(tenantId, provider);
     const expectedTotal = await this.prisma.tenantProductOffer.count({ where: { tenantId, provider } });
     let progress: CatalogSyncProgress;
     try {
@@ -1012,7 +1014,7 @@ export class ProvidersService implements OnModuleInit {
       pausedAt: config.pausedAt,
       pauseReason: config.pauseReason,
       autoSync: config.enabled,
-      stalePrices: offers > 0 && pricesAreStale(config),
+      stalePrices: offers > 0 && pricesAreStale({ ...config, provider }),
     };
   }
 
@@ -1038,7 +1040,9 @@ export class ProvidersService implements OnModuleInit {
       },
       update: { lastSyncError: message, lastAttemptAt: now, consecutiveFailures: { increment: 1 } },
     });
-    if (!row.enabled || row.pausedAt || row.consecutiveFailures < SYNC_MAX_FAILURES) return;
+    // Un 403/429 es el portal frenándonos: insistir agrava la suspensión de la cuenta.
+    const blocked = shouldPauseOnFirstFailure(provider, message);
+    if (!row.enabled || row.pausedAt || (row.consecutiveFailures < SYNC_MAX_FAILURES && !blocked)) return;
     const reason = syncFailureReason(message);
     const paused = await this.prisma.providerSyncConfig.updateMany({
       where: { id: row.id, pausedAt: null },
@@ -1055,7 +1059,7 @@ export class ProvidersService implements OnModuleInit {
           kind: "SYSTEM",
           title: `Sync pausado por error de ${name}`,
           body:
-            `${reason} Falló ${row.consecutiveFailures} veces seguidas, así que la sincronización automática quedó pausada, no se reintenta sola y sus productos salieron del buscador. ` +
+            `${reason} ${blocked ? "El portal frenó el acceso" : `Falló ${row.consecutiveFailures} veces seguidas`}, así que la sincronización automática quedó pausada, no se reintenta sola y sus productos salieron del buscador. ` +
             `Para reactivarla, entrá a ${name} en Proveedores y tocá "Reactivar sincronización" (o revisá la cuenta si el problema es la clave). ` +
             `Al reactivarla y sincronizar bien, vuelven con precios al día.`,
           landingKey: `sync-paused:${provider}`,
@@ -2354,6 +2358,27 @@ export class ProvidersService implements OnModuleInit {
     // Sin integración (Ashir, GC, HDC) no hay portal: una config vieja en API no se intenta.
     return configs.filter((c) => providerHasCatalogAdapter(c.provider) && isSyncDue(c, now));
   }
+
+  /** "Sincronizar ahora" a Grupo Núcleo / Solution Box: no más de uno cada 30 min. */
+  private async assertManualSyncAllowed(tenantId: string, provider: Provider) {
+    const config = await this.prisma.providerSyncConfig.findUnique({
+      where: { tenantId_provider: { tenantId, provider } },
+      select: { lastAttemptAt: true, lastSyncedAt: true },
+    });
+    const last = latestDate(config?.lastAttemptAt ?? null, config?.lastSyncedAt ?? null);
+    const wait = manualSyncWaitMinutes(provider, last);
+    if (wait > 0) {
+      throw new BadRequestException(
+        `${providerLabel(provider)} limita las consultas: esperá ${wait} min antes de volver a sincronizar.`
+      );
+    }
+  }
+}
+
+function latestDate(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
 }
 
 function roundPrice(value: unknown): number | null {

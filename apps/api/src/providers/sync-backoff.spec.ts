@@ -17,6 +17,14 @@ describe("nextSyncAt / isSyncDue", () => {
     expect(isSyncDue(base, new Date("2026-10-01T11:00:00Z"))).toBe(true);
   });
 
+  it("Solution Box y Grupo Núcleo esperan su mínimo aunque el comercio tenga 1 h", () => {
+    expect(nextSyncAt({ ...base, provider: "SOLUTION_BOX" })?.toISOString()).toBe("2026-10-01T14:00:00.000Z");
+    expect(nextSyncAt({ ...base, provider: "GRUPO_NUCLEO" })?.toISOString()).toBe("2026-10-01T16:00:00.000Z");
+    // Con 4 h de intervalo, 3 h sin sync no es "precio desactualizado".
+    const sb = { provider: "SOLUTION_BOX", enabled: true, syncIntervalMinutes: 60, lastSyncedAt: base.lastSyncedAt };
+    expect(pricesAreStale(sb, new Date("2026-10-01T13:00:00Z"))).toBe(false);
+  });
+
   it("nunca sincronizado: corre ya", () => {
     expect(isSyncDue({ ...base, lastSyncedAt: null, lastAttemptAt: null })).toBe(true);
   });
