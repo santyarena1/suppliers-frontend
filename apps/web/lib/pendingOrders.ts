@@ -13,24 +13,14 @@ import {
   polytechCheckoutApi,
 } from "@/lib/api";
 import type { PolledDraft } from "@/lib/providerOrders";
+import { liveJobs, nextJobState, type PendingOrderJob, type PendingOrderProvider } from "@/lib/pendingOrderState";
+
+export type { PendingOrderJob, PendingOrderProvider };
 
 const KEY = "nodo_pending_orders_v1";
+const POLL_PENDING_MS = 2_500;
+const POLL_APPROVAL_MS = 30_000;
 const EVT = "nodo-pending-orders";
-
-export type PendingOrderProvider = "INVID" | "NEW_BYTES" | "ELIT" | "GRUPO_NUCLEO" | "AIR" | "NEW_TREE" | "SOLUTION_BOX" | "DISTECNA" | "POLYTECH";
-
-export type PendingOrderJob = {
-  id: string;
-  provider: PendingOrderProvider;
-  /** PENDING_APPROVAL: lo armó un vendedor y espera la firma del dueño del comercio. */
-  status: "PENDING" | "PENDING_APPROVAL" | "CREATED" | "FAILED";
-  message: string;
-  webOrderNumber?: string | null;
-  orderNumber?: string | null;
-  errorMessage?: string | null;
-  startedAt: number;
-  notified?: boolean;
-};
 
 type DraftLike = {
   id: string;
@@ -53,7 +43,7 @@ function readJobs(): PendingOrderJob[] {
 }
 
 function writeJobs(jobs: PendingOrderJob[]) {
-  localStorage.setItem(KEY, JSON.stringify(jobs.slice(0, 20)));
+  localStorage.setItem(KEY, JSON.stringify(liveJobs(jobs).slice(0, 20)));
   window.dispatchEvent(new Event(EVT));
 }
 
@@ -73,13 +63,16 @@ export function dismissPendingOrder(id: string) {
 export function usePendingOrders(): PendingOrderJob[] {
   const [jobs, setJobs] = useState<PendingOrderJob[]>([]);
   useEffect(() => {
-    const sync = () => setJobs(readJobs());
+    const sync = () => setJobs(liveJobs(readJobs()));
     sync();
     window.addEventListener(EVT, sync);
     window.addEventListener("storage", sync);
+    // Para que el "Pedido confirmado" se vaya solo aunque no cambie nada más.
+    const expire = window.setInterval(sync, 10_000);
     return () => {
       window.removeEventListener(EVT, sync);
       window.removeEventListener("storage", sync);
+      window.clearInterval(expire);
     };
   }, []);
   return jobs;
@@ -97,42 +90,42 @@ async function fetchDraft(provider: PendingOrderProvider, id: string): Promise<P
   return (await airCheckoutApi.draftById(id)).data;
 }
 
-export function usePendingOrderPolling() {
-  const jobs = usePendingOrders();
+/** Consulta los pedidos en ese estado cada `everyMs` y actualiza su aviso. */
+function usePollStatus(jobs: PendingOrderJob[], status: PendingOrderJob["status"], everyMs: number) {
+  const ids = jobs.filter((j) => j.status === status).map((j) => `${j.provider}:${j.id}`).join(",");
   useEffect(() => {
-    const pending = jobs.filter((j) => j.status === "PENDING");
-    if (pending.length === 0) return;
+    if (!ids) return;
+    const watched = ids.split(",").map((key) => {
+      const [provider, id] = key.split(":");
+      return { provider: provider as PendingOrderProvider, id };
+    });
     let cancelled = false;
     const tick = async () => {
-      for (const job of pending) {
+      for (const { provider, id } of watched) {
         try {
-          const row = await fetchDraft(job.provider, job.id);
-          if (cancelled || !row || row.status === "PENDING") continue;
-          patchPendingOrder(job.id, {
-            status: row.status === "CREATED" ? "CREATED" : "FAILED",
-            orderNumber: row.invidOrderNumber,
-            webOrderNumber: row.invidWebOrderNumber,
-            errorMessage: row.errorMessage,
-            message: row.status === "CREATED"
-              ? (row.invidWebOrderNumber
-                ? `Pedido confirmado. Pedido web ${row.invidWebOrderNumber}.`
-                : row.invidOrderNumber
-                  ? `Pedido confirmado. Orden ${row.invidOrderNumber}.`
-                  : "Pedido confirmado.")
-              : (row.errorMessage || "No se pudo crear el pedido"),
-          });
+          const row = await fetchDraft(provider, id);
+          const job = readJobs().find((j) => j.id === id);
+          if (cancelled || !row || !job) continue;
+          const patch = nextJobState(job, row);
+          if (patch) patchPendingOrder(id, patch);
         } catch {
-          // sigue pendiente
+          // sigue como estaba
         }
       }
     };
-    tick();
-    const t = setInterval(tick, 2500);
+    void tick();
+    const t = setInterval(tick, everyMs);
     return () => {
       cancelled = true;
       clearInterval(t);
     };
-  }, [jobs]);
+  }, [ids, everyMs]);
+}
+
+export function usePendingOrderPolling() {
+  const jobs = usePendingOrders();
+  usePollStatus(jobs, "PENDING", POLL_PENDING_MS);
+  usePollStatus(jobs, "PENDING_APPROVAL", POLL_APPROVAL_MS);
   return jobs;
 }
 
