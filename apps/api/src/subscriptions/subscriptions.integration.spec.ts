@@ -95,7 +95,7 @@ d("Suscripciones contra Postgres", () => {
     const detail = await service.registerPayment(actor, RETAILER, { provider: "TRANSFER", externalReference: "TRF-INT-1" });
     expect(detail).toMatchObject({ status: "ACTIVE", access: "FULL" });
     expect(new Date(detail.currentPeriodEnd!).getTime()).toBeGreaterThan(Date.now());
-    expect(detail.payments[0]).toMatchObject({ amount: 38, provider: "TRANSFER" });
+    expect(detail.payments[0]).toMatchObject({ amount: 35, provider: "TRANSFER" });
     await expect(
       service.registerPayment(actor, RETAILER, { provider: "TRANSFER", externalReference: "TRF-INT-1" })
     ).rejects.toMatchObject({ status: 409 });

@@ -9,7 +9,7 @@ const svc = SubscriptionsService.prototype as unknown as {
 describe("API de catálogo: incluida en todos los planes", () => {
   it("en Pro viene incluida y no suma a la cuota aunque estuviera activada como módulo", () => {
     const sub = { priceOverride: null, catalogApiAddon: true, catalogApiAddonCourtesy: false, catalogApiAddonSince: null };
-    expect(svc.totalOf.call(svc, "PRO", sub)).toBe(38);
+    expect(svc.totalOf.call(svc, "PRO", sub)).toBe(35);
     expect(svc.catalogApiAddonOf.call(svc, "PRO", sub)).toMatchObject({ enabled: true, includedInPlan: true, courtesy: false });
   });
 

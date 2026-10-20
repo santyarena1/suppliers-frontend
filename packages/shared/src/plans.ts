@@ -127,7 +127,7 @@ export const PLAN_CATALOG: Record<TenantPlan, PlanDefinition> = {
     plan: "PRO",
     label: "NODO Pro",
     shortLabel: "Pro",
-    monthlyPrice: 38,
+    monthlyPrice: 35,
     currency: "USD",
     setupFee: null,
     tagline: "Gestioná tus compras y proveedores directamente desde NODO.",
