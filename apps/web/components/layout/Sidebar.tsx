@@ -419,14 +419,17 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
         {tenant?.type === "RETAILER" && (
           <ApiIntegrationLink active={pathname === "/integracion-api" || pathname.startsWith("/configuracion/api")} iconMode={iconMode} />
         )}
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          title={collapsed ? "Expandir menú" : "Colapsar menú"}
-          className="hidden lg:flex w-full items-center justify-center mb-2 text-surface-500 hover:text-surface-200 py-1.5 rounded-md hover:bg-surface-800 transition-colors"
-        >
-          {collapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-        </button>
+        <div className={`mb-2 flex items-center gap-1 ${iconMode ? "flex-col" : "justify-between"}`}>
+          <VersionLink iconMode={iconMode} active={pathname.startsWith("/actualizaciones")} />
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title={collapsed ? "Expandir menú" : "Colapsar menú"}
+            className="hidden lg:flex items-center justify-center px-2 py-1.5 text-surface-500 hover:text-surface-200 rounded-md hover:bg-surface-800 transition-colors"
+          >
+            {collapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
+        </div>
 
         <div className={`rounded-md bg-surface-800 flex items-center ${iconMode ? "justify-center p-2" : "justify-between px-3 py-2"}`}>
           {!iconMode && (
@@ -449,7 +452,6 @@ export default function Sidebar({ mobileOpen, onCloseMobile }: Props) {
             <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
-        <VersionLink iconMode={iconMode} active={pathname.startsWith("/actualizaciones")} />
       </div>
     </aside>
   );
@@ -474,7 +476,7 @@ function VersionLink({ iconMode, active }: { iconMode: boolean; active: boolean 
     <Link
       href="/actualizaciones"
       title="Qué hay de nuevo en NODO"
-      className={`mt-2 flex items-center gap-1.5 rounded px-1 py-0.5 text-[10px] transition-colors ${iconMode ? "justify-center" : ""} ${
+      className={`flex min-w-0 items-center gap-1.5 rounded px-1 py-1 text-[10px] transition-colors ${
         active ? "text-surface-200" : "text-surface-500 hover:text-surface-200"
       }`}
     >
