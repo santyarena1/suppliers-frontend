@@ -15,11 +15,15 @@ import { apiError } from "@/lib/storefront";
 import { capabilityAllowed, useSubscription } from "@/lib/subscription";
 
 type Tab = "resumen" | "productos" | "pedidos" | "datos";
-const TABS: { key: Tab; label: string }[] = [
-  { key: "resumen", label: "Resumen" },
-  { key: "productos", label: "Productos" },
-  { key: "pedidos", label: "Pedidos" },
-  { key: "datos", label: "Configuración" },
+const TABS: { key: Tab; label: string; hint: string }[] = [
+  { key: "resumen", label: "Resumen", hint: "Si tu tienda se ve, qué falta para que la vean otros comercios y qué tenés pendiente." },
+  { key: "productos", label: "Productos", hint: "Lo que publicás: de dónde salen los productos, y su precio, stock y fotos." },
+  { key: "pedidos", label: "Pedidos", hint: "Lo que te pidieron otros comercios: confirmás o rechazás cada pedido y coordinan pago y entrega." },
+  {
+    key: "datos",
+    label: "Configuración",
+    hint: "Cómo te ven los compradores, tus condiciones de venta, cada cuánto confirmás el stock y quién ve tu tienda.",
+  },
 ];
 
 export default function VenderPage() {
@@ -122,6 +126,7 @@ function VenderInner() {
                   </button>
                 ))}
               </nav>
+              <p className="-mt-1 text-xs text-surface-400">{TABS.find((t) => t.key === tab)?.hint}</p>
               {store.status === "CLOSED" && <ReopenCard onReopened={changed} />}
               {tab === "resumen" && <StorefrontOverview store={store} onChange={changed} onGo={go} />}
               {tab === "productos" && (
@@ -130,6 +135,8 @@ function VenderInner() {
                   sellsOffline={store.sellsOffline}
                   defaultWarranty={store.defaultWarranty}
                   sheet={store.sheet}
+                  productCount={store.productCount}
+                  inStockCount={store.inStockCount}
                   onStoreChange={changed}
                   onChanged={() => changed()}
                 />

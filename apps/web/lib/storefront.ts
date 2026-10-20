@@ -23,7 +23,9 @@ export function hiddenReasonText(reason: StorefrontHiddenReason | null, suspende
     case "NO_STOCK_CONFIRMED":
       return "Confirmá el stock para que aparezca en el buscador.";
     case "NO_PRODUCTS":
-      return "Cargá productos (con una planilla o a mano) para empezar a vender.";
+      return "Todavía no tiene productos. Cargalos en Productos: con Google Sheets, subiendo un Excel o de a uno.";
+    case "NO_STOCK":
+      return "Tenés productos cargados, pero todos con stock 0, y a los compradores no se les muestra lo que no tiene stock. Revisá la columna de stock de tu planilla (o que esté bien asignada en «Qué columna es cada dato»).";
     case "OWNER_INACTIVE":
       return "Tu comercio está inactivo en NODO.";
     default:

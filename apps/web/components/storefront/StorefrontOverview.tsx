@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckCircle2, ClipboardList, Eye, EyeOff, Loader2, Package, PlugZap, RefreshCw, Store, Users } from "lucide-react";
 import { storefrontApi, type MyStorefront } from "@/lib/api";
+import StorefrontChecklist from "@/components/storefront/StorefrontChecklist";
 import { ago, apiError, hiddenReasonText, STOCK_DAY_OPTIONS, untilText } from "@/lib/storefront";
 
 type StoreView = Extract<MyStorefront, { exists: true }>;
@@ -156,6 +157,14 @@ export default function StorefrontOverview({
         )}
       </section>
 
+      <StorefrontChecklist
+        store={store}
+        working={working}
+        onGo={onGo}
+        onReactivate={() => void togglePause()}
+        onConfirmStock={() => void confirmStock()}
+      />
+
       <div className="grid gap-3 sm:grid-cols-3">
         {stats.map((s) => {
           const body = (
@@ -186,12 +195,12 @@ export default function StorefrontOverview({
         </div>
         <ol className="mt-3 grid gap-2 text-xs leading-relaxed text-surface-300 sm:grid-cols-3">
           <li className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
-            <span className="font-semibold text-white">1. Publicás.</span> Subís tu planilla o cargás productos a mano, con
-            precio y stock.
+            <span className="font-semibold text-white">1. Publicás.</span> Conectás tu Google Sheets, subís un Excel o cargás
+            productos de a uno, con precio y stock.
           </li>
           <li className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
-            <span className="font-semibold text-white">2. Te encuentran.</span> Los demás comercios te ven en el buscador como
-            un proveedor más, marcado como local.
+            <span className="font-semibold text-white">2. Te encuentran.</span> A cada comercio de NODO le preguntamos si quiere
+            ver tu tienda (si es pública). Los que aceptan te ven en su buscador como un proveedor más, marcado como local.
           </li>
           <li className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
             <span className="font-semibold text-white">3. Confirmás.</span> Te llega el pedido, lo confirmás o lo rechazás, y

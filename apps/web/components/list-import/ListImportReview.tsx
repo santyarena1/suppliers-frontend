@@ -10,6 +10,7 @@ import PrefsPanel from "@/components/PrefsPanel";
 import ProviderBadge from "@/components/ProviderBadge";
 import { listImportsApi, type ListImportDetail, type ListImportPriceChange, type Provider } from "@/lib/api";
 import { fmtDate } from "@/components/list-import/ListImportsPanel";
+import ImportSheetChoice from "@/components/list-import/ImportSheetChoice";
 import { invalidateListFreshness } from "@/lib/listFreshness";
 
 type Group = "priceChanged" | "created" | "missing" | "issues";
@@ -120,6 +121,18 @@ export default function ListImportReview({
                 <div className="flex items-center gap-2 text-sm text-sky-400 bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3">
                   <Loader2 className="w-4 h-4 animate-spin" /> Procesando la planilla…
                 </div>
+              )}
+              {detail.status !== "PROCESSING" && (
+                <ImportSheetChoice
+                  key={`${detail.id}-${detail.sheet?.index ?? ""}`}
+                  provider={provider}
+                  record={detail}
+                  allowApplied
+                  onChanged={(next) => {
+                    if (next.id !== detail.id) router.push(`${basePath}/listas/${next.id}`);
+                    else void load();
+                  }}
+                />
               )}
               {detail.status === "FAILED" && (
                 <div className="flex items-start gap-2 text-sm text-red-400 bg-red-500/8 border border-red-500/20 rounded-xl px-4 py-3">

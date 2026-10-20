@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Download, ExternalLink, Loader2, RefreshCw, Sheet, Unlink } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, Layers, Loader2, RefreshCw, Sheet, Unlink } from "lucide-react";
 import { storefrontApi, type MyStorefront, type StorefrontSheet } from "@/lib/api";
 import { ago, apiError } from "@/lib/storefront";
 
@@ -109,6 +109,23 @@ export default function StorefrontSheetCard({
               {sheet.error}
             </p>
           )}
+          <SheetTabPicker
+            key={`${sheet.tab ?? ""}-${sheet.tabs.length}`}
+            sheet={sheet}
+            disabled={working !== null}
+            onChose={(res) => {
+              onChange(res.store);
+              if (res.changed) onImported();
+              setAviso(
+                res.error
+                  ? { ok: false, text: res.error }
+                  : res.changed
+                    ? { ok: true, text: "Listo: estamos cargando esa pestaña. Mirá el estado en las cargas de abajo." }
+                    : { ok: true, text: "Pestaña guardada. Hay una carga procesándose: la leemos apenas termine." }
+              );
+            }}
+            onError={(text) => setAviso({ ok: false, text })}
+          />
           <p className="text-[11px] leading-relaxed text-surface-400">
             Con la planilla conectada, la planilla manda: si cambiás un precio o un stock acá en NODO (o confirmás un pedido, que
             descuenta stock), anotalo también en la planilla, porque la próxima vez que la cambies se carga lo que dice ella. Las
@@ -147,8 +164,8 @@ export default function StorefrontSheetCard({
               rol <b>Lector</b>. Copiá el enlace.
             </li>
             <li className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
-              <span className="font-semibold text-white">3.</span> Pegalo acá. Se lee la pestaña del link (si copiás el link
-              desde otra pestaña, se lee esa). En «Fotos» podés poner varios links separados por espacio.
+              <span className="font-semibold text-white">3.</span> Pegalo acá. Si la planilla tiene varias pestañas, te
+              mostramos cuál leemos y elegís la de productos. En «Fotos» podés poner varios links separados por espacio.
             </li>
           </ol>
           <p className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-100">
@@ -180,5 +197,91 @@ export default function StorefrontSheetCard({
         <p className={`mt-3 rounded-md px-3 py-2 text-xs ${aviso.ok ? "bg-emerald-500/10 text-emerald-300" : "bg-red-500/10 text-red-300"}`}>{aviso.text}</p>
       )}
     </section>
+  );
+}
+
+type ChooseResult = { changed: boolean; importId: string | null; error: string | null; store: MyStorefront };
+
+const TAB_SOURCE_TEXT: Record<StorefrontSheet["tabSource"], string> = {
+  MOST_ROWS: "la elegimos porque es la que más productos tiene",
+  CHOSEN: "la elegiste vos",
+  LINK: "es la del link que pegaste",
+};
+
+/** Qué pestaña de la planilla se lee y, si hay varias, cuál es la de productos. */
+function SheetTabPicker({
+  sheet,
+  disabled,
+  onChose,
+  onError,
+}: {
+  sheet: StorefrontSheet;
+  disabled: boolean;
+  onChose: (res: ChooseResult) => void;
+  onError: (text: string) => void;
+}) {
+  const current = sheet.tab;
+  const exists = current != null && sheet.tabs.some((t) => t.name === current);
+  const [picked, setPicked] = useState<string>(exists ? current! : (sheet.tabs.find((t) => t.rows > 0)?.name ?? ""));
+  const [working, setWorking] = useState(false);
+  const rows = sheet.tabs.find((t) => t.name === current)?.rows;
+
+  async function choose() {
+    if (!picked) return;
+    setWorking(true);
+    try {
+      onChose((await storefrontApi.chooseSheetTab(picked)).data);
+    } catch (err) {
+      onError(apiError(err, "No se pudo leer esa pestaña"));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-surface-800 bg-surface-950/40 px-3 py-2.5 text-xs">
+      <p className="flex items-start gap-2 text-surface-200">
+        <Layers className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-300" aria-hidden />
+        <span>
+          {current ? (
+            <>
+              Leemos la pestaña <b className="text-white">«{current}»</b>
+              {rows != null && ` (${rows} ${rows === 1 ? "fila" : "filas"} con datos)`}: {TAB_SOURCE_TEXT[sheet.tabSource]}.
+            </>
+          ) : (
+            "Leemos la pestaña del link que pegaste."
+          )}
+          {sheet.tabs.length > 1 && ` Tu planilla tiene ${sheet.tabs.length} pestañas; si los productos están en otra, elegila.`}
+        </span>
+      </p>
+      {sheet.tabs.length > 1 && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 pl-5">
+          <label className="sr-only" htmlFor="sheet-tab">
+            Pestaña de productos
+          </label>
+          <select
+            id="sheet-tab"
+            value={picked}
+            onChange={(e) => setPicked(e.target.value)}
+            className="rounded-lg border border-surface-700 bg-surface-950 px-2.5 py-1.5 text-xs text-white focus:border-brand-500 focus:outline-none"
+          >
+            {sheet.tabs.map((t) => (
+              <option key={t.name} value={t.name} disabled={t.rows === 0}>
+                {t.name} · {t.rows > 0 ? `${t.rows} filas` : "sin tabla de productos"}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void choose()}
+            disabled={disabled || working || !picked || (picked === current && sheet.tabSource !== "LINK")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-surface-600 px-3 py-1.5 text-xs font-semibold text-white hover:border-surface-400 disabled:opacity-50"
+          >
+            {working && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Leer esta pestaña
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

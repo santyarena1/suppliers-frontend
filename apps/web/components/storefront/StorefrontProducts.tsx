@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AlertTriangle, Check, FileSpreadsheet, ImageOff, Loader2, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
 import ComboField from "@/components/storefront/ComboField";
@@ -66,6 +67,8 @@ export default function StorefrontProducts({
   sellsOffline,
   defaultWarranty,
   sheet,
+  productCount,
+  inStockCount,
   onStoreChange,
   onChanged,
 }: {
@@ -73,6 +76,8 @@ export default function StorefrontProducts({
   sellsOffline: boolean;
   defaultWarranty: string | null;
   sheet: StorefrontSheet | null;
+  productCount: number;
+  inStockCount: number;
   onStoreChange: (next: MyStorefront) => void;
   onChanged: () => void;
 }) {
@@ -128,6 +133,12 @@ export default function StorefrontProducts({
 
   return (
     <div className="flex flex-col gap-4">
+      <ProductSources
+        sheetConnected={Boolean(sheet)}
+        productCount={productCount}
+        inStockCount={inStockCount}
+      />
+
       <p className="flex items-start gap-2 rounded-xl border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-xs leading-relaxed text-sky-100">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden />
         <span>
@@ -248,6 +259,75 @@ export default function StorefrontProducts({
         )}
       </section>
     </div>
+  );
+}
+
+/** De dónde salen los productos de la tienda y qué se les muestra a los compradores. */
+function ProductSources({
+  sheetConnected,
+  productCount,
+  inStockCount,
+}: {
+  sheetConnected: boolean;
+  productCount: number;
+  inStockCount: number;
+}) {
+  const sources = [
+    {
+      key: "sheets",
+      title: "Google Sheets",
+      text: "NODO lee tu planilla cada 15 minutos. Lo que cambies allá se actualiza acá solo.",
+      badge: sheetConnected ? "Conectada" : null,
+    },
+    {
+      key: "excel",
+      title: "Excel o CSV",
+      text: "Lo subís cada vez que cambia. Cada archivo es tu catálogo entero: lo que no venga deja de publicarse.",
+      badge: null,
+    },
+    {
+      key: "manual",
+      title: "De a uno",
+      text: "Para pocos productos o algo suelto. Si después cargás una planilla, lo cargado a mano deja de publicarse.",
+      badge: null,
+    },
+  ];
+  return (
+    <section className="rounded-2xl border border-surface-800 bg-surface-900 p-5">
+      <h2 className="text-sm font-semibold text-white">De dónde salen tus productos</h2>
+      <ul className="mt-3 grid gap-2 sm:grid-cols-3">
+        {sources.map((s) => (
+          <li key={s.key} className="rounded-xl border border-surface-800 bg-surface-950/40 p-3 text-xs leading-relaxed">
+            <span className="flex items-center gap-2 text-sm font-semibold text-white">
+              {s.title}
+              {s.badge && (
+                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">{s.badge}</span>
+              )}
+            </span>
+            <span className="mt-1 block text-surface-400">{s.text}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[11px] text-surface-500">
+        Google Sheets y Excel están en «Planilla o Google Sheets»; uno solo, en «Cargar un producto».
+      </p>
+      <p className="mt-3 text-xs leading-relaxed text-surface-300">
+        A los compradores solo se les muestra lo que tiene stock: con stock 0 queda cargado acá, pero no aparece.
+        {productCount > 0 && (
+          <span className={inStockCount === 0 ? " font-semibold text-amber-300" : " text-surface-400"}>
+            {" "}
+            Hoy tienen stock {inStockCount} de {productCount}.
+          </span>
+        )}
+      </p>
+      <p className="mt-1 text-[11px] leading-relaxed text-surface-500">
+        ¿Cargaste una planilla y no aparecen productos, o salen sin precio o sin stock? Revisá{" "}
+        <Link href="/vender/listas/perfil" className="text-brand-300 underline-offset-2 hover:underline">
+          qué columna es cada dato
+        </Link>
+        : ahí le decís a NODO cuál es el precio, cuál el stock y en qué hoja están.
+      </p>
+    </section>
   );
 }
 

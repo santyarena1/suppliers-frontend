@@ -8,6 +8,7 @@ import {
 import { listImportsApi, type ListImportRecord, type ListImportStatus, type Provider } from "@/lib/api";
 import { freshnessLabel, invalidateListFreshness, useListFreshness } from "@/lib/listFreshness";
 import NodoSpinner from "@/components/NodoSpinner";
+import ImportSheetChoice from "./ImportSheetChoice";
 import ListCadenceEditor from "./ListCadenceEditor";
 
 const POLL_MS = 2500;
@@ -206,6 +207,20 @@ export default function ListImportsPanel({ provider, uploadsAsBase, onApplied, b
           {message.ok ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
           {message.text}
         </div>
+      )}
+
+      {/* Archivo con varias hojas: cuál se leyó y elegir otra sin ir al perfil */}
+      {rows[0] && rows[0].status !== "PROCESSING" && (
+        <ImportSheetChoice
+          key={`${rows[0].id}-${rows[0].sheet?.index ?? ""}`}
+          provider={provider}
+          record={rows[0]}
+          allowApplied
+          onChanged={() => {
+            setMessage(null);
+            void load();
+          }}
+        />
       )}
 
       {/* Historial */}

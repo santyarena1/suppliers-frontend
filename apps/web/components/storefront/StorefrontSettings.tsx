@@ -126,7 +126,8 @@ function ProfileAndTerms({ store, onChange }: { store: StoreView; onChange: (nex
       <section className={cardCls}>
         <h2 className="text-sm font-semibold text-white">Cómo te ven</h2>
         <p className="mt-1 text-xs leading-relaxed text-surface-400">
-          El nombre con el que aparecés en el buscador, en el filtro de distribuidores y en los pedidos de los demás comercios.
+          Nombre y logo con los que aparecés en el buscador de los comercios que ven tu tienda, en su filtro de distribuidores y
+          en sus pedidos. La presentación la leen cuando les ofrecemos tu tienda, antes de aceptarla.
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-[auto,1fr]">
           <ImagePicker value={form.logo} onChange={(v) => set("logo", v)} max={1} label="Logo" />
@@ -159,11 +160,15 @@ function ProfileAndTerms({ store, onChange }: { store: StoreView; onChange: (nex
 
       <section className={cardCls}>
         <h2 className="text-sm font-semibold text-white">Contacto y condiciones de venta</h2>
-        <p className="mt-1 text-xs leading-relaxed text-surface-400">Lo ve quien te compra en la ficha de cada producto, antes de pedir.</p>
+        <p className="mt-1 text-xs leading-relaxed text-surface-400">
+          Lo ven los compradores en la ficha de cada producto tuyo, antes de pedir. No cambia precios ni stock: les dice cómo te
+          contactan, cómo pagan, cómo les llega y qué factura les hacés.
+        </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-[11px] text-surface-400">
             Teléfono / WhatsApp
             <input value={form.phone} onChange={(e) => set("phone", e.target.value)} maxLength={40} placeholder="11 5555-5555" className={inputCls} />
+            <span className="text-surface-500">Los compradores lo ven como botón de WhatsApp en tu ficha.</span>
           </label>
           <label className="flex flex-col gap-1 text-[11px] text-surface-400">
             Mail para recibir los pedidos
@@ -391,10 +396,18 @@ function AudienceCard({ store, onChange }: { store: StoreView; onChange: (next: 
   return (
     <section className={cardCls}>
       <h2 className="text-sm font-semibold text-white">Quién ve tu tienda</h2>
+      <p className="mt-1 text-xs leading-relaxed text-surface-400">
+        A quién le aparecen tus productos en el buscador. Cambiarlo no le saca la tienda a los comercios que ya la ven.
+      </p>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {(
           [
-            ["PUBLIC", Globe2, "Pública", "A cada comercio de NODO le preguntamos si quiere ver tus productos. Elige cada uno."],
+            [
+              "PUBLIC",
+              Globe2,
+              "Pública",
+              "Se la ofrecemos a todos los comercios de NODO con un aviso y la ve cada uno que acepta. Se ofrece cuando la tienda está abierta y tiene productos con stock.",
+            ],
             ["PRIVATE", Lock, "Privada", "Solo la ven los comercios a los que les pases tu link de invitación."],
           ] as const
         ).map(([value, Icon, title, hint]) => (

@@ -1628,9 +1628,19 @@ export interface ListImportRecord {
   rowsData: number;
   summary: ListImportSummary | null;
   error: string | null;
+  /** Qué hoja del archivo se leyó y cuáles más tiene. `null` mientras se procesa por primera vez. */
+  sheet: ListImportSheetInfo | null;
   createdAt: string;
   appliedAt: string | null;
   revertedAt: string | null;
+}
+
+export interface ListImportSheetInfo {
+  count: number;
+  index: number;
+  name: string;
+  dataRows: number;
+  sheets: { index: number; name: string; dataRows: number }[];
 }
 
 export interface ListImportDiffItem {
@@ -1746,6 +1756,9 @@ export const listImportsApi = {
   },
   list: (provider: Provider) => api.get<ListImportRecord[]>(`/providers/${provider}/imports`),
   reprocessLatest: (provider: Provider) => api.post<ListImportRecord>(`/providers/${provider}/imports/reprocess-latest`),
+  /** Vuelve a leer la carga con otra hoja del mismo archivo (y el perfil la recuerda). */
+  chooseSheet: (provider: Provider, id: string, sheetIndex: number) =>
+    api.post<ListImportRecord>(`/providers/${provider}/imports/${id}/sheet`, { sheetIndex }),
   get: (provider: Provider, id: string) => api.get<ListImportDetail>(`/providers/${provider}/imports/${id}`),
   apply: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/apply`),
   discard: (provider: Provider, id: string) => api.post<ListImportDetail>(`/providers/${provider}/imports/${id}/discard`),
@@ -4704,7 +4717,9 @@ export type StorefrontHiddenReason =
   | "STOCK_EXPIRED"
   | "NO_STOCK_CONFIRMED"
   | "OWNER_INACTIVE"
-  | "NO_PRODUCTS";
+  | "NO_PRODUCTS"
+  /** Hay productos pero ninguno con stock: a los compradores no se les muestra nada. */
+  | "NO_STOCK";
 /** NO_EXPIRY = el dueño eligió que no se le pida confirmar. */
 export type StorefrontStockState = "NO_EXPIRY" | "UNCONFIRMED" | "FRESH" | "DUE_SOON" | "EXPIRED";
 export type StorefrontVisibility = "PUBLIC" | "PRIVATE";
@@ -4752,8 +4767,13 @@ export type MyStorefront =
       /** Comercios que la aceptaron y la ven. */
       reach: number;
       audience: { accepted: number; pending: number; declined: number };
+      /** Última planilla cargada (subida o de Google Sheets): si quedó en revisión o falló, los productos no se actualizaron. */
+      latestImport: { id: string; status: ListImportStatus; error: string | null; fileName: string; createdAt: string } | null;
       createdAt: string;
     };
+
+/** De dónde sale la pestaña que se lee: la eligió el comercio, la eligió NODO (más filas) o es la del link. */
+export type StorefrontSheetTabSource = "CHOSEN" | "MOST_ROWS" | "LINK";
 
 export interface StorefrontSheet {
   url: string;
@@ -4761,6 +4781,11 @@ export interface StorefrontSheet {
   changedAt: string | null;
   error: string | null;
   importId: string | null;
+  /** Pestaña que se está leyendo. `null`: la del link, sin saber cómo se llama. */
+  tab: string | null;
+  tabSource: StorefrontSheetTabSource;
+  /** Pestañas de la planilla en la última lectura, con sus filas de datos. */
+  tabs: { name: string; rows: number }[];
 }
 
 export interface StorefrontSettingsInput {
@@ -4933,6 +4958,8 @@ export const storefrontApi = {
     api.put<{ changed: boolean; importId: string | null; error: string | null; store: MyStorefront }>("/my/storefront/sheet", { url }),
   unlinkSheet: () => api.delete<MyStorefront>("/my/storefront/sheet"),
   syncSheet: () => api.post<{ changed: boolean; importId: string | null; error: string | null; store: MyStorefront }>("/my/storefront/sheet/sync"),
+  chooseSheetTab: (tab: string) =>
+    api.put<{ changed: boolean; importId: string | null; error: string | null; store: MyStorefront }>("/my/storefront/sheet/tab", { tab }),
   audience: () => api.get<StorefrontAudienceList>("/my/storefront/audience"),
   removeBuyer: (tenantId: string) => api.delete<{ removed: true }>(`/my/storefront/audience/${tenantId}`),
   /** Foto ya achicada (ver `lib/imageCompress.ts`). Devuelve `/assets/<id>`. */
