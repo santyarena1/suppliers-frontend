@@ -38,7 +38,8 @@ const OFFERS: { kind: UpgradeKind; icon: typeof Building2; title: string; pitch:
  * Siempre a la vista en Vender en NODO: un local que vende no es un distribuidor
  * ni una marca. Si quiere más, lo pide y NODO lo arma.
  */
-export default function UpgradeOffer() {
+/** `bare`: sin marco ni título (va adentro del desplegable de Vender en NODO). */
+export default function UpgradeOffer({ bare = false }: { bare?: boolean }) {
   const [requests, setRequests] = useState<UpgradeRequest[]>([]);
   const [open, setOpen] = useState<UpgradeKind | null>(null);
   const [message, setMessage] = useState("");
@@ -72,21 +73,25 @@ export default function UpgradeOffer() {
   }
 
   return (
-    <section className="rounded-2xl border border-brand-500/25 bg-gradient-to-br from-brand-600/10 via-surface-900 to-surface-900 p-5">
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-brand-300" aria-hidden />
-        <h2 className="text-sm font-semibold text-white">¿Querés más que una tienda?</h2>
-      </div>
-      <p className="mt-1 text-xs leading-relaxed text-surface-400">
-        Vender en NODO es para publicar tu stock. Si sos distribuidor o tenés marca propia, pedí la cuenta que corresponde
-        y te la armamos.
-      </p>
+    <section className={bare ? "px-3 pb-3" : "rounded-2xl border border-brand-500/25 bg-gradient-to-br from-brand-600/10 via-surface-900 to-surface-900 p-5"}>
+      {!bare && (
+        <>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-brand-300" aria-hidden />
+            <h2 className="text-sm font-semibold text-white">¿Querés más que una tienda?</h2>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-surface-400">
+            Vender en NODO es para publicar tu stock. Si sos distribuidor o tenés marca propia, pedí la cuenta que corresponde
+            y te la armamos.
+          </p>
+        </>
+      )}
       {aviso && (
         <p className={`mt-3 rounded-md px-3 py-2 text-xs ${aviso.ok ? "bg-emerald-500/10 text-emerald-300" : "bg-red-500/10 text-red-300"}`}>
           {aviso.text}
         </p>
       )}
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className={`${bare ? "" : "mt-4 "}grid gap-3 md:grid-cols-2`}>
         {OFFERS.map((o) => {
           const pending = pendingOf(o.kind);
           return (

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Check, FileSpreadsheet, ImageOff, Loader2, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { AlertTriangle, Check, FileSpreadsheet, ImageOff, Loader2, Pencil, Plus, Search, Sheet, SlidersHorizontal, Trash2, X } from "lucide-react";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
 import ComboField from "@/components/storefront/ComboField";
 import ImagePicker from "@/components/storefront/ImagePicker";
@@ -133,22 +133,9 @@ export default function StorefrontProducts({
 
   return (
     <div className="flex flex-col gap-4">
-      <ProductSources
-        sheetConnected={Boolean(sheet)}
-        productCount={productCount}
-        inStockCount={inStockCount}
-      />
-
-      <p className="flex items-start gap-2 rounded-xl border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 text-xs leading-relaxed text-sky-100">
-        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden />
-        <span>
-          {sellsOffline
-            ? "Vendés también por fuera de NODO: cada vez que vendas algo en el local o en otra web, bajá el stock acá (lápiz → stock) o subí la planilla de nuevo."
-            : "Si vendés algo por fuera de NODO, bajá el stock acá para que nadie te pida lo que ya no tenés."}{" "}
-          Los pedidos siempre te llegan a confirmar.
-        </span>
-      </p>
-
+      {productCount === 0 && !sheet && mode === "list" ? (
+        <ProductSourcePicker onPick={setMode} />
+      ) : (
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -169,9 +156,25 @@ export default function StorefrontProducts({
           <Plus className="h-4 w-4" /> Cargar un producto
         </button>
         <span className="ml-auto text-xs text-surface-500">
-          {total} productos publicados{withoutPhotos > 0 && total > 0 ? ` · ${withoutPhotos} sin foto` : ""}
+          {total} publicados
+          {productCount > 0 && (
+            <span className={inStockCount === 0 ? "font-semibold text-amber-300" : ""}> · {inStockCount} con stock</span>
+          )}
+          {withoutPhotos > 0 && total > 0 ? ` · ${withoutPhotos} sin foto` : ""}
         </span>
       </div>
+      )}
+
+      {productCount > 0 && (
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-relaxed text-surface-500">
+          <AlertTriangle className="h-3 w-3 text-surface-500" aria-hidden />
+          Lo que tiene stock 0 queda cargado pero no lo ven los compradores.
+          {sellsOffline ? " Si vendés algo en el local, bajá el stock acá o subí la planilla de nuevo." : ""}
+          <Link href="/vender/listas/perfil" className="text-brand-300 underline-offset-2 hover:underline">
+            ¿Sin precio o sin stock? Revisá qué columna es cada dato
+          </Link>
+        </p>
+      )}
 
       {aviso && (
         <p className={`rounded-md px-3 py-2 text-xs ${aviso.ok ? "bg-emerald-500/10 text-emerald-300" : "bg-red-500/10 text-red-300"}`}>{aviso.text}</p>
@@ -262,71 +265,58 @@ export default function StorefrontProducts({
   );
 }
 
-/** De dónde salen los productos de la tienda y qué se les muestra a los compradores. */
-function ProductSources({
-  sheetConnected,
-  productCount,
-  inStockCount,
-}: {
-  sheetConnected: boolean;
-  productCount: number;
-  inStockCount: number;
-}) {
+/** Tienda sin productos: las tres formas de cargarlos, cada una con lo que implica. Tocar una la abre. */
+function ProductSourcePicker({ onPick }: { onPick: (mode: "excel" | "add") => void }) {
   const sources = [
     {
       key: "sheets",
+      icon: Sheet,
       title: "Google Sheets",
-      text: "NODO lee tu planilla cada 15 minutos. Lo que cambies allá se actualiza acá solo.",
-      badge: sheetConnected ? "Conectada" : null,
+      text: "Pegás el link de tu planilla y NODO la lee cada 15 minutos: lo que cambies ahí se actualiza solo.",
+      tag: "Recomendado",
+      mode: "excel" as const,
     },
     {
       key: "excel",
+      icon: FileSpreadsheet,
       title: "Excel o CSV",
       text: "Lo subís cada vez que cambia. Cada archivo es tu catálogo entero: lo que no venga deja de publicarse.",
-      badge: null,
+      tag: null,
+      mode: "excel" as const,
     },
     {
       key: "manual",
+      icon: Plus,
       title: "De a uno",
       text: "Para pocos productos o algo suelto. Si después cargás una planilla, lo cargado a mano deja de publicarse.",
-      badge: null,
+      tag: null,
+      mode: "add" as const,
     },
   ];
   return (
-    <section className="rounded-2xl border border-surface-800 bg-surface-900 p-5">
-      <h2 className="text-sm font-semibold text-white">De dónde salen tus productos</h2>
-      <ul className="mt-3 grid gap-2 sm:grid-cols-3">
+    <section className="rounded-2xl border border-surface-800 bg-surface-900 p-4 sm:p-5">
+      <h2 className="text-sm font-semibold text-white">¿Cómo cargás tus productos?</h2>
+      <p className="mt-0.5 text-xs text-surface-400">Elegí una. Con precio y stock; lo que tiene stock 0 no lo ven los compradores.</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {sources.map((s) => (
-          <li key={s.key} className="rounded-xl border border-surface-800 bg-surface-950/40 p-3 text-xs leading-relaxed">
-            <span className="flex items-center gap-2 text-sm font-semibold text-white">
-              {s.title}
-              {s.badge && (
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">{s.badge}</span>
-              )}
+          <button
+            key={s.key}
+            type="button"
+            onClick={() => onPick(s.mode)}
+            className="group flex flex-col rounded-xl border border-surface-700 bg-surface-950/40 p-4 text-left transition-colors hover:border-brand-500/60 hover:bg-brand-500/[0.06]"
+          >
+            <span className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600/15 text-brand-300">
+                <s.icon className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="text-sm font-semibold text-white">{s.title}</span>
+              {s.tag && <span className="ml-auto rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">{s.tag}</span>}
             </span>
-            <span className="mt-1 block text-surface-400">{s.text}</span>
-          </li>
+            <span className="mt-2 text-xs leading-relaxed text-surface-400">{s.text}</span>
+            <span className="mt-3 text-xs font-semibold text-brand-300 group-hover:text-brand-200">Empezar →</span>
+          </button>
         ))}
-      </ul>
-      <p className="mt-2 text-[11px] text-surface-500">
-        Google Sheets y Excel están en «Planilla o Google Sheets»; uno solo, en «Cargar un producto».
-      </p>
-      <p className="mt-3 text-xs leading-relaxed text-surface-300">
-        A los compradores solo se les muestra lo que tiene stock: con stock 0 queda cargado acá, pero no aparece.
-        {productCount > 0 && (
-          <span className={inStockCount === 0 ? " font-semibold text-amber-300" : " text-surface-400"}>
-            {" "}
-            Hoy tienen stock {inStockCount} de {productCount}.
-          </span>
-        )}
-      </p>
-      <p className="mt-1 text-[11px] leading-relaxed text-surface-500">
-        ¿Cargaste una planilla y no aparecen productos, o salen sin precio o sin stock? Revisá{" "}
-        <Link href="/vender/listas/perfil" className="text-brand-300 underline-offset-2 hover:underline">
-          qué columna es cada dato
-        </Link>
-        : ahí le decís a NODO cuál es el precio, cuál el stock y en qué hoja están.
-      </p>
+      </div>
     </section>
   );
 }

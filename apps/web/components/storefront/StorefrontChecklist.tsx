@@ -44,7 +44,7 @@ function openItem(store: StoreView): Item {
     case "PAUSED":
       return { ...base, state: "todo", detail: "La pausaste: nadie la ve ni te puede pedir.", action: { kind: "reactivate", label: "Reactivar tienda" } };
     case "CLOSED":
-      return { ...base, state: "todo", detail: "La cerraste. Abrila con el botón de arriba: vuelve con tus productos." };
+      return { ...base, state: "todo", detail: "La cerraste. Abrila con «Abrir la tienda», arriba: vuelve con tus productos." };
     case "SUSPENDED":
       return { ...base, state: "todo", detail: `NODO la frenó${store.suspendedReason ? `: ${store.suspendedReason}` : ""}. Escribinos para revisarlo.` };
     default:
@@ -188,33 +188,48 @@ export default function StorefrontChecklist({
   onConfirmStock: () => void;
 }) {
   const items = checklistItems(store);
-  const missing = items.filter((i) => i.state === "todo").length;
+  const current = items.find((i) => i.state === "todo")?.key;
 
   return (
-    <section className="rounded-2xl border border-surface-800 bg-surface-900 p-5" aria-labelledby="checklist-title">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="checklist-title" className="text-sm font-semibold text-white">
-          Qué falta para que otros comercios vean tu tienda
-        </h2>
-        <span className={`text-xs ${missing > 0 ? "text-amber-300" : "text-emerald-300"}`}>
-          {missing > 0 ? `Faltan ${missing}` : "No falta nada"}
-        </span>
-      </div>
-      <ul className="mt-3 divide-y divide-surface-800 rounded-xl border border-surface-800">
-        {items.map((item) => {
+    <section className="rounded-2xl border border-surface-800 bg-surface-900 p-4 sm:p-5" aria-labelledby="checklist-title">
+      <h2 id="checklist-title" className="text-sm font-semibold text-white">
+        Para que otros comercios vean tu tienda
+      </h2>
+      <ol className="mt-3 flex flex-col gap-1.5">
+        {items.map((item, i) => {
           const s = STATE_ICON[item.state];
+          const isCurrent = item.key === current;
+          const isDone = item.state === "done";
           return (
-            <li key={item.key} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
-              <s.icon className={`h-4 w-4 flex-shrink-0 ${s.cls}`} aria-label={s.label} />
+            <li
+              key={item.key}
+              className={`flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2.5 ${
+                isCurrent ? "border-amber-500/40 bg-amber-500/[0.07]" : "border-transparent"
+              }`}
+            >
+              <span
+                className={`grid h-7 w-7 flex-shrink-0 place-items-center rounded-full text-xs font-bold ${
+                  isDone
+                    ? "bg-emerald-500/15 text-emerald-300"
+                    : isCurrent
+                      ? "bg-amber-400 text-surface-950"
+                      : "border border-surface-700 text-surface-400"
+                }`}
+                aria-label={s.label}
+              >
+                {isDone ? <CheckCircle2 className="h-4 w-4" /> : item.state === "warn" ? <AlertTriangle className="h-3.5 w-3.5 text-amber-300" /> : i + 1}
+              </span>
               <div className="min-w-0 flex-1 basis-60">
-                <p className={`text-sm ${item.state === "blocked" ? "text-surface-400" : "text-white"}`}>{item.title}</p>
-                <p className="text-[11px] leading-relaxed text-surface-400">{item.detail}</p>
+                <p className={`text-sm ${isDone ? "text-surface-300" : item.state === "blocked" ? "text-surface-500" : "font-medium text-white"}`}>{item.title}</p>
+                {(!isDone || isCurrent) && <p className="text-[11px] leading-relaxed text-surface-400">{item.detail}</p>}
               </div>
-              {item.action && <ActionButton action={item.action} working={working} onGo={onGo} onReactivate={onReactivate} onConfirmStock={onConfirmStock} />}
+              {item.action && !isDone && (
+                <ActionButton action={item.action} working={working} onGo={onGo} onReactivate={onReactivate} onConfirmStock={onConfirmStock} primary={isCurrent} />
+              )}
             </li>
           );
         })}
-      </ul>
+      </ol>
     </section>
   );
 }
@@ -225,15 +240,18 @@ function ActionButton({
   onGo,
   onReactivate,
   onConfirmStock,
+  primary = false,
 }: {
   action: Action;
   working: "confirm" | "pause" | null;
   onGo: (tab: Tab) => void;
   onReactivate: () => void;
   onConfirmStock: () => void;
+  primary?: boolean;
 }) {
-  const cls =
-    "inline-flex items-center gap-1.5 rounded-lg border border-surface-600 px-3 py-1.5 text-xs font-semibold text-white hover:border-surface-400 disabled:opacity-50";
+  const cls = primary
+    ? "inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
+    : "inline-flex items-center gap-1.5 rounded-lg border border-surface-600 px-3 py-1.5 text-xs font-semibold text-white hover:border-surface-400 disabled:opacity-50";
   if (action.kind === "href") {
     return (
       <Link href={action.href} className={cls}>

@@ -59,8 +59,9 @@ function Chips({ value, options, onChange }: { value: string[]; options: Record<
 export default function StorefrontSettings({ store, onChange }: { store: StoreView; onChange: (next: MyStorefront) => void }) {
   return (
     <div className="flex flex-col gap-4">
-      <ProfileAndTerms store={store} onChange={onChange} />
+      {/* Primero lo que decide si te ven (se guarda al tocarlo); después el perfil, con su botón de guardar. */}
       <AudienceCard store={store} onChange={onChange} />
+      <ProfileAndTerms store={store} onChange={onChange} />
       <CloseCard store={store} onChange={onChange} />
     </div>
   );

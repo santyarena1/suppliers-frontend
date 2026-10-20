@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.8.1",
+    date: "2026-10-19",
+    title: "Vender en NODO, más simple",
+    changes: [
+      { kind: "improved", text: "Arriba de todo ves si tu tienda se ve, qué falta y el botón para lo que sigue, en todas las pestañas." },
+      { kind: "improved", text: "Los pasos para que te vean, numerados y con el que toca resaltado." },
+      { kind: "improved", text: "Productos arranca eligiendo cómo cargarlos: Google Sheets, Excel o de a uno." },
+      { kind: "improved", text: "En Configuración, «Quién ve tu tienda» va primero." },
+    ],
+  },
+  {
     version: "2.8.0",
     date: "2026-10-19",
     title: "Vender en NODO: elegí la hoja y mirá qué falta para que te vean",

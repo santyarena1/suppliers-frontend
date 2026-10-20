@@ -2,13 +2,14 @@
 
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Power } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import StorefrontIntro from "@/components/storefront/StorefrontIntro";
 import StorefrontOrders from "@/components/storefront/StorefrontOrders";
 import StorefrontOverview from "@/components/storefront/StorefrontOverview";
 import StorefrontProducts from "@/components/storefront/StorefrontProducts";
 import StorefrontSettings from "@/components/storefront/StorefrontSettings";
+import StoreStatusHeader from "@/components/storefront/StoreStatusHeader";
 import UpgradeOffer from "@/components/storefront/UpgradeOffer";
 import { invalidateMyProviders, myApi, storefrontApi, type MyStorefront } from "@/lib/api";
 import { apiError } from "@/lib/storefront";
@@ -16,14 +17,10 @@ import { capabilityAllowed, useSubscription } from "@/lib/subscription";
 
 type Tab = "resumen" | "productos" | "pedidos" | "datos";
 const TABS: { key: Tab; label: string; hint: string }[] = [
-  { key: "resumen", label: "Resumen", hint: "Si tu tienda se ve, qué falta para que la vean otros comercios y qué tenés pendiente." },
-  { key: "productos", label: "Productos", hint: "Lo que publicás: de dónde salen los productos, y su precio, stock y fotos." },
-  { key: "pedidos", label: "Pedidos", hint: "Lo que te pidieron otros comercios: confirmás o rechazás cada pedido y coordinan pago y entrega." },
-  {
-    key: "datos",
-    label: "Configuración",
-    hint: "Cómo te ven los compradores, tus condiciones de venta, cada cuánto confirmás el stock y quién ve tu tienda.",
-  },
+  { key: "resumen", label: "Resumen", hint: "Lo que falta para que te vean, tu stock y tus números." },
+  { key: "productos", label: "Productos", hint: "Lo que publicás, con precio, stock y fotos." },
+  { key: "pedidos", label: "Pedidos", hint: "Lo que te pidieron otros comercios: confirmás o rechazás cada pedido." },
+  { key: "datos", label: "Configuración", hint: "Quién ve tu tienda, cómo te ven y tus condiciones de venta." },
 ];
 
 export default function VenderPage() {
@@ -108,6 +105,7 @@ function VenderInner() {
             />
           ) : (
             <>
+              <StoreStatusHeader store={store} onChange={changed} onGo={go} />
               <nav className="flex gap-1 overflow-x-auto border-b border-surface-800" aria-label="Secciones de la tienda">
                 {TABS.map((t) => (
                   <button
@@ -127,7 +125,6 @@ function VenderInner() {
                 ))}
               </nav>
               <p className="-mt-1 text-xs text-surface-400">{TABS.find((t) => t.key === tab)?.hint}</p>
-              {store.status === "CLOSED" && <ReopenCard onReopened={changed} />}
               {tab === "resumen" && <StorefrontOverview store={store} onChange={changed} onGo={go} />}
               {tab === "productos" && (
                 <StorefrontProducts
@@ -145,45 +142,21 @@ function VenderInner() {
               {tab === "datos" && <StorefrontSettings store={store} onChange={changed} />}
             </>
           )}
-          {store && <UpgradeOffer />}
+          {store && (!store.exists || tab === "resumen") && (
+            <details className="group rounded-2xl border border-surface-800 bg-surface-900/50">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-surface-300 hover:text-white">
+                <span>
+                  <span className="font-medium">¿Sos distribuidor o tenés marca propia?</span>{" "}
+                  <span className="text-xs text-surface-500">Hay una cuenta pensada para eso.</span>
+                </span>
+                <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform group-open:rotate-180" aria-hidden />
+              </summary>
+              <UpgradeOffer bare />
+            </details>
+          )}
         </div>
       </div>
     </>
   );
 }
 
-/** Tienda cerrada por el dueño: se reabre cuando quiera, con lo que tenga cargado. */
-function ReopenCard({ onReopened }: { onReopened: (next: MyStorefront) => void }) {
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  async function reopen() {
-    setWorking(true);
-    setError(null);
-    try {
-      onReopened((await storefrontApi.open({})).data);
-    } catch (err) {
-      setError(apiError(err, "No se pudo abrir la tienda"));
-    } finally {
-      setWorking(false);
-    }
-  }
-  return (
-    <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-surface-700 bg-surface-900 p-4">
-      <Power className="h-5 w-5 text-surface-400" aria-hidden />
-      <div className="min-w-0 flex-1 basis-60">
-        <p className="text-sm font-semibold text-white">Tu tienda está cerrada</p>
-        <p className="text-xs text-surface-400">Nadie la ve. Abrila de nuevo cuando quieras: vuelve con tus productos y tus compradores.</p>
-        {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
-      </div>
-      <button
-        type="button"
-        onClick={() => void reopen()}
-        disabled={working}
-        className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-50"
-      >
-        {working && <Loader2 className="h-4 w-4 animate-spin" />}
-        Abrir la tienda
-      </button>
-    </section>
-  );
-}

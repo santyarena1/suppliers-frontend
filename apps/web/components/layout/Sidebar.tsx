@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, Plug, Workflow, X } from "lucide-react";
+import { ChevronDown, LogOut, PanelLeft, PanelLeftClose, Plug, Sparkles, Workflow, X } from "lucide-react";
 import { useSubscription } from "@/lib/subscription";
 import { clearSession, getTenant, getUser, type UserRole } from "@/lib/auth";
 import { useChatUnread } from "@/lib/chat-unread";
@@ -476,13 +476,19 @@ function VersionLink({ iconMode, active }: { iconMode: boolean; active: boolean 
     <Link
       href="/actualizaciones"
       title="Qué hay de nuevo en NODO"
-      className={`flex min-w-0 items-center gap-1.5 rounded px-1 py-1 text-[10px] transition-colors ${
-        active ? "text-surface-200" : "text-surface-500 hover:text-surface-200"
-      }`}
+      className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] transition-colors ${
+        active
+          ? "border-surface-600 bg-surface-800 text-white"
+          : unseen
+            ? "border-brand-500/40 bg-brand-500/10 text-brand-100 hover:border-brand-400/60"
+            : "border-surface-800 text-surface-300 hover:border-surface-600 hover:text-white"
+      } ${iconMode ? "justify-center px-1" : ""}`}
     >
-      {unseen && <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-brand-400" aria-label="Hay novedades sin ver" />}
-      <span className="font-mono">v{APP_VERSION}</span>
-      {!iconMode && <span>· Qué hay de nuevo</span>}
+      <Sparkles className={`h-3.5 w-3.5 flex-shrink-0 ${unseen ? "text-brand-300" : "text-surface-500"}`} />
+      {!iconMode && <span className="truncate font-medium">Novedades</span>}
+      {!iconMode && <span className="font-mono text-[10px] text-surface-500">v{APP_VERSION}</span>}
+      {unseen && !iconMode && <span className="ml-auto rounded-full bg-brand-500 px-1.5 py-px text-[9px] font-bold uppercase text-white">Nuevo</span>}
+      {unseen && iconMode && <span className="h-1.5 w-1.5 rounded-full bg-brand-400" aria-label="Hay novedades sin ver" />}
     </Link>
   );
 }
