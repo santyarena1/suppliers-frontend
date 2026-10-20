@@ -157,8 +157,10 @@ export function quotePdfFilename(model: Pick<QuotePdfModel, "code" | "client" | 
   const client = (model.title || model.client.name || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .replace(/[^\w\- ]+/g, "")
+    .replace(/[^\w\- ]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 40);
+    .slice(0, 40)
+    .trim();
   return `Presupuesto ${model.code}${client ? ` - ${client}` : ""}.pdf`;
 }
