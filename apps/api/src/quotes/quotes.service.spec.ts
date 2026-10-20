@@ -12,7 +12,23 @@ import {
   totalsByCurrency,
   type QuoteItem,
 } from "./quote-items";
-import { effectiveStatus, QuotesService, seesAllQuotes } from "./quotes.service";
+import { effectiveStatus, QuotesService, seesAllQuotes, statusWhere } from "./quotes.service";
+
+describe("statusWhere: el estado que se ve, como filtro", () => {
+  const now = new Date("2026-10-19T12:00:00Z");
+
+  it("vencido = borrador o enviado con la validez pasada", () => {
+    expect(statusWhere("EXPIRED", now)).toEqual({ status: { in: ["DRAFT", "SENT"] }, validUntil: { lt: now } });
+  });
+
+  it("borrador y enviado no incluyen los vencidos", () => {
+    expect(statusWhere("SENT", now)).toEqual({ status: "SENT", OR: [{ validUntil: null }, { validUntil: { gte: now } }] });
+  });
+
+  it("aceptado y rechazado no vencen", () => {
+    expect(statusWhere("ACCEPTED", now)).toEqual({ status: "ACCEPTED" });
+  });
+});
 
 const RULES: TenantSaleRules = {
   rules: new Map([["P:ELIT", 25]]),
@@ -99,6 +115,10 @@ function setup(
     findMany: jest.fn(async ({ where }: { where: { tenantId: string; createdById?: string } }) =>
       [...rows.values()].filter((r) => r.tenantId === where.tenantId && (!where.createdById || r.createdById === where.createdById))
     ),
+    count: jest.fn(async ({ where }: { where: { tenantId: string; createdById?: string } }) =>
+      [...rows.values()].filter((r) => r.tenantId === where.tenantId && (!where.createdById || r.createdById === where.createdById)).length
+    ),
+    groupBy: jest.fn(async () => []),
     update: jest.fn(async ({ where, data }: { where: { id: string }; data: Partial<Row> }) => {
       const row = { ...rows.get(where.id)!, ...data, updatedAt: new Date() };
       rows.set(where.id, row);
@@ -199,8 +219,8 @@ describe("QuotesService", () => {
     const { service } = setup();
     const mine = await service.create(seller, {});
     await service.create(otherSeller, {});
-    expect((await service.list(seller)).map((q) => q.id)).toEqual([mine.id]);
-    expect(await service.list(owner)).toHaveLength(2);
+    expect((await service.list(seller)).items.map((q) => q.id)).toEqual([mine.id]);
+    expect((await service.list(owner)).items).toHaveLength(2);
     await expect(service.get(otherSeller, mine.id)).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.get(owner, mine.id)).resolves.toMatchObject({ id: mine.id, mine: false, createdByName: "vendedor" });
   });

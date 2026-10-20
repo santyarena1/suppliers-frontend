@@ -74,14 +74,14 @@ d("Presupuestos contra Postgres", () => {
     const stored = await prisma.salesQuote.findUniqueOrThrow({ where: { id: quote.id } });
     expect(JSON.stringify(stored.items)).not.toContain("121");
 
-    const ownerList = await service.list(owner);
+    const ownerList = (await service.list(owner)).items;
     expect(ownerList.find((q) => q.id === quote.id)).toMatchObject({ initials: "AG", createdByName: "q-int-vendedor", mine: false });
-    expect((await service.list(owner, { q: "ana" })).map((q) => q.id)).toEqual([quote.id]);
-    expect((await service.list(owner, { q: `#${quote.number}` })).map((q) => q.id)).toEqual([quote.id]);
+    expect((await service.list(owner, { q: "ana" })).items.map((q) => q.id)).toEqual([quote.id]);
+    expect((await service.list(owner, { q: `#${quote.number}` })).items.map((q) => q.id)).toEqual([quote.id]);
 
     await service.setArchived(seller, quote.id, true);
-    expect((await service.list(seller)).some((q) => q.id === quote.id)).toBe(false);
-    expect((await service.list(seller, { archived: true })).map((q) => q.id)).toEqual([quote.id]);
+    expect((await service.list(seller)).items.some((q) => q.id === quote.id)).toBe(false);
+    expect((await service.list(seller, { archived: true })).items.map((q) => q.id)).toEqual([quote.id]);
   });
 
   it("plantilla, margen del presupuesto, descuento, líneas libres y estado se guardan en la base", async () => {

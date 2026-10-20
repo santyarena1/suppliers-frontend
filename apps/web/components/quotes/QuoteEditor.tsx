@@ -981,6 +981,7 @@ function ClientFields({
   disabled: boolean;
   onSave: (patch: QuoteClientPatch) => void;
 }) {
+  const [title, setTitle] = useState(quote.title ?? "");
   const [name, setName] = useState(quote.clientName ?? "");
   const [phone, setPhone] = useState(quote.clientPhone ?? "");
   const [email, setEmail] = useState(quote.clientEmail ?? "");
@@ -988,14 +989,15 @@ function ClientFields({
   const [showMore, setShowMore] = useState(Boolean(quote.notes || quote.clientEmail));
 
   useEffect(() => {
+    setTitle(quote.title ?? "");
     setName(quote.clientName ?? "");
     setPhone(quote.clientPhone ?? "");
     setEmail(quote.clientEmail ?? "");
     setNotes(quote.notes ?? "");
     setShowMore(Boolean(quote.notes || quote.clientEmail));
-  }, [quote.id, quote.clientName, quote.clientPhone, quote.clientEmail, quote.notes]);
+  }, [quote.id, quote.title, quote.clientName, quote.clientPhone, quote.clientEmail, quote.notes]);
 
-  const commit = (field: "clientName" | "clientPhone" | "clientEmail" | "notes", value: string, current: string | null) => {
+  const commit = (field: "title" | "clientName" | "clientPhone" | "clientEmail" | "notes", value: string, current: string | null) => {
     const next = value.trim();
     if (next === (current ?? "")) return;
     onSave({ [field]: next || null });
@@ -1006,6 +1008,18 @@ function ClientFields({
 
   return (
     <div className={`border-b border-surface-800 px-3.5 ${compact ? "py-2.5" : "py-3"}`}>
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={() => commit("title", title, quote.title)}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+        disabled={disabled}
+        maxLength={120}
+        placeholder="Nombre de referencia: «Oficina Pérez, 3 PCs»"
+        aria-label="Nombre de referencia del presupuesto"
+        title="Para encontrarlo después en la lista. Sale también en el PDF."
+        className={`${input} mb-1.5 text-sm font-medium`}
+      />
       <div className="grid grid-cols-[1.4fr_1fr] gap-1.5">
         <input
           value={name}

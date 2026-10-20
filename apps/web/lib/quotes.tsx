@@ -56,6 +56,8 @@ export interface Quote {
   id: string;
   number: number;
   initials: string | null;
+  /** Nombre de referencia ("Oficina Pérez, 3 PCs"). */
+  title: string | null;
   clientName: string | null;
   clientPhone: string | null;
   clientEmail: string | null;
@@ -101,7 +103,7 @@ export interface QuotePriceChange {
 }
 
 export type QuoteClientPatch = Partial<
-  Pick<Quote, "clientName" | "clientPhone" | "clientEmail" | "notes" | "terms" | "currency" | "validUntil" | "marginPercent" | "discountPercent">
+  Pick<Quote, "title" | "clientName" | "clientPhone" | "clientEmail" | "notes" | "terms" | "currency" | "validUntil" | "marginPercent" | "discountPercent">
 > & { status?: Exclude<QuoteStatus, "EXPIRED"> };
 
 export interface QuoteItemPatch {
@@ -151,15 +153,35 @@ export interface QuoteSettings {
 
 export type QuoteSettingsPatch = Partial<Omit<QuoteSettings, "logoUrl" | "updatedAt">>;
 
+export type QuoteSort = "updated" | "created" | "number" | "validUntil";
+
+export interface QuoteListParams {
+  archived?: boolean;
+  q?: string;
+  createdById?: string;
+  status?: QuoteStatus;
+  /** Creados desde/hasta (YYYY-MM-DD). */
+  from?: string;
+  to?: string;
+  sort?: QuoteSort;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface QuoteListPage {
+  items: Quote[];
+  total: number;
+  page: number;
+  pageSize: number;
+  counts: Record<QuoteStatus | "ALL", number>;
+}
+
 export const quotesApi = {
-  list: (params: { archived?: boolean; q?: string; createdById?: string; status?: string } = {}) =>
-    api.get<Quote[]>("/my/quotes", {
-      params: {
-        ...(params.archived ? { archived: "true" } : {}),
-        ...(params.q ? { q: params.q } : {}),
-        ...(params.createdById ? { createdById: params.createdById } : {}),
-        ...(params.status ? { status: params.status } : {}),
-      },
+  list: (params: QuoteListParams = {}) =>
+    api.get<QuoteListPage>("/my/quotes", {
+      params: Object.fromEntries(
+        Object.entries({ ...params, archived: params.archived ? "true" : undefined }).filter(([, v]) => v !== undefined && v !== "")
+      ),
     }),
   get: (id: string) => api.get<Quote>(`/my/quotes/${id}`),
   create: (data: QuoteClientPatch = {}) => api.post<Quote>("/my/quotes", data),
@@ -188,8 +210,9 @@ export function quoteBadge(q: Pick<Quote, "initials" | "number">): string {
   return q.initials ?? `#${q.number}`;
 }
 
-export function quoteTitle(q: Pick<Quote, "number" | "clientName">): string {
-  return q.clientName ? `#${q.number} · ${q.clientName}` : `Presupuesto #${q.number}`;
+export function quoteTitle(q: Pick<Quote, "number" | "clientName" | "title">): string {
+  const name = q.title || q.clientName;
+  return name ? `#${q.number} · ${name}` : `Presupuesto #${q.number}`;
 }
 
 /** Mensaje de error legible de una respuesta de la API. */
@@ -373,12 +396,13 @@ export function QuotesProvider({ children }: { children: React.ReactNode }) {
   const reload = useCallback(async () => {
     if (!sellerMode) return;
     try {
-      const { data } = await quotesApi.list();
-      setQuotes(data);
+      // Para la burbuja y "Agregar a…": los 100 más recientes de quien mira.
+      const { data } = await quotesApi.list({ createdById: userId ?? undefined, pageSize: 100 });
+      setQuotes(data.items);
     } finally {
       setLoaded(true);
     }
-  }, [sellerMode]);
+  }, [sellerMode, userId]);
 
   useEffect(() => {
     setQuotes([]);

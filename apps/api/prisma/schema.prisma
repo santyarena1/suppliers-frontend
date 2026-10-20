@@ -2697,6 +2697,8 @@ model SalesQuote {
   number      Int
   /// Quién lo armó. Sin relación: si la persona se va, el presupuesto queda.
   createdById String
+  /// Nombre de referencia ("Oficina Pérez, 3 PCs"): para encontrarlo entre muchos.
+  title       String?
   clientName  String?
   clientPhone String?
   clientEmail String?
@@ -2722,6 +2724,8 @@ model SalesQuote {
 
   @@unique([tenantId, number])
   @@index([tenantId, createdById, archivedAt])
+  @@index([tenantId, archivedAt, updatedAt])
+  @@index([tenantId, archivedAt, status])
 }
 
 enum SalesQuoteStatus {

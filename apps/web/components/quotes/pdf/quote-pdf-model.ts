@@ -18,6 +18,12 @@ export interface QuotePdfModel {
     lines: string[];
   };
   code: string;
+  /** Nombre de referencia del presupuesto, si tiene. */
+  title: string | null;
+  /** "8 productos · 11 unidades". */
+  summary: string;
+  /** Total final ya formateado (va también arriba, en el resumen). */
+  grandTotal: string;
   date: string;
   validUntil: string | null;
   client: { name: string | null; lines: string[] };
@@ -118,6 +124,9 @@ export function buildQuotePdfModel(
       logo: null,
       business: { name: business, lines: contact },
       code: quoteCode(settings.numberPrefix, quote.number),
+      title: quote.title?.trim() || null,
+      summary: itemSummary(quote.items),
+      grandTotal: money.format(total),
       date: shortDate(quote.createdAt),
       validUntil: quote.validUntil ? shortDate(quote.validUntil) : null,
       client: {
@@ -137,9 +146,15 @@ export function buildQuotePdfModel(
   };
 }
 
-/** Nombre del archivo: "Presupuesto P-0012 - Juan Perez.pdf" (sin caracteres raros). */
-export function quotePdfFilename(model: Pick<QuotePdfModel, "code" | "client">): string {
-  const client = (model.client.name ?? "")
+function itemSummary(items: Quote["items"]): string {
+  const units = items.reduce((s, it) => s + it.qty, 0);
+  const lines = items.length;
+  return `${lines} ${lines === 1 ? "producto" : "productos"} · ${units} ${units === 1 ? "unidad" : "unidades"}`;
+}
+
+/** Nombre del archivo: "Presupuesto P-0012 - Oficina Perez.pdf" (nombre de referencia o cliente, sin caracteres raros). */
+export function quotePdfFilename(model: Pick<QuotePdfModel, "code" | "client" | "title">): string {
+  const client = (model.title || model.client.name || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^\w\- ]+/g, "")

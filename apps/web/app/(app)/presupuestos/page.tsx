@@ -3,10 +3,11 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, FileText, Loader2, MessageCircle, Palette, Plus, Search, ShoppingBag, Tag } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Eye, FileText, Loader2, MessageCircle, Palette, Plus, Search, ShoppingBag, SlidersHorizontal, Tag } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import QuoteEditor from "@/components/quotes/QuoteEditor";
+import QuotePdfPreview from "@/components/quotes/QuotePdfPreview";
 import { useQuoteSettings } from "@/components/quotes/quote-share";
 import { getTenant } from "@/lib/auth";
 import { useSubscription } from "@/lib/subscription";
@@ -20,6 +21,8 @@ import {
   useQuoteTotal,
   useQuotes,
   type Quote,
+  type QuoteListPage,
+  type QuoteSort,
   type QuoteStatus,
 } from "@/lib/quotes";
 
@@ -97,6 +100,23 @@ const STATUS_FILTERS: { value: "all" | QuoteStatus; label: string }[] = [
   { value: "EXPIRED", label: "Vencidos" },
 ];
 
+const SORT_OPTIONS: { value: QuoteSort; label: string }[] = [
+  { value: "updated", label: "Último cambio" },
+  { value: "created", label: "Fecha de creación" },
+  { value: "number", label: "Número" },
+  { value: "validUntil", label: "Vencen primero" },
+];
+
+const PAGE_SIZE = 30;
+
+/** "Ryzen 5 5600, Kingston Fury 16GB y 2 más": qué tiene sin abrirlo. */
+function contentSummary(q: Quote): string {
+  if (q.items.length === 0) return "";
+  const names = q.items.slice(0, 2).map((it) => it.name.split(/\s+/).slice(0, 5).join(" "));
+  const rest = q.items.length - names.length;
+  return rest > 0 ? `${names.join(", ")} y ${rest} más` : names.join(" y ");
+}
+
 /** Presupuestos de venta: cada vendedor ve los suyos; dueño y admin, los de todo el equipo. */
 function QuotesPageInner() {
   const quotes = useQuotes();
@@ -113,10 +133,21 @@ function QuotesPageInner() {
   const [debounced, setDebounced] = useState("");
   const [seller, setSeller] = useState<string>("all");
   const [status, setStatus] = useState<"all" | QuoteStatus>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [sort, setSort] = useState<QuoteSort>("updated");
+  const [moreFilters, setMoreFilters] = useState(false);
+  const [page, setPage] = useState(1);
   const [list, setList] = useState<Quote[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState<QuoteListPage["counts"] | null>(null);
+  // Personas vistas en alguna página: el filtro por vendedor no depende de la página actual.
+  const [sellers, setSellers] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("id"));
+  const [selectedExtra, setSelectedExtra] = useState<Quote | null>(null);
+  const [preview, setPreview] = useState<Quote | null>(null);
   const [freshId, setFreshId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -131,41 +162,63 @@ function QuotesPageInner() {
     return () => clearTimeout(t);
   }, [query]);
 
+  // Cualquier filtro nuevo vuelve a la primera página.
+  useEffect(() => {
+    setPage(1);
+  }, [archived, debounced, seller, status, from, to, sort]);
+
   const load = useCallback(async () => {
     if (!quotes.enabled) return;
     setLoading(true);
     setError(null);
     try {
-      const { data } = await quotesApi.list({ archived, q: debounced || undefined });
-      setList(data);
+      const { data } = await quotesApi.list({
+        archived,
+        q: debounced || undefined,
+        createdById: seller === "all" ? undefined : seller,
+        status: status === "all" ? undefined : status,
+        from: from || undefined,
+        to: to || undefined,
+        sort,
+        page,
+        pageSize: PAGE_SIZE,
+      });
+      setList(data.items);
+      setTotal(data.total);
+      setCounts(data.counts);
+      setSellers((prev) => {
+        const next = new Map(prev);
+        for (const q of data.items) next.set(q.createdById, q.mine ? "Yo" : q.createdByName ?? "Ex integrante");
+        return next;
+      });
     } catch (err) {
       setError(quoteError(err, "No se pudieron cargar los presupuestos"));
     } finally {
       setLoading(false);
     }
-  }, [quotes.enabled, archived, debounced]);
+  }, [quotes.enabled, archived, debounced, seller, status, from, to, sort, page]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const sellers = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const q of list) map.set(q.createdById, q.mine ? "Yo" : q.createdByName ?? "Ex integrante");
-    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [list]);
+  // El que se abre por link puede no estar en esta página: se trae aparte.
+  useEffect(() => {
+    if (!selectedId || list.some((q) => q.id === selectedId) || selectedExtra?.id === selectedId) return;
+    let alive = true;
+    quotesApi
+      .get(selectedId)
+      .then(({ data }) => alive && setSelectedExtra(data))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [selectedId, list, selectedExtra?.id]);
 
-  const counts = useMemo(() => {
-    const out: Record<string, number> = { all: list.length };
-    for (const q of list) out[q.status] = (out[q.status] ?? 0) + 1;
-    return out;
-  }, [list]);
-
-  const shown = useMemo(
-    () => list.filter((q) => (seller === "all" || q.createdById === seller) && (status === "all" || q.status === status)),
-    [list, seller, status]
-  );
-  const selected = list.find((q) => q.id === selectedId) ?? null;
+  const sellerOptions = useMemo(() => [...sellers.entries()].sort((a, b) => a[1].localeCompare(b[1])), [sellers]);
+  const selected = list.find((q) => q.id === selectedId) ?? (selectedExtra?.id === selectedId ? selectedExtra : null);
+  const filtering = Boolean(debounced || from || to || status !== "all" || seller !== "all");
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function select(id: string | null) {
     setSelectedId(id);
@@ -174,12 +227,23 @@ function QuotesPageInner() {
   }
 
   function changed(q: Quote) {
+    if (selectedExtra?.id === q.id) setSelectedExtra(q);
     setList((prev) => {
       const stillHere = Boolean(q.archivedAt) === archived;
-      const rest = prev.filter((x) => x.id !== q.id);
-      return stillHere ? [q, ...rest].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)) : rest;
+      return stillHere ? prev.map((x) => (x.id === q.id ? q : x)) : prev.filter((x) => x.id !== q.id);
     });
-    if (Boolean(q.archivedAt) !== archived) select(null);
+    if (Boolean(q.archivedAt) !== archived) {
+      select(null);
+      void load();
+    }
+  }
+
+  function clearFilters() {
+    setQuery("");
+    setStatus("all");
+    setSeller("all");
+    setFrom("");
+    setTo("");
   }
 
   async function createNew() {
@@ -187,9 +251,11 @@ function QuotesPageInner() {
     setError(null);
     try {
       const q = await quotes.create();
-      if (!archived) setList((prev) => [q, ...prev]);
-      else setArchived(false);
-      setStatus("all");
+      if (archived) setArchived(false);
+      clearFilters();
+      setSort("updated");
+      setList((prev) => [q, ...prev.filter((x) => x.id !== q.id)]);
+      setTotal((t) => t + 1);
       setFreshId(q.id);
       select(q.id);
     } catch (err) {
@@ -214,7 +280,9 @@ function QuotesPageInner() {
     );
   }
 
-  const nothingYet = !loading && !error && list.length === 0 && !archived && !debounced;
+  const nothingYet = !loading && !error && counts?.ALL === 0 && !archived && !filtering;
+  const firstShown = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastShown = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -257,54 +325,95 @@ function QuotesPageInner() {
         </div>
       ) : (
         <>
-          <div className={`${selected ? "hidden lg:flex" : "flex"} flex-shrink-0 flex-wrap items-center gap-2 border-b border-surface-800 px-4 py-2.5 sm:px-6`}>
-            <label className="relative min-w-[12rem] flex-1 sm:max-w-xs">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-surface-500" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Cliente, teléfono o número"
-                aria-label="Buscar presupuestos"
-                className="w-full rounded-lg border border-surface-700 bg-surface-900 py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-surface-600 focus:border-brand-500 focus:outline-none"
-              />
-            </label>
-            <div className="flex rounded-lg border border-surface-700 p-0.5 text-xs" role="tablist">
-              {[
-                [false, "Abiertos"],
-                [true, "Archivados"],
-              ].map(([value, label]) => (
-                <button
-                  key={String(value)}
-                  type="button"
-                  role="tab"
-                  aria-selected={archived === value}
-                  onClick={() => {
-                    setArchived(value as boolean);
-                    select(null);
-                  }}
-                  className={`rounded-md px-3 py-1 font-medium ${archived === value ? "bg-surface-700 text-white" : "text-surface-400 hover:text-white"}`}
-                >
-                  {label as string}
-                </button>
-              ))}
-            </div>
-            {seesAll && sellers.length > 1 && (
-              <select
-                value={seller}
-                onChange={(e) => setSeller(e.target.value)}
-                aria-label="Filtrar por vendedor"
-                className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1.5 text-xs text-surface-200 focus:border-brand-500 focus:outline-none"
-              >
-                <option value="all">Todo el equipo</option>
-                {sellers.map(([id, name]) => (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
+          <div className={`${selected ? "hidden lg:block" : "block"} flex-shrink-0 border-b border-surface-800 px-4 py-2.5 sm:px-6`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative min-w-[12rem] flex-1 sm:max-w-sm">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-surface-500" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Nombre, cliente, teléfono, mail o número"
+                  aria-label="Buscar presupuestos"
+                  className="w-full rounded-lg border border-surface-700 bg-surface-900 py-1.5 pl-8 pr-3 text-sm text-white placeholder:text-surface-600 focus:border-brand-500 focus:outline-none"
+                />
+              </label>
+              <div className="flex rounded-lg border border-surface-700 p-0.5 text-xs" role="tablist">
+                {[
+                  [false, "Abiertos"],
+                  [true, "Archivados"],
+                ].map(([value, label]) => (
+                  <button
+                    key={String(value)}
+                    type="button"
+                    role="tab"
+                    aria-selected={archived === value}
+                    onClick={() => {
+                      setArchived(value as boolean);
+                      select(null);
+                    }}
+                    className={`rounded-md px-3 py-1 font-medium ${archived === value ? "bg-surface-700 text-white" : "text-surface-400 hover:text-white"}`}
+                  >
+                    {label as string}
+                  </button>
                 ))}
-              </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMoreFilters((v) => !v)}
+                aria-expanded={moreFilters}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+                  moreFilters || from || to || seller !== "all" || sort !== "updated"
+                    ? "border-brand-500/60 bg-brand-500/10 text-brand-200"
+                    : "border-surface-700 text-surface-300 hover:text-white"
+                }`}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" /> Fechas y orden
+              </button>
+            </div>
+
+            {moreFilters && (
+              <div className="mt-2 flex flex-wrap items-end gap-2 text-xs">
+                <label className="flex flex-col gap-1 text-surface-400">
+                  Creado desde
+                  <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className="rounded-lg border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none [color-scheme:dark]" />
+                </label>
+                <label className="flex flex-col gap-1 text-surface-400">
+                  Hasta
+                  <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className="rounded-lg border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none [color-scheme:dark]" />
+                </label>
+                <label className="flex flex-col gap-1 text-surface-400">
+                  Ordenar por
+                  <select value={sort} onChange={(e) => setSort(e.target.value as QuoteSort)} className="rounded-lg border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none">
+                    {SORT_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {seesAll && sellerOptions.length > 1 && (
+                  <label className="flex flex-col gap-1 text-surface-400">
+                    Armado por
+                    <select value={seller} onChange={(e) => setSeller(e.target.value)} className="rounded-lg border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none">
+                      <option value="all">Todo el equipo</option>
+                      {sellerOptions.map(([id, name]) => (
+                        <option key={id} value={id}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {filtering && (
+                  <button type="button" onClick={clearFilters} className="px-1 py-1.5 font-medium text-surface-400 underline-offset-2 hover:text-white hover:underline">
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
             )}
-            <div className="flex w-full gap-1 overflow-x-auto pb-0.5 sm:w-auto" aria-label="Filtrar por estado">
-              {STATUS_FILTERS.filter((f) => f.value === "all" || counts[f.value]).map((f) => (
+
+            <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5" aria-label="Filtrar por estado">
+              {STATUS_FILTERS.filter((f) => f.value === "all" || status === f.value || (counts?.[f.value] ?? 0) > 0).map((f) => (
                 <button
                   key={f.value}
                   type="button"
@@ -315,79 +424,121 @@ function QuotesPageInner() {
                   }`}
                 >
                   {f.label}
-                  {f.value !== "all" && <span className="ml-1 tabular-nums opacity-70">{counts[f.value]}</span>}
+                  <span className="ml-1 tabular-nums opacity-70">{(counts?.[f.value === "all" ? "ALL" : f.value] ?? 0).toLocaleString("es-AR")}</span>
                 </button>
               ))}
             </div>
           </div>
 
           <div className="flex min-h-0 flex-1">
-            <div className={`min-h-0 flex-1 overflow-y-auto lg:max-w-md lg:border-r lg:border-surface-800 ${selected ? "hidden lg:block" : ""}`}>
-              {error && <p className="px-6 py-3 text-xs text-red-300">{error}</p>}
-              {loading && list.length === 0 ? (
-                <ul className="space-y-2 p-4 sm:px-6">
-                  {[0, 1, 2].map((i) => (
-                    <li key={i} className="h-16 animate-pulse rounded-xl bg-surface-900" />
-                  ))}
-                </ul>
-              ) : shown.length === 0 ? (
-                <div className="flex flex-col items-center px-6 py-16 text-center">
-                  <FileText className="mb-3 h-8 w-8 text-surface-700" />
-                  <p className="text-sm text-surface-300">
-                    {debounced
-                      ? "Ningún presupuesto coincide con la búsqueda."
-                      : archived
-                        ? "No hay presupuestos archivados."
-                        : status !== "all"
-                          ? `Ninguno en «${STATUS_FILTERS.find((f) => f.value === status)?.label ?? ""}».`
+            <div className={`flex min-h-0 flex-1 flex-col lg:max-w-md lg:border-r lg:border-surface-800 ${selected ? "hidden lg:flex" : ""}`}>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {error && <p className="px-6 py-3 text-xs text-red-300">{error}</p>}
+                {loading && list.length === 0 ? (
+                  <ul className="space-y-2 p-4 sm:px-6">
+                    {[0, 1, 2].map((i) => (
+                      <li key={i} className="h-20 animate-pulse rounded-xl bg-surface-900" />
+                    ))}
+                  </ul>
+                ) : list.length === 0 ? (
+                  <div className="flex flex-col items-center px-6 py-16 text-center">
+                    <FileText className="mb-3 h-8 w-8 text-surface-700" />
+                    <p className="text-sm text-surface-300">
+                      {filtering
+                        ? "Ningún presupuesto coincide con los filtros."
+                        : archived
+                          ? "No hay presupuestos archivados."
                           : "No hay presupuestos abiertos."}
-                  </p>
-                  {archived && <p className="mt-1 max-w-xs text-xs text-surface-500">Los que archivás quedan acá, por si el cliente vuelve.</p>}
-                </div>
-              ) : (
-                <ul className="space-y-1.5 p-3 sm:px-4">
-                  {shown.map((q) => {
-                    const isSel = q.id === selectedId;
-                    const building = quotes.active?.id === q.id;
-                    return (
-                      <li key={q.id}>
-                        <button
-                          type="button"
-                          onClick={() => select(q.id)}
-                          className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
-                            isSel ? "border-brand-500/60 bg-brand-500/10" : "border-surface-800 bg-surface-900/60 hover:border-surface-600"
-                          }`}
-                        >
-                          <span
-                            className={`flex h-9 min-w-[2.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${
-                              building ? "bg-brand-600 text-white" : "bg-surface-800 text-surface-300"
+                    </p>
+                    {filtering && (
+                      <button type="button" onClick={clearFilters} className="mt-2 text-xs font-medium text-brand-300 hover:text-brand-200">
+                        Limpiar filtros
+                      </button>
+                    )}
+                    {archived && !filtering && <p className="mt-1 max-w-xs text-xs text-surface-500">Los que archivás quedan acá, por si el cliente vuelve.</p>}
+                  </div>
+                ) : (
+                  <ul className={`space-y-1.5 p-3 transition-opacity sm:px-4 ${loading ? "opacity-60" : ""}`}>
+                    {list.map((q) => {
+                      const isSel = q.id === selectedId;
+                      const building = quotes.active?.id === q.id;
+                      const name = q.title || q.clientName || "Sin nombre ni cliente";
+                      const summary = contentSummary(q);
+                      return (
+                        <li key={q.id} className="group relative">
+                          <button
+                            type="button"
+                            onClick={() => select(q.id)}
+                            className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2.5 pr-11 text-left transition-colors ${
+                              isSel ? "border-brand-500/60 bg-brand-500/10" : "border-surface-800 bg-surface-900/60 hover:border-surface-600"
                             }`}
                           >
-                            {quoteBadge(q)}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-1.5">
-                              <span className="truncate text-sm font-medium text-white">{q.clientName || "Sin cliente"}</span>
-                              <span className={`flex-shrink-0 rounded-full border px-1.5 py-px text-[9px] font-semibold ${QUOTE_STATUS_TONE[q.status]}`}>
-                                {QUOTE_STATUS_LABEL[q.status]}
-                              </span>
-                              {q.atCostLines > 0 && (
-                                <span className="flex-shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-px text-[9px] font-semibold text-amber-300" title="Hay productos al costo">
-                                  al costo
+                            <span
+                              className={`mt-0.5 flex h-9 min-w-[2.25rem] items-center justify-center rounded-full px-1.5 text-[11px] font-bold ${
+                                building ? "bg-brand-600 text-white" : "bg-surface-800 text-surface-300"
+                              }`}
+                            >
+                              {quoteBadge(q)}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center gap-1.5">
+                                <span className={`truncate text-sm font-medium ${q.title || q.clientName ? "text-white" : "text-surface-400"}`}>{name}</span>
+                                <span className={`flex-shrink-0 rounded-full border px-1.5 py-px text-[9px] font-semibold ${QUOTE_STATUS_TONE[q.status]}`}>
+                                  {QUOTE_STATUS_LABEL[q.status]}
                                 </span>
-                              )}
+                                {q.atCostLines > 0 && (
+                                  <span className="flex-shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-px text-[9px] font-semibold text-amber-300" title="Hay productos al costo">
+                                    al costo
+                                  </span>
+                                )}
+                              </span>
+                              <span className="block truncate text-[11px] text-surface-500">
+                                {quoteCode(settings?.numberPrefix, q.number)}
+                                {q.title && q.clientName ? ` · ${q.clientName}` : ""} · {ago(q.updatedAt)}
+                                {seesAll && !q.mine ? ` · ${q.createdByName ?? "Ex integrante"}` : ""}
+                              </span>
+                              <span className="mt-0.5 block truncate text-[11px] text-surface-400">
+                                {summary ? `${q.itemCount} u. · ${summary}` : "Sin productos todavía"}
+                              </span>
                             </span>
-                            <span className="block truncate text-[11px] text-surface-500">
-                              {quoteCode(settings?.numberPrefix, q.number)} · {q.itemCount === 0 ? "sin productos" : `${q.itemCount} u.`} · {ago(q.updatedAt)}
-                              {seesAll && !q.mine ? ` · ${q.createdByName ?? "Ex integrante"}` : ""}
-                            </span>
-                          </span>
-                          <span className="flex-shrink-0 text-sm font-semibold tabular-nums text-white">{totalOf(q)}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                            <span className="flex-shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-white">{totalOf(q)}</span>
+                          </button>
+                          {q.items.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setPreview(q)}
+                              className="absolute bottom-2 right-2 rounded-md p-1.5 text-surface-500 hover:bg-surface-800 hover:text-white"
+                              title="Ver el PDF como le llega al cliente"
+                              aria-label={`Ver el PDF de ${name}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+              {total > 0 && (
+                <div className="flex flex-shrink-0 items-center justify-between gap-2 border-t border-surface-800 px-4 py-2 text-[11px] text-surface-400">
+                  <span className="tabular-nums">
+                    {firstShown.toLocaleString("es-AR")}–{lastShown.toLocaleString("es-AR")} de {total.toLocaleString("es-AR")}
+                  </span>
+                  {pages > 1 && (
+                    <span className="flex items-center gap-1">
+                      <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1 || loading} className="rounded-md p-1 hover:bg-surface-800 hover:text-white disabled:opacity-40" aria-label="Página anterior">
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="tabular-nums">
+                        Página {page} de {pages.toLocaleString("es-AR")}
+                      </span>
+                      <button type="button" onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages || loading} className="rounded-md p-1 hover:bg-surface-800 hover:text-white disabled:opacity-40" aria-label="Página siguiente">
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -405,8 +556,8 @@ function QuotesPageInner() {
                     </button>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-white">
-                        Presupuesto {quoteCode(settings?.numberPrefix, selected.number)}
-                        {selected.clientName ? ` · ${selected.clientName}` : ""}
+                        {quoteCode(settings?.numberPrefix, selected.number)}
+                        {selected.title || selected.clientName ? ` · ${selected.title || selected.clientName}` : ""}
                       </p>
                       <p className="text-[11px] text-surface-500">
                         {selected.archivedAt ? "Archivado · " : ""}creado {ago(selected.createdAt)}
@@ -432,10 +583,12 @@ function QuotesPageInner() {
                     onChanged={changed}
                     onDuplicated={(q) => {
                       setList((prev) => [q, ...prev]);
+                      setTotal((t) => t + 1);
                       select(q.id);
                     }}
                     onRemoved={(id) => {
                       setList((prev) => prev.filter((q) => q.id !== id));
+                      setTotal((t) => Math.max(0, t - 1));
                       select(null);
                     }}
                   />
@@ -449,6 +602,16 @@ function QuotesPageInner() {
             </div>
           </div>
         </>
+      )}
+      {preview && (
+        <QuotePdfPreview
+          quote={preview}
+          onClose={() => setPreview(null)}
+          onOpen={() => {
+            select(preview.id);
+            setPreview(null);
+          }}
+        />
       )}
     </div>
   );

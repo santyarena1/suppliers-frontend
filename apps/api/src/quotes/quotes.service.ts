@@ -40,6 +40,8 @@ export interface QuoteView {
   number: number;
   /** Iniciales del cliente o `null` (la ficha muestra el número). */
   initials: string | null;
+  /** Nombre de referencia (null = sin nombre). */
+  title: string | null;
   clientName: string | null;
   clientPhone: string | null;
   clientEmail: string | null;
@@ -73,12 +75,30 @@ export interface QuoteView {
   updatedAt: string;
 }
 
+export type QuoteSort = "updated" | "created" | "number" | "validUntil";
+
 export interface QuoteListFilter {
   archived?: boolean;
   q?: string;
   /** Solo dueño/admin: ver los de una persona. */
   createdById?: string;
+  /** Un estado de QuoteStatusView (incluye EXPIRED). */
   status?: string;
+  /** Creados desde/hasta (ISO, día inclusive). */
+  from?: string;
+  to?: string;
+  sort?: QuoteSort;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface QuoteListPage {
+  items: QuoteView[];
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Cuántos hay por estado con los demás filtros aplicados (para los chips). */
+  counts: Record<QuoteStatusView | "ALL", number>;
 }
 
 type Viewer = Pick<
@@ -86,9 +106,36 @@ type Viewer = Pick<
   "tenantId" | "commercialTenantId" | "userId" | "tenantRole" | "tenantType" | "permissions" | "entitlements"
 >;
 
-const LIST_LIMIT = 200;
+const DEFAULT_PAGE_SIZE = 30;
+const MAX_PAGE_SIZE = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STATUSES: readonly SalesQuoteStatus[] = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"];
+const VIEW_STATUSES: readonly QuoteStatusView[] = [...STATUSES, "EXPIRED"];
+
+const SORTS: Record<QuoteSort, Prisma.SalesQuoteOrderByWithRelationInput[]> = {
+  updated: [{ updatedAt: "desc" }],
+  created: [{ createdAt: "desc" }],
+  number: [{ number: "desc" }],
+  validUntil: [{ validUntil: { sort: "asc", nulls: "last" } }],
+};
+
+/**
+ * El estado como se ve (con EXPIRED, que no se guarda) traducido a un filtro:
+ * borrador y enviado solo cuentan mientras no vencieron.
+ */
+export function statusWhere(status: QuoteStatusView, now = new Date()): Prisma.SalesQuoteWhereInput {
+  if (status === "EXPIRED") return { status: { in: ["DRAFT", "SENT"] }, validUntil: { lt: now } };
+  if (status === "DRAFT" || status === "SENT") {
+    return { status, OR: [{ validUntil: null }, { validUntil: { gte: now } }] };
+  }
+  return { status };
+}
+
+function dayStart(iso: string | undefined): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 const num = (v: unknown): number | null => {
   if (v == null) return null;
@@ -140,20 +187,51 @@ export class QuotesService {
     private readonly settings: QuoteSettingsService
   ) {}
 
-  async list(viewer: Viewer, filter: QuoteListFilter = {}): Promise<QuoteView[]> {
+  /**
+   * Listado paginado. Los filtros van en el servidor (con miles de presupuestos no
+   * se puede traer todo): búsqueda, persona, fechas y estado, incluso "vencido".
+   */
+  async list(viewer: Viewer, filter: QuoteListFilter = {}): Promise<QuoteListPage> {
+    const now = new Date();
+    const base = this.listWhere(viewer, filter);
+    const status = VIEW_STATUSES.find((s) => s === filter.status);
+    const where: Prisma.SalesQuoteWhereInput = status ? { AND: [base, statusWhere(status, now)] } : base;
+    const pageSize = Math.min(Math.max(Math.floor(filter.pageSize ?? DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
+    const page = Math.max(Math.floor(filter.page ?? 1), 1);
+    const [rows, total, counts] = await Promise.all([
+      this.prisma.salesQuote.findMany({
+        where,
+        orderBy: [...SORTS[filter.sort ?? "updated"], { number: "desc" }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.salesQuote.count({ where }),
+      this.statusCounts(base, now),
+    ]);
+    return { items: await this.views(viewer, rows), total, page, pageSize, counts };
+  }
+
+  private listWhere(viewer: Viewer, filter: QuoteListFilter): Prisma.SalesQuoteWhereInput {
     const where: Prisma.SalesQuoteWhereInput = {
       tenantId: viewer.tenantId,
       archivedAt: filter.archived ? { not: null } : null,
     };
     if (!seesAllQuotes(viewer)) where.createdById = viewer.userId;
     else if (filter.createdById) where.createdById = filter.createdById;
-    if (filter.status && (STATUSES as readonly string[]).includes(filter.status)) {
-      where.status = filter.status as SalesQuoteStatus;
+    const from = dayStart(filter.from);
+    const to = dayStart(filter.to);
+    if (from || to) {
+      where.createdAt = {
+        ...(from ? { gte: from } : {}),
+        // Hasta el final de ese día.
+        ...(to ? { lt: new Date(to.getTime() + DAY_MS) } : {}),
+      };
     }
     const q = filter.q?.trim();
     if (q) {
       const asNumber = Number(q.replace(/^\D+/, ""));
       where.OR = [
+        { title: { contains: q, mode: "insensitive" } },
         { clientName: { contains: q, mode: "insensitive" } },
         { clientPhone: { contains: q } },
         { clientEmail: { contains: q, mode: "insensitive" } },
@@ -161,12 +239,25 @@ export class QuotesService {
         ...(Number.isInteger(asNumber) && asNumber > 0 ? [{ number: asNumber }] : []),
       ];
     }
-    const rows = await this.prisma.salesQuote.findMany({
-      where,
-      orderBy: [{ updatedAt: "desc" }],
-      take: LIST_LIMIT,
-    });
-    return this.views(viewer, rows);
+    return where;
+  }
+
+  /** Conteo por estado visible: los guardados más los vencidos, que se restan de borrador/enviado. */
+  private async statusCounts(base: Prisma.SalesQuoteWhereInput, now: Date): Promise<QuoteListPage["counts"]> {
+    const [grouped, expiredBy] = await Promise.all([
+      this.prisma.salesQuote.groupBy({ by: ["status"], where: base, _count: { _all: true } }),
+      this.prisma.salesQuote.groupBy({ by: ["status"], where: { AND: [base, statusWhere("EXPIRED", now)] }, _count: { _all: true } }),
+    ]);
+    const counts = { ALL: 0, DRAFT: 0, SENT: 0, ACCEPTED: 0, REJECTED: 0, EXPIRED: 0 } as QuoteListPage["counts"];
+    for (const g of grouped) {
+      counts[g.status] = g._count._all;
+      counts.ALL += g._count._all;
+    }
+    for (const g of expiredBy) {
+      counts[g.status] -= g._count._all;
+      counts.EXPIRED += g._count._all;
+    }
+    return counts;
   }
 
   async get(viewer: Viewer, id: string): Promise<QuoteView> {
@@ -184,6 +275,7 @@ export class QuotesService {
           tenantId: viewer.tenantId,
           number: (last._max.number ?? 0) + 1,
           createdById: viewer.userId,
+          title: dto.title ?? null,
           clientName: dto.clientName ?? null,
           clientPhone: dto.clientPhone ?? null,
           clientEmail: dto.clientEmail ?? null,
@@ -199,6 +291,7 @@ export class QuotesService {
   async duplicate(viewer: Viewer, id: string): Promise<QuoteView> {
     const source = await this.owned(viewer, id);
     const copy = await this.create(viewer, {
+      title: source.title,
       clientName: source.clientName,
       clientPhone: source.clientPhone,
       clientEmail: source.clientEmail,
@@ -221,6 +314,7 @@ export class QuotesService {
   async updateClient(viewer: Viewer, id: string, dto: QuoteClientDto): Promise<QuoteView> {
     const quote = await this.owned(viewer, id);
     const data: Prisma.SalesQuoteUpdateInput = {};
+    if (dto.title !== undefined) data.title = dto.title;
     if (dto.clientName !== undefined) data.clientName = dto.clientName;
     if (dto.clientPhone !== undefined) data.clientPhone = dto.clientPhone;
     if (dto.clientEmail !== undefined) data.clientEmail = dto.clientEmail;
@@ -468,6 +562,7 @@ export class QuotesService {
         id: row.id,
         number: row.number,
         initials: initialsOf(row.clientName),
+        title: row.title ?? null,
         clientName: row.clientName,
         clientPhone: row.clientPhone,
         clientEmail: row.clientEmail ?? null,

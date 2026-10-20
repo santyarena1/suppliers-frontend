@@ -18,6 +18,8 @@ const INK = "#14172a";
 const MUTED = "#5f667d";
 const FAINT = "#9aa0b4";
 const LINE = "#e3e6ee";
+/** Margen de arriba: deja lugar al encabezado de continuación de la hoja 2 en adelante. */
+const PAD_TOP = 46;
 
 function hexToRgb(hex: string): [number, number, number] {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
@@ -56,6 +58,19 @@ export default function QuotePdfDocument({ model }: { model: QuotePdfModel }) {
           <Text style={s.footerText}>{model.footer || model.business.name}</Text>
           <Text style={s.footerText} render={({ pageNumber, totalPages }) => `${model.code} · Página ${pageNumber} de ${totalPages}`} />
         </View>
+
+        {/* ---------- Encabezado de continuación (de la hoja 2 en adelante) ---------- */}
+        <View fixed style={s.runHead} render={({ pageNumber }) =>
+          pageNumber > 1 ? (
+            <View style={s.runHeadInner}>
+              <Text style={s.runHeadText}>{model.business.name || "Presupuesto"}</Text>
+              <Text style={s.runHeadText}>
+                Presupuesto {model.code}
+                {model.title ? ` · ${model.title}` : model.client.name ? ` · ${model.client.name}` : ""} (continuación)
+              </Text>
+            </View>
+          ) : null
+        } />
 
         {/* ---------- Encabezado ---------- */}
         {modern ? (
@@ -106,9 +121,12 @@ export default function QuotePdfDocument({ model }: { model: QuotePdfModel }) {
           </View>
         )}
 
-        {/* ---------- Cliente y datos ---------- */}
+        {/* ---------- Nombre de referencia ---------- */}
+        {model.title && <Text style={s.docTitle}>{model.title}</Text>}
+
+        {/* ---------- Cliente, datos y resumen ---------- */}
         <View style={s.metaRow}>
-          <View style={[s.metaBox, { flexGrow: 1, marginRight: 12 }]}>
+          <View style={[s.metaBox, { flexGrow: 1, flexBasis: 0, marginRight: 10 }]}>
             <Text style={s.label}>Para</Text>
             <Text style={s.metaStrong}>{model.client.name || "Cliente"}</Text>
             {model.client.lines.map((l) => (
@@ -117,40 +135,50 @@ export default function QuotePdfDocument({ model }: { model: QuotePdfModel }) {
               </Text>
             ))}
           </View>
-          <View style={[s.metaBox, { width: 190 }]}>
+          <View style={[s.metaBox, { width: 150, marginRight: 10 }]}>
             <MetaPair s={s} label="Fecha" value={model.date} />
             {model.validUntil && <MetaPair s={s} label="Válido hasta" value={model.validUntil} />}
-            <MetaPair s={s} label="Precios" value={model.netPrices ? "Sin IVA (IVA aparte)" : "Finales, con IVA"} />
+            <MetaPair s={s} label="Precios" value={model.netPrices ? "Sin IVA" : "Con IVA"} />
+          </View>
+          <View style={s.summaryBox}>
+            <Text style={s.summaryLabel}>Total</Text>
+            <Text style={s.summaryValue}>{model.grandTotal}</Text>
+            <Text style={s.summaryText}>{model.summary}</Text>
           </View>
         </View>
 
         {model.intro && <Text style={s.intro}>{model.intro}</Text>}
 
-        {/* ---------- Productos ---------- */}
-        <View style={s.tableHead}>
-          {model.showImages && <Text style={[s.th, { width: 40 }]} />}
-          <Text style={[s.th, { flexGrow: 1, flexShrink: 1, flexBasis: 0 }]}>Producto</Text>
-          <Text style={[s.th, s.num, { width: 40 }]}>Cant.</Text>
-          <Text style={[s.th, s.num, { width: 82 }]}>{model.netPrices ? "Unit. s/IVA" : "Unitario"}</Text>
-          <Text style={[s.th, s.num, { width: 86 }]}>Subtotal</Text>
-        </View>
-        {model.lines.map((l, i) => (
-          <View key={`${l.name}-${i}`} style={[s.row, modern && i % 2 === 1 ? { backgroundColor: tint(accent, 0.96) } : {}]} wrap={false}>
-            {model.showImages && (
-              <View style={s.thumbBox}>{l.image ? <Image src={l.image} style={s.thumb} /> : null}</View>
-            )}
-            <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 10 }}>
-              <Text style={s.itemName}>{l.name}</Text>
-              {l.detail && <Text style={s.itemDetail}>{l.detail}</Text>}
-            </View>
-            <Text style={[s.td, s.num, { width: 40 }]}>{l.qty}</Text>
-            <Text style={[s.td, s.num, { width: 82 }]}>{l.unit}</Text>
-            <Text style={[s.td, s.num, s.tdStrong, { width: 86 }]}>{l.total}</Text>
+        {/* ---------- Productos: la cabecera se repite en cada hoja ---------- */}
+        <View>
+          <View fixed style={s.tableHead}>
+            <Text style={[s.th, { width: 20 }]}>#</Text>
+            {model.showImages && <Text style={[s.th, { width: 40 }]} />}
+            <Text style={[s.th, { flexGrow: 1, flexShrink: 1, flexBasis: 0 }]}>Producto</Text>
+            <Text style={[s.th, s.num, { width: 36 }]}>Cant.</Text>
+            <Text style={[s.th, s.num, { width: 82 }]}>{model.netPrices ? "Unit. s/IVA" : "Unitario"}</Text>
+            <Text style={[s.th, s.num, { width: 86 }]}>Subtotal</Text>
           </View>
-        ))}
+          {model.lines.map((l, i) => (
+            <View key={`${l.name}-${i}`} style={[s.row, i % 2 === 1 ? s.rowAlt : {}]} wrap={false}>
+              <Text style={[s.td, s.idx, { width: 20 }]}>{i + 1}</Text>
+              {model.showImages && <View style={s.thumbBox}>{l.image ? <Image src={l.image} style={s.thumb} /> : null}</View>}
+              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 10 }}>
+                <Text style={s.itemName}>{l.name}</Text>
+                {l.detail && <Text style={s.itemDetail}>{l.detail}</Text>}
+              </View>
+              <Text style={[s.td, s.num, { width: 36 }]}>{l.qty}</Text>
+              <Text style={[s.td, s.num, { width: 82 }]}>{l.unit}</Text>
+              <Text style={[s.td, s.num, s.tdStrong, { width: 86 }]}>{l.total}</Text>
+            </View>
+          ))}
+        </View>
 
-        {/* ---------- Totales ---------- */}
+        {/* ---------- Totales (nunca se cortan entre hojas) ---------- */}
         <View style={s.totalsWrap} wrap={false}>
+          <View style={s.totalsAside}>
+            {model.currencyNote && <Text style={s.note}>{model.currencyNote}</Text>}
+          </View>
           <View style={s.totals}>
             {model.totals.map((t) =>
               t.strong ? (
@@ -167,18 +195,22 @@ export default function QuotePdfDocument({ model }: { model: QuotePdfModel }) {
             )}
           </View>
         </View>
-        {model.currencyNote && <Text style={s.note}>{model.currencyNote}</Text>}
 
-        {model.notes && (
-          <View style={s.block} wrap={false}>
-            <Text style={s.label}>Notas</Text>
-            <Text style={s.blockText}>{model.notes}</Text>
-          </View>
-        )}
-        {model.terms && (
-          <View style={s.block}>
-            <Text style={s.label}>Condiciones</Text>
-            <Text style={s.blockText}>{model.terms}</Text>
+        {/* ---------- Notas y condiciones, lado a lado si entran ---------- */}
+        {(model.notes || model.terms) && (
+          <View style={s.closing}>
+            {model.notes && (
+              <View style={[s.block, model.terms ? { marginRight: 14 } : {}]}>
+                <Text style={s.label}>Notas</Text>
+                <Text style={s.blockText}>{model.notes}</Text>
+              </View>
+            )}
+            {model.terms && (
+              <View style={s.block}>
+                <Text style={s.label}>Condiciones</Text>
+                <Text style={s.blockText}>{model.terms}</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -209,7 +241,7 @@ function makeStyles(model: QuotePdfModel, f: { regular: string; bold: string }) 
       fontFamily: f.regular,
       fontSize: 9.5,
       color: INK,
-      paddingTop: 40,
+      paddingTop: PAD_TOP,
       paddingBottom: 54,
       paddingLeft: bold ? 46 : 40,
       paddingRight: 40,
@@ -220,7 +252,7 @@ function makeStyles(model: QuotePdfModel, f: { regular: string; bold: string }) 
       justifyContent: "space-between",
       alignItems: "center",
       backgroundColor: accent,
-      marginTop: -40,
+      marginTop: -PAD_TOP,
       marginLeft: -40,
       marginRight: -40,
       paddingHorizontal: 40,
@@ -247,7 +279,23 @@ function makeStyles(model: QuotePdfModel, f: { regular: string; bold: string }) 
     titleSmall: { fontFamily: f.bold, fontSize: 9, letterSpacing: 2 },
     code: { fontFamily: f.bold, fontSize: 18, marginTop: 2 },
     codeDark: { fontSize: 10, color: MUTED, marginTop: 3 },
-    metaRow: { flexDirection: "row", marginBottom: 14 },
+    runHead: { position: "absolute", top: 22, left: bold ? 46 : 40, right: 40 },
+    runHeadInner: { flexDirection: "row", justifyContent: "space-between", borderBottomWidth: 0.6, borderBottomColor: LINE, paddingBottom: 5 },
+    runHeadText: { fontSize: 7.5, color: MUTED },
+    docTitle: { fontFamily: f.bold, fontSize: 15, color: INK, marginBottom: 10, lineHeight: 1.2 },
+    metaRow: { flexDirection: "row", alignItems: "stretch", marginBottom: 14 },
+    summaryBox: {
+      width: 130,
+      padding: 10,
+      borderRadius: classic ? 0 : 6,
+      backgroundColor: minimal ? undefined : tint(accent, 0.9),
+      borderWidth: minimal ? 0.75 : 0,
+      borderColor: LINE,
+      justifyContent: "center",
+    },
+    summaryLabel: { fontFamily: f.bold, fontSize: 7, color: accent, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 3 },
+    summaryValue: { fontFamily: f.bold, fontSize: 13, color: INK, lineHeight: 1.15 },
+    summaryText: { fontSize: 7.5, color: MUTED, marginTop: 3 },
     metaBox: {
       borderWidth: minimal ? 0 : 0.75,
       borderColor: LINE,
@@ -279,10 +327,12 @@ function makeStyles(model: QuotePdfModel, f: { regular: string; bold: string }) 
       color: bold ? onColor(accent) : theme === "modern" ? tint(accent, 0) : MUTED,
     },
     num: { textAlign: "right" },
+    rowAlt: { backgroundColor: minimal || classic ? "#fafbfc" : tint(accent, 0.965) },
+    idx: { fontSize: 7.5, color: FAINT },
     row: {
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 7,
+      paddingVertical: 4.5,
       paddingHorizontal: 6,
       borderBottomWidth: 0.6,
       borderBottomColor: LINE,
@@ -293,7 +343,8 @@ function makeStyles(model: QuotePdfModel, f: { regular: string; bold: string }) 
     itemDetail: { fontSize: 7.5, color: FAINT, marginTop: 1 },
     td: { fontSize: 9.5 },
     tdStrong: { fontFamily: f.bold },
-    totalsWrap: { flexDirection: "row", justifyContent: "flex-end", marginTop: 12 },
+    totalsWrap: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 12 },
+    totalsAside: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 16 },
     totals: { width: 250 },
     totalRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 3, paddingHorizontal: 8 },
     totalLabel: { fontSize: 9, color: MUTED },
@@ -312,9 +363,10 @@ function makeStyles(model: QuotePdfModel, f: { regular: string; bold: string }) 
     },
     totalStrongLabel: { fontFamily: f.bold, fontSize: 10, color: minimal || classic ? INK : onColor(accent) },
     totalStrongValue: { fontFamily: f.bold, fontSize: bold ? 16 : 14, color: minimal ? accent : classic ? INK : onColor(accent) },
-    note: { fontSize: 7.5, color: FAINT, textAlign: "right", marginTop: 6 },
-    block: { marginTop: 16 },
-    blockText: { fontSize: 9, color: INK },
+    note: { fontSize: 7.5, color: FAINT },
+    closing: { flexDirection: "row", marginTop: 18, paddingTop: 12, borderTopWidth: 0.6, borderTopColor: LINE },
+    block: { flexGrow: 1, flexShrink: 1, flexBasis: 0 },
+    blockText: { fontSize: 8.5, color: INK, lineHeight: 1.4 },
     footer: {
       position: "absolute",
       left: bold ? 46 : 40,

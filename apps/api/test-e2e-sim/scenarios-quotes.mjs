@@ -183,9 +183,9 @@ async function q3Quotes(ctx) {
     dup.data
   );
   const filter = await api("GET", "/my/quotes?status=ACCEPTED", { token: buyer.token });
-  s.check("filtrar por estado", (filter.data ?? []).every((q) => q.status === "ACCEPTED") && (filter.data ?? []).some((q) => q.id === id), filter.data?.map((q) => q.status));
+  s.check("filtrar por estado", (filter.data?.items ?? []).every((q) => q.status === "ACCEPTED") && (filter.data?.items ?? []).some((q) => q.id === id), filter.data?.items?.map((q) => q.status));
   const byMail = await api("GET", `/my/quotes?q=${encodeURIComponent("juan@cliente")}`, { token: buyer.token });
-  s.check("buscar por mail del cliente", (byMail.data ?? []).some((q) => q.id === id), byMail.data?.length);
+  s.check("buscar por mail del cliente", (byMail.data?.items ?? []).some((q) => q.id === id), byMail.data?.total);
   ctx.q.quoteId = id;
 }
 

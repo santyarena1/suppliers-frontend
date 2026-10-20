@@ -64,6 +64,7 @@ function sampleQuote(validityDays: number): Quote {
     id: "ejemplo",
     number: 12,
     initials: "JP",
+    title: "Oficina Pérez · PC de escritorio",
     clientName: "Juan Pérez",
     clientPhone: "11 5555-1234",
     clientEmail: "juan@ejemplo.com",

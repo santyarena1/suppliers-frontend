@@ -31,6 +31,13 @@ export const QUOTE_CURRENCIES = ["ARS", "USD"] as const;
 export const QUOTE_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"] as const;
 
 export class QuoteClientDto {
+  /** Nombre de referencia del presupuesto. */
+  @IsOptional()
+  @Transform(optionalText)
+  @IsString()
+  @MaxLength(120)
+  title?: string | null;
+
   @IsOptional()
   @Transform(optionalText)
   @IsString()

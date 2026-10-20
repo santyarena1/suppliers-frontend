@@ -14,7 +14,9 @@ import {
   UpdateQuoteItemDto,
 } from "./dto/quotes.dto";
 import { QuoteSettingsService } from "./quote-settings.service";
-import { QuotesService, seesAllQuotes } from "./quotes.service";
+import { QuotesService, seesAllQuotes, type QuoteSort } from "./quotes.service";
+
+const QUOTE_SORTS: readonly QuoteSort[] = ["updated", "created", "number", "validUntil"];
 
 /**
  * Presupuestos de venta (modo vendedor, docs/PLAN_MODO_VENDEDOR.md §8).
@@ -35,9 +37,24 @@ export class QuotesController {
     @Query("archived") archived?: string,
     @Query("q") q?: string,
     @Query("createdById") createdById?: string,
-    @Query("status") status?: string
+    @Query("status") status?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("sort") sort?: string,
+    @Query("page") page?: string,
+    @Query("pageSize") pageSize?: string
   ) {
-    return this.quotes.list(tenant, { archived: archived === "true" || archived === "1", q, createdById, status });
+    return this.quotes.list(tenant, {
+      archived: archived === "true" || archived === "1",
+      q,
+      createdById,
+      status,
+      from,
+      to,
+      sort: QUOTE_SORTS.find((s) => s === sort),
+      page: page ? Number(page) || 1 : undefined,
+      pageSize: pageSize ? Number(pageSize) || undefined : undefined,
+    });
   }
 
   @Post()
