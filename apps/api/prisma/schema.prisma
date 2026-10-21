@@ -364,6 +364,68 @@ model PlatformProductIdentity {
   @@unique([matchKind, matchKey])
 }
 
+/// Contenido enriquecido de plataforma (fotos, descripción, especificaciones) traído de una
+/// fuente externa (AcuStock). Vive aparte de la ficha del distribuidor: la sincronización no lo pisa.
+model PlatformProductContent {
+  id               String                       @id @default(uuid())
+  /// ACUSTOCK
+  source           String
+  sourceId         String
+  name             String
+  brand            String?
+  ean              String?
+  partNumber       String?
+  /// Ruta de categorías, de la más general a la más específica.
+  category         String[]
+  shortDescription String?
+  /// HTML de la fuente; la web lo sanitiza al mostrarlo.
+  descriptionHtml  String?
+  /// [{ group, name, value }]
+  specs            Json                         @default("[]")
+  /// [{ url, alt }] en orden; la primera es la principal.
+  images           Json                         @default("[]")
+  warrantyMonths   Int?
+  sourceUpdatedAt  DateTime?
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
+  links            PlatformProductContentLink[]
+
+  @@unique([source, sourceId])
+}
+
+/// Qué ficha de distribuidor muestra qué contenido. Una ficha, un contenido.
+model PlatformProductContentLink {
+  id         String                 @id @default(uuid())
+  contentId  String
+  content    PlatformProductContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  provider   String
+  externalId String
+  /// SUPPLIER_CODE | EAN | PART_NUMBER
+  matchedBy  String
+  createdAt  DateTime               @default(now())
+
+  @@unique([provider, externalId])
+  @@index([contentId])
+}
+
+/// Corrida de importación de contenido (previsualizar o cargar). Guarda el resumen del cruce.
+model PlatformContentImportRun {
+  id           String    @id @default(uuid())
+  source       String
+  /// PREVIEW | APPLY
+  mode         String
+  /// RUNNING | OK | ERROR
+  status       String    @default("RUNNING")
+  stats        Json?
+  errorMessage String?
+  startedById  String?
+  startedAt    DateTime  @default(now())
+  heartbeatAt  DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([startedAt])
+}
+
 /// Clave de OpenAI para sugerencias de catálogo. Solo superadmin. Cifrada.
 model CatalogEnrichmentSettings {
   id                    String   @id @default("default")

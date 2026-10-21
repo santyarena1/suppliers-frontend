@@ -1,4 +1,5 @@
 import { isDemoDistributorKey } from "../onboarding/onboarding-demo";
+import { PlatformContentService } from "../platform-content/platform-content.service";
 import { incompleteSyncMessage, missingActionIsSafe, shouldUnhideOnConfigChange } from "./missing-guard";
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import {
@@ -114,7 +115,8 @@ export class ProvidersService implements OnModuleInit {
     private readonly credentials: CredentialsService,
     private readonly registry: ProviderRegistry,
     private readonly visibility: TenantVisibilityService,
-    private readonly catalogEnrichment: CatalogEnrichmentService
+    private readonly catalogEnrichment: CatalogEnrichmentService,
+    private readonly platformContent: PlatformContentService
   ) {}
 
   async onModuleInit() {
@@ -1359,19 +1361,20 @@ export class ProvidersService implements OnModuleInit {
       }),
       this.catalogEnrichment.getContext(),
     ]);
+    const platformContent = await this.platformContent.forProduct(provider, externalId);
     if (offer) {
       const rules = await this.rulesFor(tenantId, provider);
       const [view] = await this.withImageAiFlags([
         toProductView(offer.product, offer, rules, enrichment),
       ]);
-      return view;
+      return { ...view, platformContent };
     }
     const sheet = await this.prisma.providerSyncCache.findUnique({
       where: { provider_externalId: { provider, externalId } },
     });
     if (!sheet) return null;
     const [view] = await this.withImageAiFlags([toSheetView(sheet, enrichment)]);
-    return view;
+    return { ...view, platformContent };
   }
 
   /**

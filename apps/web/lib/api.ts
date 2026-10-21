@@ -262,6 +262,16 @@ export const IMPLEMENTED_PROVIDERS: Provider[] = [
   "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX", "DISTECNA", "POLYTECH",
 ];
 
+/** Contenido enriquecido de plataforma (AcuStock): fotos, descripción y especificaciones. */
+export interface PlatformProductContent {
+  source: string;
+  images: { url: string; alt: string | null }[];
+  shortDescription: string | null;
+  descriptionHtml: string | null;
+  specs: { group: string | null; name: string; value: string }[];
+  warrantyMonths: number | null;
+}
+
 export interface ProductDTO {
   id?: string;
   provider: string;
@@ -287,6 +297,8 @@ export interface ProductDTO {
   imageUrl: string | null;
   /** True cuando la foto actual vino de Serper / Primera foto (no del proveedor). */
   imageAiSelected?: boolean;
+  /** Solo en la ficha individual. */
+  platformContent?: PlatformProductContent | null;
   productUrl?: string | null;
   externalId: string;
   sku?: string | null;
@@ -3670,6 +3682,52 @@ export interface SerperImageHit {
   title: string | null;
   source: string | null;
 }
+
+export interface PlatformContentRunStats {
+  phase?: string;
+  page?: number;
+  totalPages?: number;
+  read?: number;
+  sourceTotal?: number;
+  sourceMatched?: number;
+  sourceUnmatched?: number;
+  links?: number;
+  catalogRows?: number;
+  byKind?: Record<"SUPPLIER_CODE" | "EAN" | "PART_NUMBER", number>;
+  byProvider?: Record<string, number>;
+  ambiguous?: number;
+  unknownSuppliers?: Record<string, number>;
+  withImages?: number;
+  withDescription?: number;
+  withSpecs?: number;
+  unmatchedSample?: string[];
+}
+
+export interface PlatformContentRun {
+  id: string;
+  source: string;
+  mode: "PREVIEW" | "APPLY";
+  status: "RUNNING" | "OK" | "ERROR";
+  stats: PlatformContentRunStats | null;
+  errorMessage: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface PlatformContentStatus {
+  configured: boolean;
+  running: boolean;
+  contents: number;
+  links: number;
+  runs: PlatformContentRun[];
+}
+
+/** Fichas enriquecidas desde AcuStock. Solo superadmin. */
+export const platformContentApi = {
+  status: () => api.get<PlatformContentStatus>("/admin/platform-content/status"),
+  preview: () => api.post<{ started: boolean; runId: string }>("/admin/platform-content/acustock/preview", {}),
+  apply: () => api.post<{ started: boolean; runId: string }>("/admin/platform-content/acustock/apply", {}),
+};
 
 export const imageSyncApi = {
   status: () => api.get<ImageSyncStatus>("/admin/images/status"),

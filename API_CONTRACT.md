@@ -1090,3 +1090,12 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: `{ query, images: [{ imageUrl, thumbnailUrl, title, source }], left }` (hasta 10 fotos: Serper cobra 1 crédito hasta 10 resultados; `left` = búsquedas que quedan hoy).
 - **Estado**: IMPLEMENTADO
 - **Notas**: Serper, como «Primera foto». Tope de 25 búsquedas por tienda y por día (hora argentina; 429 al pasarlo); si Serper falla, 503 y no cuenta. El servidor no baja ninguna foto: la web baja la elegida por `/img-proxy`, la achica y la sube con `POST /my/storefront/images`. `GET /my/storefront/products` suma `autoImage` (la foto la encontró NODO solo) y al editar se puede conservar esa foto. Migración `20261016140000_storefront_image_search`.
+
+### [FEATURE] Fichas enriquecidas (AcuStock)
+- **Método**: GET | POST
+- **Ruta**: `/admin/platform-content/status`, `/admin/platform-content/acustock/preview`, `/admin/platform-content/acustock/apply`
+- **Auth**: Bearer token requerido, ROLE_ADMIN (superadmin)
+- **Body / Params**: sin body. `preview` cruza sin escribir contenido; `apply` hace upsert del contenido y reemplaza los vínculos de AcuStock.
+- **Respuesta esperada**: `status` → `{ configured, running, contents, links, runs: [{ id, mode, status, stats, errorMessage, startedAt, finishedAt }] }`; `preview`/`apply` → `{ started, runId }` (corre en segundo plano).
+- **Estado**: IMPLEMENTADO
+- **Notas**: lee `ACUSTOCK_EXPORT_URL` y `ACUSTOCK_EXPORT_TOKEN` del entorno. Cruce: código del distribuidor (contra externalId, sku o partNumber de la ficha) > EAN > número de parte (≥ 6 caracteres y marca compatible). `GET /providers/:provider/products/:externalId` suma `platformContent: { source, images[{url, alt}], shortDescription, descriptionHtml, specs[{group, name, value}], warrantyMonths } | null`; la web sanitiza el HTML con DOMPurify.

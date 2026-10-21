@@ -5,7 +5,7 @@ import { SYNC_MAX_FAILURES } from "./sync-backoff";
 
 function service(prisma: Record<string, unknown>) {
   const registry = { get: jest.fn().mockReturnValue({ provider: "ELIT" }) };
-  return new ProvidersService(prisma as never, {} as never, registry as never, {} as never, {} as never);
+  return new ProvidersService(prisma as never, {} as never, registry as never, {} as never, {} as never, {} as never);
 }
 
 describe("backoff y pausa del auto-sync", () => {

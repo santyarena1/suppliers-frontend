@@ -11,6 +11,7 @@ import { useResults } from "@/lib/results";
 import { usePrefs } from "@/lib/prefs";
 import { ProductDTO, Provider, searchApi, catalogApi, PricePoint, productDisplayBrand, productDisplayCategory, productDisplaySubcategory } from "@/lib/api";
 import { proxyImg, formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
+import { ProductRichDescription, ProductSpecsTable } from "@/components/product/ProductRichContent";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import ProductProviderLinks from "@/components/ProductProviderLinks";
 import StorefrontProductInfo, { useStorefrontItem } from "@/components/storefront/StorefrontProductInfo";
@@ -142,7 +143,15 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   // Modo vendedor: el vendedor ve solo la venta; quien ve costos, la venta en el desglose.
   const present = product ? salePresentation(product, sellerSession, withIva) : ({ mode: "cost" } as const);
   const sellerView = present.mode === "sale";
-  const gallery = storefrontItem?.item.images.length ? storefrontItem.item.images : product?.imageUrl ? [product.imageUrl] : [];
+  // Fotos: las de tu tienda; si no, las de la ficha enriquecida (con la del distribuidor al final); si no, la del distribuidor.
+  const richImages = product?.platformContent?.images.map((i) => i.url) ?? [];
+  const gallery = storefrontItem?.item.images.length
+    ? storefrontItem.item.images
+    : richImages.length
+      ? [...richImages, ...(product?.imageUrl && !richImages.includes(product.imageUrl) ? [product.imageUrl] : [])]
+      : product?.imageUrl
+        ? [product.imageUrl]
+        : [];
   const mainImage = gallery[imgIdx] ?? product?.imageUrl ?? null;
   const quotesEnabled = useQuotes().enabled;
   const saleUnitUsd = present.mode === "sale" || present.mode === "cost+sale" ? present.saleUsd : null;
@@ -360,7 +369,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                       ))}
                     </div>
                   )}
-                  {product.imageAiSelected && product.imageUrl && !imgErr && (
+                  {product.imageAiSelected && product.imageUrl && mainImage === product.imageUrl && !imgErr && (
                     <AiImageDisclaimer className="text-surface-500 px-0.5" />
                   )}
                 </div>
@@ -649,7 +658,10 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 )}
               </section>}
 
-              {(product.description || product.longDescription) && (
+              {product.platformContent && <ProductRichDescription content={product.platformContent} />}
+              {product.platformContent && <ProductSpecsTable specs={product.platformContent.specs} />}
+
+              {!product.platformContent?.descriptionHtml && !product.platformContent?.shortDescription && (product.description || product.longDescription) && (
                 <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
                   <h2 className="pp__sec-title">Descripción</h2>
                   {product.description && (

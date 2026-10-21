@@ -11,6 +11,7 @@ import ProviderMergePanel from "@/components/admin/ProviderMergePanel";
 import CatalogEnrichmentPanel from "@/components/admin/CatalogEnrichmentPanel";
 import DiagnosticsPanel from "@/components/DiagnosticsPanel";
 import ImageSyncPanel from "@/components/admin/ImageSyncPanel";
+import PlatformContentPanel from "@/components/admin/PlatformContentPanel";
 import EnrichmentPanel from "@/components/admin/enrichment/EnrichmentPanel";
 import AdminAdsPanel from "@/components/admin/AdminAdsPanel";
 import AdminNewsPanel from "@/components/admin/AdminNewsPanel";
@@ -145,7 +146,14 @@ function AdminPageInner() {
             {tab === "retail" && <RetailTab showToast={showToast} />}
             {tab === "catalog" && <CatalogEnrichmentPanel showToast={showToast} />}
             {tab === "enrichment" && <EnrichmentPanel showToast={showToast} />}
-            {tab === "images" && <ImageSyncPanel showToast={showToast} />}
+            {tab === "images" && (
+              <>
+                <PlatformContentPanel showToast={showToast} />
+                <div className="mt-6">
+                  <ImageSyncPanel showToast={showToast} />
+                </div>
+              </>
+            )}
             {tab === "ads" && <AdminAdsPanel showToast={showToast} />}
             {tab === "news" && <AdminNewsPanel showToast={showToast} />}
             {tab === "diagnostics" && <DiagnosticsPanel />}

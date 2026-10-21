@@ -1,0 +1,224 @@
+import { ConflictException, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { KNOWN_PROVIDERS } from "@nodo/shared";
+import { Prisma } from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { type AcuStockProduct, AcuStockClient } from "./acustock.client";
+import { type CatalogRow, type ContentLink, matchContent } from "./content-match";
+
+export const ACUSTOCK_SOURCE = "ACUSTOCK";
+type Mode = "PREVIEW" | "APPLY";
+
+const CONTENT_CHUNK = 100;
+const LINK_CHUNK = 1000;
+const CATALOG_PAGE = 20_000;
+/** Hay varias réplicas: una corrida sin latido en este tiempo se da por muerta. */
+const STALE_MS = 3 * 60_000;
+
+/** Lo que la ficha muestra del contenido de plataforma. */
+export interface PlatformContentView {
+  source: string;
+  images: { url: string; alt: string | null }[];
+  shortDescription: string | null;
+  descriptionHtml: string | null;
+  specs: { group: string | null; name: string; value: string }[];
+  warrantyMonths: number | null;
+}
+
+@Injectable()
+export class PlatformContentService implements OnModuleInit {
+  private readonly logger = new Logger(PlatformContentService.name);
+  private running = false;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly acustock: AcuStockClient
+  ) {}
+
+  async onModuleInit() {
+    await this.prisma.platformContentImportRun.updateMany({
+      where: { status: "RUNNING", heartbeatAt: { lt: new Date(Date.now() - STALE_MS) } },
+      data: { status: "ERROR", finishedAt: new Date(), errorMessage: "Interrumpida por reinicio del servidor" },
+    });
+  }
+
+  /** Contenido vinculado a una ficha, o null. */
+  async forProduct(provider: string, externalId: string): Promise<PlatformContentView | null> {
+    const link = await this.prisma.platformProductContentLink.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+      include: { content: true },
+    });
+    if (!link) return null;
+    const c = link.content;
+    return {
+      source: c.source,
+      images: Array.isArray(c.images) ? (c.images as PlatformContentView["images"]) : [],
+      shortDescription: c.shortDescription,
+      descriptionHtml: c.descriptionHtml,
+      specs: Array.isArray(c.specs) ? (c.specs as PlatformContentView["specs"]) : [],
+      warrantyMonths: c.warrantyMonths,
+    };
+  }
+
+  async status() {
+    const [runs, contents, links] = await Promise.all([
+      this.prisma.platformContentImportRun.findMany({ orderBy: { startedAt: "desc" }, take: 10 }),
+      this.prisma.platformProductContent.count({ where: { source: ACUSTOCK_SOURCE } }),
+      this.prisma.platformProductContentLink.count(),
+    ]);
+    return { configured: this.acustock.isConfigured(), running: this.running, contents, links, runs };
+  }
+
+  /** Arranca una corrida en segundo plano. PREVIEW no escribe contenido; APPLY carga y reemplaza los vínculos. */
+  async start(mode: Mode, startedById?: string) {
+    if (this.running) throw new ConflictException("Ya hay una importación en curso");
+    if (!this.acustock.isConfigured()) throw new ConflictException("Falta configurar la exportación de AcuStock");
+    // Las corridas sin latido (réplica caída) se cierran; el índice único parcial
+    // de la migración deja una sola RUNNING por fuente entre todas las réplicas.
+    await this.prisma.platformContentImportRun.updateMany({
+      where: { source: ACUSTOCK_SOURCE, status: "RUNNING", heartbeatAt: { lt: new Date(Date.now() - STALE_MS) } },
+      data: { status: "ERROR", finishedAt: new Date(), errorMessage: "Sin latido: se dio por interrumpida" },
+    });
+    let run: { id: string };
+    try {
+      run = await this.prisma.platformContentImportRun.create({
+        data: { source: ACUSTOCK_SOURCE, mode, startedById: startedById ?? null },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        throw new ConflictException("Ya hay una importación en curso");
+      }
+      throw err;
+    }
+    this.running = true;
+    void this.execute(run.id, mode)
+      .catch((err: unknown) => this.logger.error(`Importación ${run.id} falló`, err as Error))
+      .finally(() => {
+        this.running = false;
+      });
+    return { started: true, runId: run.id };
+  }
+
+  private async execute(runId: string, mode: Mode) {
+    try {
+      const products = await this.acustock.fetchAll((page, total) =>
+        this.heartbeat(runId, { phase: "Leyendo AcuStock", page, totalPages: total })
+      );
+      await this.heartbeat(runId, { phase: "Cruzando con el catálogo", read: products.length });
+      const catalog = await this.loadCatalog();
+      const { links, stats } = matchContent(products, catalog, new Set<string>(KNOWN_PROVIDERS));
+      const summary = {
+        ...stats,
+        catalogRows: catalog.length,
+        withImages: products.filter((p) => p.images.length).length,
+        withDescription: products.filter((p) => p.description).length,
+        withSpecs: products.filter((p) => p.specs.length).length,
+        unmatchedSample: stats.unmatchedSample.map((id) => products.find((p) => p.id === id)?.name ?? id),
+      };
+      if (mode === "APPLY") {
+        await this.heartbeat(runId, { ...summary, phase: "Cargando contenido" });
+        await this.apply(products, links, (phase) => this.heartbeat(runId, { ...summary, phase }));
+      }
+      await this.prisma.platformContentImportRun.update({
+        where: { id: runId },
+        data: { status: "OK", finishedAt: new Date(), stats: { ...summary, phase: "Listo" } },
+      });
+    } catch (err) {
+      await this.prisma.platformContentImportRun.update({
+        where: { id: runId },
+        data: { status: "ERROR", finishedAt: new Date(), errorMessage: (err as Error).message.slice(0, 500) },
+      });
+      throw err;
+    }
+  }
+
+  private heartbeat(runId: string, stats: Record<string, unknown>) {
+    return this.prisma.platformContentImportRun
+      .update({ where: { id: runId }, data: { heartbeatAt: new Date(), stats: stats as Prisma.InputJsonValue } })
+      .then(() => undefined);
+  }
+
+  /** Claves de cruce de todas las fichas, en páginas para no traer `raw`. */
+  private async loadCatalog(): Promise<CatalogRow[]> {
+    const rows: CatalogRow[] = [];
+    let cursor: string | undefined;
+    for (;;) {
+      const page = await this.prisma.providerSyncCache.findMany({
+        select: { id: true, provider: true, externalId: true, sku: true, partNumber: true, ean: true, brand: true },
+        orderBy: { id: "asc" },
+        take: CATALOG_PAGE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      });
+      for (const { id: _id, ...row } of page) rows.push(row);
+      if (page.length < CATALOG_PAGE) return rows;
+      cursor = page[page.length - 1].id;
+    }
+  }
+
+  /**
+   * Upsert del contenido y sincronización de los vínculos por diferencia (sin una
+   * transacción larga ni un momento con las fichas vacías). Se puede volver a correr.
+   */
+  private async apply(products: AcuStockProduct[], links: ContentLink[], progress: (phase: string) => Promise<void>) {
+    for (let i = 0; i < products.length; i += CONTENT_CHUNK) {
+      const chunk = products.slice(i, i + CONTENT_CHUNK);
+      // Lote no interactivo: no tiene el tope de 5 s de las transacciones interactivas.
+      await this.prisma.$transaction(chunk.map((p) => this.upsertContent(p)));
+      await progress(`Cargando contenido (${Math.min(i + CONTENT_CHUNK, products.length)}/${products.length})`);
+    }
+
+    const ids = await this.prisma.platformProductContent.findMany({
+      where: { source: ACUSTOCK_SOURCE },
+      select: { id: true, sourceId: true },
+    });
+    const idBySource = new Map(ids.map((r) => [r.sourceId, r.id]));
+    const wanted = new Map<string, { contentId: string; provider: string; externalId: string; matchedBy: string }>();
+    for (const l of links) {
+      const contentId = idBySource.get(l.contentId);
+      if (contentId) {
+        wanted.set(`${l.provider}|${l.externalId}`, { contentId, provider: l.provider, externalId: l.externalId, matchedBy: l.matchedBy });
+      }
+    }
+
+    const existing = await this.prisma.platformProductContentLink.findMany({
+      where: { content: { source: ACUSTOCK_SOURCE } },
+      select: { id: true, provider: true, externalId: true, contentId: true, matchedBy: true },
+    });
+    const stale: string[] = [];
+    for (const e of existing) {
+      const key = `${e.provider}|${e.externalId}`;
+      const w = wanted.get(key);
+      if (w && w.contentId === e.contentId && w.matchedBy === e.matchedBy) wanted.delete(key);
+      else stale.push(e.id);
+    }
+
+    await progress(`Actualizando vínculos (${stale.length} cambian, ${wanted.size} nuevos)`);
+    for (let i = 0; i < stale.length; i += LINK_CHUNK) {
+      await this.prisma.platformProductContentLink.deleteMany({ where: { id: { in: stale.slice(i, i + LINK_CHUNK) } } });
+    }
+    const fresh = [...wanted.values()];
+    for (let i = 0; i < fresh.length; i += LINK_CHUNK) {
+      await this.prisma.platformProductContentLink.createMany({ data: fresh.slice(i, i + LINK_CHUNK), skipDuplicates: true });
+    }
+  }
+
+  private upsertContent(p: AcuStockProduct) {
+    const data = {
+      name: p.name,
+      brand: p.brand,
+      ean: p.ean,
+      partNumber: p.partNumber,
+      category: p.category,
+      shortDescription: p.shortDescription,
+      descriptionHtml: p.description,
+      specs: p.specs as Prisma.InputJsonValue,
+      images: p.images as Prisma.InputJsonValue,
+      warrantyMonths: p.warrantyMonths,
+      sourceUpdatedAt: p.updatedAt,
+    };
+    return this.prisma.platformProductContent.upsert({
+      where: { source_sourceId: { source: ACUSTOCK_SOURCE, sourceId: p.id } },
+      create: { source: ACUSTOCK_SOURCE, sourceId: p.id, ...data },
+      update: data,
+    });
+  }
+}
