@@ -1109,3 +1109,27 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Estado**: IMPLEMENTADO
 - **Notas**: 429 pasadas las 100 copias por usuario y día (hora de Argentina). La ficha (`GET /providers/:provider/products/:externalId`) devuelve `platformContent: null` y `platformContentLimited: true` cuando el usuario ya vio 300 fichas completas distintas en el día (las ya vistas se siguen viendo). Cada vista y copia queda en `PlatformContentAccess`. El contenido enriquecido no sale por la API de catálogo (`/v1`).
 - **Fotos (2026-10-21)**: `platformContent.images[].url` llega como `/img-proxy?t=<token>`: la dirección original va cifrada (AES-256-GCM, `CONTENT_IMAGE_KEY` igual en API y web) y vence entre 6 y 12 h. Sin clave configurada la API no manda fotos.
+
+## Masnet, Microglobal y PC Arts — solo catálogo (2026-10-22)
+
+Tres distribuidores nuevos en `KNOWN_PROVIDERS`: `MASNET`, `MICROGLOBAL`, `PC_ARTS`
+(etiquetas "Masnet", "Microglobal", "PC Arts"). No hay endpoints nuevos: usan los de
+siempre (`POST /credentials`, `POST /providers/:provider/sync`, catálogo, búsqueda).
+La migración `20261022180000_distribuidores_masnet_microglobal_pc_arts` crea su
+organización distribuidor (`Tenant.providerKey`) para que se puedan vincular.
+Notas por proveedor en `docs/providers/{masnet,microglobal,pc-arts}.md`.
+
+| Proveedor | Credenciales (`POST /credentials`) | Precio guardado |
+|---|---|---|
+| `MASNET` | `user_id`, `token` | neto (ya incluye internos), moneda del CSV; `finalPrice` = neto × (1 + IVA) |
+| `MICROGLOBAL` | `cliente`, `password`, `usuario` opcional, `moneda` opcional (`USD` default / `ARS`) | neto; `finalPrice` = neto × (1 + IVA + internos) |
+| `PC_ARTS` | `api_token` | neto USD; `finalPrice` = neto × (1 + IVA + internos) |
+
+- **Sync**: mínimo 2 h entre automáticas y 30 min entre "Sincronizar ahora"
+  (`PROVIDER_MIN_SYNC_MINUTES` / `PROVIDER_MANUAL_COOLDOWN_MINUTES`). Un 403/429 pausa
+  la sync en el primer fallo y se prueba sola una vez por día.
+- **IVA**: los tres informan alícuota por producto (entran en `PROVIDERS_WITH_IVA_RATE`:
+  habilitan pedido offline y esquema).
+- **Pedidos / checkout**: no implementados. No hay `/providers/{MASNET,MICROGLOBAL,PC_ARTS}/checkout/*`
+  ni cuenta corriente: en el carrito quedan como Ceven o Diapstore (sin checkout directo).
+- **Estado**: IMPLEMENTADO (catálogo), sin probar contra los portales reales.
