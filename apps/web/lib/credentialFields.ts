@@ -356,7 +356,7 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
     intro:
       "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
     extra:
-      "Usá el mismo mail y contraseña con los que entrás a www.solutionbox.com.ar. Con eso NODO trae el catálogo con tus precios, stock e IVA, y habilita pedidos, historial y facturas.",
+      "Mail y contraseña de www.solutionbox.com.ar: traen el catálogo con tus precios, stock e IVA, y habilitan pedidos, historial y facturas. Si Solution Box te dio usuario y contraseña de su API (lxc.solutionbox.com.ar), cargalos también: el catálogo sale de la API, con impuestos internos, y se puede sincronizar cada 1 hora en vez de cada 12. Pedidos y facturas siguen saliendo del sitio.",
     portalUrl: "https://www.solutionbox.com.ar",
     portalLabel: "www.solutionbox.com.ar",
     fields: [
@@ -377,6 +377,23 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
         placeholder: "Contraseña del sitio",
         aliases: ["pass", "api_password"],
         autoComplete: "current-password",
+      },
+      {
+        key: "sb_api_user",
+        label: "Usuario de la API",
+        type: "text",
+        required: false,
+        placeholder: "Usuario API que te da Solution Box",
+        help: "No es el mail del sitio: lo entrega Solution Box para lxc.solutionbox.com.ar.",
+        autoComplete: "off",
+      },
+      {
+        key: "sb_api_password",
+        label: "Contraseña de la API",
+        type: "password",
+        required: false,
+        placeholder: "Contraseña API",
+        autoComplete: "off",
       },
     ],
   },
@@ -508,11 +525,15 @@ export function validateCredentialValues(
   }
 
   if (provider === "SOLUTION_BOX") {
-    // El catálogo y los pedidos salen del portal: hace falta el mail y la contraseña del sitio.
+    // Portal (catálogo, pedidos y facturas) y/o API oficial (solo catálogo): cada par va completo.
     const email = (values.email ?? "").trim();
     const password = (values.password ?? "").trim();
+    const apiUser = (values.sb_api_user ?? "").trim();
+    const apiPassword = (values.sb_api_password ?? "").trim();
+    if ((email || password) && !(email && password)) return "Cargá el mail y la contraseña del portal juntos.";
+    if ((apiUser || apiPassword) && !(apiUser && apiPassword)) return "Cargá el usuario y la contraseña de la API juntos.";
     if (email && password) return null;
-    if (email || password) return "Cargá el mail y la contraseña del portal juntos.";
+    if (apiUser && apiPassword) return null;
     return "Cargá el mail y la contraseña con los que entrás a solutionbox.com.ar.";
   }
 

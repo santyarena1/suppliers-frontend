@@ -336,6 +336,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
   - POST sync (manual): `{ provider, runId, accepted: true, status: "RUNNING", synced: 0, created: 0, updated: 0, missingAffected: 0, zeroStockAffected: 0 }` — la corrida sigue en background
   - POST import / sync cron: `{ provider, synced, created, updated, unchanged, missingAffected, zeroStockAffected, runId }` al terminar
   - `status.currentRun`: última corrida (`RUNNING` | `OK` | `ERROR`) con contadores en vivo (`processed`, `expectedTotal`)
+  - `status.minSyncMinutes`: mínimo entre syncs automáticas con la cuenta cargada (0 = sin mínimo; Grupo Núcleo 720; Solution Box 720 por portal, 60 por API oficial) · `status.officialApi`: Solution Box sincroniza por su API oficial
   - `sync/current`: igual, o `null` si nunca se sincronizó
   - `sync/runs`: lista de corridas (sin el detalle de productos)
   - `sync/runs/:id`: corrida + `changes[]` (`created` | `updated`, `changedFields`, `before`, `after`)
@@ -662,7 +663,15 @@ Historial de pedidos creados desde Nodo (mismo formato que Elit).
 
 Emula la API JSON de la tienda (login con mail y contraseña del sitio). Diseño y
 tabla de llamadas: `docs/superpowers/specs/2026-09-05-solution-box-site-api-design.md`.
-Credenciales: `email` + `password`.
+Credenciales (`POST /credentials`): `email` + `password` del sitio (catálogo, pedidos,
+historial y facturas) y/o `sb_api_user` + `sb_api_password` de la API oficial
+(`lxc.solutionbox.com.ar`, los entrega Solution Box). Con los datos de API, el catálogo
+sale de `GET /api/listas/articulos` (un GET por sync, token de `createToken` guardado en
+memoria ~7 días) y trae impuestos internos (`finalPrice` = neto × (1 + IVA + internos));
+las fichas (descripción larga y fotos) y todo lo de pedidos siguen por el sitio y piden
+`email` + `password`. Sin datos de API, nada cambia. `GET /providers/SOLUTION_BOX/status`
+devuelve `officialApi: true` y `minSyncMinutes: 60` (por el portal, 720); la web arma el
+selector de intervalo con `minSyncMinutes`. "Sincronizar ahora" espera 60 min entre intentos en los dos casos.
 
 - `GET /providers/SOLUTION_BOX/account?refresh=1` → `{ profile:{id,name,email,cuit,exchange,paymentCondition,deliveryType}, orders:[{number,extension,date,seller,paymentCondition,amount,currency,exchange,invoice,status,items:[{code,qty,price,currency}]}], invoices:[…solo con factura…], drafts:[…], note }`.
 - `GET /providers/SOLUTION_BOX/orders/:number/:ext` → un pedido; `…/invoice` → PDF de la factura.

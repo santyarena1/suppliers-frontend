@@ -308,6 +308,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   useEffect(() => { loadStatus(); loadConfig(); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const liveSync = isLiveSyncRun(status?.currentRun) || syncing;
+  // El mínimo depende de la cuenta (Solution Box por API oficial: 1 h). Sin status, el de siempre.
+  const minSync = status?.minSyncMinutes ?? MIN_SYNC_MINUTES[provider] ?? 0;
 
   useEffect(() => {
     if (!liveSync) return;
@@ -725,18 +727,24 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           <div>
                             <label className="block text-xs font-medium text-surface-400 mb-1.5">Intervalo de sincronización</label>
                             <select
-                              value={Math.max(config.syncIntervalMinutes, MIN_SYNC_MINUTES[provider] ?? 0)}
+                              value={Math.max(config.syncIntervalMinutes, minSync)}
                               onChange={(e) => setConfig({ ...config, syncIntervalMinutes: Number(e.target.value) })}
                               className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-all"
                             >
-                              {INTERVAL_OPTIONS.filter((o) => o.minutes >= (MIN_SYNC_MINUTES[provider] ?? 0)).map((o) => (
+                              {INTERVAL_OPTIONS.filter((o) => o.minutes >= minSync).map((o) => (
                                 <option key={o.minutes} value={o.minutes}>{o.label}</option>
                               ))}
                             </select>
-                            {MIN_SYNC_MINUTES[provider] && (
+                            {minSync > 0 && status?.officialApi && (
+                              <p className="text-[11px] text-amber-400/90 mt-1.5 leading-relaxed">
+                                Por la API de {providerLabel(provider)} el listado admite 2 consultas por hora: se sincroniza como mucho cada hora y
+                                “Sincronizar ahora” espera 60 minutos entre intentos.
+                              </p>
+                            )}
+                            {minSync > 0 && !status?.officialApi && (
                               <p className="text-[11px] text-amber-400/90 mt-1.5 leading-relaxed">
                                 {providerLabel(provider)} suspende la cuenta si se consulta seguido: se sincroniza como mucho cada{" "}
-                                {MIN_SYNC_MINUTES[provider] / 60} horas y “Sincronizar ahora” espera 30 minutos entre intentos.
+                                {minSync / 60} horas y “Sincronizar ahora” espera 60 minutos entre intentos.
                               </p>
                             )}
                             <p className="text-[11px] text-surface-500 mt-1.5 leading-relaxed">

@@ -107,6 +107,77 @@ export function mapSolutionBoxArticle(raw: unknown, category: SolutionBoxCategor
   };
 }
 
+/**
+ * Moneda de la API oficial. AcuStock toma USD cuando viene vacía (el listado es
+ * en dólares); un valor que no se reconoce queda sin informar.
+ */
+export function apiCurrency(raw: unknown): string | undefined {
+  const m = asString(raw)?.trim().toUpperCase() ?? "";
+  if (!m) return "USD";
+  if (/^(USD|U\$S|US\$|DOLAR(ES)?|D[OÓ]LARES)$/.test(m)) return "USD";
+  if (/^(ARS|\$|PESOS?)$/.test(m)) return "ARS";
+  return undefined;
+}
+
+/** "Rubro > Sub > Hoja" (o con "/") → categoría = primero, subcategoría = último. */
+function splitApiCategory(raw: unknown): { category?: string; subcategory?: string } {
+  const text = asString(raw)?.trim();
+  if (!text) return {};
+  const parts = text.split(/\s*[>/]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return { category: parts[0] ?? text };
+  return { category: parts[0], subcategory: parts[parts.length - 1] };
+}
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+/**
+ * Artículo de la API oficial (GET lxc.solutionbox.com.ar/api/listas/articulos).
+ * Campos según el cliente de AcuStock: Alias, Numero_de_Parte, Descripcion,
+ * Detalle, Precio (neto), Moneda, Cotizacion, Tasa_IVA, Tasa_Impuestos_Internos,
+ * Stock, Marca, Categorias. El id es el Alias, igual que por el portal: cambiar
+ * de camino no duplica productos. Con impuestos internos el `finalPrice` es
+ * neto × (1 + IVA + internos), y la web desglosa los internos de esa diferencia.
+ * La API no manda fotos: si también está la cuenta del portal, las fichas las completan.
+ */
+export function mapSolutionBoxApiArticle(raw: unknown): NormalizedProduct | null {
+  const rec = asRecord(raw);
+  if (!rec) return null;
+  const alias = asString(rec.Alias ?? rec.alias)?.trim();
+  const partNumber = asString(rec.Numero_de_Parte ?? rec.numero_de_parte)?.trim();
+  const id = alias || partNumber;
+  const name = asString(rec.Descripcion ?? rec.descripcion)?.trim();
+  if (!id || !name) return null;
+  const price = asNumber(rec.Precio ?? rec.precio);
+  const hasPrice = price != null && price > 0;
+  const stock = asNumber(rec.Stock ?? rec.stock);
+  const ivaPercent = parsePercent(rec.Tasa_IVA ?? rec.tasa_iva);
+  const internalTax = parsePercent(rec.Tasa_Impuestos_Internos ?? rec.tasa_impuestos_internos);
+  const detail = asString(rec.Detalle ?? rec.detalle)?.trim();
+  const { category, subcategory } = splitApiCategory(rec.Categorias ?? rec.categorias ?? rec.Categoria);
+  return {
+    externalId: id,
+    sku: id,
+    partNumber: partNumber && partNumber !== id ? partNumber : undefined,
+    name,
+    brand: asString(rec.Marca ?? rec.marca)?.trim() || undefined,
+    category,
+    subcategory,
+    description: detail ? detail.slice(0, 500) : undefined,
+    price: hasPrice ? price : undefined,
+    finalPrice:
+      hasPrice && ivaPercent != null && internalTax != null && internalTax > 0
+        ? round4(price * (1 + (ivaPercent + internalTax) / 100))
+        : undefined,
+    currency: hasPrice ? apiCurrency(rec.Moneda ?? rec.moneda) : undefined,
+    ivaPercent,
+    stock: stock != null ? Math.max(0, Math.trunc(stock)) : undefined,
+    productUrl: `${SOLUTION_BOX_SITE}/detalle?sku=${encodeURIComponent(id)}`,
+    raw,
+  };
+}
+
 /** Descripción de /api/articulos/detalle?sku= (`descripcionArray` son renglones). */
 export function mapSolutionBoxDetail(body: unknown): Partial<NormalizedProduct> {
   const rec = asRecord(body);
