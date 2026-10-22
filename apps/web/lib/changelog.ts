@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.10.3",
+    date: "2026-10-22",
+    title: "Invid: los impuestos internos ya no se cobran dos veces",
+    changes: [
+      { kind: "fixed", text: "Invid: en productos con impuestos internos (monitores, por ejemplo) el IVA de la cotización traía los internos adentro y se sumaban otra vez. Ahora el IVA es el 21 % o 10,5 % que corresponde y los internos van una sola vez." },
+    ],
+  },
+  {
     version: "2.10.2",
     date: "2026-10-22",
     title: "Carrito más claro, con los impuestos a la vista",

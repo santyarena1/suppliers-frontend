@@ -335,7 +335,17 @@ export function applyInvidCheckoutTaxes(
   const lines: TaxLine[] = [];
   const safeQty = qty > 0 ? qty : 1;
 
-  const lineIva = checkout.lineIva;
+  // ValidarStockInvid manda en "IVA" el IVA más los internos (MSI MAG 272F: 21 % + 10,5 %
+  // = 45,29 sobre 143,78) y además los internos aparte. Si el IVA cotizado es el del
+  // catálogo más los internos, se le restan: si no, se cobran dos veces.
+  const catalogIva = keep("iva");
+  const quotedInternos = checkout.lineInternos != null && checkout.lineInternos > 0.0001 ? checkout.lineInternos : 0;
+  let lineIva = checkout.lineIva;
+  if (lineIva != null && quotedInternos > 0 && catalogIva && unitNet > 0) {
+    const ivaOnly = (lineIva - quotedInternos) / safeQty;
+    const tolerance = Math.max(0.02, unitNet * 0.005);
+    if (Math.abs(ivaOnly - catalogIva.unitAmount) <= tolerance) lineIva = lineIva - quotedInternos;
+  }
   if (lineIva != null && lineIva > 0.0001) {
     const unit = round4(lineIva / safeQty);
     lines.push({

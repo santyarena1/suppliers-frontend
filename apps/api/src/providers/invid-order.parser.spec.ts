@@ -1,4 +1,5 @@
 import {
+  invidLineIvaWithoutInternos,
   parseCheckoutForm,
   parseSubmitResult,
   pickPickupDelivery,
@@ -596,5 +597,18 @@ describe("invid-order.parser", () => {
     );
     expect(r.line).toEqual({ qty: 2, price: 10, subtotal: 20, iva: 4.2 });
     expect(r.next).toEqual({ qty: 4, gross: 124.2 });
+  });
+});
+
+describe("invidLineIvaWithoutInternos", () => {
+  it("saca los internos del IVA calculado con el monto del carrito", () => {
+    // MSI MAG 272F: neto 143,78; monto 189,07 = IVA 21 % (30,19) + internos 10,5 % (15,10)
+    expect(invidLineIvaWithoutInternos(45.29, 15.1)).toBe(30.19);
+  });
+  it("sin internos deja el IVA como está", () => {
+    expect(invidLineIvaWithoutInternos(11.85, 0)).toBe(11.85);
+  });
+  it("nunca da negativo", () => {
+    expect(invidLineIvaWithoutInternos(5, 15.1)).toBe(0);
   });
 });

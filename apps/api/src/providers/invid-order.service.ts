@@ -23,6 +23,7 @@ import {
   type CartSyncChanges,
   type PortalReconcileFor,
   type InvidCartCumulative,
+  invidLineIvaWithoutInternos,
   type InvidRadioOption,
 } from "./invid-order.parser";
 
@@ -442,7 +443,7 @@ export class InvidOrderService {
         ?? taxLines[idx];
       const internos = tax?.internos ?? 0;
       const percepciones = round2(item.subtotal * (percepcionPercent / 100));
-      return { ...item, internos, percepciones };
+      return { ...item, iva: invidLineIvaWithoutInternos(item.iva, internos), internos, percepciones };
     });
 
     const net = preparedItems.reduce((s, i) => s + i.subtotal, 0);

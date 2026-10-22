@@ -231,6 +231,17 @@ export function invidLineFromCumulative(
   };
 }
 
+/**
+ * El IVA de una línea sale de `monto - neto` del carrito, y el `monto` de Invid
+ * ya trae los impuestos internos. ValidarStockInvid informa los internos aparte,
+ * así que hay que sacarlos de ese "IVA": si no, se suman dos veces (MSI MAG 272F:
+ * 45,29 de "IVA" = 30,19 de IVA 21 % + 15,10 de internos 10,5 %).
+ */
+export function invidLineIvaWithoutInternos(ivaFromGross: number, internos: number): number {
+  if (!(internos > 0)) return ivaFromGross;
+  return Math.max(0, round2(ivaFromGross - internos));
+}
+
 /** Una fila del carrito autenticado del portal (`carrito.php`). */
 export interface InvidCartLine {
   /** Posición 1-based, la que usa `sacarItemCarrito('N')` / `cant_N`. */
