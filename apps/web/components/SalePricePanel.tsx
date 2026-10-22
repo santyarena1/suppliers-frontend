@@ -48,15 +48,35 @@ import {
 } from "@/lib/retailMatch";
 import { useOwnStore } from "@/lib/own-store";
 
-function simplifyQuery(name: string): string {
+/** Palabras que no distinguen un modelo de otro: se sacan antes de cortar a 8. */
+const GENERIC_WORDS = new Set([
+  "de", "del", "con", "para", "la", "el", "los", "las", "y", "en",
+  "placa", "video", "procesador", "mother", "motherboard", "monitor", "mouse", "teclado",
+  "auricular", "auriculares", "memoria", "disco", "fuente", "gabinete", "notebook", "nvidia", "amd",
+]);
+
+function cleanTokens(name: string): string[] {
   return name
     .replace(/[^\p{L}\p{N}\s+.-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
     .split(" ")
-    .filter((t) => t.length > 1)
-    .slice(0, 8)
-    .join(" ");
+    .filter((t) => t.length > 1);
+}
+
+function specificTokens(name: string): string[] {
+  const all = cleanTokens(name);
+  const specific = all.filter((t) => !GENERIC_WORDS.has(t.toLowerCase()));
+  return specific.length >= 3 ? specific : all;
+}
+
+/**
+ * Búsqueda inicial: marca y modelo. Se sacan primero las palabras genéricas
+ * ("Placa de Video", "NVIDIA") para que el corte a 8 no se lleve el modelo
+ * ("WINDFORCE MAX OC"); si quedaran muy pocas, va el nombre tal cual.
+ */
+function simplifyQuery(name: string): string {
+  return specificTokens(name).slice(0, 8).join(" ");
 }
 
 function timeAgo(iso: string): string {
@@ -266,8 +286,10 @@ export default function SalePricePanel({
   const visibleResults = useMemo(() => {
     const hidden = new Set(hiddenStoreIds);
     const filtered = results.filter((r) => !hidden.has(r.store.id));
-    // Match vs la query que el usuario escribió (no el nombre largo del proveedor)
-    const matchAgainst = q.trim() || seedQuery;
+    // Match vs la búsqueda; si es la automática, contra todo el nombre sin palabras
+    // genéricas, para que un modelo hermano (Eagle vs Windforce) no dé 100 %.
+    const auto = q.trim() === simplifyQuery(seedQuery);
+    const matchAgainst = auto ? specificTokens(seedQuery).join(" ") : q.trim() || seedQuery;
     const enriched = filtered.map((hit) => {
       const price = repairImplausibleSalePrice(hit.price, costArs);
       const fixed = price !== hit.price ? { ...hit, price } : hit;
