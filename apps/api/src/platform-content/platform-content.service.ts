@@ -232,7 +232,7 @@ export class PlatformContentService implements OnModuleInit {
     let cursor: string | undefined;
     for (;;) {
       const page = await this.prisma.providerSyncCache.findMany({
-        select: { id: true, provider: true, externalId: true, sku: true, partNumber: true, ean: true, brand: true },
+        select: { id: true, provider: true, externalId: true, sku: true, partNumber: true },
         orderBy: { id: "asc" },
         take: CATALOG_PAGE,
         ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),

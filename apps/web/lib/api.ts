@@ -3696,9 +3696,10 @@ export interface PlatformContentRunStats {
   sourceTotal?: number;
   sourceMatched?: number;
   sourceUnmatched?: number;
+  sourceWithoutCodes?: number;
   links?: number;
   catalogRows?: number;
-  byKind?: Record<"SUPPLIER_CODE" | "EAN" | "PART_NUMBER", number>;
+  byKind?: Record<"SUPPLIER_CODE", number>;
   byProvider?: Record<string, number>;
   ambiguous?: number;
   unknownSuppliers?: Record<string, number>;

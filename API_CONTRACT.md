@@ -1098,7 +1098,7 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Body / Params**: sin body. `preview` cruza sin escribir contenido; `apply` hace upsert del contenido y reemplaza los vínculos de AcuStock.
 - **Respuesta esperada**: `status` → `{ configured, running, contents, links, runs: [{ id, mode, status, stats, errorMessage, startedAt, finishedAt }] }`; `preview`/`apply` → `{ started, runId }` (corre en segundo plano).
 - **Estado**: IMPLEMENTADO
-- **Notas**: lee `ACUSTOCK_EXPORT_URL` y `ACUSTOCK_EXPORT_TOKEN` del entorno. Cruce: código del distribuidor (contra externalId, sku o partNumber de la ficha) > EAN > número de parte (≥ 6 caracteres y marca compatible). `GET /providers/:provider/products/:externalId` suma `platformContent: { source, images[{url, alt}], shortDescription, descriptionHtml, specs[{group, name, value}], warrantyMonths } | null`; la web sanitiza el HTML con DOMPurify.
+- **Notas**: lee `ACUSTOCK_EXPORT_URL` y `ACUSTOCK_EXPORT_TOKEN` del entorno. Cruce: solo por los códigos de proveedor de cada producto (contra externalId, sku o partNumber de la ficha); NODO no arma agrupaciones nuevas por EAN ni número de parte. Cada ficha conserva su precio y stock; el contenido se repite en las fichas agrupadas. `GET /providers/:provider/products/:externalId` suma `platformContent: { source, images[{url, alt}], shortDescription, descriptionHtml, specs[{group, name, value}], warrantyMonths } | null`; la web sanitiza el HTML con DOMPurify.
 
 ### [FEATURE] Fichas enriquecidas: tope diario y "Copiar ficha"
 - **Método**: GET

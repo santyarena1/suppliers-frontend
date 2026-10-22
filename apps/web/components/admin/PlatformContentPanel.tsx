@@ -6,7 +6,6 @@ import { providerLabel } from "@/components/ProviderBadge";
 import { platformContentApi, type PlatformContentRun, type PlatformContentStatus } from "@/lib/api";
 
 const POLL_MS = 3000;
-const KIND_LABEL = { SUPPLIER_CODE: "Código del distribuidor", EAN: "EAN", PART_NUMBER: "Número de parte" } as const;
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
@@ -71,8 +70,8 @@ export default function PlatformContentPanel({ showToast }: Props) {
             <FileStack className="h-4 w-4 text-brand-400" /> Fichas enriquecidas · AcuStock
           </h2>
           <p className="mt-1 max-w-xl text-xs text-surface-400">
-            Fotos, descripción y especificaciones de AcuStock en las fichas de todos los distribuidores que venden el
-            mismo producto. Cruza por código del distribuidor, después EAN y número de parte.
+            Fotos, descripción y especificaciones de AcuStock en las fichas de los distribuidores que AcuStock agrupó en
+            cada producto (por código de proveedor). Cada ficha sigue con su precio y su stock.
           </p>
         </div>
         <div className="text-right text-xs text-surface-400">
@@ -161,7 +160,7 @@ function RunSummary({ run }: { run: PlatformContentRun }) {
             <Stat label="Ambiguas (no se vinculan)" value={n(s.ambiguous)} />
           </div>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <List title="Por clave" rows={Object.entries(s.byKind ?? {}).map(([k, v]) => [KIND_LABEL[k as keyof typeof KIND_LABEL] ?? k, v])} />
+            <List title="Sin vincular" rows={[["Sin códigos de proveedor", s.sourceWithoutCodes ?? 0], ["Con códigos que no están en NODO", Math.max(0, (s.sourceUnmatched ?? 0) - (s.sourceWithoutCodes ?? 0))]]} />
             <List title="Por distribuidor" rows={providers.map(([p, v]) => [providerLabel(p), v])} />
             <List
               title="Contenido"
