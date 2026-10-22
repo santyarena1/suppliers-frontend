@@ -325,7 +325,13 @@ export default function SalePricePanel({
   const listLayout = inline && layout === "list";
   const cap = listLayout && !showAll ? LIST_PREVIEW : Infinity;
   const bestShown = bestMatches.slice(0, cap);
-  const otherShown = otherMatches.slice(0, Math.max(0, cap - bestShown.length));
+  // En la lista, las parecidas no rellenan el lugar de las exactas: van aparte y,
+  // si hay exactas, se abren a pedido.
+  const otherShown = listLayout
+    ? showAll || bestMatches.length === 0
+      ? otherMatches.slice(0, showAll ? Infinity : LIST_PREVIEW)
+      : []
+    : otherMatches.slice(0, Math.max(0, cap - bestShown.length));
   const moreCount = bestMatches.length + otherMatches.length - bestShown.length - otherShown.length;
   const gridClass = listLayout ? "flex flex-col" : inline ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" : "space-y-2";
 
@@ -662,7 +668,7 @@ export default function SalePricePanel({
             <div className="space-y-4">
               {bestShown.length > 0 && (
                 <div>
-                  <p className={`text-[11px] font-semibold text-emerald-300 mb-2 px-0.5 ${listLayout ? "hidden" : ""}`}>
+                  <p className="text-[11px] font-semibold text-emerald-300 mb-2 px-0.5">
                     Mejores coincidencias
                     <span className="text-surface-500 font-normal"> · ≥85% de palabras de la búsqueda</span>
                   </p>
@@ -684,9 +690,10 @@ export default function SalePricePanel({
 
               {otherShown.length > 0 && (
                 <div>
-                  {bestMatches.length > 0 && !listLayout && (
+                  {bestMatches.length > 0 && (
                     <p className="text-[11px] font-semibold text-surface-400 mb-2 px-0.5">
                       Otras referencias
+                      {listLayout && <span className="font-normal text-surface-500"> · parecidas, no el mismo producto</span>}
                     </p>
                   )}
                   <div className={gridClass}>
@@ -709,7 +716,9 @@ export default function SalePricePanel({
                   onClick={() => setShowAll(true)}
                   className="w-full rounded-xl border border-surface-700 px-4 py-2.5 text-xs font-semibold text-surface-200 hover:bg-surface-800 hover:text-white transition-colors"
                 >
-                  Ver {moreCount} publicaciones más
+                  {listLayout && bestMatches.length > 0 && otherShown.length === 0
+                    ? `Ver ${moreCount} publicaciones más (${otherMatches.length} parecidas)`
+                    : `Ver ${moreCount} publicaciones más`}
                 </button>
               )}
             </div>
@@ -794,7 +803,7 @@ function RetailHitCard({
       <button
         type="button"
         onClick={onOpen}
-        className="grid w-full grid-cols-[54px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border-t border-surface-800 px-1.5 py-2 text-left transition-colors hover:bg-surface-800/50"
+        className={`grid w-full grid-cols-[54px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border-t border-surface-800 px-1.5 py-2 text-left transition-colors hover:bg-surface-800/50 ${best ? "border-l-2 border-l-emerald-500/60" : ""}`}
       >
         <span className="flex h-[54px] w-[54px] items-center justify-center overflow-hidden rounded-[10px] bg-white">
           {hit.imageUrl && !imgErr ? (
@@ -833,12 +842,12 @@ function RetailHitCard({
               {mine ? "tu tienda · " : ""}{timeAgo(hit.syncedAt)}
             </span>
           </span>
-          <span className="truncate text-xs text-surface-400">{hit.name}</span>
+          <span className="line-clamp-2 text-xs leading-snug text-surface-300" title={hit.name}>{hit.name}</span>
         </span>
         <span className="flex flex-col items-end gap-0.5">
           <span className="font-mono text-sm tabular-nums text-white">{formatARS(hit.price)}</span>
           <span className="text-[11px] text-surface-400 tabular-nums">
-            {matchLabel}
+            <span className={best ? "text-emerald-300" : ""}>{matchLabel}</span>
             {marginPct != null && Number.isFinite(marginPct) && (
               <>
                 {" · "}

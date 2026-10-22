@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.10.1",
+    date: "2026-10-22",
+    title: "Locales en la ficha: el mismo producto primero",
+    changes: [
+      { kind: "fixed", text: "En la ficha, los locales vuelven a separar las publicaciones del mismo producto de las parecidas, con el nombre completo de cada una. Las parecidas se abren aparte." },
+    ],
+  },
+  {
     version: "2.10.0",
     date: "2026-10-22",
     title: "Ficha de producto renovada",
