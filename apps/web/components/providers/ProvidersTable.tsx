@@ -48,7 +48,7 @@ export function providerRowState(p: VisibleProvider, s: ProviderStatus | undefin
   const health = (s as { health?: SyncHealth | null } | undefined)?.health;
   if (syncing || isLiveSyncRun(s?.currentRun)) return { state: "syncing", reason: "Trayendo precios y stock" };
   if (health?.paused || p.syncPaused) {
-    const why = (health?.pauseReason || "el portal no respondió varias veces").replace(/[.s]+$/, "");
+    const why = (health?.pauseReason || "el portal no respondió varias veces").replace(/[.\s]+$/, "");
     return { state: "attention", reason: `Pausado: ${why}. Sus productos no salen en la búsqueda.` };
   }
   if (p.configured === false) {
