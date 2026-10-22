@@ -33,6 +33,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       { kind: "improved", text: "Cada producto del carrito muestra el nombre completo y, debajo, neto, IVA, internos, percepción y unitario final, también en el celular." },
       { kind: "improved", text: "Cada distribuidor cierra con su subtotal: neto, IVA, internos, percepciones, envío y total. Si el portal cobra una diferencia, figura con nombre." },
       { kind: "improved", text: "En la compu, el resumen del carrito queda a la derecha mientras recorrés los productos." },
+      { kind: "improved", text: "New Bytes: las órdenes de compra se separan en las que salieron de NODO y las que se hicieron directo en el portal." },
     ],
   },
   {
