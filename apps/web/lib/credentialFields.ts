@@ -269,6 +269,106 @@ export const PROVIDER_CREDENTIAL_SCHEMAS: Partial<Record<Provider, CredentialSch
       },
     ],
   },
+  MASNET: {
+    title: "Conectar tu cuenta de Masnet",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
+    extra:
+      "Con el User ID y el token de la API, NODO baja el catálogo de Masnet (CSV): precios netos con IVA aparte, stock, marca, categoría e imagen. Se sincroniza como mucho cada 2 horas. Los pedidos se siguen haciendo en el portal de Masnet.",
+    portalUrl: "https://masnet.com.ar",
+    portalLabel: "masnet.com.ar",
+    fields: [
+      {
+        key: "user_id",
+        label: "User ID",
+        type: "text",
+        required: true,
+        placeholder: "Ej.: api-12345",
+        help: "El usuario de la API que te da Masnet (empieza con «api-»).",
+        aliases: ["userId", "usuario"],
+        autoComplete: "off",
+      },
+      {
+        key: "token",
+        label: "Token API",
+        type: "password",
+        required: true,
+        placeholder: "Token de la API",
+        aliases: ["api_token"],
+        autoComplete: "off",
+      },
+    ],
+  },
+  MICROGLOBAL: {
+    title: "Conectar tu cuenta de Microglobal",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
+    extra:
+      "Usa el web service de revendedores de Microglobal (WSMG): baja el catálogo completo con precio neto, IVA, impuestos internos, stock y EAN. No trae fotos. Se sincroniza como mucho cada 2 horas. Los pedidos se siguen haciendo en el portal de Microglobal.",
+    portalUrl: "https://www.microglobal.com.ar",
+    portalLabel: "microglobal.com.ar",
+    fields: [
+      {
+        key: "cliente",
+        label: "Código de cliente",
+        type: "text",
+        required: true,
+        placeholder: "Tu número de cliente en Microglobal",
+        aliases: ["client", "codigo_cliente"],
+        autoComplete: "off",
+      },
+      {
+        key: "usuario",
+        label: "Usuario",
+        type: "text",
+        required: false,
+        placeholder: "Dejalo vacío si sos el administrador",
+        help: "Solo si Microglobal te dio un usuario aparte del administrador de la cuenta.",
+        aliases: ["user", "username"],
+        autoComplete: "username",
+      },
+      {
+        key: "password",
+        label: "Contraseña",
+        type: "password",
+        required: true,
+        placeholder: "Contraseña del web service",
+        aliases: ["pass"],
+        autoComplete: "current-password",
+      },
+      {
+        key: "moneda",
+        label: "Moneda de los precios",
+        type: "text",
+        required: false,
+        placeholder: "USD",
+        help: "El catálogo de Microglobal no dice en qué moneda está el precio. Poné USD o ARS según tu lista; si lo dejás vacío se toma USD.",
+        aliases: ["currency"],
+        autoComplete: "off",
+      },
+    ],
+  },
+  PC_ARTS: {
+    title: "Conectar tu cuenta de PC Arts",
+    intro:
+      "Es la cuenta de tu organización: se guarda cifrada y la comparte todo tu equipo.",
+    extra:
+      "Con el token de la API de PC Arts, NODO baja el catálogo y cruza stock y precio: neto en USD, IVA e impuestos internos aparte, marca, categoría e imagen. Se sincroniza como mucho cada 2 horas. Los pedidos se siguen haciendo en el portal de PC Arts.",
+    portalUrl: "https://www.pcarts.com",
+    portalLabel: "pcarts.com",
+    fields: [
+      {
+        key: "api_token",
+        label: "Token API",
+        type: "password",
+        required: true,
+        placeholder: "Token de sesión de la API",
+        help: "Se manda como x-session-token. Lo pedís a tu ejecutivo de PC Arts.",
+        aliases: ["token", "session_token"],
+        autoComplete: "off",
+      },
+    ],
+  },
   NEW_TREE: {
     title: "Conectar tu cuenta de New Tree",
     intro:
@@ -550,6 +650,11 @@ export function validateCredentialValues(
     }
     if (apiKey || (user && password)) return null;
     return "Cargá usuario y contraseña de Gestión Resellers, o la API Key.";
+  }
+
+  if (provider === "MICROGLOBAL") {
+    const moneda = (values.moneda ?? "").trim().toUpperCase();
+    if (moneda && moneda !== "USD" && moneda !== "ARS") return "La moneda tiene que ser USD o ARS.";
   }
 
   if (provider === "DISTECNA") {

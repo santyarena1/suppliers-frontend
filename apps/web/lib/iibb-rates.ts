@@ -39,11 +39,15 @@ const RATE_LABELS: Record<string, string> = {
   HDC: "HDC",
   SOLUTION_BOX: "Solution Box",
   DISTECNA: "Distecna",
+  MASNET: "Masnet",
+  MICROGLOBAL: "Microglobal",
+  PC_ARTS: "PC Arts",
 };
 
 const RATE_ORDER = [
   "NEW_BYTES", "INVID", "ELIT", "GRUPO_NUCLEO", "AIR",
   "CEVEN", "DIAPSTORE", "NEW_TREE", "GC", "POLYTECH", "ASHIR", "HDC", "SOLUTION_BOX", "DISTECNA",
+  "MASNET", "MICROGLOBAL", "PC_ARTS",
 ];
 
 export const IIBB_SOURCE_LABEL: Record<IibbRateSource, string> = {
