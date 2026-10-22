@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.10.2",
+    date: "2026-10-22",
+    title: "Carrito más claro, con los impuestos a la vista",
+    changes: [
+      { kind: "improved", text: "Cada producto del carrito muestra el nombre completo y, debajo, neto, IVA, internos, percepción y unitario final, también en el celular." },
+      { kind: "improved", text: "Cada distribuidor cierra con su subtotal: neto, IVA, internos, percepciones, envío y total. Si el portal cobra una diferencia, figura con nombre." },
+      { kind: "improved", text: "En la compu, el resumen del carrito queda a la derecha mientras recorrés los productos." },
+    ],
+  },
+  {
     version: "2.10.1",
     date: "2026-10-22",
     title: "Locales en la ficha: el mismo producto primero",

@@ -1210,7 +1210,8 @@ function CartPageInner() {
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto px-5 lg:px-8 py-6 flex flex-col gap-8">
+              <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+              <div className="flex-1 min-h-0 min-w-0 overflow-y-auto px-4 sm:px-5 lg:px-8 py-5 lg:py-6 flex flex-col gap-5">
                   {activeTab === "all" ? (
                   sortedProviders.map((prov) => (
                     <ProviderSection
@@ -1481,8 +1482,8 @@ function CartPageInner() {
                 </div>
               </div>
 
-              <footer className="shrink-0 border-t border-white/5 bg-surface-950 max-lg:max-h-[40dvh] max-lg:overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-                <div className="px-5 lg:px-8 py-3 lg:py-4 flex flex-col gap-3">
+              <footer className="shrink-0 border-t border-white/5 bg-surface-950 max-lg:max-h-[40dvh] max-lg:overflow-y-auto pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:w-[360px] lg:border-t-0 lg:border-l lg:border-surface-800 lg:overflow-y-auto">
+                <div className="px-5 py-3 lg:px-6 lg:py-6 flex flex-col gap-3">
                   {channelTab === "online" && (
                     <StockIssuesNotice
                       issuesByProvider={stockIssues}
@@ -1523,17 +1524,17 @@ function CartPageInner() {
                     </p>
                   )}
                   {activeTab === "all" && (
-                    <div className="flex items-center gap-2 min-h-9 flex-nowrap overflow-x-auto overscroll-x-contain lg:flex-wrap lg:overflow-visible">
+                    <div className="flex items-center gap-2 min-h-9 flex-nowrap overflow-x-auto overscroll-x-contain lg:flex-col lg:items-stretch lg:overflow-visible">
                       {sortedProviders.map((p) => {
                         const t = providerTotals[p];
                         const warming =
                           (onlineByProvider[p]?.length ?? 0) > 0 &&
                           (warmSnap[p]?.status === "loading" || warmSnap[p]?.status === "idle");
                         return (
-                          <div key={p} className="inline-flex h-9 shrink-0 overflow-hidden border border-surface-700 rounded-sm">
+                          <div key={p} className="inline-flex h-9 shrink-0 overflow-hidden border border-surface-700 rounded-lg">
                             <button
                               onClick={() => setActiveTab(p)}
-                              className="h-9 px-2.5 inline-flex items-center gap-2 text-sm hover:bg-surface-900 transition-colors"
+                              className="h-9 px-2.5 inline-flex flex-1 items-center justify-between gap-2 text-sm hover:bg-surface-900 transition-colors"
                             >
                               <ProviderBadge provider={p} variant="inline" size="sm" />
                               <span className="tabular-nums text-surface-300">{fmt(t.totalUSD)}</span>
@@ -1549,13 +1550,14 @@ function CartPageInner() {
                           </div>
                         );
                       })}
-                      <span className="hidden lg:inline shrink-0 whitespace-nowrap text-sm text-surface-500">
-                        Solo informativo. Confirmá en la pestaña del proveedor.
+                      <span className="hidden lg:inline text-xs text-surface-500">
+                        Cada pedido se confirma en la pestaña de su distribuidor.
                       </span>
                     </div>
                   )}
                 </div>
               </footer>
+              </div>
             </div>
           )}
 
@@ -1661,7 +1663,7 @@ function SummaryBar({
                   parte del mismo total que ya figura arriba. */}
               {groupPerceptionLines(totals.perceptionLines).length > 1 &&
                 groupPerceptionLines(totals.perceptionLines).map((line) => (
-                  <span key={line.label} className="text-surface-600 text-xs">
+                  <span key={line.label} className="text-surface-500 text-xs">
                     {line.label} <span className="tabular-nums">{fmt(line.amount, 2)}</span>
                   </span>
                 ))}
@@ -1677,7 +1679,7 @@ function SummaryBar({
   }
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3 min-h-8">
+      <div className="flex items-center justify-between gap-3 min-h-8 lg:flex-col lg:items-stretch">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-xs font-semibold text-surface-500 uppercase tracking-wider">{title}</span>
           {historyHref && historyLabel && (
@@ -1694,11 +1696,12 @@ function SummaryBar({
             {detailOpen ? "Ocultar" : "Desglose"}
           </button>
         </div>
-        <div className="hidden lg:flex flex-1 flex-wrap items-baseline gap-x-4 gap-y-1 text-sm min-w-0">
+        <div className="hidden lg:flex flex-col gap-2 text-sm min-w-0 [&>span]:flex [&>span]:justify-between [&>span]:gap-3">
           {breakdown()}
         </div>
-        <div className="text-right flex-shrink-0">
-          <p className="text-lg font-semibold text-white tabular-nums leading-none">{fmt(totals.totalUSD)}</p>
+        <div className="text-right flex-shrink-0 lg:text-left lg:border-t lg:border-surface-800 lg:pt-3">
+          <p className="hidden lg:block text-[11px] text-surface-500 mb-1">Total{withIva ? "" : " sin impuestos"}</p>
+          <p className="text-lg lg:text-3xl font-semibold text-white tabular-nums leading-none font-mono whitespace-nowrap">{fmt(totals.totalUSD)}</p>
           {currency === "ARS" && (
             <p className="text-[11px] text-surface-500 tabular-nums mt-0.5">{formatUSD(totals.totalUSD)}</p>
           )}
@@ -1812,12 +1815,12 @@ function ProviderSection({
   const orphanSchemeItems = items.filter((it) => it.schemeId && !schemes.some((s) => s.id === it.schemeId));
 
   return (
-    <section>
-      <div className="flex items-center justify-between gap-3 pb-3 border-b border-surface-800">
+    <section className="shrink-0 overflow-hidden rounded-2xl border border-surface-800 bg-surface-900/60">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-800 px-4 py-3.5 sm:px-5">
         <div className="flex items-center gap-2.5 min-w-0">
           <ProviderBadge provider={provider} variant="inline" size="md" />
           <span className="text-xs text-surface-500 tabular-nums">
-            {totals.productCount} {totals.productCount === 1 ? "línea" : "líneas"} · {totals.itemCount} u.
+            {totals.productCount} {totals.productCount === 1 ? "producto" : "productos"} · {totals.itemCount} {totals.itemCount === 1 ? "unidad" : "unidades"}
           </span>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
@@ -1831,34 +1834,22 @@ function ProviderSection({
               Crear esquema
             </button>
           )}
-          <span className="text-[15px] font-medium text-white tabular-nums">{fmt(totals.totalUSD)}</span>
-          <button onClick={onClearProvider} className="text-surface-600 hover:text-red-400 transition-colors" title="Quitar proveedor">
+          <button onClick={onClearProvider} className="text-surface-600 hover:text-red-400 transition-colors" title="Quitar proveedor" aria-label={`Quitar ${providerLabel(provider)} del carrito`}>
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <div className="hidden md:grid grid-cols-[minmax(0,1.5fr)_80px_100px_100px_100px_100px_110px_36px] gap-3 pt-3 pb-1.5 text-xs font-medium uppercase tracking-wider text-surface-500">
-        <span>Producto</span>
-        <span className="text-center">Cant.</span>
-        <span className="text-right">Neto</span>
-        <span className="text-right">IVA</span>
-        <span className="text-right">Internos</span>
-        <span className="text-right">Perc.</span>
-        <span className="text-right">Total</span>
-        <span />
-      </div>
-
       <div className="divide-y divide-surface-800/80">
         {loose.length > 0 && schemeGroups.length > 0 && (
-          <p className="pt-3 pb-1 text-[11px] uppercase tracking-wider text-surface-500">Sin esquema</p>
+          <p className="px-4 pt-3 pb-1 text-[11px] uppercase tracking-wider text-surface-500 sm:px-5">Sin esquema</p>
         )}
         {loose.map((it) => (
           <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} stockIssue={stockIssues?.get(it.externalId)} />
         ))}
         {schemeGroups.map(({ scheme, items: grouped }) => (
           <div key={scheme.id} className="pt-3">
-            <SchemeGroupHeader scheme={scheme} />
+            <div className="px-4 sm:px-5"><SchemeGroupHeader scheme={scheme} /></div>
             {grouped.map((it) => (
               <CartLine key={cartItemKey(it)} item={it} siblings={items} extra={extra} fmt={fmt} withIva={withIva} setQty={setQty} remove={remove} stockIssue={stockIssues?.get(it.externalId)} />
             ))}
@@ -1869,8 +1860,10 @@ function ProviderSection({
         ))}
       </div>
 
+      <ProviderSubtotal provider={provider} totals={totals} fmt={fmt} withIva={withIva} />
+
       {channel === "online" && provider === "INVID" && items.every((it) => !cartPerception(it, items, extra)) && (
-        <p className="text-xs text-surface-500 mt-2">
+        <p className="border-t border-surface-800 px-4 py-2.5 text-xs text-surface-500 sm:px-5">
           Las percepciones de Invid aparecen al validar stock.
         </p>
       )}
@@ -1879,6 +1872,54 @@ function ProviderSection({
         <CreateSchemeFromCart provider={provider} items={items} onClose={() => setCreateOpen(false)} />
       )}
     </section>
+  );
+}
+
+/** Subtotal del pedido a un distribuidor, con cada impuesto rotulado. */
+function ProviderSubtotal({
+  provider, totals, fmt, withIva,
+}: {
+  provider: string;
+  totals: Totals;
+  fmt: (n: number, digits?: number) => string;
+  withIva: boolean;
+}) {
+  const cells: { label: string; value: number; quoted?: boolean }[] = [
+    { label: "Neto", value: totals.subtotalUSD },
+    ...(withIva
+      ? [
+          { label: "IVA", value: totals.ivaUSD, quoted: Boolean(totals.portalSources.iva?.length) },
+          { label: "Internos", value: totals.internosUSD, quoted: Boolean(totals.portalSources.internos?.length) },
+          { label: "Percepciones", value: totals.iibbUSD, quoted: Boolean(totals.portalSources.iibb?.length) },
+          ...(totals.otherUSD > 0.004 ? [{ label: "Otros cargos", value: totals.otherUSD, quoted: Boolean(totals.portalSources.otros?.length) }] : []),
+        ]
+      : []),
+    ...(totals.quotedShipping || totals.shippingUSD > 0.004
+      ? [{ label: "Envío", value: totals.shippingUSD, quoted: Boolean(totals.portalSources.envio?.length) }]
+      : []),
+  ];
+  // Lo que el portal cobra de más (o de menos) y sus renglones no explican: con nombre, no escondido.
+  const portalDiff = totals.reconciliations.reduce((acc, r) => acc + r.diffUSD, 0);
+  if (Math.abs(portalDiff) >= RECONCILE_TOLERANCE_USD) {
+    cells.push({ label: "Diferencia del portal", value: portalDiff, quoted: true });
+  }
+  return (
+    <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-surface-700 bg-surface-950/60 px-4 py-3.5 sm:flex sm:flex-wrap sm:items-end sm:gap-x-8 sm:px-5">
+      {cells.map((c) => (
+        <div key={c.label} className="min-w-0">
+          <dt className="text-[11px] font-semibold uppercase tracking-wider text-surface-500" title={c.quoted ? "Lo cotizó el portal del distribuidor" : undefined}>
+            {c.label}{c.quoted ? "*" : ""}
+          </dt>
+          <dd className="m-0 mt-1 whitespace-nowrap font-mono text-sm tabular-nums text-surface-100">{fmt(c.value, 2)}</dd>
+        </div>
+      ))}
+      <div className="col-span-2 min-w-0 sm:col-span-1 sm:ml-auto sm:text-right">
+        <dt className="text-[11px] font-semibold uppercase tracking-wider text-surface-400">
+          Total {providerLabel(provider)}{withIva ? "" : " sin impuestos"}
+        </dt>
+        <dd className="m-0 mt-1 whitespace-nowrap font-mono text-lg font-semibold tabular-nums text-white">{fmt(totals.totalUSD, 2)}</dd>
+      </div>
+    </dl>
   );
 }
 
@@ -2043,10 +2084,12 @@ function CartLine({
   const canMoveOnline = item.channel === "offline";
   const canScheme = item.channel !== "offline" && hasIva && policy.acceptsScheme;
 
+  const lineTotal = withIva ? lineGross : pricing.net;
+
   return (
-    <div className="py-4 md:grid md:grid-cols-[minmax(0,1.5fr)_80px_100px_100px_100px_100px_110px_36px] md:gap-3 md:items-center">
-      <div className="flex items-start gap-3.5 min-w-0">
-        <Link href={href} className="w-16 h-16 relative flex-shrink-0 bg-white rounded-md overflow-hidden border border-surface-800">
+    <div className="px-4 py-4 sm:px-5">
+      <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-3.5 gap-y-3 sm:grid-cols-[56px_minmax(0,1fr)_auto_minmax(130px,auto)_36px] sm:items-start">
+        <Link href={href} className="w-14 h-14 relative flex-shrink-0 bg-white rounded-lg overflow-hidden border border-surface-800 sm:row-span-1">
           {item.imageUrl ? (
             <Image src={proxyImg(item.imageUrl)} alt="" fill className="object-contain p-1" unoptimized />
           ) : (
@@ -2054,7 +2097,7 @@ function CartLine({
           )}
         </Link>
         <div className="min-w-0 flex-1">
-          <Link href={href} className="text-[15px] text-surface-100 leading-snug line-clamp-2 hover:text-white">
+          <Link href={href} className="text-[15px] font-semibold text-white leading-snug line-clamp-2 hover:text-brand-200">
             {item.name}
           </Link>
           <p className="text-xs text-surface-500 font-mono mt-1 truncate">
@@ -2146,91 +2189,59 @@ function CartLine({
               onClose={() => setPickOpen(false)}
             />
           )}
-          <div className="md:hidden mt-2.5 grid grid-cols-3 gap-x-3 gap-y-1">
-            <TaxCell label="IVA" line={iva} qty={item.qty} fmt={fmt} />
-            <TaxCell label="Internos" line={internos} qty={item.qty} fmt={fmt} />
-            <TaxCell label={iibb?.label || "Perc."} line={iibb} qty={item.qty} fmt={fmt} />
-          </div>
         </div>
-      </div>
 
-      <div className="mt-3 md:mt-0 flex md:justify-center">
-        <QtyControl
-          qty={item.qty}
-          onDec={() => item.qty <= 1 ? remove(ref) : setQty(ref, item.qty - 1)}
-          onInc={() => setQty(ref, item.qty + 1)}
-          onSet={(q) => setQty(ref, q)}
-        />
-      </div>
-
-      <MoneyCell className="hidden md:block" primary={fmt(pricing.net, 2)} secondary={item.qty > 1 ? `${fmt(pricing.unitNet, 2)} c/u` : undefined} />
-      <div className="hidden md:block"><TaxCell line={iva} qty={item.qty} fmt={fmt} align="right" /></div>
-      <div className="hidden md:block"><TaxCell line={internos} qty={item.qty} fmt={fmt} align="right" /></div>
-      <div className="hidden md:block"><TaxCell line={iibb} qty={item.qty} fmt={fmt} align="right" /></div>
-      <MoneyCell
-        className="hidden md:block"
-        primary={fmt(withIva ? lineGross : pricing.net, 2)}
-        emphasize
-      />
-
-      <div className="hidden md:flex justify-end">
-        <button onClick={() => remove(ref)} className="text-surface-600 hover:text-red-400 p-1" title="Quitar">
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="md:hidden flex items-center justify-between mt-2 pt-2 border-t border-surface-800/60">
-        <span className="text-xs text-surface-500">Total línea</span>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-white tabular-nums">{fmt(withIva ? lineGross : pricing.net, 2)}</span>
-          <button onClick={() => remove(ref)} className="text-surface-600 hover:text-red-400">
-            <Trash2 className="w-3.5 h-3.5" />
+        <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:contents">
+          <div className="sm:pt-1">
+            <QtyControl
+              qty={item.qty}
+              onDec={() => item.qty <= 1 ? remove(ref) : setQty(ref, item.qty - 1)}
+              onInc={() => setQty(ref, item.qty + 1)}
+              onSet={(q) => setQty(ref, q)}
+            />
+          </div>
+          <div className="text-right sm:pt-0.5">
+            <p className="text-[11px] text-surface-500">
+              {withIva ? "Total" : "Total sin impuestos"}{item.qty > 1 ? ` · ${item.qty} u.` : ""}
+            </p>
+            <p className="whitespace-nowrap font-mono text-base font-semibold tabular-nums text-white">{fmt(lineTotal, 2)}</p>
+          </div>
+          <button onClick={() => remove(ref)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-surface-700 text-surface-500 hover:border-red-500/40 hover:text-red-400" title="Quitar" aria-label={`Quitar ${item.name}`}>
+            <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Impuestos de la línea: siempre a la vista, en todas las pantallas. */}
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl bg-surface-950/70 px-3 py-2.5 text-xs sm:ml-[70px] sm:flex sm:flex-wrap sm:gap-x-6">
+        <TaxItem label="Neto" value={fmt(pricing.net, 2)} hint={item.qty > 1 ? `${fmt(pricing.unitNet, 2)} c/u` : undefined} />
+        <TaxItem label={iva ? `IVA ${formatAlicuota(iva.percent)}` : "IVA"} value={iva ? fmt(iva.unitAmount * item.qty, 2) : null} />
+        <TaxItem label={internos ? `Internos ${formatAlicuota(internos.percent)}` : "Internos"} value={internos ? fmt(internos.unitAmount * item.qty, 2) : null} />
+        <TaxItem
+          label={iibb ? `${iibb.label || "Perc."}${iibb.percent ? ` ${formatAlicuota(iibb.percent)}` : ""}` : item.channel === "offline" ? "Percepción" : "Perc."}
+          value={iibb ? fmt(iibb.unitAmount * item.qty, 2) : null}
+        />
+        {withIva && item.qty > 0 && <TaxItem label="Unitario final" value={fmt(lineGross / item.qty, 2)} strong />}
+      </dl>
     </div>
   );
 }
 
-function TaxCell({
-  label, line, qty, fmt, align = "left",
+function TaxItem({
+  label, value, hint, strong,
 }: {
-  label?: string;
-  line: ReturnType<typeof taxByKind>;
-  qty: number;
-  fmt: (n: number, digits?: number) => string;
-  align?: "left" | "right";
-}) {
-  const empty = !line;
-  return (
-    <div className={align === "right" ? "text-right" : ""}>
-      {label && <p className="text-[11px] uppercase tracking-wider text-surface-500 mb-0.5">{label}</p>}
-      {empty ? (
-        <p className="text-sm text-surface-600 tabular-nums">—</p>
-      ) : (
-        <>
-          <p className="text-xs text-surface-500 tabular-nums">{formatAlicuota(line.percent)}</p>
-          <p className="text-sm text-surface-200 tabular-nums leading-tight">{fmt(line.unitAmount * qty, 2)}</p>
-        </>
-      )}
-    </div>
-  );
-}
-
-function MoneyCell({
-  primary, secondary, emphasize, className = "",
-}: {
-  primary: string;
-  secondary?: string;
-  emphasize?: boolean;
-  className?: string;
+  label: string;
+  value: string | null;
+  hint?: string;
+  strong?: boolean;
 }) {
   return (
-    <div className={`text-right ${className}`}>
-      <p className={`tabular-nums leading-tight ${emphasize ? "text-[15px] font-semibold text-white" : "text-sm text-surface-200"}`}>
-        {primary}
-      </p>
-      {secondary && <p className="text-xs text-surface-500 tabular-nums mt-0.5">{secondary}</p>}
+    <div className="flex min-w-0 items-baseline justify-between gap-2 sm:justify-start">
+      <dt className="whitespace-nowrap text-surface-500">{label}</dt>
+      <dd className={`m-0 whitespace-nowrap font-mono tabular-nums ${value == null ? "text-surface-600" : strong ? "font-semibold text-white" : "text-surface-200"}`}>
+        {value ?? "—"}
+        {hint && <span className="ml-1.5 font-sans text-[11px] text-surface-500">({hint})</span>}
+      </dd>
     </div>
   );
 }
