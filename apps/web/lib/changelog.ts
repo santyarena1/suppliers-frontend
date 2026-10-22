@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.11.0",
+    date: "2026-10-22",
+    title: "Proveedores renovado y toda la configuración en un solo lugar",
+    changes: [
+      { kind: "new", text: "Proveedores: arriba, los distribuidores que necesitan atención y qué hacer. Abajo, todos en una lista con estado, productos, cuándo se actualizó, buscador, filtros y orden." },
+      { kind: "improved", text: "En cada distribuidor, Configuración junta todo: cuenta, impuestos, pago, envío, offline y esquema, actualización automática, stock, márgenes y zona de peligro, con un índice al costado." },
+      { kind: "improved", text: "La pestaña de sincronización ahora se llama Actualizaciones." },
+    ],
+  },
+  {
     version: "2.10.3",
     date: "2026-10-22",
     title: "Invid: los impuestos internos ya no se cobran dos veces",

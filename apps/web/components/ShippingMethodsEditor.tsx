@@ -200,7 +200,7 @@ export default function ShippingMethodsEditor({
               <select
                 value={m.currency}
                 onChange={(e) => update(i, { currency: e.target.value as ShippingCurrency })}
-                className={`${INPUT} w-20 flex-shrink-0`}
+                className={INPUT}
                 aria-label="Moneda"
               >
                 {SHIPPING_CURRENCIES.map((c) => (
@@ -259,11 +259,11 @@ export default function ShippingMethodsEditor({
             <Gift className="w-3.5 h-3.5 text-emerald-300" />
             Envío gratis desde
           </label>
-          <div className="flex items-center gap-2">
+          <div className="grid max-w-sm grid-cols-[96px_minmax(0,1fr)] items-center gap-2">
             <select
               value={freeShippingCurrency ?? "ARS"}
               onChange={(e) => onFreeShippingChange(freeShippingFrom, e.target.value as ShippingCurrency)}
-              className={`${INPUT} w-20 flex-shrink-0`}
+              className={INPUT}
               aria-label="Moneda del envío gratis"
             >
               {SHIPPING_CURRENCIES.map((c) => (
@@ -282,7 +282,7 @@ export default function ShippingMethodsEditor({
                 const n = Number(e.target.value);
                 onFreeShippingChange(e.target.value === "" || !(n > 0) ? null : n, freeShippingCurrency ?? "ARS");
               }}
-              className={`${INPUT} w-40 text-right tabular-nums`}
+              className={`${INPUT} text-right tabular-nums`}
               aria-label="Monto mínimo del pedido para envío gratis"
             />
           </div>

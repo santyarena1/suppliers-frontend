@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import PrefsPanel from "@/components/PrefsPanel";
@@ -87,7 +87,17 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   // Ashir, HDC, Gaming City: no hay API. El Excel del comercio es el canal.
   const spreadsheet = !listBased && !hasAdapter;
 
-  const [tab, setTab] = useState<ProviderTab>(listBased || spreadsheet ? "lists" : "sync");
+  const [tab, setTabRaw] = useState<ProviderTab>(listBased || spreadsheet ? "lists" : "sync");
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
+  // "Mi cuenta" y "Márgenes" son secciones de Configuración: los links viejos (?tab=credentials) llevan ahí.
+  const setTab = useCallback((next: ProviderTab) => {
+    if (next === "credentials" || next === "margins") {
+      setTabRaw("config");
+      setPendingAnchor(next === "credentials" ? "cfg-cuenta" : "cfg-margenes");
+      return;
+    }
+    setTabRaw(next);
+  }, []);
   const [listRefresh, setListRefresh] = useState(0);
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
@@ -128,7 +138,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setTab(queryTab as ProviderTab);
       tabFromQuery.current = true;
     }
-  }, [provider, queryTab]);
+  }, [provider, queryTab, setTab]);
 
   useEffect(() => {
     void loadMyProviders().then((list) => {
@@ -167,6 +177,15 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   const [savingConfig, setSavingConfig] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingAnchor || tab !== "config" || loadingConfig) return;
+    const id = pendingAnchor;
+    const t = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setPendingAnchor(null);
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [pendingAnchor, tab, loadingConfig]);
 
   const [clearingZeroStock, setClearingZeroStock] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
@@ -338,7 +357,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     autoTabDone.current = true;
     if (tabFromQuery.current) return;
     if (!canSyncProvider(status)) setTab("credentials");
-  }, [loadingStatus, status, provider]);
+  }, [loadingStatus, status, provider, setTab]);
 
   async function handleSync() {
     setSyncing(true);
@@ -552,14 +571,9 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     ...(listPriced ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }] : []),
                     ...((listBased || spreadsheet) && !demo
                       ? []
-                      : [
-                          { key: "credentials" as const, label: "Mi cuenta" },
-                          { key: "sync" as const, label: "Sincronización", shortLabel: "Sync" },
-                        ]),
-                    ...(listPriced ? [{ key: "orders" as const, label: "Pedidos", shortLabel: "Pedidos" }] : []),
-                    { key: "config" as const, label: isRetailer ? "Configuración · offline" : "Configuración", shortLabel: isRetailer ? "Offline" : "Config" },
-                    ...(isRetailer && !demo ? [{ key: "margins" as const, label: "Márgenes de venta", shortLabel: "Márgenes" }] : []),
+                      : [{ key: "sync" as const, label: "Actualizaciones", shortLabel: "Sync" }]),
                     { key: "catalog" as const, label: "Catálogo" },
+                    ...(listPriced ? [{ key: "orders" as const, label: "Pedidos", shortLabel: "Pedidos" }] : []),
                     ...(provider === "INVID" ? [{ key: "invid-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
                     ...(provider === "NEW_BYTES" ? [{ key: "nb-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
                     ...(provider === "ELIT" ? [{ key: "elit-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Pedidos" }] : []),
@@ -570,6 +584,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     ...(provider === "DISTECNA" ? [{ key: "dt-account" as const, label: "Pedidos y cuenta", shortLabel: "Pedidos" }] : []),
                     ...(provider === "POLYTECH" ? [{ key: "pt-account" as const, label: "Pedidos y cuenta", shortLabel: "Pedidos" }] : []),
                     ...(demo ? [{ key: "demo-account" as const, label: "Pedidos y Cta. Cte.", shortLabel: "Cta. Cte." }] : []),
+                    { key: "config" as const, label: "Configuración", shortLabel: "Config" },
                   ].map(({ key, label, shortLabel }) => (
                     <button
                       key={key}
@@ -611,30 +626,12 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   />
                 )}
 
-                {demo && tab === "credentials" && <DemoCredentialsCard providerName={providerLabel(provider)} />}
                 {demo && tab === "sync" && <DemoSyncPanel providerName={providerLabel(provider)} />}
                 {demo && tab === "demo-account" && <DemoAccountPanel provider={provider} providerName={providerLabel(provider)} />}
 
-                {tab === "credentials" && !listBased && (
-                  canManage ? (
-                    <ProviderCredentialForm provider={provider} onChanged={loadStatus} />
-                  ) : (
-                    <NoPermissionNote text="Las credenciales de proveedores las carga quien tiene el permiso “Configurar proveedores”." />
-                  )
-                )}
 
                 {tab === "sync" && !demo && (
-                  <div className="max-w-xl flex flex-col gap-4">
-                    {isRetailer && (
-                      <button
-                        type="button"
-                        onClick={() => setTab("config")}
-                        className="text-left border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100 hover:bg-amber-500/15"
-                      >
-                        <span className="font-semibold">Pedido offline y esquema</span>
-                        <span className="block text-xs text-amber-200/80 mt-0.5">Se configura en la pestaña Configuración, no acá.</span>
-                      </button>
-                    )}
+                  <div className="max-w-3xl flex flex-col gap-4">
                     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                       <p className="text-sm text-surface-400">
                         Trae el catálogo completo de {providerLabel(provider)} y lo guarda en nuestra base.
@@ -685,7 +682,42 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 )}
 
                 {tab === "config" && (
-                  <div className="max-w-xl" data-tour="provider-tab-content">
+                  <div className="grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start" data-tour="provider-tab-content">
+                    <nav aria-label="Secciones de la configuración" className="flex gap-1 overflow-x-auto rounded-xl border border-surface-800 bg-surface-900/60 p-1.5 lg:sticky lg:top-4 lg:flex-col lg:overflow-visible">
+                      {[
+                        ...(!listBased ? [["cfg-cuenta", "Cuenta y conexión"]] : []),
+                        ...(isRetailer ? [["cfg-compra", "Impuestos, pago y envío"]] : []),
+                        ...(!listBased ? [["cfg-actualizacion", "Actualización automática"]] : []),
+                        ["cfg-stock", "Stock y catálogo"],
+                        ...(isRetailer && !demo ? [["cfg-margenes", "Márgenes de venta"]] : []),
+                        ...(canPurge || (isRetailer && canManage) ? [["cfg-peligro", "Zona de peligro"]] : []),
+                      ].map(([id, label]) => (
+                        <a
+                          key={id}
+                          href={`#${id}`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          }}
+                          className="whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium text-surface-400 transition-colors hover:bg-surface-800 hover:text-white"
+                        >
+                          {label}
+                        </a>
+                      ))}
+                    </nav>
+                    <div className="flex min-w-0 max-w-3xl flex-col gap-5">
+                    {!listBased && (
+                      <section id="cfg-cuenta" className="scroll-mt-4 flex flex-col gap-3">
+                        <h2 className="text-base font-semibold text-white">Cuenta y conexión</h2>
+                        {demo ? (
+                          <DemoCredentialsCard providerName={providerLabel(provider)} />
+                        ) : canManage ? (
+                          <ProviderCredentialForm provider={provider} onChanged={loadStatus} />
+                        ) : (
+                          <NoPermissionNote text="Las credenciales de proveedores las carga quien tiene el permiso “Configurar proveedores”." />
+                        )}
+                      </section>
+                    )}
                     {loadingConfig ? (
                       <div className="flex items-center justify-center py-16">
                         <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
@@ -697,11 +729,14 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     ) : (
                       <form onSubmit={handleSaveConfig} className="flex flex-col gap-5">
                         {isRetailer && (
-                          <ProviderPurchaseConfig provider={provider} config={config} onChange={setConfig} />
+                          <section id="cfg-compra" className="scroll-mt-4 flex flex-col gap-3">
+                            <h2 className="text-base font-semibold text-white">Impuestos, pago, envío, offline y esquema</h2>
+                            <ProviderPurchaseConfig provider={provider} config={config} onChange={setConfig} />
+                          </section>
                         )}
 
                         {!listBased && (
-                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                        <div id="cfg-actualizacion" className="scroll-mt-4 border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="flex items-center gap-2 text-sm font-semibold text-white">
                             <Settings className="w-4 h-4 text-brand-700 dark:text-brand-400" />
                             Sincronización automática
@@ -759,23 +794,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
 
                         {/* El viejo "markup sobre el precio del proveedor" ya no toca el costo:
                             el precio de venta se arma en la pestaña Márgenes de venta. */}
-                        {isRetailer && !demo && (
-                          <button
-                            type="button"
-                            onClick={() => setTab("margins")}
-                            className="flex items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] px-5 py-4 text-left transition hover:border-emerald-500/50"
-                          >
-                            <span>
-                              <span className="block text-sm font-semibold text-white">Márgenes de venta</span>
-                              <span className="mt-0.5 block text-xs text-surface-400">
-                                El precio de venta por categoría y producto ahora tiene su propia pestaña.
-                              </span>
-                            </span>
-                            <span className="text-xs font-semibold text-emerald-300">Abrir</span>
-                          </button>
-                        )}
-
-                        <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
+                        <div id="cfg-stock" className="scroll-mt-4 border border-surface-800 rounded-xl p-5 flex flex-col gap-4">
                           <div className="text-sm font-semibold text-white">Manejo de stock y catálogo</div>
                           <div className="flex items-center justify-between gap-3 bg-surface-800 rounded-lg px-3.5 py-3">
                             <div>
@@ -848,15 +867,18 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                           </div>
                         )}
 
+                        <div className="sticky bottom-0 z-10 -mx-1 border-t border-surface-800 bg-surface-950/95 px-1 py-3 backdrop-blur">
                         <button
                           type="submit"
                           disabled={savingConfig || !canManage}
                           title={canManage ? undefined : "Necesitás el permiso “Configurar proveedores”"}
-                          className="flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
+                          className="flex w-full items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white text-sm font-semibold rounded-lg py-2.5 transition-all"
                         >
                           {savingConfig ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                           {savingConfig ? "Guardando..." : "Guardar configuración"}
                         </button>
+                        <p className="mt-1.5 text-center text-[11px] text-surface-500">Guarda impuestos, pago, envío, actualización y stock. La cuenta y los márgenes se guardan en su sección.</p>
+                        </div>
                         {configSaved && (
                           <div className="flex items-center gap-2 text-xs rounded-lg px-3.5 py-2.5 bg-emerald-500/8 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
                             <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Configuración guardada
@@ -870,8 +892,16 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       </form>
                     )}
 
+                    {isRetailer && !demo && (
+                      <section id="cfg-margenes" className="scroll-mt-4 flex flex-col gap-3">
+                        <h2 className="text-base font-semibold text-white">Márgenes de venta</h2>
+                        <SaleMarginsPanel provider={provider} providerName={providerLabel(provider)} />
+                      </section>
+                    )}
+
+                    <div id="cfg-peligro" className="scroll-mt-4 flex flex-col gap-5">
                     {!loadingConfig && config && canPurge && (
-                      <div className="border border-red-500/20 rounded-xl p-5 flex flex-col gap-4 mt-5">
+                      <div className="border border-red-500/20 rounded-xl p-5 flex flex-col gap-4">
                         <div className="flex items-center gap-2 text-sm font-semibold text-red-400">
                           <AlertTriangle className="w-4 h-4" />
                           Zona de peligro
@@ -928,12 +958,8 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                     {isRetailer && canManage && !provider.startsWith("LIST_DEMO_") && (
                       <DisconnectProviderCard provider={provider} />
                     )}
-                  </div>
-                )}
-
-                {tab === "margins" && isRetailer && (
-                  <div data-tour="provider-tab-content">
-                    <SaleMarginsPanel provider={provider} providerName={providerLabel(provider)} />
+                    </div>
+                    </div>
                   </div>
                 )}
 

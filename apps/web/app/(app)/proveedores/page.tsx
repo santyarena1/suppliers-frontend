@@ -3,27 +3,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
-import NodoSpinner from "@/components/NodoSpinner";
-import SyncProgressBar from "@/components/SyncProgressBar";
 import RedeemAccessCode from "@/components/RedeemAccessCode";
 import LocalPurchaseDashboard from "@/components/insights/LocalPurchaseDashboard";
 import {
   invalidateMyProviders, loadMyProviders, Provider, providersApi, ProviderStatus,
-  canSyncProvider, isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, IMPLEMENTED_PROVIDERS, listImportsApi, type VisibleProvider
+  isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, listImportsApi, type VisibleProvider
 } from "@/lib/api";
 import { getTenant, isAdmin } from "@/lib/auth";
 import AddSupplierDialog from "@/components/list-import/AddSupplierDialog";
 import StoreProvidersSection from "@/components/storefront/StoreProvidersSection";
 import AvailableProviders from "@/components/AvailableProviders";
-import { ListFreshnessChip } from "@/components/list-import/ListFreshnessHints";
 import ProviderBadge from "@/components/ProviderBadge";
 import { useIsRetailer } from "@/lib/purchase";
-import { providerHasIvaRate } from "@/lib/purchase-pricing";
-import SearchToggle from "@/components/subscription/SearchToggle";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import { capabilityAllowed, invalidateSubscription, useSubscription } from "@/lib/subscription";
-import { type SyncHealth } from "@/components/SyncHealthBanner";
-import { Boxes, CheckCircle2, Clock, FileSpreadsheet, KeyRound, Loader2, MessageSquare, Plus, RefreshCw, Settings, StickyNote, XCircle } from "lucide-react";
+import ProvidersTable, { providerRowState } from "@/components/providers/ProvidersTable";
+import { FileSpreadsheet, Loader2, Plus } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
 
@@ -148,6 +143,9 @@ export default function ProveedoresPage() {
   const linked = visible.filter((p) => p.linked);
   const advertised = visible.filter((p) => !p.linked);
   const activeInSearch = linked.filter((p) => p.inSearch !== false && !p.platformHidden).length;
+  const attention = linked
+    .map((p) => ({ p, ...providerRowState(p, statuses[p.provider], syncing === p.provider) }))
+    .filter((r) => r.state === "attention" || r.state === "account");
   const maxSearch = subscription?.capabilities.maxSearchProviders ?? null;
 
   function onSearchChanged() {
@@ -159,9 +157,9 @@ export default function ProveedoresPage() {
     <>
       <header className="flex-shrink-0 border-b border-surface-800 bg-surface-950 px-4 sm:px-6 py-3 flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold text-white">Dashboard de Proveedores</h1>
+          <h1 className="text-base font-semibold text-white">Proveedores</h1>
           <p className="text-xs text-surface-500 hidden sm:block">
-            Compras, marcas y catálogo de este comercio — las cuentas no se mezclan con otros locales
+            Tus distribuidores, cómo están y qué te venden. Las cuentas son de este comercio.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -194,202 +192,76 @@ export default function ProveedoresPage() {
 
       <div className="flex-1 overflow-y-auto">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-8">
-              {/* Lo primero que ve un comercio nuevo: con quién se puede conectar. */}
-              {retailer && <AvailableProviders providers={advertised} onConnected={() => void load(true)} />}
-              {analyticsAllowed ? <LocalPurchaseDashboard /> : <UpsellNotice capability="advancedAnalytics" compact />}
-              {retailer && (
-                <div className="border border-amber-500/30 bg-amber-500/10 rounded-xl px-4 py-3 text-sm text-amber-100">
-                  <span className="font-semibold">Pedido offline y esquema</span>
-                  <span className="block text-xs text-amber-200/80 mt-0.5">
-                    Entrá a un distribuidor que informe IVA (New Bytes, Elit, Grupo Núcleo, Air, Invid o Diapstore) → pestaña Configuración. Activá los checks y elegí el IVA. Ceven y el resto no habilitan esto.
-                  </span>
-                </div>
+              {/* Un comercio nuevo ve primero con quién se puede conectar. */}
+              {retailer && !loading && linked.length === 0 && (
+                <AvailableProviders providers={advertised} onConnected={() => void load(true)} />
               )}
-              <section>
-                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
-                    Tus proveedores — {linked.length}
+
+              {!loading && attention.length > 0 && (
+                <section className="rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-4 sm:p-5">
+                  <h2 className="text-sm font-semibold text-amber-300">
+                    {attention.length === 1 ? "1 distribuidor necesita atención" : `${attention.length} distribuidores necesitan atención`}
                   </h2>
-                  {retailer && linked.length > 0 && (
-                    <p className="text-xs text-surface-400" data-testid="search-usage">
-                      Proveedores conectados: <strong className="text-white">{linked.length}</strong>
-                      <span className="mx-1.5 text-surface-600">·</span>
-                      Activos en búsqueda:{" "}
-                      <strong className="text-white">
-                        {activeInSearch}
-                        {maxSearch != null && ` / ${maxSearch}`}
-                      </strong>
-                      {maxSearch != null && (
-                        <Link href="/suscripcion" className="ml-2 font-semibold text-brand-300 hover:text-brand-200">
-                          Buscar en todos con NODO Pro
+                  <ul className="m-0 mt-3 grid list-none gap-2.5 p-0 sm:grid-cols-2 lg:grid-cols-3">
+                    {attention.slice(0, 6).map(({ p, reason }) => (
+                      <li key={p.provider} className="rounded-xl border border-surface-800 bg-surface-950/60 px-3.5 py-3">
+                        <ProviderBadge provider={p.provider} label={p.name} variant="inline" size="sm" />
+                        <p className="mt-1.5 text-xs leading-relaxed text-surface-300">{reason}</p>
+                        <Link href={`/proveedores/${p.provider}?tab=config`} className="mt-2 inline-block text-xs font-semibold text-brand-300 hover:text-white">
+                          Ver qué hacer
                         </Link>
-                      )}
-                    </p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {retailer && linked.length > 0 && (
+                <p className="-mb-4 text-xs text-surface-400" data-testid="search-usage">
+                  Conectados: <strong className="text-white">{linked.length}</strong>
+                  <span className="mx-1.5 text-surface-600">·</span>
+                  Activos en búsqueda:{" "}
+                  <strong className="text-white">
+                    {activeInSearch}
+                    {maxSearch != null && ` / ${maxSearch}`}
+                  </strong>
+                  {maxSearch != null && (
+                    <Link href="/suscripcion" className="ml-2 font-semibold text-brand-300 hover:text-brand-200">
+                      Buscar en todos con NODO Pro
+                    </Link>
                   )}
+                </p>
+              )}
+
+              {loading ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
                 </div>
-                {loading ? (
-                  <div className="flex items-center justify-center py-16">
-                    <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
-                  </div>
-                ) : linked.length === 0 ? (
-                  <div className="border border-surface-800 rounded-xl p-8 text-center flex flex-col gap-2">
-                    <p className="text-sm text-surface-300">Todavía no estás conectado con ningún proveedor.</p>
-                    <p className="text-xs text-surface-500">
-                      Pedile un código de acceso al distribuidor con el que ya trabajás y canjealo acá abajo.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {linked.map(({ provider, name, accountManager, linkId, inSearch, platformHidden, configured }) => {
-                      const s = statuses[provider];
-                      const bySpreadsheet = isListProvider(provider) || !IMPLEMENTED_PROVIDERS.includes(provider);
-                      const result = syncResult[provider];
-                      const live = isLiveSyncRun(s?.currentRun);
-                      const isSyncing = syncing === provider || live;
-                      return (
-                        <div
-                          key={provider}
-                          className="bg-surface-900 border border-surface-800 hover:border-surface-600 rounded-xl p-4 transition-all flex flex-col gap-3"
-                        >
-                          <Link href={`/proveedores/${provider}`} className="flex items-center justify-between gap-3">
-                            <ProviderBadge provider={provider} label={name} variant="inline" size="md" />
-                            {configured === false ? (
-                              <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-300">
-                                <KeyRound className="w-3 h-3" /> Sin configurar
-                              </span>
-                            ) : bySpreadsheet ? (
-                              <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400">
-                                <FileSpreadsheet className="w-3 h-3" /> Por lista
-                              </span>
-                            ) : s?.hasCredentials ? (
-                              <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                                <CheckCircle2 className="w-3 h-3" /> Configurado
-                              </span>
-                            ) : s?.publicCatalog ? (
-                              <span className="flex items-center gap-1 text-[10px] font-semibold text-sky-400">
-                                <CheckCircle2 className="w-3 h-3" /> Catálogo público
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-[10px] font-semibold text-surface-500">
-                                <KeyRound className="w-3 h-3" /> Sin credencial
-                              </span>
-                            )}
-                          </Link>
+              ) : linked.length === 0 ? (
+                <div className="border border-surface-800 rounded-xl p-8 text-center flex flex-col gap-2">
+                  <p className="text-sm text-surface-300">Todavía no estás conectado con ningún distribuidor.</p>
+                  <p className="text-xs text-surface-500">
+                    Elegí uno de arriba o pedile un código de acceso al distribuidor con el que ya trabajás y canjealo abajo.
+                  </p>
+                </div>
+              ) : (
+                <ProvidersTable
+                  providers={linked}
+                  statuses={statuses}
+                  syncingProvider={syncing}
+                  syncResult={syncResult}
+                  retailer={retailer}
+                  chatAllowed={chatAllowed}
+                  onSync={handleSync}
+                  onSearchChanged={onSearchChanged}
+                />
+              )}
 
-                          <Link href={`/proveedores/${provider}`} className="flex items-center gap-4 text-xs text-surface-400">
-                            <span className="flex items-center gap-1.5">
-                              <Boxes className="w-3.5 h-3.5 text-surface-600" />
-                              {(s?.total ?? 0).toLocaleString("es-AR")} productos
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-surface-600" />
-                              {s?.lastSyncedAt ? relativeTime(s.lastSyncedAt) : "nunca sincronizado"}
-                            </span>
-                          </Link>
+              {analyticsAllowed ? <LocalPurchaseDashboard /> : <UpsellNotice capability="advancedAnalytics" compact />}
 
-                          {accountManager && (
-                            <p className="text-[11px] text-surface-500 -mt-1">
-                              Tu vendedor: {accountManager.name} · {accountManager.email}
-                            </p>
-                          )}
-                          {(s as { health?: SyncHealth | null } | undefined)?.health?.paused && (
-                            <p className="text-[11px] text-red-300 -mt-1 leading-relaxed">
-                              <b>Sync pausado por error de {name}.</b> Sus productos salieron del buscador hasta que lo reactives desde el proveedor.
-                            </p>
-                          )}
-                          {configured === false && (
-                            <p className="text-[11px] text-amber-200/80 -mt-1">
-                              No aparece en la búsqueda hasta que {bySpreadsheet ? "apliques tu lista de precios" : "cargues tu cuenta y sincronices"}.
-                            </p>
-                          )}
-                          {bySpreadsheet && <ListFreshnessChip provider={provider} />}
-                          {retailer && !platformHidden && configured !== false && (
-                            <SearchToggle provider={provider} name={name} inSearch={inSearch !== false} onChanged={onSearchChanged} />
-                          )}
-
-                          <div className="flex items-center gap-2 pt-1 border-t border-surface-800 mt-1">
-                            {linkId && chatAllowed && (
-                              <Link
-                                href={`/mensajes?linkId=${linkId}`}
-                                className="flex items-center justify-center gap-1 text-xs font-medium border border-brand-500/40 hover:border-brand-400 text-brand-200 hover:text-white rounded-lg px-2.5 py-1.5 transition-all"
-                                title={accountManager ? `Hablar con ${accountManager.name}` : "Hablar con el vendedor asignado"}
-                              >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                Hablar
-                              </Link>
-                            )}
-                            <Link
-                              href={`/proveedores/${provider}?tab=${bySpreadsheet ? "config" : canSyncProvider(s) ? "sync" : "credentials"}`}
-                              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-300 hover:text-white rounded-lg py-1.5 transition-all"
-                            >
-                              {s?.hasCredentials || bySpreadsheet ? <Settings className="w-3.5 h-3.5" /> : <KeyRound className="w-3.5 h-3.5" />}
-                              {s?.hasCredentials || bySpreadsheet ? "Configurar" : s?.publicCatalog ? "Sincronizar" : "Cargar cuenta"}
-                            </Link>
-                            {retailer && providerHasIvaRate(provider) && (
-                              <Link
-                                href={`/proveedores/${provider}?tab=config`}
-                                className="flex items-center justify-center gap-1 text-xs font-medium border border-amber-500/40 hover:border-amber-400 text-amber-200 hover:text-white rounded-lg px-2.5 py-1.5 transition-all"
-                                title="Pedido offline y esquema"
-                              >
-                                <StickyNote className="w-3.5 h-3.5" />
-                              </Link>
-                            )}
-                            {bySpreadsheet ? (
-                              <Link
-                                href={`/proveedores/${provider}?tab=lists`}
-                                className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg py-1.5 transition-all"
-                              >
-                                <FileSpreadsheet className="w-3.5 h-3.5" /> Subir lista
-                              </Link>
-                            ) : (
-                            <button
-                              onClick={(e) => handleSync(provider, e)}
-                              disabled={isSyncing || !canSyncProvider(s)}
-                              title={!canSyncProvider(s) ? "Configurá la credencial primero" : undefined}
-                              className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-lg py-1.5 transition-all"
-                            >
-                              {isSyncing ? <NodoSpinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                              {isSyncing ? "Sincronizando" : "Sincronizar"}
-                            </button>
-                            )}
-                          </div>
-
-                          {isSyncing && <SyncProgressBar run={s?.currentRun} />}
-
-                          {result && !isSyncing && (
-                            <div className={`flex flex-col gap-1 text-[11px] rounded-md px-2.5 py-1.5 ${
-                              result.ok
-                                ? "bg-emerald-500/8 text-emerald-700 dark:text-emerald-400"
-                                : "bg-red-500/8 text-red-400"
-                            }`}>
-                              <div className="flex items-center gap-1.5">
-                                {result.ok ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" /> : <XCircle className="w-3 h-3 flex-shrink-0" />}
-                                {result.msg}
-                              </div>
-                              {result.ok && (
-                                <Link
-                                  href={`/proveedores/${provider}?tab=sync`}
-                                  className="text-[10px] underline text-emerald-600/80 dark:text-emerald-400/80 pl-4"
-                                >
-                                  Ver qué cambió
-                                </Link>
-                              )}
-                            </div>
-                          )}
-                          {!result && !isSyncing && s?.currentRun?.status === "OK" && (
-                            <p className="text-[10px] text-surface-500">
-                              Última: {summarizeSyncRun(s.currentRun)}{" "}
-                              <Link href={`/proveedores/${provider}?tab=sync`} className="underline">
-                                ver cambios
-                              </Link>
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
+              {retailer && !loading && linked.length > 0 && advertised.length > 0 && (
+                <AvailableProviders providers={advertised} onConnected={() => void load(true)} />
+              )}
 
               <StoreProvidersSection onChanged={() => void load(true)} />
 
@@ -403,15 +275,4 @@ export default function ProveedoresPage() {
           </div>
     </>
   );
-}
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "ahora";
-  if (m < 60) return `hace ${m}m`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `hace ${h}h`;
-  const d = Math.floor(h / 24);
-  return `hace ${d}d`;
 }
