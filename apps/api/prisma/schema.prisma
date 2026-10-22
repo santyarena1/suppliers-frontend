@@ -408,6 +408,21 @@ model PlatformProductContentLink {
   @@index([contentId])
 }
 
+/// Qué fichas enriquecidas vio cada usuario por día (tope anti-scraping) y si las copió.
+model PlatformContentAccess {
+  id         String   @id @default(uuid())
+  userId     String
+  /// YYYY-MM-DD, hora de Argentina.
+  day        String
+  provider   String
+  externalId String
+  copied     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, day, provider, externalId])
+  @@index([userId, day])
+}
+
 /// Corrida de importación de contenido (previsualizar o cargar). Guarda el resumen del cruce.
 model PlatformContentImportRun {
   id           String    @id @default(uuid())

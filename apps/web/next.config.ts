@@ -29,7 +29,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [{ protocol: "https", hostname: "**" }, { protocol: "http", hostname: "**" }],
   },
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      // Fichas de producto: fuera de buscadores y de entrenamiento de IA.
+      { source: "/product/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, noai, noimageai" }] },
+    ];
   },
 };
 

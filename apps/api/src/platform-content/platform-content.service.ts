@@ -1,9 +1,10 @@
-import { ConflictException, Injectable, Logger, OnModuleInit } from "@nestjs/common";
+import { ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { KNOWN_PROVIDERS } from "@nodo/shared";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { type AcuStockProduct, AcuStockClient } from "./acustock.client";
 import { type CatalogRow, type ContentLink, matchContent } from "./content-match";
+import { contentToText } from "./content-text";
 
 export const ACUSTOCK_SOURCE = "ACUSTOCK";
 type Mode = "PREVIEW" | "APPLY";
@@ -13,6 +14,18 @@ const LINK_CHUNK = 1000;
 const CATALOG_PAGE = 20_000;
 /** Hay varias réplicas: una corrida sin latido en este tiempo se da por muerta. */
 const STALE_MS = 3 * 60_000;
+/**
+ * Fichas completas distintas que ve un usuario por día. Un comercio que cotiza no
+ * llega; un script que recorre el catálogo sí, y desde ahí ve la ficha del distribuidor.
+ */
+export const DAILY_VIEW_LIMIT = 300;
+/** Veces por día que un usuario puede usar "Copiar ficha". */
+export const DAILY_COPY_LIMIT = 100;
+
+/** Día en Argentina (YYYY-MM-DD): el tope se reinicia a la medianoche local. */
+export function argentinaDay(now = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(now);
+}
 
 /** Lo que la ficha muestra del contenido de plataforma. */
 export interface PlatformContentView {
@@ -41,22 +54,78 @@ export class PlatformContentService implements OnModuleInit {
     });
   }
 
-  /** Contenido vinculado a una ficha, o null. */
-  async forProduct(provider: string, externalId: string): Promise<PlatformContentView | null> {
+  /**
+   * Contenido de una ficha para un usuario. Nunca sale por la API de catálogo
+   * (catalog-api arma sus respuestas aparte): solo la ficha dentro de la app.
+   * Pasado el tope diario devuelve `limited` y la ficha se ve como la del distribuidor.
+   */
+  async forProduct(
+    provider: string,
+    externalId: string,
+    userId: string | undefined
+  ): Promise<{ content: PlatformContentView | null; limited: boolean }> {
     const link = await this.prisma.platformProductContentLink.findUnique({
       where: { provider_externalId: { provider, externalId } },
       include: { content: true },
     });
-    if (!link) return null;
+    if (!link || !userId) return { content: null, limited: false };
+    if (!(await this.registerView(userId, provider, externalId))) return { content: null, limited: true };
     const c = link.content;
     return {
-      source: c.source,
-      images: Array.isArray(c.images) ? (c.images as PlatformContentView["images"]) : [],
-      shortDescription: c.shortDescription,
-      descriptionHtml: c.descriptionHtml,
-      specs: Array.isArray(c.specs) ? (c.specs as PlatformContentView["specs"]) : [],
-      warrantyMonths: c.warrantyMonths,
+      content: {
+        source: c.source,
+        images: Array.isArray(c.images) ? (c.images as PlatformContentView["images"]) : [],
+        shortDescription: c.shortDescription,
+        descriptionHtml: c.descriptionHtml,
+        specs: Array.isArray(c.specs) ? (c.specs as PlatformContentView["specs"]) : [],
+        warrantyMonths: c.warrantyMonths,
+      },
+      limited: false,
     };
+  }
+
+  /** Texto de la ficha para "Copiar ficha", con su propio tope diario. Queda registrado. */
+  async copyText(provider: string, externalId: string, userId: string): Promise<{ text: string }> {
+    const link = await this.prisma.platformProductContentLink.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+      include: { content: true },
+    });
+    if (!link) throw new NotFoundException("Este producto no tiene ficha completa");
+    const day = argentinaDay();
+    const copies = await this.prisma.platformContentAccess.count({ where: { userId, day, copied: true } });
+    if (copies >= DAILY_COPY_LIMIT) {
+      throw new HttpException("Llegaste al límite de fichas copiadas por hoy", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    if (!(await this.registerView(userId, provider, externalId))) {
+      throw new HttpException("Llegaste al límite de fichas completas por hoy", HttpStatus.TOO_MANY_REQUESTS);
+    }
+    await this.prisma.platformContentAccess.update({
+      where: { userId_day_provider_externalId: { userId, day, provider, externalId } },
+      data: { copied: true },
+    });
+    const c = link.content;
+    return {
+      text: contentToText({
+        name: c.name,
+        shortDescription: c.shortDescription,
+        descriptionHtml: c.descriptionHtml,
+        specs: Array.isArray(c.specs) ? (c.specs as PlatformContentView["specs"]) : [],
+      }),
+    };
+  }
+
+  /** true si el usuario puede ver esta ficha hoy: ya la vio, o todavía no llegó al tope. */
+  private async registerView(userId: string, provider: string, externalId: string): Promise<boolean> {
+    const day = argentinaDay();
+    const key = { userId_day_provider_externalId: { userId, day, provider, externalId } };
+    if (await this.prisma.platformContentAccess.findUnique({ where: key, select: { id: true } })) return true;
+    const seen = await this.prisma.platformContentAccess.count({ where: { userId, day } });
+    if (seen >= DAILY_VIEW_LIMIT) {
+      if (seen === DAILY_VIEW_LIMIT) this.logger.warn(`Usuario ${userId} llegó al tope diario de fichas completas`);
+      return false;
+    }
+    await this.prisma.platformContentAccess.createMany({ data: [{ userId, day, provider, externalId }], skipDuplicates: true });
+    return true;
   }
 
   async status() {

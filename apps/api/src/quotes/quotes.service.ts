@@ -503,7 +503,7 @@ export class QuotesService {
     lineMargin: number | null,
     quoteMargin: number | null
   ): Promise<PricedLine | null> {
-    const product = (await this.providers.getProduct(viewer.commercialTenantId, provider as never, externalId, viewer.userId)) as
+    const product = (await this.providers.getProduct(viewer.commercialTenantId, provider as never, externalId, viewer.userId, { richContent: false })) as
       | (Record<string, unknown> & { provider: string; externalId: string })
       | null;
     if (!product) throw new NotFoundException("Producto no encontrado");

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { PlatformProductContent } from "@/lib/api";
+import { useEffect, useMemo, useState, type SyntheticEvent } from "react";
+import { Check, Copy, Loader2 } from "lucide-react";
+import { catalogApi, type PlatformProductContent, type Provider } from "@/lib/api";
 import { sanitizeRichHtml } from "@/lib/sanitize-html";
 
 /** Tipografía del HTML de la descripción, con la paleta de la ficha. */
@@ -11,21 +12,87 @@ const PROSE =
   "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_a]:text-brand-400 " +
   "[&_table]:my-3 [&_table]:w-full [&_td]:border-b [&_td]:border-surface-800 [&_td]:py-1.5 [&_td]:pr-3 [&_img]:hidden";
 
-interface DescriptionProps {
+/**
+ * La ficha enriquecida no se selecciona ni se copia con el mouse: se copia con
+ * "Copiar ficha", que tiene tope diario y queda registrado.
+ */
+const block = (e: SyntheticEvent) => e.preventDefault();
+const PROTECT = {
+  className: "select-none",
+  onCopy: block,
+  onCut: block,
+  onContextMenu: block,
+  onDragStart: block,
+} as const;
+
+function errMsg(err: unknown, fallback: string) {
+  return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback;
+}
+
+interface CopyProps {
+  provider: string;
+  externalId: string;
+}
+
+function CopyRichButton({ provider, externalId }: CopyProps) {
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const [error, setError] = useState("");
+
+  const copy = async () => {
+    setState("busy");
+    try {
+      const r = await catalogApi.copyRichText(provider as Provider, externalId);
+      await navigator.clipboard.writeText(r.data.text);
+      setState("done");
+      setTimeout(() => setState("idle"), 2000);
+    } catch (err) {
+      setError(errMsg(err, "No se pudo copiar la ficha"));
+      setState("error");
+      setTimeout(() => setState("idle"), 4000);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      {state === "error" && <span className="text-xs text-red-300">{error}</span>}
+      <button
+        type="button"
+        onClick={() => void copy()}
+        disabled={state === "busy"}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-surface-700 bg-surface-800 px-2.5 py-1.5 text-xs font-semibold text-surface-200 hover:bg-surface-700 hover:text-white disabled:opacity-60"
+        title="Copia la descripción y las especificaciones"
+      >
+        {state === "busy" ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : state === "done" ? (
+          <Check className="h-3.5 w-3.5 text-emerald-400" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+        {state === "done" ? "Copiada" : "Copiar ficha"}
+      </button>
+    </div>
+  );
+}
+
+interface DescriptionProps extends CopyProps {
   content: PlatformProductContent;
 }
 
 /** Descripción enriquecida: la bajada y el HTML limpio (DOMPurify corre en el navegador). */
-export function ProductRichDescription({ content }: DescriptionProps) {
+export function ProductRichDescription({ content, provider, externalId }: DescriptionProps) {
   const [clean, setClean] = useState("");
   useEffect(() => {
     setClean(sanitizeRichHtml(content.descriptionHtml ?? ""));
   }, [content.descriptionHtml]);
 
-  if (!content.descriptionHtml && !content.shortDescription) return null;
+  if (!content.descriptionHtml && !content.shortDescription && !content.specs.length) return null;
   return (
-    <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-      <h2 className="pp__sec-title">Descripción</h2>
+    <section {...PROTECT} className={`pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5 ${PROTECT.className}`}>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="pp__sec-title">{content.descriptionHtml || content.shortDescription ? "Descripción" : "Ficha técnica"}</h2>
+        <CopyRichButton provider={provider} externalId={externalId} />
+      </div>
       {content.shortDescription && (
         <p className="text-[15px] leading-relaxed text-surface-100">{content.shortDescription}</p>
       )}
@@ -51,7 +118,7 @@ export function ProductSpecsTable({ specs }: SpecsProps) {
 
   if (!specs.length) return null;
   return (
-    <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
+    <section {...PROTECT} className={`pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5 ${PROTECT.className}`}>
       <h2 className="pp__sec-title">Especificaciones</h2>
       <div className="grid gap-5 md:grid-cols-2">
         {groups.map(([group, rows]) => (

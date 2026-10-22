@@ -1099,3 +1099,12 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: `status` → `{ configured, running, contents, links, runs: [{ id, mode, status, stats, errorMessage, startedAt, finishedAt }] }`; `preview`/`apply` → `{ started, runId }` (corre en segundo plano).
 - **Estado**: IMPLEMENTADO
 - **Notas**: lee `ACUSTOCK_EXPORT_URL` y `ACUSTOCK_EXPORT_TOKEN` del entorno. Cruce: código del distribuidor (contra externalId, sku o partNumber de la ficha) > EAN > número de parte (≥ 6 caracteres y marca compatible). `GET /providers/:provider/products/:externalId` suma `platformContent: { source, images[{url, alt}], shortDescription, descriptionHtml, specs[{group, name, value}], warrantyMonths } | null`; la web sanitiza el HTML con DOMPurify.
+
+### [FEATURE] Fichas enriquecidas: tope diario y "Copiar ficha"
+- **Método**: GET
+- **Ruta**: `/providers/:provider/products/:externalId/rich-text`
+- **Auth**: Bearer token requerido (mismo permiso de lectura que la ficha)
+- **Body / Params**: sin body
+- **Respuesta esperada**: `{ text }` — nombre, bajada, descripción sin HTML y especificaciones agrupadas, en texto plano.
+- **Estado**: IMPLEMENTADO
+- **Notas**: 429 pasadas las 100 copias por usuario y día (hora de Argentina). La ficha (`GET /providers/:provider/products/:externalId`) devuelve `platformContent: null` y `platformContentLimited: true` cuando el usuario ya vio 300 fichas completas distintas en el día (las ya vistas se siguen viendo). Cada vista y copia queda en `PlatformContentAccess`. El contenido enriquecido no sale por la API de catálogo (`/v1`).

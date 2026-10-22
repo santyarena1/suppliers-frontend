@@ -299,6 +299,8 @@ export interface ProductDTO {
   imageAiSelected?: boolean;
   /** Solo en la ficha individual. */
   platformContent?: PlatformProductContent | null;
+  /** El usuario llegó al tope diario de fichas completas: se ve la del distribuidor. */
+  platformContentLimited?: boolean;
   productUrl?: string | null;
   externalId: string;
   sku?: string | null;
@@ -3027,6 +3029,9 @@ export interface BrandCount {
 }
 
 export const catalogApi = {
+  /** "Copiar ficha": texto de la ficha enriquecida (tope diario, queda registrado). */
+  copyRichText: (provider: Provider, externalId: string) =>
+    api.get<{ text: string }>(`/providers/${provider}/products/${encodeURIComponent(externalId)}/rich-text`),
   getProduct: (provider: Provider, externalId: string) =>
     api.get<ProductDTO>(`/providers/${provider}/products/${externalId}`),
   priceHistory: (

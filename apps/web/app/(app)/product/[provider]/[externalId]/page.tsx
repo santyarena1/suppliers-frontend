@@ -328,6 +328,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                         className="object-contain p-6 sm:p-8"
                         unoptimized
                         onError={() => setImgErr(true)}
+                        onContextMenu={(e) => e.preventDefault()}
+                        draggable={false}
                         priority
                       />
                       <button
@@ -364,7 +366,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           }`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={proxyImg(src, { trim: false })} alt="" className="h-full w-full object-contain p-1" loading="lazy" />
+                          <img src={proxyImg(src, { trim: false })} alt="" className="h-full w-full object-contain p-1" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()} />
                         </button>
                       ))}
                     </div>
@@ -658,8 +660,15 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 )}
               </section>}
 
-              {product.platformContent && <ProductRichDescription content={product.platformContent} />}
+              {product.platformContent && (
+                <ProductRichDescription content={product.platformContent} provider={product.provider} externalId={product.externalId} />
+              )}
               {product.platformContent && <ProductSpecsTable specs={product.platformContent.specs} />}
+              {product.platformContentLimited && (
+                <p className="rounded-xl border border-surface-800 bg-surface-900/60 px-4 py-3 text-xs text-surface-400">
+                  Hoy ya viste muchas fichas completas. Mañana vuelven a verse las fotos, la descripción y las especificaciones de NODO.
+                </p>
+              )}
 
               {!product.platformContent?.descriptionHtml && !product.platformContent?.shortDescription && (product.description || product.longDescription) && (
                 <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">

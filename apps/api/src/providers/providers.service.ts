@@ -1352,7 +1352,13 @@ export class ProvidersService implements OnModuleInit {
   }
 
   /** Producto individual — soporta entrar directo por link, sin depender del caché de búsqueda del frontend. */
-  async getProduct(tenantId: string, provider: Provider, externalId: string, viewerUserId?: string) {
+  async getProduct(
+    tenantId: string,
+    provider: Provider,
+    externalId: string,
+    viewerUserId?: string,
+    opts: { richContent?: boolean } = {}
+  ) {
     if (!(await this.visibility.canReadCatalog(tenantId, provider, viewerUserId))) return null;
     const [offer, enrichment] = await Promise.all([
       this.prisma.tenantProductOffer.findUnique({
@@ -1361,20 +1367,34 @@ export class ProvidersService implements OnModuleInit {
       }),
       this.catalogEnrichment.getContext(),
     ]);
-    const platformContent = await this.platformContent.forProduct(provider, externalId);
+    // La ficha enriquecida es solo para la ficha en pantalla: otros usos (presupuestos) no la piden ni suman al tope.
+    const rich =
+      opts.richContent === false
+        ? { content: null, limited: false }
+        : await this.platformContent.forProduct(provider, externalId, viewerUserId);
+    const platformContent = rich.content;
+    const platformContentLimited = rich.limited;
     if (offer) {
       const rules = await this.rulesFor(tenantId, provider);
       const [view] = await this.withImageAiFlags([
         toProductView(offer.product, offer, rules, enrichment),
       ]);
-      return { ...view, platformContent };
+      return { ...view, platformContent, platformContentLimited };
     }
     const sheet = await this.prisma.providerSyncCache.findUnique({
       where: { provider_externalId: { provider, externalId } },
     });
     if (!sheet) return null;
     const [view] = await this.withImageAiFlags([toSheetView(sheet, enrichment)]);
-    return { ...view, platformContent };
+    return { ...view, platformContent, platformContentLimited };
+  }
+
+  /** Texto de la ficha enriquecida para "Copiar ficha" (mismo permiso de lectura que la ficha). */
+  async copyRichText(tenantId: string, provider: Provider, externalId: string, viewerUserId: string) {
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, viewerUserId))) {
+      throw new NotFoundException("Producto no encontrado");
+    }
+    return this.platformContent.copyText(provider, externalId, viewerUserId);
   }
 
   /**

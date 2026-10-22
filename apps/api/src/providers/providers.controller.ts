@@ -992,6 +992,17 @@ export class ProvidersController {
     return product;
   }
 
+  /** "Copiar ficha": texto de la ficha enriquecida, con tope diario y registro. */
+  @Get("providers/:provider/products/:externalId/rich-text")
+  copyRichText(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Param("externalId") externalId: string
+  ) {
+    if (!tenant.userId) throw new NotFoundException("Producto no encontrado");
+    return this.providersService.copyRichText(commercialId(tenant), assertProvider(provider), externalId, tenant.userId);
+  }
+
   @SalePriced("history")
   @Get("providers/:provider/products/:externalId/price-history")
   getPriceHistory(
