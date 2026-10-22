@@ -48,7 +48,7 @@ type CachedPayload = { account: ElitAccount; drafts: NodoProviderDraft[] };
 const SECTIONS = [
   { id: "cta", label: "Cuenta corriente" },
   { id: "payments", label: "Informes de pago" },
-  { id: "nodo", label: "Desde Nodo" },
+  { id: "nodo", label: "Desde NODO" },
   { id: "orders", label: "Notas de venta" },
 ] as const;
 

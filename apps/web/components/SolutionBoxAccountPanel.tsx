@@ -12,6 +12,14 @@ import { sbOrderItems, sbOrderTotals } from "@/components/account/sbOrderDetail"
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import { useAccountHistoryState, useClampPage, usePagedMonthRows } from "@/components/account/useAccountHistory";
 import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
+import {
+  matchesNodoNumber,
+  nodoOrderNumbers,
+  NodoOrderBadge,
+  OrderOriginFilter,
+  rowsByOrigin,
+  type OrderOrigin,
+} from "@/components/account/nodoOrigin";
 
 type SolutionBoxAccount = Awaited<ReturnType<typeof solutionBoxAccountApi.account>>["data"];
 type Detail = { kind: "order"; row: SolutionBoxOrder } | { kind: "draft"; row: NodoProviderDraft };
@@ -21,8 +29,17 @@ type CachedPayload = { account: SolutionBoxAccount; drafts: NodoProviderDraft[] 
 const SECTIONS = [
   { id: "orders", label: "Pedidos" },
   { id: "invoices", label: "Facturas" },
-  { id: "nodo", label: "Desde Nodo" },
+  { id: "nodo", label: "Desde NODO" },
 ] as const;
+
+/**
+ * NODO guarda el Pedido_Nro que devuelve Solution Box al confirmar (a veces con la
+ * extensión: 12345/01). Se compara con el número del pedido y con número/extensión.
+ * Sin verificar con datos: no se consulta Solution Box por sus límites.
+ */
+function isFromNodo(o: SolutionBoxOrder, numbers: Set<string>): boolean {
+  return matchesNodoNumber([o.number, `${o.number}/${o.extension}`], numbers);
+}
 
 function invoiceHref(o: SolutionBoxOrder): string | undefined {
   if (!o.invoice) return undefined;
@@ -42,6 +59,7 @@ export default function SolutionBoxAccountPanel() {
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [origin, setOrigin] = useState<OrderOrigin>("all");
 
   useEffect(() => {
     void load(false);
@@ -75,9 +93,11 @@ export default function SolutionBoxAccountPanel() {
   }
 
   const section = history.section as SectionId;
+  const nodoNumbers = nodoOrderNumbers(drafts);
+  const isNodoOrder = (o: SolutionBoxOrder) => isFromNodo(o, nodoNumbers);
   const rowsForSection =
     section === "orders"
-      ? (account ? account.orders ?? [] : null)
+      ? (account ? rowsByOrigin(account.orders ?? [], origin, isNodoOrder) : null)
       : section === "invoices"
         ? (account ? account.invoices ?? [] : null)
         : drafts;
@@ -137,6 +157,16 @@ export default function SolutionBoxAccountPanel() {
         amountTotalLabel="Total período"
         hint={account?.note ?? "Pedidos y facturas de solutionbox.com.ar."}
         wide={section !== "nodo"}
+        header={
+          section === "orders" && account ? (
+            <OrderOriginFilter
+              rows={account.orders ?? []}
+              isNodo={isNodoOrder}
+              value={origin}
+              onChange={(o) => { setOrigin(o); history.setPage(1); }}
+            />
+          ) : undefined
+        }
       >
         {loading && !ready ? (
           <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -154,7 +184,7 @@ export default function SolutionBoxAccountPanel() {
         ) : section === "nodo" ? (
           <DraftsTable drafts={paged.items as NodoProviderDraft[]} onOpen={(d) => setDetail({ kind: "draft", row: d })} />
         ) : (
-          <OrdersTable rows={paged.items as SolutionBoxOrder[]} invoicesOnly={section === "invoices"} onOpen={(o) => setDetail({ kind: "order", row: o })} />
+          <OrdersTable rows={paged.items as SolutionBoxOrder[]} invoicesOnly={section === "invoices"} isNodo={isNodoOrder} onOpen={(o) => setDetail({ kind: "order", row: o })} />
         )}
       </AccountHistoryChrome>
 
@@ -193,7 +223,17 @@ export default function SolutionBoxAccountPanel() {
   );
 }
 
-function OrdersTable({ rows, invoicesOnly, onOpen }: { rows: SolutionBoxOrder[]; invoicesOnly: boolean; onOpen: (o: SolutionBoxOrder) => void }) {
+function OrdersTable({
+  rows,
+  invoicesOnly,
+  isNodo,
+  onOpen,
+}: {
+  rows: SolutionBoxOrder[];
+  invoicesOnly: boolean;
+  isNodo: (o: SolutionBoxOrder) => boolean;
+  onOpen: (o: SolutionBoxOrder) => void;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -213,7 +253,10 @@ function OrdersTable({ rows, invoicesOnly, onOpen }: { rows: SolutionBoxOrder[];
             const href = invoiceHref(o);
             return (
               <tr key={`${o.number}-${o.extension}`}>
-                <td className="px-2 py-2 text-surface-200 font-mono text-xs">{o.number}/{o.extension}</td>
+                <td className="px-2 py-2 text-surface-200 font-mono text-xs">
+                  {o.number}/{o.extension}
+                  {isNodo(o) && <NodoOrderBadge />}
+                </td>
                 <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
                 <td className="px-2 py-2 text-surface-300">{o.status}</td>
                 <td className="px-2 py-2 text-surface-500 font-mono text-xs">{o.invoice ?? "—"}</td>
