@@ -5,6 +5,9 @@ const STOP = new Set([
   "un", "una", "y", "o", "the", "of", "and", "or", "p",
 ]);
 
+/** Variantes que cambian el producto aunque el número sea el mismo. */
+const VARIANT_WORDS = new Set(["ti", "super", "xt", "xtx", "gre"]);
+
 /** Series de placas y mothers: distinguen productos del mismo chip. */
 const SERIES_WORDS = new Set([
   "windforce", "eagle", "gaming", "aero", "aorus", "vision", "tuf", "rog", "strix", "prime", "dual",
@@ -63,6 +66,14 @@ export function providerNameMatchRatio(providerName: string, retailName: string)
   }
   if (retailSkus.some((sku) => !querySkus.includes(sku) && !providerTokens.includes(sku))) {
     ratio = Math.min(ratio, 0.72);
+  }
+  // Otra variante del mismo número (5060 vs 5060 Ti, 7600 vs 7600 XT): otro producto.
+  const variants = (toks: string[]) =>
+    new Set(toks.flatMap((t) => (VARIANT_WORDS.has(t) ? [t] : (t.match(/\d{3,5}(ti|xtx|xt|super|gre)$/)?.slice(1, 2) ?? []))));
+  const qv = variants(providerTokens);
+  const rv = variants(retailTokens);
+  if (qv.size !== rv.size || [...qv].some((v) => !rv.has(v))) {
+    ratio = Math.min(ratio, 0.6);
   }
   // Otra serie del mismo modelo (Windforce vs Eagle): parecido, no el mismo producto.
   const querySeries = providerTokens.filter((t) => SERIES_WORDS.has(t));

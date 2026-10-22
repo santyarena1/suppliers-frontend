@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.11.1",
+    date: "2026-10-22",
+    title: "Una 5060 Ti ya no pasa por una 5060",
+    changes: [
+      { kind: "fixed", text: "En la ficha, “Tu tienda” y los locales distinguen las variantes del mismo número: Ti, Super, XT. Una RTX 5060 ya no se compara con la 5060 Ti de tu web." },
+    ],
+  },
+  {
     version: "2.11.0",
     date: "2026-10-22",
     title: "Proveedores renovado y toda la configuración en un solo lugar",

@@ -54,6 +54,30 @@ function isPartNumberToken(t: string): boolean {
 const hasLetter = (t: string) => /[a-z]/i.test(t);
 
 /**
+ * Variantes que cambian el producto aunque el modelo sea el mismo número:
+ * RTX 5060 y RTX 5060 Ti, RX 7600 y RX 7600 XT. Si una la dice y la otra no,
+ * son productos distintos.
+ */
+const VARIANT_WORDS = new Set(["ti", "super", "xt", "xtx", "gre"]);
+
+function variantWords(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of normalizeSearchText(text).split(/[^a-z0-9]+/)) {
+    if (VARIANT_WORDS.has(w)) out.add(w);
+    // Pegado al número: "RTX5060TI", "7600XT".
+    const glued = w.match(/\d{3,5}(ti|xtx|xt|super|gre)$/);
+    if (glued) out.add(glued[1]);
+  }
+  return out;
+}
+
+export function sameVariant(a: string, b: string): boolean {
+  const va = variantWords(a);
+  const vb = variantWords(b);
+  return va.size === vb.size && [...va].every((w) => vb.has(w));
+}
+
+/**
  * Tokens que importan para encontrar el producto en la web propia. Sin códigos
  * de fabricante, y si hay un modelo con letras (5700G, A520M) los números
  * sueltos (100, 3377) no son obligatorios: antes un "(100-100000263BOX)" en el
@@ -106,6 +130,8 @@ export function pickOwnStoreMatch(
   let best: { row: OwnStoreMatchRow; match: MatchScore; price: number } | null = null;
   for (const row of rows) {
     const text = row.searchText || normalizeSearchText(row.name);
+    // Una 5060 Ti no es la 5060: ni se ofrece como aproximada.
+    if (!sameVariant(query, row.name)) continue;
     const match = scoreRetailMatch(text, tokens);
     if (!passesRelevanceGate(match, tokens)) continue;
     const price = coerceStoredRetailPrice(row.price, store.priceDivisor ?? 1, {

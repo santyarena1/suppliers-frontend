@@ -1,5 +1,5 @@
 import { extractSearchTokens, normalizeSearchText, passesRelevanceGate, scoreRetailMatch } from "./retail-search.util";
-import { isConfidentOwnStoreMatch, pickOwnStoreMatch, type OwnStoreMatchRow } from "./own-store.match";
+import { isConfidentOwnStoreMatch, pickOwnStoreMatch, sameVariant, type OwnStoreMatchRow } from "./own-store.match";
 
 const store = { name: "Gorila Games", externalId: 5, priceDivisor: 1 };
 
@@ -82,5 +82,16 @@ describe("tienda propia · nombres reales de distribuidores (Ryzen 7 5700G)", ()
   it("otro modelo no matchea (5700X contra 5700G)", () => {
     const match = pickOwnStoreMatch(web, "PROCESADOR AMD RYZEN 7 5700X AM4", store);
     expect(match?.confident ?? false).toBe(false);
+  });
+});
+
+describe("sameVariant", () => {
+  it("la 5060 Ti no es la 5060", () => {
+    expect(sameVariant("Placa de Video GIGABYTE NVIDIA GeForce RTX 5060 WINDFORCE MAX OC 8G", "VGA Gigabyte GeForce RTX 5060 Ti WINDFORCE OC 8G (6057)")).toBe(false);
+    expect(sameVariant("RTX 5060 WINDFORCE", "RTX5060TI WINDFORCE")).toBe(false);
+  });
+  it("misma variante: sí", () => {
+    expect(sameVariant("RX 7600 XT 16GB", "Placa RX7600XT Pulse")).toBe(true);
+    expect(sameVariant("RTX 5060 WINDFORCE", "Gigabyte RTX 5060 Windforce Max OC")).toBe(true);
   });
 });
