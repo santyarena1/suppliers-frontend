@@ -58,6 +58,13 @@ import PriceHistoryChart from "@/components/PriceHistoryChart";
 import ArsPriceHint from "@/components/ArsPriceHint";
 import { useActiveTourStep } from "@/lib/onboarding";
 
+/** Garantía legible: algunos distribuidores mandan solo el número de meses ("36"). */
+function warrantyText(raw: string | null | undefined): string | null {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  return /^\d+$/.test(v) ? `${v} meses` : v;
+}
+
 /** Miniaturas visibles al lado de la foto (la última muestra "+N" si hay más). */
 const MAX_THUMBS = 5;
 
@@ -470,7 +477,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                 {product.platformContent && (
                   <ProductKeySpecs
                     specs={product.platformContent.specs}
-                    warranty={product.warranty || (product.platformContent.warrantyMonths ? `${product.platformContent.warrantyMonths} meses` : null)}
+                    warranty={warrantyText(product.warranty) ?? (product.platformContent.warrantyMonths ? `${product.platformContent.warrantyMonths} meses` : null)}
                   />
                 )}
 
