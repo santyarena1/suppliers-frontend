@@ -30,6 +30,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-22",
     title: "Una 5060 Ti ya no pasa por una 5060",
     changes: [
+      { kind: "improved", text: "Pedidos y cuenta de Invid, New Tree y Solution Box: filtro Todas / Desde NODO / Hechas en el portal, con la marca NODO en el número. En New Bytes, en las órdenes de compra." },
       { kind: "fixed", text: "En la ficha, “Tu tienda” y los locales distinguen las variantes del mismo número: Ti, Super, XT. Una RTX 5060 ya no se compara con la 5060 Ti de tu web." },
     ],
   },
