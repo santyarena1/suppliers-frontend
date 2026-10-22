@@ -52,13 +52,16 @@ import {
   type CatalogSyncSource,
 } from "./catalog-sync-progress";
 import { SYNC_MAX_FAILURES, isSyncDue, pricesAreStale, syncFailureReason } from "./sync-backoff";
-import { manualSyncWaitMinutes, shouldPauseOnFirstFailure } from "./provider-rate-limits";
+import { manualSyncWaitMinutes, minSyncMinutes, shouldPauseOnFirstFailure } from "./provider-rate-limits";
+import { hasSolutionBoxOfficialApi } from "./solution-box-api-client";
 
 /** Corridas RUNNING con latido más viejo que esto se dan por muertas al arrancar. */
 const RESTART_GRACE_MS = 30_000;
 const RESTART_RECHECK_MS = 60_000;
 /** Fichas de Solution Box que se enriquecen por corrida (el portal limita con 429). */
 const ENRICH_BATCH_SOLUTION_BOX = 20;
+/** Fichas de Air (fotos y descripción) por corrida: de a una y con pausa en el portal. */
+const ENRICH_BATCH_AIR = 40;
 /** Con "faltantes = sin stock", lo que no aparece hace esta cantidad de días se da de baja. */
 const ZOMBIE_DAYS = 14;
 const DAY_MS = 24 * 60 * 60_000;
@@ -452,14 +455,27 @@ export class ProvidersService implements OnModuleInit {
    * (stock de tienda, IVA) y sigue pidiendo todo.
    */
   private async idsToEnrich(provider: Provider, syncedIds: string[]): Promise<string[]> {
-    if (provider !== "SOLUTION_BOX" || syncedIds.length === 0) return syncedIds;
-    const missing = await this.prisma.providerSyncCache.findMany({
-      where: { provider, externalId: { in: syncedIds }, longDescription: null },
-      select: { externalId: true },
-      orderBy: { syncedAt: "desc" },
-      take: ENRICH_BATCH_SOLUTION_BOX,
-    });
-    return missing.map((m) => m.externalId);
+    if (syncedIds.length === 0) return syncedIds;
+    if (provider === "SOLUTION_BOX") {
+      const missing = await this.prisma.providerSyncCache.findMany({
+        where: { provider, externalId: { in: syncedIds }, longDescription: null },
+        select: { externalId: true },
+        orderBy: { syncedAt: "desc" },
+        take: ENRICH_BATCH_SOLUTION_BOX,
+      });
+      return missing.map((m) => m.externalId);
+    }
+    if (provider === "AIR") {
+      // Fichas de Air de a una (mas_info.php): solo las que no tienen foto ni descripción.
+      const missing = await this.prisma.providerSyncCache.findMany({
+        where: { provider, externalId: { in: syncedIds }, imageUrl: null, longDescription: null },
+        select: { externalId: true },
+        orderBy: { syncedAt: "desc" },
+        take: ENRICH_BATCH_AIR,
+      });
+      return missing.map((m) => m.externalId);
+    }
+    return syncedIds;
   }
 
   /**
@@ -972,6 +988,7 @@ export class ProvidersService implements OnModuleInit {
       }),
     ]);
 
+    const mode = { officialApi: provider === "SOLUTION_BOX" && usesOfficialApi(credential?.credentialsJson) };
     return {
       provider,
       implemented: Boolean(this.registry.get(provider)),
@@ -981,7 +998,10 @@ export class ProvidersService implements OnModuleInit {
       withStock,
       lastSyncedAt: last?.syncedAt ?? null,
       currentRun: currentRun ? serializeCatalogSyncRun(currentRun) : null,
-      health: this.syncHealth(provider, config, total),
+      health: this.syncHealth(provider, config ? { ...config, ...mode } : null, total),
+      // Mínimo entre syncs automáticas con la cuenta cargada (0 = sin mínimo). La web arma el selector con esto.
+      minSyncMinutes: minSyncMinutes(provider, mode),
+      officialApi: mode.officialApi,
     };
   }
 
@@ -1001,6 +1021,7 @@ export class ProvidersService implements OnModuleInit {
       consecutiveFailures: number;
       pausedAt: Date | null;
       pauseReason: string | null;
+      officialApi?: boolean;
     } | null,
     offers: number
   ) {
@@ -2401,7 +2422,18 @@ export class ProvidersService implements OnModuleInit {
     });
     const now = new Date();
     // Sin integración (Ashir, GC, HDC) no hay portal: una config vieja en API no se intenta.
-    return configs.filter((c) => providerHasCatalogAdapter(c.provider) && isSyncDue(c, now));
+    const withAdapter = configs.filter((c) => providerHasCatalogAdapter(c.provider));
+    const due = await Promise.all(
+      withAdapter.map(async (c) => isSyncDue({ ...c, officialApi: await this.solutionBoxUsesOfficialApi(c) }, now))
+    );
+    return withAdapter.filter((_, i) => due[i]);
+  }
+
+  /** Solution Box con la API oficial cargada sincroniza cada 1 h como mínimo en vez de 12 h. */
+  private async solutionBoxUsesOfficialApi(config: { tenantId: string; provider: string }): Promise<boolean> {
+    if (config.provider !== "SOLUTION_BOX") return false;
+    const stored = await this.credentials.findByProvider(config.tenantId, "SOLUTION_BOX").catch(() => null);
+    return usesOfficialApi(stored?.credentialsJson);
   }
 
   /** "Sincronizar ahora" a Grupo Núcleo / Solution Box: no más de uno cada 30 min. */
@@ -2417,6 +2449,16 @@ export class ProvidersService implements OnModuleInit {
         `${providerLabel(provider)} limita las consultas: esperá ${wait} min antes de volver a sincronizar.`
       );
     }
+  }
+}
+
+/** La credencial guardada (JSON descifrado) trae usuario y contraseña de la API oficial de Solution Box. */
+function usesOfficialApi(credentialsJson: string | null | undefined): boolean {
+  if (!credentialsJson) return false;
+  try {
+    return hasSolutionBoxOfficialApi(JSON.parse(credentialsJson) as Record<string, string>);
+  } catch {
+    return false;
   }
 }
 

@@ -47,9 +47,29 @@ export const PROVIDER_MANUAL_COOLDOWN_MINUTES: Partial<Record<Provider, number>>
   PC_ARTS: 30,
 };
 
-export function effectiveSyncMinutes(provider: string, configured: number): number {
-  const min = PROVIDER_MIN_SYNC_MINUTES[provider as Provider] ?? 0;
-  return Math.max(configured, min, 1);
+/**
+ * Solution Box por su API oficial (lxc.solutionbox.com.ar): el listado admite 2
+ * pedidos por hora y una sync hace uno solo (más un createToken por semana), así
+ * que alcanza con 1 h. Las 12 h de arriba son por el portal, que se recorre
+ * rubro por rubro. "Sincronizar ahora" sigue con su espera de 60 min: entre cron
+ * y botón no pasan de 2 listados por hora.
+ */
+export const SOLUTION_BOX_OFFICIAL_API_MIN_SYNC_MINUTES = 60;
+
+/** Cómo se conecta el comercio con el distribuidor, cuando cambia el ritmo permitido. */
+export interface SyncMode {
+  /** Solution Box con usuario y contraseña de la API oficial cargados. */
+  officialApi?: boolean;
+}
+
+/** Mínimo entre syncs automáticas para este distribuidor y modo; 0 = sin mínimo. */
+export function minSyncMinutes(provider: string, mode: SyncMode = {}): number {
+  if (provider === "SOLUTION_BOX" && mode.officialApi) return SOLUTION_BOX_OFFICIAL_API_MIN_SYNC_MINUTES;
+  return PROVIDER_MIN_SYNC_MINUTES[provider as Provider] ?? 0;
+}
+
+export function effectiveSyncMinutes(provider: string, configured: number, mode: SyncMode = {}): number {
+  return Math.max(configured, minSyncMinutes(provider, mode), 1);
 }
 
 /** Minutos que faltan para poder sincronizar a mano; 0 = ya se puede. */

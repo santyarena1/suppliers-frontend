@@ -1,8 +1,10 @@
 import { BadGatewayException, Injectable, Logger } from "@nestjs/common";
-import type { NormalizedProduct, ProviderAdapter } from "../types";
-import { SolutionBoxWebClient } from "../solution-box-web-client";
+import type { CatalogSyncMeta, NormalizedProduct, ProviderAdapter } from "../types";
+import { SolutionBoxWebClient, hasSolutionBoxLogin, parseSolutionBoxCredentials } from "../solution-box-web-client";
+import { SolutionBoxApiClient, hasSolutionBoxOfficialApi } from "../solution-box-api-client";
 import {
   flattenCategories,
+  mapSolutionBoxApiArticle,
   mapSolutionBoxArticle,
   mapSolutionBoxDetail,
   type SolutionBoxCategory,
@@ -18,6 +20,8 @@ const DETAIL_CONCURRENCY = 1;
 const DETAIL_PAUSE_MS = 3_000;
 /** Pausa entre listados de rubro durante la sync. */
 const LIST_PAUSE_MS = 2_000;
+/** El listado de la API oficial llega entero: se persiste en tandas. */
+const API_PAGE_SIZE = 500;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -27,8 +31,11 @@ function sleep(ms: number) {
  * Catálogo de Solution Box leído de la API interna de www.solutionbox.com.ar
  * con la sesión del cliente. Por cada rubro se piden dos listados: con
  * `Stock=1` (trae precio) y sin filtro (trae también lo sin stock, sin precio).
- * La API oficial de lxc.solutionbox.com.ar queda para cuando Solution Box
- * entregue credenciales y documentación.
+ *
+ * Si el comercio cargó usuario y contraseña de la API oficial
+ * (lxc.solutionbox.com.ar, ver solution-box-api-client.ts), el catálogo sale de
+ * ahí en un solo GET y el portal no se usa para listar. Las fichas (descripción
+ * larga y fotos) siguen saliendo del portal si también está esa cuenta.
  */
 @Injectable()
 export class SolutionBoxAdapter implements ProviderAdapter {
@@ -37,8 +44,13 @@ export class SolutionBoxAdapter implements ProviderAdapter {
 
   async syncAll(
     credentials: Record<string, string>,
-    onPage: (items: NormalizedProduct[]) => Promise<void>
+    onPage: (items: NormalizedProduct[]) => Promise<void>,
+    onMeta?: (meta: CatalogSyncMeta) => Promise<void>
   ): Promise<void> {
+    if (hasSolutionBoxOfficialApi(credentials)) {
+      await this.syncFromOfficialApi(credentials, onPage, onMeta);
+      return;
+    }
     const api = await SolutionBoxWebClient.login(credentials);
     const categories = flattenCategories(await api.get("/articulos/categorias"));
     if (categories.length === 0) throw new BadGatewayException("Solution Box no devolvió rubros");
@@ -48,6 +60,22 @@ export class SolutionBoxAdapter implements ProviderAdapter {
       if (items.length) await onPage(items);
     }
     if (seen.size === 0) throw new BadGatewayException("Solution Box no devolvió artículos");
+  }
+
+  /** Camino API oficial: un createToken (si no hay token vigente) y un GET del listado. */
+  private async syncFromOfficialApi(
+    credentials: Record<string, string>,
+    onPage: (items: NormalizedProduct[]) => Promise<void>,
+    onMeta?: (meta: CatalogSyncMeta) => Promise<void>
+  ): Promise<void> {
+    const rows = await SolutionBoxApiClient.fromCredentials(credentials).listArticles();
+    const items = mapSolutionBoxApiArticles(rows);
+    if (items.length === 0) throw new BadGatewayException("La API de Solution Box no devolvió artículos");
+    await onMeta?.({ expectedTotal: items.length });
+    for (let i = 0; i < items.length; i += API_PAGE_SIZE) {
+      await onPage(items.slice(i, i + API_PAGE_SIZE));
+    }
+    this.logger.log(`Solution Box (API oficial): ${items.length} artículos`);
   }
 
   private async readCategory(api: SolutionBoxWebClient, cat: SolutionBoxCategory, seen: Set<string>) {
@@ -79,6 +107,8 @@ export class SolutionBoxAdapter implements ProviderAdapter {
     onItem: (externalId: string, patch: Partial<NormalizedProduct>) => Promise<void>
   ): Promise<void> {
     if (codes.length === 0) return;
+    // Con la API oficial sola no hay sesión del portal para leer fichas.
+    if (!hasSolutionBoxLogin(parseSolutionBoxCredentials(credentials))) return;
     const api = await SolutionBoxWebClient.login(credentials);
     const queue = [...codes];
     let failures = 0;
@@ -105,4 +135,17 @@ export class SolutionBoxAdapter implements ProviderAdapter {
     await Promise.all(Array.from({ length: DETAIL_CONCURRENCY }, worker));
     if (failures > 0) this.logger.warn(`Solution Box: ${failures} fichas no se pudieron leer`);
   }
+}
+
+/** Mapea el listado de la API oficial y descarta filas sin id/nombre o repetidas. */
+export function mapSolutionBoxApiArticles(rows: unknown[]): NormalizedProduct[] {
+  const seen = new Set<string>();
+  const out: NormalizedProduct[] = [];
+  for (const row of rows) {
+    const item = mapSolutionBoxApiArticle(row);
+    if (!item || seen.has(item.externalId)) continue;
+    seen.add(item.externalId);
+    out.push(item);
+  }
+  return out;
 }

@@ -62,4 +62,10 @@ Rutas: `GET /providers/SOLUTION_BOX/account`, `GET /providers/SOLUTION_BOX/order
 ## Pendiente
 
 - Verificar con la cuenta real: login, sync completo, un pedido chico.
-- API oficial `lxc` cuando Solution Box entregue credenciales y documentación.
+- API oficial `lxc`: implementada (2026-10-22) con lo que usa AcuStock en producción
+  (`SolutionBoxClient.php`): `POST /api/usuario/createToken` (Basic, máx. 2 cada 10 min,
+  token ~7 días en `expira_en`) y `GET /api/listas/articulos` (Bearer, máx. 2 por hora,
+  catálogo entero). Va en `solution-box-api-client.ts` y `mapSolutionBoxApiArticle`; se
+  usa solo si la credencial trae `sb_api_user` + `sb_api_password`. Falta verificar con
+  credenciales reales que Solution Box tiene que entregarle al comercio (forma exacta de
+  `Moneda`, `Categorias` y si `Stock` es la suma de depósitos).

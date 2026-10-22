@@ -466,34 +466,83 @@ export class PolytechClient {
   }
 
   private async postOnce(path: string, body: unknown, retry: boolean): Promise<unknown> {
-    const attempts = retry ? 3 : 1;
-    let last = `Polytech no respondió en ${path}`;
-    for (let i = 0; i < attempts; i++) {
-      const res = await fetch(`${POLYTECH_API}${path}`, {
-        method: "POST",
-        headers: {
-          Authorization: basic(this.apiKey),
-          "Content-Type": "application/json; charset=utf-8",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(90_000),
-      });
-      const text = await res.text();
-      if (res.ok) {
-        if (!text.trim()) return {};
-        try {
-          return JSON.parse(text) as unknown;
-        } catch {
-          throw new BadGatewayException(`Polytech devolvió una respuesta que no es JSON en ${path}`);
-        }
+    const res = await sendPolytechWithRetry(
+      async () => {
+        const r = await fetch(`${POLYTECH_API}${path}`, {
+          method: "POST",
+          headers: {
+            Authorization: basic(this.apiKey),
+            "Content-Type": "application/json; charset=utf-8",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(90_000),
+        });
+        return { ok: r.ok, status: r.status, retryAfter: r.headers.get("retry-after"), text: await r.text() };
+      },
+      { retry }
+    );
+    if (res.ok) {
+      if (!res.text.trim()) return {};
+      try {
+        return JSON.parse(res.text) as unknown;
+      } catch {
+        throw new BadGatewayException(`Polytech devolvió una respuesta que no es JSON en ${path}`);
       }
-      last = errorText(res.status, text);
-      if (res.status !== 502 && res.status !== 503) break;
-      await sleep(1500 * (i + 1));
     }
-    throw new BadGatewayException(last);
+    if (res.status === 429) {
+      throw new BadGatewayException(`Polytech limitó los pedidos (429) en ${path}: se reintenta en la próxima sincronización`);
+    }
+    throw new BadGatewayException(errorText(res.status, res.text));
   }
+}
+
+export interface PolytechRawResponse {
+  ok: boolean;
+  status: number;
+  retryAfter: string | null;
+  text: string;
+}
+
+/** Intentos totales ante 502/503/429 (como PolytechClient.php de AcuStock: 3). */
+export const POLYTECH_MAX_ATTEMPTS = 3;
+/** Tope de cualquier espera ante un 429, venga o no `Retry-After`. */
+export const POLYTECH_MAX_RETRY_WAIT_MS = 60_000;
+
+/**
+ * Espera antes de reintentar. 429: `Retry-After` (segundos o fecha HTTP) acotado a
+ * 60 s; si no viene, 10 s, 20 s… (AcuStock espera 10 s fijos más su backoff).
+ * 502/503: 1,5 s, 3 s, como hasta ahora.
+ */
+export function polytechRetryDelayMs(status: number, retryAfter: string | null, attempt: number, now = Date.now()): number {
+  if (status !== 429) return 1500 * (attempt + 1);
+  const raw = retryAfter?.trim();
+  if (raw) {
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, POLYTECH_MAX_RETRY_WAIT_MS);
+    const at = Date.parse(raw);
+    if (Number.isFinite(at)) return Math.min(Math.max(at - now, 0), POLYTECH_MAX_RETRY_WAIT_MS);
+  }
+  return Math.min(10_000 * (attempt + 1), POLYTECH_MAX_RETRY_WAIT_MS);
+}
+
+/**
+ * Manda el pedido y reintenta ante 502/503/429 hasta POLYTECH_MAX_ATTEMPTS. Sin
+ * `retry` (alta de pedido, que no es idempotente) va una sola vez. Devuelve la
+ * última respuesta: el llamador arma el error.
+ */
+export async function sendPolytechWithRetry(
+  send: () => Promise<PolytechRawResponse>,
+  opts: { retry: boolean; wait?: (ms: number) => Promise<unknown> }
+): Promise<PolytechRawResponse> {
+  const wait = opts.wait ?? sleep;
+  const attempts = opts.retry ? POLYTECH_MAX_ATTEMPTS : 1;
+  let res = await send();
+  for (let i = 1; i < attempts && !res.ok && [429, 502, 503].includes(res.status); i++) {
+    await wait(polytechRetryDelayMs(res.status, res.retryAfter, i - 1));
+    res = await send();
+  }
+  return res;
 }
 
 function basic(apiKey: string): string {

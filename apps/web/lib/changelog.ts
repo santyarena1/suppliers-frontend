@@ -26,6 +26,18 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.12.0",
+    date: "2026-10-22",
+    title: "Masnet, Microglobal y PC Arts, y Solution Box por su API",
+    changes: [
+      { kind: "new", text: "Nuevos distribuidores: Masnet, Microglobal y PC Arts. Cargá tu cuenta en Proveedores y NODO trae su catálogo con precio neto, IVA, impuestos internos y stock, actualizado como mucho cada 2 horas. Los pedidos se siguen haciendo en el portal de cada uno." },
+      { kind: "new", text: "Solution Box: si te dieron usuario y contraseña de su API, cargalos en Configuración → Cuenta. El catálogo sale de la API, con los impuestos internos, y se puede actualizar cada 1 hora en vez de cada 12. Pedidos y facturas siguen con el mail y la contraseña del sitio." },
+      { kind: "new", text: "Air: los productos van sumando foto, descripción y garantía de la ficha del portal, de a tandas en cada actualización." },
+      { kind: "fixed", text: "Air: los monitores importados muestran los impuestos internos (10,5 %) aparte del IVA; el neto ya no los trae adentro y el IVA no se calcula sobre ellos." },
+      { kind: "fixed", text: "Polytech: si el portal pide esperar, la actualización espera y reintenta en vez de cortarse." },
+    ],
+  },
+  {
     version: "2.11.1",
     date: "2026-10-22",
     title: "Una 5060 Ti ya no pasa por una 5060",

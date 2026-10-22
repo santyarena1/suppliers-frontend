@@ -1544,6 +1544,10 @@ export interface ProviderStatus {
   withStock: number;
   lastSyncedAt: string | null;
   currentRun?: CatalogSyncRun | null;
+  /** Mínimo entre syncs automáticas con la cuenta cargada (0 = sin mínimo). */
+  minSyncMinutes?: number;
+  /** Solution Box: el catálogo sale de la API oficial. */
+  officialApi?: boolean;
 }
 
 export function canSyncProvider(status?: ProviderStatus | null): boolean {

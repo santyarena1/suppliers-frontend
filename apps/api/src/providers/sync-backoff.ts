@@ -22,6 +22,8 @@ export interface SyncSchedule {
   pausedAt: Date | null;
   /** Para reconocer la pausa por bloqueo (403/429) de los distribuidores cuidadosos. */
   lastSyncError?: string | null;
+  /** Solution Box por API oficial: su mínimo es 1 h en vez de 12 h. */
+  officialApi?: boolean;
 }
 
 /**
@@ -38,7 +40,7 @@ export function nextSyncAt(config: SyncSchedule): Date | null {
     const from = config.lastAttemptAt ?? config.pausedAt;
     return new Date(from.getTime() + BLOCKED_PROBE_MINUTES * 60_000);
   }
-  const interval = effectiveSyncMinutes(config.provider ?? "", config.syncIntervalMinutes) * 60_000;
+  const interval = effectiveSyncMinutes(config.provider ?? "", config.syncIntervalMinutes, { officialApi: config.officialApi }) * 60_000;
   const failures = Math.max(config.consecutiveFailures, 0);
   if (failures > 0) {
     const from = config.lastAttemptAt ?? config.lastSyncedAt;
@@ -61,11 +63,11 @@ export function isSyncDue(config: SyncSchedule, now = new Date()): boolean {
  * alarmar por una corrida que viene un rato atrasada.
  */
 export function pricesAreStale(
-  config: { provider?: string; enabled: boolean; syncIntervalMinutes: number; lastSyncedAt: Date | null },
+  config: { provider?: string; enabled: boolean; syncIntervalMinutes: number; lastSyncedAt: Date | null; officialApi?: boolean },
   now = new Date()
 ): boolean {
   if (!config.lastSyncedAt) return false;
-  const minutes = effectiveSyncMinutes(config.provider ?? "", config.syncIntervalMinutes);
+  const minutes = effectiveSyncMinutes(config.provider ?? "", config.syncIntervalMinutes, { officialApi: config.officialApi });
   const byInterval = config.enabled ? minutes * 60_000 * 2 : PRICES_STALE_FLOOR_MS;
   const limit = Math.max(Math.min(byInterval, PRICES_STALE_FLOOR_MS), 2 * 60 * 60_000);
   return now.getTime() - config.lastSyncedAt.getTime() > limit;

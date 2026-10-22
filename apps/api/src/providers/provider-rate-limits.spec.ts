@@ -1,4 +1,4 @@
-import { effectiveSyncMinutes, isAccessBlockedError, manualSyncWaitMinutes, shouldPauseOnFirstFailure } from "./provider-rate-limits";
+import { effectiveSyncMinutes, isAccessBlockedError, manualSyncWaitMinutes, minSyncMinutes, shouldPauseOnFirstFailure } from "./provider-rate-limits";
 
 describe("effectiveSyncMinutes", () => {
   it("Grupo Núcleo y Solution Box no bajan de su mínimo aunque el comercio pida 1 h", () => {
@@ -56,5 +56,19 @@ describe("shouldPauseOnFirstFailure", () => {
     expect(shouldPauseOnFirstFailure("ELIT", "Request failed with status code 403")).toBe(false);
     expect(shouldPauseOnFirstFailure("SOLUTION_BOX", "socket hang up")).toBe(false);
     expect(shouldPauseOnFirstFailure("PC_ARTS", "PC Arts (operación 1004, offset 0): Request failed with status code 429")).toBe(true);
+  });
+});
+
+describe("Solution Box por API oficial", () => {
+  it("baja el mínimo a 1 h solo con la API cargada", () => {
+    expect(minSyncMinutes("SOLUTION_BOX", { officialApi: true })).toBe(60);
+    expect(effectiveSyncMinutes("SOLUTION_BOX", 60, { officialApi: true })).toBe(60);
+    expect(effectiveSyncMinutes("SOLUTION_BOX", 60)).toBe(720);
+    expect(effectiveSyncMinutes("SOLUTION_BOX", 30, { officialApi: true })).toBe(60);
+  });
+
+  it("el modo API no cambia a otros distribuidores", () => {
+    expect(minSyncMinutes("GRUPO_NUCLEO", { officialApi: true })).toBe(720);
+    expect(minSyncMinutes("ELIT", { officialApi: true })).toBe(0);
   });
 });

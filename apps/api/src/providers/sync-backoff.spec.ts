@@ -25,6 +25,11 @@ describe("nextSyncAt / isSyncDue", () => {
     expect(pricesAreStale(sb, new Date("2026-10-01T13:00:00Z"))).toBe(false);
   });
 
+  it("Solution Box por API oficial respeta el intervalo de 1 h", () => {
+    expect(nextSyncAt({ ...base, provider: "SOLUTION_BOX", officialApi: true })?.toISOString()).toBe("2026-10-01T11:00:00.000Z");
+    expect(nextSyncAt({ ...base, provider: "GRUPO_NUCLEO", officialApi: true })?.toISOString()).toBe("2026-10-01T22:00:00.000Z");
+  });
+
   it("nunca sincronizado: corre ya", () => {
     expect(isSyncDue({ ...base, lastSyncedAt: null, lastAttemptAt: null })).toBe(true);
   });
