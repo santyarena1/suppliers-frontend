@@ -268,8 +268,9 @@ export class PlatformContentService implements OnModuleInit {
       }
     }
 
+    // Solo se manejan los vínculos por código: los agregados por nombre (revisados a mano) se respetan.
     const existing = await this.prisma.platformProductContentLink.findMany({
-      where: { content: { source: ACUSTOCK_SOURCE } },
+      where: { content: { source: ACUSTOCK_SOURCE }, matchedBy: "SUPPLIER_CODE" },
       select: { id: true, provider: true, externalId: true, contentId: true, matchedBy: true },
     });
     const stale: string[] = [];

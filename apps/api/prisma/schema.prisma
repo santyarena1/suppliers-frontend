@@ -400,7 +400,7 @@ model PlatformProductContentLink {
   content    PlatformProductContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
   provider   String
   externalId String
-  /// SUPPLIER_CODE | EAN | PART_NUMBER
+  /// SUPPLIER_CODE (por la carga) | NAME (vinculado por nombre, revisado a mano)
   matchedBy  String
   createdAt  DateTime               @default(now())
 
