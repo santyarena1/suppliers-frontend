@@ -20,6 +20,6 @@ export const SKU_PREFIX: Record<string, string> = {
  * cuenta si se consultan seguido.
  */
 export const MIN_SYNC_MINUTES: Record<string, number> = {
-  GRUPO_NUCLEO: 360,
-  SOLUTION_BOX: 240,
+  GRUPO_NUCLEO: 720,
+  SOLUTION_BOX: 720,
 };

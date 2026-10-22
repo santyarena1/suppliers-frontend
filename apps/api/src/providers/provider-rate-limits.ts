@@ -6,16 +6,24 @@ import type { Provider } from "@nodo/shared";
  *
  * Grupo Núcleo (catálogo entero en un GET) y Solution Box (un listado por rubro
  * más fichas sueltas) suspendieron la cuenta con la sync cada 1 h (oct-2026).
+ * Desde el 21/10, cada 12 h mientras vemos si levantan el bloqueo.
  */
 export const PROVIDER_MIN_SYNC_MINUTES: Partial<Record<Provider, number>> = {
-  GRUPO_NUCLEO: 360,
-  SOLUTION_BOX: 240,
+  GRUPO_NUCLEO: 720,
+  SOLUTION_BOX: 720,
 };
+
+/**
+ * Pausados por un 403/429, estos distribuidores se prueban solos una vez por día:
+ * si siguen bloqueados la corrida corta en el primer pedido; si responden, la
+ * sync se reactiva con el ritmo de arriba.
+ */
+export const BLOCKED_PROBE_MINUTES = 24 * 60;
 
 /** Tras un intento (cron o manual), cuánto esperar antes de aceptar "Sincronizar ahora". */
 export const PROVIDER_MANUAL_COOLDOWN_MINUTES: Partial<Record<Provider, number>> = {
-  GRUPO_NUCLEO: 30,
-  SOLUTION_BOX: 30,
+  GRUPO_NUCLEO: 60,
+  SOLUTION_BOX: 60,
 };
 
 export function effectiveSyncMinutes(provider: string, configured: number): number {

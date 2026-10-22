@@ -58,7 +58,7 @@ import { manualSyncWaitMinutes, shouldPauseOnFirstFailure } from "./provider-rat
 const RESTART_GRACE_MS = 30_000;
 const RESTART_RECHECK_MS = 60_000;
 /** Fichas de Solution Box que se enriquecen por corrida (el portal limita con 429). */
-const ENRICH_BATCH_SOLUTION_BOX = 50;
+const ENRICH_BATCH_SOLUTION_BOX = 20;
 /** Con "faltantes = sin stock", lo que no aparece hace esta cantidad de días se da de baja. */
 const ZOMBIE_DAYS = 14;
 const DAY_MS = 24 * 60 * 60_000;

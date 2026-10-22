@@ -18,9 +18,9 @@ describe("nextSyncAt / isSyncDue", () => {
   });
 
   it("Solution Box y Grupo Núcleo esperan su mínimo aunque el comercio tenga 1 h", () => {
-    expect(nextSyncAt({ ...base, provider: "SOLUTION_BOX" })?.toISOString()).toBe("2026-10-01T14:00:00.000Z");
-    expect(nextSyncAt({ ...base, provider: "GRUPO_NUCLEO" })?.toISOString()).toBe("2026-10-01T16:00:00.000Z");
-    // Con 4 h de intervalo, 3 h sin sync no es "precio desactualizado".
+    expect(nextSyncAt({ ...base, provider: "SOLUTION_BOX" })?.toISOString()).toBe("2026-10-01T22:00:00.000Z");
+    expect(nextSyncAt({ ...base, provider: "GRUPO_NUCLEO" })?.toISOString()).toBe("2026-10-01T22:00:00.000Z");
+    // Con 12 h de intervalo, 3 h sin sync no es "precio desactualizado".
     const sb = { provider: "SOLUTION_BOX", enabled: true, syncIntervalMinutes: 60, lastSyncedAt: base.lastSyncedAt };
     expect(pricesAreStale(sb, new Date("2026-10-01T13:00:00Z"))).toBe(false);
   });
@@ -45,6 +45,26 @@ describe("nextSyncAt / isSyncDue", () => {
     expect(nextSyncAt({ ...base, pausedAt: new Date() })).toBeNull();
     expect(nextSyncAt({ ...base, enabled: false })).toBeNull();
     expect(isSyncDue({ ...base, pausedAt: new Date() }, new Date("2030-01-01"))).toBe(false);
+  });
+
+  it("Núcleo / Solution Box bloqueados por 403 o 429 se prueban una vez por día", () => {
+    const blocked = {
+      ...base,
+      provider: "GRUPO_NUCLEO",
+      pausedAt: new Date("2026-10-01T10:00:00Z"),
+      lastSyncError: "Request failed with status code 403",
+    };
+
+    expect(nextSyncAt(blocked)?.toISOString()).toBe("2026-10-02T10:00:00.000Z");
+    expect(isSyncDue(blocked, new Date("2026-10-02T09:59:00Z"))).toBe(false);
+    expect(isSyncDue({ ...blocked, provider: "SOLUTION_BOX", lastSyncError: "429 Too Many Requests" }, new Date("2026-10-02T10:00:00Z"))).toBe(true);
+  });
+
+  it("la prueba diaria no aplica a otras pausas ni a otros distribuidores", () => {
+    const paused = { ...base, pausedAt: new Date("2026-10-01T10:00:00Z") };
+
+    expect(nextSyncAt({ ...paused, provider: "GRUPO_NUCLEO", lastSyncError: "Usuario o contraseña incorrectos" })).toBeNull();
+    expect(nextSyncAt({ ...paused, provider: "ELIT", lastSyncError: "403 Forbidden" })).toBeNull();
   });
 });
 

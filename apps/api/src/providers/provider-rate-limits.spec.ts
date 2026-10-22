@@ -2,8 +2,8 @@ import { effectiveSyncMinutes, isAccessBlockedError, manualSyncWaitMinutes, shou
 
 describe("effectiveSyncMinutes", () => {
   it("Grupo Núcleo y Solution Box no bajan de su mínimo aunque el comercio pida 1 h", () => {
-    expect(effectiveSyncMinutes("GRUPO_NUCLEO", 60)).toBe(360);
-    expect(effectiveSyncMinutes("SOLUTION_BOX", 60)).toBe(240);
+    expect(effectiveSyncMinutes("GRUPO_NUCLEO", 60)).toBe(720);
+    expect(effectiveSyncMinutes("SOLUTION_BOX", 60)).toBe(720);
   });
 
   it("un intervalo más largo que el mínimo se respeta", () => {
@@ -18,12 +18,12 @@ describe("effectiveSyncMinutes", () => {
 describe("manualSyncWaitMinutes", () => {
   const now = new Date("2026-10-19T15:00:00Z");
 
-  it("pide esperar si hubo un intento hace menos de 30 min", () => {
-    expect(manualSyncWaitMinutes("SOLUTION_BOX", new Date("2026-10-19T14:50:00Z"), now)).toBe(20);
+  it("pide esperar si hubo un intento hace menos de 60 min", () => {
+    expect(manualSyncWaitMinutes("SOLUTION_BOX", new Date("2026-10-19T14:50:00Z"), now)).toBe(50);
   });
 
   it("deja sincronizar pasado el plazo o sin intentos previos", () => {
-    expect(manualSyncWaitMinutes("SOLUTION_BOX", new Date("2026-10-19T14:20:00Z"), now)).toBe(0);
+    expect(manualSyncWaitMinutes("SOLUTION_BOX", new Date("2026-10-19T13:50:00Z"), now)).toBe(0);
     expect(manualSyncWaitMinutes("GRUPO_NUCLEO", null, now)).toBe(0);
   });
 

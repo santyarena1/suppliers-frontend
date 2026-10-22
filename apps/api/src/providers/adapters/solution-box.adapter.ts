@@ -15,9 +15,9 @@ const PAGE_LIMIT = 1000;
 const MAX_PAGES_PER_CATEGORY = 20;
 /** Fichas de a una y con pausa: el portal suspendió la cuenta por exceso de pedidos. */
 const DETAIL_CONCURRENCY = 1;
-const DETAIL_PAUSE_MS = 1_000;
+const DETAIL_PAUSE_MS = 3_000;
 /** Pausa entre listados de rubro durante la sync. */
-const LIST_PAUSE_MS = 500;
+const LIST_PAUSE_MS = 2_000;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
