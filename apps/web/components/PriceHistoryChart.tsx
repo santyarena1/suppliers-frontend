@@ -239,40 +239,23 @@ export default function PriceHistoryChart({
   const fillId = "priceHistoryFill";
 
   return (
-    <div
-      className={`overflow-hidden rounded-xl border border-surface-800 bg-surface-950/60 ${
-        fillHeight ? "flex h-full flex-col" : ""
-      }`}
-    >
-      <div className="flex flex-col gap-3 border-b border-surface-800 px-3 py-3 sm:px-5">
-        <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-surface-500">
-              Precio en el rango
-            </p>
-            <p className="mt-0.5 text-lg font-semibold tabular-nums tracking-tight text-white sm:text-xl">
-              {stats ? formatUsd(stats.last) : "—"}
-            </p>
-            <p className="mt-0.5 text-[11px] text-surface-500">{prefsHint}</p>
-          </div>
+    <div className={fillHeight ? "flex h-full flex-col" : ""}>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-bold text-white">Evolución de precio</h2>
           {stats && (
-            <div className={`flex shrink-0 items-center gap-1 text-sm font-medium ${trendColor}`}>
-              <TrendIcon className="h-4 w-4" />
-              <span className="tabular-nums">
-                {stats.change >= 0 ? "+" : ""}
-                {formatUsd(stats.change)}
-              </span>
-              <span className="tabular-nums text-xs opacity-80">
-                ({stats.changePct >= 0 ? "+" : ""}
-                {stats.changePct.toFixed(1)}%)
-              </span>
-            </div>
+            <span className={`inline-flex items-center gap-1 font-mono text-[13px] tabular-nums ${trendColor}`}>
+              <TrendIcon className="h-3.5 w-3.5" />
+              {stats.change >= 0 ? "+" : ""}
+              {formatUsd(stats.change)} ({stats.changePct >= 0 ? "+" : ""}
+              {stats.changePct.toLocaleString("es-AR", { maximumFractionDigits: 1 })} %)
+            </span>
           )}
         </div>
 
         {/* Chips en scroll horizontal: en mobile no se apilan en 3 filas. */}
         <div
-          className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden"
+          className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden"
           role="tablist"
           aria-label="Rango del historial"
         >
@@ -283,46 +266,41 @@ export default function PriceHistoryChart({
               role="tab"
               aria-selected={preset === p.id}
               onClick={() => applyPreset(p.id)}
-              className={`shrink-0 rounded-md border px-2.5 py-1.5 text-[11px] font-medium transition-colors touch-manipulation ${
+              className={`min-h-[32px] shrink-0 rounded-lg border px-2.5 text-xs font-semibold transition-colors touch-manipulation ${
                 preset === p.id
                   ? "border-brand-500 bg-brand-600/15 text-brand-300"
-                  : "border-surface-700 text-surface-400 hover:border-surface-500 hover:text-surface-200"
+                  : "border-surface-800 text-surface-400 hover:border-surface-600 hover:text-white"
               }`}
             >
-              <span className="sm:hidden">{p.short}</span>
-              <span className="hidden sm:inline">{p.label}</span>
+              {p.id === "custom" ? "Rango…" : p.label}
             </button>
           ))}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-xs text-surface-400 sm:flex sm:flex-wrap sm:items-center">
-          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-1.5">
-            <span className="text-surface-500">Desde</span>
-            <input
-              type="date"
-              value={fromYmd}
-              max={toYmd || undefined}
-              onChange={(e) => {
-                setPreset("custom");
-                setFromYmd(e.target.value);
-              }}
-              className="w-full min-w-0 rounded-md border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none sm:w-auto"
-            />
-          </label>
-          <label className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:gap-1.5">
-            <span className="text-surface-500">Hasta</span>
-            <input
-              type="date"
-              value={toYmd}
-              min={fromYmd || undefined}
-              onChange={(e) => {
-                setPreset("custom");
-                setToYmd(e.target.value);
-              }}
-              className="w-full min-w-0 rounded-md border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none sm:w-auto"
-            />
-          </label>
-        </div>
+        {preset === "custom" && (
+          <div className="flex flex-wrap items-center gap-3 text-xs text-surface-400">
+            <label className="flex items-center gap-1.5">
+              <span className="text-surface-500">Desde</span>
+              <input
+                type="date"
+                value={fromYmd}
+                max={toYmd || undefined}
+                onChange={(e) => setFromYmd(e.target.value)}
+                className="rounded-md border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none"
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              <span className="text-surface-500">Hasta</span>
+              <input
+                type="date"
+                value={toYmd}
+                min={fromYmd || undefined}
+                onChange={(e) => setToYmd(e.target.value)}
+                className="rounded-md border border-surface-700 bg-surface-900 px-2 py-1.5 text-surface-200 focus:border-brand-500 focus:outline-none"
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       {!stats || data.length < 2 ? (
@@ -333,35 +311,8 @@ export default function PriceHistoryChart({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-3 divide-x divide-surface-800 border-b border-surface-800 text-center">
-            <div className="px-1.5 py-2.5 sm:px-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-                Mín
-              </p>
-              <p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-emerald-400 sm:text-sm">
-                {formatUsd(stats.min)}
-              </p>
-            </div>
-            <div className="px-1.5 py-2.5 sm:px-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-                Prom
-              </p>
-              <p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-surface-100 sm:text-sm">
-                {formatUsd(stats.avg)}
-              </p>
-            </div>
-            <div className="px-1.5 py-2.5 sm:px-2">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-surface-500">
-                Máx
-              </p>
-              <p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-rose-400 sm:text-sm">
-                {formatUsd(stats.max)}
-              </p>
-            </div>
-          </div>
-
           <div
-            className={`w-full px-1 pb-2 pt-3 sm:px-3 sm:pt-4 ${
+            className={`w-full pb-1 pt-3 ${
               fillHeight ? "min-h-0 flex-1" : "h-48 sm:h-56"
             }`}
           >
@@ -447,12 +398,22 @@ export default function PriceHistoryChart({
             </ResponsiveContainer>
           </div>
 
-          <p className="border-t border-surface-800 px-3 py-2 text-[11px] leading-relaxed text-surface-500 sm:px-5">
-            {data.length} {data.length === 1 ? "día" : "días"} · {formatFullDate(data[0].capturedAt)} →{" "}
-            {formatFullDate(data[data.length - 1].capturedAt)}
-            <span className="hidden sm:inline">
-              {" · "}línea punteada = promedio · máx. 12 meses
-            </span>
+          <dl className="m-0 mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { k: "Hoy", v: stats.last, c: "text-white" },
+              { k: "Mínimo", v: stats.min, c: "text-emerald-300" },
+              { k: "Promedio", v: stats.avg, c: "text-surface-100" },
+              { k: "Máximo", v: stats.max, c: "text-rose-300" },
+            ].map((x) => (
+              <div key={x.k} className="min-w-0">
+                <dt className="text-[11px] text-surface-400">{x.k}</dt>
+                <dd className={`m-0 mt-0.5 truncate font-mono text-sm tabular-nums ${x.c}`}>{formatUsd(x.v)}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-2.5 text-[11px] leading-relaxed text-surface-500">
+            {prefsHint.charAt(0).toUpperCase() + prefsHint.slice(1)}. Línea punteada: promedio. {formatFullDate(data[0].capturedAt)} →{" "}
+            {formatFullDate(data[data.length - 1].capturedAt)}. Guardamos hasta 12 meses.
           </p>
         </>
       )}

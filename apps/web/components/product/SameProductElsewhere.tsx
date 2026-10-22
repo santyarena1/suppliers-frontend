@@ -4,8 +4,30 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import type { ProductDTO, SameProductEntry } from "@/lib/api";
 import { providerLabel } from "@/components/ProviderBadge";
-import PriceTag from "@/components/PriceTag";
-import { hasOwnPrice } from "@/lib/format";
+import { formatARS, formatUSD, hasOwnPrice } from "@/lib/format";
+import { usePrefs } from "@/lib/prefs";
+import { usePurchasePolicy } from "@/lib/purchase";
+import { purchaseLinePricing } from "@/lib/purchase-price";
+import { displayAmountFromPricing } from "@/lib/display-price";
+
+/** Precio final unitario de una ficha, con los mismos impuestos que la caja de compra. */
+function FinalPrice({ product }: { product: ProductDTO }) {
+  const { currency, withIva, withIibb, convert } = usePrefs();
+  const policy = usePurchasePolicy(product.provider);
+  if (!hasOwnPrice(product)) return <span className="text-xs text-surface-500">Sin precio</span>;
+  const usd = displayAmountFromPricing(
+    purchaseLinePricing(product, policy, "list", 1),
+    { withIva, withIibb, provider: product.provider },
+    1
+  ).unitDisplayUsd;
+  const text =
+    currency === "USD"
+      ? formatUSD(usd)
+      : product.sourceCurrency === "ARS" && product.fxRate
+        ? formatARS(usd * product.fxRate)
+        : formatARS(convert(usd).amount);
+  return <span className="font-mono text-sm tabular-nums text-white">{text}</span>;
+}
 
 const productHref = (provider: string, externalId: string) =>
   `/product/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}`;
@@ -56,7 +78,7 @@ export default function SameProductElsewhere({
               {providerLabel(current.provider)} <span className="text-[11px] font-semibold text-brand-300">· estás acá</span>
             </span>
             <StockLabel product={current} />
-            <span className="min-w-[96px] text-right">{hasOwnPrice(current) ? <PriceTag product={current} size="sm" /> : "—"}</span>
+            <span className="min-w-[96px] text-right"><FinalPrice product={current} /></span>
           </li>
           {visible.map((e) => (
             <li key={`${e.provider}-${e.externalId}`} className="border-t border-surface-800">
@@ -66,9 +88,7 @@ export default function SameProductElsewhere({
               >
                 <span className="font-bold text-white">{providerLabel(e.provider)}</span>
                 <StockLabel product={e.product!} />
-                <span className="min-w-[96px] text-right">
-                  {hasOwnPrice(e.product!) ? <PriceTag product={e.product!} size="sm" /> : <span className="text-xs text-surface-500">Sin precio</span>}
-                </span>
+                <span className="min-w-[96px] text-right"><FinalPrice product={e.product!} /></span>
               </Link>
             </li>
           ))}

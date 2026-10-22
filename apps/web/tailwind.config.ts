@@ -42,8 +42,8 @@ const config: Config = {
         foreground: "rgb(var(--fg) / <alpha-value>)",
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
-        mono: ["JetBrains Mono", "Fira Code", "monospace"],
+        sans: ["var(--app-font-sans)", "Inter", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["var(--app-font-mono)", "JetBrains Mono", "Fira Code", "monospace"],
       },
     },
   },

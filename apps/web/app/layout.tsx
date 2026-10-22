@@ -3,7 +3,7 @@ import "./globals.css";
 import "./nodo-system.css";
 import "./nodo-home.css";
 import "./nodo-product.css";
-import { archivo, chivoMono } from "./(marketing)/fonts";
+import { inter, jetbrainsMono } from "./fonts-app";
 import { PrefsProvider } from "@/lib/prefs";
 import { CartProvider } from "@/lib/cart";
 import { ResultsProvider } from "@/lib/results";
@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="es"
-      className={`h-dvh ${archivo.variable} ${chivoMono.variable}`}
+      className={`h-dvh ${inter.variable} ${jetbrainsMono.variable}`}
       data-theme="soft"
       suppressHydrationWarning
     >

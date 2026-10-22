@@ -98,10 +98,16 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
+/* Fijadas en <html>: la landing pisa --lnd-font-* en su contenedor, la app no. */
+html {
+  --app-font-sans: var(--lnd-font-display);
+  --app-font-mono: var(--lnd-font-mono);
+}
+
 body {
   background-color: rgb(var(--body-bg));
   color: rgb(var(--fg));
-  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-family: var(--app-font-sans), "Inter", system-ui, -apple-system, sans-serif;
   min-height: 100vh;
   min-height: 100dvh;
   transition: background-color 0.25s, color 0.25s;

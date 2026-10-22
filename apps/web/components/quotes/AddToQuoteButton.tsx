@@ -6,7 +6,7 @@ import { quoteBadge, quoteError, useQuotes } from "@/lib/quotes";
 import { useSellerSession } from "@/lib/sale-price";
 import QuotePicker from "./QuotePicker";
 
-type Variant = "primary" | "icon" | "full" | "link" | "bar";
+type Variant = "primary" | "icon" | "full" | "link" | "bar" | "outline";
 
 /**
  * "Agregar al presupuesto" (modo vendedor). Va al presupuesto activo.
@@ -145,6 +145,33 @@ export default function AddToQuoteButton({
       {picker}
       <button type="button" onClick={add} title={title} aria-label="Agregar a un presupuesto" className={`pc__ghost ${inActive ? "is-on" : ""}`}>
         <Icon className={iconCls} />
+      </button>
+      </>
+    );
+  }
+
+  // Botón ancho con borde, debajo de la compra en la ficha.
+  if (variant === "outline") {
+    return (
+      <>
+      {picker}
+      <button
+        type="button"
+        onClick={add}
+        disabled={busy}
+        className={`flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border px-3 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+          done ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200" : "border-surface-700 text-surface-100 hover:bg-surface-800 hover:text-white"
+        }`}
+      >
+        <Icon className={iconCls} />
+        {error ??
+          (done
+            ? `Agregado a ${quotes.active ? quoteBadge(quotes.active) : target}`
+            : inActive
+              ? `En el presupuesto ${target} (${inActive}) · sumar`
+              : quotes.active
+                ? `Agregar al presupuesto ${target}`
+                : "Agregar a un presupuesto")}
       </button>
       </>
     );

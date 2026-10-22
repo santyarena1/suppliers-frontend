@@ -130,6 +130,7 @@ export default function SalePricePanel({
   const [tokens, setTokens] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [sortBy, setSortBy] = useState<RetailSortKey>(() =>
@@ -326,7 +327,7 @@ export default function SalePricePanel({
   const bestShown = bestMatches.slice(0, cap);
   const otherShown = otherMatches.slice(0, Math.max(0, cap - bestShown.length));
   const moreCount = bestMatches.length + otherMatches.length - bestShown.length - otherShown.length;
-  const gridClass = inline && !listLayout ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" : "space-y-2";
+  const gridClass = listLayout ? "flex flex-col" : inline ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" : "space-y-2";
 
   const prices = visibleResults
     .map((r) => r.hit.price)
@@ -337,6 +338,80 @@ export default function SalePricePanel({
   const hiddenCount = hiddenStoreIds.filter((id) =>
     storesInResults.some((s) => s.id === id),
   ).length;
+
+  const storesFilter = (
+            <div className="mt-2 rounded-lg border border-surface-800 bg-surface-900/70 p-2.5 space-y-2">
+              <label className="flex items-start gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberHidden}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="mt-0.5 rounded border-surface-600 bg-surface-800 text-brand-500 focus:ring-brand-500/30"
+                />
+                <span className="text-[11px] text-surface-300 leading-snug">
+                  Recordar locales ocultos entre búsquedas
+                  <span className="block text-[10px] text-surface-500 mt-0.5">
+                    Si está apagado, se reinician al buscar otra cosa.
+                  </span>
+                </span>
+              </label>
+
+              {storesInResults.length === 0 ? (
+                <p className="text-[10px] text-surface-500 px-0.5 py-1">
+                  Todavía no hay locales en estos resultados.
+                </p>
+              ) : (
+                <ul className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5">
+                  {storesInResults.map((store) => {
+                    const hidden = hiddenStoreIds.includes(store.id);
+                    return (
+                      <li key={store.id}>
+                        <button
+                          type="button"
+                          onClick={() => toggleStoreHidden(store.id)}
+                          className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                            hidden
+                              ? "bg-surface-950/80 text-surface-500"
+                              : "hover:bg-surface-800 text-surface-200"
+                          }`}
+                        >
+                          {store.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={proxyImg(store.logoUrl)}
+                              alt=""
+                              className={`w-4 h-4 object-contain rounded-sm flex-shrink-0 ${hidden ? "opacity-40" : ""}`}
+                            />
+                          ) : (
+                            <Store className={`w-3.5 h-3.5 flex-shrink-0 ${hidden ? "text-surface-600" : "text-surface-500"}`} />
+                          )}
+                          <span className={`text-[11px] truncate flex-1 ${hidden ? "line-through" : "font-medium"}`}>
+                            {store.name}
+                          </span>
+                          <span className="text-[10px] text-surface-600 tabular-nums">{store.count}</span>
+                          {hidden ? (
+                            <EyeOff className="w-3.5 h-3.5 text-surface-500 flex-shrink-0" />
+                          ) : (
+                            <Eye className="w-3.5 h-3.5 text-emerald-400/80 flex-shrink-0" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {hiddenStoreIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => applyHidden([], rememberHidden)}
+                  className="text-[10px] text-surface-400 hover:text-white"
+                >
+                  Mostrar todos los locales
+                </button>
+              )}
+            </div>
+  );
 
   const toolbar = (
         <header className={`flex-shrink-0 ${inline ? "" : "border-b border-surface-800 px-4 py-3"}`}>
@@ -420,79 +495,7 @@ export default function SalePricePanel({
             </button>
           </div>
 
-          {storesOpen && (
-            <div className="mt-2 rounded-lg border border-surface-800 bg-surface-900/70 p-2.5 space-y-2">
-              <label className="flex items-start gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberHidden}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="mt-0.5 rounded border-surface-600 bg-surface-800 text-brand-500 focus:ring-brand-500/30"
-                />
-                <span className="text-[11px] text-surface-300 leading-snug">
-                  Recordar locales ocultos entre búsquedas
-                  <span className="block text-[10px] text-surface-500 mt-0.5">
-                    Si está apagado, se reinician al buscar otra cosa.
-                  </span>
-                </span>
-              </label>
-
-              {storesInResults.length === 0 ? (
-                <p className="text-[10px] text-surface-500 px-0.5 py-1">
-                  Todavía no hay locales en estos resultados.
-                </p>
-              ) : (
-                <ul className="max-h-36 overflow-y-auto space-y-0.5 pr-0.5">
-                  {storesInResults.map((store) => {
-                    const hidden = hiddenStoreIds.includes(store.id);
-                    return (
-                      <li key={store.id}>
-                        <button
-                          type="button"
-                          onClick={() => toggleStoreHidden(store.id)}
-                          className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
-                            hidden
-                              ? "bg-surface-950/80 text-surface-500"
-                              : "hover:bg-surface-800 text-surface-200"
-                          }`}
-                        >
-                          {store.logoUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={proxyImg(store.logoUrl)}
-                              alt=""
-                              className={`w-4 h-4 object-contain rounded-sm flex-shrink-0 ${hidden ? "opacity-40" : ""}`}
-                            />
-                          ) : (
-                            <Store className={`w-3.5 h-3.5 flex-shrink-0 ${hidden ? "text-surface-600" : "text-surface-500"}`} />
-                          )}
-                          <span className={`text-[11px] truncate flex-1 ${hidden ? "line-through" : "font-medium"}`}>
-                            {store.name}
-                          </span>
-                          <span className="text-[10px] text-surface-600 tabular-nums">{store.count}</span>
-                          {hidden ? (
-                            <EyeOff className="w-3.5 h-3.5 text-surface-500 flex-shrink-0" />
-                          ) : (
-                            <Eye className="w-3.5 h-3.5 text-emerald-400/80 flex-shrink-0" />
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              {hiddenStoreIds.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => applyHidden([], rememberHidden)}
-                  className="text-[10px] text-surface-400 hover:text-white"
-                >
-                  Mostrar todos los locales
-                </button>
-              )}
-            </div>
-          )}
+          {storesOpen && storesFilter}
 
           {(min != null || visibleResults.length > 0 || results.length > 0) && (
             <p className="text-[11px] text-surface-300 mt-2">
@@ -519,8 +522,111 @@ export default function SalePricePanel({
         </header>
   );
 
+  // Lista de una columna (ficha de producto): cabecera corta con la escala de precios.
+  const ownPrice = ownStoreId ? visibleResults.find((r) => r.hit.store.id === ownStoreId)?.hit.price ?? null : null;
+  const pos = (v: number | null) =>
+    v == null || min == null || max == null || max <= min ? null : Math.min(100, Math.max(0, ((v - min) / (max - min)) * 100));
+  const costPos = pos(costArs);
+  const ownPos = pos(ownPrice);
+  const listToolbar = (
+    <header className="flex flex-col gap-3">
+      <div>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-bold text-white">Precios de venta en locales</h2>
+          {storeCount > 0 && (
+            <span className="text-xs text-surface-400">
+              {storeCount} locales · {Math.max(totalMatched, visibleResults.length)} publicaciones
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-surface-500">
+          Referencia de mercado para calcular tu margen. No es tu precio de compra ni una oferta de NODO.
+        </p>
+      </div>
+
+      {min != null && max != null && max > min && (
+        <div className="relative mx-1.5 mt-1 h-[50px]" aria-label={`Rango de ${formatARS(min)} a ${formatARS(max)}`}>
+          <div aria-hidden className="absolute inset-x-0 top-5 h-2 rounded-full bg-gradient-to-r from-surface-700 to-surface-800" />
+          {costPos != null && (
+            <>
+              <span aria-hidden className="absolute top-4 h-4 w-4 -translate-x-1/2 rounded-full border-[3px] border-surface-900 bg-amber-300" style={{ left: `${costPos}%` }} />
+              <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold text-amber-300" style={{ left: `${Math.min(92, Math.max(8, costPos))}%` }}>Tu costo</span>
+            </>
+          )}
+          {ownPos != null && (
+            <>
+              <span aria-hidden className="absolute top-4 h-4 w-4 -translate-x-1/2 rounded-full border-[3px] border-surface-900 bg-brand-400" style={{ left: `${ownPos}%` }} />
+              <span className="absolute top-0 -translate-x-1/2 whitespace-nowrap text-[11px] font-bold text-brand-300" style={{ left: `${Math.min(92, Math.max(costPos != null && Math.abs(ownPos - costPos) < 14 ? costPos + 14 : 8, ownPos))}%` }}>Tu web</span>
+            </>
+          )}
+          <div className="absolute inset-x-0 top-[34px] flex justify-between font-mono text-[11px] text-surface-400">
+            <span>{formatARS(min)}</span>
+            <span>{formatARS(max)}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1.5">
+        {SORT_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            aria-pressed={sortBy === opt.value}
+            onClick={() => setSort(opt.value)}
+            className={`min-h-[32px] rounded-lg border px-2.5 text-xs font-semibold transition-colors ${
+              sortBy === opt.value
+                ? "border-brand-500 bg-brand-600/15 text-brand-300"
+                : "border-surface-800 text-surface-400 hover:border-surface-600 hover:text-white"
+            }`}
+          >
+            {opt.value === "store_asc" ? "Local A–Z" : opt.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setStoresOpen((v) => !v)}
+          aria-expanded={storesOpen}
+          className={`inline-flex min-h-[32px] items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold transition-colors ${
+            storesOpen || hiddenCount > 0
+              ? "border-brand-500 bg-brand-600/15 text-brand-300"
+              : "border-surface-800 text-surface-400 hover:border-surface-600 hover:text-white"
+          }`}
+        >
+          Locales{hiddenCount > 0 ? ` · ${hiddenCount} ocultos` : ""}
+        </button>
+        <button
+          type="button"
+          onClick={() => setSearchOpen((v) => !v)}
+          aria-expanded={searchOpen}
+          className="inline-flex min-h-[32px] items-center gap-1 rounded-lg border border-surface-800 px-2.5 text-xs font-semibold text-surface-400 transition-colors hover:border-surface-600 hover:text-white"
+        >
+          <Search className="h-3 w-3" />
+          Búsqueda
+        </button>
+      </div>
+      {searchOpen && (
+        <form
+          className="relative"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void runSearch(q);
+          }}
+        >
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-surface-500" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Ajustá la búsqueda (amplia)..."
+            className="w-full bg-surface-900 border border-surface-700 rounded-lg pl-8 pr-3 py-2 text-xs text-white placeholder-surface-600 focus:outline-none focus:border-brand-500"
+          />
+        </form>
+      )}
+      {storesOpen && storesFilter}
+    </header>
+  );
+
   const body = (
-        <div className={inline
+        <div className={listLayout ? "mt-2" : inline
           ? "mt-4"
           : "flex-1 min-h-0 overflow-y-auto overscroll-contain px-3 py-3 touch-pan-y"
         }>
@@ -554,9 +660,9 @@ export default function SalePricePanel({
 
           {!loading && visibleResults.length > 0 && (
             <div className="space-y-4">
-              {bestMatches.length > 0 && (
+              {bestShown.length > 0 && (
                 <div>
-                  <p className="text-[11px] font-semibold text-emerald-300 mb-2 px-0.5">
+                  <p className={`text-[11px] font-semibold text-emerald-300 mb-2 px-0.5 ${listLayout ? "hidden" : ""}`}>
                     Mejores coincidencias
                     <span className="text-surface-500 font-normal"> · ≥85% de palabras de la búsqueda</span>
                   </p>
@@ -568,6 +674,7 @@ export default function SalePricePanel({
                         matchRatio={matchRatio}
                         marginPct={marginPct}
                         best
+                        compact={listLayout}
                         onOpen={() => setSelectedId(hit.id)}
                       />
                     ))}
@@ -577,7 +684,7 @@ export default function SalePricePanel({
 
               {otherShown.length > 0 && (
                 <div>
-                  {bestMatches.length > 0 && (
+                  {bestMatches.length > 0 && !listLayout && (
                     <p className="text-[11px] font-semibold text-surface-400 mb-2 px-0.5">
                       Otras referencias
                     </p>
@@ -589,6 +696,7 @@ export default function SalePricePanel({
                         hit={hit}
                         matchRatio={matchRatio}
                         marginPct={marginPct}
+                        compact={listLayout}
                         onOpen={() => setSelectedId(hit.id)}
                       />
                     ))}
@@ -612,10 +720,17 @@ export default function SalePricePanel({
   if (inline) {
     return (
       <div className="w-full">
-        <section className="bg-surface-900 border border-surface-800 rounded-2xl p-4 sm:p-5">
-          {toolbar}
-          {body}
-        </section>
+        {listLayout ? (
+          <>
+            {listToolbar}
+            {body}
+          </>
+        ) : (
+          <section className="bg-surface-900 border border-surface-800 rounded-2xl p-4 sm:p-5">
+            {toolbar}
+            {body}
+          </section>
+        )}
         {selectedId && (
           <RetailDetailModal
             productId={selectedId}
@@ -659,17 +774,84 @@ function RetailHitCard({
   matchRatio,
   marginPct,
   best = false,
+  compact = false,
 }: {
   hit: RetailSearchHit;
   onOpen: () => void;
   matchRatio: number;
   marginPct: number | null;
   best?: boolean;
+  /** Renglón de la lista de una columna (ficha de producto). */
+  compact?: boolean;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const [logoErr, setLogoErr] = useState(false);
   const mine = useOwnStore().store?.id === hit.store.id;
   const matchLabel = `${Math.round(matchRatio * 100)}% match`;
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="grid w-full grid-cols-[54px_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border-t border-surface-800 px-1.5 py-2 text-left transition-colors hover:bg-surface-800/50"
+      >
+        <span className="flex h-[54px] w-[54px] items-center justify-center overflow-hidden rounded-[10px] bg-white">
+          {hit.imageUrl && !imgErr ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={proxyImg(hit.imageUrl, { trim: false })}
+              alt=""
+              className="h-full w-full object-contain p-1"
+              loading="lazy"
+              decoding="async"
+              onError={() => setImgErr(true)}
+            />
+          ) : (
+            <Store className="h-5 w-5 text-slate-400" />
+          )}
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-bold text-white">
+            {hit.store.logoUrl && !logoErr ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={proxyImg(hit.store.logoUrl, { trim: false })}
+                alt=""
+                className="h-4 w-4 flex-shrink-0 rounded object-cover"
+                loading="lazy"
+                decoding="async"
+                onError={() => setLogoErr(true)}
+              />
+            ) : (
+              <span aria-hidden className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-surface-700 text-[10px] font-bold text-surface-100">
+                {hit.store.name.charAt(0)}
+              </span>
+            )}
+            <span className="truncate">{hit.store.name}</span>
+            <span className={`flex-shrink-0 text-[11px] font-medium ${mine ? "text-brand-300" : "text-surface-500"}`}>
+              {mine ? "tu tienda · " : ""}{timeAgo(hit.syncedAt)}
+            </span>
+          </span>
+          <span className="truncate text-xs text-surface-400">{hit.name}</span>
+        </span>
+        <span className="flex flex-col items-end gap-0.5">
+          <span className="font-mono text-sm tabular-nums text-white">{formatARS(hit.price)}</span>
+          <span className="text-[11px] text-surface-400 tabular-nums">
+            {matchLabel}
+            {marginPct != null && Number.isFinite(marginPct) && (
+              <>
+                {" · "}
+                <span className={`font-bold ${mine ? "text-brand-300" : marginPct >= 0 ? "text-emerald-300" : "text-amber-300"}`}>
+                  vs costo {marginPct >= 0 ? "+" : ""}{marginPct.toFixed(0)} %
+                </span>
+              </>
+            )}
+          </span>
+        </span>
+      </button>
+    );
+  }
 
   return (
     <button
