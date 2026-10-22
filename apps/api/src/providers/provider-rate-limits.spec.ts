@@ -10,6 +10,12 @@ describe("effectiveSyncMinutes", () => {
     expect(effectiveSyncMinutes("SOLUTION_BOX", 720)).toBe(720);
   });
 
+  it("Masnet, Microglobal y PC Arts no bajan de 2 h", () => {
+    expect(effectiveSyncMinutes("MASNET", 60)).toBe(120);
+    expect(effectiveSyncMinutes("MICROGLOBAL", 30)).toBe(120);
+    expect(effectiveSyncMinutes("PC_ARTS", 240)).toBe(240);
+  });
+
   it("los demás distribuidores siguen con lo configurado", () => {
     expect(effectiveSyncMinutes("ELIT", 60)).toBe(60);
   });
@@ -49,5 +55,6 @@ describe("shouldPauseOnFirstFailure", () => {
     expect(shouldPauseOnFirstFailure("GRUPO_NUCLEO", "Request failed with status code 403")).toBe(true);
     expect(shouldPauseOnFirstFailure("ELIT", "Request failed with status code 403")).toBe(false);
     expect(shouldPauseOnFirstFailure("SOLUTION_BOX", "socket hang up")).toBe(false);
+    expect(shouldPauseOnFirstFailure("PC_ARTS", "PC Arts (operación 1004, offset 0): Request failed with status code 429")).toBe(true);
   });
 });

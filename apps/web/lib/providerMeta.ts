@@ -12,6 +12,9 @@ export const SKU_PREFIX: Record<string, string> = {
   SOLUTION_BOX: "SB_",
   DISTECNA: "DT_",
   GC: "GC_",
+  MASNET: "MS_",
+  MICROGLOBAL: "MG_",
+  PC_ARTS: "PA_",
 };
 
 /**
@@ -22,4 +25,10 @@ export const SKU_PREFIX: Record<string, string> = {
 export const MIN_SYNC_MINUTES: Record<string, number> = {
   GRUPO_NUCLEO: 720,
   SOLUTION_BOX: 720,
+  MASNET: 120,
+  MICROGLOBAL: 120,
+  PC_ARTS: 120,
 };
+
+/** De estos el mínimo es porque suspendieron cuentas; del resto es prudencia (integraciones nuevas). */
+export const SUSPENDS_ON_FREQUENT_SYNC: readonly string[] = ["GRUPO_NUCLEO", "SOLUTION_BOX"];

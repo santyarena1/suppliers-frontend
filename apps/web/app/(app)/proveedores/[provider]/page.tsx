@@ -19,7 +19,7 @@ import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { invalidateShippingEstimates } from "@/lib/shipping";
 import { parsePrice, proxyImg } from "@/lib/format";
-import { MIN_SYNC_MINUTES, SKU_PREFIX } from "@/lib/providerMeta";
+import { MIN_SYNC_MINUTES, SKU_PREFIX, SUSPENDS_ON_FREQUENT_SYNC } from "@/lib/providerMeta";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
@@ -770,8 +770,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                             </select>
                             {MIN_SYNC_MINUTES[provider] && (
                               <p className="text-[11px] text-amber-400/90 mt-1.5 leading-relaxed">
-                                {providerLabel(provider)} suspende la cuenta si se consulta seguido: se sincroniza como mucho cada{" "}
-                                {MIN_SYNC_MINUTES[provider] / 60} horas y “Sincronizar ahora” espera 30 minutos entre intentos.
+                                {SUSPENDS_ON_FREQUENT_SYNC.includes(provider)
+                                  ? `${providerLabel(provider)} suspende la cuenta si se consulta seguido`
+                                  : `Para no saturar a ${providerLabel(provider)}`}
+                                : se sincroniza como mucho cada {MIN_SYNC_MINUTES[provider] / 60} horas y “Sincronizar ahora” espera 30 minutos entre intentos.
                               </p>
                             )}
                             <p className="text-[11px] text-surface-500 mt-1.5 leading-relaxed">

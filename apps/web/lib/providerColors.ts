@@ -27,6 +27,9 @@ export const PROVIDER_TEXT_COLOR: Record<string, string> = {
   DISTECNA: "text-violet-700 dark:text-violet-400",
   CEVEN: "text-rose-700 dark:text-rose-400",
   DIAPSTORE: "text-blue-700 dark:text-blue-400",
+  MASNET: "text-amber-700 dark:text-amber-400",
+  MICROGLOBAL: "text-fuchsia-700 dark:text-fuchsia-400",
+  PC_ARTS: "text-green-700 dark:text-green-400",
 };
 
 /** Text + soft background + border, for badges/chips, theme-aware. */
@@ -45,4 +48,7 @@ export const PROVIDER_CHIP_COLOR: Record<string, string> = {
   DISTECNA: "text-violet-700 dark:text-violet-400 bg-violet-500/10 dark:bg-violet-400/10 border-violet-500/30 dark:border-violet-400/30",
   CEVEN: "text-rose-700 dark:text-rose-400 bg-rose-500/10 dark:bg-rose-400/10 border-rose-500/30 dark:border-rose-400/30",
   DIAPSTORE: "text-blue-700 dark:text-blue-400 bg-blue-500/10 dark:bg-blue-400/10 border-blue-500/30 dark:border-blue-400/30",
+  MASNET: "text-amber-700 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-400/10 border-amber-500/30 dark:border-amber-400/30",
+  MICROGLOBAL: "text-fuchsia-700 dark:text-fuchsia-400 bg-fuchsia-500/10 dark:bg-fuchsia-400/10 border-fuchsia-500/30 dark:border-fuchsia-400/30",
+  PC_ARTS: "text-green-700 dark:text-green-400 bg-green-500/10 dark:bg-green-400/10 border-green-500/30 dark:border-green-400/30",
 };

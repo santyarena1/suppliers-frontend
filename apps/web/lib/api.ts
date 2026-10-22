@@ -237,6 +237,7 @@ export const ALL_PROVIDERS: Provider[] = [
   "NEW_BYTES", "ELIT", "GRUPO_NUCLEO", "AIR", "NEW_TREE",
   "INVID", "GC", "POLYTECH", "ASHIR", "HDC",
   "SOLUTION_BOX", "DISTECNA", "CEVEN", "DIAPSTORE",
+  "MASNET", "MICROGLOBAL", "PC_ARTS",
 ];
 
 /** Nombre comercial normalizado de cada proveedor. Es lo único que se muestra en pantalla. */
@@ -255,11 +256,15 @@ export const PROVIDER_LABELS: Record<string, string> = {
   DISTECNA: "Distecna",
   CEVEN: "Ceven",
   DIAPSTORE: "Diapstore",
+  MASNET: "Masnet",
+  MICROGLOBAL: "Microglobal",
+  PC_ARTS: "PC Arts",
 };
 
 /** Proveedores con integración real implementada (sincronizan catálogo propio). */
 export const IMPLEMENTED_PROVIDERS: Provider[] = [
   "ELIT", "NEW_BYTES", "GRUPO_NUCLEO", "AIR", "INVID", "CEVEN", "DIAPSTORE", "NEW_TREE", "SOLUTION_BOX", "DISTECNA", "POLYTECH",
+  "MASNET", "MICROGLOBAL", "PC_ARTS",
 ];
 
 /** Contenido enriquecido de plataforma (AcuStock): fotos, descripción y especificaciones. */
