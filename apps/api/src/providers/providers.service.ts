@@ -60,6 +60,8 @@ const RESTART_GRACE_MS = 30_000;
 const RESTART_RECHECK_MS = 60_000;
 /** Fichas de Solution Box que se enriquecen por corrida (el portal limita con 429). */
 const ENRICH_BATCH_SOLUTION_BOX = 20;
+/** Fichas de Air (fotos y descripción) por corrida: de a una y con pausa en el portal. */
+const ENRICH_BATCH_AIR = 40;
 /** Con "faltantes = sin stock", lo que no aparece hace esta cantidad de días se da de baja. */
 const ZOMBIE_DAYS = 14;
 const DAY_MS = 24 * 60 * 60_000;
@@ -460,6 +462,16 @@ export class ProvidersService implements OnModuleInit {
         select: { externalId: true },
         orderBy: { syncedAt: "desc" },
         take: ENRICH_BATCH_SOLUTION_BOX,
+      });
+      return missing.map((m) => m.externalId);
+    }
+    if (provider === "AIR") {
+      // Fichas de Air de a una (mas_info.php): solo las que no tienen foto ni descripción.
+      const missing = await this.prisma.providerSyncCache.findMany({
+        where: { provider, externalId: { in: syncedIds }, imageUrl: null, longDescription: null },
+        select: { externalId: true },
+        orderBy: { syncedAt: "desc" },
+        take: ENRICH_BATCH_AIR,
       });
       return missing.map((m) => m.externalId);
     }

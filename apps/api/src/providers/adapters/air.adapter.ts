@@ -2,6 +2,9 @@ import { Injectable, BadGatewayException, Logger } from "@nestjs/common";
 import axios from "axios";
 import type { NormalizedProduct, ProviderAdapter } from "../types";
 import { asRecord, asString } from "../json-value";
+import { AIR_META_URL, airInternalTaxPercent, mapAirMeta, splitAirInternalTax } from "../air-meta";
+import { AirPortalClient } from "../air-portal-client";
+import { isAccessBlockedError } from "../provider-rate-limits";
 
 // La API JSON documentada (api.air-intra.com/v2, ?q=articulos) tiene un
 // límite real de 1 request cada 5 minutos, verificado en vivo — inviable
@@ -162,6 +165,43 @@ export class AirAdapter implements ProviderAdapter {
 
     await onPage(products);
   }
+
+  /**
+   * Fotos y descripción desde la ficha del portal (mas_info.php), como la
+   * herramienta "fichas/fotos" de AcuStock. Va de a una, con pausa, y solo para
+   * las fichas que todavía no tienen foto ni descripción (providers.service
+   * manda un lote chico por sync). Un 403/429 corta: el resto queda para la próxima.
+   */
+  async enrichDetails(
+    credentials: Record<string, string>,
+    codes: string[],
+    onItem: (externalId: string, patch: Partial<NormalizedProduct>) => Promise<void>
+  ): Promise<void> {
+    if (codes.length === 0) return;
+    const portal = await AirPortalClient.login(credentials);
+    let failures = 0;
+    for (const code of codes) {
+      try {
+        const body = await portal.getText(`${AIR_META_URL}?codiart=${encodeURIComponent(code)}`);
+        // Sin ficha o sin nada útil: queda "" para no volver a pedirla en cada sync.
+        await onItem(code, { longDescription: "", ...(mapAirMeta(body) ?? {}) });
+      } catch (err) {
+        failures++;
+        const message = err instanceof Error ? err.message : String(err);
+        if (failures <= 3) this.logger.warn(`Air ficha ${code}: ${message}`);
+        if (failures > 5 || isAccessBlockedError(message) || /sesi[oó]n de air expir/i.test(message)) break;
+      }
+      await sleep(AIR_META_PAUSE_MS);
+    }
+    if (failures > 0) this.logger.warn(`Air: ${failures} fichas no se pudieron leer`);
+  }
+}
+
+/** Pausa entre fichas de Air (AcuStock usa 120 ms con tope de 25 por pedido; acá, más prudente). */
+const AIR_META_PAUSE_MS = 1_000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const AIR_CSV_COLUMNS = ["Codigo", "Descripcion", "lista5", "Tipo", "IVA", "ROS", "MZA", "CBA", "LUG", "Grupo", "Rubro", "Part Number"];
@@ -443,6 +483,16 @@ export function mapAirProduct(
   }
   out.category = resolveAirTerm(rubros, r.Rubro);
   out.brand = resolveAirTerm(grupos, r.Grupo);
+  // Monitores importados: el precio de lista trae el interno adentro. Se guarda el
+  // neto, el final con IVA + interno, y la alícuota en el raw para que la web la
+  // muestre como "Imp. internos" (lee `impuestoInterno`).
+  const internalTax = airInternalTaxPercent(r.Rubro);
+  if (internalTax > 0) {
+    const split = splitAirInternalTax(out.price, out.ivaPercent, internalTax);
+    out.price = split.price;
+    if (split.finalPrice != null) out.finalPrice = split.finalPrice;
+    return { ...out, raw: { ...r, impuestoInterno: internalTax } } as NormalizedProduct;
+  }
   return { ...out, raw: r } as NormalizedProduct;
 }
 
