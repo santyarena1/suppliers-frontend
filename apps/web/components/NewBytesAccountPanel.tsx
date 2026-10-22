@@ -24,6 +24,14 @@ import {
   usePagedMonthRows,
 } from "@/components/account/useAccountHistory";
 import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
+import {
+  matchesNodoNumber,
+  nodoOrderNumbers,
+  NodoOrderBadge,
+  OrderOriginFilter,
+  rowsByOrigin,
+  type OrderOrigin,
+} from "@/components/account/nodoOrigin";
 
 type Detail =
   | { kind: "movement"; row: NewBytesComprobante }
@@ -37,23 +45,9 @@ type OrdersPayload = { orders: NewBytesOrder[] };
 type PurchasePayload = { orders: NewBytesOrder[] };
 type NodoPayload = { drafts: NewBytesNodoDraft[] };
 
-/** De dónde salió una orden de compra: confirmada en el carrito de NODO o hecha directo en el portal. */
-type Origin = "all" | "nodo" | "portal";
-
-/** Números de orden de New Bytes de los pedidos que salieron de NODO (con y sin sucursal: 10486513 y 0002-10486513). */
-function nodoOrderNumbers(drafts: NewBytesNodoDraft[] | null): Set<string> {
-  const out = new Set<string>();
-  for (const d of drafts ?? []) {
-    for (const n of [d.invidOrderNumber, d.invidWebOrderNumber]) {
-      const v = String(n ?? "").trim();
-      if (v) out.add(v);
-    }
-  }
-  return out;
-}
-
+/** Las órdenes de compra de NODO se cruzan por número, con y sin sucursal (10486513 y 0002-10486513). */
 function isFromNodo(o: NewBytesOrder, numbers: Set<string>): boolean {
-  return [o.orderNumber, o.webOrderNumber].some((n) => n != null && numbers.has(String(n).trim()));
+  return matchesNodoNumber([o.orderNumber, o.webOrderNumber], numbers);
 }
 
 const SECTIONS = [
@@ -83,7 +77,7 @@ export default function NewBytesAccountPanel() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [orderFull, setOrderFull] = useState<NewBytesOrder | null>(null);
   const [orderLoading, setOrderLoading] = useState(false);
-  const [origin, setOrigin] = useState<Origin>("all");
+  const [origin, setOrigin] = useState<OrderOrigin>("all");
 
   const section = history.section as SectionId;
 
@@ -190,12 +184,7 @@ export default function NewBytesAccountPanel() {
   }
 
   const nodoNumbers = nodoOrderNumbers(drafts);
-  const purchaseByOrigin = (o: Origin) =>
-    purchaseOrders == null
-      ? null
-      : o === "all"
-        ? purchaseOrders
-        : purchaseOrders.filter((row) => isFromNodo(row, nodoNumbers) === (o === "nodo"));
+  const isNodoPurchase = (o: NewBytesOrder) => isFromNodo(o, nodoNumbers);
 
   const rowsForSection =
     section === "cta"
@@ -203,7 +192,7 @@ export default function NewBytesAccountPanel() {
       : section === "orders"
         ? orders
         : section === "purchase"
-          ? purchaseByOrigin(origin)
+          ? rowsByOrigin(purchaseOrders, origin, isNodoPurchase)
           : drafts;
 
   const getDate =
@@ -263,27 +252,12 @@ export default function NewBytesAccountPanel() {
         hint="Pedidos y facturas de nb.com.ar. Ver más carga productos e importes del portal. No hay adjuntar pago."
         header={
           section === "purchase" && purchaseOrders ? (
-            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Origen de la orden">
-              {([
-                ["all", "Todas"],
-                ["nodo", "Desde NODO"],
-                ["portal", "Hechas en el portal"],
-              ] as const).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  aria-pressed={origin === id}
-                  onClick={() => { setOrigin(id); history.setPage(1); }}
-                  className={`min-h-[32px] rounded-lg border px-3 text-xs font-semibold transition-colors ${
-                    origin === id
-                      ? "border-brand-500 bg-brand-600/15 text-brand-300"
-                      : "border-surface-700 text-surface-400 hover:border-surface-500 hover:text-white"
-                  }`}
-                >
-                  {label} <span className="tabular-nums opacity-70">{purchaseByOrigin(id)?.length ?? 0}</span>
-                </button>
-              ))}
-            </div>
+            <OrderOriginFilter
+              rows={purchaseOrders}
+              isNodo={isNodoPurchase}
+              value={origin}
+              onChange={(o) => { setOrigin(o); history.setPage(1); }}
+            />
           ) : section === "cta" && (balance != null || ctaSummary) ? (
             <div className="flex flex-wrap items-end gap-3">
               {balance != null && (
@@ -587,9 +561,7 @@ function OrdersTable({
             <tr key={i}>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">
                 {o[numberKey] || o.orderNumber || o.webOrderNumber || "—"}
-                {nodoNumbers && isFromNodo(o, nodoNumbers) && (
-                  <span className="ml-2 rounded-full bg-brand-500/15 px-2 py-0.5 font-sans text-[10px] font-semibold text-brand-300">NODO</span>
-                )}
+                {nodoNumbers && isFromNodo(o, nodoNumbers) && <NodoOrderBadge />}
               </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.branch ?? "—"}</td>
               <td className="px-2 py-2">
