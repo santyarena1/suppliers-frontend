@@ -5,6 +5,13 @@ const STOP = new Set([
   "un", "una", "y", "o", "the", "of", "and", "or", "p",
 ]);
 
+/** Series de placas y mothers: distinguen productos del mismo chip. */
+const SERIES_WORDS = new Set([
+  "windforce", "eagle", "gaming", "aero", "aorus", "vision", "tuf", "rog", "strix", "prime", "dual",
+  "proart", "ventus", "shadow", "inspire", "suprim", "twin", "edge", "pulse", "nitro", "hellhound",
+  "challenger", "phantom", "steel", "legend",
+]);
+
 export function tokenizeProductName(name: string): string[] {
   return name
     .normalize("NFD")
@@ -56,6 +63,11 @@ export function providerNameMatchRatio(providerName: string, retailName: string)
   }
   if (retailSkus.some((sku) => !querySkus.includes(sku) && !providerTokens.includes(sku))) {
     ratio = Math.min(ratio, 0.72);
+  }
+  // Otra serie del mismo modelo (Windforce vs Eagle): parecido, no el mismo producto.
+  const querySeries = providerTokens.filter((t) => SERIES_WORDS.has(t));
+  if (querySeries.length > 0 && retailTokens.some((t) => SERIES_WORDS.has(t) && !querySeries.includes(t))) {
+    ratio = Math.min(ratio, 0.75);
   }
   if (/\b(combo|kit|pack)\b/i.test(retailName)) {
     ratio = Math.min(ratio, 0.7);

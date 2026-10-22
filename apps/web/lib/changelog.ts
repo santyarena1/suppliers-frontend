@@ -30,7 +30,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-22",
     title: "Locales en la ficha: el mismo producto primero",
     changes: [
-      { kind: "fixed", text: "La búsqueda en locales usa la marca y el modelo completos: una Windforce ya no aparece igual que una Eagle." },
+      { kind: "fixed", text: "La búsqueda en locales usa la marca y el modelo completos: una Windforce ya no aparece igual que una Eagle, y otra serie del mismo chip pasa a parecidas." },
       { kind: "fixed", text: "En la ficha, los locales vuelven a separar las publicaciones del mismo producto de las parecidas, con el nombre completo de cada una. Las parecidas se abren aparte." },
     ],
   },
