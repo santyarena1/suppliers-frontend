@@ -29,7 +29,7 @@ type CachedPayload = {
   note: string;
 };
 
-const SECTIONS = [{ id: "nodo", label: "Desde Nodo" }] as const;
+const SECTIONS = [{ id: "nodo", label: "Desde NODO" }] as const;
 
 export default function DistecnaAccountPanel() {
   const history = useAccountHistoryState("nodo");

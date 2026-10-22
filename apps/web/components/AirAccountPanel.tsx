@@ -33,7 +33,7 @@ const SECTIONS = [
   { id: "cta", label: "Debe/Haber" },
   { id: "invoices", label: "Comprobantes" },
   { id: "pending", label: "Pendientes" },
-  { id: "nodo", label: "Desde Nodo" },
+  { id: "nodo", label: "Desde NODO" },
 ] as const;
 
 function airRowDate(row: AirRow): string | null {

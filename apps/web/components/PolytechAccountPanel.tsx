@@ -44,7 +44,7 @@ type CachedPayload = {
 
 const SECTIONS = [
   { id: "portal", label: "En Polytech" },
-  { id: "nodo", label: "Desde Nodo" },
+  { id: "nodo", label: "Desde NODO" },
 ] as const;
 
 const BUCKET_LABEL: Record<PolytechHistoryOrder["bucket"], string> = {

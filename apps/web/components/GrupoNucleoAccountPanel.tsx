@@ -22,7 +22,7 @@ import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
 
 type CachedPayload = { drafts: NodoProviderDraft[] };
 
-const SECTIONS = [{ id: "nodo", label: "Desde Nodo" }] as const;
+const SECTIONS = [{ id: "nodo", label: "Desde NODO" }] as const;
 
 export default function GrupoNucleoAccountPanel() {
   const history = useAccountHistoryState("nodo");

@@ -26,6 +26,14 @@ import {
 } from "@/components/account/useAccountHistory";
 import { formatAccountSum, parseAccountAmount, sumAccountAmounts } from "@/lib/account-history";
 import { usePrefs } from "@/lib/prefs";
+import {
+  matchesNodoNumber,
+  nodoOrderNumbers,
+  NodoOrderBadge,
+  OrderOriginFilter,
+  rowsByOrigin,
+  type OrderOrigin,
+} from "@/components/account/nodoOrigin";
 
 type Detail =
   | { kind: "order"; row: InvidOrder }
@@ -44,10 +52,31 @@ type OrdersPayload = {
 };
 type NodoPayload = { drafts: InvidNodoDraft[] };
 
+/**
+ * Los pedidos de NODO se cruzan por número del mismo tipo: el pedido web (217062) con
+ * el pedido web del portal y, cuando Invid devolvió también el de la orden (619235),
+ * con el N° de orden. Si el borrador no tiene N° de orden propio, guarda el web en los
+ * dos campos: ese no se compara contra el N° de orden para no cruzar números de otra serie.
+ */
+type InvidNodoNumbers = { web: Set<string>; order: Set<string> };
+
+function invidNodoNumbers(drafts: InvidNodoDraft[] | null): InvidNodoNumbers {
+  return {
+    web: nodoOrderNumbers(drafts, (d) => [d.invidWebOrderNumber]),
+    order: nodoOrderNumbers(drafts, (d) =>
+      d.invidOrderNumber && d.invidOrderNumber !== d.invidWebOrderNumber ? [d.invidOrderNumber] : []
+    ),
+  };
+}
+
+function isFromNodo(o: InvidOrder, numbers: InvidNodoNumbers): boolean {
+  return matchesNodoNumber([o.webOrderNumber], numbers.web) || matchesNodoNumber([o.orderNumber], numbers.order);
+}
+
 const SECTIONS = [
   { id: "cta", label: "Cuenta corriente" },
   { id: "orders", label: "Mis pedidos" },
-  { id: "nodo", label: "Desde Nodo" },
+  { id: "nodo", label: "Desde NODO" },
 ] as const;
 
 const CACHE = {
@@ -72,6 +101,7 @@ export default function InvidAccountPanel() {
   const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<InvidOrder | null>(null);
+  const [origin, setOrigin] = useState<OrderOrigin>("all");
 
   const section = history.section as SectionId;
 
@@ -119,6 +149,15 @@ export default function InvidAccountPanel() {
         setPaymentUploads(data.paymentUploads);
         setUploadNote(data.note);
         setFromCache(hit);
+        const nodo = await loadAccountCached<NodoPayload>(
+          CACHE.nodo,
+          async () => {
+            const res = await invidCheckoutApi.drafts().catch(() => ({ data: [] as InvidNodoDraft[] }));
+            return { drafts: res.data ?? [] };
+          },
+          { refresh }
+        );
+        setDrafts(nodo.data.drafts);
       } else {
         const { data, fromCache: hit } = await loadAccountCached<NodoPayload>(
           CACHE.nodo,
@@ -141,8 +180,11 @@ export default function InvidAccountPanel() {
     }
   }
 
+  const nodoNumbers = invidNodoNumbers(drafts);
+  const isNodoOrder = (o: InvidOrder) => isFromNodo(o, nodoNumbers);
+
   const rowsForSection =
-    section === "cta" ? movements : section === "orders" ? orders : drafts;
+    section === "cta" ? movements : section === "orders" ? rowsByOrigin(orders, origin, isNodoOrder) : drafts;
 
   const getDate =
     section === "cta"
@@ -214,6 +256,13 @@ export default function InvidAccountPanel() {
                 </p>
               </div>
             </div>
+          ) : section === "orders" && orders ? (
+            <OrderOriginFilter
+              rows={orders}
+              isNodo={isNodoOrder}
+              value={origin}
+              onChange={(o) => { setOrigin(o); history.setPage(1); }}
+            />
           ) : undefined
         }
       >
@@ -245,6 +294,7 @@ export default function InvidAccountPanel() {
         ) : (
           <OrdersTable
             rows={paged.items as InvidOrder[]}
+            isNodo={isNodoOrder}
             onOpen={(o) => setDetail({ kind: "order", row: o })}
             onAttach={(o) => setPaymentOrder(o)}
           />
@@ -438,10 +488,13 @@ function MovementsTable({
 
 function OrdersTable({
   rows,
+  isNodo,
   onOpen,
   onAttach,
 }: {
   rows: InvidOrder[];
+  /** Marca los pedidos que salieron del carrito de NODO. */
+  isNodo: (o: InvidOrder) => boolean;
   onOpen: (o: InvidOrder) => void;
   onAttach: (o: InvidOrder) => void;
 }) {
@@ -461,7 +514,10 @@ function OrdersTable({
         <tbody className="divide-y divide-surface-800">
           {rows.map((o, i) => (
             <tr key={i}>
-              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.orderNumber || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 font-mono text-xs">
+                {o.orderNumber || "—"}
+                {isNodo(o) && <NodoOrderBadge />}
+              </td>
               <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.webOrderNumber || "—"}</td>
               <td className="px-2 py-2">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${

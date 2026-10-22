@@ -17,6 +17,14 @@ import { draftItems, draftLines, draftTotals } from "@/components/account/draftD
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
 import { useAccountHistoryState, useClampPage, usePagedMonthRows } from "@/components/account/useAccountHistory";
 import { formatAccountSum, sumAccountAmounts } from "@/lib/account-history";
+import {
+  matchesNodoNumber,
+  nodoOrderNumbers,
+  NodoOrderBadge,
+  OrderOriginFilter,
+  rowsByOrigin,
+  type OrderOrigin,
+} from "@/components/account/nodoOrigin";
 
 type NewTreeAccount = Awaited<ReturnType<typeof newTreeAccountApi.account>>["data"];
 type Detail =
@@ -27,11 +35,20 @@ type Detail =
 type SectionId = "cta" | "invoices" | "orders" | "nodo";
 type CachedPayload = { account: NewTreeAccount; drafts: NodoProviderDraft[] };
 
+/**
+ * NODO guarda el número que devuelve wsNRW_SaveSaleOrder, que es el Id de la lista de
+ * pedidos web (MISPEDIDOS). Sin verificar con datos: la cuenta de prueba no tiene pedidos
+ * de NODO en New Tree.
+ */
+function isFromNodo(o: NewTreePortalOrder, numbers: Set<string>): boolean {
+  return matchesNodoNumber([o.id], numbers);
+}
+
 const SECTIONS = [
   { id: "cta", label: "Cuenta corriente" },
   { id: "invoices", label: "Facturas" },
   { id: "orders", label: "Pedidos web" },
-  { id: "nodo", label: "Desde Nodo" },
+  { id: "nodo", label: "Desde NODO" },
 ] as const;
 
 function documentHref(m: NewTreeMovement): string | undefined {
@@ -58,6 +75,7 @@ export default function NewTreeAccountPanel() {
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [origin, setOrigin] = useState<OrderOrigin>("all");
 
   useEffect(() => {
     void load(false);
@@ -91,13 +109,15 @@ export default function NewTreeAccountPanel() {
   }
 
   const section = history.section as SectionId;
+  const nodoNumbers = nodoOrderNumbers(drafts);
+  const isNodoOrder = (o: NewTreePortalOrder) => isFromNodo(o, nodoNumbers);
   const rowsForSection =
     section === "cta"
       ? (account ? account.movements ?? [] : null)
       : section === "invoices"
         ? (account ? account.invoices ?? [] : null)
         : section === "orders"
-          ? (account ? account.orders ?? [] : null)
+          ? (account ? rowsByOrigin(account.orders ?? [], origin, isNodoOrder) : null)
           : drafts;
   const getDate =
     section === "nodo"
@@ -167,7 +187,18 @@ export default function NewTreeAccountPanel() {
         amountBreakdown={ctaBreakdown}
         hint={account?.note ?? "Cuenta corriente, facturas y pedidos web de newtree.com.ar."}
         wide={section === "cta" || section === "invoices"}
-        header={section === "cta" ? <BalanceOverview account={account} /> : undefined}
+        header={
+          section === "cta" ? (
+            <BalanceOverview account={account} />
+          ) : section === "orders" && account ? (
+            <OrderOriginFilter
+              rows={account.orders ?? []}
+              isNodo={isNodoOrder}
+              value={origin}
+              onChange={(o) => { setOrigin(o); history.setPage(1); }}
+            />
+          ) : undefined
+        }
       >
         {loading && !ready ? (
           <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -189,7 +220,7 @@ export default function NewTreeAccountPanel() {
             onOpen={(m) => setDetail({ kind: "movement", row: m })}
           />
         ) : section === "orders" ? (
-          <OrdersTable rows={paged.items as NewTreePortalOrder[]} onOpen={(o) => setDetail({ kind: "order", row: o })} />
+          <OrdersTable rows={paged.items as NewTreePortalOrder[]} isNodo={isNodoOrder} onOpen={(o) => setDetail({ kind: "order", row: o })} />
         ) : (
           <DraftsTable drafts={paged.items as NodoProviderDraft[]} onOpen={(d) => setDetail({ kind: "draft", row: d })} />
         )}
@@ -328,7 +359,15 @@ function MovementsTable({
   );
 }
 
-function OrdersTable({ rows, onOpen }: { rows: NewTreePortalOrder[]; onOpen: (o: NewTreePortalOrder) => void }) {
+function OrdersTable({
+  rows,
+  isNodo,
+  onOpen,
+}: {
+  rows: NewTreePortalOrder[];
+  isNodo: (o: NewTreePortalOrder) => boolean;
+  onOpen: (o: NewTreePortalOrder) => void;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -345,7 +384,10 @@ function OrdersTable({ rows, onOpen }: { rows: NewTreePortalOrder[]; onOpen: (o:
         <tbody className="divide-y divide-surface-800">
           {rows.map((o) => (
             <tr key={o.id}>
-              <td className="px-2 py-2 text-surface-200 font-mono text-xs">{o.id}</td>
+              <td className="px-2 py-2 text-surface-200 font-mono text-xs">
+                {o.id}
+                {isNodo(o) && <NodoOrderBadge />}
+              </td>
               <td className="px-2 py-2 text-surface-400 whitespace-nowrap">{o.date}</td>
               <td className="px-2 py-2 text-surface-300">{o.status}</td>
               <td className="px-2 py-2 text-surface-500">{o.origin}</td>
