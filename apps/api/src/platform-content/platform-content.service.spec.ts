@@ -26,7 +26,7 @@ function setup(opts: { linked?: boolean; seenToday?: number; alreadySeen?: boole
       update: jest.fn().mockResolvedValue({}),
     },
   };
-  const service = new PlatformContentService(prisma as never, {} as never);
+  const service = new PlatformContentService(prisma as never, {} as never, { get: () => "a".repeat(64) } as never);
   return { service, prisma };
 }
 
@@ -38,6 +38,8 @@ describe("PlatformContentService.forProduct", () => {
 
     expect(r.limited).toBe(false);
     expect(r.content?.specs).toHaveLength(1);
+    expect(r.content?.images[0].url).toMatch(/^\/img-proxy\?t=/);
+    expect(JSON.stringify(r.content)).not.toContain("a.com");
     expect(prisma.platformContentAccess.createMany).toHaveBeenCalledTimes(1);
   });
 

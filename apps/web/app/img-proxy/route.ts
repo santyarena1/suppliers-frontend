@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
+import { decryptImageToken } from "@/lib/server/image-token";
 import { BlockedUrlError, publicFetch } from "@/lib/server/public-fetch";
 
 /** Una imagen de producto no pesa más que esto; lo demás no es una imagen. */
@@ -16,13 +17,22 @@ const SAFE_HEADERS = {
 
 export const runtime = "nodejs";
 
+/**
+ * Caché del navegador y de la red de Vercel: la misma foto no vuelve a ejecutar
+ * esta función en cada visita.
+ */
+const CACHE = "public, max-age=86400, s-maxage=86400, immutable";
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url");
+  // `t`: foto de ficha enriquecida con la dirección cifrada (no se ve de dónde sale).
+  const token = req.nextUrl.searchParams.get("t");
   const trim = req.nextUrl.searchParams.get("trim") !== "0";
-  if (!url) return new NextResponse("Missing url", { status: 400 });
+  if (!url && !token) return new NextResponse("Missing url", { status: 400 });
 
   try {
-    const decoded = decodeURIComponent(url);
+    const decoded = token ? decryptImageToken(token) : decodeURIComponent(url!);
+    if (!decoded) return new NextResponse("Expired", { status: 410 });
     // Solo internet pública: nada de localhost, red interna ni metadata de la nube.
     const res = await publicFetch(decoded, {
       headers: {
@@ -51,7 +61,7 @@ export async function GET(req: NextRequest) {
         headers: {
           ...SAFE_HEADERS,
           "content-type": res.headers.get("content-type") || "image/jpeg",
-          "cache-control": "public, max-age=86400, immutable",
+          "cache-control": CACHE,
         },
       });
     }
@@ -68,7 +78,7 @@ export async function GET(req: NextRequest) {
         headers: {
           ...SAFE_HEADERS,
           "content-type": "image/webp",
-          "cache-control": "public, max-age=86400, immutable",
+          "cache-control": CACHE,
         },
       });
     } catch {
@@ -77,7 +87,7 @@ export async function GET(req: NextRequest) {
         headers: {
           ...SAFE_HEADERS,
           "content-type": res.headers.get("content-type") || "image/jpeg",
-          "cache-control": "public, max-age=86400, immutable",
+          "cache-control": CACHE,
         },
       });
     }

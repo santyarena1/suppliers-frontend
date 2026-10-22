@@ -1,10 +1,12 @@
 import { ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { KNOWN_PROVIDERS } from "@nodo/shared";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { type AcuStockProduct, AcuStockClient } from "./acustock.client";
 import { type CatalogRow, type ContentLink, matchContent } from "./content-match";
 import { contentToText } from "./content-text";
+import { encryptImageUrl, imageKey } from "./image-token";
 
 export const ACUSTOCK_SOURCE = "ACUSTOCK";
 type Mode = "PREVIEW" | "APPLY";
@@ -42,10 +44,28 @@ export class PlatformContentService implements OnModuleInit {
   private readonly logger = new Logger(PlatformContentService.name);
   private running = false;
 
+  private readonly imgKey: Buffer | null;
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly acustock: AcuStockClient
-  ) {}
+    private readonly acustock: AcuStockClient,
+    config: ConfigService
+  ) {
+    const secret = config.get<string>("CONTENT_IMAGE_KEY");
+    this.imgKey = secret ? imageKey(secret) : null;
+  }
+
+  /**
+   * Fotos con la dirección cifrada para el /img-proxy de la web. Sin clave configurada
+   * no se mandan: antes que mostrar de dónde salen, la ficha usa la foto del distribuidor.
+   */
+  private protectImages(images: unknown): PlatformContentView["images"] {
+    if (!this.imgKey || !Array.isArray(images)) return [];
+    return (images as { url: string; alt: string | null }[]).map((i) => ({
+      url: `/img-proxy?t=${encryptImageUrl(i.url, this.imgKey!)}`,
+      alt: i.alt,
+    }));
+  }
 
   async onModuleInit() {
     await this.prisma.platformContentImportRun.updateMany({
@@ -74,7 +94,7 @@ export class PlatformContentService implements OnModuleInit {
     return {
       content: {
         source: c.source,
-        images: Array.isArray(c.images) ? (c.images as PlatformContentView["images"]) : [],
+        images: this.protectImages(c.images),
         shortDescription: c.shortDescription,
         descriptionHtml: c.descriptionHtml,
         specs: Array.isArray(c.specs) ? (c.specs as PlatformContentView["specs"]) : [],

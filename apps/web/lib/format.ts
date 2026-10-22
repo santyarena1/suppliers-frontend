@@ -25,5 +25,7 @@ export function proxyImg(url: string | undefined | null, opts?: { trim?: boolean
   if (!url) return "";
   if (url.startsWith("/assets/") || url.startsWith("/uploads/")) return assetUrl(url);
   const trim = opts?.trim === false ? "&trim=0" : "";
+  // Ya es una foto por el proxy (ficha enriquecida, dirección cifrada): no se envuelve de nuevo.
+  if (url.startsWith("/img-proxy?")) return `${url}${trim}`;
   return `/img-proxy?url=${encodeURIComponent(url)}${trim}`;
 }

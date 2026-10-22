@@ -1108,3 +1108,4 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: `{ text }` — nombre, bajada, descripción sin HTML y especificaciones agrupadas, en texto plano.
 - **Estado**: IMPLEMENTADO
 - **Notas**: 429 pasadas las 100 copias por usuario y día (hora de Argentina). La ficha (`GET /providers/:provider/products/:externalId`) devuelve `platformContent: null` y `platformContentLimited: true` cuando el usuario ya vio 300 fichas completas distintas en el día (las ya vistas se siguen viendo). Cada vista y copia queda en `PlatformContentAccess`. El contenido enriquecido no sale por la API de catálogo (`/v1`).
+- **Fotos (2026-10-21)**: `platformContent.images[].url` llega como `/img-proxy?t=<token>`: la dirección original va cifrada (AES-256-GCM, `CONTENT_IMAGE_KEY` igual en API y web) y vence entre 6 y 12 h. Sin clave configurada la API no manda fotos.
