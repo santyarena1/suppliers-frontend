@@ -94,12 +94,16 @@ function sortHits(hits: RetailSearchHit[], sort: RetailSortKey): RetailSearchHit
   return arr.sort((a, b) => (b.score ?? 0) - (a.score ?? 0) || a.price - b.price);
 }
 
+/** Publicaciones que se ven de entrada en la lista de una columna. */
+const LIST_PREVIEW = 8;
+
 export default function SalePricePanel({
   open = true,
   onClose,
   seedQuery,
   costUsd,
   variant = "drawer",
+  layout = "grid",
   active: activeProp,
 }: {
   open?: boolean;
@@ -108,6 +112,8 @@ export default function SalePricePanel({
   costUsd?: number | null;
   /** drawer = panel lateral (cards); inline = sección en la ficha de producto */
   variant?: "drawer" | "inline";
+  /** inline en una columna angosta: lista de a una, las primeras LIST_PREVIEW y "Ver todas". */
+  layout?: "grid" | "list";
   /** Controla si corre la búsqueda (accordion mobile cerrado → false). */
   active?: boolean;
 }) {
@@ -123,6 +129,7 @@ export default function SalePricePanel({
   const [totalMatched, setTotalMatched] = useState(0);
   const [tokens, setTokens] = useState<string[]>([]);
   const [error, setError] = useState("");
+  const [showAll, setShowAll] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [sortBy, setSortBy] = useState<RetailSortKey>(() =>
@@ -312,6 +319,14 @@ export default function SalePricePanel({
   }, [visibleResults, bestMatches, sortBy, ownStoreId]);
 
   if (!active) return null;
+
+  // Columna angosta: una tarjeta por fila y, de entrada, solo las primeras.
+  const listLayout = inline && layout === "list";
+  const cap = listLayout && !showAll ? LIST_PREVIEW : Infinity;
+  const bestShown = bestMatches.slice(0, cap);
+  const otherShown = otherMatches.slice(0, Math.max(0, cap - bestShown.length));
+  const moreCount = bestMatches.length + otherMatches.length - bestShown.length - otherShown.length;
+  const gridClass = inline && !listLayout ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" : "space-y-2";
 
   const prices = visibleResults
     .map((r) => r.hit.price)
@@ -545,11 +560,8 @@ export default function SalePricePanel({
                     Mejores coincidencias
                     <span className="text-surface-500 font-normal"> · ≥85% de palabras de la búsqueda</span>
                   </p>
-                  <div className={inline
-                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-                    : "space-y-2"
-                  }>
-                    {bestMatches.map(({ hit, matchRatio, marginPct }) => (
+                  <div className={gridClass}>
+                    {bestShown.map(({ hit, matchRatio, marginPct }) => (
                       <RetailHitCard
                         key={hit.id}
                         hit={hit}
@@ -563,18 +575,15 @@ export default function SalePricePanel({
                 </div>
               )}
 
-              {otherMatches.length > 0 && (
+              {otherShown.length > 0 && (
                 <div>
                   {bestMatches.length > 0 && (
                     <p className="text-[11px] font-semibold text-surface-400 mb-2 px-0.5">
                       Otras referencias
                     </p>
                   )}
-                  <div className={inline
-                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
-                    : "space-y-2"
-                  }>
-                    {otherMatches.map(({ hit, matchRatio, marginPct }) => (
+                  <div className={gridClass}>
+                    {otherShown.map(({ hit, matchRatio, marginPct }) => (
                       <RetailHitCard
                         key={hit.id}
                         hit={hit}
@@ -585,6 +594,15 @@ export default function SalePricePanel({
                     ))}
                   </div>
                 </div>
+              )}
+              {moreCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAll(true)}
+                  className="w-full rounded-xl border border-surface-700 px-4 py-2.5 text-xs font-semibold text-surface-200 hover:bg-surface-800 hover:text-white transition-colors"
+                >
+                  Ver {moreCount} publicaciones más
+                </button>
               )}
             </div>
           )}

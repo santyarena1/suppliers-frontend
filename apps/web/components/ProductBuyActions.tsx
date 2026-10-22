@@ -6,193 +6,134 @@ import { Check, Layers, ShoppingCart, StickyNote } from "lucide-react";
 import type { ProductDTO } from "@/lib/api";
 import { useCart } from "@/lib/cart";
 import { useIsRetailer, usePurchasePolicy } from "@/lib/purchase";
-import { purchaseLinePricing } from "@/lib/purchase-price";
+import type { PriceMode } from "@/lib/purchase-price";
 import { hasOwnPrice } from "@/lib/format";
-import { usePrefs } from "@/lib/prefs";
-import { displayAmountFromPricing } from "@/lib/display-price";
-import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { SchemePicker } from "@/components/SchemePicker";
 import { providerHasIvaRate } from "@/lib/purchase-pricing";
-import type { TaxLine } from "@/lib/tax";
-import ChannelPriceBreakdown from "@/components/ChannelPriceBreakdown";
 import { isStorefrontProvider, providerLabel } from "@/components/ProviderBadge";
 
-/** Las líneas de impuesto que suman al precio mostrado según IVA/percepciones elegidos. */
-function shownLines(lines: TaxLine[], withIva: boolean, withIibb: boolean): TaxLine[] {
-  return lines.filter((l) => (l.kind === "iibb" ? withIibb : withIva));
+/** Formas de compra que este distribuidor acepta para el comercio (online siempre). */
+export function useBuyChannels(product: ProductDTO | null) {
+  const retailer = useIsRetailer();
+  const policy = usePurchasePolicy(product?.provider ?? "");
+  const hasIva = product ? providerHasIvaRate(product.provider, policy.priceChannel) : false;
+  return {
+    scheme: Boolean(retailer && hasIva && policy.acceptsScheme),
+    offline: Boolean(retailer && hasIva && policy.acceptsOffline),
+    /** Se pueden activar en la configuración del distribuidor. */
+    canEnable: Boolean(retailer && hasIva && product && !isStorefrontProvider(product.provider)),
+  };
 }
 
-export default function ProductBuyActions({ product, qty }: { product: ProductDTO; qty: number }) {
-  const { add, items, createScheme, schemesFor } = useCart();
-  const retailer = useIsRetailer();
-  const policy = usePurchasePolicy(product.provider);
-  const hasIva = providerHasIvaRate(product.provider, policy.priceChannel);
-  const { withIva, withIibb } = usePrefs();
-  useIibbRatesEpoch();
-  const [flash, setFlash] = useState<"cart" | "scheme" | "offline" | null>(null);
-  const [pickOpen, setPickOpen] = useState(false);
+const CTA: Record<PriceMode, { idle: string; done: string; idleClass: string; doneClass: string }> = {
+  list: {
+    idle: "Agregar al carrito",
+    done: "Agregado al carrito",
+    idleClass: "bg-brand-600 hover:bg-brand-500 text-white",
+    doneClass: "bg-emerald-600 text-white",
+  },
+  offline: {
+    idle: "Agregar a carrito offline",
+    done: "Agregado al pedido offline",
+    idleClass: "bg-amber-500 hover:bg-amber-400 text-surface-950",
+    doneClass: "bg-amber-600 text-white",
+  },
+  scheme: {
+    idle: "Agregar como esquema",
+    done: "Agregado al esquema",
+    idleClass: "bg-violet-600 hover:bg-violet-500 text-white",
+    doneClass: "bg-violet-700 text-white",
+  },
+};
 
-  const onlineLoose = items.find(
-    (i) =>
-      i.provider === product.provider &&
-      i.externalId === product.externalId &&
-      (i.channel ?? "online") === "online" &&
-      !i.schemeId
-  );
-  const offlineItem = items.find(
-    (i) =>
-      i.provider === product.provider &&
-      i.externalId === product.externalId &&
-      i.channel === "offline"
-  );
+/** El botón de compra de la forma elegida (online, offline o esquema) y lo que ya está en el carrito. */
+export default function ProductBuyActions({
+  product,
+  qty,
+  channel,
+}: {
+  product: ProductDTO;
+  qty: number;
+  channel: PriceMode;
+}) {
+  const { add, items, createScheme, schemesFor } = useCart();
+  const [flash, setFlash] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
 
   if (!hasOwnPrice(product)) return null;
 
-  const offlinePricing = purchaseLinePricing(product, policy, "offline", qty);
-  const schemePricing = purchaseLinePricing(product, policy, "scheme", qty);
-  const schemeShown = displayAmountFromPricing(
-    schemePricing,
-    { withIva, withIibb: withIibb && schemePricing.mode !== "offline", provider: product.provider },
-    qty
+  const inCart = items.find(
+    (i) =>
+      i.provider === product.provider &&
+      i.externalId === product.externalId &&
+      (channel === "offline" ? i.channel === "offline" : (i.channel ?? "online") === "online" && (channel === "scheme" ? !!i.schemeId : !i.schemeId))
   );
-  const offlineShown = displayAmountFromPricing(
-    offlinePricing,
-    { withIva, withIibb: false, provider: product.provider },
-    qty
-  );
-  const onlineShown = displayAmountFromPricing(
-    purchaseLinePricing(product, policy, "list", qty),
-    { withIva, withIibb, provider: product.provider },
-    qty
-  );
-  const schemeDiscount = Number(policy.schemeDiscountPercent ?? 0);
-  const showScheme = retailer && hasIva && policy.acceptsScheme;
-  const showOffline = retailer && hasIva && policy.acceptsOffline;
 
-  function flashKind(kind: "cart" | "scheme" | "offline") {
-    setFlash(kind);
-    setTimeout(() => setFlash(null), 1600);
-  }
-
-  function addOnline() {
-    add(product, qty, { channel: "online", schemeId: null });
-    flashKind("cart");
-  }
-
-  function addOffline() {
-    add(product, qty, { channel: "offline", schemeId: null });
-    flashKind("offline");
+  function done() {
+    setFlash(true);
+    setTimeout(() => setFlash(false), 1600);
   }
 
   function addScheme(schemeId: string) {
     add(product, qty, { channel: "online", schemeId });
-    flashKind("scheme");
     setPickOpen(false);
+    done();
   }
 
-  function handleScheme() {
-    const existing = schemesFor(product.provider);
-    if (existing.length === 0) {
-      addScheme(createScheme(product.provider).id);
+  function onClick() {
+    if (channel === "offline") {
+      add(product, qty, { channel: "offline", schemeId: null });
+      done();
       return;
     }
-    setPickOpen(true);
+    if (channel === "scheme") {
+      const existing = schemesFor(product.provider);
+      if (existing.length === 0) addScheme(createScheme(product.provider).id);
+      else setPickOpen(true);
+      return;
+    }
+    add(product, qty, { channel: "online", schemeId: null });
+    done();
   }
 
+  const cta = CTA[channel];
+  const Icon = flash ? Check : channel === "offline" ? StickyNote : channel === "scheme" ? Layers : ShoppingCart;
+  const inCartLabel =
+    channel === "offline" ? "en el pedido offline" : channel === "scheme" ? "en un esquema" : "en el carrito online";
+
   return (
-    <div className="space-y-2">
+    <>
       <button
         type="button"
-        onClick={addOnline}
-        className={`w-full flex items-center justify-center gap-2 text-sm font-semibold rounded-xl py-3 transition-all ${
-          flash === "cart" ? "bg-emerald-600 text-white" : "bg-brand-600 hover:bg-brand-500 text-white"
+        onClick={onClick}
+        className={`flex-1 min-h-[46px] flex items-center justify-center gap-2 text-sm font-semibold rounded-xl px-3 transition-all ${
+          flash ? cta.doneClass : cta.idleClass
         }`}
       >
-        {flash === "cart" ? <Check className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
-        {flash === "cart" ? "Agregado al carrito" : `Agregar al carrito · ${qty}`}
+        <Icon className="w-4 h-4" />
+        {flash ? cta.done : cta.idle}
       </button>
-      {onlineLoose && (
-        <p className="text-[11px] text-emerald-400 text-center">Ya tenés {onlineLoose.qty} en el carrito online</p>
-      )}
-
-      {showScheme && (
-        <>
-          <button
-            type="button"
-            onClick={handleScheme}
-            className={`w-full flex items-center justify-center gap-2 text-sm font-semibold rounded-xl py-2.5 transition-all border ${
-              flash === "scheme"
-                ? "bg-violet-600 border-violet-500 text-white"
-                : "border-violet-500/40 bg-violet-500/10 text-violet-200 hover:bg-violet-500/20"
-            }`}
-          >
-            {flash === "scheme" ? <Check className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
-            {flash === "scheme" ? "Agregado al esquema" : "Agregar como esquema"}
-          </button>
-          {schemePricing.adjusted && (
-            <ChannelPriceBreakdown
-              title="Precio en esquema"
-              tone="violet"
-              unitNet={schemePricing.unitNet}
-              lines={shownLines(schemePricing.lines, withIva, withIibb)}
-              unitFinal={schemeShown.unitDisplayUsd}
-              qty={qty}
-              onlineUnitFinal={onlineShown.unitDisplayUsd}
-              note={schemeDiscount > 0 ? `Incluye ${schemeDiscount}% de descuento de esquema.` : undefined}
-            />
-          )}
-        </>
-      )}
-
-      {showOffline && (
-        <>
-          <button
-            type="button"
-            onClick={addOffline}
-            className={`w-full flex items-center justify-center gap-2 text-sm font-semibold rounded-xl py-2.5 transition-all border ${
-              flash === "offline"
-                ? "bg-amber-600 border-amber-500 text-white"
-                : "border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
-            }`}
-          >
-            {flash === "offline" ? <Check className="w-4 h-4" /> : <StickyNote className="w-4 h-4" />}
-            {flash === "offline" ? "Agregado al pedido offline" : "Agregar a carrito offline"}
-          </button>
-          {offlinePricing.adjusted && (
-            <ChannelPriceBreakdown
-              title="Precio offline"
-              tone="amber"
-              unitNet={offlinePricing.unitNet}
-              lines={shownLines(offlinePricing.lines, withIva, false)}
-              unitFinal={offlineShown.unitDisplayUsd}
-              qty={qty}
-              onlineUnitFinal={onlineShown.unitDisplayUsd}
-              note="Sin facturar: con el ajuste de IVA de este distribuidor y sin percepciones."
-            />
-          )}
-          {offlineItem && (
-            <p className="text-[11px] text-amber-400 text-center">Ya tenés {offlineItem.qty} en el pedido offline</p>
-          )}
-        </>
-      )}
-
-      {retailer && hasIva && !showScheme && !showOffline && !isStorefrontProvider(product.provider) && (
-        <p className="text-[11px] text-surface-400 text-center leading-relaxed">
-          Pedido offline y esquema se activan en{" "}
-          <Link href={`/proveedores/${product.provider}?tab=config`} className="text-amber-300 hover:text-amber-200 underline">
-            Configuración de {providerLabel(product.provider)}
-          </Link>
-          .
+      {inCart && (
+        <p className="basis-full text-[11px] text-emerald-400">
+          Ya tenés {inCart.qty} {inCartLabel}
         </p>
       )}
-
       {pickOpen && (
-        <SchemePicker
-          provider={product.provider}
-          onPick={(s) => addScheme(s.id)}
-          onClose={() => setPickOpen(false)}
-        />
+        <SchemePicker provider={product.provider} onPick={(s) => addScheme(s.id)} onClose={() => setPickOpen(false)} />
       )}
-    </div>
+    </>
+  );
+}
+
+/** Aviso para activar offline y esquema cuando el distribuidor todavía no los tiene. */
+export function EnableChannelsHint({ provider }: { provider: string }) {
+  return (
+    <p className="text-[11px] text-surface-400 leading-relaxed">
+      Pedido offline y esquema se activan en{" "}
+      <Link href={`/proveedores/${provider}?tab=config`} className="text-amber-300 hover:text-amber-200 underline">
+        Configuración de {providerLabel(provider)}
+      </Link>
+      .
+    </p>
   );
 }

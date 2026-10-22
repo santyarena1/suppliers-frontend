@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.10.0",
+    date: "2026-10-22",
+    title: "Ficha de producto renovada",
+    changes: [
+      { kind: "new", text: "El mismo producto en tus otros distribuidores, con su precio y stock, para elegir dónde comprar sin salir de la ficha." },
+      { kind: "improved", text: "Foto más grande, los datos clave en una fila y la compra a un costado: online, offline o esquema con su precio y desglose." },
+      { kind: "improved", text: "Precio, locales, descripción, especificaciones y datos del distribuidor ordenados con accesos rápidos." },
+    ],
+  },
+  {
     version: "2.9.0",
     date: "2026-10-21",
     title: "Fichas de producto más completas",

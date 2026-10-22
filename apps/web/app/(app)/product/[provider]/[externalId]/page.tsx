@@ -24,7 +24,7 @@ import {
 } from "@/lib/tax";
 import { displayAmountFromPricing, displayTaxTitle } from "@/lib/display-price";
 import { getIibbRatePercent, useIibbRatesEpoch } from "@/lib/iibb-rates";
-import { purchaseLinePricing } from "@/lib/purchase-price";
+import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
 import { usePurchasePolicy } from "@/lib/purchase";
 import { applyPaymentOption, pricedPaymentOptions } from "@/lib/payment-options";
 import { productShipping, useShippingContext } from "@/lib/product-shipping";
@@ -45,7 +45,9 @@ import {
   ChevronDown,
   Store,
 } from "lucide-react";
-import ProductBuyActions from "@/components/ProductBuyActions";
+import ProductBuyActions, { EnableChannelsHint, useBuyChannels } from "@/components/ProductBuyActions";
+import ProductKeySpecs from "@/components/product/ProductKeySpecs";
+import SameProductElsewhere from "@/components/product/SameProductElsewhere";
 import AddToQuoteButton from "@/components/quotes/AddToQuoteButton";
 import { useQuotes } from "@/lib/quotes";
 import { OwnStoreProductCompare } from "@/components/OwnStoreCompare";
@@ -54,6 +56,12 @@ import { signedMargin } from "@/lib/sale-margins";
 import PriceHistoryChart from "@/components/PriceHistoryChart";
 import ArsPriceHint from "@/components/ArsPriceHint";
 import { useActiveTourStep } from "@/lib/onboarding";
+
+const CHANNEL_TABS: { mode: PriceMode; label: string }[] = [
+  { mode: "list", label: "Online" },
+  { mode: "offline", label: "Offline" },
+  { mode: "scheme", label: "Esquema" },
+];
 
 export default function ProductPage({ params }: { params: Promise<{ provider: string; externalId: string }> }) {
   const { provider, externalId } = use(params);
@@ -79,6 +87,8 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   // Tienda de un local: todas sus fotos y sus condiciones.
   const storefrontItem = useStorefrontItem(providerName, extId);
   const [imgIdx, setImgIdx] = useState(0);
+  // Forma de compra elegida: cambia precio, desglose y botón.
+  const [channel, setChannel] = useState<PriceMode>("list");
 
   useEffect(() => {
     setImgErr(false);
@@ -156,12 +166,17 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const quotesEnabled = useQuotes().enabled;
   const saleUnitUsd = present.mode === "sale" || present.mode === "cost+sale" ? present.saleUsd : null;
   const unpriced = Boolean(product && (sellerView ? saleUnitUsd == null || saleUnitUsd <= 0 : !hasOwnPrice(product)));
-  const pricing = product ? purchaseLinePricing(product, policy, "list", qty) : null;
+  const channels = useBuyChannels(product);
+  const activeChannel: PriceMode =
+    channel === "offline" && !channels.offline ? "list" : channel === "scheme" && !channels.scheme ? "list" : channel;
+  // En offline no hay percepciones.
+  const effectiveIibb = withIibb && activeChannel !== "offline";
+  const pricing = product ? purchaseLinePricing(product, policy, activeChannel, qty) : null;
   const taxLines = pricing?.lines ?? [];
   const shown = pricing
     ? displayAmountFromPricing(
         pricing,
-        { withIva, withIibb, provider: providerName },
+        { withIva, withIibb: effectiveIibb, provider: providerName },
         qty
       )
     : null;
@@ -176,7 +191,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         }
       : null;
   const visibleTaxLines = taxLines.filter((l) => {
-    if (l.kind === "iibb") return withIibb;
+    if (l.kind === "iibb") return effectiveIibb;
     if (l.kind === "iva" || l.kind === "internos" || l.kind === "other") return withIva;
     return true;
   });
@@ -190,6 +205,43 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
     ...o,
     unitUsd: applyPaymentOption(unitDisplayUsd, o),
   }));
+
+  /** Unitario final de una forma de compra, para comparar contra online. */
+  const unitFor = (mode: PriceMode) =>
+    product
+      ? displayAmountFromPricing(
+          purchaseLinePricing(product, policy, mode, 1),
+          { withIva, withIibb: withIibb && mode !== "offline", provider: providerName },
+          1
+        ).unitDisplayUsd
+      : 0;
+  const channelSaving = (() => {
+    if (!product || !hasOwnPrice(product)) return null;
+    const online = unitFor("list");
+    if (online <= 0) return null;
+    const pct = (v: number) => `${(((v - online) / online) * 100).toLocaleString("es-AR", { maximumFractionDigits: 2 })} %`;
+    if (activeChannel !== "list") {
+      const here = unitFor(activeChannel);
+      if (here >= online) return null;
+      return `Ahorrás ${money(online - here)} por unidad (${pct(here)}) contra comprar online.`;
+    }
+    const tips: string[] = [];
+    if (channels.offline) {
+      const off = unitFor("offline");
+      if (off < online) tips.push(`en offline te sale ${money(online - off)} menos por unidad (${pct(off)})`);
+    }
+    if (channels.scheme) {
+      const sch = unitFor("scheme");
+      if (sch < online) tips.push(`en esquema, ${money(online - sch)} menos (${pct(sch)})`);
+    }
+    return tips.length ? tips.join("; ").replace(/^./, (c) => c.toUpperCase()) + "." : null;
+  })();
+  const sectionTabs = [
+    { id: "precio", label: "Precio y mercado" },
+    ...(product?.platformContent || product?.description || product?.longDescription ? [{ id: "descripcion", label: "Descripción" }] : []),
+    ...(product?.platformContent?.specs.length ? [{ id: "especificaciones", label: "Especificaciones" }] : []),
+    { id: "datos", label: `Datos de ${providerLabel(providerName)}` },
+  ];
 
   const shippingCtx = useShippingContext();
   const shippingEstimate = shippingCtx.estimates[providerName]?.estimate ?? null;
@@ -226,7 +278,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         <PrefsPanel />
       </header>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" id="product-scroll">
         {loading && (
           <div className="flex items-center justify-center py-32">
             <div className="w-8 h-8 rounded-full border-2 border-surface-700 border-t-brand-500 animate-spin" />
@@ -251,105 +303,74 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
         )}
 
         {!loading && product && pricing && (
-          <>
-            {/* Todo el producto — sin locales */}
-            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <ProviderBadge provider={providerName} variant="inline" size="md" chip />
-                  {productDisplayBrand(product) && (
-                    <Link
-                      href={`/search?marca=${encodeURIComponent(productDisplayBrand(product)!)}`}
-                      className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200 hover:border-brand-500/50 hover:text-brand-300 hover:bg-brand-600/10 transition-colors"
-                      title={`Buscar marca ${productDisplayBrand(product)}`}
+          <div className="max-w-[1320px] mx-auto px-4 sm:px-6 py-6 sm:py-7 pb-16 flex flex-col gap-6">
+            {/* Título, a todo el ancho */}
+            <header className="flex flex-col gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <ProviderBadge provider={providerName} variant="inline" size="md" chip />
+                {productDisplayBrand(product) && (
+                  <Link
+                    href={`/search?marca=${encodeURIComponent(productDisplayBrand(product)!)}`}
+                    className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded border border-surface-700 bg-surface-900 text-surface-200 hover:border-brand-500/50 hover:text-brand-300 hover:bg-brand-600/10 transition-colors"
+                    title={`Buscar marca ${productDisplayBrand(product)}`}
+                  >
+                    {productDisplayBrand(product)}
+                  </Link>
+                )}
+                {productDisplayCategory(product) && (
+                  <Link
+                    href={`/search?categoria=${encodeURIComponent(productDisplayCategory(product)!)}`}
+                    className="text-xs text-surface-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline"
+                    title={`Filtrar por categoría ${productDisplayCategory(product)}`}
+                  >
+                    {productDisplayCategory(product)}
+                  </Link>
+                )}
+                {productDisplaySubcategory(product) && (
+                  <span className="text-xs text-surface-500">
+                    {productDisplayCategory(product) ? "· " : ""}
+                    {productDisplaySubcategory(product)}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={copyId}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-surface-800 px-2 py-1 text-xs text-surface-400 hover:text-white hover:border-surface-600 transition-colors"
+                  title="Copiar ID"
+                >
+                  <span className="font-mono">#{extId}</span>
+                  {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                </button>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                <h1 className="pp__name text-balance m-0">{product.name}</h1>
+                <div className="flex flex-wrap items-center gap-3">
+                  {(product.stock != null || product.stockStatus) && (
+                    <span
+                      className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
+                        (product.stock ?? 0) > 0 ? "bg-emerald-500/10 text-emerald-300" : "bg-amber-500/10 text-amber-300"
+                      }`}
                     >
-                      {productDisplayBrand(product)}
-                    </Link>
-                  )}
-                  {productDisplayCategory(product) && (
-                    <Link
-                      href={`/search?categoria=${encodeURIComponent(productDisplayCategory(product)!)}`}
-                      className="text-xs text-surface-400 hover:text-brand-300 transition-colors underline-offset-2 hover:underline"
-                      title={`Filtrar por categoría ${productDisplayCategory(product)}`}
-                    >
-                      {productDisplayCategory(product)}
-                    </Link>
-                  )}
-                  {productDisplaySubcategory(product) && (
-                    <span className="text-xs text-surface-500">
-                      {productDisplayCategory(product) ? "· " : ""}
-                      {productDisplaySubcategory(product)}
+                      {product.stock != null ? `Stock: ${product.stock}` : ""}
+                      {product.stock != null && product.stockStatus ? " · " : ""}
+                      {product.stockStatus ?? ""}
                     </span>
                   )}
-                  <span className="font-mono text-xs text-surface-500">#{extId}</span>
-                  <button
-                    type="button"
-                    onClick={copyId}
-                    className="inline-flex items-center gap-1 text-xs text-surface-500 hover:text-white transition-colors"
-                    title="Copiar ID"
-                  >
-                    {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    {copied ? "Copiado" : "Copiar"}
-                  </button>
+                  {/* Ir al proveedor: no para el vendedor en modo vendedor (el portal es la compra, con costos). */}
+                  {!sellerSession.isSeller && <ProductProviderLinks provider={providerName} productUrl={product.productUrl} />}
                 </div>
-                <h1 className="pp__name text-balance">{product.name}</h1>
-                {(product.stock != null || product.stockStatus) && (
-                  <p className="mt-2 text-xs text-surface-400">
-                    {product.stock != null && (
-                      <span className={product.stock > 0 ? "text-emerald-400" : "text-amber-400"}>
-                        Stock: {product.stock}
-                      </span>
-                    )}
-                    {product.stock != null && product.stockStatus ? (
-                      <span className="text-surface-600"> · </span>
-                    ) : null}
-                    {product.stockStatus && <span>{product.stockStatus}</span>}
-                  </p>
-                )}
-                {/* Ir al proveedor: no para el vendedor en modo vendedor (el portal es la compra, con costos). */}
-                {!sellerSession.isSeller && (
-                  <>
-                    <ProductProviderLinks provider={providerName} productUrl={product.productUrl} />
-                    {storefrontItem && <StorefrontProductInfo info={storefrontItem} productName={product.name} />}
-                  </>
-                )}
               </div>
+              {!sellerSession.isSeller && storefrontItem && (
+                <StorefrontProductInfo info={storefrontItem} productName={product.name} />
+              )}
+            </header>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8 items-start">
-                <div className="flex flex-col gap-2">
-                  <div className="relative bg-white rounded-2xl border border-surface-800 overflow-hidden aspect-square shadow-sm">
-                  {mainImage && !imgErr ? (
-                    <>
-                      <Image
-                        key={mainImage}
-                        src={proxyImg(mainImage, { trim: false })}
-                        alt={product.name}
-                        fill
-                        className="object-contain p-6 sm:p-8"
-                        unoptimized
-                        onError={() => setImgErr(true)}
-                        onContextMenu={(e) => e.preventDefault()}
-                        draggable={false}
-                        priority
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setZoom(true)}
-                        className="absolute top-3 right-3 bg-surface-950/80 hover:bg-surface-900 border border-surface-700 rounded-lg p-2 text-surface-300 hover:text-white transition-all"
-                        aria-label="Ampliar imagen"
-                      >
-                        <ZoomIn className="w-4 h-4" />
-                      </button>
-                    </>
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface-950 text-surface-600">
-                      {imgErr ? <ImageOff className="w-14 h-14" /> : <Package className="w-14 h-14" />}
-                      <span className="text-sm">Sin imagen disponible</span>
-                    </div>
-                  )}
-                  </div>
+            {/* Foto + atributos | compra */}
+            <div className="flex flex-wrap gap-6 items-stretch">
+              <div className="flex-[999_1_560px] min-w-0 flex flex-col gap-4">
+                <div className="flex flex-col-reverse sm:flex-row gap-3 min-w-0">
                   {gallery.length > 1 && (
-                    <div className="flex gap-2 overflow-x-auto pb-1" role="list" aria-label="Fotos del producto">
+                    <div className="flex sm:flex-col gap-2.5 overflow-x-auto sm:overflow-visible" role="list" aria-label="Fotos del producto">
                       {gallery.map((src, i) => (
                         <button
                           key={src}
@@ -361,357 +382,445 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                           }}
                           aria-label={`Foto ${i + 1}`}
                           aria-current={i === imgIdx}
-                          className={`relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg border bg-white ${
+                          className={`relative h-[72px] w-[72px] flex-shrink-0 overflow-hidden rounded-xl border bg-white p-1 ${
                             i === imgIdx ? "border-brand-500 ring-2 ring-brand-500/40" : "border-surface-700 hover:border-surface-500"
                           }`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={proxyImg(src, { trim: false })} alt="" className="h-full w-full object-contain p-1" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()} />
+                          <img src={proxyImg(src, { trim: false })} alt="" className="h-full w-full object-contain" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()} />
                         </button>
                       ))}
                     </div>
                   )}
-                  {product.imageAiSelected && product.imageUrl && mainImage === product.imageUrl && !imgErr && (
-                    <AiImageDisclaimer className="text-surface-500 px-0.5" />
-                  )}
-                </div>
-
-                <aside className="flex flex-col gap-4 lg:sticky lg:top-16">
-                  <div className="pp pp__panel">
-                    <div className="pp__head">
-                      <p className="pp__caption">
-                        {sellerView
-                          ? `Precio de venta · ${withIva ? "con IVA" : "sin IVA"}`
-                          : unpriced
-                            ? "Precio de tu cuenta"
-                            : displayTaxTitle({ withIva, withIibb, provider: providerName })}
-                        {!unpriced && qty > 1 ? ` · ${qty} u.` : ""}
-                      </p>
-                      <span className="pp__amount">
-                        {unpriced
-                          ? sellerView ? "Sin precio de venta" : "Sin precio"
-                          : money(sellerView ? (saleUnitUsd ?? 0) * qty : displayUSD)}
-                      </span>
-                      {product && (product.sourceCurrency === "ARS" || product.fxPending) && <ArsPriceHint product={product} />}
-                      {!unpriced && currency === "ARS" && currentRate && product?.sourceCurrency !== "ARS" && (
-                        <p className="pp__sub">
-                          Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
-                        </p>
-                      )}
-                      {!unpriced && qty > 1 && (
-                        <p className="pp__sub">{money(sellerView ? saleUnitUsd ?? 0 : unitDisplayUsd)} por unidad</p>
-                      )}
-                    </div>
-
-                    {unpriced && sellerView && (
-                      <p className="pp__note">
-                        Este producto todavía no tiene precio de venta. Lo calcula el comercio con su margen
-                        apenas haya precio del distribuidor.
-                      </p>
-                    )}
-
-                    {unpriced && !sellerView && (
-                      <p className="pp__note">
-                        El precio y el stock aparecen cuando cargás la cuenta de este distribuidor.
-                        La ficha es la misma para todos los locales; el importe es el de tu cuenta.
-                      </p>
-                    )}
-
-                    {!unpriced && !sellerView && <div className="pp__rows">
-                      <p className="pp__rows-title">Desglose de costo</p>
-
-                      <BreakdownRow
-                        label="Costo del distribuidor"
-                        value={money(pricing.unitNet)}
-                        hint="Precio de lista, sin impuestos"
-                      />
-                      {currency === "ARS" && currentRate && (
-                        <BreakdownRow
-                          label={`Cotización · ${dollarLabel(dollarType)}`}
-                          value={`$${currentRate.venta.toLocaleString("es-AR")}`}
-                          hint="Tipo de cambio aplicado"
+                  <div className="relative flex-1 min-w-0 aspect-square sm:aspect-auto sm:h-[470px] bg-white rounded-2xl border border-surface-800 overflow-hidden shadow-sm">
+                    {mainImage && !imgErr ? (
+                      <>
+                        <Image
+                          key={mainImage}
+                          src={proxyImg(mainImage, { trim: false })}
+                          alt={product.name}
+                          fill
+                          className="object-contain p-8 sm:p-12"
+                          unoptimized
+                          onError={() => setImgErr(true)}
+                          onContextMenu={(e) => e.preventDefault()}
+                          draggable={false}
+                          priority
                         />
-                      )}
-
-                      {visibleTaxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
-                        <BreakdownRow
-                          key={`${line.kind}-${line.label}`}
-                          label={`${line.kind === "iibb" && line.estimated ? "IIBB (est.)" : line.label}${line.percent != null ? ` ${formatAlicuota(line.percent)}` : ""}`}
-                          value={`+ ${money(line.unitAmount)}`}
-                          muted
-                        />
-                      ))}
-                      {estimatedIibbLine &&
-                        !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) && (
-                        <BreakdownRow
-                          label={`${estimatedIibbLine.label}${estimatedIibbLine.percent != null ? ` ${formatAlicuota(estimatedIibbLine.percent)}` : ""}`}
-                          value={`+ ${money(estimatedIibbLine.unitAmount)}`}
-                          muted
-                        />
-                      )}
-                      {withIibb &&
-                        !estimatedIibbLine &&
-                        !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) &&
-                        knownIibbPct == null && (
-                          <p className="text-[10px] text-surface-600 leading-snug">
-                            No hay alícuota de percepción para este distribuidor. Cargala en Configuración, o cotizá en el carrito si el portal la informa.
-                          </p>
+                        <button
+                          type="button"
+                          onClick={() => setZoom(true)}
+                          className="absolute top-3 right-3 bg-surface-950/80 hover:bg-surface-900 border border-surface-700 rounded-lg p-2 text-surface-300 hover:text-white transition-all"
+                          aria-label="Ampliar imagen"
+                        >
+                          <ZoomIn className="w-4 h-4" />
+                        </button>
+                        {gallery.length > 1 && (
+                          <span className="absolute left-3 bottom-3 rounded-full bg-surface-900 px-2.5 py-1 text-xs font-semibold text-surface-200">
+                            {imgIdx + 1} / {gallery.length}
+                          </span>
                         )}
-                      {visibleTaxLines.every((l) => l.unitAmount <= 0.0001) &&
-                        !estimatedIibbLine &&
-                        pricing.tax > 0 &&
-                        withIva && (
-                        <BreakdownRow label={taxLabel(product)} value={`+ ${money(pricing.tax / qty)}`} muted />
-                      )}
-
-                      <div className="pt-2.5 mt-1" style={{ borderTop: "1px solid var(--p-line)" }}>
-                        <BreakdownRow
-                          label="Costo unitario final"
-                          value={money(unitDisplayUsd)}
-                          strong
-                        />
-                        {qty > 1 && (
-                          <BreakdownRow
-                            label={`Total × ${qty}`}
-                            value={money(displayUSD)}
-                            strong
-                          />
-                        )}
-                      </div>
-                      {present.mode === "cost+sale" && (
-                        <div className="pt-2.5 mt-1" style={{ borderTop: "1px solid var(--p-line)" }}>
-                          <BreakdownRow
-                            label={present.marginPercent != null ? `Precio de venta · margen ${signedMargin(present.marginPercent)}` : "Precio de venta"}
-                            value={money(present.saleUsd)}
-                            hint="Es lo que ve un vendedor de tu equipo"
-                            strong
-                          />
-                        </div>
-                      )}
-                      <p className="pp__note">
-                        El desglose usa tu cotización. IVA y percepciones se eligen por separado
-                        {withIva ? "" : " · sin IVA"}
-                        {withIibb ? " · con percepciones si se conocen (en esquema también; en offline no)" : " · sin percepciones"}
-                        . El margen contra locales se calcula sobre tu costo final, porque el precio que publican ellos también es final.
-                      </p>
-                    </div>}
-
-                    {!unpriced && !sellerView && payPrices.length > 0 && (
-                      <div className="pp__pay">
-                        <h2 className="pp__sec-title">Formas de pago</h2>
-                        <div className="pp__pay-rows">
-                          {payPrices.map((p) => (
-                            <div key={p.id} className="pp__pay-row">
-                              <span className="pp__pay-label">{p.label}</span>
-                              <span className="pp__pay-delta" data-kind={p.kind}>
-                                {p.kind === "SURCHARGE" ? "+" : "−"}
-                                {p.percent}%
-                              </span>
-                              <span className="pp__pay-amount">{money(p.unitUsd)}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="pp__note">
-                          Precio unitario según cómo pagues, para comparar. NODO no elige la forma
-                          de pago ni la manda al confirmar el pedido: la arreglás con el
-                          distribuidor.
-                        </p>
+                      </>
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-surface-950 text-surface-600">
+                        {imgErr ? <ImageOff className="w-14 h-14" /> : <Package className="w-14 h-14" />}
+                        <span className="text-sm">Sin imagen disponible</span>
                       </div>
                     )}
-
-                    {!unpriced && !sellerView && shippingEstimate && (
-                      <div className="pp__pay">
-                        <h2 className="pp__sec-title">Envío estimado</h2>
-                        {shippingEstimate.pickup ? (
-                          <p className="pp__note">Con este distribuidor solés retirar: no se suma envío.</p>
-                        ) : shipping?.free && shipping.freeShipping ? (
-                          <p className="pp__note">
-                            <b>Envío gratis</b>: tu pedido a este distribuidor llega a {freeShippingLabel(shipping.freeShipping)} (total con IVA), el mínimo que cargaste.
-                          </p>
-                        ) : shipping ? (
-                          <div className="pp__pay-rows">
-                            <div className="pp__pay-row">
-                              <span className="pp__pay-label">{shippingEstimate.label}</span>
-                              <span className="pp__pay-delta">por pedido</span>
-                              <span className="pp__pay-amount">{money(shipping.costUsd)}</span>
-                            </div>
-                            <div className="pp__pay-row">
-                              <span className="pp__pay-label">
-                                {shipping.basis === "in_cart"
-                                  ? "Ya cuenta en tu carrito"
-                                  : `A este producto, con tu carrito actual`}
-                              </span>
-                              <span className="pp__pay-delta">{SHIPPING_SPLIT_LABELS[shippingCtx.split].label.toLowerCase()}</span>
-                              <span className="pp__pay-amount">{money(shipping.perUnitUsd)}/u</span>
-                            </div>
-                            {shipping.freeShipping && shipping.missingUsd != null && shipping.missingUsd > 0 && (
-                              <div className="pp__pay-row">
-                                <span className="pp__pay-label">Envío gratis desde {freeShippingLabel(shipping.freeShipping)}</span>
-                                <span className="pp__pay-delta">te faltan</span>
-                                <span className="pp__pay-amount">{money(shipping.missingUsd)}</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <p className="pp__note">
-                            Tu forma de envío habitual es {shippingEstimate.label}, pero todavía no sabemos cuánto sale.{" "}
-                            <Link href={`/proveedores/${encodeURIComponent(providerName)}`} className="underline">
-                              Cargale el valor
-                            </Link>{" "}
-                            en la configuración del distribuidor.
-                          </p>
-                        )}
-                        <p className="pp__note">
-                          {shippingEstimate.source === "history" && shippingEstimate.orders
-                            ? `Sale de tus pedidos: la usaste en ${shippingEstimate.orders} de los últimos ${shippingEstimate.ofOrders}. `
-                            : "Es la forma de envío que cargaste para este distribuidor. "}
-                          {SHIPPING_DISCLAIMER}
-                        </p>
-                      </div>
-                    )}
-
-                    {!unpriced && (!sellerView || quotesEnabled) && <div className="pp__buy">
-                      <div className="pp__qty">
-                        <span>Cantidad</span>
-                        <span className="pp__step">
-                          <button
-                            type="button"
-                            onClick={() => setQty((q) => Math.max(1, q - 1))}
-                            aria-label="Quitar uno"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                          </button>
-                          <input
-                            type="number"
-                            value={qty}
-                            min={1}
-                            onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                            aria-label="Cantidad"
-                          />
-                          <button type="button" onClick={() => setQty((q) => q + 1)} aria-label="Sumar uno">
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </span>
-                      </div>
-
-                      {sellerView ? (
-                        <AddToQuoteButton product={product} qty={qty} variant="full" />
-                      ) : (
-                        <>
-                          <ProductBuyActions product={product} qty={qty} />
-                          <AddToQuoteButton product={product} qty={qty} variant="link" />
-                        </>
-                      )}
-                    </div>}
                   </div>
+                </div>
+                {product.imageAiSelected && product.imageUrl && mainImage === product.imageUrl && !imgErr && (
+                  <AiImageDisclaimer className="text-surface-500 px-0.5" />
+                )}
 
-                  {product && (
-                    <OwnStoreProductCompare
-                      productName={product.name}
-                      costUsd={unpriced ? null : sellerView ? saleUnitUsd : unitDisplayUsd}
-                      sale={sellerView}
-                    />
-                  )}
+                {product.platformContent && (
+                  <ProductKeySpecs
+                    specs={product.platformContent.specs}
+                    warranty={product.warranty || (product.platformContent.warrantyMonths ? `${product.platformContent.warrantyMonths} meses` : null)}
+                  />
+                )}
 
-                  <button type="button" onClick={() => void searchSameName()} className="pp pp__ghost">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Buscar similares en otros proveedores
-                  </button>
-                </aside>
+                <div className="mt-auto">
+                  <OwnStoreProductCompare
+                    productName={product.name}
+                    costUsd={unpriced ? null : sellerView ? saleUnitUsd : unitDisplayUsd}
+                    sale={sellerView}
+                  />
+                </div>
               </div>
 
-              {/* Justo debajo del precio en mobile: no queda enterrado tras hechos/descripción.
-                  Es la evolución del costo: el vendedor no la ve. */}
-              {!sellerView && <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-3 sm:p-5">
-                <h2 className="pp__sec-title">
-                  <TrendingUp className="w-3 h-3" />
-                  Evolución de precio
-                </h2>
-                {unpriced ? (
-                  <p className="text-xs leading-relaxed text-surface-500">
-                    Todavía no hay precio de tu cuenta para graficar.
-                  </p>
-                ) : priceHistory.length >= 1 ? (
-                  <PriceHistoryChart
-                    points={priceHistory}
-                    product={product}
-                    policy={policy}
-                    format={money}
-                  />
-                ) : (
-                  // Solo se guarda una fila cuando el precio cambia, así que un
-                  // producto estable no tiene serie que graficar. Decirlo con el
-                  // precio a la vista es más útil que prometer un gráfico futuro.
-                  <div className="rounded-xl border border-surface-800 bg-surface-950/60 px-4 py-5">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-surface-500">
-                      Sin cambios de precio
-                    </p>
-                    <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-white">
-                      {/* El mismo número que muestra el encabezado: el precio
-                          del historial es el crudo del proveedor y no siempre
-                          trae el final, así que acá quedaba otra cifra. */}
-                      {money(unitDisplayUsd)}
-                    </p>
-                    <p className="mt-1.5 text-xs leading-relaxed text-surface-500">
-                      El precio se mantiene desde que seguimos este producto. La curva aparece
-                      con el primer cambio.
-                    </p>
-                  </div>
-                )}
-              </section>}
-
-              {product.platformContent && (
-                <ProductRichDescription content={product.platformContent} provider={product.provider} externalId={product.externalId} />
-              )}
-              {product.platformContent && <ProductSpecsTable specs={product.platformContent.specs} />}
-              {product.platformContentLimited && (
-                <p className="rounded-xl border border-surface-800 bg-surface-900/60 px-4 py-3 text-xs text-surface-400">
-                  Hoy ya viste muchas fichas completas. Mañana vuelven a verse las fotos, la descripción y las especificaciones de NODO.
-                </p>
-              )}
-
-              {!product.platformContent?.descriptionHtml && !product.platformContent?.shortDescription && (product.description || product.longDescription) && (
-                <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5">
-                  <h2 className="pp__sec-title">Descripción</h2>
-                  {product.description && (
-                    <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
-                      {product.description}
-                    </p>
+              <aside className="flex-[1_1_380px] lg:max-w-[440px] min-w-0">
+                <div className="pp pp__panel h-full">
+                  {!sellerView && !unpriced && (channels.offline || channels.scheme) && (
+                    <div role="group" aria-label="Forma de compra" className="mx-[1.2rem] mt-[1.1rem] grid grid-cols-3 gap-1 rounded-xl border border-surface-800 bg-surface-950 p-1">
+                      {CHANNEL_TABS.map((t) => {
+                        const enabled = t.mode === "list" || (t.mode === "offline" ? channels.offline : channels.scheme);
+                        const on = activeChannel === t.mode;
+                        return (
+                          <button
+                            key={t.mode}
+                            type="button"
+                            disabled={!enabled}
+                            aria-pressed={on}
+                            onClick={() => setChannel(t.mode)}
+                            title={enabled ? undefined : `${providerLabel(providerName)} no ofrece ${t.label.toLowerCase()} para tu cuenta`}
+                            className={`min-h-[40px] rounded-lg text-[13px] font-bold transition-colors ${
+                              on ? "bg-brand-600 text-white" : enabled ? "text-surface-300 hover:text-white" : "text-surface-600 cursor-not-allowed"
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   )}
-                  {product.longDescription &&
-                    product.longDescription !== product.description && (
-                      <p className="text-sm text-surface-400 leading-relaxed whitespace-pre-wrap mt-3">
-                        {product.longDescription}
+
+                  <div className="pp__head">
+                    <p className="pp__caption">
+                      {sellerView
+                        ? `Precio de venta · ${withIva ? "con IVA" : "sin IVA"}`
+                        : unpriced
+                          ? "Precio de tu cuenta"
+                          : activeChannel === "offline"
+                            ? "Offline · sin facturar"
+                            : activeChannel === "scheme"
+                              ? `Esquema · ${displayTaxTitle({ withIva, withIibb, provider: providerName }).toLowerCase()}`
+                              : displayTaxTitle({ withIva, withIibb, provider: providerName })}
+                      {!unpriced && qty > 1 ? ` · ${qty} u.` : ""}
+                    </p>
+                    <span className="pp__amount">
+                      {unpriced
+                        ? sellerView ? "Sin precio de venta" : "Sin precio"
+                        : money(sellerView ? (saleUnitUsd ?? 0) * qty : displayUSD)}
+                    </span>
+                    {product && (product.sourceCurrency === "ARS" || product.fxPending) && <ArsPriceHint product={product} />}
+                    {!unpriced && currency === "ARS" && currentRate && product?.sourceCurrency !== "ARS" && (
+                      <p className="pp__sub">
+                        Dólar {dollarLabel(dollarType)} ${currentRate.venta.toLocaleString("es-AR")}
                       </p>
                     )}
-                </section>
-              )}
-
-              <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
-
-              {related.length > 0 && (
-                <section>
-                  <h2 className="pp pp__sec-title">
-                    <Sparkles className="w-3 h-3" />
-                    Relacionados
-                  </h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {related.map((p, i) => (
-                      <RelatedCard key={`${p.provider}-${p.externalId}-${i}`} product={p} />
-                    ))}
+                    {!unpriced && qty > 1 && (
+                      <p className="pp__sub">{money(sellerView ? saleUnitUsd ?? 0 : unitDisplayUsd)} por unidad</p>
+                    )}
+                    {!unpriced && !sellerView && channelSaving && (
+                      <p className={`text-xs leading-snug mt-1 ${activeChannel === "list" ? "text-surface-400" : "text-emerald-300"}`}>{channelSaving}</p>
+                    )}
                   </div>
-                </section>
-              )}
 
-              <ProductSyncedAt
-                syncedAt={product.syncedAt}
-                className="text-[11px] text-surface-500 text-center pt-2 border-t border-surface-800/60"
-              />
+                  {unpriced && sellerView && (
+                    <p className="pp__note">
+                      Este producto todavía no tiene precio de venta. Lo calcula el comercio con su margen
+                      apenas haya precio del distribuidor.
+                    </p>
+                  )}
+
+                  {unpriced && !sellerView && (
+                    <p className="pp__note">
+                      El precio y el stock aparecen cuando cargás la cuenta de este distribuidor.
+                      La ficha es la misma para todos los locales; el importe es el de tu cuenta.
+                    </p>
+                  )}
+
+                  {!unpriced && !sellerView && <div className="pp__rows">
+                    <p className="pp__rows-title">Desglose de costo</p>
+
+                    <BreakdownRow
+                      label={activeChannel === "offline" ? "Costo neto" : "Costo del distribuidor"}
+                      value={money(pricing.unitNet)}
+                      hint={activeChannel === "offline" ? "Sin facturar" : "Precio de lista, sin impuestos"}
+                    />
+                    {currency === "ARS" && currentRate && (
+                      <BreakdownRow
+                        label={`Cotización · ${dollarLabel(dollarType)}`}
+                        value={`$${currentRate.venta.toLocaleString("es-AR")}`}
+                        hint="Tipo de cambio aplicado"
+                      />
+                    )}
+
+                    {visibleTaxLines.filter((l) => l.unitAmount > 0.0001).map((line) => (
+                      <BreakdownRow
+                        key={`${line.kind}-${line.label}`}
+                        label={`${line.kind === "iibb" && line.estimated ? "IIBB (est.)" : line.label}${line.percent != null ? ` ${formatAlicuota(line.percent)}` : ""}`}
+                        value={`+ ${money(line.unitAmount)}`}
+                        muted
+                      />
+                    ))}
+                    {estimatedIibbLine &&
+                      !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) && (
+                      <BreakdownRow
+                        label={`${estimatedIibbLine.label}${estimatedIibbLine.percent != null ? ` ${formatAlicuota(estimatedIibbLine.percent)}` : ""}`}
+                        value={`+ ${money(estimatedIibbLine.unitAmount)}`}
+                        muted
+                      />
+                    )}
+                    {effectiveIibb &&
+                      !estimatedIibbLine &&
+                      !visibleTaxLines.some((l) => l.kind === "iibb" && l.unitAmount > 0.0001) &&
+                      knownIibbPct == null && (
+                        <p className="text-[10px] text-surface-600 leading-snug">
+                          No hay alícuota de percepción para este distribuidor. Cargala en Configuración, o cotizá en el carrito si el portal la informa.
+                        </p>
+                      )}
+                    {visibleTaxLines.every((l) => l.unitAmount <= 0.0001) &&
+                      !estimatedIibbLine &&
+                      pricing.tax > 0 &&
+                      withIva && (
+                      <BreakdownRow label={taxLabel(product)} value={`+ ${money(pricing.tax / qty)}`} muted />
+                    )}
+
+                    <div className="pt-2.5 mt-1" style={{ borderTop: "1px solid var(--p-line)" }}>
+                      <BreakdownRow
+                        label={activeChannel === "list" ? "Costo unitario final" : "Precio unitario"}
+                        value={money(unitDisplayUsd)}
+                        strong
+                      />
+                      {qty > 1 && (
+                        <BreakdownRow
+                          label={`Total × ${qty}`}
+                          value={money(displayUSD)}
+                          strong
+                        />
+                      )}
+                    </div>
+                    {present.mode === "cost+sale" && activeChannel === "list" && (
+                      <div className="pt-2.5 mt-1" style={{ borderTop: "1px solid var(--p-line)" }}>
+                        <BreakdownRow
+                          label={present.marginPercent != null ? `Precio de venta · margen ${signedMargin(present.marginPercent)}` : "Precio de venta"}
+                          value={money(present.saleUsd)}
+                          hint="Es lo que ve un vendedor de tu equipo"
+                          strong
+                        />
+                      </div>
+                    )}
+                    <p className="pp__note">
+                      {activeChannel === "offline"
+                        ? "Sin facturar: con el ajuste de IVA de este distribuidor y sin percepciones."
+                        : <>
+                            El desglose usa tu cotización. IVA y percepciones se eligen por separado
+                            {withIva ? "" : " · sin IVA"}
+                            {withIibb ? " · con percepciones si se conocen (en esquema también; en offline no)" : " · sin percepciones"}
+                            . El margen contra locales se calcula sobre tu costo final, porque el precio que publican ellos también es final.
+                          </>}
+                    </p>
+                  </div>}
+
+                  {!unpriced && !sellerView && payPrices.length > 0 && (
+                    <div className="pp__pay">
+                      <h2 className="pp__sec-title">Formas de pago</h2>
+                      <div className="pp__pay-rows">
+                        {payPrices.map((p) => (
+                          <div key={p.id} className="pp__pay-row">
+                            <span className="pp__pay-label">{p.label}</span>
+                            <span className="pp__pay-delta" data-kind={p.kind}>
+                              {p.kind === "SURCHARGE" ? "+" : "−"}
+                              {p.percent}%
+                            </span>
+                            <span className="pp__pay-amount">{money(p.unitUsd)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="pp__note">
+                        Precio unitario según cómo pagues, para comparar. NODO no elige la forma
+                        de pago ni la manda al confirmar el pedido: la arreglás con el
+                        distribuidor.
+                      </p>
+                    </div>
+                  )}
+
+                  {!unpriced && !sellerView && shippingEstimate && (
+                    <div className="pp__pay">
+                      <h2 className="pp__sec-title">Envío estimado</h2>
+                      {shippingEstimate.pickup ? (
+                        <p className="pp__note">Con este distribuidor solés retirar: no se suma envío.</p>
+                      ) : shipping?.free && shipping.freeShipping ? (
+                        <p className="pp__note">
+                          <b>Envío gratis</b>: tu pedido a este distribuidor llega a {freeShippingLabel(shipping.freeShipping)} (total con IVA), el mínimo que cargaste.
+                        </p>
+                      ) : shipping ? (
+                        <div className="pp__pay-rows">
+                          <div className="pp__pay-row">
+                            <span className="pp__pay-label">{shippingEstimate.label}</span>
+                            <span className="pp__pay-delta">por pedido</span>
+                            <span className="pp__pay-amount">{money(shipping.costUsd)}</span>
+                          </div>
+                          <div className="pp__pay-row">
+                            <span className="pp__pay-label">
+                              {shipping.basis === "in_cart"
+                                ? "Ya cuenta en tu carrito"
+                                : `A este producto, con tu carrito actual`}
+                            </span>
+                            <span className="pp__pay-delta">{SHIPPING_SPLIT_LABELS[shippingCtx.split].label.toLowerCase()}</span>
+                            <span className="pp__pay-amount">{money(shipping.perUnitUsd)}/u</span>
+                          </div>
+                          {shipping.freeShipping && shipping.missingUsd != null && shipping.missingUsd > 0 && (
+                            <div className="pp__pay-row">
+                              <span className="pp__pay-label">Envío gratis desde {freeShippingLabel(shipping.freeShipping)}</span>
+                              <span className="pp__pay-delta">te faltan</span>
+                              <span className="pp__pay-amount">{money(shipping.missingUsd)}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="pp__note">
+                          Tu forma de envío habitual es {shippingEstimate.label}, pero todavía no sabemos cuánto sale.{" "}
+                          <Link href={`/proveedores/${encodeURIComponent(providerName)}`} className="underline">
+                            Cargale el valor
+                          </Link>{" "}
+                          en la configuración del distribuidor.
+                        </p>
+                      )}
+                      <p className="pp__note">
+                        {shippingEstimate.source === "history" && shippingEstimate.orders
+                          ? `Sale de tus pedidos: la usaste en ${shippingEstimate.orders} de los últimos ${shippingEstimate.ofOrders}. `
+                          : "Es la forma de envío que cargaste para este distribuidor. "}
+                        {SHIPPING_DISCLAIMER}
+                      </p>
+                    </div>
+                  )}
+
+                  {!unpriced && (!sellerView || quotesEnabled) && <div className="pp__buy">
+                    <div className="flex flex-wrap gap-2.5">
+                      <span className="pp__step self-stretch" aria-label="Cantidad">
+                        <button
+                          type="button"
+                          onClick={() => setQty((q) => Math.max(1, q - 1))}
+                          aria-label="Quitar uno"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <input
+                          type="number"
+                          value={qty}
+                          min={1}
+                          onChange={(e) => setQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          aria-label="Cantidad"
+                        />
+                        <button type="button" onClick={() => setQty((q) => q + 1)} aria-label="Sumar uno">
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </span>
+                      {sellerView ? (
+                        <div className="flex-1"><AddToQuoteButton product={product} qty={qty} variant="full" /></div>
+                      ) : (
+                        <ProductBuyActions product={product} qty={qty} channel={activeChannel} />
+                      )}
+                    </div>
+                    {!sellerView && !channels.offline && !channels.scheme && channels.canEnable && (
+                      <EnableChannelsHint provider={providerName} />
+                    )}
+                    {!sellerView && <AddToQuoteButton product={product} qty={qty} variant="link" />}
+                  </div>}
+                </div>
+              </aside>
             </div>
 
-            {/* Locales: footer separado, siempre debajo de TODO el producto (mobile incluido) */}
-            <LocalesFooter seedQuery={product.name} costUsd={sellerView ? saleUnitUsd ?? 0 : unitDisplayUsd} />
-          </>
+            {/* Saltos de sección */}
+            <nav aria-label="Secciones de la ficha" className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-0.5 border-b border-surface-800 bg-surface-950/95 px-1 backdrop-blur-sm">
+              {sectionTabs.map((t) => (
+                <a
+                  key={t.id}
+                  href={`#${t.id}`}
+                  className="px-3.5 py-3 text-sm font-semibold text-surface-400 hover:text-white border-b-2 border-transparent hover:border-brand-500 transition-colors"
+                >
+                  {t.label}
+                </a>
+              ))}
+            </nav>
+
+            {/* Precio + otros distribuidores | locales */}
+            <div id="precio" className="scroll-mt-16 grid gap-6 lg:grid-cols-2 items-stretch">
+              <div className="flex flex-col gap-6 min-w-0">
+                {/* Es la evolución del costo: el vendedor no la ve. */}
+                {!sellerView && <section className="pp rounded-2xl border border-surface-800 bg-surface-900/60 p-4 sm:p-5">
+                  <h2 className="pp__sec-title">
+                    <TrendingUp className="w-3 h-3" />
+                    Evolución de precio
+                  </h2>
+                  {unpriced ? (
+                    <p className="text-xs leading-relaxed text-surface-500">
+                      Todavía no hay precio de tu cuenta para graficar.
+                    </p>
+                  ) : priceHistory.length >= 1 ? (
+                    <PriceHistoryChart
+                      points={priceHistory}
+                      product={product}
+                      policy={policy}
+                      format={money}
+                    />
+                  ) : (
+                    // Solo se guarda una fila cuando el precio cambia: un producto estable no tiene serie.
+                    <div className="rounded-xl border border-surface-800 bg-surface-950/60 px-4 py-5">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-surface-500">
+                        Sin cambios de precio
+                      </p>
+                      <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-white">
+                        {money(unitDisplayUsd)}
+                      </p>
+                      <p className="mt-1.5 text-xs leading-relaxed text-surface-500">
+                        El precio se mantiene desde que seguimos este producto. La curva aparece
+                        con el primer cambio.
+                      </p>
+                    </div>
+                  )}
+                </section>}
+
+                <SameProductElsewhere
+                  current={product}
+                  entries={product.sameProduct ?? []}
+                  onSearchSimilar={() => void searchSameName()}
+                />
+              </div>
+
+              <LocalesPanel seedQuery={product.name} costUsd={sellerView ? saleUnitUsd ?? 0 : unitDisplayUsd} />
+            </div>
+
+            {related.length > 0 && (
+              <section>
+                <h2 className="pp pp__sec-title">
+                  <Sparkles className="w-3 h-3" />
+                  Relacionados
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {related.map((p, i) => (
+                    <RelatedCard key={`${p.provider}-${p.externalId}-${i}`} product={p} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {product.platformContent && (
+              <ProductRichDescription id="descripcion" content={product.platformContent} provider={product.provider} externalId={product.externalId} />
+            )}
+            {product.platformContentLimited && (
+              <p className="rounded-xl border border-surface-800 bg-surface-900/60 px-4 py-3 text-xs text-surface-400">
+                Hoy ya viste muchas fichas completas. Mañana vuelven a verse las fotos, la descripción y las especificaciones de NODO.
+              </p>
+            )}
+            {!product.platformContent?.descriptionHtml && !product.platformContent?.shortDescription && (product.description || product.longDescription) && (
+              <section id="descripcion" className="scroll-mt-16 rounded-2xl border border-surface-800 bg-surface-900/60 p-5 sm:p-6">
+                <h2 className="mb-3 text-lg font-bold text-white">Descripción</h2>
+                {product.description && (
+                  <p className="text-sm text-surface-300 leading-relaxed whitespace-pre-wrap">
+                    {product.description}
+                  </p>
+                )}
+                {product.longDescription &&
+                  product.longDescription !== product.description && (
+                    <p className="text-sm text-surface-400 leading-relaxed whitespace-pre-wrap mt-3">
+                      {product.longDescription}
+                    </p>
+                  )}
+              </section>
+            )}
+            {product.platformContent && <ProductSpecsTable id="especificaciones" specs={product.platformContent.specs} />}
+
+            <ProductFactsGrid product={product} extId={extId} providerName={providerName} />
+
+            <ProductSyncedAt
+              syncedAt={product.syncedAt}
+              className="text-[11px] text-surface-500 text-center pt-2 border-t border-surface-800/60"
+            />
+          </div>
         )}
       </div>
 
@@ -744,7 +853,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   );
 }
 
-function LocalesFooter({
+function LocalesPanel({
   seedQuery,
   costUsd,
 }: {
@@ -773,27 +882,25 @@ function LocalesFooter({
     <section
       id="precios-locales"
       data-tour="local-prices"
-      className="w-full border-t border-surface-800 bg-surface-950/80 mt-2"
+      className="min-w-0 rounded-2xl border border-surface-800 bg-surface-900/60 p-4 sm:p-5"
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8 pb-16">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="lg:hidden w-full flex items-center justify-between gap-3 rounded-xl border border-surface-700 bg-surface-900 px-4 py-3.5 text-left"
-          aria-expanded={open}
-        >
-          <span className="flex items-center gap-2 min-w-0">
-            <Store className="w-4 h-4 text-brand-400 flex-shrink-0" />
-            <span className="text-sm font-semibold text-white">Precios de venta en locales</span>
-          </span>
-          <ChevronDown
-            className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        </button>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="lg:hidden w-full flex items-center justify-between gap-3 text-left"
+        aria-expanded={open}
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          <Store className="w-4 h-4 text-brand-400 flex-shrink-0" />
+          <span className="text-sm font-semibold text-white">Precios de venta en locales</span>
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-surface-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
 
-        <div className={`${open ? "block mt-4 lg:mt-0" : "hidden"} lg:block`}>
-          <SalePricePanel variant="inline" seedQuery={seedQuery} costUsd={costUsd} active={open} />
-        </div>
+      <div className={`${open ? "block mt-4 lg:mt-0" : "hidden"} lg:block`}>
+        <SalePricePanel variant="inline" layout="list" seedQuery={seedQuery} costUsd={costUsd} active={open} />
       </div>
     </section>
   );
@@ -811,48 +918,39 @@ function ProductFactsGrid({
 }) {
   const facts = productFacts(product, extId, providerName);
   if (facts.length === 0) return null;
-  const mid = Math.ceil(facts.length / 2);
-  const columns = [facts.slice(0, mid), facts.slice(mid)];
+  const links = facts.filter((f) => f.href);
+  const rows = facts.filter((f) => !f.href);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {columns.map((col, colIdx) => (
-        <section
-          key={colIdx}
-          className="rounded-2xl border border-surface-800 bg-surface-900/60 p-5"
-        >
-          <h2
-            className={`text-sm font-semibold text-white mb-3 ${
-              colIdx === 1 ? "md:invisible md:select-none" : ""
-            }`}
-          >
-            {colIdx === 0 ? "Datos del producto" : "Más datos"}
-          </h2>
-          <dl className="space-y-0">
-            {col.map((row) => (
-              <MetaRow key={row.label} label={row.label}>
-                {row.href ? (
-                  <a
-                    href={row.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-brand-400 hover:text-brand-300 inline-flex items-center gap-1"
-                  >
-                    {row.value} <ExternalLink className="w-3 h-3" />
-                  </a>
-                ) : (
-                  <span
-                    className={`text-xs text-surface-200 ${row.mono ? "font-mono" : ""} ${row.strongColor ?? ""}`}
-                  >
-                    {row.value}
-                  </span>
-                )}
-              </MetaRow>
-            ))}
-          </dl>
-        </section>
-      ))}
-    </div>
+    <section id="datos" className="scroll-mt-16 rounded-2xl border border-surface-800 bg-surface-900/60 p-5 sm:p-6">
+      <h2 className="mb-2.5 text-lg font-bold text-white">Datos de {providerLabel(providerName)}</h2>
+      <dl className="m-0 grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-7">
+        {rows.map((row) => (
+          <div key={row.label} className="min-w-0 border-b border-surface-800 py-2.5">
+            <dt className="text-[11px] text-surface-400">{row.label}</dt>
+            <dd className={`m-0 mt-0.5 text-[13px] text-white break-words ${row.mono ? "font-mono" : ""} ${row.strongColor ?? ""}`}>
+              {row.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {links.length > 0 && (
+        <div className="mt-3.5 flex flex-wrap gap-4">
+          {links.map((row) => (
+            <a
+              key={row.label}
+              href={row.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-400 hover:text-brand-300"
+            >
+              {row.label === "Ficha del proveedor" ? `Abrir la ficha en ${providerLabel(providerName)}` : "Ver la imagen original"}
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -980,14 +1078,6 @@ function BreakdownRow({
   );
 }
 
-function MetaRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-2.5 border-b border-surface-800/80 last:border-0">
-      <dt className="text-xs text-surface-500">{label}</dt>
-      <dd className="text-right">{children}</dd>
-    </div>
-  );
-}
 
 function RelatedCard({ product }: { product: ProductDTO }) {
   const [err, setErr] = useState(false);

@@ -80,7 +80,7 @@ interface DescriptionProps extends CopyProps {
 }
 
 /** Descripción enriquecida: la bajada y el HTML limpio (DOMPurify corre en el navegador). */
-export function ProductRichDescription({ content, provider, externalId }: DescriptionProps) {
+export function ProductRichDescription({ content, provider, externalId, id }: DescriptionProps & { id?: string }) {
   const [clean, setClean] = useState("");
   useEffect(() => {
     setClean(sanitizeRichHtml(content.descriptionHtml ?? ""));
@@ -88,15 +88,15 @@ export function ProductRichDescription({ content, provider, externalId }: Descri
 
   if (!content.descriptionHtml && !content.shortDescription && !content.specs.length) return null;
   return (
-    <section {...PROTECT} className={`pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5 ${PROTECT.className}`}>
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="pp__sec-title">{content.descriptionHtml || content.shortDescription ? "Descripción" : "Ficha técnica"}</h2>
+    <section id={id} {...PROTECT} className={`scroll-mt-16 rounded-2xl border border-surface-800 bg-surface-900/60 p-5 sm:p-6 ${PROTECT.className}`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-white">{content.descriptionHtml || content.shortDescription ? "Descripción" : "Ficha técnica"}</h2>
         <CopyRichButton provider={provider} externalId={externalId} />
       </div>
       {content.shortDescription && (
         <p className="text-[15px] leading-relaxed text-surface-100">{content.shortDescription}</p>
       )}
-      {clean && <div className={`${PROSE} mt-3`} dangerouslySetInnerHTML={{ __html: clean }} />}
+      {clean && <div className={`${PROSE} mt-3 max-w-[860px]`} dangerouslySetInnerHTML={{ __html: clean }} />}
     </section>
   );
 }
@@ -106,32 +106,46 @@ interface SpecsProps {
 }
 
 /** Especificaciones agrupadas ("Memoria", "Conectividad"…); las sin grupo van en "Generales". */
-export function ProductSpecsTable({ specs }: SpecsProps) {
-  const groups = useMemo(() => {
-    const out = new Map<string, { name: string; value: string }[]>();
+export function ProductSpecsTable({ specs, id }: SpecsProps & { id?: string }) {
+  // Grupos ("Memoria", "Conectividad"…) repartidos en dos columnas de alto parejo.
+  const columns = useMemo(() => {
+    const groups = new Map<string, { name: string; value: string }[]>();
     for (const s of specs) {
       const key = s.group?.trim() || "Generales";
-      out.set(key, [...(out.get(key) ?? []), { name: s.name, value: s.value }]);
+      groups.set(key, [...(groups.get(key) ?? []), { name: s.name, value: s.value }]);
     }
-    return [...out.entries()];
+    const cols: { rows: number; groups: [string, { name: string; value: string }[]][] }[] = [
+      { rows: 0, groups: [] },
+      { rows: 0, groups: [] },
+    ];
+    for (const g of groups.entries()) {
+      const target = cols[0].rows <= cols[1].rows ? cols[0] : cols[1];
+      target.groups.push(g);
+      target.rows += g[1].length + 1;
+    }
+    return cols.filter((c) => c.groups.length);
   }, [specs]);
 
   if (!specs.length) return null;
   return (
-    <section {...PROTECT} className={`pp rounded-2xl border border-surface-800 bg-surface-900/60 p-5 ${PROTECT.className}`}>
-      <h2 className="pp__sec-title">Especificaciones</h2>
-      <div className="grid gap-5 md:grid-cols-2">
-        {groups.map(([group, rows]) => (
-          <div key={group} className="min-w-0">
-            <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-surface-500">{group}</h3>
-            <dl className="divide-y divide-surface-800/80">
-              {rows.map((r, i) => (
-                <div key={`${r.name}-${i}`} className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-3 py-1.5 text-sm">
-                  <dt className="text-surface-400">{r.name}</dt>
-                  <dd className="break-words text-surface-100">{r.value}</dd>
-                </div>
-              ))}
-            </dl>
+    <section id={id} {...PROTECT} className={`scroll-mt-16 rounded-2xl border border-surface-800 bg-surface-900/60 p-5 sm:p-6 ${PROTECT.className}`}>
+      <h2 className="mb-3.5 text-lg font-bold text-white">Especificaciones</h2>
+      <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
+        {columns.map((col, ci) => (
+          <div key={ci} className="flex min-w-0 flex-col gap-5">
+            {col.groups.map(([group, rows]) => (
+              <div key={group}>
+                <h3 className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-brand-400">{group}</h3>
+                <dl className="m-0">
+                  {rows.map((r, i) => (
+                    <div key={`${r.name}-${i}`} className="grid grid-cols-2 gap-3 border-b border-surface-800 py-2 text-sm">
+                      <dt className="text-surface-400">{r.name}</dt>
+                      <dd className="m-0 break-words text-white">{r.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
           </div>
         ))}
       </div>

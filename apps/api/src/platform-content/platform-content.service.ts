@@ -23,6 +23,8 @@ const STALE_MS = 3 * 60_000;
 export const DAILY_VIEW_LIMIT = 300;
 /** Veces por día que un usuario puede usar "Copiar ficha". */
 export const DAILY_COPY_LIMIT = 100;
+/** Tope de "el mismo producto en otros distribuidores" por ficha. */
+const MAX_SIBLINGS = 12;
 
 /** Día en Argentina (YYYY-MM-DD): el tope se reinicia a la medianoche local. */
 export function argentinaDay(now = new Date()): string {
@@ -102,6 +104,21 @@ export class PlatformContentService implements OnModuleInit {
       },
       limited: false,
     };
+  }
+
+  /** Las otras fichas de distribuidor vinculadas al mismo contenido (el mismo producto). */
+  async siblings(provider: string, externalId: string): Promise<{ provider: string; externalId: string }[]> {
+    const link = await this.prisma.platformProductContentLink.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+      select: { contentId: true },
+    });
+    if (!link) return [];
+    return this.prisma.platformProductContentLink.findMany({
+      where: { contentId: link.contentId, NOT: { provider, externalId } },
+      select: { provider: true, externalId: true },
+      orderBy: { provider: "asc" },
+      take: MAX_SIBLINGS,
+    });
   }
 
   /** Texto de la ficha para "Copiar ficha", con su propio tope diario. Queda registrado. */

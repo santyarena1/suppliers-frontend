@@ -272,6 +272,14 @@ export interface PlatformProductContent {
   warrantyMonths: number | null;
 }
 
+/** Otra ficha del mismo producto: con su precio si el comercio ve ese distribuidor; si no, `locked`. */
+export interface SameProductEntry {
+  provider: string;
+  externalId: string;
+  locked: boolean;
+  product: ProductDTO | null;
+}
+
 export interface ProductDTO {
   id?: string;
   provider: string;
@@ -301,6 +309,8 @@ export interface ProductDTO {
   platformContent?: PlatformProductContent | null;
   /** El usuario llegó al tope diario de fichas completas: se ve la del distribuidor. */
   platformContentLimited?: boolean;
+  /** El mismo producto en otros distribuidores (agrupado en la ficha enriquecida). Solo en la ficha individual. */
+  sameProduct?: SameProductEntry[];
   productUrl?: string | null;
   externalId: string;
   sku?: string | null;

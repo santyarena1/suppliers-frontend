@@ -1360,6 +1360,19 @@ export class ProvidersService implements OnModuleInit {
     opts: { richContent?: boolean } = {}
   ) {
     if (!(await this.visibility.canReadCatalog(tenantId, provider, viewerUserId))) return null;
+    const view = await this.productView(tenantId, provider, externalId);
+    if (!view) return null;
+    // La ficha enriquecida es solo para la ficha en pantalla: otros usos (presupuestos) no la piden ni suman al tope.
+    if (opts.richContent === false) return { ...view, platformContent: null, platformContentLimited: false };
+    const [rich, sameProduct] = await Promise.all([
+      this.platformContent.forProduct(provider, externalId, viewerUserId),
+      this.sameProductElsewhere(tenantId, provider, externalId, viewerUserId),
+    ]);
+    return { ...view, platformContent: rich.content, platformContentLimited: rich.limited, sameProduct };
+  }
+
+  /** Vista de una ficha para este comercio: con su oferta (precio de su cuenta) o la ficha sola. */
+  private async productView(tenantId: string, provider: Provider, externalId: string) {
     const [offer, enrichment] = await Promise.all([
       this.prisma.tenantProductOffer.findUnique({
         where: { tenantId_provider_externalId: { tenantId, provider, externalId } },
@@ -1367,26 +1380,35 @@ export class ProvidersService implements OnModuleInit {
       }),
       this.catalogEnrichment.getContext(),
     ]);
-    // La ficha enriquecida es solo para la ficha en pantalla: otros usos (presupuestos) no la piden ni suman al tope.
-    const rich =
-      opts.richContent === false
-        ? { content: null, limited: false }
-        : await this.platformContent.forProduct(provider, externalId, viewerUserId);
-    const platformContent = rich.content;
-    const platformContentLimited = rich.limited;
     if (offer) {
       const rules = await this.rulesFor(tenantId, provider);
-      const [view] = await this.withImageAiFlags([
-        toProductView(offer.product, offer, rules, enrichment),
-      ]);
-      return { ...view, platformContent, platformContentLimited };
+      const [view] = await this.withImageAiFlags([toProductView(offer.product, offer, rules, enrichment)]);
+      return view;
     }
     const sheet = await this.prisma.providerSyncCache.findUnique({
       where: { provider_externalId: { provider, externalId } },
     });
     if (!sheet) return null;
     const [view] = await this.withImageAiFlags([toSheetView(sheet, enrichment)]);
-    return { ...view, platformContent, platformContentLimited };
+    return view;
+  }
+
+  /**
+   * El mismo producto en los otros distribuidores, según la agrupación de la ficha
+   * enriquecida (AcuStock). Los que el comercio no puede ver van como `locked`.
+   */
+  private async sameProductElsewhere(tenantId: string, provider: Provider, externalId: string, viewerUserId?: string) {
+    const siblings = await this.platformContent.siblings(provider, externalId);
+    const out: { provider: string; externalId: string; locked: boolean; product: unknown }[] = [];
+    for (const s of siblings) {
+      if (!(await this.visibility.canReadCatalog(tenantId, s.provider as Provider, viewerUserId))) {
+        out.push({ provider: s.provider, externalId: s.externalId, locked: true, product: null });
+        continue;
+      }
+      const view = await this.productView(tenantId, s.provider as Provider, s.externalId);
+      if (view) out.push({ provider: s.provider, externalId: s.externalId, locked: false, product: view });
+    }
+    return out;
   }
 
   /** Texto de la ficha enriquecida para "Copiar ficha" (mismo permiso de lectura que la ficha). */
