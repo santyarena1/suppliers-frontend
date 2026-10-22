@@ -71,6 +71,25 @@ function variantWords(text: string): Set<string> {
   return out;
 }
 
+/** Series de placas y mothers: distinguen productos del mismo chip (Windforce vs Eagle). */
+const SERIES_WORDS = new Set([
+  "windforce", "eagle", "gaming", "aero", "aorus", "vision", "tuf", "rog", "strix", "prime", "dual",
+  "proart", "ventus", "shadow", "inspire", "suprim", "twin", "edge", "pulse", "nitro", "hellhound",
+  "challenger", "phantom", "steel", "legend",
+]);
+
+/**
+ * Si el producto dice su serie y la web dice otra, no es el mismo. Si alguno
+ * no dice serie, no se descarta (muchas webs la omiten).
+ */
+export function sameSeries(a: string, b: string): boolean {
+  const words = (t: string) => normalizeSearchText(t).split(" ").filter((w) => SERIES_WORDS.has(w));
+  const sa = words(a);
+  const sb = words(b);
+  if (sa.length === 0 || sb.length === 0) return true;
+  return sb.every((w) => sa.includes(w)) || sa.every((w) => sb.includes(w));
+}
+
 export function sameVariant(a: string, b: string): boolean {
   const va = variantWords(a);
   const vb = variantWords(b);
@@ -131,7 +150,7 @@ export function pickOwnStoreMatch(
   for (const row of rows) {
     const text = row.searchText || normalizeSearchText(row.name);
     // Una 5060 Ti no es la 5060: ni se ofrece como aproximada.
-    if (!sameVariant(query, row.name)) continue;
+    if (!sameVariant(query, row.name) || !sameSeries(query, row.name)) continue;
     const match = scoreRetailMatch(text, tokens);
     if (!passesRelevanceGate(match, tokens)) continue;
     const price = coerceStoredRetailPrice(row.price, store.priceDivisor ?? 1, {

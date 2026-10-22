@@ -1,5 +1,5 @@
 import { extractSearchTokens, normalizeSearchText, passesRelevanceGate, scoreRetailMatch } from "./retail-search.util";
-import { isConfidentOwnStoreMatch, pickOwnStoreMatch, sameVariant, type OwnStoreMatchRow } from "./own-store.match";
+import { isConfidentOwnStoreMatch, pickOwnStoreMatch, sameSeries, sameVariant, type OwnStoreMatchRow } from "./own-store.match";
 
 const store = { name: "Gorila Games", externalId: 5, priceDivisor: 1 };
 
@@ -93,5 +93,17 @@ describe("sameVariant", () => {
   it("misma variante: sí", () => {
     expect(sameVariant("RX 7600 XT 16GB", "Placa RX7600XT Pulse")).toBe(true);
     expect(sameVariant("RTX 5060 WINDFORCE", "Gigabyte RTX 5060 Windforce Max OC")).toBe(true);
+  });
+});
+
+describe("sameSeries", () => {
+  it("Windforce no es Eagle", () => {
+    expect(sameSeries("Placa de Video GIGABYTE NVIDIA GeForce RTX 5060 WINDFORCE MAX OC 8G", "VGA Gigabyte GeForce RTX 5060 EAGLE OC 8G (6439)")).toBe(false);
+  });
+  it("si una no dice serie, no se descarta", () => {
+    expect(sameSeries("RTX 5060 WINDFORCE MAX OC", "Gigabyte RTX 5060 8GB")).toBe(true);
+  });
+  it("una serie contenida en la otra es la misma", () => {
+    expect(sameSeries("AORUS B650 Elite AX Gaming", "Mother Aorus B650 Elite AX")).toBe(true);
   });
 });
