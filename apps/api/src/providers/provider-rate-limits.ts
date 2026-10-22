@@ -7,10 +7,18 @@ import type { Provider } from "@nodo/shared";
  * Grupo Núcleo (catálogo entero en un GET) y Solution Box (un listado por rubro
  * más fichas sueltas) suspendieron la cuenta con la sync cada 1 h (oct-2026).
  * Desde el 21/10, cada 12 h mientras vemos si levantan el bloqueo.
+ *
+ * Masnet (un CSV), Microglobal (un SOAP con todo el catálogo) y PC Arts (dos
+ * listados paginados) entraron en oct-2026 sin haberlos probado en vivo: cada
+ * 2 h, que es lo que AcuStock usa por defecto con ellos. Al estar en esta lista
+ * también se pausan con el primer 403/429 y se prueban solos una vez por día.
  */
 export const PROVIDER_MIN_SYNC_MINUTES: Partial<Record<Provider, number>> = {
   GRUPO_NUCLEO: 720,
   SOLUTION_BOX: 720,
+  MASNET: 120,
+  MICROGLOBAL: 120,
+  PC_ARTS: 120,
 };
 
 /**
@@ -34,6 +42,9 @@ export function shouldProbeWhenPaused(provider: string, message: string): boolea
 export const PROVIDER_MANUAL_COOLDOWN_MINUTES: Partial<Record<Provider, number>> = {
   GRUPO_NUCLEO: 60,
   SOLUTION_BOX: 60,
+  MASNET: 30,
+  MICROGLOBAL: 30,
+  PC_ARTS: 30,
 };
 
 export function effectiveSyncMinutes(provider: string, configured: number): number {

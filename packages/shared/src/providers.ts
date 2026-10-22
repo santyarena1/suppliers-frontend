@@ -27,6 +27,9 @@ export const KNOWN_PROVIDERS = [
   "DISTECNA",
   "CEVEN",
   "DIAPSTORE",
+  "MASNET",
+  "MICROGLOBAL",
+  "PC_ARTS",
 ] as const;
 
 export type KnownProvider = (typeof KNOWN_PROVIDERS)[number];
@@ -101,6 +104,9 @@ export const PROVIDER_LABELS: Record<string, string> = {
   DISTECNA: "Distecna",
   CEVEN: "Ceven",
   DIAPSTORE: "Diapstore",
+  MASNET: "Masnet",
+  MICROGLOBAL: "Microglobal",
+  PC_ARTS: "PC Arts",
 };
 
 /**

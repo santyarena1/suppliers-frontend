@@ -24,6 +24,9 @@ import { SolutionBoxOrderService } from "./solution-box-order.service";
 import { DistecnaAdapter } from "./adapters/distecna.adapter";
 import { DistecnaOrderService } from "./distecna-order.service";
 import { PolytechAdapter } from "./adapters/polytech.adapter";
+import { MasnetAdapter } from "./adapters/masnet.adapter";
+import { MicroglobalAdapter } from "./adapters/microglobal.adapter";
+import { PcArtsAdapter } from "./adapters/pc-arts.adapter";
 import { PolytechOrderService } from "./polytech-order.service";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
@@ -58,6 +61,9 @@ import { PricingCoreModule } from "../pricing/pricing-core.module";
     SolutionBoxAdapter,
     DistecnaAdapter,
     PolytechAdapter,
+    MasnetAdapter,
+    MicroglobalAdapter,
+    PcArtsAdapter,
     PortalCartSnapshotService,
     InvidAccountService,
     InvidOrderService,
