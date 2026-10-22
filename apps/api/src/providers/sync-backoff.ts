@@ -1,4 +1,4 @@
-import { BLOCKED_PROBE_MINUTES, effectiveSyncMinutes, shouldPauseOnFirstFailure } from "./provider-rate-limits";
+import { BLOCKED_PROBE_MINUTES, effectiveSyncMinutes, shouldProbeWhenPaused } from "./provider-rate-limits";
 
 /**
  * Fallos seguidos que pausan el auto-sync (y avisan al comercio). Pausado es como
@@ -34,7 +34,7 @@ export function nextSyncAt(config: SyncSchedule): Date | null {
   if (!config.enabled) return null;
   if (config.pausedAt) {
     // Bloqueado por el portal (Núcleo, Solution Box): un solo intento por día.
-    if (!shouldPauseOnFirstFailure(config.provider ?? "", config.lastSyncError ?? "")) return null;
+    if (!shouldProbeWhenPaused(config.provider ?? "", config.lastSyncError ?? "")) return null;
     const from = config.lastAttemptAt ?? config.pausedAt;
     return new Date(from.getTime() + BLOCKED_PROBE_MINUTES * 60_000);
   }

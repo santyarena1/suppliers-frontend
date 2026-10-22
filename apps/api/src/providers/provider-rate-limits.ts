@@ -20,6 +20,16 @@ export const PROVIDER_MIN_SYNC_MINUTES: Partial<Record<Provider, number>> = {
  */
 export const BLOCKED_PROBE_MINUTES = 24 * 60;
 
+/**
+ * Pausado, ¿se prueba solo una vez por día? Sí para estos distribuidores, sea un
+ * 403/429 o un corte de conexión (Solution Box bloquea cortando), salvo que el
+ * error sea de usuario o contraseña: eso no se arregla esperando.
+ */
+export function shouldProbeWhenPaused(provider: string, message: string): boolean {
+  if (!(provider in PROVIDER_MIN_SYNC_MINUTES)) return false;
+  return !/contrase[nñ]a|credencial|usuario|401|unauthori[sz]ed|login/i.test(message);
+}
+
 /** Tras un intento (cron o manual), cuánto esperar antes de aceptar "Sincronizar ahora". */
 export const PROVIDER_MANUAL_COOLDOWN_MINUTES: Partial<Record<Provider, number>> = {
   GRUPO_NUCLEO: 60,

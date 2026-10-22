@@ -64,6 +64,8 @@ describe("nextSyncAt / isSyncDue", () => {
     const paused = { ...base, pausedAt: new Date("2026-10-01T10:00:00Z") };
 
     expect(nextSyncAt({ ...paused, provider: "GRUPO_NUCLEO", lastSyncError: "Usuario o contraseña incorrectos" })).toBeNull();
+    // Solution Box bloquea cortando la conexión: también se prueba una vez por día.
+    expect(nextSyncAt({ ...paused, provider: "SOLUTION_BOX", lastSyncError: "Solution Box /articulos falló: socket hang up" })).not.toBeNull();
     expect(nextSyncAt({ ...paused, provider: "ELIT", lastSyncError: "403 Forbidden" })).toBeNull();
   });
 });
