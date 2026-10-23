@@ -1,3 +1,4 @@
+import { type PcStep } from "../platform-content/pc-specs";
 import { isDemoDistributorKey } from "../onboarding/onboarding-demo";
 import { PlatformContentService } from "../platform-content/platform-content.service";
 import { incompleteSyncMessage, missingActionIsSafe, shouldUnhideOnConfigChange } from "./missing-guard";
@@ -1430,6 +1431,43 @@ export class ProvidersService implements OnModuleInit {
       if (view) out.push({ provider: s.provider, externalId: s.externalId, locked: false, product: view });
     }
     return out;
+  }
+
+  /**
+   * Armador de PC: los productos de un paso (procesadores, mothers…) que tienen
+   * ficha técnica, cada uno con las ofertas de los distribuidores que el comercio
+   * puede ver, con el precio de su cuenta. Un producto sin ninguna oferta no va.
+   */
+  async pcBuilderParts(tenantId: string, step: PcStep, viewerUserId?: string) {
+    const parts = await this.platformContent.pcParts(step);
+    const readable = new Map<string, boolean>();
+    for (const p of new Set(parts.flatMap((x) => x.links.map((l) => l.provider)))) {
+      readable.set(p, await this.visibility.canReadCatalog(tenantId, p as Provider, viewerUserId));
+    }
+    const wanted = parts.flatMap((x) => x.links.filter((l) => readable.get(l.provider)));
+    const offers: Prisma.TenantProductOfferGetPayload<{ include: { product: true } }>[] = [];
+    for (let i = 0; i < wanted.length; i += 500) {
+      const chunk = wanted.slice(i, i + 500);
+      offers.push(...(await this.prisma.tenantProductOffer.findMany({
+        where: { tenantId, active: true, OR: chunk.map((l) => ({ provider: l.provider, externalId: l.externalId })) },
+        include: { product: true },
+      })));
+    }
+    const enrichment = await this.catalogEnrichment.getContext();
+    const rulesBy = new Map<string, Awaited<ReturnType<ProvidersService["rulesFor"]>>>();
+    for (const p of new Set(offers.map((o) => o.provider))) rulesBy.set(p, await this.rulesFor(tenantId, p as Provider));
+    const views = await this.withImageAiFlags(offers.map((o) => toProductView(o.product, o, rulesBy.get(o.provider)!, enrichment)));
+    const byKey = new Map(views.map((v) => [`${v.provider}:${v.externalId}`, v]));
+    return parts
+      .map((x) => ({
+        contentId: x.contentId,
+        name: x.name,
+        brand: x.brand,
+        image: x.image,
+        compat: x.compat,
+        offers: x.links.map((l) => byKey.get(`${l.provider}:${l.externalId}`)).filter((v): v is NonNullable<typeof v> => Boolean(v)),
+      }))
+      .filter((x) => x.offers.length > 0);
   }
 
   /** Texto de la ficha enriquecida para "Copiar ficha" (mismo permiso de lectura que la ficha). */

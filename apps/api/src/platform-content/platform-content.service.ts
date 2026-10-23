@@ -7,6 +7,7 @@ import { type AcuStockProduct, AcuStockClient } from "./acustock.client";
 import { type CatalogRow, type ContentLink, matchContent } from "./content-match";
 import { contentToText } from "./content-text";
 import { encryptImageUrl, imageKey } from "./image-token";
+import { PC_STEP_CATEGORIES, pcCompat, type PcStep } from "./pc-specs";
 
 export const ACUSTOCK_SOURCE = "ACUSTOCK";
 type Mode = "PREVIEW" | "APPLY";
@@ -119,6 +120,30 @@ export class PlatformContentService implements OnModuleInit {
       orderBy: { provider: "asc" },
       take: MAX_SIBLINGS,
     });
+  }
+
+  /**
+   * Fichas de un paso del armador de PC con sus vínculos a distribuidores. Va solo
+   * lo que hace falta para elegir y chequear compatibilidad (nombre, una foto
+   * cifrada y los datos técnicos normalizados), no la ficha completa: no suma al
+   * tope diario de fichas vistas.
+   */
+  async pcParts(step: PcStep) {
+    const rows = await this.prisma.platformProductContent.findMany({
+      where: { category: { hasSome: PC_STEP_CATEGORIES[step] }, links: { some: {} } },
+      select: {
+        id: true, name: true, brand: true, category: true, specs: true, images: true,
+        links: { select: { provider: true, externalId: true } },
+      },
+    });
+    return rows.map((r) => ({
+      contentId: r.id,
+      name: r.name,
+      brand: r.brand,
+      image: this.protectImages(Array.isArray(r.images) ? (r.images as unknown[]).slice(0, 1) : [])[0]?.url ?? null,
+      compat: pcCompat(step, r.specs, r.category),
+      links: r.links,
+    }));
   }
 
   /** Texto de la ficha para "Copiar ficha", con su propio tope diario. Queda registrado. */

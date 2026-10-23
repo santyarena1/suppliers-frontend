@@ -15,6 +15,7 @@ import { CostSensitive } from "../pricing/cost-visibility";
 import { SalePriced, SalePricingInterceptor } from "../pricing/sale-pricing.interceptor";
 import { RequiresActiveSubscription, RequiresCapability } from "../tenants/entitlements";
 import { ProvidersService } from "./providers.service";
+import { isPcStep } from "../platform-content/pc-specs";
 import { InvidAccountService } from "./invid-account.service";
 import { InvidOrderService } from "./invid-order.service";
 import { NewBytesAccountService } from "./new-bytes-account.service";
@@ -1052,6 +1053,15 @@ export class ProvidersController {
       all: all === "1" || all === "true",
       viewerUserId: tenant.userId,
     });
+  }
+
+  /** Armador de PC: productos con ficha técnica de un paso, con las ofertas de la cuenta. */
+  @SalePriced()
+  @Get("pc-builder/parts")
+  getPcBuilderParts(@CurrentTenantOrNone() tenant: TenantContext | null, @Query("step") step: string) {
+    if (!isPcStep(step)) throw new BadRequestException("Paso del armador inválido");
+    if (!tenant) return [];
+    return this.providersService.pcBuilderParts(commercialId(tenant), step, tenant.userId);
   }
 
   @SalePriced()

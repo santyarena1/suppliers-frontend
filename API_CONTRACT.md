@@ -1142,3 +1142,11 @@ Notas por proveedor en `docs/providers/{masnet,microglobal,pc-arts}.md`.
 - **Pedidos / checkout**: no implementados. No hay `/providers/{MASNET,MICROGLOBAL,PC_ARTS}/checkout/*`
   ni cuenta corriente: en el carrito quedan como Ceven o Diapstore (sin checkout directo).
 - **Estado**: IMPLEMENTADO (catálogo), sin probar contra los portales reales.
+
+### [FEATURE] Armador de PC — productos de un paso
+- **Método**: GET
+- **Ruta**: /pc-builder/parts?step=cpu|mobo|ram|gpu|ssd|psu|case|cooler
+- **Auth**: Bearer token requerido (comercio)
+- **Respuesta esperada**: `[{ contentId, name, brand, image (/img-proxy?t=… o null), compat: { …datos técnicos del paso, null si falta }, offers: ProductDTO[] }]`. Solo productos con ficha enriquecida y al menos una oferta de un distribuidor que el comercio puede ver; cada oferta es la vista del producto con el precio de la cuenta (y el de venta en modo vendedor). No suma al tope diario de fichas.
+- **Estado**: IMPLEMENTADO
+- **Notas**: `compat` por paso — cpu: socket, memory[], tdp, cores, threads, boost, igpu, cooler · mobo: socket, chipset, memory, form, slots, maxMemory, m2, maxFreq · ram: type, capacity, modules, freq, cl · gpu: chip, vram, length, tgp, recommendedPsu, power · ssd: capacity, iface, form, read, hdd · psu: watts, cert, modular, form, hpwr · case: forms[], gpuMax, coolerMax, radiatorMax, psuIncluded, psuWatts, type · cooler: kind (air|liquid), sockets[], height, tdp, radiator.
