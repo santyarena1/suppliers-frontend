@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.12.1",
+    date: "2026-10-23",
+    title: "Carrito más compacto",
+    changes: [
+      { kind: "improved", text: "Cada producto del carrito muestra la foto a la altura de toda la línea, y la marca, el código, quién lo agregó y los botones de offline y esquema van en una sola fila." },
+    ],
+  },
+  {
     version: "2.12.0",
     date: "2026-10-22",
     title: "Masnet, Microglobal y PC Arts, y Solution Box por su API",

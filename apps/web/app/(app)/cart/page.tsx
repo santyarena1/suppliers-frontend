@@ -2087,56 +2087,26 @@ function CartLine({
   const lineTotal = withIva ? lineGross : pricing.net;
 
   return (
-    <div className="px-4 py-4 sm:px-5">
-      <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-3.5 gap-y-3 sm:grid-cols-[56px_minmax(0,1fr)_auto_minmax(130px,auto)_36px] sm:items-start">
-        <Link href={href} className="w-14 h-14 relative flex-shrink-0 bg-white rounded-lg overflow-hidden border border-surface-800 sm:row-span-1">
+    <div className="flex gap-3.5 px-4 py-4 sm:gap-4 sm:px-5">
+        <Link href={href} className="relative h-14 w-14 flex-shrink-0 self-start overflow-hidden rounded-lg border border-surface-800 bg-white sm:h-auto sm:min-h-[96px] sm:w-[96px] sm:self-stretch">
           {item.imageUrl ? (
             <Image src={proxyImg(item.imageUrl)} alt="" fill className="object-contain p-1" unoptimized />
           ) : (
             <ImageOff className="w-4 h-4 text-surface-400 absolute inset-0 m-auto" />
           )}
         </Link>
-        <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1">
+      <div className="grid grid-cols-1 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(130px,auto)_36px] sm:items-start sm:gap-x-3.5">
+        <div className="min-w-0">
           <Link href={href} className="text-[15px] font-semibold text-white leading-snug line-clamp-2 hover:text-brand-200">
             {item.name}
           </Link>
-          <p className="text-xs text-surface-500 font-mono mt-1 truncate">
-            {item.brand ? `${item.brand} · ` : ""}#{sku}
-          </p>
-          <LineAuthors item={item} />
-          {stockIssue && (
-            <p className="mt-1.5 inline-flex flex-wrap items-center gap-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-300">
-              <PackageX className="w-3.5 h-3.5" />
-              {stockIssue.kind === "out"
-                ? `Sin stock en ${providerLabel(item.provider)}: no entra en el pedido`
-                : `${providerLabel(item.provider)} tiene ${stockIssue.available} u.: el resto no entra en el pedido`}
-              {stockIssue.kind === "out" ? (
-                <button type="button" onClick={() => remove(ref)} className="font-semibold underline underline-offset-2 hover:text-white">
-                  Sacar
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setQty(ref, stockIssue.available)}
-                  className="font-semibold underline underline-offset-2 hover:text-white"
-                >
-                  Dejar {stockIssue.available}
-                </button>
-              )}
-            </p>
-          )}
-          {item.stockStatus?.toLowerCase().includes("bajo") && (
-            <p className="text-xs text-amber-400/90 mt-0.5">Stock bajo</p>
-          )}
-          {pricing.missingIva && (
-            <p className="text-xs text-amber-400/90 mt-0.5">Este producto no trajo alícuota de IVA</p>
-          )}
-          {others.length > 0 && (
-            <p className="text-xs text-surface-500 mt-0.5">
-              {others.map((o) => `${o.label} ${formatAlicuota(o.percent)} ${fmt(o.unitAmount * item.qty, 2)}`).join(" · ")}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-1.5 mt-2">
+          {/* Marca, código, quién lo sumó y a dónde moverlo: una sola fila. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="max-w-full truncate font-mono text-xs text-surface-500">
+              {item.brand ? `${item.brand} · ` : ""}#{sku}
+            </span>
+            <LineAuthors item={item} className="text-xs text-surface-400" />
             {canMoveOffline && (
               <button
                 type="button"
@@ -2177,6 +2147,38 @@ function CartLine({
               </button>
             )}
           </div>
+          {stockIssue && (
+            <p className="mt-1.5 inline-flex flex-wrap items-center gap-2 rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-300">
+              <PackageX className="w-3.5 h-3.5" />
+              {stockIssue.kind === "out"
+                ? `Sin stock en ${providerLabel(item.provider)}: no entra en el pedido`
+                : `${providerLabel(item.provider)} tiene ${stockIssue.available} u.: el resto no entra en el pedido`}
+              {stockIssue.kind === "out" ? (
+                <button type="button" onClick={() => remove(ref)} className="font-semibold underline underline-offset-2 hover:text-white">
+                  Sacar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setQty(ref, stockIssue.available)}
+                  className="font-semibold underline underline-offset-2 hover:text-white"
+                >
+                  Dejar {stockIssue.available}
+                </button>
+              )}
+            </p>
+          )}
+          {item.stockStatus?.toLowerCase().includes("bajo") && (
+            <p className="text-xs text-amber-400/90 mt-0.5">Stock bajo</p>
+          )}
+          {pricing.missingIva && (
+            <p className="text-xs text-amber-400/90 mt-0.5">Este producto no trajo alícuota de IVA</p>
+          )}
+          {others.length > 0 && (
+            <p className="text-xs text-surface-500 mt-0.5">
+              {others.map((o) => `${o.label} ${formatAlicuota(o.percent)} ${fmt(o.unitAmount * item.qty, 2)}`).join(" · ")}
+            </p>
+          )}
           {pickOpen && (
             <SchemePicker
               provider={item.provider}
@@ -2191,7 +2193,7 @@ function CartLine({
           )}
         </div>
 
-        <div className="col-start-2 flex items-center justify-between gap-3 sm:col-start-auto sm:contents">
+        <div className="flex items-center justify-between gap-3 sm:contents">
           <div className="sm:pt-1">
             <QtyControl
               qty={item.qty}
@@ -2213,7 +2215,7 @@ function CartLine({
       </div>
 
       {/* Impuestos de la línea: siempre a la vista, en todas las pantallas. */}
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl bg-surface-950/70 px-3 py-2.5 text-xs sm:ml-[70px] sm:flex sm:flex-wrap sm:gap-x-6">
+      <dl className="-ml-[70px] mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl bg-surface-950/70 px-3 py-2.5 text-xs sm:ml-0 sm:flex sm:flex-wrap sm:gap-x-6">
         <TaxItem label="Neto" value={fmt(pricing.net, 2)} hint={item.qty > 1 ? `${fmt(pricing.unitNet, 2)} c/u` : undefined} />
         <TaxItem label={iva ? `IVA ${formatAlicuota(iva.percent)}` : "IVA"} value={iva ? fmt(iva.unitAmount * item.qty, 2) : null} />
         <TaxItem label={internos ? `Internos ${formatAlicuota(internos.percent)}` : "Internos"} value={internos ? fmt(internos.unitAmount * item.qty, 2) : null} />
@@ -2223,6 +2225,7 @@ function CartLine({
         />
         {withIva && item.qty > 0 && <TaxItem label="Unitario final" value={fmt(lineGross / item.qty, 2)} strong />}
       </dl>
+      </div>
     </div>
   );
 }
