@@ -3047,6 +3047,12 @@ export interface BrandCount {
   count: number;
 }
 
+/** Armador de PC: productos con ficha técnica de un paso, con las ofertas de la cuenta (ver API_CONTRACT). */
+export const pcBuilderApi = {
+  parts: (step: string) =>
+    api.get<{ contentId: string; name: string; brand: string | null; image: string | null; compat: Record<string, string | number | boolean | string[] | null>; offers: ProductDTO[] }[]>("/pc-builder/parts", { params: { step } }),
+};
+
 export const catalogApi = {
   /** "Copiar ficha": texto de la ficha enriquecida (tope diario, queda registrado). */
   copyRichText: (provider: Provider, externalId: string) =>

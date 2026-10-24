@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.13.0",
+    date: "2026-10-23",
+    title: "Armador de PC en Presupuestos",
+    changes: [
+      { kind: "new", text: "Presupuestos → Armar PC: elegís paso a paso procesador, mother, memoria, placa de video, disco, fuente, gabinete y refrigeración. En cada paso ves solo lo compatible con lo que ya elegiste (socket, memoria, formato, largo de la placa, altura del cooler, potencia), con foto, datos clave y el precio de cada distribuidor." },
+      { kind: "new", text: "Sumás cualquier producto del catálogo (monitor, teclado, mouse…) y líneas libres como el armado. Al final elegís de qué distribuidor sale cada pieza (más barato o menos distribuidores) y lo pasás a un presupuesto o al carrito." },
+    ],
+  },
+  {
     version: "2.12.1",
     date: "2026-10-23",
     title: "Carrito más compacto",

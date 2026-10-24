@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, ChevronLeft, ChevronRight, Eye, FileText, Loader2, MessageCircle, Palette, Plus, Search, ShoppingBag, SlidersHorizontal, Tag } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Eye, FileText, Loader2, MessageCircle, Palette, Plus, Search, ShoppingBag, SlidersHorizontal, Tag, Cpu } from "lucide-react";
 import PrefsPanel from "@/components/PrefsPanel";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import QuoteEditor from "@/components/quotes/QuoteEditor";
@@ -306,6 +306,14 @@ function QuotesPageInner() {
               <span className="hidden sm:inline">Plantilla del PDF</span>
             </Link>
           )}
+          <Link
+            href="/presupuestos/armador"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-surface-700 px-3 py-2 text-sm font-medium text-surface-200 hover:border-surface-500 hover:text-white"
+            title="Armá una PC con chequeo de compatibilidad y pasala a un presupuesto"
+          >
+            <Cpu className="h-4 w-4" />
+            <span className="hidden sm:inline">Armar PC</span>
+          </Link>
           <button
             type="button"
             onClick={createNew}
