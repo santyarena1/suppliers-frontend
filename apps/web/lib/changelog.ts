@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.13.1",
+    date: "2026-10-23",
+    title: "Armador de PC: filtros encadenados y fuente certificada",
+    changes: [
+      { kind: "improved", text: "Filtros a la izquierda que se encadenan: si elegís AMD, en Socket quedan AM4 y AM5. Hay filtros por categoría sacados de la ficha: línea, video integrado, X3D, serie G o F, cooler incluido, núcleos, chipset, formato, WiFi, capacidad, frecuencia, certificación, largo de placa y más." },
+      { kind: "improved", text: "Con placa de video dedicada solo se ofrecen fuentes certificadas (80 Plus o superior)." },
+      { kind: "improved", text: "Cuando a una ficha le falta un dato, el aviso dice a qué producto y qué dato le falta, y lo que sí se sabe (por ejemplo, hasta cuántos mm admite el gabinete)." },
+    ],
+  },
+  {
     version: "2.13.0",
     date: "2026-10-23",
     title: "Armador de PC en Presupuestos",
