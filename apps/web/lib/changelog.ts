@@ -31,6 +31,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     title: "Armador de PC en Presupuestos",
     changes: [
       { kind: "new", text: "Presupuestos → Armar PC: elegís paso a paso procesador, mother, memoria, placa de video, disco, fuente, gabinete y refrigeración. En cada paso ves solo lo compatible con lo que ya elegiste (socket, memoria, formato, largo de la placa, altura del cooler, potencia), con foto, datos clave y el precio de cada distribuidor." },
+      { kind: "new", text: "En cada pieza ves los distribuidores que la tienen con su logo, stock y precio, y la cambiás con un clic. A la derecha, la compra por distribuidor y todos los chequeos de compatibilidad." },
       { kind: "new", text: "Sumás cualquier producto del catálogo (monitor, teclado, mouse…) y líneas libres como el armado. Al final elegís de qué distribuidor sale cada pieza (más barato o menos distribuidores) y lo pasás a un presupuesto o al carrito." },
     ],
   },

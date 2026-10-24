@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, ChevronDown, ImageOff } from "lucide-react";
 import type { ProductDTO } from "@/lib/api";
 import { proxyImg } from "@/lib/format";
-import ProviderBadge from "@/components/ProviderBadge";
+import { DistName } from "./Dist";
 import { keySpecs, type Level, type PcPart, type PcStep } from "@/lib/pc-builder/compat";
 import { inStock, offerKey, useOfferPricer } from "@/lib/pc-builder/state";
 
@@ -63,10 +63,7 @@ export default function PartCard({
         <div className="mt-auto border-t border-surface-800 pt-2.5">
           {shown?.p ? (
             <div className="flex items-end justify-between gap-2">
-              <div className="min-w-0">
-                <ProviderBadge provider={shown.o.provider} variant="inline" size="sm" />
-                <span className="mt-0.5 block text-[11px] text-surface-500">{shown.stock ? `${shown.o.stock ?? ""} en stock`.trim() : "Sin stock"}</span>
-              </div>
+              <DistName provider={shown.o.provider} sub={shown.stock ? (shown.o.stock ? `${shown.o.stock} en stock` : "con stock") : "sin stock"} size={28} />
               <span className="whitespace-nowrap font-mono text-base font-semibold tabular-nums text-white">{shown.p.label}</span>
             </div>
           ) : (
@@ -90,11 +87,8 @@ export default function PartCard({
                       selected && selectedOffer === offerKey(o) ? "border-brand-500 bg-brand-600/10" : "border-surface-800 hover:border-surface-600"
                     }`}
                   >
-                    <ProviderBadge provider={o.provider} variant="inline" size="sm" />
-                    <span className="text-right">
-                      <span className="block font-mono text-xs tabular-nums text-white">{p?.label ?? "—"}</span>
-                      <span className="block text-[10px] text-surface-500">{stock ? "con stock" : "sin stock"}</span>
-                    </span>
+                    <DistName provider={o.provider} sub={stock ? (o.stock ? `${o.stock} en stock` : "con stock") : "sin stock"} size={26} />
+                    <span className="whitespace-nowrap font-mono text-xs font-semibold tabular-nums text-white">{p?.label ?? "—"}</span>
                   </button>
                 </li>
               ))}

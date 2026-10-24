@@ -19,6 +19,8 @@ export interface PcPart {
 export type Level = "ok" | "warn" | "bad";
 export interface Check {
   parts: PcStep[];
+  /** Qué paso se marca en pantalla (por defecto, todos los de parts). */
+  owner?: PcStep;
   name: string;
   level: Level;
   text: string;
@@ -188,11 +190,11 @@ export function checks(build: Build): Check[] {
   const need = powerNeed(build), have = psuWatts(build);
   if (need && have) {
     const level: Level = have < need.recommended ? "bad" : have < need.recommended * 1.1 ? "warn" : "ok";
-    out.push({ parts: ["psu", "gpu", "cpu", "case"], name: "Potencia", level, text: `${have} W para ${need.recommended} W recomendados${level === "bad" ? ": no alcanza." : level === "warn" ? ": queda justa." : "."}` });
+    out.push({ parts: ["psu", "gpu", "cpu", "case"], owner: "psu", name: "Potencia", level, text: `${have} W para ${need.recommended} W recomendados${level === "bad" ? ": no alcanza." : level === "warn" ? ": queda justa." : "."}` });
   }
   if (gpu && psu && /16 pines|12v-2x6|12vhpwr/i.test(s(gpu, "power") ?? "")) {
     const h = b(psu, "hpwr");
-    out.push({ parts: ["gpu", "psu"], name: "Conector 12V-2x6", level: h ? "ok" : "warn", text: h ? "La fuente trae el conector que pide la placa." : h === false ? "La fuente no lo trae: la placa va con adaptador." : "La ficha de la fuente no lo informa: verificalo." });
+    out.push({ parts: ["gpu", "psu"], owner: "psu", name: "Conector 12V-2x6", level: h ? "ok" : "warn", text: h ? "La fuente trae el conector que pide la placa." : h === false ? "La fuente no lo trae: la placa va con adaptador." : "La ficha de la fuente no lo informa: verificalo." });
   }
   return out;
 }
@@ -200,6 +202,9 @@ export function checks(build: Build): Check[] {
 const RANK: Record<Level, number> = { ok: 0, warn: 1, bad: 2 };
 export const worst = (cs: Check[]): Level => cs.reduce<Level>((m, c) => (RANK[c.level] > RANK[m] ? c.level : m), "ok");
 export const byLevel = (a: Check, c: Check) => RANK[c.level] - RANK[a.level];
+
+/** Si un chequeo marca a un paso en pantalla. */
+export const marks = (c: Check, step: PcStep) => (c.owner ? c.owner === step : c.parts.includes(step));
 
 /** Cómo queda un candidato con lo ya elegido: solo los chequeos que lo involucran. */
 export function verdict(step: PcStep, candidate: PcPart, build: Build): { level: Level; checks: Check[] } {

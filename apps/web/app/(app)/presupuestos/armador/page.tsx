@@ -8,7 +8,7 @@ import PartsStep from "@/components/pc-builder/PartsStep";
 import ExtrasStep from "@/components/pc-builder/ExtrasStep";
 import ReviewStep from "@/components/pc-builder/ReviewStep";
 import BuildSummary, { useBuildTotals } from "@/components/pc-builder/BuildSummary";
-import { STEP_LABEL, checks, optionalNote, worst, type PcStep } from "@/lib/pc-builder/compat";
+import { STEP_LABEL, checks, marks, optionalNote, worst, type PcStep } from "@/lib/pc-builder/compat";
 import { ALL_STEPS, PART_STEPS, resolveOffers, usePcBuilder, useOfferPricer, type StepId } from "@/lib/pc-builder/state";
 import { quotesApi, useQuotes } from "@/lib/quotes";
 import { useCart } from "@/lib/cart";
@@ -94,7 +94,7 @@ export default function PcBuilderPage() {
         <ol className="m-0 flex list-none gap-1 overflow-x-auto rounded-xl border border-surface-800 bg-surface-900/60 p-1.5" aria-label="Pasos del armado">
           {ALL_STEPS.map((s, i) => {
             const chosen = s !== "extras" && s !== "review" ? draft.parts[s as PcStep] : null;
-            const issues = chosen ? cs.filter((c) => c.parts.includes(s as PcStep)) : [];
+            const issues = chosen ? cs.filter((c) => marks(c, s as PcStep)) : [];
             const level = issues.length ? worst(issues) : "ok";
             const optional = s !== "extras" && s !== "review" && !chosen && optionalNote(s as PcStep, build);
             const done = Boolean(chosen) || (s === "extras" && draft.extras.length + draft.custom.length > 0);
@@ -131,7 +131,7 @@ export default function PcBuilderPage() {
             {step === "extras" ? (
               <ExtrasStep extras={draft.extras} custom={draft.custom} onAdd={pc.addExtra} onQty={pc.setExtraQty} onRemove={pc.removeExtra} onAddCustom={pc.addCustom} onRemoveCustom={pc.removeCustom} />
             ) : step === "review" ? (
-              <ReviewStep build={build} parts={draft.parts} offers={offers} extras={draft.extras} custom={draft.custom} onOffer={pc.setOffer} onQty={pc.setQty} onGo={go} />
+              <ReviewStep parts={draft.parts} offers={offers} extras={draft.extras} custom={draft.custom} onOffer={pc.setOffer} onQty={pc.setQty} onGo={go} />
             ) : (
               <PartsStep
                 step={step}
