@@ -77,11 +77,15 @@ export default function BuildSummary({
   const count = Object.keys(parts).length + extras.length + custom.length;
 
   const providers = Object.entries(totals.byProvider).sort((a, b) => b[1].amount - a[1].amount);
-  const card = "overflow-hidden rounded-xl border border-surface-800 bg-surface-900";
+  // Lo que todavía falta elegir (sin contar lo opcional: video integrado, cooler incluido, fuente del gabinete).
+  const missing = PART_STEPS.filter((s) => !parts[s] && !optionalNote(s, build));
+  // "Falta…" ya está en la lista de arriba: no se repite.
+  const listed = cs.filter((c) => c.name !== "Falta");
+  const card = "shrink-0 overflow-hidden rounded-xl border border-surface-800 bg-surface-900";
   const head = "flex items-center justify-between gap-2 border-b border-surface-800 px-4 py-3";
 
   return (
-    <aside className="flex flex-col gap-4 lg:sticky lg:top-4" aria-label="Tu armado">
+    <aside className="flex flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:pr-1 [scrollbar-width:thin]" aria-label="Tu armado">
       <section className={card}>
         <div className={head}>
           <h2 className="text-sm font-semibold text-white">Tu armado</h2>
@@ -184,16 +188,30 @@ export default function BuildSummary({
 
       <section className={card} aria-label="Chequeos de compatibilidad">
         <div className={head}><h2 className="text-sm font-semibold text-white">Chequeos de compatibilidad</h2></div>
-        {cs.length ? (
+        {missing.length > 0 && (
+          <div className="border-b border-surface-800 px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-surface-500">Falta elegir</p>
+            <ul className="m-0 mt-1.5 flex list-none flex-wrap gap-1.5 p-0">
+              {missing.map((s) => (
+                <li key={s}>
+                  <button type="button" onClick={() => onGo(s)} className="inline-flex items-center gap-1.5 rounded-md border border-surface-700 px-2 py-1 text-xs text-surface-200 hover:border-surface-500 hover:text-white">
+                    <span className="h-1.5 w-1.5 rounded-full bg-surface-500" />{STEP_LABEL[s]}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {listed.length ? (
           <ul className="m-0 list-none px-4 py-1">
-            {cs.map((c, i) => (
+            {listed.map((c, i) => (
               <li key={i} className="flex items-start gap-2.5 border-b border-surface-800/70 py-2.5 text-[13px] leading-snug last:border-0">
                 <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${DOT[c.level]}`} />
                 <span><span className="font-semibold text-white">{c.name}</span> <span className="text-surface-300">· {c.text}</span></span>
               </li>
             ))}
           </ul>
-        ) : <p className="px-4 py-3 text-xs text-surface-500">Elegí piezas para ver los chequeos.</p>}
+        ) : !missing.length ? <p className="px-4 py-3 text-xs text-surface-500">Elegí piezas para ver los chequeos.</p> : null}
         <p className="border-t border-surface-800 px-4 py-2.5 text-[11px] text-surface-500">Se chequea con la ficha técnica de cada producto. Si falta un dato, se marca para verificar en vez de darlo por bueno.</p>
       </section>
     </aside>
