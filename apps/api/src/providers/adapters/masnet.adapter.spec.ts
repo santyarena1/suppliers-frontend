@@ -6,6 +6,7 @@ import {
   parseCsvNumber,
   parseMasnetCsv,
   parseMasnetStock,
+  masnetShouldRetry,
 } from "./masnet.adapter";
 
 const HEADER = MASNET_CSV_COLUMNS.join(",");
@@ -143,5 +144,17 @@ describe("helpers de Masnet", () => {
     const msg = maskMasnetSecrets("GET https://masnet.com.ar/api/v1/productos/csv?user_id=api-22623&token=s3cr3t-tok falló", creds);
     expect(msg).not.toContain("s3cr3t-tok");
     expect(msg).toContain("token=••••");
+  });
+});
+
+describe("masnetShouldRetry", () => {
+  it("reintenta cortes y errores 5xx", () => {
+    expect(masnetShouldRetry({ code: "ECONNRESET" })).toBe(true);
+    expect(masnetShouldRetry({ response: { status: 502 } })).toBe(true);
+  });
+  it("no reintenta credenciales, bloqueo ni límite", () => {
+    expect(masnetShouldRetry({ response: { status: 401 } })).toBe(false);
+    expect(masnetShouldRetry({ response: { status: 403 } })).toBe(false);
+    expect(masnetShouldRetry({ response: { status: 429 } })).toBe(false);
   });
 });

@@ -21,6 +21,8 @@ export interface ElitRscOrderItem {
 }
 
 export interface ElitRscOrder {
+  /** Número interno de Elit (el del alta del pedido); distinto del número de la nota de venta. */
+  internalNumber?: string | null;
   orderNumber: string;
   invoiceNumber: string;
   status: string;
@@ -543,6 +545,8 @@ export function mapElitSaleNote(rec: Record<string, unknown>): ElitRscOrder {
     : undefined;
   return {
     orderNumber: asString(rec.number) || asString(rec.internalNumber) || "",
+    // Número interno: es el que devuelve el alta del pedido desde NODO y sirve para cruzarlos.
+    internalNumber: asString(rec.internalNumber) || null,
     invoiceNumber: asString(rec.invoiceNumber) || "",
     status: asString(statusObj?.label) || asString(rec.message) || asString(rec.status) || "",
     statusDescription: asString(statusObj?.description),

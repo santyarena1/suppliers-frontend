@@ -173,6 +173,18 @@ export function maskMasnetSecrets(message: string, creds: MasnetCredentials): st
   return out.replace(/([?&]token=)[^&\s"']+/gi, "$1••••");
 }
 
+/** Intentos para bajar el CSV: un corte o un 5xx de Masnet no tira toda la actualización. */
+export const MASNET_ATTEMPTS = 3;
+export const MASNET_RETRY_WAIT_MS = 5_000;
+
+/** Solo se reintenta lo transitorio: sin respuesta, timeout o error 5xx del servidor. */
+export function masnetShouldRetry(err: unknown): boolean {
+  const e = err as { response?: { status?: number }; code?: string };
+  const status = e?.response?.status;
+  if (status == null) return true;
+  return status >= 500;
+}
+
 @Injectable()
 export class MasnetAdapter implements ProviderAdapter {
   readonly provider = "MASNET" as const;
@@ -188,7 +200,8 @@ export class MasnetAdapter implements ProviderAdapter {
       throw new BadGatewayException("Credenciales de Masnet incompletas: hacen falta User ID y token de la API.");
     }
 
-    let body: string;
+    let body = "";
+    for (let attempt = 1; ; attempt++) {
     try {
       const res = await axios.get<string>(MASNET_CSV_URL, {
         params: { user_id: creds.userId, token: creds.token },
@@ -199,9 +212,16 @@ export class MasnetAdapter implements ProviderAdapter {
         headers: { Accept: "text/csv,*/*" },
       });
       body = typeof res.data === "string" ? res.data : String(res.data ?? "");
+      break;
     } catch (err) {
+      // Un corte o un 5xx puntual se reintenta; credenciales, bloqueo o límite no.
+      if (attempt < MASNET_ATTEMPTS && masnetShouldRetry(err)) {
+        await new Promise((resolve) => setTimeout(resolve, MASNET_RETRY_WAIT_MS * attempt));
+        continue;
+      }
       const msg = maskMasnetSecrets(axiosErrorMessage(err, "No se pudo descargar el CSV de Masnet"), creds);
       throw new BadGatewayException(`Masnet: ${msg}`);
+    }
     }
 
     const rows = parseMasnetCsv(body);
