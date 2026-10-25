@@ -2512,6 +2512,8 @@ export const elitAccountApi = {
 
 export interface ElitSaleNote {
   orderNumber: string;
+  /** Número interno de Elit; es el que guarda el borrador de NODO al confirmar. */
+  internalNumber?: string | null;
   invoiceNumber: string;
   status: string;
   statusDescription?: string;

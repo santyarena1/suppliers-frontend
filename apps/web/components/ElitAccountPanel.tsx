@@ -24,6 +24,14 @@ import {
   elitSaleNoteNote,
   elitSaleNoteTotals,
 } from "@/components/account/elitOrderDetail";
+import {
+  matchesNodoNumber,
+  nodoOrderNumbers,
+  NodoOrderBadge,
+  OrderOriginFilter,
+  rowsByOrigin,
+  type OrderOrigin,
+} from "@/components/account/nodoOrigin";
 import ElitPaymentModal from "@/components/account/ElitPaymentModal";
 import { CheckoutGhostButton } from "@/components/checkout/CheckoutForm";
 import AccountHistoryChrome from "@/components/account/AccountHistoryChrome";
@@ -61,6 +69,7 @@ export default function ElitAccountPanel() {
   const [fromCache, setFromCache] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [detailNote, setDetailNote] = useState<ElitSaleNote | null>(null);
+  const [origin, setOrigin] = useState<OrderOrigin>("all");
 
   useEffect(() => {
     void load(false);
@@ -108,6 +117,8 @@ export default function ElitAccountPanel() {
   }, [detail]);
 
   const section = history.section as SectionId;
+  const nodoNumbers = nodoOrderNumbers(drafts);
+  const isNodoOrder = (o: ElitSaleNote) => matchesNodoNumber([o.internalNumber, o.orderNumber], nodoNumbers);
   const rowsForSection =
     section === "cta"
       ? (account ? account.movements ?? [] : null)
@@ -115,7 +126,7 @@ export default function ElitAccountPanel() {
         ? (account ? account.payments ?? [] : null)
         : section === "nodo"
           ? drafts
-          : (account ? account.orders ?? [] : null);
+          : rowsByOrigin(account ? account.orders ?? [] : null, origin, isNodoOrder);
 
   const getDate =
     section === "cta"
@@ -237,7 +248,18 @@ export default function ElitAccountPanel() {
         amountBreakdown={ctaBreakdown}
         hint="Pedidos y comprobantes de elit.com.ar. Informes de pago: Adjuntar abre el formulario de Elit (banco, tipo, fecha, importe y un archivo)."
         wide={section === "cta"}
-        header={section === "cta" ? <CtaOverview account={account} /> : undefined}
+        header={
+          section === "cta" ? (
+            <CtaOverview account={account} />
+          ) : section === "orders" && account?.orders ? (
+            <OrderOriginFilter
+              rows={account.orders}
+              isNodo={isNodoOrder}
+              value={origin}
+              onChange={(o) => { setOrigin(o); history.setPage(1); }}
+            />
+          ) : undefined
+        }
       >
         {loading && !ready ? (
           <div className="flex justify-center py-10"><NodoSpinner className="w-6 h-6" /></div>
@@ -280,6 +302,7 @@ export default function ElitAccountPanel() {
         ) : (
           <OrdersTable
             rows={paged.items as ElitSaleNote[]}
+            isNodo={isNodoOrder}
             onOpen={(o) => setDetail({ kind: "order", row: o })}
           />
         )}
@@ -535,9 +558,11 @@ function MovementsTable({
 
 function OrdersTable({
   rows,
+  isNodo,
   onOpen,
 }: {
   rows: ElitSaleNote[];
+  isNodo: (o: ElitSaleNote) => boolean;
   onOpen: (o: ElitSaleNote) => void;
 }) {
   return (
@@ -557,7 +582,10 @@ function OrdersTable({
         <tbody className="divide-y divide-surface-800">
           {rows.map((o, i) => (
             <tr key={`${o.orderNumber}-${i}`}>
-              <td className="px-2 py-2 text-surface-400 font-mono text-xs">{o.orderNumber || "—"}</td>
+              <td className="px-2 py-2 text-surface-400 font-mono text-xs">
+                {o.orderNumber || "—"}
+                {isNodo(o) && <NodoOrderBadge />}
+              </td>
               <td className={`px-2 py-2 font-mono text-xs ${o.invoiceNumber?.trim() ? "text-surface-400" : "text-amber-400"}`}>
                 {o.invoiceNumber?.trim() || "Pendiente"}
               </td>

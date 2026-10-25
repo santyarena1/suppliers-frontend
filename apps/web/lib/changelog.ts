@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.14.1",
+    date: "2026-10-24",
+    title: "Elit: notas de venta separadas entre NODO y el portal",
+    changes: [
+      { kind: "improved", text: "En Pedidos de Elit, las notas de venta se filtran por origen: las que confirmaste desde el carrito de NODO (con la marca NODO) y las que hiciste directo en elit.com.ar." },
+      { kind: "fixed", text: "Masnet: si su servidor corta o tarda, la actualización de precios reintenta sola antes de marcar error." },
+    ],
+  },
+  {
     version: "2.14.0",
     date: "2026-10-24",
     title: "Proveedores: resumen de cada distribuidor y catálogo con filtros",
