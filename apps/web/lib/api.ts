@@ -567,11 +567,14 @@ export const searchApi = {
   /** Catálogo paginado de un distribuidor (sin texto lista todo) con el total. */
   catalog: (
     provider: Provider,
-    opts: { q?: string; skip?: number; take?: number; includeOutOfStock?: boolean } = {}
+    opts: { q?: string; skip?: number; take?: number; includeOutOfStock?: boolean; brand?: string; category?: string; sort?: "name" | "price" | "price-desc" | "stock" } = {}
   ) =>
     api.get<{ total: number; items: ProductDTO[] }>(`/providers/${provider}/catalog`, {
       params: {
         ...(opts.q?.trim() ? { q: opts.q.trim() } : {}),
+        ...(opts.brand ? { brand: opts.brand } : {}),
+        ...(opts.category ? { category: opts.category } : {}),
+        ...(opts.sort && opts.sort !== "name" ? { sort: opts.sort } : {}),
         ...(opts.skip ? { skip: opts.skip } : {}),
         ...(opts.take ? { take: opts.take } : {}),
         ...(opts.includeOutOfStock ? { includeOutOfStock: true } : {}),
@@ -1615,6 +1618,10 @@ export const providersApi = {
     api.get<ProviderStatus>(`/providers/${providerName}/status`),
   currentSync: (providerName: Provider) =>
     api.get<CatalogSyncRun | null>(`/providers/${providerName}/sync/current`),
+  syncRunsPage: (providerName: Provider, opts: { skip?: number; take?: number; only?: "new" | "error" } = {}) =>
+    api.get<{ total: number; items: CatalogSyncRun[] }>(`/providers/${providerName}/sync/runs/page`, { params: opts }),
+  catalogFacets: (providerName: Provider) =>
+    api.get<{ brands: { value: string; count: number }[]; categories: { value: string; count: number }[] }>(`/providers/${providerName}/catalog/facets`),
   syncRuns: (providerName: Provider, take = 20) =>
     api.get<CatalogSyncRun[]>(`/providers/${providerName}/sync/runs`, { params: { take } }),
   syncRun: (providerName: Provider, runId: string) =>

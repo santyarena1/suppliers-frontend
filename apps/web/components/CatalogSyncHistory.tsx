@@ -60,6 +60,8 @@ function statusClass(run: CatalogSyncRun) {
   return "text-red-400";
 }
 
+const PAGE = 20;
+
 export default function CatalogSyncHistory({
   provider,
   refreshKey,
@@ -77,17 +79,22 @@ export default function CatalogSyncHistory({
   const [detail, setDetail] = useState<CatalogSyncRunDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [filter, setFilter] = useState<"all" | "created" | "updated">("all");
+  const [only, setOnly] = useState<"all" | "new" | "error">("all");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(async () => {
     try {
-      const res = await providersApi.syncRuns(provider, 20);
-      setRuns(Array.isArray(res.data) ? res.data : []);
+      const res = await providersApi.syncRunsPage(provider, { skip: (page - 1) * PAGE, take: PAGE, ...(only !== "all" ? { only } : {}) });
+      setRuns(Array.isArray(res.data?.items) ? res.data.items : []);
+      setTotal(res.data?.total ?? 0);
     } catch {
       setRuns([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [provider]);
+  }, [provider, page, only]);
 
   useEffect(() => {
     setLoading(true);
@@ -142,9 +149,25 @@ export default function CatalogSyncHistory({
 
   return (
     <div className="border border-surface-800 rounded-xl p-5 flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-semibold text-white">
-        <History className="w-4 h-4 text-brand-700 dark:text-brand-400" />
-        Últimas sincronizaciones
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-white">
+          <History className="w-4 h-4 text-brand-700 dark:text-brand-400" />
+          Actualizaciones
+          {total > 0 && <span className="text-xs font-normal text-surface-500">{total.toLocaleString("es-AR")}</span>}
+        </div>
+        <div className="flex gap-1.5" role="group" aria-label="Filtrar actualizaciones">
+          {([["all", "Todas"], ["new", "Con productos nuevos"], ["error", "Con error"]] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={only === id}
+              onClick={() => { setOnly(id); setPage(1); }}
+              className={`h-8 rounded-lg border px-2.5 text-xs font-semibold ${only === id ? "border-brand-500 bg-brand-600/15 text-brand-200" : "border-surface-700 text-surface-400 hover:text-white"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       <p className="text-xs text-surface-500">
         Entrá a una corrida para ver qué productos se crearon o cambiaron (precio, stock, marca, categoría).
@@ -155,7 +178,7 @@ export default function CatalogSyncHistory({
           Cargando historial…
         </div>
       ) : runs.length === 0 ? (
-        <p className="text-xs text-surface-500 py-1">Todavía no hubo ninguna sincronización.</p>
+        <p className="text-xs text-surface-500 py-1">{only === "all" ? "Todavía no hubo ninguna actualización." : only === "new" ? "Ninguna actualización trajo productos nuevos." : "Ninguna actualización terminó con error."}</p>
       ) : (
         <ul className="flex flex-col gap-1.5">
           {runs.map((run) => {
@@ -259,6 +282,15 @@ export default function CatalogSyncHistory({
             );
           })}
         </ul>
+      )}
+      {total > PAGE && (
+        <div className="flex items-center justify-between text-xs text-surface-500">
+          <span>{((page - 1) * PAGE + 1).toLocaleString("es-AR")}–{Math.min(total, page * PAGE).toLocaleString("es-AR")} de {total.toLocaleString("es-AR")}</span>
+          <span className="flex gap-1.5">
+            <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-8 rounded-lg border border-surface-700 px-3 font-semibold text-surface-200 disabled:opacity-40">Anterior</button>
+            <button type="button" disabled={page * PAGE >= total} onClick={() => setPage(page + 1)} className="h-8 rounded-lg border border-surface-700 px-3 font-semibold text-surface-200 disabled:opacity-40">Siguiente</button>
+          </span>
+        </div>
       )}
     </div>
   );

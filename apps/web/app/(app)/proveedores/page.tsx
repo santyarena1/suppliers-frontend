@@ -18,6 +18,7 @@ import { useIsRetailer } from "@/lib/purchase";
 import UpsellNotice from "@/components/subscription/UpsellNotice";
 import { capabilityAllowed, invalidateSubscription, useSubscription } from "@/lib/subscription";
 import ProvidersTable, { providerRowState } from "@/components/providers/ProvidersTable";
+import HubKpis from "@/components/providers/HubKpis";
 import { FileSpreadsheet, Loader2, Plus } from "lucide-react";
 
 type StatusMap = Partial<Record<string, ProviderStatus>>;
@@ -214,6 +215,10 @@ export default function ProveedoresPage() {
                     ))}
                   </ul>
                 </section>
+              )}
+
+              {!loading && linked.length > 0 && (
+                <HubKpis linked={linked} statuses={statuses} showPurchases={analyticsAllowed} />
               )}
 
               {retailer && linked.length > 0 && (

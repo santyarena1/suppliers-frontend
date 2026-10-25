@@ -2,11 +2,13 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import PrefsPanel from "@/components/PrefsPanel";
+import ProviderCatalogTab from "@/components/providers/ProviderCatalogTab";
+import ProviderSummaryTab from "@/components/providers/ProviderSummaryTab";
+import { providerPortal } from "@/lib/providerLinks";
 import {
-  IMPLEMENTED_PROVIDERS, Provider, ProductDTO, ProviderStatus, ProviderConfig,
-  MissingProductAction, ZeroStockAction, providersApi, searchApi, canSyncProvider,
+  IMPLEMENTED_PROVIDERS, Provider, ProviderStatus, ProviderConfig,
+  MissingProductAction, ZeroStockAction, providersApi, canSyncProvider,
   invalidateMyProviders, loadMyProviders, storefrontApi,
   isLiveSyncRun, summarizeSyncRun, catalogSyncKickoff, isListProvider, isProviderKey,
 } from "@/lib/api";
@@ -18,7 +20,6 @@ import { useCan } from "@/lib/permissions";
 import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { invalidateShippingEstimates } from "@/lib/shipping";
-import { parsePrice, proxyImg } from "@/lib/format";
 import { MIN_SYNC_MINUTES, SKU_PREFIX, SUSPENDS_ON_FREQUENT_SYNC } from "@/lib/providerMeta";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
@@ -42,8 +43,8 @@ import PlanGate from "@/components/subscription/PlanGate";
 import SaleMarginsPanel from "@/components/sale-margins/SaleMarginsPanel";
 import StoreProviderDetail from "@/components/storefront/StoreProviderDetail";
 import {
-  AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, ImageOff, KeyRound,
-  Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Search, Settings, Trash2, XCircle
+  AlertTriangle, ArrowLeft, Boxes, CalendarClock, CheckCircle2, KeyRound,
+  ExternalLink, Loader2, MessageSquare, PackageCheck, RefreshCw, Save, Settings, Trash2, XCircle
 } from "lucide-react";
 
 /** Lo que el proveedor dejó de mandar nunca queda a la vista con el precio viejo. */
@@ -59,12 +60,10 @@ const ZERO_STOCK_ACTION_LABELS: Record<ZeroStockAction, string> = {
   DELETE: "Eliminar de nuestra base",
 };
 
-type ProviderTab = "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "margins" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account" | "demo-account";
-
-const CATALOG_PAGE = 50;
+type ProviderTab = "resumen" | "lists" | "orders" | "credentials" | "sync" | "catalog" | "config" | "margins" | "invid-account" | "nb-account" | "elit-account" | "gn-account" | "air-account" | "nt-account" | "sb-account" | "dt-account" | "pt-account" | "demo-account";
 
 const VALID_PROVIDER_TABS: ProviderTab[] = [
-  "lists", "orders", "credentials", "sync", "config", "margins", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account", "demo-account",
+  "resumen", "lists", "orders", "credentials", "sync", "config", "margins", "catalog", "invid-account", "nb-account", "elit-account", "gn-account", "air-account", "nt-account", "sb-account", "dt-account", "pt-account", "demo-account",
 ];
 
 const INTERVAL_OPTIONS = [
@@ -87,7 +86,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
   // Ashir, HDC, Gaming City: no hay API. El Excel del comercio es el canal.
   const spreadsheet = !listBased && !hasAdapter;
 
-  const [tab, setTabRaw] = useState<ProviderTab>(listBased || spreadsheet ? "lists" : "sync");
+  const [tab, setTabRaw] = useState<ProviderTab>(listBased || spreadsheet ? "lists" : "resumen");
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
   // "Mi cuenta" y "Márgenes" son secciones de Configuración: los links viejos (?tab=credentials) llevan ahí.
   const setTab = useCallback((next: ProviderTab) => {
@@ -148,15 +147,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       setPlatformHidden(Boolean(row?.platformHidden));
     });
   }, [provider]);
-
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ProductDTO[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [catalogTotal, setCatalogTotal] = useState(0);
-  const [catalogQuery, setCatalogQuery] = useState("");
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [includeOutOfStock, setIncludeOutOfStock] = useState(false);
 
   const [config, setConfig] = useState<ProviderConfig | null>(null);
   // Cotiza por lista: proveedor sin API, o proveedor con API al que este comercio le carga su Excel.
@@ -405,56 +395,6 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
     }
   }
 
-  async function runCatalogSearch(withZero: boolean, q: string = query) {
-    setSearching(true);
-    setSearched(true);
-    setCatalogQuery(q);
-    try {
-      const res = await searchApi.catalog(provider, { q, includeOutOfStock: withZero, take: CATALOG_PAGE });
-      setResults(Array.isArray(res.data?.items) ? res.data.items : []);
-      setCatalogTotal(res.data?.total ?? 0);
-    } catch {
-      setResults([]);
-      setCatalogTotal(0);
-    } finally {
-      setSearching(false);
-    }
-  }
-
-  async function loadMoreCatalog() {
-    setLoadingMore(true);
-    try {
-      const res = await searchApi.catalog(provider, {
-        q: catalogQuery,
-        includeOutOfStock,
-        skip: results.length,
-        take: CATALOG_PAGE,
-      });
-      const more = Array.isArray(res.data?.items) ? res.data.items : [];
-      setResults((prev) => [...prev, ...more]);
-      setCatalogTotal(res.data?.total ?? 0);
-    } catch {
-      /* el botón queda para reintentar */
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  // La pestaña abre con el catálogo ya listado: no hace falta escribir nada para verlo.
-  const catalogLoadedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (tab !== "catalog" || catalogLoadedFor.current === provider) return;
-    catalogLoadedFor.current = provider;
-    setQuery("");
-    void runCatalogSearch(includeOutOfStock, "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, provider]);
-
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
-    await runCatalogSearch(includeOutOfStock);
-  }
-
   if (!valid) {
     return <div className="flex-1 flex items-center justify-center text-surface-500 text-sm">Proveedor inválido.</div>;
   }
@@ -476,12 +416,25 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
               </Link>
               <div className="min-w-0">
                 <ProviderBadge provider={provider} variant="inline" size="lg" className="mb-0.5" />
-                <p className="text-xs text-surface-500 hidden sm:block">
-                  {spreadsheet || listBased
-                    ? "Subí la lista de precios de este local"
-                    : implemented
-                      ? "Cargá tu cuenta, sincronizá el catálogo y mirá pedidos"
-                      : "Sin integración real todavía"}
+                <p className="flex flex-wrap items-center gap-2 text-xs text-surface-400">
+                  {(() => {
+                    const health = (status as { health?: SyncHealth | null } | null)?.health;
+                    const pill = listPriced
+                      ? ["Por lista", "bg-sky-500/15 text-sky-300"]
+                      : health?.paused
+                        ? ["Pausado", "bg-amber-500/15 text-amber-300"]
+                        : status && !status.hasCredentials && !status.publicCatalog
+                          ? ["Falta la cuenta", "bg-red-500/15 text-red-300"]
+                          : ["Al día", "bg-emerald-500/15 text-emerald-300"];
+                    return <span className={`rounded-full px-2 py-0.5 font-semibold ${pill[1]}`}>{pill[0]}</span>;
+                  })()}
+                  <span className="hidden sm:inline">
+                    {listPriced
+                      ? "Precios de la lista que subís"
+                      : status?.lastSyncedAt
+                        ? `Precios del ${new Date(status.lastSyncedAt).toLocaleString("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${config?.enabled ? ` · se actualizan cada ${Math.round(config.syncIntervalMinutes / 60)} h` : ""}`
+                        : "Todavía sin actualizar"}
+                  </span>
                 </p>
               </div>
             </div>
@@ -495,6 +448,23 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
                   {chatSeller ? `Hablar con ${chatSeller}` : "Hablar"}
                 </Link>
+              )}
+              {providerPortal(provider) && (
+                <a href={providerPortal(provider)!.url} target="_blank" rel="noreferrer" className="hidden md:inline-flex items-center gap-1.5 text-xs font-medium border border-surface-700 hover:border-surface-500 text-surface-200 hover:text-white rounded-lg px-2.5 py-1.5">
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir el portal
+                </a>
+              )}
+              {!listPriced && implemented && canManage && (
+                <button
+                  type="button"
+                  onClick={() => { setTab("sync"); void handleSync(); }}
+                  disabled={syncing || isLiveSyncRun(status?.currentRun) || !canSyncProvider(status)}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold bg-brand-600 hover:bg-brand-500 disabled:opacity-40 text-white rounded-lg px-2.5 py-1.5"
+                  title={!canSyncProvider(status) ? "Cargá la cuenta primero" : undefined}
+                >
+                  {syncing || isLiveSyncRun(status?.currentRun) ? <NodoSpinner className="w-3.5 h-3.5" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">Actualizar precios ahora</span>
+                </button>
               )}
               <PrefsPanel />
             </div>
@@ -570,6 +540,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                 {/* Tabs */}
                 <div className="flex border-b border-surface-800 overflow-x-auto scrollbar-none" data-tour="provider-tabs">
                   {[
+                    ...(demo ? [] : [{ key: "resumen" as const, label: "Resumen" }]),
                     ...(listPriced ? [{ key: "lists" as const, label: "Listas", shortLabel: "Listas" }] : []),
                     ...((listBased || spreadsheet) && !demo
                       ? []
@@ -974,117 +945,10 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   </div>
                 )}
 
-                {tab === "catalog" && (
-                  <div className="flex flex-col gap-4" data-tour="provider-tab-content">
-                    <form onSubmit={handleSearch} className="flex gap-2 max-w-xl flex-wrap items-center">
-                      <div className="relative flex-1 min-w-[220px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-500" />
-                        <input
-                          value={query}
-                          onChange={(e) => setQuery(e.target.value)}
-                          placeholder="Buscar en el catálogo sincronizado..."
-                          className="w-full bg-surface-800 border border-surface-700 rounded-lg pl-9 pr-3 py-2.5 text-sm text-white placeholder-surface-500 focus:outline-none focus:border-brand-500 transition-all"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={searching}
-                        className="bg-surface-700 hover:bg-surface-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg px-4 py-2.5 transition-all"
-                      >
-                        {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Buscar"}
-                      </button>
-                      <label className="flex items-center gap-2 text-xs text-surface-400 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={includeOutOfStock}
-                          onChange={(e) => {
-                            const next = e.target.checked;
-                            setIncludeOutOfStock(next);
-                            if (searched) void runCatalogSearch(next, catalogQuery);
-                          }}
-                          className="rounded border-surface-600 bg-surface-800 text-brand-500 focus:ring-brand-500/30"
-                        />
-                        Incluir sin stock
-                      </label>
-                    </form>
-
-                    {searched && !searching && (
-                      <p className="text-xs text-surface-500">
-                        {catalogTotal === results.length
-                          ? `${catalogTotal.toLocaleString("es-AR")} producto${catalogTotal !== 1 ? "s" : ""}`
-                          : `Mostrando ${results.length.toLocaleString("es-AR")} de ${catalogTotal.toLocaleString("es-AR")} productos`}
-                        {catalogQuery ? ` para “${catalogQuery}”` : ""}
-                      </p>
-                    )}
-
-                    <div className="border border-surface-800 rounded-xl overflow-hidden">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="bg-surface-900 text-[10px] uppercase tracking-wider text-surface-500">
-                              <th className="text-left font-semibold px-3 py-2.5 w-12"></th>
-                              <th className="text-left font-semibold px-3 py-2.5">Producto</th>
-                              <th className="text-left font-semibold px-3 py-2.5">Marca</th>
-                              <th className="text-left font-semibold px-3 py-2.5">Categoría</th>
-                              <th className="text-right font-semibold px-3 py-2.5">Precio</th>
-                              <th className="text-right font-semibold px-3 py-2.5">Stock</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-surface-800">
-                            {results.map((p) => (
-                              <tr key={`${p.provider}-${p.externalId}`} className="hover:bg-surface-900/60 transition-colors">
-                                <td className="px-3 py-2">
-                                  <div className="w-8 h-8 rounded-md bg-surface-800 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                    {p.imageUrl ? (
-                                      <Image src={proxyImg(p.imageUrl)} alt="" width={32} height={32} className="object-contain w-full h-full" unoptimized />
-                                    ) : (
-                                      <ImageOff className="w-3.5 h-3.5 text-surface-600" />
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2 text-surface-200 max-w-xs truncate">{p.name}</td>
-                                <td className="px-3 py-2 text-surface-400">{p.brand || "—"}</td>
-                                <td className="px-3 py-2 text-surface-400">{p.category || "—"}</td>
-                                <td className="px-3 py-2 text-right text-surface-200 tabular-nums">
-                                  {p.price == null && p.finalPrice == null ? (
-                                    <span className="text-surface-500">Sin precio</span>
-                                  ) : (
-                                    `${p.currency ?? "USD"} ${parsePrice(p.price ?? p.finalPrice).toLocaleString("es-AR", { maximumFractionDigits: 2 })}`
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right tabular-nums">
-                                  <span className={p.stock && p.stock > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-surface-600"}>
-                                    {p.stock ?? "—"}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      {searched && !searching && results.length === 0 && (
-                        <p className="text-center text-xs text-surface-500 py-10">Sin resultados.</p>
-                      )}
-                      {searched && searching && results.length === 0 && (
-                        <p className="text-center text-xs text-surface-500 py-10">
-                          <Loader2 className="w-4 h-4 animate-spin inline" />
-                        </p>
-                      )}
-                      {searched && !searching && results.length < catalogTotal && (
-                        <div className="flex justify-center py-3 border-t border-surface-800">
-                          <button
-                            type="button"
-                            onClick={() => void loadMoreCatalog()}
-                            disabled={loadingMore}
-                            className="text-xs font-medium text-brand-400 hover:text-brand-300 disabled:opacity-50"
-                          >
-                            {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cargar más"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                {tab === "resumen" && !demo && (
+                  <ProviderSummaryTab provider={provider} status={status} config={config} listPriced={listPriced} onGo={(t) => setTab(t)} />
                 )}
+                {tab === "catalog" && <ProviderCatalogTab provider={provider} />}
 
                 {tab.endsWith("-account") && (
                   <PlanGate capability="providerAccountAccess">

@@ -26,6 +26,18 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.14.0",
+    date: "2026-10-24",
+    title: "Proveedores: resumen de cada distribuidor y catálogo con filtros",
+    changes: [
+      { kind: "new", text: "Proveedores muestra arriba cuántos distribuidores están al día, cuántos productos tenés con stock, cuánto compraste en 90 días y a quién le comprás más." },
+      { kind: "new", text: "Cada distribuidor abre en Resumen: tu cuenta, cómo le comprás, los últimos pedidos desde NODO y cómo salieron las actualizaciones de las últimas 48 horas." },
+      { kind: "improved", text: "Arriba de cada distribuidor: su estado, de cuándo son los precios, y los botones para hablar con el vendedor, abrir el portal y actualizar precios." },
+      { kind: "improved", text: "El catálogo de cada distribuidor se filtra por categoría y marca, se ordena por precio o stock, tiene paginado y un botón para mandar al carrito." },
+      { kind: "improved", text: "Actualizaciones: todas, con productos nuevos o con error, con paginado para ver las anteriores." },
+    ],
+  },
+  {
     version: "2.13.1",
     date: "2026-10-23",
     title: "Armador de PC: filtros encadenados y fuente certificada",
