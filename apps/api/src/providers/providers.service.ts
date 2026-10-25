@@ -1109,6 +1109,46 @@ export class ProvidersService implements OnModuleInit {
     return run ? serializeCatalogSyncRun(run) : null;
   }
 
+  /**
+   * Marcas y categorías del catálogo de un distribuidor para este comercio, con
+   * cuántos productos tiene cada una (para los filtros del catálogo).
+   */
+  async catalogFacets(tenantId: string, provider: Provider, viewerUserId?: string) {
+    if (!(await this.visibility.canReadCatalog(tenantId, provider, viewerUserId))) return { brands: [], categories: [] };
+    const rows = await this.prisma.$queryRaw<{ kind: string; value: string; count: bigint }[]>`
+      SELECT 'brand' AS kind, p."brand" AS value, COUNT(*) AS count
+        FROM "TenantProductOffer" o JOIN "ProviderSyncCache" p ON p."provider" = o."provider" AND p."externalId" = o."externalId"
+       WHERE o."tenantId" = ${tenantId} AND o."provider" = ${provider} AND o."active" = true AND p."brand" IS NOT NULL AND p."brand" <> ''
+       GROUP BY p."brand"
+      UNION ALL
+      SELECT 'category' AS kind, p."category" AS value, COUNT(*) AS count
+        FROM "TenantProductOffer" o JOIN "ProviderSyncCache" p ON p."provider" = o."provider" AND p."externalId" = o."externalId"
+       WHERE o."tenantId" = ${tenantId} AND o."provider" = ${provider} AND o."active" = true AND p."category" IS NOT NULL AND p."category" <> ''
+       GROUP BY p."category"`;
+    const pick = (kind: string) => rows
+      .filter((r) => r.kind === kind)
+      .map((r) => ({ value: r.value, count: Number(r.count) }))
+      .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "es"));
+    return { brands: pick("brand"), categories: pick("category") };
+  }
+
+  /** Historial de actualizaciones paginado, con filtro por resultado. */
+  async listSyncRunsPage(tenantId: string, provider: Provider, opts: { skip?: number; take?: number; only?: string } = {}) {
+    await this.visibility.assertVisible(tenantId, provider);
+    const where: Prisma.CatalogSyncRunWhereInput = {
+      tenantId,
+      provider,
+      ...(opts.only === "error" ? { status: "ERROR" } : opts.only === "new" ? { created: { gt: 0 } } : {}),
+    };
+    const take = Math.min(Math.max(Math.floor(opts.take ?? 20), 1), 100);
+    const skip = Math.max(0, Math.floor(opts.skip ?? 0));
+    const [total, runs] = await Promise.all([
+      this.prisma.catalogSyncRun.count({ where }),
+      this.prisma.catalogSyncRun.findMany({ where, orderBy: { startedAt: "desc" }, skip, take }),
+    ]);
+    return { total, items: runs.map(serializeCatalogSyncRun) };
+  }
+
   async listSyncRuns(tenantId: string, provider: Provider, take = 20) {
     await this.visibility.assertVisible(tenantId, provider);
     const runs = await this.prisma.catalogSyncRun.findMany({
@@ -1299,11 +1339,20 @@ export class ProvidersService implements OnModuleInit {
   async listCatalog(
     tenantId: string,
     provider: Provider,
-    opts: { q?: string; skip?: number; take?: number; includeOutOfStock?: boolean; viewerUserId?: string } = {}
+    opts: {
+      q?: string; skip?: number; take?: number; includeOutOfStock?: boolean; viewerUserId?: string;
+      brand?: string; category?: string; sort?: "name" | "price" | "price-desc" | "stock";
+    } = {}
   ) {
     if (!(await this.visibility.canReadCatalog(tenantId, provider, opts.viewerUserId))) {
       return { total: 0, items: [] as ProductView[] };
     }
+    const sort = opts.sort ?? "name";
+    // Marca y categoría tal como las guarda la ficha del distribuidor.
+    const facetClauses: Prisma.ProviderSyncCacheWhereInput[] = [
+      ...(opts.brand ? [{ brand: { equals: opts.brand, mode: "insensitive" as const } }] : []),
+      ...(opts.category ? [{ category: { equals: opts.category, mode: "insensitive" as const } }] : []),
+    ];
     const skip = Math.max(0, Math.floor(opts.skip ?? 0));
     const take = Math.min(Math.max(Math.floor(opts.take ?? CATALOG_PAGE), 1), CATALOG_PAGE_MAX);
     const includeOutOfStock = Boolean(opts.includeOutOfStock);
@@ -1335,12 +1384,13 @@ export class ProvidersService implements OnModuleInit {
         ...(hidesUnsynced ? [catalogHideEmptyOfferWhere(rules.minStockThreshold, includeOutOfStock)] : []),
         ...catalogPricedOnlyWhere(priced),
         ...(tokenClauses.length ? [{ product: { AND: tokenClauses } }] : []),
+        ...(facetClauses.length ? [{ product: { AND: facetClauses } }] : []),
       ],
     };
     const sheetWhere: Prisma.ProviderSyncCacheWhereInput | null =
       hidesUnsynced || priced.has(provider)
         ? null
-        : { provider, offers: { none: { tenantId } }, AND: tokenClauses };
+        : { provider, offers: { none: { tenantId } }, AND: [...tokenClauses, ...facetClauses] };
 
     const [offerTotal, sheetTotal] = await Promise.all([
       this.prisma.tenantProductOffer.count({ where: offerWhere }),
@@ -1352,7 +1402,11 @@ export class ProvidersService implements OnModuleInit {
       const offers = await this.prisma.tenantProductOffer.findMany({
         where: offerWhere,
         include: { product: true },
-        orderBy: [{ product: { name: "asc" } }, { externalId: "asc" }],
+        orderBy:
+          sort === "price" ? [{ finalPrice: { sort: "asc", nulls: "last" } }, { externalId: "asc" }]
+          : sort === "price-desc" ? [{ finalPrice: { sort: "desc", nulls: "last" } }, { externalId: "asc" }]
+          : sort === "stock" ? [{ stock: { sort: "desc", nulls: "last" } }, { externalId: "asc" }]
+          : [{ product: { name: "asc" } }, { externalId: "asc" }],
         skip,
         take,
       });

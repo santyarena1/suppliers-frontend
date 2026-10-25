@@ -1150,3 +1150,17 @@ Notas por proveedor en `docs/providers/{masnet,microglobal,pc-arts}.md`.
 - **Respuesta esperada**: `[{ contentId, name, brand, image (/img-proxy?t=… o null), compat: { …datos técnicos del paso, null si falta }, offers: ProductDTO[] }]`. Solo productos con ficha enriquecida y al menos una oferta de un distribuidor que el comercio puede ver; cada oferta es la vista del producto con el precio de la cuenta (y el de venta en modo vendedor). No suma al tope diario de fichas.
 - **Estado**: IMPLEMENTADO
 - **Notas**: `compat` por paso — cpu: socket, memory[], tdp, cores, threads, boost, igpu, cooler · mobo: socket, chipset, memory, form, slots, maxMemory, m2, maxFreq · ram: type, capacity, modules, freq, cl · gpu: chip, vram, length, tgp, recommendedPsu, power · ssd: capacity, iface, form, read, hdd · psu: watts, cert, modular, form, hpwr · case: forms[], gpuMax, coolerMax, radiatorMax, psuIncluded, psuWatts, type · cooler: kind (air|liquid), sockets[], height, tdp, radiator.
+
+### [FEATURE] Catálogo de un distribuidor: filtros, orden y facetas
+- **Método**: GET
+- **Ruta**: /providers/:provider/catalog?q&skip&take&includeOutOfStock&brand&category&sort=name|price|price-desc|stock · /providers/:provider/catalog/facets
+- **Auth**: Bearer token requerido
+- **Respuesta esperada**: catálogo `{ total, items: ProductDTO[] }` (como antes, filtrado por marca/categoría exactas y ordenado). Facetas: `{ brands: [{ value, count }], categories: [{ value, count }] }` sobre las ofertas activas del comercio.
+- **Estado**: IMPLEMENTADO
+
+### [FEATURE] Historial de actualizaciones paginado
+- **Método**: GET
+- **Ruta**: /providers/:provider/sync/runs/page?skip&take&only=new|error
+- **Auth**: Bearer token requerido
+- **Respuesta esperada**: `{ total, items: CatalogSyncRun[] }`. `only=new`: corridas con productos nuevos; `only=error`: con error.
+- **Estado**: IMPLEMENTADO

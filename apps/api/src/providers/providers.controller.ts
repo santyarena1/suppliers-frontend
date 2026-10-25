@@ -849,6 +849,28 @@ export class ProvidersController {
   }
 
   @SkipThrottle()
+  @Get("providers/:provider/sync/runs/page")
+  listSyncRunsPage(
+    @CurrentTenant() tenant: TenantContext,
+    @Param("provider") provider: string,
+    @Query("skip") skip?: string,
+    @Query("take") take?: string,
+    @Query("only") only?: string
+  ) {
+    return this.providersService.listSyncRunsPage(commercialId(tenant), assertProvider(provider), {
+      skip: Number(skip) || 0,
+      take: Number(take) || 20,
+      only,
+    });
+  }
+
+  @Get("providers/:provider/catalog/facets")
+  catalogFacets(@CurrentTenantOrNone() tenant: TenantContext | null, @Param("provider") provider: string) {
+    if (!tenant) return { brands: [], categories: [] };
+    return this.providersService.catalogFacets(commercialId(tenant), assertProvider(provider), tenant.userId);
+  }
+
+  @SkipThrottle()
   @Get("providers/:provider/sync/runs")
   listSyncRuns(
     @CurrentTenant() tenant: TenantContext,
@@ -964,7 +986,10 @@ export class ProvidersController {
     @Query("q") q = "",
     @Query("skip") skip?: string,
     @Query("take") take?: string,
-    @Query("includeOutOfStock") includeOutOfStock?: string
+    @Query("includeOutOfStock") includeOutOfStock?: string,
+    @Query("brand") brand?: string,
+    @Query("category") category?: string,
+    @Query("sort") sort?: string
   ) {
     if (!tenant) return { total: 0, items: [] };
     return this.providersService.listCatalog(commercialId(tenant), assertProvider(provider), {
@@ -972,6 +997,9 @@ export class ProvidersController {
       skip: Number(skip) || 0,
       take: Number(take) || undefined,
       includeOutOfStock: parseIncludeOutOfStock(includeOutOfStock),
+      brand: brand || undefined,
+      category: category || undefined,
+      sort: sort === "price" || sort === "price-desc" || sort === "stock" ? sort : "name",
       viewerUserId: tenant.userId,
     });
   }
