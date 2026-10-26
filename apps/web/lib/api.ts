@@ -3892,6 +3892,8 @@ export interface TenantNode {
   contactPhone: string | null;
   notes: string | null;
   advertisingEnabled: boolean;
+  /** Organización espejo: mira el catálogo con el id de esta otra (Administración → Comercio de Pruebas). */
+  mirrorsCommercialFromId?: string | null;
   active: boolean;
   createdAt: string;
   members: TenantMember[];

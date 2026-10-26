@@ -24,7 +24,9 @@ function loadOrgs(): Promise<Org[]> {
     .tree()
     .then((r) =>
       r.data.tenants
-        .filter((t) => t.type === "RETAILER" && t.active)
+        // Una organización espejo (Administración → Comercio de Pruebas) mira con el id
+        // de la que espeja: habilitarla a ella no cambia nada. Se elige la original.
+        .filter((t) => t.type === "RETAILER" && t.active && !t.mirrorsCommercialFromId)
         .map((t) => ({ id: t.id, name: t.name }))
         .sort((a, b) => a.name.localeCompare(b.name, "es"))
     )
@@ -53,7 +55,7 @@ export default function ProviderVisibilityControl({
 }) {
   const allowed = useMemo(() => row.allowedTenantIds ?? [], [row.allowedTenantIds]);
   const [picking, setPicking] = useState(false);
-  const mode: Mode = picking && !row.visible ? "some" : modeOf(row);
+  const mode: Mode = picking ? "some" : modeOf(row);
   const current = MODES.find((m) => m.mode === mode)!;
 
   function pick(next: Mode) {
@@ -64,8 +66,9 @@ export default function ProviderVisibilityControl({
       setPicking(false);
       onChange({ visible: false, allowedTenantIds: [] });
     } else {
+      // No se guarda nada hasta elegir la primera organización: antes quedaba oculto
+      // para todos apenas se tocaba "Algunas orgs".
       setPicking(true);
-      if (row.visible) onChange({ visible: false });
     }
   }
 
@@ -100,6 +103,7 @@ export default function ProviderVisibilityControl({
       {mode === "some" && (
         <OrgPicker
           selected={allowed}
+          stillVisible={row.visible}
           onChange={(ids) => onChange({ visible: false, allowedTenantIds: ids })}
         />
       )}
@@ -107,7 +111,16 @@ export default function ProviderVisibilityControl({
   );
 }
 
-function OrgPicker({ selected, onChange }: { selected: string[]; onChange: (ids: string[]) => void }) {
+function OrgPicker({
+  selected,
+  stillVisible,
+  onChange,
+}: {
+  selected: string[];
+  /** Todavía no se guardó "Algunas orgs": lo siguen viendo todos hasta elegir una. */
+  stillVisible: boolean;
+  onChange: (ids: string[]) => void;
+}) {
   const [orgs, setOrgs] = useState<Org[] | null>(null);
   const [error, setError] = useState(false);
   const [query, setQuery] = useState("");
@@ -134,7 +147,11 @@ function OrgPicker({ selected, onChange }: { selected: string[]; onChange: (ids:
   return (
     <div className="rounded-lg border border-surface-800 bg-surface-900/60 p-3 flex flex-col gap-2">
       {selected.length === 0 ? (
-        <p className="text-[11px] text-amber-200/80">Sin organizaciones elegidas: por ahora no lo ve nadie.</p>
+        <p className="text-[11px] text-amber-200/80">
+          {stillVisible
+            ? "Elegí la primera organización: hasta entonces lo siguen viendo todos."
+            : "Sin organizaciones elegidas: por ahora no lo ve nadie."}
+        </p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {selected.map((id) => (

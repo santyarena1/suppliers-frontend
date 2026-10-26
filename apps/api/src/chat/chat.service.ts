@@ -8,7 +8,8 @@ import { Prisma } from "@prisma/client";
 import { isChatReactionEmoji, resolvePermissions, TENANT_ROLE_LABELS, type Provider, type TenantRole, type TenantType, providerLabel } from "@nodo/shared";
 import { signAssetPath } from "../assets/asset-signing";
 import { PrismaService } from "../prisma/prisma.service";
-import { toOverrides, type TenantContext } from "../tenants/tenant-context.service";
+import { commercialId, toOverrides, type TenantContext } from "../tenants/tenant-context.service";
+import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { assertPermission, hasPermission } from "../tenants/tenant-roles";
 import {
   chatLinkVisibleTo,
@@ -78,10 +79,26 @@ type ChatPeer = {
 
 @Injectable()
 export class ChatService {
+  // Solo lee ProviderDisplayConfig y vínculos: se arma acá para no cruzar el forwardRef con TenantsModule.
+  private readonly tenantVisibility: TenantVisibilityService;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly hub: ChatHub
-  ) {}
+  ) {
+    this.tenantVisibility = new TenantVisibilityService(prisma);
+  }
+
+  /** Un comercio no chatea con un distribuidor que la plataforma le oculta: para él no existe. */
+  private async withoutHiddenSuppliers<T extends { supplierTenant: { providerKey: string | null } }>(
+    tenant: TenantContext,
+    links: T[]
+  ): Promise<T[]> {
+    if (tenant.tenantType !== "RETAILER" || links.length === 0) return links;
+    const hidden = await this.tenantVisibility.platformHiddenFor(commercialId(tenant), tenant.userId);
+    if (hidden.size === 0) return links;
+    return links.filter((link) => !link.supplierTenant.providerKey || !hidden.has(link.supplierTenant.providerKey));
+  }
 
   async listThreads(tenant: TenantContext) {
     const links = await this.visibleLinks(tenant);
@@ -600,12 +617,12 @@ export class ChatService {
       select: LINK_SELECT,
       orderBy: { updatedAt: "desc" },
     });
-    return links.filter((link) => chatLinkVisibleTo(link, this.actor(tenant)));
+    return this.withoutHiddenSuppliers(tenant, links.filter((link) => chatLinkVisibleTo(link, this.actor(tenant))));
   }
 
   private async requireLink(tenant: TenantContext, linkId: string) {
     const link = await this.prisma.tenantLink.findUnique({ where: { id: linkId }, select: LINK_SELECT });
-    if (!link || !chatLinkVisibleTo(link, this.actor(tenant))) {
+    if (!link || !chatLinkVisibleTo(link, this.actor(tenant)) || (await this.withoutHiddenSuppliers(tenant, [link])).length === 0) {
       throw new NotFoundException("Conversación no encontrada");
     }
     return link;
@@ -632,6 +649,7 @@ export class ChatService {
       select: LINK_SELECT,
     });
     if (!link || !chatLinkVisibleTo(link, this.actor(tenant))) return null;
+    if ((await this.withoutHiddenSuppliers(tenant, [link])).length === 0) return null;
     const pair = await this.resolvePair(tenant, link);
     return this.upsertPair(pair.distroUserId, pair.storeUserId, link.id);
   }

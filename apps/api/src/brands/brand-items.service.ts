@@ -19,8 +19,8 @@ import {
 /** Quién mira: define si ve unidades exactas y qué distribuidores resalta. */
 type Audience =
   | { kind: "brand"; seesExact: boolean }
-  | { kind: "client"; yourProviders: Set<string> }
-  | { kind: "public" };
+  | { kind: "client"; yourProviders: Set<string>; hidden: Set<string> }
+  | { kind: "public"; hidden: Set<string> };
 
 export interface AvailabilityDistributor {
   provider: string;
@@ -269,8 +269,9 @@ export class BrandItemsService {
       const mine = await this.visibility.listFor(commercialId(tenant), tenant.userId);
       for (const p of mine) if (p.linked && !p.storefront) yourProviders.add(p.provider);
     }
+    const hidden = await this.visibility.platformHiddenFor(commercialId(tenant), tenant.userId);
     const settings = await this.settingsFor(brandId);
-    const items = await this.availability(brandId, settings, { kind: "client", yourProviders });
+    const items = await this.availability(brandId, settings, { kind: "client", yourProviders, hidden });
     return { mode: settings.mode, items };
   }
 
@@ -285,7 +286,11 @@ export class BrandItemsService {
     }
     const settings = await this.settingsFor(landing.tenantId);
     if (!settings.publicStock) return { mode: settings.mode, items: [] as AvailabilityItem[], hidden: true };
-    const items = await this.availability(landing.tenantId, settings, { kind: "public" });
+    // Sin saber quién mira: un distribuidor oculto por la plataforma no aparece.
+    const hidden = new Set(
+      (await this.prisma.providerDisplayConfig.findMany({ where: { visible: false }, select: { provider: true } })).map((r) => r.provider)
+    );
+    const items = await this.availability(landing.tenantId, settings, { kind: "public", hidden });
     return { mode: settings.mode, items, hidden: false };
   }
 
@@ -306,7 +311,8 @@ export class BrandItemsService {
     const now = new Date();
 
     return items.map((item) => {
-      const distributors = item.links.map((link): AvailabilityDistributor => {
+      const links = audience.kind === "brand" ? item.links : item.links.filter((link) => !audience.hidden.has(link.provider));
+      const distributors = links.map((link): AvailabilityDistributor => {
         const found = stock.get(key(link.provider, link.externalId));
         const status = semaphoreStatus({
           settings,

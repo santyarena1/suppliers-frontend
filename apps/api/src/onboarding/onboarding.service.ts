@@ -785,13 +785,15 @@ export class OnboardingService {
       });
       if (!admin) return null;
       const sourceTenantId = admin.tenant.mirrorsCommercialFromId ?? admin.tenant.id;
+      // Lo oculto por la plataforma no entra a la demo de un comercio nuevo.
+      const hidden = await this.prisma.providerDisplayConfig.findMany({ where: { visible: false }, select: { provider: true } });
       const offers = await this.prisma.tenantProductOffer.findMany({
         where: {
           tenantId: sourceTenantId,
           active: true,
           stock: { gt: 0 },
           price: { gt: 0 },
-          provider: { notIn: DEMO_DISTRIBUTORS.map((d) => d.providerKey) },
+          provider: { notIn: [...DEMO_DISTRIBUTORS.map((d) => d.providerKey), ...hidden.map((h) => h.provider)] },
           product: { imageUrl: { not: null } },
         },
         include: { product: true },

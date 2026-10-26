@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.15.1",
+    date: "2026-10-26",
+    title: "Los distribuidores pausados en NODO no aparecen en ningún lado",
+    changes: [
+      { kind: "fixed", text: "Un distribuidor que NODO tiene pausado ya no aparece para conectarse, ni en «Mismo producto en otros distribuidores», noticias, publicidad, chat, el mapa de las marcas ni las tiendas de otros locales." },
+    ],
+  },
+  {
     version: "2.15.0",
     date: "2026-10-26",
     title: "Air: elegí de qué depósito ves el stock",

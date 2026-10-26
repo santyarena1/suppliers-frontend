@@ -320,7 +320,7 @@ export class TenantVisibilityService {
 
     // El administrador de la plataforma ve todo: cada distribuidor activo con clave
     // de proveedor aparece vinculado, sin código de acceso ni vendedor asignado.
-    const platformAdminOrg = await this.isPlatformAdminOrg(tenantId);
+    const platformAdminOrg = await this.isPlatformAdminOrg(tenantId, viewerUserId);
     if (platformAdminOrg) {
       const distribuidores = await this.prisma.tenant.findMany({
         where: { type: "DISTRIBUTOR", active: true, providerKey: { not: null } },
@@ -463,7 +463,7 @@ export class TenantVisibilityService {
     const [visibles, tenant, platformAdminOrg] = await Promise.all([
       this.listFor(tenantId, viewerUserId),
       this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { plan: true, type: true } }),
-      this.isPlatformAdminOrg(tenantId),
+      this.isPlatformAdminOrg(tenantId, viewerUserId),
     ]);
     const linked = visibles.filter((v) => v.linked && v.configured && !isDemoDistributorKey(v.provider) && !v.storefront);
     return {
@@ -570,19 +570,37 @@ export class TenantVisibilityService {
   }
 
   /**
-   * `true` si en esta organización (o en una que la espeja, como Administración →
-   * Comercio de Pruebas) hay una persona con rol de administrador de plataforma.
+   * Vista de Administración: ve todo, oculto incluido, y sin tope del plan.
+   *
+   * Con quien mira, es solo el administrador de plataforma. Administración espeja a
+   * Comercio de Pruebas (lo mira con su id): antes bastaba eso para que toda la gente
+   * real de Comercio de Pruebas viera lo oculto. Sin quien mira (snapshots, conteos),
+   * solo cuenta un administrador que sea miembro de esta misma organización.
    */
-  private async isPlatformAdminOrg(tenantId: string): Promise<boolean> {
+  private async isPlatformAdminOrg(tenantId: string, viewerUserId?: string): Promise<boolean> {
+    if (viewerUserId) {
+      const viewer = await this.prisma.user.findUnique({ where: { id: viewerUserId }, select: { role: true } });
+      return viewer?.role === "ROLE_ADMIN";
+    }
     const admin = await this.prisma.tenantMembership.findFirst({
-      where: {
-        active: true,
-        user: { role: "ROLE_ADMIN" },
-        tenant: { OR: [{ id: tenantId }, { mirrorsCommercialFromId: tenantId }] },
-      },
+      where: { active: true, tenantId, user: { role: "ROLE_ADMIN" } },
       select: { id: true },
     });
     return admin != null;
+  }
+
+  /**
+   * Proveedores que la plataforma le oculta a esta organización (Administración →
+   * Visibilidad): para ella no existen. Para lo que no pasa por `listFor`: noticias,
+   * publicidad, chat, directorio, mapa de marcas, tiendas, "mismo producto en…".
+   */
+  async platformHiddenFor(tenantId: string, viewerUserId?: string): Promise<Set<string>> {
+    const [hidden, admin] = await Promise.all([
+      this.platformHiddenProviders(),
+      this.isPlatformAdminOrg(tenantId, viewerUserId),
+    ]);
+    if (admin) return new Set();
+    return new Set([...hidden.keys()].filter((provider) => hiddenForViewer(hidden, provider, tenantId)));
   }
 
   /**

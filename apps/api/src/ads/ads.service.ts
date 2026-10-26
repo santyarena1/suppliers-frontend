@@ -145,11 +145,16 @@ export class AdsService {
         startsAt: { lte: now },
         OR: [{ endsAt: null }, { endsAt: { gte: now } }],
         slot: { enabled: true, ...(placement ? { placement } : {}) },
+        tenant: { active: true, advertisingEnabled: true },
       },
       include: { slot: true, tenant: { select: { name: true, providerKey: true } } },
       orderBy: { updatedAt: "desc" },
     });
-    return rows.map((row) => ({
+    // Sin saber quién mira, un proveedor oculto por la plataforma (aunque lo vean algunas orgs) no se publicita.
+    const hidden = new Set(
+      (await this.prisma.providerDisplayConfig.findMany({ where: { visible: false }, select: { provider: true } })).map((r) => r.provider)
+    );
+    return rows.filter((row) => !row.tenant.providerKey || !hidden.has(row.tenant.providerKey)).map((row) => ({
       campaignId: row.id,
       slot: row.slot.key,
       placement: row.slot.placement,

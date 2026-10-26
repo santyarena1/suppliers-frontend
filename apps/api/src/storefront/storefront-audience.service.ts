@@ -160,11 +160,14 @@ export class StorefrontAudienceService {
       orderBy: { createdAt: "desc" },
     });
     const now = new Date();
+    const hiddenByPlatform = await this.visibility.platformHiddenFor(buyerId, tenant.userId);
     const out = [];
     for (const r of rows) {
       const sf = r.storefront;
       const key = sf.supplierTenant.providerKey;
       if (!key || sf.retailerTenantId === buyerId) continue;
+      // Oculta por la plataforma (Administración → Visibilidad): para este comercio no existe.
+      if (hiddenByPlatform.has(key)) continue;
       // Una tienda cerrada o frenada no se ofrece; si ya la veía, vuelve sola al reabrir.
       if (storefrontHiddenReason({ ...sf, ownerActive: sf.retailerTenant.active }, now)) continue;
       if (sf.visibility === "PRIVATE" && r.source !== "INVITE" && r.status !== "ACCEPTED") continue;
@@ -185,6 +188,9 @@ export class StorefrontAudienceService {
     const sf = row.storefront;
     const key = sf.supplierTenant.providerKey;
     if (!key) throw new NotFoundException("Esa tienda no está disponible para tu comercio");
+    if (decision === "ACCEPT" && (await this.visibility.platformHiddenFor(buyerId, tenant.userId)).has(key)) {
+      throw new NotFoundException("Esa tienda no está disponible para tu comercio");
+    }
     if (decision === "ACCEPT") {
       if (storefrontHiddenReason({ ...sf, ownerActive: sf.retailerTenant.active }, new Date())) {
         throw new BadRequestException("Esa tienda no está abierta ahora");
@@ -201,6 +207,16 @@ export class StorefrontAudienceService {
     return { storefrontId, provider: key, audienceStatus: status };
   }
 
+  /** Una tienda que la plataforma oculta no se ve ni se acepta por link (la propia sí se ve). */
+  private async assertNotPlatformHidden(tenant: TenantContext, sf: SfRow) {
+    const buyerId = commercialId(tenant);
+    if (sf.retailerTenantId === buyerId || sf.retailerTenantId === tenant.tenantId) return;
+    const key = sf.supplierTenant.providerKey;
+    if (key && (await this.visibility.platformHiddenFor(buyerId, tenant.userId)).has(key)) {
+      throw new NotFoundException("El link de invitación no existe o ya no vale");
+    }
+  }
+
   private async byToken(token: string): Promise<SfRow> {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) throw new NotFoundException("El link de invitación no existe o ya no vale");
     const sf = await this.prisma.storefront.findUnique({ where: { inviteToken: token }, include: SF_INCLUDE });
@@ -212,6 +228,7 @@ export class StorefrontAudienceService {
   async invitePreview(tenant: TenantContext, token: string) {
     const sf = await this.byToken(token);
     const buyerId = commercialId(tenant);
+    await this.assertNotPlatformHidden(tenant, sf);
     const own = sf.retailerTenantId === buyerId || sf.retailerTenantId === tenant.tenantId;
     const row = own
       ? null
@@ -237,6 +254,7 @@ export class StorefrontAudienceService {
     if (sf.retailerTenantId === buyerId || sf.retailerTenantId === tenant.tenantId) {
       throw new BadRequestException("Es tu propia tienda");
     }
+    await this.assertNotPlatformHidden(tenant, sf);
     if (storefrontHiddenReason({ ...sf, ownerActive: sf.retailerTenant.active }, new Date())) {
       throw new BadRequestException("Esa tienda no está abierta ahora. Probá más tarde.");
     }

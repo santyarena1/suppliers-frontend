@@ -92,9 +92,13 @@ export class NewsService {
       orderBy: { updatedAt: "desc" },
       take: 8,
     });
-    const linked = await this.visibility.linkedSupplierIds(commercialId(tenant));
+    const [linked, hidden] = await Promise.all([
+      this.visibility.linkedSupplierIds(commercialId(tenant)),
+      this.visibility.hiddenAuthorIds(tenant),
+    ]);
     const slides: { article: NonNullable<(typeof campaigns)[number]["article"]>; campaign: (typeof campaigns)[number] }[] = [];
     for (const campaign of campaigns) {
+      if (hidden.has(campaign.tenantId)) continue;
       const article =
         campaign.article && this.isLive(campaign.article, now)
           ? campaign.article

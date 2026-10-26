@@ -1,12 +1,34 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import type { TenantType } from "@nodo/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { commercialId, type TenantContext } from "../tenants/tenant-context.service";
+import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { authorIdsForViewer } from "./news-visibility";
 
 @Injectable()
 export class NewsVisibilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly tenantVisibility: TenantVisibilityService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() tenantVisibility?: TenantVisibilityService
+  ) {
+    this.tenantVisibility = tenantVisibility ?? new TenantVisibilityService(prisma);
+  }
+
+  /**
+   * Organizaciones cuyo proveedor la plataforma le oculta a este comercio: sus
+   * noticias, publicidad y logo tampoco le llegan.
+   */
+  async hiddenAuthorIds(tenant: TenantContext): Promise<Set<string>> {
+    const hidden = await this.tenantVisibility.platformHiddenFor(commercialId(tenant), tenant.userId);
+    if (hidden.size === 0) return new Set();
+    const rows = await this.prisma.tenant.findMany({
+      where: { providerKey: { in: [...hidden] } },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
 
   async authorIdsFor(tenant: TenantContext): Promise<string[]> {
     const viewerId = commercialId(tenant);
@@ -41,12 +63,13 @@ export class NewsVisibilityService {
         ? supplierLinks.filter((l) => l.supplierTenant.type === "BRAND").map((l) => l.supplierTenantId)
         : supplierLinks.map((l) => l.supplierTenantId);
 
+    const hidden = await this.hiddenAuthorIds(tenant);
     return authorIdsForViewer(viewerType, {
       ownId: tenant.tenantId,
       linkedSupplierIds,
       linkedClientDistributorIds: clientLinks.map((l) => l.clientTenantId),
       advertisedAuthorIds: advertised,
-    });
+    }).filter((id) => !hidden.has(id));
   }
 
   async linkedSupplierIds(viewerTenantId: string): Promise<Set<string>> {

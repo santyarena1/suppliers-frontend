@@ -1506,12 +1506,17 @@ export class ProvidersService implements OnModuleInit {
 
   /**
    * El mismo producto en los otros distribuidores, según la agrupación de la ficha
-   * enriquecida (AcuStock). Los que el comercio no puede ver van como `locked`.
+   * enriquecida (AcuStock). Los que el comercio no puede ver van como `locked`; los
+   * que la plataforma le oculta no van: para ese comercio no existen.
    */
   private async sameProductElsewhere(tenantId: string, provider: Provider, externalId: string, viewerUserId?: string) {
-    const siblings = await this.platformContent.siblings(provider, externalId);
+    const [siblings, hidden] = await Promise.all([
+      this.platformContent.siblings(provider, externalId),
+      this.visibility.platformHiddenFor(tenantId, viewerUserId),
+    ]);
     const out: { provider: string; externalId: string; locked: boolean; product: unknown }[] = [];
     for (const s of siblings) {
+      if (hidden.has(s.provider)) continue;
       if (!(await this.visibility.canReadCatalog(tenantId, s.provider as Provider, viewerUserId))) {
         out.push({ provider: s.provider, externalId: s.externalId, locked: true, product: null });
         continue;

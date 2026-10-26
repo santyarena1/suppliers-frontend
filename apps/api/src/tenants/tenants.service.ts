@@ -1,5 +1,5 @@
 import { forgetSession } from "../auth/jwt.strategy";
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { randomBytes } from "node:crypto";
 import { Prisma, UserRole } from "@prisma/client";
@@ -28,6 +28,7 @@ import {
 import { isDemoDistributorKey } from "../onboarding/onboarding-demo";
 import { commercialId, type TenantContext } from "./tenant-context.service";
 import { tenantLinkAllowed, tenantLinkRejection } from "./link-sides";
+import { TenantVisibilityService } from "./tenant-visibility.service";
 
 const MEMBERSHIP_INCLUDE = {
   user: {
@@ -59,7 +60,14 @@ function normalizeAccessCode(raw: string): string {
 
 @Injectable()
 export class TenantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly visibility: TenantVisibilityService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() visibility?: TenantVisibilityService
+  ) {
+    this.visibility = visibility ?? new TenantVisibilityService(prisma);
+  }
 
   // ---------- Organizaciones ----------
 
@@ -313,14 +321,17 @@ export class TenantsService {
       },
       select: { id: true, name: true, type: true, providerKey: true, managedByPlatform: true },
       orderBy: { name: "asc" },
-      take: 30,
+      take: 60,
     });
+    // Oculto por la plataforma (Administración → Visibilidad): no aparece para conectarse.
+    const hidden = await this.visibility.platformHiddenFor(commercialId(tenant), tenant.userId);
+    const shown = rows.filter((r) => !r.providerKey || !hidden.has(r.providerKey)).slice(0, 30);
     const links = await this.prisma.tenantLink.findMany({
-      where: { clientTenantId: commercialId(tenant), supplierTenantId: { in: rows.map((r) => r.id) } },
+      where: { clientTenantId: commercialId(tenant), supplierTenantId: { in: shown.map((r) => r.id) } },
       select: { supplierTenantId: true, status: true },
     });
     const linkByTenant = new Map(links.map((l) => [l.supplierTenantId, l.status]));
-    return rows.map((r) => ({
+    return shown.map((r) => ({
       id: r.id,
       name: r.name,
       type: r.type,
@@ -346,6 +357,9 @@ export class TenantsService {
     if (supplier.id === clientTenantId) throw new BadRequestException("Una organización no puede vincularse consigo misma");
     const linkError = tenantLinkRejection(tenant.tenantType, supplier.type);
     if (linkError) throw new BadRequestException(linkError);
+    if (supplier.providerKey && (await this.visibility.platformHiddenFor(clientTenantId, tenant.userId)).has(supplier.providerKey)) {
+      throw new NotFoundException("Proveedor no encontrado");
+    }
 
     let providerKey = supplier.providerKey;
     if (!providerKey) {
