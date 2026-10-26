@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { quotesApi, type QuoteSettings } from "@/lib/quotes";
+import { whatsappNumber } from "@/lib/phone";
 import type { QuotePdfModel } from "./pdf/quote-pdf-model";
 
 /** Texto para WhatsApp o para copiar: corto, legible en el celular del cliente. Sale del mismo modelo que el PDF. */
@@ -21,13 +22,9 @@ export function quoteText(model: QuotePdfModel): string {
   return lines.join("\n");
 }
 
-/** wa.me con el teléfono del cliente si lo hay (solo dígitos; sin código de país se asume Argentina). */
+/** wa.me con el teléfono del cliente; si no se entiende el número, WhatsApp deja elegir el contacto. */
 export function whatsappUrl(text: string, phone: string | null): string {
-  const digits = (phone ?? "").replace(/\D/g, "");
-  let target = digits;
-  if (digits && !digits.startsWith("54")) {
-    target = `549${digits.replace(/^0/, "").replace(/^15/, "")}`;
-  }
+  const target = whatsappNumber(phone);
   const base = target ? `https://wa.me/${target}` : "https://wa.me/";
   return `${base}?text=${encodeURIComponent(text)}`;
 }

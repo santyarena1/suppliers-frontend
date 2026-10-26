@@ -171,7 +171,7 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
       name,
       price: prices.price ?? undefined,
       finalPrice: prices.finalPrice ?? undefined,
-      currency: typeof mapped.currency === "string" ? mapped.currency : profile.currency ?? undefined,
+      currency: normalizeCurrency(mapped.currency) ?? normalizeCurrency(profile.currency),
       ivaPercent: prices.ivaPercent ?? undefined,
       raw: { ...raw, ...(dataRow.divider ? { _divisor: dataRow.divider } : {}) },
     };
@@ -194,6 +194,22 @@ export function httpUrlOrUndefined(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Moneda como la escribe la gente en una planilla: "U$S", "US$", "Dólares" → USD;
+ * "$", "AR$", "Pesos" → ARS. Lo que no se reconoce queda en mayúsculas.
+ */
+export function normalizeCurrency(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  const key = value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[\s.]/g, "");
+  if (/^(USD|US\$|U\$S|U\$D|U\$|USS|DOLAR|DOLARES|DOLLAR|DOLLARS)$/.test(key)) return "USD";
+  if (/^(ARS|\$|AR\$|\$AR|ARG|PESO|PESOS)$/.test(key)) return "ARS";
+  return value.trim().toUpperCase().slice(0, 10);
 }
 
 function applyDivider(

@@ -1,6 +1,6 @@
 import { isArsCurrency } from "@/lib/fx";
 import type { Quote, QuoteSettings } from "@/lib/quotes";
-import { quoteCode, shortDate } from "@/lib/quotes";
+import { quoteAmounts, quoteCode, shortDate, shownAmount } from "@/lib/quotes";
 
 /**
  * Lo que dibuja el PDF, ya calculado y en texto: el documento no hace cuentas
@@ -51,8 +51,6 @@ export interface QuotePdfModel {
 
 type Convert = (amount: number | null, source: string) => number | null;
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
-
 /** Arma el modelo del PDF. Devuelve `error` si falta la cotización para convertir. */
 export function buildQuotePdfModel(
   quote: Quote,
@@ -60,42 +58,29 @@ export function buildQuotePdfModel(
   money: { currency: "ARS" | "USD"; rate: number | null; convert: Convert; format: (n: number | null) => string }
 ): { model: QuotePdfModel } | { error: string } {
   const net = settings.priceDisplay === "NET";
-  let subtotalFinal = 0;
-  let subtotalNet = 0;
-  let converted = false;
-  const lines: QuotePdfModel["lines"] = [];
-  for (const it of quote.items) {
-    if (isArsCurrency(it.currency) !== (money.currency === "ARS")) converted = true;
-    const finalUnit = money.convert(it.unitFinalPrice, it.currency);
-    const netUnit = money.convert(it.unitPrice ?? it.unitFinalPrice, it.currency);
-    if (it.unitFinalPrice != null && finalUnit == null) {
-      return { error: "Falta la cotización del dólar para pasar los precios. Probá en un momento." };
-    }
-    const unit = net ? netUnit : finalUnit;
-    if (finalUnit != null) subtotalFinal += finalUnit * it.qty;
-    if (netUnit != null) subtotalNet += netUnit * it.qty;
+  const amounts = quoteAmounts(quote.items, quote.discountPercent, money.currency, money.convert);
+  if (amounts.missingRate) return { error: "Falta la cotización del dólar para pasar los precios. Probá en un momento." };
+  const { subtotalFinal, subtotalNet, discount, total } = amounts;
+  const converted = quote.items.some((it) => isArsCurrency(it.currency) !== (money.currency === "ARS"));
+  const lines: QuotePdfModel["lines"] = quote.items.map((it, i) => {
+    const line = amounts.lines[i];
     const detail = [settings.showBrand ? it.brand : null, settings.showSku ? it.sku : null].filter(Boolean).join(" · ");
-    lines.push({
+    return {
       name: it.name,
       detail: detail || null,
       qty: it.qty,
-      unit: unit == null ? "Consultar" : money.format(round2(unit)),
-      total: unit == null ? "—" : money.format(round2(unit * it.qty)),
+      unit: line == null ? "Consultar" : money.format(net ? line.unitNet : line.unitFinal),
+      total: line == null ? "—" : money.format(net ? line.totalNet : line.totalFinal),
       image: null,
       imageSrc: settings.showImages && it.kind === "product" ? it.imageUrl : null,
-    });
-  }
-  subtotalFinal = round2(subtotalFinal);
-  subtotalNet = round2(subtotalNet);
-  const discountRate = quote.discountPercent && quote.discountPercent > 0 ? Math.min(100, quote.discountPercent) / 100 : 0;
-  const discount = round2(subtotalFinal * discountRate);
-  const total = round2(subtotalFinal - discount);
+    };
+  });
   const pct = quote.discountPercent ? `${quote.discountPercent.toLocaleString("es-AR")} %` : "";
 
   const totals: QuotePdfModel["totals"] = [];
   if (net) {
     totals.push({ label: "Subtotal sin IVA", value: money.format(subtotalNet) });
-    totals.push({ label: "IVA", value: money.format(round2(subtotalFinal - subtotalNet)), muted: true });
+    totals.push({ label: "IVA", value: money.format(shownAmount(subtotalFinal - subtotalNet, money.currency)), muted: true });
   } else if (discount > 0) {
     totals.push({ label: "Subtotal", value: money.format(subtotalFinal) });
   }

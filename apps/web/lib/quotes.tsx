@@ -252,6 +252,57 @@ export function shortDate(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
+/** Importe como se muestra: pesos sin centavos, dólares con centavos. */
+export function shownAmount(n: number, currency: "ARS" | "USD"): number {
+  return currency === "ARS" ? Math.round(n) : Math.round(n * 100) / 100;
+}
+
+export interface QuoteLineAmounts {
+  unitFinal: number;
+  unitNet: number;
+  totalFinal: number;
+  totalNet: number;
+}
+
+/**
+ * Las cuentas del presupuesto en la moneda en que se muestra. Cada precio por
+ * unidad se redondea a lo que se ve (pesos enteros, centavos de dólar) y de ahí
+ * sale todo lo demás, así las líneas suman exacto el subtotal y el subtotal
+ * menos el descuento da el total: en la pantalla, el PDF, WhatsApp y la lista.
+ * `missingRate`: hay precios que no se pudieron pasar (falta la cotización).
+ */
+export function quoteAmounts(
+  items: Pick<QuoteItem, "unitFinalPrice" | "unitPrice" | "currency" | "qty">[],
+  discountPercent: number | null | undefined,
+  currency: "ARS" | "USD",
+  convert: (amount: number | null, source: string) => number | null
+): { lines: (QuoteLineAmounts | null)[]; subtotalFinal: number; subtotalNet: number; discount: number; total: number; missingRate: boolean } {
+  const shown = (n: number) => shownAmount(n, currency);
+  let subtotalFinal = 0;
+  let subtotalNet = 0;
+  let missingRate = false;
+  const lines = items.map((it) => {
+    if (it.unitFinalPrice == null) return null;
+    const final = convert(it.unitFinalPrice, it.currency);
+    const net = convert(it.unitPrice ?? it.unitFinalPrice, it.currency);
+    if (final == null || net == null) {
+      missingRate = true;
+      return null;
+    }
+    const unitFinal = shown(final);
+    const unitNet = shown(net);
+    const line = { unitFinal, unitNet, totalFinal: shown(unitFinal * it.qty), totalNet: shown(unitNet * it.qty) };
+    subtotalFinal += line.totalFinal;
+    subtotalNet += line.totalNet;
+    return line;
+  });
+  subtotalFinal = shown(subtotalFinal);
+  subtotalNet = shown(subtotalNet);
+  const rate = discountPercent && discountPercent > 0 ? Math.min(100, discountPercent) / 100 : 0;
+  const discount = shown(subtotalFinal * rate);
+  return { lines, subtotalFinal, subtotalNet, discount, total: shown(subtotalFinal - discount), missingRate };
+}
+
 /**
  * Pasa importes a la moneda del presupuesto (o la que eligió quien mira) con la
  * cotización del día. Devuelve números para el PDF y el texto, y el formato.
@@ -305,20 +356,16 @@ export function useQuoteTotal() {
   const { currency, currentRate } = usePrefs();
   return useCallback(
     (q: Pick<Quote, "items"> & Partial<Pick<Quote, "currency" | "discountPercent">>): string => {
+      // Las mismas cuentas que el PDF (quoteAmounts), para que la lista diga lo mismo.
       const rate = currentRate?.venta ?? getArsPerUsd();
-      const target = q.currency ?? (currency === "ARS" ? "ARS" : "USD");
-      const round2 = (n: number) => Math.round(n * 100) / 100;
-      let subtotal = 0;
-      for (const it of q.items) {
-        if (it.unitFinalPrice == null) continue;
-        const amount = it.unitFinalPrice * it.qty;
-        const ars = isArsCurrency(it.currency);
-        if (target === "ARS") subtotal += ars ? amount : rate ? amount * rate : 0;
-        else subtotal += ars ? (rate ? amount / rate : 0) : amount;
-      }
-      subtotal = round2(subtotal);
-      const pct = q.discountPercent && q.discountPercent > 0 ? Math.min(100, q.discountPercent) / 100 : 0;
-      const total = round2(subtotal - round2(subtotal * pct));
+      const target: "ARS" | "USD" = q.currency ?? (currency === "ARS" ? "ARS" : "USD");
+      const convert = (amount: number | null, source: string): number | null => {
+        if (amount == null) return null;
+        const ars = isArsCurrency(source);
+        if (target === "ARS") return ars ? amount : rate ? amount * rate : null;
+        return ars ? (rate ? amount / rate : null) : amount;
+      };
+      const { total } = quoteAmounts(q.items, q.discountPercent, target, convert);
       return target === "ARS" ? formatARS(total) : formatUSD(total);
     },
     [currency, currentRate]

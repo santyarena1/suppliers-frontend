@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { Prisma, type SalesQuote, type SalesQuoteStatus } from "@prisma/client";
 import { SALE_MARGIN_MAX, SALE_MARGIN_MIN, isProviderKey } from "@nodo/shared";
@@ -109,6 +109,9 @@ type Viewer = Pick<
 const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Identifica una línea aunque cambie de lugar (los productos no se repiten; las libres tienen id propio). */
+const lineKey = (it: Pick<QuoteItem, "provider" | "externalId">) => `${it.provider}|${it.externalId}`;
 const STATUSES: readonly SalesQuoteStatus[] = ["DRAFT", "SENT", "ACCEPTED", "REJECTED"];
 const VIEW_STATUSES: readonly QuoteStatusView[] = [...STATUSES, "EXPIRED"];
 
@@ -372,9 +375,10 @@ export class QuotesService {
     const quote = await this.owned(viewer, id);
     const provider = input.provider.toUpperCase();
     if (!isProviderKey(provider)) throw new BadRequestException(`Proveedor inválido: ${input.provider}`);
-    const items = readItems(quote.items);
-    const exists = items.some((it) => it.kind === "product" && it.provider === provider && it.externalId === input.externalId);
-    if (!exists && items.length >= MAX_QUOTE_ITEMS) {
+    const full = (items: QuoteItem[]) =>
+      !items.some((it) => it.kind === "product" && it.provider === provider && it.externalId === input.externalId) &&
+      items.length >= MAX_QUOTE_ITEMS;
+    if (full(readItems(quote.items))) {
       throw new BadRequestException(`Un presupuesto admite hasta ${MAX_QUOTE_ITEMS} productos`);
     }
     const rules = await this.saleRules.get(viewer.commercialTenantId);
@@ -382,15 +386,15 @@ export class QuotesService {
     if (!line || line.unitFinalPrice == null) {
       throw new UnprocessableEntityException("Este producto no tiene precio de venta en este momento");
     }
-    const next = addItem(items, { ...line, provider, externalId: input.externalId }, input.qty ?? 1, new Date());
-    return this.saveItems(viewer, quote.id, next);
+    return this.mutateItems(viewer, quote.id, (items) => {
+      if (full(items)) throw new BadRequestException(`Un presupuesto admite hasta ${MAX_QUOTE_ITEMS} productos`);
+      return addItem(items, { ...line, provider, externalId: input.externalId }, input.qty ?? 1, new Date());
+    });
   }
 
   /** Línea libre (armado, envío, algo que no está en NODO) con precio final a mano. */
   async addCustom(viewer: Viewer, id: string, dto: AddCustomItemDto): Promise<QuoteView> {
     const quote = await this.owned(viewer, id);
-    const items = readItems(quote.items);
-    if (items.length >= MAX_QUOTE_ITEMS) throw new BadRequestException(`Un presupuesto admite hasta ${MAX_QUOTE_ITEMS} líneas`);
     const line = customItem(
       {
         id: randomUUID(),
@@ -402,19 +406,54 @@ export class QuotesService {
       },
       new Date()
     );
-    return this.saveItems(viewer, quote.id, [...items, line]);
+    return this.mutateItems(viewer, quote.id, (items) => {
+      if (items.length >= MAX_QUOTE_ITEMS) throw new BadRequestException(`Un presupuesto admite hasta ${MAX_QUOTE_ITEMS} líneas`);
+      return [...items, line];
+    });
   }
 
   /** Cantidad, margen propio de la línea o (líneas libres) nombre y precio. */
   async updateItem(viewer: Viewer, id: string, index: number, dto: UpdateQuoteItemDto): Promise<QuoteView> {
     const quote = await this.owned(viewer, id);
-    const items = readItems(quote.items);
-    const current = items[index];
-    if (!current) throw new NotFoundException("Ese producto ya no está en el presupuesto");
+    const seen = readItems(quote.items)[index];
+    if (!seen) throw new NotFoundException("Ese producto ya no está en el presupuesto");
+    // El precio con el margen nuevo se busca antes del candado (puede ir a la red).
+    let repriced: { line: PricedLine; override: number | null } | null = null;
+    if (seen.kind === "custom") {
+      if (dto.marginPercent !== undefined) throw new BadRequestException("Una línea libre lleva precio, no margen");
+    } else {
+      if (dto.name != null || dto.unitFinalPrice != null) {
+        throw new BadRequestException("El nombre y el precio de un producto salen del catálogo; usá el margen");
+      }
+      if (dto.marginPercent !== undefined) {
+        if (sellerOnly(viewer)) throw new ForbiddenException("El margen lo cambia quien ve costos.");
+        const override = parseMargin(dto.marginPercent);
+        const rules = await this.saleRules.get(viewer.commercialTenantId);
+        const line = await this.priceOf(viewer, rules, seen.provider, seen.externalId, override, num(quote.marginPercent));
+        if (!line || line.unitFinalPrice == null) {
+          throw new UnprocessableEntityException("Este producto ya no tiene precio: actualizá los precios o sacalo");
+        }
+        repriced = { line, override };
+      }
+    }
+    return this.mutateItems(viewer, quote.id, (items) => {
+      const current = items[index];
+      if (!current || current.provider !== seen.provider || current.externalId !== seen.externalId) {
+        throw new ConflictException("El presupuesto cambió mientras lo editabas. Probá de nuevo.");
+      }
+      return items.map((it, i) => (i === index ? this.editedLine(current, dto, repriced) : it));
+    });
+  }
+
+  /** La línea con los cambios pedidos (sobre lo último guardado). */
+  private editedLine(
+    current: QuoteItem,
+    dto: UpdateQuoteItemDto,
+    repriced: { line: PricedLine; override: number | null } | null
+  ): QuoteItem {
     let next: QuoteItem = { ...current };
     if (dto.qty != null) next.qty = dto.qty;
     if (current.kind === "custom") {
-      if (dto.marginPercent !== undefined) throw new BadRequestException("Una línea libre lleva precio, no margen");
       if (dto.name != null) next.name = dto.name;
       if (dto.unitFinalPrice != null || dto.currency != null || dto.ivaPercent != null) {
         const iva = dto.ivaPercent ?? (current.unitPrice && current.unitFinalPrice ? Math.round((current.unitFinalPrice / current.unitPrice - 1) * 1000) / 10 : 21);
@@ -432,40 +471,30 @@ export class QuotesService {
           ),
         };
       }
-    } else {
-      if (dto.name != null || dto.unitFinalPrice != null) {
-        throw new BadRequestException("El nombre y el precio de un producto salen del catálogo; usá el margen");
-      }
-      if (dto.marginPercent !== undefined) {
-        if (sellerOnly(viewer)) throw new ForbiddenException("El margen lo cambia quien ve costos.");
-        const override = parseMargin(dto.marginPercent);
-        const rules = await this.saleRules.get(viewer.commercialTenantId);
-        const line = await this.priceOf(viewer, rules, current.provider, current.externalId, override, num(quote.marginPercent));
-        if (!line || line.unitFinalPrice == null) {
-          throw new UnprocessableEntityException("Este producto ya no tiene precio: actualizá los precios o sacalo");
-        }
-        next = { ...next, ...line, marginPercent: override, pricedAt: new Date().toISOString() };
-      }
+    } else if (repriced) {
+      next = { ...next, ...repriced.line, marginPercent: repriced.override, pricedAt: new Date().toISOString() };
     }
-    return this.saveItems(viewer, quote.id, items.map((it, i) => (i === index ? next : it)));
+    return next;
   }
 
   async removeItem(viewer: Viewer, id: string, index: number): Promise<QuoteView> {
     const quote = await this.owned(viewer, id);
-    const items = readItems(quote.items);
-    if (!items[index]) throw new NotFoundException("Ese producto ya no está en el presupuesto");
-    return this.saveItems(viewer, quote.id, items.filter((_, i) => i !== index));
+    return this.mutateItems(viewer, quote.id, (items) => {
+      if (!items[index]) throw new NotFoundException("Ese producto ya no está en el presupuesto");
+      return items.filter((_, i) => i !== index);
+    });
   }
 
   /** Mueve una línea (orden en el PDF). */
   async moveItem(viewer: Viewer, id: string, index: number, to: number): Promise<QuoteView> {
     const quote = await this.owned(viewer, id);
-    const items = readItems(quote.items);
-    if (!items[index] || to < 0 || to >= items.length) throw new BadRequestException("Posición inválida");
-    const next = [...items];
-    const [moved] = next.splice(index, 1);
-    next.splice(to, 0, moved);
-    return this.saveItems(viewer, quote.id, next);
+    return this.mutateItems(viewer, quote.id, (items) => {
+      if (!items[index] || to < 0 || to >= items.length) throw new BadRequestException("Posición inválida");
+      const next = [...items];
+      const [moved] = next.splice(index, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
   }
 
   /** Precios de hoy para cada línea (con sus márgenes) y la validez renovada; devuelve qué cambió. */
@@ -481,13 +510,22 @@ export class QuotesService {
           : this.priceOf(viewer, rules, it.provider, it.externalId, it.marginPercent, quoteMargin).catch(() => null)
       )
     );
-    const { items: next, changes } = repriceItems(items, current, new Date());
+    // Los precios se buscaron sin candado: se aplican a las líneas como estén ahora
+    // (si mientras tanto se sumó una, queda como estaba).
+    const priced = new Map(items.map((it, i) => [lineKey(it), current[i]]));
     const settings = await this.settings.get(viewer.tenantId);
-    await this.prisma.salesQuote.update({
-      where: { id: quote.id },
-      data: { validUntil: new Date(Date.now() + settings.validityDays * DAY_MS) },
-    });
-    return { quote: await this.saveItems(viewer, quote.id, next), changes };
+    let changes: PriceChange[] = [];
+    const view = await this.mutateItems(
+      viewer,
+      quote.id,
+      (latest) => {
+        const result = repriceItems(latest, latest.map((it) => priced.get(lineKey(it))), new Date());
+        changes = result.changes;
+        return result.items;
+      },
+      { validUntil: new Date(Date.now() + settings.validityDays * DAY_MS) }
+    );
+    return { quote: view, changes };
   }
 
   /**
@@ -523,10 +561,23 @@ export class QuotesService {
     };
   }
 
-  private async saveItems(viewer: Viewer, id: string, items: QuoteItem[]): Promise<QuoteView> {
-    const row = await this.prisma.salesQuote.update({
-      where: { id },
-      data: { items: items as unknown as Prisma.InputJsonValue },
+  /**
+   * Cambia las líneas leyendo y guardando bajo un candado por presupuesto: dos
+   * «Agregar» casi a la vez (doble clic, varios productos seguidos, dos pestañas)
+   * no se pisan. `apply` no va a la red; los precios se buscan antes.
+   */
+  private async mutateItems(
+    viewer: Viewer,
+    id: string,
+    apply: (items: QuoteItem[]) => QuoteItem[],
+    extra: Prisma.SalesQuoteUpdateInput = {}
+  ): Promise<QuoteView> {
+    const row = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`sales-quote-items:${id}`}))`;
+      const latest = await tx.salesQuote.findUnique({ where: { id } });
+      if (!latest) throw new NotFoundException("Presupuesto no encontrado");
+      const items = apply(readItems(latest.items));
+      return tx.salesQuote.update({ where: { id }, data: { ...extra, items: items as unknown as Prisma.InputJsonValue } });
     });
     return this.view(viewer, row);
   }

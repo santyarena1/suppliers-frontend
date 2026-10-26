@@ -115,4 +115,23 @@ d("Presupuestos contra Postgres", () => {
     expect(stored).toMatchObject({ currency: "ARS", status: "SENT", clientEmail: "beto@cliente.test" });
     expect(JSON.stringify(stored.items)).not.toContain("121");
   });
+  it("no pierde líneas con «Agregar», cantidades y quitar casi a la vez", async () => {
+    const quote = await service.create(seller, { clientName: "Doble clic" });
+    const ids = ["A", "B", "C", "D", "E", "F"];
+    await Promise.all(ids.map((externalId) => service.addItem(seller, quote.id, { provider: "ELIT", externalId })));
+    await Promise.all([1, 2].map(() => service.addItem(seller, quote.id, { provider: "ELIT", externalId: "A" })));
+    let view = await service.get(seller, quote.id);
+    expect(view.items.map((i) => i.externalId).sort()).toEqual(ids);
+    expect(view.items.find((i) => i.externalId === "A")?.qty).toBe(3);
+    const custom = Promise.all([0, 1, 2].map((n) => service.addCustom(seller, quote.id, { name: `Envío ${n}`, unitFinalPrice: 10, currency: "ARS" })));
+    const qty = Promise.all([service.updateItem(seller, quote.id, 1, { qty: 4 }), service.updateItem(seller, quote.id, 2, { qty: 5 })]);
+    await Promise.all([custom, qty]);
+    view = await service.get(seller, quote.id);
+    expect(view.items).toHaveLength(9);
+    expect([view.items[1].qty, view.items[2].qty]).toEqual([4, 5]);
+    const [refreshed] = await Promise.all([service.refreshPrices(seller, quote.id), service.addItem(seller, quote.id, { provider: "ELIT", externalId: "G" })]);
+    view = await service.get(seller, quote.id);
+    expect(view.items).toHaveLength(10);
+    expect(refreshed.changes.filter((c) => c.after === null)).toEqual([]);
+  });
 });

@@ -1,4 +1,4 @@
-import { detectNumberFormat, httpUrlOrUndefined, interpretAvailabilityText, normalizeRows, parseNumber } from "./row-normalizer";
+import { detectNumberFormat, httpUrlOrUndefined, interpretAvailabilityText, normalizeCurrency, normalizeRows, parseNumber } from "./row-normalizer";
 import type { ImportProfileSpec, SheetAnalysis } from "./types";
 
 function sheetOf(headers: string[], rows: (string | number | null)[][], dividers: (string | null)[] = []): SheetAnalysis {
@@ -159,5 +159,15 @@ describe("links de la planilla", () => {
     expect(httpUrlOrUndefined("data:text/html,<b>x</b>")).toBeUndefined();
     expect(httpUrlOrUndefined("no es un link")).toBeUndefined();
     expect(httpUrlOrUndefined(123)).toBeUndefined();
+  });
+});
+
+describe("normalizeCurrency", () => {
+  it("lleva a USD o ARS como lo escriben los locales", () => {
+    for (const v of ["USD", "usd", "U$S", "u$s", "US$", "U$D", "U$", "Dólares", "dolar", "U.S.D."]) expect(normalizeCurrency(v)).toBe("USD");
+    for (const v of ["ARS", "$", "AR$", "Pesos", "peso", " $ "]) expect(normalizeCurrency(v)).toBe("ARS");
+    expect(normalizeCurrency("EUR")).toBe("EUR");
+    expect(normalizeCurrency("")).toBeUndefined();
+    expect(normalizeCurrency(12)).toBeUndefined();
   });
 });

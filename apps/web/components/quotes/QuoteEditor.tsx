@@ -17,6 +17,7 @@ import { useSellerSession } from "@/lib/sale-price";
 import {
   QUOTE_STATUS_LABEL,
   QUOTE_STATUS_TONE,
+  quoteAmounts,
   quoteError,
   quotesApi,
   shortDate,
@@ -99,6 +100,11 @@ export default function QuoteEditor({
   const empty = quote.items.length === 0;
 
   const built = useMemo(() => (settings ? buildQuotePdfModel(quote, settings, money) : null), [quote, settings, money]);
+  // Lo que muestra cada línea en pantalla sale de las mismas cuentas que el PDF.
+  const amounts = useMemo(
+    () => quoteAmounts(quote.items, quote.discountPercent, money.currency, money.convert),
+    [quote.items, quote.discountPercent, money]
+  );
   const model = built && "model" in built ? built.model : null;
   const total = model?.totals.find((t) => t.strong)?.value ?? "—";
 
@@ -375,8 +381,8 @@ export default function QuoteEditor({
                 editable={editable}
                 busy={busy}
                 canEditMargins={quote.canEditMargins}
-                unit={money.format(money.convert(it.unitFinalPrice, it.currency))}
-                total={money.format(it.unitFinalPrice == null ? null : money.convert(it.unitFinalPrice * it.qty, it.currency))}
+                unit={money.format(amounts.lines[index]?.unitFinal ?? null)}
+                total={money.format(amounts.lines[index]?.totalFinal ?? null)}
                 onQty={(qty) => updateItem(index, { qty }, `qty:${index}`)}
                 onMargin={(marginPercent) => updateItem(index, { marginPercent })}
                 onCustom={(patch) => updateItem(index, patch)}

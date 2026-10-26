@@ -1,3 +1,5 @@
+import { whatsappNumber } from "./phone";
+
 /** Contacto directo con NODO: el mismo número en la landing, el alta y Plan y facturación. */
 export const NODO_WHATSAPP = "5491140859342";
 export const NODO_WHATSAPP_LABEL = "+54 9 11 4085-9342";
@@ -9,10 +11,8 @@ export function whatsappUrl(text?: string): string {
 
 /** Link de WhatsApp a un teléfono cualquiera (bandeja de Solicitudes). Null si no parece un número. */
 export function whatsappForPhone(phone: string | null | undefined): string | null {
-  const digits = (phone ?? "").replace(/\D/g, "");
-  if (digits.length < 8) return null;
-  const withCountry = digits.startsWith("54") ? digits : `54${digits.replace(/^0/, "")}`;
-  return `https://wa.me/${withCountry}`;
+  const digits = whatsappNumber(phone);
+  return digits ? `https://wa.me/${digits}` : null;
 }
 
 export type LandingContactKind = "CONTACT" | "CUSTOM" | "SUPPLIER" | "BRAND";

@@ -1,3 +1,5 @@
+import { isArsCurrency } from "@/lib/fx";
+import { whatsappNumber } from "@/lib/phone";
 import type { StorefrontHiddenReason, StorefrontOrderStatus, StorefrontStockState } from "@/lib/api";
 
 /** Ayudantes de Vender en NODO (docs/PLAN_VENDER_EN_NODO.md). */
@@ -73,21 +75,15 @@ export function untilText(iso: string | null | undefined): string | null {
 
 export function money(value: number | null | undefined, currency: string | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  const cur = currency === "ARS" ? "ARS" : "USD";
+  const cur = isArsCurrency(currency) ? "ARS" : "USD";
   const n = value.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return cur === "ARS" ? `$ ${n}` : `US$ ${n}`;
 }
 
 /** Link de WhatsApp a partir de un teléfono cargado como venga (Argentina por defecto). */
 export function whatsappLink(phone: string | null | undefined, text?: string): string | null {
-  if (!phone) return null;
-  let digits = phone.replace(/\D/g, "");
+  const digits = whatsappNumber(phone);
   if (!digits) return null;
-  if (digits.startsWith("00")) digits = digits.slice(2);
-  if (digits.startsWith("0")) digits = digits.slice(1);
-  // 10 dígitos = característica + número local: se le agrega el 54 9 de celulares de Argentina.
-  if (digits.length === 10) digits = `549${digits}`;
-  if (digits.length < 8) return null;
   return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }
 

@@ -6,7 +6,7 @@
 //   [SIM_OUT=<reporte.json>] [SIM_ONLY=providers] node test-e2e-sim/run.mjs
 //
 // SIM_ONLY=providers corre solo P1–P6 (scenarios-providers.mjs); SIM_ONLY=storefront, V1–V9
-// (Vender en NODO, scenarios-storefront.mjs); SIM_ONLY=quotes, Q1–Q7 (presupuestos y márgenes por estado). Levantar el API
+// (Vender en NODO, scenarios-storefront.mjs); SIM_ONLY=quotes, Q1–Q7 (presupuestos y márgenes por estado); SIM_ONLY=real, R1–R6 (casos reales de punta a punta). Levantar el API
 // con CRON_DISABLED=true: así nada sale a los portales reales con credenciales falsas.
 //
 // El API tiene que estar corriendo sin RESEND/SMTP (el código de mail sale por
@@ -22,6 +22,7 @@ import { providerScenarios } from "./scenarios-providers.mjs";
 import { t1TeamInvite } from "./scenarios-team.mjs";
 import { storefrontScenarios } from "./scenarios-storefront.mjs";
 import { quoteScenarios } from "./scenarios-quotes.mjs";
+import { realScenarios } from "./scenarios-real.mjs";
 
 const { PrismaClient } = prismaPkg;
 const SESSION_CACHE_WAIT_MS = 31_000;
@@ -152,6 +153,10 @@ async function main() {
     }
     if (process.env.SIM_ONLY === "storefront") {
       for (const step of storefrontScenarios) await runStep(step, ctx);
+      return;
+    }
+    if (process.env.SIM_ONLY === "real") {
+      for (const step of realScenarios) await runStep(step, ctx);
       return;
     }
     if (process.env.SIM_ONLY === "quotes") {

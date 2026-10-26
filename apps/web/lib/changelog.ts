@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.14.2",
+    date: "2026-10-26",
+    title: "Presupuestos: el total coincide en pantalla, PDF y WhatsApp",
+    changes: [
+      { kind: "fixed", text: "Si agregás varios productos al mismo presupuesto muy rápido (o desde dos pestañas), ya no se pierde ninguno." },
+      { kind: "fixed", text: "El total del presupuesto en pesos es el mismo en la pantalla, el PDF, el mensaje de WhatsApp y la lista." },
+      { kind: "fixed", text: "Los teléfonos escritos como 011 15-… o +54 sin el 9 abren bien el WhatsApp desde presupuestos, tiendas y la bandeja." },
+      { kind: "fixed", text: "En las planillas de tu tienda, la moneda escrita como U$S, $ o Pesos se reconoce bien." },
+    ],
+  },
+  {
     version: "2.14.1",
     date: "2026-10-24",
     title: "Elit: notas de venta separadas entre NODO y el portal",

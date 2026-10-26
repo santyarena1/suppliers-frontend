@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { isArsCurrency } from "@/lib/fx";
 import { AlertTriangle, Check, FileSpreadsheet, ImageOff, Loader2, Pencil, Plus, Search, Sheet, SlidersHorizontal, Trash2, X } from "lucide-react";
 import ListImportsPanel from "@/components/list-import/ListImportsPanel";
 import ComboField from "@/components/storefront/ComboField";
@@ -403,7 +404,7 @@ function ProductRow({
         {editing === "quick" ? (
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 text-[11px] text-surface-400">
-              Neto {product.currency === "ARS" ? "$" : "US$"}
+              Neto {isArsCurrency(product.currency) ? "$" : "US$"}
               <input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" className={`${inputCls} w-28 py-1.5`} />
             </label>
             <label className="flex items-center gap-1.5 text-[11px] text-surface-400">
@@ -524,7 +525,7 @@ function ProductForm({
     category: product?.category ?? "",
     sku: product?.sku ?? "",
     price: product?.price != null ? String(product.price).replace(".", ",") : "",
-    currency: product?.currency === "ARS" ? "ARS" : "USD",
+    currency: isArsCurrency(product?.currency) ? "ARS" : "USD",
     iva: String(product?.ivaPercent ?? 21),
     stock: product?.stock != null ? String(product.stock) : "1",
     condition: product?.condition ?? "",

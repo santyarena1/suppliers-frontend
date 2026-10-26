@@ -164,17 +164,19 @@ export interface PriceChange {
 
 /**
  * Aplica los precios de hoy. Lo que dejó de tener precio conserva el anterior
- * y se informa con `after: null`. Las líneas libres no cambian.
+ * y se informa con `after: null`. Las líneas libres no cambian, y tampoco las
+ * que no se consultaron (`undefined`: se sumaron mientras se buscaban precios).
  */
 export function repriceItems(
   items: QuoteItem[],
-  current: (PricedLine | null)[],
+  current: (PricedLine | null | undefined)[],
   now: Date
 ): { items: QuoteItem[]; changes: PriceChange[] } {
   const changes: PriceChange[] = [];
   const next = items.map((it, index) => {
     if (it.kind === "custom") return it;
     const line = current[index];
+    if (line === undefined) return it;
     if (!line || line.unitFinalPrice == null) {
       changes.push({ index, provider: it.provider, externalId: it.externalId, name: it.name, currency: it.currency, before: it.unitFinalPrice, after: null });
       return it;
