@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.15.0",
+    date: "2026-10-26",
+    title: "Air: elegí de qué depósito ves el stock",
+    changes: [
+      { kind: "new", text: "En Configuración de Air elegís qué depósitos ves (Lugano, Rosario, Córdoba, Mendoza). El stock es solo el de esos depósitos, ya descontado lo reservado, y se actualiza al guardar." },
+      { kind: "fixed", text: "Air: un depósito con más unidades reservadas que físicas ya no le resta stock a los demás." },
+      { kind: "fixed", text: "New Bytes: el stock es el mismo que muestra su sitio. Antes NODO mostraba menos unidades, y cuando New Bytes dice «10 o más» ahora se ve así." },
+      { kind: "fixed", text: "New Bytes: lo que NODO había cargado en una cotización anterior ya no aparece como «cargado en New Bytes» al volver al carrito. Solo se avisa lo que agregaste o cambiaste en el portal." },
+    ],
+  },
+  {
     version: "2.14.2",
     date: "2026-10-26",
     title: "Presupuestos: el total coincide en pantalla, PDF y WhatsApp",

@@ -20,7 +20,7 @@ import { useCan } from "@/lib/permissions";
 import { isRetailerSession } from "@/lib/purchase";
 import ProviderPurchaseConfig from "@/components/ProviderPurchaseConfig";
 import { invalidateShippingEstimates } from "@/lib/shipping";
-import { MIN_SYNC_MINUTES, SKU_PREFIX, SUSPENDS_ON_FREQUENT_SYNC } from "@/lib/providerMeta";
+import { AIR_WAREHOUSES, MIN_SYNC_MINUTES, SKU_PREFIX, SUSPENDS_ON_FREQUENT_SYNC } from "@/lib/providerMeta";
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import NodoSpinner from "@/components/NodoSpinner";
 import SyncProgressBar from "@/components/SyncProgressBar";
@@ -243,6 +243,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
         missingProductAction: config.missingProductAction,
         zeroStockAction: config.zeroStockAction,
         hideUnsyncedCatalog: Boolean(config.hideUnsyncedCatalog),
+        ...(provider === "AIR" ? { stockWarehouses: config.stockWarehouses ?? [] } : {}),
         priceMarkupPercent: Number(config.priceMarkupPercent) || 0,
         minStockThreshold: Number(config.minStockThreshold) || 0,
         acceptsOffline: Boolean(config.acceptsOffline),
@@ -796,6 +797,39 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                               <span className={`absolute top-0.5 bg-white rounded-full transition-all ${config.hideUnsyncedCatalog ? "left-[22px]" : "left-0.5"}`} style={{ width: 18, height: 18 }} />
                             </button>
                           </div>
+                          {provider === "AIR" && (
+                            <div>
+                              <p className="block text-xs font-medium text-surface-400 mb-1.5">Depósitos de Air que ves</p>
+                              <div className="flex flex-wrap gap-2">
+                                {AIR_WAREHOUSES.map((w) => {
+                                  const chosen = config.stockWarehouses ?? [];
+                                  const on = chosen.includes(w.id);
+                                  return (
+                                    <button
+                                      key={w.id}
+                                      type="button"
+                                      aria-pressed={on}
+                                      onClick={() =>
+                                        setConfig({
+                                          ...config,
+                                          stockWarehouses: on ? chosen.filter((id) => id !== w.id) : [...chosen, w.id],
+                                        })
+                                      }
+                                      className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${on ? "border-brand-500 bg-brand-600/20 text-white" : "border-surface-700 bg-surface-800 text-surface-300 hover:border-surface-500"}`}
+                                    >
+                                      {w.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-[11px] text-surface-500 mt-1.5 leading-relaxed">
+                                {(config.stockWarehouses ?? []).length === 0
+                                  ? "Sin elegir, el stock suma todos los depósitos. Elegí desde cuál comprás para ver solo ese stock."
+                                  : "El stock es el de estos depósitos, ya descontado lo reservado."}{" "}
+                                Al guardar se actualiza enseguida, sin esperar la próxima sincronización.
+                              </p>
+                            </div>
+                          )}
                           <div>
                             <label className="block text-xs font-medium text-surface-400 mb-1.5">Stock mínimo del proveedor</label>
                             <input

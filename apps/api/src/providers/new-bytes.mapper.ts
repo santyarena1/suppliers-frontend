@@ -37,6 +37,10 @@ export interface NbJsonProduct {
   mainImageExp?: string;
   stock?: string | number | null;
   amountStock?: number | string | null;
+  /** Lo que el sitio muestra ("8 unidades", "10 unidades o más"). `amountStock` viene más bajo. */
+  availableStock?: number | string | null;
+  /** Tope que informa New Bytes: con `availableStock` igual a esto hay eso o más. */
+  stockDisplayLimit?: number | string | null;
   warranty?: string;
   cotizacion?: number;
   price?: {
@@ -81,6 +85,21 @@ function stockFromTextOrNumber(stock: unknown, amountStock: unknown): { stock?: 
   const qty = amount ?? numericText;
   const status = text && numericText == null ? text : undefined;
   return { stock: qty, stockStatus: status };
+}
+
+/**
+ * Stock del catálogo JSON como lo ve el comercio en el sitio: `availableStock`
+ * (el sitio dice "8 unidades"), no `amountStock`, que viene más bajo. New Bytes
+ * no informa más que `stockDisplayLimit` (10): en el tope es "10 o más".
+ */
+export function nbJsonStock(p: Pick<NbJsonProduct, "stock" | "amountStock" | "availableStock" | "stockDisplayLimit">): { stock?: number; stockStatus?: string } {
+  const available = asNumber(p.availableStock);
+  const parsed = stockFromTextOrNumber(p.stock, available ?? p.amountStock);
+  const limit = asNumber(p.stockDisplayLimit);
+  if (available != null && limit != null && limit > 0 && available >= limit) {
+    return { stock: available, stockStatus: `${limit} o más` };
+  }
+  return parsed;
 }
 
 /**
@@ -137,7 +156,7 @@ export function mapJsonProduct(p: NbJsonProduct): NormalizedProduct | null {
   const id = asString(p.id);
   const name = asString(p.title);
   if (!id || !name) return null;
-  const stockParsed = stockFromTextOrNumber(p.stock, p.amountStock);
+  const stockParsed = nbJsonStock(p);
   const price = p.price ?? undefined;
   return {
     externalId: id,

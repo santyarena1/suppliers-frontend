@@ -1581,6 +1581,8 @@ export interface ProviderConfig {
   zeroStockAction: ZeroStockAction;
   /** No listar fichas de este distribuidor que este local todavía no sincronizó. */
   hideUnsyncedCatalog: boolean;
+  /** Air: depósitos cuyo stock ve el comercio (LUG, ROS, CBA, MZA). Vacío = todos. */
+  stockWarehouses?: string[];
   priceMarkupPercent: number | string;
   minStockThreshold: number;
   acceptsOffline: boolean;

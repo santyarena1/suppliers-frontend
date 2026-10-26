@@ -14,6 +14,7 @@ import {
   type Provider,
   type ShippingMethod,
   providerHasCatalogAdapter,
+  airWarehouseStock,
 } from "@nodo/shared";
 import type { IvaAdjustment, OfferSource, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -41,6 +42,7 @@ import {
 import { mergeProductImage } from "../images/product-image";
 import { ProviderRegistry } from "./provider-registry";
 import type { NormalizedProduct, ProviderAdapter } from "./types";
+import { withAirWarehouses } from "./adapters/air.adapter";
 import { UpdateProviderConfigDto } from "./dto/update-config.dto";
 import { diffCatalogItem, type CatalogSyncDiff } from "./catalog-sync-diff";
 import {
@@ -166,6 +168,7 @@ export class ProvidersService implements OnModuleInit {
       missingProductAction: "KEEP" as const,
       zeroStockAction: "KEEP" as const,
       hideUnsyncedCatalog: false,
+      stockWarehouses: [] as string[],
       priceMarkupPercent: 0,
       minStockThreshold: 0,
       acceptsOffline: false,
@@ -242,6 +245,9 @@ export class ProvidersService implements OnModuleInit {
       create: { tenantId, provider, ...data },
       update: data,
     });
+    if (provider === "AIR" && dto.stockWarehouses !== undefined && !sameWarehouses(current?.stockWarehouses, saved.stockWarehouses)) {
+      await this.reapplyAirWarehouses(tenantId, saved.stockWarehouses);
+    }
     if (shouldUnhideOnConfigChange(current, saved)) {
       await this.prisma.tenantProductOffer.updateMany({
         where: { tenantId, provider, active: false },
@@ -311,6 +317,34 @@ export class ProvidersService implements OnModuleInit {
     };
   }
 
+  private async airWarehousesOf(tenantId: string): Promise<string[]> {
+    const row = await this.prisma.providerSyncConfig.findUnique({
+      where: { tenantId_provider: { tenantId, provider: "AIR" } },
+      select: { stockWarehouses: true },
+    });
+    return row?.stockWarehouses ?? [];
+  }
+
+  /**
+   * El comercio cambió los depósitos de Air que ve: el stock de cada oferta se
+   * recalcula ya con el desglose por depósito de la ficha, sin esperar la próxima sync.
+   */
+  private async reapplyAirWarehouses(tenantId: string, warehouses: string[]) {
+    const offers = await this.prisma.tenantProductOffer.findMany({
+      where: { tenantId, provider: "AIR", source: "SYNC" },
+      select: { id: true, stock: true, product: { select: { raw: true } } },
+    });
+    const updates = offers
+      .map((offer) => ({ id: offer.id, before: offer.stock, stock: airWarehouseStock(offer.product.raw, warehouses) }))
+      .filter((row): row is { id: string; before: number | null; stock: number } => row.stock != null && row.stock !== row.before);
+    for (let i = 0; i < updates.length; i += 200) {
+      await this.prisma.$transaction(
+        updates.slice(i, i + 200).map((row) => this.prisma.tenantProductOffer.update({ where: { id: row.id }, data: { stock: row.stock } }))
+      );
+    }
+    this.logger.log(`Air: depósitos [${warehouses.join(", ") || "todos"}] para ${tenantId}, ${updates.length} ofertas con otro stock`);
+  }
+
   /** Arranca después de mandar el 200, para que el POST no se quede preso del primer GET a Distecna. */
   private enqueueManualSync(
     tenantId: string,
@@ -338,6 +372,7 @@ export class ProvidersService implements OnModuleInit {
     progress?: CatalogSyncProgress
   ) {
     const syncedExternalIds: string[] = [];
+    const warehouses = provider === "AIR" ? await this.airWarehousesOf(tenantId) : [];
     const result = await this.runSync(
       tenantId,
       provider,
@@ -346,7 +381,7 @@ export class ProvidersService implements OnModuleInit {
           credentials,
           async (items) => {
             syncedExternalIds.push(...items.map((i) => i.externalId));
-            await onPage(items);
+            await onPage(warehouses.length > 0 ? items.map((item) => withAirWarehouses(item, warehouses)) : items);
           },
           onMeta
         );
@@ -2578,6 +2613,12 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function sameWarehouses(a: readonly string[] | null | undefined, b: readonly string[] | null | undefined): boolean {
+  const x = [...(a ?? [])].sort().join(",");
+  const y = [...(b ?? [])].sort().join(",");
+  return x === y;
+}
+
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500);
 }
@@ -2597,6 +2638,7 @@ function serializeSyncConfig<T extends object>(c: T) {
     acceptsOffline: Boolean(row.acceptsOffline),
     acceptsScheme: Boolean(row.acceptsScheme),
     hideUnsyncedCatalog: Boolean(row.hideUnsyncedCatalog),
+    stockWarehouses: Array.isArray(row.stockWarehouses) ? (row.stockWarehouses as string[]) : [],
     offlineIvaAdjustment: (row.offlineIvaAdjustment as IvaAdjustment | null | undefined) ?? null,
     schemeIvaAdjustment: (row.schemeIvaAdjustment as IvaAdjustment | null | undefined) ?? null,
   };

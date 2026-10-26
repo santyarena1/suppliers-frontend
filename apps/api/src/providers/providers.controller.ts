@@ -329,7 +329,7 @@ export class ProvidersController {
   @RequiresCapability("directCheckout")
   @Get("providers/NEW_BYTES/checkout/portal-cart")
   async newBytesPortalCart(@CurrentTenant() tenant: TenantContext) {
-    return this.newBytesOrderService.readPortalCart(await this.newBytesCredentials(tenant));
+    return this.newBytesOrderService.readPortalCart(await this.newBytesCredentials(tenant), tenant.tenantId);
   }
 
   /** POST /carrito/new + items. Devuelve el carrito real de NewBytes (subtotales / availability). */

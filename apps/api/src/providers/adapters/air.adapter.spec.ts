@@ -1,8 +1,10 @@
+import { airWarehouseStock } from "@nodo/shared";
 import {
   airLoginRejected,
   airPortalArticles,
   applyAirAccountPrices,
   mapAirProduct,
+  withAirWarehouses,
   parseAirCsv,
   parseAirPrice,
   parseAirTermMap,
@@ -135,5 +137,35 @@ describe("parseAirPrice / airLoginRejected", () => {
     expect(airLoginRejected(`<meta name="action_state" content="-1">`)).toBe(true);
     expect(airLoginRejected(`<meta name="cuenta" content="">Inicia sesión con tu cuenta`)).toBe(true);
     expect(airLoginRejected(`<meta name="cuenta" content="1234">`)).toBe(false);
+  });
+});
+
+describe("stock de Air por depósito", () => {
+  // 53359 en el portal el 2026-10-26: Rosario 3 físicos y 6 reservados (−3 en el CSV).
+  const raw = { ROS: "-3", MZA: "18", CBA: "0", LUG: "150" };
+
+  it("un depósito con más reservado que físico cuenta 0 y no le resta a los demás", () => {
+    expect(airWarehouseStock(raw)).toBe(168);
+  });
+
+  it("solo los depósitos que eligió el comercio", () => {
+    expect(airWarehouseStock(raw, ["LUG"])).toBe(150);
+    expect(airWarehouseStock(raw, ["ROS"])).toBe(0);
+    expect(airWarehouseStock(raw, ["ROS", "MZA"])).toBe(18);
+  });
+
+  it("sin elegir (o con ids que no existen) suma todos", () => {
+    expect(airWarehouseStock(raw, [])).toBe(168);
+    expect(airWarehouseStock(raw, ["XXX"])).toBe(168);
+  });
+
+  it("la sync aplica los depósitos al producto", () => {
+    const product = mapAirProduct({
+      Codigo: "53359", Descripcion: "MONITOR", lista5: "100", Tipo: "A", IVA: "21",
+      ROS: "-3", MZA: "18", CBA: "0", LUG: "150", Grupo: "", Rubro: "", "Part Number": "",
+    });
+    expect(product.stock).toBe(168);
+    expect(withAirWarehouses(product, ["CBA"]).stock).toBe(0);
+    expect(withAirWarehouses(product, ["LUG", "CBA"]).stock).toBe(150);
   });
 });

@@ -174,6 +174,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Lo aprendido sale de los últimos 30 pedidos por distribuidor (180 días, sin offline): la forma más usada y su último costo informado (New Bytes en pesos, Elit en dólares). Manda la habitual marcada a mano; si no, la más usada, con el valor cargado a mano si coincide el nombre. El reparto por producto (unidades, valor o pedido) y el filtro "Incluir envío" son preferencias del navegador. Es una estimación: el costo real lo da el portal en el checkout.
 
+### [FEATURE] Depósitos de Air que ve cada comercio
+- **Método**: GET | PUT
+- **Ruta**: `/providers/AIR/config` (campo `stockWarehouses`)
+- **Auth**: Bearer usuario con organización
+- **Body / Params**: `stockWarehouses: ("LUG" | "ROS" | "CBA" | "MZA")[]` — lista completa; `[]` = todos los depósitos.
+- **Respuesta esperada**: la config de siempre con `stockWarehouses: string[]`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: El CSV de Air trae por depósito el físico menos lo reservado (igual que `stock[].fisico - stock[].reserva` del portal). El stock de la oferta suma solo los depósitos elegidos y un depósito negativo (más reservado que físico) cuenta 0. Al guardar un cambio de depósitos se recalculan ya las ofertas del comercio con el desglose de la ficha (`raw.LUG/ROS/CBA/MZA`); cada sync lo vuelve a aplicar.
+
 ### [FEATURE] Equipo de la organización (Tipo 1 autónomo)
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `/my/org` · `/my/team` · `/my/team/:membershipId` · `/my/team/:membershipId/password` · `/my/team/:membershipId/managed-brands`

@@ -18,6 +18,7 @@ import {
 } from "class-validator";
 import { IvaAdjustment, MissingProductAction, PriceChannel, ZeroStockAction } from "@prisma/client";
 import {
+  AIR_WAREHOUSE_IDS,
   MAX_SHIPPING_METHODS,
   PAYMENT_OPTION_KINDS,
   SHIPPING_CURRENCIES,
@@ -114,6 +115,13 @@ export class UpdateProviderConfigDto {
   @IsOptional()
   @IsBoolean()
   hideUnsyncedCatalog?: boolean;
+
+  /** Air: depósitos cuyo stock ve este comercio. Vacío = todos. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(AIR_WAREHOUSE_IDS.length)
+  @IsIn(AIR_WAREHOUSE_IDS, { each: true })
+  stockWarehouses?: string[];
 
   @IsOptional()
   @IsNumber()

@@ -5,6 +5,7 @@ import { asRecord, asString } from "../json-value";
 import { AIR_META_URL, airInternalTaxPercent, mapAirMeta, splitAirInternalTax } from "../air-meta";
 import { AirPortalClient } from "../air-portal-client";
 import { isAccessBlockedError } from "../provider-rate-limits";
+import { airWarehouseStock } from "@nodo/shared";
 
 // La API JSON documentada (api.air-intra.com/v2, ?q=articulos) tiene un
 // límite real de 1 request cada 5 minutos, verificado en vivo — inviable
@@ -439,8 +440,15 @@ export function parseAirCsv(csvText: string): AirCsvRow[] {
   return rows;
 }
 
+/** Stock de Air con los depósitos que eligió el comercio (el adaptador suma todos). */
+export function withAirWarehouses(item: NormalizedProduct, warehouses: readonly string[]): NormalizedProduct {
+  const stock = airWarehouseStock(item.raw, warehouses);
+  return stock == null ? item : { ...item, stock };
+}
+
+/** Todos los depósitos; el que el comercio elija se aplica al guardar la oferta (providers.service). */
 function sumStock(r: AirCsvRow): number {
-  return [r.ROS, r.MZA, r.CBA, r.LUG].reduce((sum, v) => sum + (Number(v) || 0), 0);
+  return airWarehouseStock(r) ?? 0;
 }
 
 /** Diccionario id → nombre de `cache/rubros.txt` / `cache/grupos.txt`. */

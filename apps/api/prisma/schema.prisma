@@ -1071,6 +1071,8 @@ model ProviderSyncConfig {
   /// Si está activo, el buscador no lista fichas de este distribuidor que este
   /// local todavía no sincronizó (sin precio ni stock propios).
   hideUnsyncedCatalog      Boolean              @default(false)
+  /// Air: depósitos cuyo stock ve este comercio (LUG, ROS, CBA, MZA). Vacío = todos.
+  stockWarehouses          String[]             @default([])
   /// Cada cuántos días espera este comercio una lista nueva de este proveedor
   /// (su lista propia). null = usa la del proveedor (Tenant.listUpdateDays).
   listUpdateDays           Int?

@@ -30,6 +30,7 @@ import {
 } from "./new-bytes.mapper";
 import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
 import { snapshotJson } from "./json-value";
+import { cartSnapshotOf, type PortalReconcileFor } from "./portal-cart-sync";
 
 export interface NewBytesCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -82,6 +83,18 @@ export function nbLoadedLines(body: unknown): CartLine[] | null {
     lines.push({ code, qty });
   }
   return lines;
+}
+
+/**
+ * Lo del carrito de New Bytes que no puso NODO: lo que no estaba en la foto, o
+ * está con otra cantidad. Lo que sigue igual a la foto es un carrito anterior de NODO.
+ */
+export function portalOnlyLines<T extends { code: string; qty: number }>(
+  portal: T[],
+  snapshot: Record<string, number> | null
+): T[] {
+  if (!snapshot) return portal;
+  return portal.filter((line) => snapshot[line.code] !== line.qty);
 }
 
 /** Una línea por código: online y esquema del mismo producto van juntos. */
@@ -280,7 +293,8 @@ export class NewBytesOrderService {
    */
   private async prepareCart(
     credentials: Record<string, string>,
-    requested: NewBytesCartItems["items"]
+    requested: NewBytesCartItems["items"],
+    tenantId?: string
   ): Promise<PreparedCart> {
     const items = mergeNbLines(requested);
     if (items.length === 0) throw new BadRequestException("No hay productos de NewBytes en el pedido");
@@ -295,6 +309,8 @@ export class NewBytesOrderService {
         type: 0,
       }))
     );
+    // Lo que cargó NODO: al volver a leer el carrito de New Bytes, eso no es "algo cargado en el portal".
+    if (tenantId) await this.rememberLoaded(tenantId, items);
 
     const [cartBody, subtotalesRaw, availabilityRaw, paymentsRaw, addressesRaw] = await Promise.all([
       api.get("carrito"),
@@ -381,25 +397,37 @@ export class NewBytesOrderService {
     };
   }
 
+  private async rememberLoaded(tenantId: string, items: NewBytesCartItems["items"]) {
+    await this.cartSnapshots.save(tenantId, "NEW_BYTES", cartSnapshotOf(items)).catch((err: unknown) =>
+      this.logger.warn(`No se pudo guardar la foto del carrito de NewBytes: ${String(err)}`)
+    );
+  }
+
   /**
    * Lo que la cuenta tiene cargado en el carrito de NewBytes, sin tocarlo.
    * Hay que leerlo antes de cotizar: cotizar vacía el carrito y lo arma con NODO.
+   * Lo que quedó igual a como lo cargó NODO la última vez no se devuelve: es un
+   * carrito anterior de NODO, no algo que el comercio puso en el portal.
    */
-  async readPortalCart(credentials: Record<string, string>) {
+  async readPortalCart(credentials: Record<string, string>, tenantId?: string) {
     const api = await this.login(credentials);
     const body = await api.get("carrito").catch(() => null);
+    const snapshot = tenantId ? await this.cartSnapshots.load(tenantId, "NEW_BYTES").catch(() => null) : null;
     return {
-      items: mergeNbLines(
-        cartItemsFromBody(body, [])
-          .filter((line) => line.code)
-          .map((line) => ({ code: line.code, qty: line.qty, name: line.name }))
+      items: portalOnlyLines(
+        mergeNbLines(
+          cartItemsFromBody(body, [])
+            .filter((line) => line.code)
+            .map((line) => ({ code: line.code, qty: line.qty, name: line.name }))
+        ),
+        snapshot
       ),
     };
   }
 
   /** Arma el carrito en NewBytes (POST /carrito/new + items) y devuelve subtotales reales. */
-  async syncCart(credentials: Record<string, string>, input: NewBytesCartItems, _reconcileFor?: unknown) {
-    const prepared = await this.prepareCart(credentials, input.items);
+  async syncCart(credentials: Record<string, string>, input: NewBytesCartItems, reconcileFor?: PortalReconcileFor) {
+    const prepared = await this.prepareCart(credentials, input.items, reconcileFor?.tenantId);
     return {
       ...this.publicCart(prepared),
       pickup: NB_PICKUP_BRANCH,
@@ -411,9 +439,9 @@ export class NewBytesOrderService {
   async quoteShippingForAddress(
     credentials: Record<string, string>,
     input: NewBytesCartItems & { addressId: string },
-    _reconcileFor?: unknown
+    reconcileFor?: PortalReconcileFor
   ) {
-    const prepared = await this.prepareCart(credentials, input.items);
+    const prepared = await this.prepareCart(credentials, input.items, reconcileFor?.tenantId);
     const address = prepared.addresses.find((a) => a.id === input.addressId);
     if (!address) throw new BadRequestException("Esa dirección no está en tu cuenta de NewBytes");
     const quoted = await this.quoteShipping(prepared.api, address);
@@ -424,11 +452,11 @@ export class NewBytesOrderService {
     };
   }
 
-  async preview(credentials: Record<string, string>, input: NewBytesDraftInput, _reconcileFor?: unknown) {
+  async preview(credentials: Record<string, string>, input: NewBytesDraftInput, reconcileFor?: PortalReconcileFor) {
     if (input.delivery !== "pickup" && input.delivery !== "shipping") {
       throw new BadRequestException("Elegí retiro en sucursal o envío a domicilio");
     }
-    const prepared = await this.prepareCart(credentials, input.items);
+    const prepared = await this.prepareCart(credentials, input.items, reconcileFor?.tenantId);
     const payments = this.paymentsFor(prepared, input.delivery);
     const payment = this.resolvePayment(payments, input.medioDePagoId, false);
 
@@ -541,7 +569,7 @@ export class NewBytesOrderService {
       throw new BadRequestException("El dropshipping de NewBytes solo aplica cuando hay envío, no en retiro");
     }
 
-    const prepared = await this.prepareCart(credentials, input.items);
+    const prepared = await this.prepareCart(credentials, input.items, author.tenantId);
     // Si New Bytes no aceptó algo, no sale un pedido distinto del carrito.
     if (prepared.loaded) assertPortalCartMatches("New Bytes", mergeNbLines(input.items), prepared.loaded);
     else this.logger.warn("New Bytes: no se pudo leer el carrito para verificarlo antes de confirmar");
@@ -623,12 +651,9 @@ export class NewBytesOrderService {
       throw new BadGatewayException(record.errorMessage || "No se pudo crear el pedido en NewBytes");
     }
 
+    // La foto queda con lo pedido: si New Bytes deja esas líneas en el carrito,
+    // la próxima vez no aparecen como "cargadas en el portal".
     const created = Boolean(processResult.orderId || processResult.branch);
-    if (created) {
-      await this.cartSnapshots.clear(author.tenantId, "NEW_BYTES").catch((err: unknown) =>
-        this.logger.warn(`No se pudo limpiar la foto del carrito de NewBytes: ${String(err)}`)
-      );
-    }
     const saved = {
       status: created ? "CREATED" : "FAILED",
       invidOrderNumber: processResult.orderId ?? null,

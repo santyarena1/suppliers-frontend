@@ -95,6 +95,46 @@ describe("NewBytesOrderService", () => {
     jest.restoreAllMocks();
   });
 
+  it("un carrito anterior de NODO no aparece como cargado en New Bytes; lo puesto a mano sí", async () => {
+    const fotos: Record<string, Record<string, number> | null> = {};
+    const snapshots = {
+      load: jest.fn(async (tenantId: string) => fotos[tenantId] ?? null),
+      save: jest.fn(async (tenantId: string, _p: string, snap: Record<string, number> | null) => {
+        fotos[tenantId] = snap;
+      }),
+      clear: jest.fn(async (tenantId: string) => {
+        fotos[tenantId] = null;
+      }),
+    };
+    service = new NewBytesOrderService({ providerOrder: { create: createOrder, findMany: jest.fn() } } as never, snapshots as never);
+
+    // Cotiza con dos productos y después saca uno en NODO: New Bytes sigue con los dos.
+    await service.syncCart(CREDS, { items: [{ code: "108613", qty: 1 }, { code: "555", qty: 2 }] }, { tenantId: "tenant-1" });
+    expect((await service.readPortalCart(CREDS, "tenant-1")).items).toEqual([]);
+
+    // En el portal cambia una cantidad y agrega otro producto a mano.
+    await api.post("carrito/item", [
+      { productId: 108613, amount: 4 },
+      { productId: 555, amount: 2 },
+      { productId: 777, amount: 1 },
+    ]);
+    const codes = (await service.readPortalCart(CREDS, "tenant-1")).items.map((it) => [it.code, it.qty]);
+    expect(codes).toEqual([["108613", 4], ["777", 1]]);
+
+    // Otro comercio (sin foto) ve todo lo del portal.
+    expect((await service.readPortalCart(CREDS, "tenant-2")).items).toHaveLength(3);
+  });
+
+  it("después de pedir, lo pedido sigue en la foto", async () => {
+    const save = jest.fn(async () => undefined);
+    service = new NewBytesOrderService(
+      { providerOrder: { create: createOrder, findMany: jest.fn() } } as never,
+      { load: jest.fn(async () => null), save, clear: jest.fn(async () => undefined) } as never
+    );
+    await service.submitDraft(AUTOR, CREDS, { items: [{ code: "108613", qty: 1, name: "RTX 3070" }], delivery: "pickup", medioDePagoId: 5 });
+    expect(save).toHaveBeenLastCalledWith("tenant-1", "NEW_BYTES", { "108613": 1 });
+  });
+
   it("vacía el carrito de la cuenta antes de cargar lo de NODO, no asume retiro", async () => {
     const cart = await service.syncCart(CREDS, { items: ITEMS });
     expect(api.patch).toHaveBeenCalledWith("carrito/empty");

@@ -15,3 +15,4 @@ export * from "./shipping";
 export * from "./catalog-api";
 export * from "./tax-lines";
 export * from "./sale-margins";
+export * from "./air-warehouses";

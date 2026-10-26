@@ -7,6 +7,7 @@ import {
   filterPaymentsForDelivery,
   mapCsvProduct,
   mapJsonProduct,
+  nbJsonStock,
   mapPaymentOption,
   nbProductUrl,
   normalizeComprobante,
@@ -348,5 +349,20 @@ describe("cleanCode (código de fabricante de New Bytes)", () => {
     expect(cleanCode("--")).toBeUndefined();
     expect(cleanCode(" ABC-123 ")).toBe("ABC-123");
     expect(cleanCode("SSD")).toBe("SSD");
+  });
+});
+
+describe("stock de New Bytes como lo muestra el sitio", () => {
+  it("usa availableStock, no amountStock (que viene más bajo)", () => {
+    // Datos reales del 2026-10-26: el sitio decía "8 unidades" y NODO mostraba 5.
+    expect(nbJsonStock({ stock: "Medio", amountStock: 5, availableStock: 8, stockDisplayLimit: 10 })).toEqual({ stock: 8, stockStatus: "Medio" });
+  });
+
+  it("en el tope que informa New Bytes es «10 o más»", () => {
+    expect(nbJsonStock({ stock: "Alto", amountStock: 2, availableStock: 10, stockDisplayLimit: 10 })).toEqual({ stock: 10, stockStatus: "10 o más" });
+  });
+
+  it("sin availableStock sigue con amountStock", () => {
+    expect(nbJsonStock({ stock: "Sin stock", amountStock: 0 })).toEqual({ stock: 0, stockStatus: "Sin stock" });
   });
 });

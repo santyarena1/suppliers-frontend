@@ -32,3 +32,11 @@ export const MIN_SYNC_MINUTES: Record<string, number> = {
 
 /** De estos el mínimo es porque suspendieron cuentas; del resto es prudencia (integraciones nuevas). */
 export const SUSPENDS_ON_FREQUENT_SYNC: readonly string[] = ["GRUPO_NUCLEO", "SOLUTION_BOX"];
+
+/** Espejo de `AIR_WAREHOUSES` de `packages/shared/src/air-warehouses.ts` (la web no depende de @nodo/shared). */
+export const AIR_WAREHOUSES = [
+  { id: "LUG", label: "Lugano (Buenos Aires)" },
+  { id: "ROS", label: "Rosario" },
+  { id: "CBA", label: "Córdoba" },
+  { id: "MZA", label: "Mendoza" },
+] as const;
