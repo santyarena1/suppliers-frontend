@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.15.3",
+    date: "2026-10-27",
+    title: "Elit: el carrito ya no muestra como propio lo que cargó NODO",
+    changes: [
+      { kind: "fixed", text: "Después de cotizar un pedido de Elit pendiente de aprobación, el carrito ya no muestra esos productos como cargados a mano en Elit ni avisa que Elit perdió los tuyos." },
+    ],
+  },
+  {
     version: "2.15.2",
     date: "2026-10-27",
     title: "New Bytes: el carrito ya no muestra como propio lo que cargó NODO",

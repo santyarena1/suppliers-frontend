@@ -659,7 +659,8 @@ export class OrdersService {
       case "AIR":
         return this.air.preview(credentials, input as unknown as AirDraftInput);
       case "ELIT":
-        return this.elit.preview(credentials, input as unknown as ElitCartItems);
+        // Cotizar arma el carrito de Elit con el pedido: queda la foto para que no se lea como algo cargado en el portal.
+        return this.elit.preview(credentials, input as unknown as ElitCartItems, undefined, tenantId);
       case "NEW_TREE":
         return this.newTree.preview(tenantId, credentials, input as unknown as NewTreeCartItems);
       case "SOLUTION_BOX":

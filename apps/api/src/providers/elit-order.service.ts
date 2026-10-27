@@ -3,7 +3,7 @@ import { atCheckout, type PortalShippingOptions } from "./portal-shipping-option
 import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
 import { assertPortalCartMatches } from "./cart-match";
-import { nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
+import { cartSnapshotOf, nextCartSnapshot, reconcilePortalCart, type CartSyncChanges, type PortalReconcileFor } from "./portal-cart-sync";
 import { mapProviderDraft, orderOwner, pendingCheckoutResponse, runBackgroundDraft, type OrderAuthor } from "./provider-draft";
 import { parseElitCredentials,
   ElitWebClient,
@@ -240,14 +240,23 @@ export class ElitOrderService {
    * suma y lo que solo está en Elit queda pendiente en `sync`. Sin
    * `reconcileFor` (confirmar un pedido) el carrito es lo que NODO manda.
    */
-  preview(credentials: Record<string, string>, input: ElitCartItems, reconcileFor?: PortalReconcileFor) {
-    return withPortalCartLock(elitAccountKey(credentials), () => this.previewUnlocked(credentials, input, reconcileFor));
+  preview(
+    credentials: Record<string, string>,
+    input: ElitCartItems,
+    reconcileFor?: PortalReconcileFor,
+    loadedFor?: string
+  ) {
+    return withPortalCartLock(elitAccountKey(credentials), () =>
+      this.previewUnlocked(credentials, input, reconcileFor, loadedFor)
+    );
   }
 
   private async previewUnlocked(
     credentials: Record<string, string>,
     input: ElitCartItems,
-    reconcileFor?: PortalReconcileFor
+    reconcileFor?: PortalReconcileFor,
+    /** Sin conciliar (cotizar un pedido retenido): el carrito de Elit queda con lo que mandó NODO, y esa es la foto. */
+    loadedFor?: string
   ) {
     if (input.items.length === 0) throw new BadRequestException("No hay productos de Elit en el pedido");
     const api = await ElitWebClient.login(credentials);
@@ -274,6 +283,10 @@ export class ElitOrderService {
     if (unavailable.length > 0 && unavailable.length >= items.length) throw noStockError(unavailable);
     if (reconcileFor && sync) {
       await this.cartSnapshots.save(reconcileFor.tenantId, "ELIT", nextCartSnapshot(items, sync, previousSnapshot));
+    } else if (loadedFor) {
+      await this.cartSnapshots.save(loadedFor, "ELIT", cartSnapshotOf(items)).catch((err: unknown) =>
+        this.logger.warn(`No se pudo guardar la foto del carrito de Elit: ${String(err)}`)
+      );
     }
     let summary = elitData<Record<string, unknown>>(await api.getJson("cart/summary"));
     await this.applyOptions(api, { ...input, items }, summary);

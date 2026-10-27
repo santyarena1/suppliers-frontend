@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException } from "@nestjs/common";
 import { ElitWebClient } from "./elit-web-client";
 import { ElitOrderService } from "./elit-order.service";
+import { reconcilePortalCart } from "./portal-cart-sync";
 
 function summary(over: Record<string, unknown> = {}) {
   return {
@@ -169,6 +170,25 @@ describe("ElitOrderService", () => {
   it("sin tenant (confirmar pedido) no concilia: el carrito es lo que NODO manda", async () => {
     await service.preview(CREDS, { items: ITEMS });
     expect(api.getJson.mock.calls.filter((c) => c[0] === "cart")).toHaveLength(1);
+  });
+
+  it("cotizar un pedido retenido guarda la foto: al volver al carrito no aparece como cargado en Elit", async () => {
+    const saved: Record<string, Record<string, number>> = {};
+    const snapshots = {
+      load: jest.fn(async (tenantId: string) => saved[tenantId] ?? null),
+      save: jest.fn(async (tenantId: string, _provider: string, snap: Record<string, number>) => {
+        saved[tenantId] = snap;
+      }),
+      clear: jest.fn(async () => undefined),
+    };
+    service = new ElitOrderService({ providerOrder: { create: createOrder, findMany: jest.fn() } } as never, snapshots as never);
+    await service.preview(CREDS, { items: ITEMS }, undefined, "t1");
+    expect(saved.t1).toEqual({ "18636": 1 });
+
+    // El carrito de Elit quedó con el pedido retenido; el de NODO tiene otra cosa.
+    const { changes } = reconcilePortalCart([{ code: "555", qty: 2 }], [{ code: "18636", qty: 1 }], saved.t1);
+    expect(changes.addedInPortal).toEqual([]);
+    expect(changes.restoredInPortal).toEqual([]);
   });
 
   it("suma percepciones IIBB al total aunque Elit no las ponga en finalTotal", async () => {
