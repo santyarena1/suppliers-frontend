@@ -652,7 +652,8 @@ export class OrdersService {
       case "INVID":
         return this.invid.preview(credentials, input as unknown as InvidDraftInput);
       case "NEW_BYTES":
-        return this.newBytes.preview(credentials, input as unknown as NewBytesDraftInput);
+        // Cotizar vacía el carrito de NewBytes y lo arma con NODO: queda la foto para que no se lea como algo cargado en el portal.
+        return this.newBytes.preview(credentials, input as unknown as NewBytesDraftInput, { tenantId });
       case "GRUPO_NUCLEO":
         return this.grupoNucleo.preview(credentials, input as unknown as GnDraftInput);
       case "AIR":

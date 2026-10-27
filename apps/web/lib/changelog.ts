@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.15.2",
+    date: "2026-10-27",
+    title: "New Bytes: el carrito ya no muestra como propio lo que cargó NODO",
+    changes: [
+      { kind: "fixed", text: "Después de cotizar un pedido pendiente de aprobación de New Bytes, el carrito ya no muestra esos productos como si estuvieran cargados a mano en New Bytes." },
+    ],
+  },
+  {
     version: "2.15.1",
     date: "2026-10-26",
     title: "Los distribuidores pausados en NODO no aparecen en ningún lado",
