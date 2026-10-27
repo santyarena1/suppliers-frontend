@@ -1156,9 +1156,38 @@ Notas por proveedor en `docs/providers/{masnet,microglobal,pc-arts}.md`.
 - **Método**: GET
 - **Ruta**: /pc-builder/parts?step=cpu|mobo|ram|gpu|ssd|psu|case|cooler
 - **Auth**: Bearer token requerido (comercio)
-- **Respuesta esperada**: `[{ contentId, name, brand, image (/img-proxy?t=… o null), compat: { …datos técnicos del paso, null si falta }, offers: ProductDTO[] }]`. Solo productos con ficha enriquecida y al menos una oferta de un distribuidor que el comercio puede ver; cada oferta es la vista del producto con el precio de la cuenta (y el de venta en modo vendedor). No suma al tope diario de fichas.
+- **Respuesta esperada**: `[{ contentId, name, brand, image (/img-proxy?t=… o null), compat: { …datos técnicos del paso, null si falta }, estimated: string[], offers: ProductDTO[] }]`. Solo productos con ficha enriquecida y al menos una oferta de un distribuidor que el comercio puede ver; cada oferta es la vista del producto con el precio de la cuenta (y el de venta en modo vendedor). No suma al tope diario de fichas.
 - **Estado**: IMPLEMENTADO
-- **Notas**: `compat` por paso — cpu: socket, memory[], tdp, cores, threads, boost, igpu, cooler · mobo: socket, chipset, memory, form, slots, maxMemory, m2, maxFreq · ram: type, capacity, modules, freq, cl · gpu: chip, vram, length, tgp, recommendedPsu, power · ssd: capacity, iface, form, read, hdd · psu: watts, cert, modular, form, hpwr · case: forms[], gpuMax, coolerMax, radiatorMax, psuIncluded, psuWatts, type · cooler: kind (air|liquid), sockets[], height, tdp, radiator.
+- **Notas**: `compat` por paso — cpu: socket, memory[], tdp, cores, threads, boost, igpu, cooler, line, gen, cache · mobo: socket, chipset, memory, form, slots, maxMemory, m2, sata, maxFreq, pcie (generación del x16), pcieX16, videoOut[], wifi · ram: type, capacity, modules, freq, cl · gpu: chip, vram, length, slots, tgp, recommendedPsu, power, pcie8 (conectores de 8 pines), pcie, iface · ssd: capacity, iface, form, read, write, pcie, hdd · psu: watts, cert, modular, form, hpwr, pcie (conectores 6+2), atx3 · case: forms[], gpuMax, coolerMax, radiatorMax, psuIncluded, psuWatts, psuForms[], slots, fans, bays35, bays25, type · cooler: kind (air|liquid), sockets[], height, tdp, radiator, fans.
+- **Datos estimados (2026-10-27)**: AcuStock exporta también lo que completó la IA sin revisar (confianza 50–79) con `specs[].estimated: true`. `estimated` lista las claves de `compat` que salieron de esos datos; la web los marca y un "no entra" basado en ellos queda como "verificar". La ficha del producto (`platformContent.specs`) y "Copiar ficha" siguen mostrando solo lo confirmado. Las fichas de un paso se guardan 10 min en memoria y se renuevan con cada importación.
+- **Importación diaria**: además del botón del superadmin, la API corre `apply` sola todos los días a las 6:30 (hora de Argentina). Se apaga con `PLATFORM_CONTENT_CRON_DISABLED=true`.
+
+### [FEATURE] Armador de PC — armados guardados y plantillas
+- **Método**: GET | POST | PUT | DELETE
+- **Ruta**: `/pc-builder/builds`, `/pc-builder/builds/:id`
+- **Auth**: Bearer token requerido (organización)
+- **Body / Params**: POST/PUT `{ title, clientName?, template?, data }`. `data` = `{ parts: { [paso]: { contentId, offer, qty, snapshot } }, extras: [{ product, qty }], custom: [...], split: "cheap"|"few", labor? }` (hasta 200 KB).
+- **Respuesta esperada**: lista → `[{ id, title, clientName, template, createdById, createdAt, updatedAt, mine }]`; uno → lo mismo + `data`; DELETE → `{ deleted: true }`.
+- **Estado**: IMPLEMENTADO
+- **Notas**: cada persona ve y cambia sus armados; dueño y admin, los de todo el equipo. Las plantillas las crean y cambian dueño y admin; el resto las ve y las usa como punto de partida. Tope: 500 por comercio. Al abrir uno, la web busca las piezas con los precios y el stock de hoy.
+
+### [FEATURE] Armador de PC — lo que cobra el comercio por armar
+- **Método**: GET | PUT
+- **Ruta**: `/pc-builder/settings`
+- **Auth**: Bearer token requerido; PUT solo dueño o admin
+- **Body / Params**: PUT `{ laborName?, laborPrice? (pesos, con IVA; null = sin línea), laborIva? (0 | 10.5 | 21 | 27) }`
+- **Respuesta esperada**: `{ laborName, laborPrice, laborIva }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: la web suma esa línea libre al armado (se puede sacar en cada uno).
+
+### [FEATURE] Presupuesto con todas las líneas de una vez
+- **Método**: POST
+- **Ruta**: `/my/quotes/with-items`
+- **Auth**: Bearer token requerido (modo vendedor)
+- **Body / Params**: `{ title?, clientName?, …datos del cliente, items: [{ provider, externalId, qty? }] (hasta 100), custom?: [{ name, unitFinalPrice, currency, qty?, ivaPercent? }] }`
+- **Respuesta esperada**: `{ quote: Quote, skipped: [{ provider, externalId }] }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: una sola escritura: el presupuesto no queda a medias. Lo que no tiene precio de venta hoy (o el distribuidor dio de baja) no entra y vuelve en `skipped`; si no entra nada, 422 y no se crea.
 
 ### [FEATURE] Catálogo de un distribuidor: filtros, orden y facetas
 - **Método**: GET

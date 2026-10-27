@@ -197,6 +197,8 @@ model Tenant {
   saleMarginChanges  SaleMarginChange[]
   salesQuotes        SalesQuote[]
   quoteSettings      QuoteSettings?
+  pcBuilds           PcBuild[]
+  pcBuilderSettings  PcBuilderSettings?
   rolePermissions    TenantRolePermission[]
   accessCodes        TenantAccessCode[]
   teamInviteCodes    TeamInviteCode[]
@@ -3136,4 +3138,35 @@ model StorefrontAudience {
 
   @@unique([storefrontId, buyerTenantId])
   @@index([buyerTenantId, status])
+}
+
+/// Armador de PC: un armado guardado del comercio (o una plantilla para reusar).
+model PcBuild {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Quién lo armó. Sin relación: si la persona se va, el armado queda.
+  createdById String
+  title       String
+  clientName  String?
+  /// Plantilla ("Gamer 1080p", "Oficina"): se usa como punto de partida de otros armados.
+  template    Boolean  @default(false)
+  /// { parts: { cpu: { contentId, offer, qty } … }, extras: [{ provider, externalId, qty }], custom: [...], split }
+  data        Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, template, updatedAt])
+}
+
+/// Armador de PC: lo que el comercio cobra por armar.
+model PcBuilderSettings {
+  tenantId     String   @id
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  /// Se suma solo como línea libre al armado. null = sin línea de armado.
+  laborName    String?
+  /// Precio final en pesos, con IVA.
+  laborPrice   Decimal? @db.Decimal(14, 2)
+  laborIva     Decimal  @default(21) @db.Decimal(5, 2)
+  updatedAt    DateTime @updatedAt
 }

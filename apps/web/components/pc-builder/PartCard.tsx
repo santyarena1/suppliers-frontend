@@ -1,18 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, ImageOff } from "lucide-react";
+import { BadgeCheck, Check, ChevronDown, ImageOff, Sparkles } from "lucide-react";
 import type { ProductDTO } from "@/lib/api";
 import { proxyImg } from "@/lib/format";
 import { DistName } from "./Dist";
-import { keySpecs, type Level, type PcPart, type PcStep } from "@/lib/pc-builder/compat";
+import { dataQuality, keySpecs, type Level, type PcPart, type PcStep } from "@/lib/pc-builder/compat";
 import { inStock, offerKey, useOfferPricer } from "@/lib/pc-builder/state";
 
 const LEVEL_TEXT: Record<Level, string> = { ok: "text-emerald-300", warn: "text-amber-300", bad: "text-red-300" };
 
 /** Un producto del paso: foto, datos clave, compatibilidad y dónde comprarlo. */
 export default function PartCard({
-  step, part, verdictLevel, verdictText, selected, selectedOffer, onChoose,
+  step, part, verdictLevel, verdictText, selected, selectedOffer, onChoose, comparing, onCompare,
 }: {
   step: PcStep;
   part: PcPart;
@@ -21,6 +21,9 @@ export default function PartCard({
   selected: boolean;
   selectedOffer: string | null;
   onChoose: (offer: string | null) => void;
+  /** Está en la comparación. */
+  comparing?: boolean;
+  onCompare?: () => void;
 }) {
   const price = useOfferPricer();
   const [open, setOpen] = useState(false);
@@ -34,6 +37,7 @@ export default function PartCard({
   // La foto de la ficha va cifrada; si no carga, la del distribuidor.
   const image = (!imgFailed && part.image) || fallback;
   const blocked = verdictLevel === "bad";
+  const quality = dataQuality(step, part);
 
   return (
     <article
@@ -52,6 +56,20 @@ export default function PartCard({
           <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-md bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white">
             <Check className="h-3 w-3" /> En tu armado
           </span>
+        )}
+        {quality !== "partial" && (
+          <span
+            className={`absolute bottom-2 left-2.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${quality === "verified" ? "bg-emerald-600/90 text-white" : "bg-surface-800/90 text-amber-200"}`}
+            title={quality === "verified" ? "Todos los datos de compatibilidad están cargados y revisados" : "Algunos datos los completó la IA y no están revisados"}
+          >
+            {quality === "verified" ? <BadgeCheck className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+            {quality === "verified" ? "Ficha verificada" : "Datos estimados"}
+          </span>
+        )}
+        {onCompare && (
+          <label className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 rounded-md bg-surface-900/85 px-1.5 py-1 text-[11px] font-medium text-surface-100">
+            <input type="checkbox" checked={Boolean(comparing)} onChange={onCompare} className="h-3 w-3 accent-brand-500" /> Comparar
+          </label>
         )}
       </div>
 

@@ -7,7 +7,7 @@ import { type AcuStockProduct, AcuStockClient } from "./acustock.client";
 import { type CatalogRow, type ContentLink, matchContent } from "./content-match";
 import { contentToText } from "./content-text";
 import { encryptImageUrl, imageKey } from "./image-token";
-import { PC_STEP_CATEGORIES, pcCompat, type PcStep } from "./pc-specs";
+import { PC_STEP_CATEGORIES, pcCompatWithEstimates, type PcStep } from "./pc-specs";
 
 export const ACUSTOCK_SOURCE = "ACUSTOCK";
 type Mode = "PREVIEW" | "APPLY";
@@ -26,10 +26,31 @@ export const DAILY_VIEW_LIMIT = 300;
 export const DAILY_COPY_LIMIT = 100;
 /** Tope de "el mismo producto en otros distribuidores" por ficha. */
 const MAX_SIBLINGS = 12;
+/** Las fichas de un paso del armador cambian solo con una importación: se guardan un rato en memoria. */
+const PC_PARTS_TTL_MS = 10 * 60_000;
+
+type SpecRow = { group: string | null; name: string; value: string; estimated?: boolean };
+/** Lo que ve el comercio en la ficha: solo lo confirmado (lo estimado por IA queda para el armador). */
+export function confirmedSpecs(specs: unknown): PlatformContentView["specs"] {
+  if (!Array.isArray(specs)) return [];
+  return (specs as SpecRow[]).filter((s) => !s.estimated).map(({ group, name, value }) => ({ group, name, value }));
+}
 
 /** Día en Argentina (YYYY-MM-DD): el tope se reinicia a la medianoche local. */
 export function argentinaDay(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(now);
+}
+
+/** Una ficha de un paso del armador, con sus vínculos a distribuidores. */
+export interface PcPartContent {
+  contentId: string;
+  name: string;
+  brand: string | null;
+  image: string | null;
+  compat: ReturnType<typeof pcCompatWithEstimates>["compat"];
+  /** Datos de `compat` que completó la IA sin revisar. */
+  estimated: string[];
+  links: { provider: string; externalId: string }[];
 }
 
 /** Lo que la ficha muestra del contenido de plataforma. */
@@ -46,6 +67,7 @@ export interface PlatformContentView {
 export class PlatformContentService implements OnModuleInit {
   private readonly logger = new Logger(PlatformContentService.name);
   private running = false;
+  private readonly pcPartsCache = new Map<PcStep, { at: number; rows: Promise<PcPartContent[]> }>();
 
   private readonly imgKey: Buffer | null;
 
@@ -100,7 +122,7 @@ export class PlatformContentService implements OnModuleInit {
         images: this.protectImages(c.images),
         shortDescription: c.shortDescription,
         descriptionHtml: c.descriptionHtml,
-        specs: Array.isArray(c.specs) ? (c.specs as PlatformContentView["specs"]) : [],
+        specs: confirmedSpecs(c.specs),
         warrantyMonths: c.warrantyMonths,
       },
       limited: false,
@@ -128,7 +150,16 @@ export class PlatformContentService implements OnModuleInit {
    * cifrada y los datos técnicos normalizados), no la ficha completa: no suma al
    * tope diario de fichas vistas.
    */
-  async pcParts(step: PcStep) {
+  pcParts(step: PcStep): Promise<PcPartContent[]> {
+    const hit = this.pcPartsCache.get(step);
+    if (hit && Date.now() - hit.at < PC_PARTS_TTL_MS) return hit.rows;
+    const rows = this.loadPcParts(step);
+    this.pcPartsCache.set(step, { at: Date.now(), rows });
+    rows.catch(() => this.pcPartsCache.delete(step));
+    return rows;
+  }
+
+  private async loadPcParts(step: PcStep): Promise<PcPartContent[]> {
     const rows = await this.prisma.platformProductContent.findMany({
       where: { category: { hasSome: PC_STEP_CATEGORIES[step] }, links: { some: {} } },
       select: {
@@ -136,14 +167,18 @@ export class PlatformContentService implements OnModuleInit {
         links: { select: { provider: true, externalId: true } },
       },
     });
-    return rows.map((r) => ({
-      contentId: r.id,
-      name: r.name,
-      brand: r.brand,
-      image: this.protectImages(Array.isArray(r.images) ? (r.images as unknown[]).slice(0, 1) : [])[0]?.url ?? null,
-      compat: pcCompat(step, r.specs, r.category),
-      links: r.links,
-    }));
+    return rows.map((r) => {
+      const { compat, estimated } = pcCompatWithEstimates(step, r.specs, r.category, r.name);
+      return {
+        contentId: r.id,
+        name: r.name,
+        brand: r.brand,
+        image: this.protectImages(Array.isArray(r.images) ? (r.images as unknown[]).slice(0, 1) : [])[0]?.url ?? null,
+        compat,
+        estimated,
+        links: r.links,
+      };
+    });
   }
 
   /** Texto de la ficha para "Copiar ficha", con su propio tope diario. Queda registrado. */
@@ -171,7 +206,7 @@ export class PlatformContentService implements OnModuleInit {
         name: c.name,
         shortDescription: c.shortDescription,
         descriptionHtml: c.descriptionHtml,
-        specs: Array.isArray(c.specs) ? (c.specs as PlatformContentView["specs"]) : [],
+        specs: confirmedSpecs(c.specs),
       }),
     };
   }
@@ -188,6 +223,10 @@ export class PlatformContentService implements OnModuleInit {
     }
     await this.prisma.platformContentAccess.createMany({ data: [{ userId, day, provider, externalId }], skipDuplicates: true });
     return true;
+  }
+
+  isConfigured(): boolean {
+    return this.acustock.isConfigured();
   }
 
   async status() {
@@ -248,6 +287,7 @@ export class PlatformContentService implements OnModuleInit {
       if (mode === "APPLY") {
         await this.heartbeat(runId, { ...summary, phase: "Cargando contenido" });
         await this.apply(products, links, (phase) => this.heartbeat(runId, { ...summary, phase }));
+        this.pcPartsCache.clear();
       }
       await this.prisma.platformContentImportRun.update({
         where: { id: runId },

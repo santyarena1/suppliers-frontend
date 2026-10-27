@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { GitCompare, Search, SlidersHorizontal, X } from "lucide-react";
 import NodoSpinner from "@/components/NodoSpinner";
 import PartCard from "./PartCard";
+import CompareDialog from "./CompareDialog";
 import {
-  FACETS, STEP_LABEL, facetValues, optionalNote, requirement, sortFacetOptions, verdict,
-  type Build, type Facet, type PcPart, type PcStep,
+  FACETS, STEP_LABEL, dataQuality, facetValues, optionalNote, requirement, sortFacetOptions, verdict,
+  type Build, type Facet, type PcPart, type PcStep, type Qty,
 } from "@/lib/pc-builder/compat";
 import { inStock, useOfferPricer, useStepParts, type ChosenPart } from "@/lib/pc-builder/state";
 
 const PAGE = 24;
+const MAX_COMPARE = 3;
+const LEVEL_RANK = { ok: 0, warn: 1, bad: 2 } as const;
+const QUALITY_RANK = { verified: 0, estimated: 1, partial: 2 } as const;
 const WITH_ARTICLE: Record<PcStep, string> = {
   cpu: "el procesador", mobo: "la mother", ram: "la memoria", gpu: "la placa de video",
   ssd: "el almacenamiento", psu: "la fuente", case: "el gabinete", cooler: "la refrigeración",
@@ -23,10 +27,11 @@ const matches = (f: Facet, p: PcPart, chosen: string[] | undefined) => !chosen?.
 
 /** Un paso del armado: filtros encadenados a la izquierda y los productos en tarjetas. */
 export default function PartsStep({
-  step, build, chosen, onChoose, onSkip,
+  step, build, qty, chosen, onChoose, onSkip,
 }: {
   step: PcStep;
   build: Build;
+  qty: Qty;
   chosen: ChosenPart | undefined;
   onChoose: (part: PcPart, offer: string | null) => void;
   onSkip: () => void;
@@ -35,13 +40,15 @@ export default function PartsStep({
   const price = useOfferPricer();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState<Selected>({});
-  const [sort, setSort] = useState<"precio" | "precio-desc" | "nombre">("precio");
+  const [sort, setSort] = useState<"recomendado" | "precio" | "precio-desc" | "nombre">("recomendado");
+  const [compare, setCompare] = useState<string[]>([]);
+  const [comparing, setComparing] = useState(false);
   const [onlyStock, setOnlyStock] = useState(true);
   const [showBad, setShowBad] = useState(false);
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
-  useEffect(() => { setQ(""); setSel({}); setPage(1); setShowBad(false); setOpen({}); }, [step]);
+  useEffect(() => { setQ(""); setSel({}); setPage(1); setShowBad(false); setOpen({}); setCompare([]); setComparing(false); }, [step]);
 
   const facets = FACETS[step];
   // Base: búsqueda, stock y compatibilidad. Los filtros se aplican encima.
@@ -50,10 +57,10 @@ export default function PartsStep({
     return (parts ?? [])
       .map((p) => {
         const prices = p.offers.filter((o) => inStock(o)).map((o) => price(o)?.usd).filter((x): x is number => x != null);
-        return { p, v: verdict(step, p, build), best: prices.length ? Math.min(...prices) : null };
+        return { p, v: verdict(step, p, build, qty), best: prices.length ? Math.min(...prices) : null, quality: dataQuality(step, p) };
       })
       .filter((r) => (!needle || `${r.p.name} ${r.p.brand ?? ""}`.toLowerCase().includes(needle)) && (!onlyStock || r.best != null));
-  }, [parts, q, onlyStock, build, step, price]);
+  }, [parts, q, onlyStock, build, qty, step, price]);
   const compatible = showBad ? base : base.filter((r) => r.v.level !== "bad");
   const hidden = base.length - base.filter((r) => r.v.level !== "bad").length;
 
@@ -69,7 +76,16 @@ export default function PartsStep({
   });
   const rows = compatible
     .filter((r) => facets.every((f) => matches(f, r.p, sel[f.name])))
-    .sort((a, b) => (sort === "nombre" ? a.p.name.localeCompare(b.p.name, "es") : sort === "precio-desc" ? (b.best ?? 0) - (a.best ?? 0) : (a.best ?? 9e9) - (b.best ?? 9e9)));
+    .sort((a, b) => {
+      if (sort === "nombre") return a.p.name.localeCompare(b.p.name, "es");
+      if (sort === "precio-desc") return (b.best ?? 0) - (a.best ?? 0);
+      // Recomendado: primero lo compatible sin dudas y con la ficha completa; después, por precio.
+      if (sort === "recomendado") {
+        const rank = (r: typeof a) => LEVEL_RANK[r.v.level] * 3 + QUALITY_RANK[r.quality] + (r.best == null ? 9 : 0);
+        return rank(a) - rank(b) || (a.best ?? 9e9) - (b.best ?? 9e9);
+      }
+      return (a.best ?? 9e9) - (b.best ?? 9e9);
+    });
   const pages = Math.max(1, Math.ceil(rows.length / PAGE));
   const current = Math.min(page, pages);
   const active = Object.entries(sel).flatMap(([name, vals]) => vals.map((v) => ({ name, v })));
@@ -80,7 +96,9 @@ export default function PartsStep({
     });
     setPage(1);
   };
-  const req = requirement(step, build);
+  const req = requirement(step, build, qty);
+  const toggleCompare = (id: string) => setCompare((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= MAX_COMPARE ? [...c.slice(1), id] : [...c, id]));
+  const compareParts = compare.map((id) => (parts ?? []).find((p) => p.contentId === id)).filter((p): p is PcPart => Boolean(p));
   const optional = optionalNote(step, build);
 
   const panel = (
@@ -154,6 +172,7 @@ export default function PartsStep({
             <label className="flex items-center">
               <span className="sr-only">Ordenar</span>
               <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="h-9 rounded-lg border border-surface-700 bg-surface-950 px-2.5 text-sm text-surface-200 focus:border-brand-500 focus:outline-none">
+                <option value="recomendado">Recomendados</option>
                 <option value="precio">Menor precio</option>
                 <option value="precio-desc">Mayor precio</option>
                 <option value="nombre">Nombre</option>
@@ -203,6 +222,8 @@ export default function PartsStep({
                       selected={chosen?.part.contentId === p.contentId}
                       selectedOffer={chosen?.offer ?? null}
                       onChoose={(offer) => onChoose(p, offer)}
+                      comparing={compare.includes(p.contentId)}
+                      onCompare={() => toggleCompare(p.contentId)}
                     />
                   );
                 })}
@@ -218,6 +239,28 @@ export default function PartsStep({
           )}
         </div>
       </div>
+
+      {compareParts.length > 0 && (
+        <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-brand-500/40 bg-surface-900/95 px-3 py-2.5 shadow-xl shadow-black/40 backdrop-blur">
+          <span className="text-sm text-surface-200">{compareParts.length} para comparar{compareParts.length < 2 ? ": elegí otro" : ""}</span>
+          <span className="flex gap-2">
+            <button type="button" onClick={() => setCompare([])} className="h-9 rounded-lg px-3 text-sm font-medium text-surface-400 hover:text-white">Limpiar</button>
+            <button type="button" disabled={compareParts.length < 2} onClick={() => setComparing(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-40">
+              <GitCompare className="h-4 w-4" /> Comparar
+            </button>
+          </span>
+        </div>
+      )}
+      {comparing && compareParts.length >= 2 && (
+        <CompareDialog
+          step={step}
+          parts={compareParts}
+          build={build}
+          qty={qty}
+          onClose={() => setComparing(false)}
+          onChoose={(p) => { setComparing(false); setCompare([]); onChoose(p, null); }}
+        />
+      )}
     </section>
   );
 }

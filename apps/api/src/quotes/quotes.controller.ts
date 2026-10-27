@@ -8,6 +8,7 @@ import { TenantGuard } from "../tenants/tenant.guard";
 import {
   AddCustomItemDto,
   AddQuoteItemDto,
+  CreateQuoteWithItemsDto,
   MoveQuoteItemDto,
   QuoteClientDto,
   QuoteSettingsDto,
@@ -60,6 +61,12 @@ export class QuotesController {
   @Post()
   create(@CurrentTenant() tenant: TenantContext, @Body() dto: QuoteClientDto) {
     return this.quotes.create(tenant, dto);
+  }
+
+  /** Presupuesto con todas sus líneas en una sola operación: no queda a medias. */
+  @Post("with-items")
+  createWithItems(@CurrentTenant() tenant: TenantContext, @Body() dto: CreateQuoteWithItemsDto) {
+    return this.quotes.createWithItems(tenant, dto);
   }
 
   @Get(":id")

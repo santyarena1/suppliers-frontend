@@ -5,7 +5,7 @@ import type { ProductDTO } from "@/lib/api";
 import { formatARS, formatUSD, proxyImg } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { DistLogo, DistName } from "./Dist";
-import { STEP_LABEL, byLevel, checks, optionalNote, powerNeed, psuWatts, worst, type Build, type PcStep } from "@/lib/pc-builder/compat";
+import { STEP_LABEL, byLevel, checks, optionalNote, powerNeed, psuWatts, worst, type Build, type PcStep, type Qty } from "@/lib/pc-builder/compat";
 import { PART_STEPS, type ChosenPart, type CustomLine, type ExtraLine, type StepId, useOfferPricer } from "@/lib/pc-builder/state";
 
 const DOT = { ok: "bg-emerald-400", warn: "bg-amber-400", bad: "bg-red-400" } as const;
@@ -51,9 +51,10 @@ export function money(amount: number, currency: string) {
 
 /** Resumen fijo del armado: piezas, compatibilidad, consumo y total. */
 export default function BuildSummary({
-  build, parts, offers, extras, custom, totals, split, onSplit, onGo, onQuote, onCart, busy,
+  build, qty, parts, offers, extras, custom, totals, split, onSplit, onGo, onQuote, onCart, busy, labor, laborOn, onLabor,
 }: {
   build: Build;
+  qty: Qty;
   parts: Partial<Record<PcStep, ChosenPart>>;
   offers: Partial<Record<PcStep, ProductDTO | null>>;
   extras: ExtraLine[];
@@ -65,14 +66,18 @@ export default function BuildSummary({
   onQuote: () => void;
   onCart: () => void;
   busy: boolean;
+  /** Línea de armado que configuró el comercio (null = no cobra armado). */
+  labor: { name: string; price: number } | null;
+  laborOn: boolean;
+  onLabor: (on: boolean) => void;
 }) {
   const price = useOfferPricer();
   const { currency } = usePrefs();
-  const cs = checks(build).sort(byLevel);
+  const cs = checks(build, qty).sort(byLevel);
   const level = worst(cs);
   const bad = cs.filter((c) => c.level === "bad").length;
   const warn = cs.filter((c) => c.level === "warn").length;
-  const need = powerNeed(build);
+  const need = powerNeed(build, qty);
   const have = psuWatts(build);
   const count = Object.keys(parts).length + extras.length + custom.length;
 
@@ -152,6 +157,12 @@ export default function BuildSummary({
             <span className="text-sm text-surface-300">Total costo</span>
             <span className="font-mono text-2xl font-semibold tabular-nums text-white">{money(totals.amount, currency)}</span>
           </div>
+          {labor && (
+            <label className="flex items-center justify-between gap-2 text-xs text-surface-300">
+              <span className="inline-flex items-center gap-2"><input type="checkbox" checked={laborOn} onChange={(e) => onLabor(e.target.checked)} className="accent-brand-500" /> {labor.name}</span>
+              <span className="font-mono tabular-nums text-surface-100">$ {Math.round(labor.price).toLocaleString("es-AR")}</span>
+            </label>
+          )}
           {totals.missing > 0 && <p className="text-[11px] text-amber-300">{totals.missing} pieza{totals.missing > 1 ? "s" : ""} sin precio o sin stock no suma{totals.missing > 1 ? "n" : ""}.</p>}
           <p className="text-[11px] text-surface-500">Precio de tu cuenta, con los impuestos que tenés activos. El margen para el cliente se pone en el presupuesto.</p>
           <button type="button" disabled={!count || busy} onClick={onQuote} className="h-10 rounded-lg bg-brand-600 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-40">
@@ -212,7 +223,7 @@ export default function BuildSummary({
             ))}
           </ul>
         ) : !missing.length ? <p className="px-4 py-3 text-xs text-surface-500">Elegí piezas para ver los chequeos.</p> : null}
-        <p className="border-t border-surface-800 px-4 py-2.5 text-[11px] text-surface-500">Se chequea con la ficha técnica de cada producto. Si falta un dato, se marca para verificar en vez de darlo por bueno.</p>
+        <p className="border-t border-surface-800 px-4 py-2.5 text-[11px] text-surface-500">Se chequea con la ficha técnica de cada producto. Si falta un dato, se marca para verificar en vez de darlo por bueno; si un dato lo estimó la IA, se avisa.</p>
       </section>
     </aside>
   );

@@ -8,7 +8,7 @@ import { hidesCost } from "../pricing/cost-visibility";
 import { SaleMarginRulesService, type TenantSaleRules } from "../pricing/sale-margin-rules.service";
 import { saleOf } from "../pricing/sale-pricing";
 import type { TenantContext } from "../tenants/tenant-context.service";
-import type { AddCustomItemDto, QuoteClientDto, UpdateQuoteItemDto } from "./dto/quotes.dto";
+import type { AddCustomItemDto, CreateQuoteWithItemsDto, QuoteClientDto, UpdateQuoteItemDto } from "./dto/quotes.dto";
 import { QuoteSettingsService } from "./quote-settings.service";
 import {
   addItem,
@@ -288,6 +288,47 @@ export class QuotesService {
       });
     });
     return this.view(viewer, row);
+  }
+
+  /**
+   * Presupuesto nuevo con todas las líneas en una sola escritura (el armador de PC).
+   * Los precios se buscan antes; lo que no tiene precio de venta hoy no entra y
+   * vuelve en `skipped` para avisarlo. Si nada tiene precio, no se crea.
+   */
+  async createWithItems(
+    viewer: Viewer,
+    dto: CreateQuoteWithItemsDto
+  ): Promise<{ quote: QuoteView; skipped: { provider: string; externalId: string }[] }> {
+    const { items: wanted, custom = [], ...client } = dto;
+    if (wanted.length + custom.length === 0) throw new BadRequestException("El presupuesto no tiene líneas");
+    if (wanted.length + custom.length > MAX_QUOTE_ITEMS) {
+      throw new BadRequestException(`Un presupuesto admite hasta ${MAX_QUOTE_ITEMS} líneas`);
+    }
+    const rules = await this.saleRules.get(viewer.commercialTenantId);
+    const now = new Date();
+    let lines: QuoteItem[] = [];
+    const skipped: { provider: string; externalId: string }[] = [];
+    for (const it of wanted) {
+      const provider = it.provider.toUpperCase();
+      if (!isProviderKey(provider)) throw new BadRequestException(`Proveedor inválido: ${it.provider}`);
+      // Un producto que el distribuidor dio de baja no frena el presupuesto: se avisa.
+      const line = await this.priceOf(viewer, rules, provider, it.externalId, null, null).catch((err: unknown) => {
+        if (err instanceof NotFoundException) return null;
+        throw err;
+      });
+      if (!line || line.unitFinalPrice == null) {
+        skipped.push({ provider, externalId: it.externalId });
+        continue;
+      }
+      lines = addItem(lines, { ...line, provider, externalId: it.externalId }, it.qty ?? 1, now);
+    }
+    for (const c of custom) {
+      lines.push(customItem({ id: randomUUID(), name: c.name, unitFinalPrice: c.unitFinalPrice, currency: c.currency, qty: c.qty ?? 1, ivaPercent: c.ivaPercent ?? 21 }, now));
+    }
+    if (lines.length === 0) throw new UnprocessableEntityException("Ningún producto tiene precio de venta en este momento");
+    const created = await this.create(viewer, client);
+    const quote = await this.mutateItems(viewer, created.id, () => lines);
+    return { quote, skipped };
   }
 
   /** Copia un presupuesto (otro cliente, o el mismo con cambios): nuevo número y precios de hoy. */

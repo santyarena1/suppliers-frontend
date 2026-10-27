@@ -21,6 +21,7 @@ import { HealthModule } from "./health/health.module";
 import { ProvidersModule } from "./providers/providers.module";
 import { PricingModule } from "./pricing/pricing.module";
 import { QuotesModule } from "./quotes/quotes.module";
+import { PcBuilderModule } from "./pc-builder/pc-builder.module";
 import { AdminModule } from "./admin/admin.module";
 import { TenantsModule } from "./tenants/tenants.module";
 import { ChatModule } from "./chat/chat.module";
@@ -69,6 +70,7 @@ import { EnrichmentModule } from "./enrichment/enrichment.module";
     ProvidersModule,
     PricingModule,
     QuotesModule,
+    PcBuilderModule,
     AdminModule,
     TenantsModule,
     ChatModule,

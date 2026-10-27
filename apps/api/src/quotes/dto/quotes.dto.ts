@@ -1,4 +1,4 @@
-import { Transform } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsBoolean,
   IsEmail,
@@ -8,6 +8,9 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ArrayMaxSize,
+  IsArray,
+  ValidateNested,
   Matches,
   Max,
   MaxLength,
@@ -144,6 +147,22 @@ export class AddCustomItemDto {
   @IsOptional()
   @IsIn([0, 10.5, 21, 27])
   ivaPercent?: number;
+}
+
+/** Presupuesto nuevo con todas sus líneas de una vez (el armador de PC). */
+export class CreateQuoteWithItemsDto extends QuoteClientDto {
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => AddQuoteItemDto)
+  items!: AddQuoteItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => AddCustomItemDto)
+  custom?: AddCustomItemDto[];
 }
 
 export class UpdateQuoteItemDto {

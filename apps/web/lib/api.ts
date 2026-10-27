@@ -3059,9 +3059,44 @@ export interface BrandCount {
 }
 
 /** Armador de PC: productos con ficha técnica de un paso, con las ofertas de la cuenta (ver API_CONTRACT). */
+type PcSpecValue = string | number | boolean | string[] | null;
+/** Un armado de PC guardado: piezas por id (los precios se buscan al abrirlo), extras y líneas libres. */
+export interface PcBuildData {
+  parts: Partial<Record<string, {
+    contentId: string;
+    offer: string | null;
+    qty: number;
+    /** Lo que se mostraba de la pieza, por si ya no está en el catálogo. */
+    snapshot?: { contentId: string; name: string; brand: string | null; image: string | null; compat: Record<string, PcSpecValue>; estimated?: string[] };
+  }>>;
+  extras: { product: ProductDTO; qty: number }[];
+  custom: { id: string; name: string; unitFinalPrice: number; ivaPercent: number; qty: number }[];
+  split: "cheap" | "few";
+  labor?: boolean;
+}
+export interface PcBuildSummary {
+  id: string;
+  title: string;
+  clientName: string | null;
+  template: boolean;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+  mine: boolean;
+}
+export interface PcBuild extends PcBuildSummary { data: PcBuildData }
+export interface PcBuilderSettings { laborName: string | null; laborPrice: number | null; laborIva: number }
+
 export const pcBuilderApi = {
   parts: (step: string) =>
-    api.get<{ contentId: string; name: string; brand: string | null; image: string | null; compat: Record<string, string | number | boolean | string[] | null>; offers: ProductDTO[] }[]>("/pc-builder/parts", { params: { step } }),
+    api.get<{ contentId: string; name: string; brand: string | null; image: string | null; compat: Record<string, PcSpecValue>; estimated?: string[]; offers: ProductDTO[] }[]>("/pc-builder/parts", { params: { step } }),
+  builds: () => api.get<PcBuildSummary[]>("/pc-builder/builds"),
+  build: (id: string) => api.get<PcBuild>(`/pc-builder/builds/${id}`),
+  createBuild: (body: { title: string; clientName?: string | null; template?: boolean; data: PcBuildData }) => api.post<PcBuild>("/pc-builder/builds", body),
+  updateBuild: (id: string, body: { title: string; clientName?: string | null; template?: boolean; data: PcBuildData }) => api.put<PcBuild>(`/pc-builder/builds/${id}`, body),
+  deleteBuild: (id: string) => api.delete<{ deleted: true }>(`/pc-builder/builds/${id}`),
+  settings: () => api.get<PcBuilderSettings>("/pc-builder/settings"),
+  saveSettings: (body: Partial<PcBuilderSettings>) => api.put<PcBuilderSettings>("/pc-builder/settings", body),
 };
 
 export const catalogApi = {

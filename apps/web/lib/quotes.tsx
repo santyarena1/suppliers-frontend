@@ -193,6 +193,9 @@ export const quotesApi = {
   updateItem: (id: string, index: number, data: QuoteItemPatch) => api.patch<Quote>(`/my/quotes/${id}/items/${index}`, data),
   moveItem: (id: string, index: number, to: number) => api.post<Quote>(`/my/quotes/${id}/items/${index}/move`, { to }),
   addCustom: (id: string, data: QuoteCustomInput) => api.post<Quote>(`/my/quotes/${id}/items/custom`, data),
+  /** Presupuesto nuevo con todas las líneas de una vez; `skipped` = productos sin precio de venta hoy. */
+  createWithItems: (data: QuoteClientPatch & { items: { provider: string; externalId: string; qty?: number }[]; custom?: QuoteCustomInput[] }) =>
+    api.post<{ quote: Quote; skipped: { provider: string; externalId: string }[] }>("/my/quotes/with-items", data),
   duplicate: (id: string) => api.post<Quote>(`/my/quotes/${id}/duplicate`, {}),
   markSent: (id: string) => api.post<Quote>(`/my/quotes/${id}/sent`, {}),
   settings: () => api.get<QuoteSettings>("/my/quote-settings"),

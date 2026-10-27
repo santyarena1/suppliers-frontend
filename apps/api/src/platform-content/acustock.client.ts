@@ -14,7 +14,8 @@ export interface AcuStockProduct {
   category: string[];
   shortDescription: string | null;
   description: string | null;
-  specs: { group: string | null; name: string; value: string }[];
+  /** `estimated`: lo completó la IA y nadie lo revisó (en la ficha no se muestra; el armador lo usa marcado). */
+  specs: { group: string | null; name: string; value: string; estimated?: boolean }[];
   images: { url: string; alt: string | null }[];
   warrantyMonths: number | null;
 }
@@ -65,7 +66,12 @@ export function parseAcuStockProduct(raw: unknown): AcuStockProduct | null {
 
   const specs = (Array.isArray(r.specs) ? r.specs : [])
     .map((s) => (s && typeof s === "object" ? (s as Record<string, unknown>) : {}))
-    .map((s) => ({ group: str(s.group, 80), name: str(s.name, 120) ?? "", value: str(s.value, 500) ?? "" }))
+    .map((s) => ({
+      group: str(s.group, 80),
+      name: str(s.name, 120) ?? "",
+      value: str(s.value, 500) ?? "",
+      ...(s.estimated === true ? { estimated: true } : {}),
+    }))
     .filter((s) => s.name && s.value)
     .slice(0, MAX_SPECS);
 

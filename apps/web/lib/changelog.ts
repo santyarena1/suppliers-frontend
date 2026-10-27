@@ -26,6 +26,20 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.16.0",
+    date: "2026-10-27",
+    title: "Armador de PC: arma la PC solo, guarda armados y chequea mucho más",
+    changes: [
+      { kind: "new", text: "Armado automático: elegí si la PC es gamer, de oficina o para diseño y, si querés, cuánto gastar. NODO la arma con lo que tiene stock en tus distribuidores, compatible y aprovechando el presupuesto. Si ya elegiste algunas piezas, completa solo lo que falta." },
+      { kind: "new", text: "Armados guardados: guardá cada armado y retomalo desde cualquier compu, con los precios y el stock del día. El dueño puede guardar plantillas («Gamer 1080p», «Oficina») para que todo el equipo arranque desde ahí." },
+      { kind: "new", text: "Comparar: marcá dos o tres productos de un paso y miralos lado a lado, con las diferencias resaltadas." },
+      { kind: "new", text: "Lo que cobrás por armar: cargalo una vez (Armados guardados) y se suma solo a cada presupuesto del armador. Se puede sacar en cada armado." },
+      { kind: "improved", text: "Más chequeos: BIOS a actualizar (por ejemplo Ryzen 5000 en B450), cantidad de memorias y discos contra las ranuras, puertos SATA, bahías, formato de la fuente, cables de la placa de video, grosor de la placa, PCI Express y ventilación del gabinete. El consumo ahora suma todas las piezas." },
+      { kind: "improved", text: "Fichas más completas: cada producto dice si su ficha está verificada o si tiene datos estimados, y los «Recomendados» muestran primero lo compatible y con la ficha completa. Las fichas se actualizan solas todos los días." },
+      { kind: "fixed", text: "El presupuesto del armador se crea de una sola vez (no queda a medias), cambiar entre «Más barato» y «Menos distribuidores» ya no borra el distribuidor que elegiste a mano, y cada persona tiene su propio borrador aunque compartan la compu." },
+    ],
+  },
+  {
     version: "2.15.3",
     date: "2026-10-27",
     title: "Elit: el carrito ya no muestra como propio lo que cargó NODO",

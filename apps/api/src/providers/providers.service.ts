@@ -1559,6 +1559,7 @@ export class ProvidersService implements OnModuleInit {
         brand: x.brand,
         image: x.image,
         compat: x.compat,
+        estimated: x.estimated,
         offers: x.links.map((l) => byKey.get(`${l.provider}:${l.externalId}`)).filter((v): v is NonNullable<typeof v> => Boolean(v)),
       }))
       .filter((x) => x.offers.length > 0);

@@ -16,7 +16,7 @@ d("Presupuestos contra Postgres", () => {
   const prisma = new PrismaClient({ datasources: { db: { url: url ?? "postgresql://skip@localhost/skip" } } });
   const rules = new SaleMarginRulesService(prisma as never);
   const providers = {
-    getProduct: async (_t: string, provider: string, externalId: string) => ({
+    getProduct: async (_t: string, provider: string, externalId: string) => externalId === "DADO-DE-BAJA" ? null : ({
       provider,
       externalId,
       name: "Monitor 24",
@@ -57,6 +57,24 @@ d("Presupuestos contra Postgres", () => {
   afterAll(async () => {
     await cleanup();
     await prisma.$disconnect();
+  });
+
+  it("armador: crea el presupuesto con todas las líneas de una vez y avisa lo que no tiene precio", async () => {
+    const { quote, skipped } = await service.createWithItems(seller, {
+      title: "PC gamer",
+      clientName: "Tomás",
+      items: [
+        { provider: "ELIT", externalId: "CPU-1", qty: 1 },
+        { provider: "ELIT", externalId: "RAM-1", qty: 2 },
+        { provider: "ELIT", externalId: "DADO-DE-BAJA", qty: 1 },
+      ],
+      custom: [{ name: "Armado y prueba", unitFinalPrice: 45000, currency: "ARS", qty: 1, ivaPercent: 21 }],
+    });
+    expect(skipped).toEqual([{ provider: "ELIT", externalId: "DADO-DE-BAJA" }]);
+    expect(quote).toMatchObject({ title: "PC gamer", clientName: "Tomás" });
+    expect(quote.items.map((it) => [it.kind, it.qty])).toEqual([["product", 1], ["product", 2], ["custom", 1]]);
+    await expect(service.createWithItems(seller, { items: [{ provider: "ELIT", externalId: "DADO-DE-BAJA" }] })).rejects.toThrow(/precio de venta/);
+    await prisma.salesQuote.deleteMany({ where: { tenantId: TENANT } });
   });
 
   it("numera sin repetir aunque se creen a la vez", async () => {

@@ -85,7 +85,7 @@ export default function ReviewStep({
             })}
             {custom.map((c) => (
               <tr key={c.id} className="border-b border-surface-800 last:border-0">
-                <td className="px-3 py-2.5 text-xs font-semibold text-surface-400">Línea libre</td>
+                <td className="px-3 py-2.5 text-xs font-semibold text-surface-400">{c.id === "labor" ? "Armado" : "Línea libre"}</td>
                 <td className="px-3 py-2.5 text-white">{c.name}</td>
                 <td className="px-3 py-2.5 text-xs text-surface-500">Solo en el presupuesto</td>
                 <td className="px-3 py-2.5 font-mono">{c.qty}</td>
