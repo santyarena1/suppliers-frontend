@@ -89,6 +89,8 @@ interface PreparedCart {
   api: NewBytesApiClient;
   /** Lo que el portal dice que quedó cargado; `null` si la respuesta no se pudo leer con certeza. */
   loaded: CartLine[] | null;
+  /** Solo nombres de campos de `GET carrito`, para el log cuando no se puede leer. */
+  cartShape: string;
   items: { code: string; qty: number; name: string; price: number; subtotal: number; ivaPercent?: number }[];
   payments: NbPaymentOption[];
   addresses: NbAddress[];
@@ -111,6 +113,14 @@ export function nbLoadedLines(body: unknown): CartLine[] | null {
     lines.push({ code, qty });
   }
   return lines;
+}
+
+/** Forma de `GET carrito` sin valores: tipo, claves de arriba, cantidad de renglones y claves del primero. */
+export function nbCartShape(body: unknown): string {
+  const top = Array.isArray(body) ? "array" : body && typeof body === "object" ? `{${Object.keys(body).join(",")}}` : typeof body;
+  const rows = unwrapNbList(body);
+  const first = asRecord(rows[0]);
+  return `${top}; ${rows.length} renglones${first ? `; renglón {${Object.keys(first).join(",")}}` : ""}`;
 }
 
 /**
@@ -351,6 +361,7 @@ export class NewBytesOrderService {
     return {
       api,
       loaded: nbLoadedLines(cartBody),
+      cartShape: nbCartShape(cartBody),
       items: cartItemsFromBody(cartBody, items),
       payments: unwrapNbList(paymentsRaw).map(mapPaymentOption).filter((p): p is NbPaymentOption => p != null),
       addresses: unwrapNbList(addressesRaw).map(mapAddress).filter((a): a is NbAddress => a != null),
@@ -641,7 +652,7 @@ export class NewBytesOrderService {
     const prepared = await this.prepareCart(credentials, input.items, author.tenantId);
     // Si New Bytes no aceptó algo, no sale un pedido distinto del carrito.
     if (prepared.loaded) assertPortalCartMatches("New Bytes", mergeNbLines(input.items), prepared.loaded);
-    else this.logger.warn("New Bytes: no se pudo leer el carrito para verificarlo antes de confirmar");
+    else this.logger.warn(`New Bytes: no se pudo leer el carrito para verificarlo antes de confirmar (${prepared.cartShape})`);
     const payments = this.paymentsFor(prepared, input.delivery);
     const payment = this.resolvePayment(payments, input.medioDePagoId, true);
 
