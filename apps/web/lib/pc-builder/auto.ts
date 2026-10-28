@@ -293,7 +293,8 @@ export function autoBuild(input: AutoInput): AutoResult {
     // Disco: en gamer y diseño, un NVMe M.2 antes que un SATA.
     if (step === "ssd" && profile !== "office") {
       const nvme = pool.filter((r) => /nvme|pcie/i.test(`${str(r.p, "iface")} ${r.p.name}`) && !/sata/i.test(str(r.p, "iface")));
-      if (usable(nvme)) pool = nvme;
+      // Un NVMe aunque cueste algo más que lo que le toca: la diferencia con un SATA se nota y es poca plata.
+      if (nvme.length) pool = nvme;
     }
     if (target == null) {
       // Sin presupuesto: la mejor relación rendimiento / precio (en diseño, el procesador pesa más que el precio).
