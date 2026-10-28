@@ -65,11 +65,19 @@ export class PlatformContentSchedulerService implements OnApplicationBootstrap, 
     }
   }
 
-  /** La de recuperación no espera la ventana de crons: de noche no hay otros trabajos corriendo. */
+  /**
+   * Al arrancar: si la última buena es vieja, o si AcuStock cambió algo desde entonces, importa.
+   * No espera la ventana de crons: de noche no hay otros trabajos corriendo.
+   */
   async catchUp() {
     const last = await this.lastOk();
-    if (!needsCatchUp(last?.finishedAt ?? null)) return;
-    await this.run("de recuperación");
+    if (!last || needsCatchUp(last.finishedAt)) return this.run("de recuperación");
+    try {
+      const changed = await this.content.changedSince(last.startedAt);
+      if (changed > 0) await this.run(`al arrancar, por ${changed} cambio${changed === 1 ? "" : "s"} en AcuStock`);
+    } catch (err) {
+      this.logger.warn(`No se pudo consultar cambios en AcuStock: ${(err as Error).message}`);
+    }
   }
 
   private lastOk() {

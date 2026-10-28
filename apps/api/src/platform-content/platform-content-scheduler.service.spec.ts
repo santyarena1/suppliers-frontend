@@ -24,6 +24,18 @@ describe("importación por cambios en AcuStock", () => {
     expect(content.start).not.toHaveBeenCalled();
   });
 
+  it("al arrancar, si hubo cambios desde la última buena (reciente), importa", async () => {
+    const { content, s } = make(5, new Date());
+    await s.catchUp();
+    expect(content.start).toHaveBeenCalledWith("APPLY");
+  });
+
+  it("al arrancar, sin cambios y con una buena reciente, no importa", async () => {
+    const { content, s } = make(0, new Date());
+    await s.catchUp();
+    expect(content.start).not.toHaveBeenCalled();
+  });
+
   it("sin ninguna importación buena, importa sin preguntar", async () => {
     const { content, s } = make(0, null);
     await s.hourly();
