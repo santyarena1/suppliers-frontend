@@ -31,6 +31,14 @@ const SHARE: Record<Profile, Record<PcStep, number>> = {
 
 /** Orden en que se eligen: cada pieza se elige compatible con las anteriores; la fuente al final, con el consumo ya conocido. */
 const ORDER: PcStep[] = ["cpu", "mobo", "ram", "gpu", "ssd", "case", "cooler", "psu"];
+/** En una gamer la placa va primero: el procesador se elige a su altura. */
+const ORDER_BY: Record<Profile, PcStep[]> = {
+  gamer: ["gpu", "cpu", "mobo", "ram", "ssd", "case", "cooler", "psu"],
+  office: ORDER,
+  creator: ORDER,
+};
+/** Procesador mínimo para la placa elegida, en puntos de cpuScore por punto de gpuScore. */
+const CPU_PER_GPU = 0.8;
 /** Qué se mejora primero con lo que sobra. */
 const UPGRADE: Record<Profile, PcStep[]> = {
   gamer: ["gpu", "cpu", "ram", "ssd"],
@@ -211,19 +219,33 @@ export function autoBuild(input: AutoInput): AutoResult {
       }
       return cheapest(rows, step);
     }
+    let pool = rows;
+    const usable = (sub: typeof rows) => sub.length > 0 && (target == null || sub.some((r) => r.cost <= target));
+    // Que el procesador no frene a la placa: con una placa de gama alta, uno barato se queda corto.
+    if (step === "cpu" && profile === "gamer" && build.gpu) {
+      const need = gpuScore(build.gpu) * CPU_PER_GPU;
+      const balanced = pool.filter((r) => cpuScore(r.p, profile) >= need);
+      if (usable(balanced)) pool = balanced;
+    }
+    // Memoria en kit de dos módulos (doble canal) cuando hay.
+    if (step === "ram" && profile !== "office") {
+      const kits = pool.filter((r) => (num(r.p, "modules") ?? 1) >= 2);
+      if (usable(kits)) pool = kits;
+    }
     if (target == null) {
       // Sin presupuesto: la mejor relación rendimiento / precio.
-      return rows.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, 0.85) - score(step, a.p, profile) / Math.pow(a.cost, 0.85))[0];
+      return pool.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, 0.85) - score(step, a.p, profile) / Math.pow(a.cost, 0.85))[0];
     }
-    const fit = rows.filter((r) => r.cost <= target);
-    if (!fit.length) return cheapest(rows, step);
+    const fit = pool.filter((r) => r.cost <= target);
+    if (!fit.length) return cheapest(pool, step);
     return fit.slice().sort((a, b) => score(step, b.p, profile) - score(step, a.p, profile) || a.cost - b.cost)[0];
   };
 
   // 1) Una pieza por paso, con la parte del presupuesto que le toca.
-  const missing = ORDER.filter((st) => !build[st]);
+  const order = ORDER_BY[profile];
+  const missing = order.filter((st) => !build[st]);
   const shares = SHARE[profile];
-  for (const step of ORDER) {
+  for (const step of order) {
     if (build[step] || skipStep(step, build, profile)) continue;
     let target: number | null = null;
     if (budget != null) {

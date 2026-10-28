@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.16.4",
+    date: "2026-10-28",
+    title: "Armador de PC: el armado automático gamer queda balanceado",
+    changes: [
+      { kind: "improved", text: "Armado automático gamer: elige primero la placa de video y después un procesador a su altura, para que no la frene (antes podía juntar una RX 9070 XT con un Ryzen 5 4500). La memoria va en kit de dos módulos cuando hay." },
+    ],
+  },
+  {
     version: "2.16.3",
     date: "2026-10-28",
     title: "Armador de PC: «Recomendados» muestra primero lo que más rinde por su precio",
