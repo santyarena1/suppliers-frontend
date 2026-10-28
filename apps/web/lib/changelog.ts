@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.16.2",
+    date: "2026-10-28",
+    title: "Armador de PC: mejores elecciones en el armado automático",
+    changes: [
+      { kind: "improved", text: "Armado automático: en una gamer ya no elige procesadores con video integrado (como el Ryzen 8500G), que rinden menos con placa de video; prefiere memorias en kit de dos módulos (doble canal) y, para procesadores de hasta 105 W, un cooler de aire en vez de una refrigeración líquida." },
+      { kind: "improved", text: "Coolers: si la ficha no trae los sockets, la altura o el radiador, se dan por compatibles en vez de pedir que lo verifiques. Solo avisa cuando los datos dicen que no va." },
+    ],
+  },
+  {
     version: "2.16.1",
     date: "2026-10-28",
     title: "New Bytes: los pedidos ya no fallan por «carrito vacío»",

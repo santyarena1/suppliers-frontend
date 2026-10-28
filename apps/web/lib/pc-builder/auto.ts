@@ -51,7 +51,7 @@ const ghz = (v: string) => {
 const GPU_TIERS: [RegExp, number][] = [
   [/rtx\s*5090/i, 150], [/rtx\s*4090/i, 125], [/rtx\s*5080/i, 105], [/rtx\s*4080/i, 100], [/rx\s*7900\s*xtx/i, 100],
   [/rx\s*9070\s*xt/i, 95], [/rtx\s*5070\s*ti/i, 92], [/rx\s*7900\s*xt\b/i, 88], [/rtx\s*4070\s*ti\s*super/i, 88],
-  [/rx\s*9070\b/i, 85], [/rtx\s*4070\s*ti/i, 82], [/rtx\s*5070\b/i, 76], [/rtx\s*4070\s*super/i, 75], [/rx\s*7900\s*gre/i, 75],
+  [/rx\s*9070\s*gre/i, 72], [/rx\s*9070\b/i, 85], [/rtx\s*4070\s*ti/i, 82], [/rtx\s*5070\b/i, 76], [/rtx\s*4070\s*super/i, 75], [/rx\s*7900\s*gre/i, 75],
   [/rx\s*7800\s*xt/i, 70], [/rtx\s*4070\b/i, 66], [/rx\s*6800\s*xt/i, 70], [/rx\s*6800\b/i, 64], [/rtx\s*3080/i, 72],
   [/rtx\s*5060\s*ti/i, 60], [/rx\s*7700\s*xt/i, 60], [/rtx\s*3070\s*ti/i, 61], [/rtx\s*3070/i, 58], [/rx\s*9060\s*xt/i, 56],
   [/rx\s*6750\s*xt/i, 55], [/rtx\s*4060\s*ti/i, 53], [/rtx\s*5060\b/i, 52], [/rx\s*6700\s*xt/i, 52], [/arc\s*b580/i, 50],
@@ -77,10 +77,14 @@ export function cpuScore(p: PcPart, profile: Profile): number {
   // En juegos pesan más la frecuencia y la caché que la cantidad de núcleos.
   const threadsWeight = profile === "gamer" ? Math.min(threads, 16) : threads;
   const x3d = profile === "gamer" && /x3d/i.test(p.name) ? 1.2 : 1;
-  return threadsWeight * boost * factor * x3d;
+  // Los Ryzen con video integrado (8500G, 5600G…) tienen menos caché y menos líneas PCIe: en una gamer rinden menos.
+  const apu = profile === "gamer" && /ryzen\s*[3579]\s*\d{4}g\b/i.test(p.name) ? 0.75 : 1;
+  return threadsWeight * boost * factor * x3d * apu;
 }
 
-const ramScore = (p: PcPart) => (num(p, "capacity") ?? 8) * (1 + (num(p, "freq") ?? 3200) / 20000);
+/** Un kit de dos módulos va en doble canal: rinde más que un módulo solo de la misma capacidad. */
+const ramScore = (p: PcPart) =>
+  (num(p, "capacity") ?? 8) * (1 + (num(p, "freq") ?? 3200) / 20000) * ((num(p, "modules") ?? (/\b2\s*x\s*\d|\bkit\b|dual/i.test(p.name) ? 2 : 1)) >= 2 ? 1.15 : 1);
 const ssdScore = (p: PcPart) => Math.min(num(p, "capacity") ?? 240, 2000) / 1000 + (num(p, "pcie") ?? 0) * 0.3 + (p.compat.hdd ? -0.5 : 0);
 
 export function score(step: PcStep, p: PcPart, profile: Profile): number {
@@ -189,8 +193,21 @@ export function autoBuild(input: AutoInput): AutoResult {
       }
       if (step === "cooler") {
         const tdp = build.cpu ? num(build.cpu, "tdp") ?? 65 : 65;
-        const enough = rows.filter((r) => (num(r.p, "tdp") ?? 0) >= tdp);
-        return cheapest(enough.length ? enough : rows, step);
+        // Sin TDP informado se da por suficiente; hasta 105 W alcanza uno de aire, que es más barato.
+        const enough = rows.filter((r) => (num(r.p, "tdp") ?? tdp) >= tdp);
+        // Mejor uno que informa el socket del procesador; entre los que no lo informan, que el nombre no sea de la otra marca.
+        const socket = build.cpu ? str(build.cpu, "socket").toUpperCase().replace(/\s+/g, "") : "";
+        const sockets = (p: PcPart) => (Array.isArray(p.compat.sockets) ? (p.compat.sockets as string[]) : []);
+        const named = (p: PcPart) => (/\bAM[45]\b|\bAMD\b|ryzen|wraith/i.test(p.name) ? "AM" : /\bLGA\b|intel/i.test(p.name) ? "LGA" : null);
+        const fits = enough.filter((r) => {
+          const list = sockets(r.p);
+          if (list.length) return list.some((x) => x.toUpperCase().replace(/\s+/g, "") === socket);
+          const brand = named(r.p);
+          return !socket || !brand || socket.startsWith(brand);
+        });
+        const pool = fits.length ? fits : enough.length ? enough : rows;
+        const air = tdp <= 105 ? pool.filter((r) => str(r.p, "kind") !== "liquid") : [];
+        return cheapest(air.length ? air : pool, step);
       }
       return cheapest(rows, step);
     }

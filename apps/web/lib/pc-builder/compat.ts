@@ -252,7 +252,8 @@ const RULES: Rule[] = [
     name: "Cooler y socket",
     run: ({ cooler, cpu }) => {
       const socks = list(cooler, "sockets"), a = s(cpu, "socket");
-      if (!socks.length || !a) return ["warn", `${lacks("los sockets", [[socks, "el cooler", cooler], [a, "el procesador", cpu]])}. Revisalo en la web del fabricante.`];
+      // Casi todos los coolers traen los anclajes de los sockets actuales: sin dato, se da por compatible.
+      if (!socks.length || !a) return ["ok", "Compatible."];
       if (!socks.some((x) => sock(x) === sock(a))) return ["bad", `El cooler no trae soporte para ${a}.`];
       const ct = n(cooler, "tdp"), pt = n(cpu, "tdp");
       if (ct && pt && ct < pt) return ["warn", `Disipa ${ct} W y el procesador tiene ${pt} W de TDP.`];
@@ -265,13 +266,12 @@ const RULES: Rule[] = [
     run: ({ cooler, case: c }) => {
       if (s(cooler, "kind") === "liquid") {
         const r = n(cooler, "radiator"), max = n(c, "radiatorMax");
-        if (!r || !max) return ["warn", `${lacks("la medida del radiador", [[r, "el cooler", cooler], [max, "el gabinete", c]])}${r ? `; el radiador es de ${r} mm` : ""}. Revisá que entre.`];
+        // Sin las medidas se da por compatible: solo se avisa cuando los datos dicen que no entra.
+        if (!r || !max) return ["ok", r ? `Radiador de ${r} mm.` : "Compatible."];
         return r <= max ? ["ok", `Radiador de ${r} mm; admite hasta ${max} mm.`] : ["bad", `El radiador es de ${r} mm y el gabinete admite ${max} mm.`];
       }
       const h = n(cooler, "height"), max = n(c, "coolerMax");
-      if (!h && max) return ["warn", `El cooler ${short(cooler)} no informa su altura; este gabinete admite hasta ${max} mm. Revisá que entre.`];
-      if (h && !max) return ["warn", `El gabinete ${short(c)} no informa la altura máxima de cooler; el cooler mide ${h} mm. Revisá que entre.`];
-      if (!h || !max) return ["warn", `Ni el cooler ${short(cooler)} ni el gabinete ${short(c)} informan la altura. Revisá que entre.`];
+      if (!h || !max) return ["ok", h ? `${h} mm.` : "Compatible."];
       return h <= max ? ["ok", `${h} mm; el gabinete admite hasta ${max} mm.`] : ["bad", `El cooler mide ${h} mm y el gabinete admite ${max} mm.`];
     },
   },
@@ -486,7 +486,7 @@ export const KEY_FIELDS: Record<PcStep, string[]> = {
   ssd: ["capacity", "form", "iface"],
   psu: ["watts", "cert", "form"],
   case: ["forms", "gpuMax", "coolerMax"],
-  cooler: ["sockets", "tdp"],
+  cooler: ["sockets"],
 };
 
 /** Qué tan completa está la ficha para el armador: "verified" (todo y confirmado), "estimated" (todo, algo por IA) o "partial". */
