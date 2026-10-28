@@ -227,11 +227,6 @@ export function autoBuild(input: AutoInput): AutoResult {
       const balanced = pool.filter((r) => cpuScore(r.p, profile) >= need);
       if (usable(balanced)) pool = balanced;
     }
-    // Memoria en kit de dos módulos (doble canal) cuando hay.
-    if (step === "ram" && profile !== "office") {
-      const kits = pool.filter((r) => (num(r.p, "modules") ?? 1) >= 2);
-      if (usable(kits)) pool = kits;
-    }
     if (target == null) {
       // Sin presupuesto: la mejor relación rendimiento / precio.
       return pool.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, 0.85) - score(step, a.p, profile) / Math.pow(a.cost, 0.85))[0];

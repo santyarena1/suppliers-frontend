@@ -30,7 +30,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-28",
     title: "Armador de PC: el armado automático gamer queda balanceado",
     changes: [
-      { kind: "improved", text: "Armado automático gamer: elige primero la placa de video y después un procesador a su altura, para que no la frene (antes podía juntar una RX 9070 XT con un Ryzen 5 4500). La memoria va en kit de dos módulos cuando hay." },
+      { kind: "improved", text: "Armado automático gamer: elige primero la placa de video y después un procesador a su altura, para que no la frene (antes podía juntar una RX 9070 XT con un Ryzen 5 4500). Entre memorias de precio parecido, prefiere el kit de dos módulos." },
     ],
   },
   {
