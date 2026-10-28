@@ -45,7 +45,12 @@ export function rememberNbPortalCart(
 ) {
   const nodoQty = new Map<string, number>();
   for (const line of nodo) nodoQty.set(line.code, (nodoQty.get(line.code) ?? 0) + line.qty);
-  const next = new Map(read().map((line) => [line.code, line]));
+  // Lo que ya está en NODO con la misma cantidad no queda nada por decidir.
+  const next = new Map(
+    read()
+      .filter((line) => (nodoQty.get(line.code) ?? 0) !== line.qty)
+      .map((line) => [line.code, line])
+  );
   for (const line of portal) {
     if (!line.code || !(line.qty > 0)) continue;
     const inNodo = nodoQty.get(line.code) ?? 0;

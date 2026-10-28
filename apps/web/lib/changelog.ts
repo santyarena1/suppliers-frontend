@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.16.1",
+    date: "2026-10-28",
+    title: "New Bytes: los pedidos ya no fallan por «carrito vacío»",
+    changes: [
+      { kind: "fixed", text: "New Bytes: al confirmar un pedido mientras NODO cotizaba el carrito, a veces salía «El carrito está vacío» o avisaba poco stock porque se sumaban las cantidades. Ahora cada consulta espera a la anterior y, si New Bytes igual encuentra el carrito vacío, NODO lo vuelve a cargar y reintenta solo." },
+      { kind: "fixed", text: "New Bytes: ya no aparecen como «cargados en el portal» productos de carritos anteriores que había puesto NODO." },
+    ],
+  },
+  {
     version: "2.16.0",
     date: "2026-10-27",
     title: "Armador de PC: arma la PC solo, guarda armados y chequea mucho más",

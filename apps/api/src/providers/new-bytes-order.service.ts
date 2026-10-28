@@ -31,6 +31,34 @@ import {
 import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
 import { snapshotJson } from "./json-value";
 import { cartSnapshotOf, type PortalReconcileFor } from "./portal-cart-sync";
+import { portalAccountKey, withPortalCartLock } from "./portal-cart-lock";
+
+/** Cuántos productos recuerda la foto de New Bytes (lo último que cargó NODO). */
+const NB_SNAPSHOT_MAX_CODES = 300;
+
+function nbAccountKey(credentials: Record<string, string>): string {
+  return portalAccountKey("NEW_BYTES", parseNbCredentials(credentials).user);
+}
+
+/**
+ * Foto de lo que NODO cargó en New Bytes: lo de ahora más lo de las cargas
+ * anteriores. Cotizar un pedido retenido o abrir otra pestaña carga otro
+ * carrito; con solo la última carga, lo de las anteriores aparecía como
+ * "cargado en el portal" aunque lo hubiera puesto NODO.
+ */
+export function mergeNbSnapshot(
+  previous: Record<string, number> | null,
+  loaded: Record<string, number>
+): Record<string, number> {
+  const next: Record<string, number> = { ...(previous ?? {}) };
+  for (const [code, qty] of Object.entries(loaded)) {
+    delete next[code];
+    next[code] = qty;
+  }
+  const codes = Object.keys(next);
+  for (const code of codes.slice(0, Math.max(0, codes.length - NB_SNAPSHOT_MAX_CODES))) delete next[code];
+  return next;
+}
 
 export interface NewBytesCartItems {
   items: { code: string; qty: number; name?: string }[];
@@ -398,9 +426,12 @@ export class NewBytesOrderService {
   }
 
   private async rememberLoaded(tenantId: string, items: NewBytesCartItems["items"]) {
-    await this.cartSnapshots.save(tenantId, "NEW_BYTES", cartSnapshotOf(items)).catch((err: unknown) =>
-      this.logger.warn(`No se pudo guardar la foto del carrito de NewBytes: ${String(err)}`)
-    );
+    try {
+      const previous = await this.cartSnapshots.load(tenantId, "NEW_BYTES").catch(() => null);
+      await this.cartSnapshots.save(tenantId, "NEW_BYTES", mergeNbSnapshot(previous, cartSnapshotOf(items)));
+    } catch (err) {
+      this.logger.warn(`No se pudo guardar la foto del carrito de NewBytes: ${String(err)}`);
+    }
   }
 
   /**
@@ -409,7 +440,11 @@ export class NewBytesOrderService {
    * Lo que quedó igual a como lo cargó NODO la última vez no se devuelve: es un
    * carrito anterior de NODO, no algo que el comercio puso en el portal.
    */
-  async readPortalCart(credentials: Record<string, string>, tenantId?: string) {
+  readPortalCart(credentials: Record<string, string>, tenantId?: string) {
+    return withPortalCartLock(nbAccountKey(credentials), () => this.readPortalCartUnlocked(credentials, tenantId));
+  }
+
+  private async readPortalCartUnlocked(credentials: Record<string, string>, tenantId?: string) {
     const api = await this.login(credentials);
     const body = await api.get("carrito").catch(() => null);
     const snapshot = tenantId ? await this.cartSnapshots.load(tenantId, "NEW_BYTES").catch(() => null) : null;
@@ -426,7 +461,11 @@ export class NewBytesOrderService {
   }
 
   /** Arma el carrito en NewBytes (POST /carrito/new + items) y devuelve subtotales reales. */
-  async syncCart(credentials: Record<string, string>, input: NewBytesCartItems, reconcileFor?: PortalReconcileFor) {
+  syncCart(credentials: Record<string, string>, input: NewBytesCartItems, reconcileFor?: PortalReconcileFor) {
+    return withPortalCartLock(nbAccountKey(credentials), () => this.syncCartUnlocked(credentials, input, reconcileFor));
+  }
+
+  private async syncCartUnlocked(credentials: Record<string, string>, input: NewBytesCartItems, reconcileFor?: PortalReconcileFor) {
     const prepared = await this.prepareCart(credentials, input.items, reconcileFor?.tenantId);
     return {
       ...this.publicCart(prepared),
@@ -436,7 +475,17 @@ export class NewBytesOrderService {
   }
 
   /** Cotiza envío sobre el carrito ya unificado: GET /carrito/calcularEnvioPara/{cp}/{idDirCli}. */
-  async quoteShippingForAddress(
+  quoteShippingForAddress(
+    credentials: Record<string, string>,
+    input: NewBytesCartItems & { addressId: string },
+    reconcileFor?: PortalReconcileFor
+  ) {
+    return withPortalCartLock(nbAccountKey(credentials), () =>
+      this.quoteShippingForAddressUnlocked(credentials, input, reconcileFor)
+    );
+  }
+
+  private async quoteShippingForAddressUnlocked(
     credentials: Record<string, string>,
     input: NewBytesCartItems & { addressId: string },
     reconcileFor?: PortalReconcileFor
@@ -452,7 +501,11 @@ export class NewBytesOrderService {
     };
   }
 
-  async preview(credentials: Record<string, string>, input: NewBytesDraftInput, reconcileFor?: PortalReconcileFor) {
+  preview(credentials: Record<string, string>, input: NewBytesDraftInput, reconcileFor?: PortalReconcileFor) {
+    return withPortalCartLock(nbAccountKey(credentials), () => this.previewUnlocked(credentials, input, reconcileFor));
+  }
+
+  private async previewUnlocked(credentials: Record<string, string>, input: NewBytesDraftInput, reconcileFor?: PortalReconcileFor) {
     if (input.delivery !== "pickup" && input.delivery !== "shipping") {
       throw new BadRequestException("Elegí retiro en sucursal o envío a domicilio");
     }
@@ -550,7 +603,23 @@ export class NewBytesOrderService {
     return this.fulfillDraft(author, credentials, input, orderId);
   }
 
-  private async fulfillDraft(
+  /**
+   * De vaciar el carrito a `carrito/process`, nadie más toca la cuenta: si una
+   * cotización vaciaba el carrito en el medio, New Bytes respondía "El carrito
+   * está vacío", y dos cargas a la vez sumaban cantidades ("poco stock").
+   */
+  private fulfillDraft(
+    author: OrderAuthor,
+    credentials: Record<string, string>,
+    input: NewBytesDraftInput,
+    existingId?: string
+  ) {
+    return withPortalCartLock(nbAccountKey(credentials), () =>
+      this.fulfillDraftUnlocked(author, credentials, input, existingId)
+    );
+  }
+
+  private async fulfillDraftUnlocked(
     author: OrderAuthor,
     credentials: Record<string, string>,
     input: NewBytesDraftInput,
@@ -615,7 +684,18 @@ export class NewBytesOrderService {
 
     let processResult: { orderId?: string; branch?: string; raw: unknown } = { raw: null };
     try {
-      const body = await prepared.api.post("carrito/process", processBody);
+      let body: unknown;
+      try {
+        body = await prepared.api.post("carrito/process", processBody);
+      } catch (err) {
+        // Si el carrito quedó vacío (lo vació otra sesión del portal), se vuelve a cargar una vez.
+        if (!(err instanceof BadRequestException) || !/carrito est[aá] vac[ií]o/i.test(err.message)) throw err;
+        this.logger.warn("New Bytes: el carrito estaba vacío al procesar; se vuelve a cargar y se reintenta");
+        const again = await this.prepareCart(credentials, input.items, author.tenantId);
+        if (again.loaded) assertPortalCartMatches("New Bytes", mergeNbLines(input.items), again.loaded);
+        if (address) await this.quoteShipping(again.api, address);
+        body = await again.api.post("carrito/process", processBody);
+      }
       processResult = extractProcessResult(body);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

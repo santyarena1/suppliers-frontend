@@ -272,4 +272,99 @@ describe("NewBytesOrderService", () => {
     expect(api.get).toHaveBeenCalledWith("carrito/calcularEnvioPara/1407/19337");
     expect(quoted.quotes[0]).toMatchObject({ id: "3030", label: "Moto (Capital Federal)", total: 3500 });
   });
+
+  describe("varias operaciones a la vez sobre la misma cuenta", () => {
+    // Como el portal real: `carrito/item` suma a lo que hay y cada llamada tarda.
+    function slowPortal() {
+      let portal: { productId: number; amount: number }[] = [];
+      const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+      return {
+        get: jest.fn(async (path: string) => {
+          await tick();
+          if (path === "carrito") return portal.map((r) => ({ ...r, title: "X", price: 10, subtotal: 10 * r.amount }));
+          if (path === "carrito/availability") {
+            return portal.map((r) => ({ productId: r.productId, available: r.amount <= 2 }));
+          }
+          if (path === "carrito/mediosDePago") return [{ payMethodId: 5, description: "Efectivo Caja", interest: 0 }];
+          return [];
+        }),
+        patch: jest.fn(async (path: string) => {
+          await tick();
+          if (path === "carrito/empty") portal = [];
+          return { ok: true };
+        }),
+        post: jest.fn(async (path: string, body?: { productId: number; amount: number }[]) => {
+          await tick();
+          if (path === "carrito/item") {
+            for (const it of body ?? []) {
+              const prev = portal.find((r) => r.productId === it.productId);
+              if (prev) prev.amount += it.amount;
+              else portal.push({ productId: it.productId, amount: it.amount });
+            }
+          }
+          if (path === "carrito/process") {
+            if (portal.length === 0) {
+              throw new BadRequestException("NewBytes POST carrito/process → 400: El carrito está vacio, no se puede procesar");
+            }
+            portal = [];
+            return { orderId: 77, branch: 1 };
+          }
+          return { ok: true };
+        }),
+      };
+    }
+
+    it("la precarga y la confirmación no se pisan: el pedido sale con el carrito entero", async () => {
+      const live = slowPortal();
+      jest.spyOn(NewBytesApiClient, "login").mockResolvedValue(live as never);
+      const items = [{ code: "108613", qty: 2, name: "RTX 3070" }];
+      const [warm, other, created] = await Promise.all([
+        service.preview(CREDS, { items, delivery: "pickup" }, { tenantId: "tenant-1" }),
+        service.syncCart(CREDS, { items }, { tenantId: "tenant-1" }),
+        service.submitDraft(AUTOR, CREDS, { items, delivery: "pickup", medioDePagoId: 5 }),
+      ]);
+      // Sin sumar cantidades: New Bytes ve 2, no 4 ("poco stock").
+      expect(warm.stockOk).toBe(true);
+      expect(other.stockOk).toBe(true);
+      expect(created.status).toBe("CREATED");
+      expect(live.post.mock.calls.filter(([path]) => path === "carrito/process")).toHaveLength(1);
+    });
+
+    it("si el carrito quedó vacío al procesar, lo vuelve a cargar y reintenta una vez", async () => {
+      const live = slowPortal();
+      jest.spyOn(NewBytesApiClient, "login").mockResolvedValue(live as never);
+      const realPost = live.post.getMockImplementation()!;
+      let first = true;
+      live.post.mockImplementation(async (path: string, body?: { productId: number; amount: number }[]) => {
+        if (path === "carrito/process" && first) {
+          first = false;
+          await live.patch("carrito/empty"); // otra sesión del portal lo vació
+        }
+        return realPost(path, body);
+      });
+      const created = await service.submitDraft(AUTOR, CREDS, { items: ITEMS, delivery: "pickup", medioDePagoId: 5 });
+      expect(created.status).toBe("CREATED");
+      expect(live.post.mock.calls.filter(([path]) => path === "carrito/process")).toHaveLength(2);
+    });
+  });
+
+  it("lo que cargó NODO en una cotización anterior no aparece como cargado en el portal", async () => {
+    let foto: Record<string, number> | null = null;
+    service = new NewBytesOrderService(
+      { providerOrder: { create: createOrder, findMany: jest.fn() } } as never,
+      {
+        load: jest.fn(async () => foto),
+        save: jest.fn(async (_t: string, _p: string, snap: Record<string, number> | null) => {
+          foto = snap;
+        }),
+        clear: jest.fn(async () => undefined),
+      } as never
+    );
+    // El carrito del comercio y, después, la cotización de un pedido retenido con otro producto.
+    await service.syncCart(CREDS, { items: [{ code: "108613", qty: 1 }] }, { tenantId: "tenant-1" });
+    await service.syncCart(CREDS, { items: [{ code: "555", qty: 3 }] }, { tenantId: "tenant-1" });
+    // En New Bytes quedó lo de la primera carga.
+    await api.post("carrito/item", [{ productId: 108613, amount: 1 }]);
+    expect((await service.readPortalCart(CREDS, "tenant-1")).items).toEqual([]);
+  });
 });
