@@ -10,11 +10,15 @@ import {
   type Build, type Facet, type PcPart, type PcStep, type Qty,
 } from "@/lib/pc-builder/compat";
 import { inStock, useOfferPricer, useStepParts, type ChosenPart } from "@/lib/pc-builder/state";
+import { score } from "@/lib/pc-builder/auto";
 
 const PAGE = 24;
 const MAX_COMPARE = 3;
 const LEVEL_RANK = { ok: 0, warn: 1, bad: 2 } as const;
-const QUALITY_RANK = { verified: 0, estimated: 1, partial: 2 } as const;
+// Verificada y con datos estimados pesan igual: lo que corre al final es la ficha incompleta.
+const QUALITY_RANK = { verified: 0, estimated: 0, partial: 1 } as const;
+/** Pasos donde "Recomendados" ordena por rendimiento por peso (en el resto, por precio). */
+const BY_VALUE: PcStep[] = ["cpu", "gpu", "ram", "ssd"];
 const WITH_ARTICLE: Record<PcStep, string> = {
   cpu: "el procesador", mobo: "la mother", ram: "la memoria", gpu: "la placa de video",
   ssd: "el almacenamiento", psu: "la fuente", case: "el gabinete", cooler: "la refrigeración",
@@ -79,10 +83,12 @@ export default function PartsStep({
     .sort((a, b) => {
       if (sort === "nombre") return a.p.name.localeCompare(b.p.name, "es");
       if (sort === "precio-desc") return (b.best ?? 0) - (a.best ?? 0);
-      // Recomendado: primero lo compatible sin dudas y con la ficha completa; después, por precio.
+      // Recomendado: primero lo compatible sin dudas y con la ficha completa; después, lo que más rinde
+      // por lo que cuesta (procesador, placa, memoria, disco) o lo más barato (el resto).
       if (sort === "recomendado") {
         const rank = (r: typeof a) => LEVEL_RANK[r.v.level] * 3 + QUALITY_RANK[r.quality] + (r.best == null ? 9 : 0);
-        return rank(a) - rank(b) || (a.best ?? 9e9) - (b.best ?? 9e9);
+        const value = (r: typeof a) => (r.best ? score(step, r.p, "gamer") / Math.pow(r.best, 0.85) : 0);
+        return rank(a) - rank(b) || (BY_VALUE.includes(step) ? value(b) - value(a) : (a.best ?? 9e9) - (b.best ?? 9e9));
       }
       return (a.best ?? 9e9) - (b.best ?? 9e9);
     });

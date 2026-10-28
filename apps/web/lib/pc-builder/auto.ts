@@ -51,7 +51,7 @@ const ghz = (v: string) => {
 const GPU_TIERS: [RegExp, number][] = [
   [/rtx\s*5090/i, 150], [/rtx\s*4090/i, 125], [/rtx\s*5080/i, 105], [/rtx\s*4080/i, 100], [/rx\s*7900\s*xtx/i, 100],
   [/rx\s*9070\s*xt/i, 95], [/rtx\s*5070\s*ti/i, 92], [/rx\s*7900\s*xt\b/i, 88], [/rtx\s*4070\s*ti\s*super/i, 88],
-  [/rx\s*9070\s*gre/i, 72], [/rx\s*9070\b/i, 85], [/rtx\s*4070\s*ti/i, 82], [/rtx\s*5070\b/i, 76], [/rtx\s*4070\s*super/i, 75], [/rx\s*7900\s*gre/i, 75],
+  [/rx\s*9070\s*gre|rx\s*9070\b.*\bgre\b/i, 72], [/rx\s*9070\b/i, 85], [/rtx\s*4070\s*ti/i, 82], [/rtx\s*5070\b/i, 76], [/rtx\s*4070\s*super/i, 75], [/rx\s*7900\s*gre/i, 75],
   [/rx\s*7800\s*xt/i, 70], [/rtx\s*4070\b/i, 66], [/rx\s*6800\s*xt/i, 70], [/rx\s*6800\b/i, 64], [/rtx\s*3080/i, 72],
   [/rtx\s*5060\s*ti/i, 60], [/rx\s*7700\s*xt/i, 60], [/rtx\s*3070\s*ti/i, 61], [/rtx\s*3070/i, 58], [/rx\s*9060\s*xt/i, 56],
   [/rx\s*6750\s*xt/i, 55], [/rtx\s*4060\s*ti/i, 53], [/rtx\s*5060\b/i, 52], [/rx\s*6700\s*xt/i, 52], [/arc\s*b580/i, 50],
@@ -59,7 +59,7 @@ const GPU_TIERS: [RegExp, number][] = [
   [/arc\s*a770/i, 45], [/rx\s*6650\s*xt/i, 44], [/rtx\s*5050/i, 42], [/arc\s*a750/i, 42], [/rtx\s*3060\b/i, 40],
   [/rx\s*6600\s*xt/i, 42], [/rx\s*6600\b/i, 38], [/arc\s*a580/i, 35], [/rtx\s*2060/i, 33], [/rtx\s*3050/i, 29],
   [/gtx\s*1660\s*(super|ti)/i, 30], [/gtx\s*1660/i, 26], [/rx\s*6500\s*xt/i, 18], [/gtx\s*1650/i, 20], [/arc\s*a380/i, 15],
-  [/rx\s*6400/i, 15], [/rx\s*580/i, 18], [/rx\s*550/i, 8], [/gtx\s*1050/i, 10], [/gt\s*1030/i, 6], [/gt\s*730/i, 3], [/gt\s*710/i, 2],
+  [/rx\s*6400/i, 15], [/rx\s*580/i, 18], [/rx\s*550/i, 8], [/gtx\s*1050/i, 10], [/gt\s*1030/i, 6], [/gt\s*730/i, 3], [/gt\s*710/i, 2], [/gt\s*[26]10/i, 1],
 ];
 
 export function gpuScore(p: PcPart): number {

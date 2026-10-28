@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.16.3",
+    date: "2026-10-28",
+    title: "Armador de PC: «Recomendados» muestra primero lo que más rinde por su precio",
+    changes: [
+      { kind: "improved", text: "En procesadores, placas de video, memorias y discos, «Recomendados» ordena por rendimiento según el precio: ya no aparecen primero las placas más viejas solo por ser baratas. En el resto de los pasos sigue primero lo más barato." },
+    ],
+  },
+  {
     version: "2.16.2",
     date: "2026-10-28",
     title: "Armador de PC: mejores elecciones en el armado automático",
