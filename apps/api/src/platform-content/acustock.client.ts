@@ -130,6 +130,15 @@ export class AcuStockClient {
     return out;
   }
 
+  /** Cuántos productos cambiaron en AcuStock (ficha, fotos o datos) desde esa fecha. */
+  async countUpdatedSince(since: Date): Promise<number> {
+    const base = this.config.get<string>("ACUSTOCK_EXPORT_URL");
+    const token = this.config.get<string>("ACUSTOCK_EXPORT_TOKEN");
+    if (!base || !token) throw new Error("Falta configurar ACUSTOCK_EXPORT_URL y ACUSTOCK_EXPORT_TOKEN");
+    const body = await this.fetchPage(`${base}?page=1&pageSize=1&updatedSince=${encodeURIComponent(since.toISOString())}`, token, 1);
+    return Math.max(0, Number(body.data?.total) || 0);
+  }
+
   /** Una página, con reintentos ante cortes o errores del servidor (un 4xx no se reintenta). */
   private async fetchPage(url: string, token: string, page: number): Promise<ExportPage> {
     let last: Error | null = null;
@@ -155,7 +164,7 @@ export class AcuStockClient {
 }
 
 interface ExportPage {
-  data?: { items?: unknown[]; totalPages?: number };
+  data?: { items?: unknown[]; totalPages?: number; total?: number };
 }
 
 const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));

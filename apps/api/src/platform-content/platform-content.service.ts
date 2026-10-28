@@ -270,6 +270,11 @@ export class PlatformContentService implements OnModuleInit {
     return this.acustock.isConfigured();
   }
 
+  /** Productos que cambiaron en AcuStock desde esa fecha (para decidir si importar). */
+  changedSince(since: Date): Promise<number> {
+    return this.acustock.countUpdatedSince(since);
+  }
+
   async status() {
     const [runs, contents, links] = await Promise.all([
       this.prisma.platformContentImportRun.findMany({ orderBy: { startedAt: "desc" }, take: 10 }),

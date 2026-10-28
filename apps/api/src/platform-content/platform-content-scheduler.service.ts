@@ -16,10 +16,12 @@ export function needsCatchUp(lastOkAt: Date | null, now = new Date()): boolean {
 }
 
 /**
- * Fichas de AcuStock al día sin que nadie tenga que importarlas: una corrida
- * completa por día (cruza con el catálogo entero, así que no puede ser parcial)
- * y, al arrancar, una de recuperación si la última buena es de hace más de 20 h.
- * Si otra réplica ya la está corriendo, `start` lo rechaza y esta se saltea.
+ * Fichas de AcuStock al día sin que nadie tenga que importarlas: cada hora se
+ * fija si algo cambió en AcuStock desde la última importación buena y, si cambió,
+ * corre una completa (cruza con el catálogo entero, así que no puede ser parcial).
+ * Además, una diaria a las 6:30 y, al arrancar, una de recuperación si la última
+ * buena es de hace más de 20 h. Si otra réplica ya está importando, `start` lo
+ * rechaza y esta se saltea.
  */
 @Injectable()
 export class PlatformContentSchedulerService implements OnApplicationBootstrap, OnModuleDestroy {
@@ -49,15 +51,33 @@ export class PlatformContentSchedulerService implements OnApplicationBootstrap, 
     await this.run("diaria");
   }
 
+  /** Cada hora (minuto 15): si AcuStock cambió algo desde la última importación buena, importa. */
+  @Cron("15 * * * *", { timeZone: CRON_TZ })
+  async hourly() {
+    if (!shouldRunScheduledJob() || this.disabled()) return;
+    const last = await this.lastOk();
+    if (!last) return this.run("inicial");
+    try {
+      const changed = await this.content.changedSince(last.startedAt);
+      if (changed > 0) await this.run(`por ${changed} cambio${changed === 1 ? "" : "s"} en AcuStock`);
+    } catch (err) {
+      this.logger.warn(`No se pudo consultar cambios en AcuStock: ${(err as Error).message}`);
+    }
+  }
+
   /** La de recuperación no espera la ventana de crons: de noche no hay otros trabajos corriendo. */
   async catchUp() {
-    const last = await this.prisma.platformContentImportRun.findFirst({
-      where: { source: ACUSTOCK_SOURCE, mode: "APPLY", status: "OK" },
-      orderBy: { finishedAt: "desc" },
-      select: { finishedAt: true },
-    });
+    const last = await this.lastOk();
     if (!needsCatchUp(last?.finishedAt ?? null)) return;
     await this.run("de recuperación");
+  }
+
+  private lastOk() {
+    return this.prisma.platformContentImportRun.findFirst({
+      where: { source: ACUSTOCK_SOURCE, mode: "APPLY", status: "OK" },
+      orderBy: { finishedAt: "desc" },
+      select: { startedAt: true, finishedAt: true },
+    });
   }
 
   private disabled() {
