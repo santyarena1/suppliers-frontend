@@ -7,7 +7,7 @@ import { type AcuStockProduct, AcuStockClient } from "./acustock.client";
 import { type CatalogRow, type ContentLink, matchContent } from "./content-match";
 import { contentToText } from "./content-text";
 import { encryptImageUrl, imageKey } from "./image-token";
-import { PC_STEP_CATEGORIES, pcCompatWithEstimates, type PcStep } from "./pc-specs";
+import { PC_STEPS, PC_STEP_CATEGORIES, pcCompatWithEstimates, type PcStep } from "./pc-specs";
 
 export const ACUSTOCK_SOURCE = "ACUSTOCK";
 type Mode = "PREVIEW" | "APPLY";
@@ -225,6 +225,47 @@ export class PlatformContentService implements OnModuleInit {
     return true;
   }
 
+  private healthCache: { at: number; data: Promise<unknown> } | null = null;
+
+  /**
+   * Estado público de las fichas para controlarlo sin entrar al superadmin: la última
+   * importación y, por paso del armador, cuántas piezas hay y qué porcentaje trae cada
+   * dato. Solo cantidades y fechas (nada del catálogo ni de los comercios). 2 min en memoria.
+   */
+  health() {
+    if (this.healthCache && Date.now() - this.healthCache.at < 2 * 60_000) return this.healthCache.data;
+    const data = this.buildHealth();
+    this.healthCache = { at: Date.now(), data };
+    data.catch(() => { this.healthCache = null; });
+    return data;
+  }
+
+  private async buildHealth() {
+    const [last, lastOk, contents, links] = await Promise.all([
+      this.prisma.platformContentImportRun.findFirst({ where: { source: ACUSTOCK_SOURCE, mode: "APPLY" }, orderBy: { startedAt: "desc" } }),
+      this.prisma.platformContentImportRun.findFirst({ where: { source: ACUSTOCK_SOURCE, mode: "APPLY", status: "OK" }, orderBy: { finishedAt: "desc" } }),
+      this.prisma.platformProductContent.count({ where: { source: ACUSTOCK_SOURCE } }),
+      this.prisma.platformProductContentLink.count(),
+    ]);
+    const steps: Record<string, { parts: number; withEstimated: number; coverage: Record<string, number> }> = {};
+    for (const step of PC_STEPS) {
+      const parts = await this.pcParts(step);
+      const keys = [...new Set(parts.flatMap((p) => Object.keys(p.compat)))];
+      const has = (v: unknown) => v != null && !(Array.isArray(v) && v.length === 0);
+      steps[step] = {
+        parts: parts.length,
+        withEstimated: parts.filter((p) => p.estimated.length > 0).length,
+        coverage: Object.fromEntries(keys.map((k) => [k, parts.length ? Math.round((parts.filter((p) => has(p.compat[k])).length / parts.length) * 100) : 0])),
+      };
+    }
+    // De las estadísticas, solo los números (no la muestra de nombres sin cruzar) y la fase.
+    const numbers = (s: unknown) =>
+      Object.fromEntries(Object.entries(s && typeof s === "object" ? (s as Record<string, unknown>) : {}).filter(([k, v]) => typeof v === "number" || k === "phase"));
+    const run = (r: typeof last) =>
+      r && { status: r.status, startedAt: r.startedAt, finishedAt: r.finishedAt, errorMessage: r.errorMessage, stats: numbers(r.stats) };
+    return { running: this.running, lastApply: run(last), lastOk: run(lastOk), contents, links, steps };
+  }
+
   isConfigured(): boolean {
     return this.acustock.isConfigured();
   }
@@ -288,6 +329,7 @@ export class PlatformContentService implements OnModuleInit {
         await this.heartbeat(runId, { ...summary, phase: "Cargando contenido" });
         await this.apply(products, links, (phase) => this.heartbeat(runId, { ...summary, phase }));
         this.pcPartsCache.clear();
+        this.healthCache = null;
       }
       await this.prisma.platformContentImportRun.update({
         where: { id: runId },

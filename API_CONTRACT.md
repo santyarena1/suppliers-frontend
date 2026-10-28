@@ -1162,6 +1162,14 @@ Notas por proveedor en `docs/providers/{masnet,microglobal,pc-arts}.md`.
 - **Datos estimados (2026-10-27)**: AcuStock exporta también lo que completó la IA sin revisar (confianza 50–79) con `specs[].estimated: true`. `estimated` lista las claves de `compat` que salieron de esos datos; la web los marca y un "no entra" basado en ellos queda como "verificar". La ficha del producto (`platformContent.specs`) y "Copiar ficha" siguen mostrando solo lo confirmado. Las fichas de un paso se guardan 10 min en memoria y se renuevan con cada importación.
 - **Importación diaria**: además del botón del superadmin, la API corre `apply` sola todos los días a las 6:30 (hora de Argentina). Además, al arrancar, si la última importación buena es de hace más de 20 h, corre una de recuperación (a los 90 s, sin esperar la ventana de crons). Se apaga con `PLATFORM_CONTENT_CRON_DISABLED=true`.
 
+### [FEATURE] Estado de las fichas (monitoreo)
+- **Método**: GET
+- **Ruta**: `/health/fichas`
+- **Auth**: no requerido (solo cantidades, porcentajes y fechas)
+- **Respuesta esperada**: `{ running, lastApply, lastOk: { status, startedAt, finishedAt, errorMessage, stats (solo números y fase) } | null, contents, links, steps: { [paso]: { parts, withEstimated, coverage: { [dato]: % de piezas que lo traen } } } }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: 2 min en memoria; se renueva con cada importación. Sirve para controlar la importación de AcuStock sin entrar al superadmin.
+
 ### [FEATURE] Armador de PC — armados guardados y plantillas
 - **Método**: GET | POST | PUT | DELETE
 - **Ruta**: `/pc-builder/builds`, `/pc-builder/builds/:id`

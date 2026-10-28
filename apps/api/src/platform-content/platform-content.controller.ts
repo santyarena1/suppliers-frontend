@@ -1,9 +1,22 @@
 import { Controller, Get, Post, UseGuards } from "@nestjs/common";
 import type { JwtPayload } from "@nodo/shared";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { Public } from "../common/decorators/public.decorator";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { PlatformContentService } from "./platform-content.service";
+
+/** Estado de las fichas para monitoreo: solo cantidades, porcentajes y fechas. */
+@Controller("health/fichas")
+export class PlatformContentHealthController {
+  constructor(private readonly content: PlatformContentService) {}
+
+  @Public()
+  @Get()
+  health() {
+    return this.content.health();
+  }
+}
 
 /** Importación de contenido enriquecido (AcuStock). Solo superadmin. */
 @UseGuards(RolesGuard)
