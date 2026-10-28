@@ -18,13 +18,13 @@ export const PROFILE_LABEL: Record<Profile, string> = {
 
 export const PROFILE_HINT: Record<Profile, string> = {
   gamer: "Prioriza la placa de video. 16 GB de RAM y SSD NVMe como mínimo.",
-  office: "Procesador con video integrado, sin placa de video. Silenciosa y barata.",
+  office: "Procesador con video integrado, sin placa de video. 16 GB de RAM y disco de 480 GB o más.",
   creator: "Prioriza procesador y memoria (32 GB). Placa de video media y disco de 1 TB.",
 };
 
 /** Qué parte del presupuesto va a cada pieza, según el perfil. */
 const SHARE: Record<Profile, Record<PcStep, number>> = {
-  gamer: { cpu: 0.18, mobo: 0.11, ram: 0.08, gpu: 0.38, ssd: 0.07, psu: 0.07, case: 0.07, cooler: 0.04 },
+  gamer: { cpu: 0.16, mobo: 0.1, ram: 0.12, gpu: 0.38, ssd: 0.08, psu: 0.07, case: 0.06, cooler: 0.03 },
   office: { cpu: 0.3, mobo: 0.2, ram: 0.14, gpu: 0, ssd: 0.14, psu: 0.08, case: 0.12, cooler: 0.02 },
   creator: { cpu: 0.26, mobo: 0.12, ram: 0.13, gpu: 0.25, ssd: 0.1, psu: 0.07, case: 0.05, cooler: 0.02 },
 };
@@ -46,6 +46,32 @@ const UPGRADE: Record<Profile, PcStep[]> = {
   creator: ["cpu", "gpu", "ram", "ssd"],
 };
 const PERF: PcStep[] = ["cpu", "gpu", "ram", "ssd"];
+
+/*
+ * Marcas con las que un comercio arma una PC para vender. Las fuentes, gabinetes y coolers
+ * genéricos quedan solo si no hay otra opción.
+ */
+const GOOD_PSU = /cooler\s*master|thermaltake|\basus\b|\brog\b|gigabyte|aorus|adata|\bxpg\b|corsair|\bmsi\b|evga|seasonic|be\s*quiet|deepcool|nzxt|antec|lian\s*li|super\s*flower|\bfsp\b|montech/i;
+const GOOD_CASE = /cooler\s*master|thermaltake|adata|\bxpg\b|gigabyte|aorus|corsair|\basus\b|\brog\b|\bmsi\b|nzxt|lian\s*li|deepcool|montech|antec|be\s*quiet|fractal|phanteks|hyte|jonsbo/i;
+const GOOD_COOLER = /cooler\s*master|deepcool|thermalright|id-?cooling|arctic|noctua|be\s*quiet|corsair|nzxt|lian\s*li|thermaltake|\basus\b|\bmsi\b|gigabyte|\bxpg\b|montech|wraith/i;
+/** Ryzen con video integrado (5600G, 8500G…): con placa de video rinden menos que su par sin video. */
+const APU = /ryzen\s*[3579]\s*(pro\s*)?\d{4}g\b/i;
+/** Chipsets de entrada: para gamer o diseño, mejor una B o superior. */
+const ENTRY_CHIPSET = /\b(A[3-6]20|H[3-6]10|H[3-6]70)\b/i;
+const brandText = (p: PcPart) => `${p.brand ?? ""} ${p.name}`;
+/** Lo que no se le arma a un cliente: golpeado, usado, outlet, reacondicionado. */
+const NOT_NEW = /golpead|usad[oa]\b|outlet|reacondicionad|refurb|caja abierta|open box|da[ñn]ad/i;
+const certRank = (cert: string) =>
+  /titanium/i.test(cert) ? 5 : /platinum/i.test(cert) ? 4 : /gold/i.test(cert) ? 3 : /silver/i.test(cert) ? 2 : /bronze/i.test(cert) ? 1 : 0;
+/** Aplica cada preferencia en orden, mientras deje alguna opción. */
+function prefer<T>(rows: T[], ...filters: ((r: T) => boolean)[]): T[] {
+  let out = rows;
+  for (const f of filters) {
+    const next = out.filter(f);
+    if (next.length) out = next;
+  }
+  return out;
+}
 
 const num = (p: PcPart, k: string) => (typeof p.compat[k] === "number" ? (p.compat[k] as number) : null);
 const str = (p: PcPart, k: string) => (typeof p.compat[k] === "string" ? (p.compat[k] as string) : "");
@@ -106,12 +132,13 @@ export function score(step: PcStep, p: PcPart, profile: Profile): number {
 /** Lo mínimo que tiene que cumplir cada pieza para ese perfil. */
 function meetsProfile(step: PcStep, p: PcPart, profile: Profile, build: Build): boolean {
   const cap = num(p, "capacity");
-  if (step === "ram") return profile === "office" ? (cap ?? 0) >= 8 : profile === "creator" ? (cap ?? 0) >= 32 : (cap ?? 0) >= 16;
+  if (step === "ram") return profile === "creator" ? (cap ?? 0) >= 32 : (cap ?? 0) >= 16;
   if (step === "ssd") {
     if (p.compat.hdd) return false;
-    return profile === "office" ? (cap ?? 0) >= 240 : profile === "creator" ? (cap ?? 0) >= 1000 : (cap ?? 0) >= 480;
+    return profile === "office" ? (cap ?? 0) >= 480 : (cap ?? 0) >= 960;
   }
   if (step === "cpu" && profile === "office" && !build.gpu) return p.compat.igpu === true;
+  if (step === "cpu" && (profile === "creator" || (profile === "gamer" && build.gpu))) return !APU.test(p.name);
   if (step === "gpu") return profile !== "office" && gpuScore(p) >= (profile === "gamer" ? 18 : 15) && gpuMaker(p) != null;
   if (step === "psu" && (profile !== "office" || build.gpu)) return !/sin cert/i.test(str(p, "cert")) && str(p, "cert") !== "";
   if (step === "case" && profile !== "office") return (num(p, "fans") ?? 1) >= 1;
@@ -173,7 +200,7 @@ export function autoBuild(input: AutoInput): AutoResult {
   const candidates = (step: PcStep, base: Build) => {
     const rows = (catalog[step] ?? [])
       .map((p) => ({ p, cost: c(p), v: verdict(step, p, base, qty).level }))
-      .filter((r): r is { p: PcPart; cost: number; v: Level } => r.cost != null && r.v !== "bad" && meetsProfile(step, r.p, profile, base));
+      .filter((r): r is { p: PcPart; cost: number; v: Level } => r.cost != null && r.v !== "bad" && !NOT_NEW.test(r.p.name) && meetsProfile(step, r.p, profile, base));
     const best = Math.min(...rows.map((r) => RANK[r.v]));
     return rows.filter((r) => RANK[r.v] === best);
   };
@@ -182,22 +209,57 @@ export function autoBuild(input: AutoInput): AutoResult {
   const cheapest = (rows: { p: PcPart; cost: number }[], step: PcStep) =>
     rows.slice().sort((a, b) => a.cost * (dataQuality(step, a.p) === "verified" ? 0.97 : 1) - b.cost * (dataQuality(step, b.p) === "verified" ? 0.97 : 1))[0];
 
+  /**
+   * Piezas que no suman rendimiento (mother, fuente, gabinete, cooler): entre las de calidad, la de precio
+   * más cercano a lo que le toca. Así acompañan el nivel de la PC: ni una fuente genérica con una placa
+   * de gama alta ni un gabinete de lujo en una de oficina.
+   */
+  const nearest = (rows: { p: PcPart; cost: number }[], step: PcStep, target: number | null) => {
+    // Con presupuesto del comercio, lo que no rinde va a la opción de calidad más barata y lo que sobra
+    // mejora la placa o el procesador. Sin presupuesto, acompaña el nivel de la pieza principal.
+    if (target == null || budget != null) return cheapest(rows, step);
+    const fit = rows.filter((r) => r.cost <= target * 1.15);
+    if (!fit.length) return cheapest(rows, step);
+    return fit.slice().sort((a, b) => Math.abs(a.cost - target) - Math.abs(b.cost - target))[0];
+  };
+
   const choose = (step: PcStep, target: number | null) => {
     const rows = candidates(step, build);
     if (!rows.length) return null;
+    const serious = profile !== "office" || Boolean(build.gpu);
     if (!PERF.includes(step)) {
-      // Fuente: con margen sobre lo recomendado y, en gamer, una de calidad razonable.
+      // Fuente: de marca, 80 Plus Bronze o más (Gold con placas de gama alta) y con margen sobre lo recomendado.
       if (step === "psu") {
         const need = powerNeed(build, qty)?.recommended ?? 0;
-        // Siempre que haya, una certificada: una genérica es la pieza que más falla.
-        const certified = rows.filter((r) => str(r.p, "cert") !== "" && !/sin cert/i.test(str(r.p, "cert")));
-        const pool = certified.length ? certified : rows;
-        const roomy = pool.filter((r) => (num(r.p, "watts") ?? 0) >= need * 1.1);
-        return cheapest(roomy.length ? roomy : pool, step);
+        const gpu = build.gpu ? gpuScore(build.gpu) : 0;
+        const pool = prefer(
+          rows,
+          (r) => str(r.p, "cert") !== "" && !/sin cert/i.test(str(r.p, "cert")),
+          (r) => !serious || GOOD_PSU.test(brandText(r.p)),
+          (r) => !serious || certRank(str(r.p, "cert")) >= 1,
+          (r) => gpu < 70 || certRank(str(r.p, "cert")) >= 3,
+          (r) => (num(r.p, "watts") ?? 0) >= need * (serious ? 1.2 : 1.1),
+          (r) => !need || (num(r.p, "watts") ?? 0) <= need * 1.5,
+        );
+        return nearest(pool, step, target);
       }
-      if (step === "case" && profile !== "office") {
-        const ventilated = rows.filter((r) => (num(r.p, "fans") ?? 0) >= 2);
-        return cheapest(ventilated.length ? ventilated : rows, step);
+      // Gabinete: de marca y con ventiladores.
+      if (step === "case") {
+        return nearest(
+          prefer(
+            rows,
+            (r) => !serious || GOOD_CASE.test(brandText(r.p)),
+            (r) => profile === "office" || (num(r.p, "fans") ?? 0) >= 2,
+            // Con fuente aparte, un gabinete que ya trae fuente es plata tirada.
+            (r) => !serious || r.p.compat.psuIncluded !== true,
+          ),
+          step,
+          target,
+        );
+      }
+      // Mother: en gamer y diseño, chipset B (o superior) antes que uno de entrada.
+      if (step === "mobo") {
+        return nearest(prefer(rows, (r) => profile === "office" || !ENTRY_CHIPSET.test(str(r.p, "chipset") + " " + r.p.name)), step, target);
       }
       if (step === "cooler") {
         const tdp = build.cpu ? num(build.cpu, "tdp") ?? 65 : 65;
@@ -213,11 +275,12 @@ export function autoBuild(input: AutoInput): AutoResult {
           const brand = named(r.p);
           return !socket || !brand || socket.startsWith(brand);
         });
-        const pool = fits.length ? fits : enough.length ? enough : rows;
+        const pool = prefer(fits.length ? fits : enough.length ? enough : rows, (r) => !serious || GOOD_COOLER.test(brandText(r.p)));
         const air = tdp <= 105 ? pool.filter((r) => str(r.p, "kind") !== "liquid") : [];
-        return cheapest(air.length ? air : pool, step);
+        // Hasta 65 W cualquier cooler de marca alcanza: no hace falta uno de torre doble.
+        return tdp <= 65 ? cheapest(air.length ? air : pool, step) : nearest(air.length ? air : pool, step, target);
       }
-      return cheapest(rows, step);
+      return nearest(rows, step, target);
     }
     let pool = rows;
     const usable = (sub: typeof rows) => sub.length > 0 && (target == null || sub.some((r) => r.cost <= target));
@@ -227,24 +290,49 @@ export function autoBuild(input: AutoInput): AutoResult {
       const balanced = pool.filter((r) => cpuScore(r.p, profile) >= need);
       if (usable(balanced)) pool = balanced;
     }
+    // Disco: en gamer y diseño, un NVMe M.2 antes que un SATA.
+    if (step === "ssd" && profile !== "office") {
+      const nvme = pool.filter((r) => /nvme|pcie/i.test(`${str(r.p, "iface")} ${r.p.name}`) && !/sata/i.test(str(r.p, "iface")));
+      if (usable(nvme)) pool = nvme;
+    }
     if (target == null) {
-      // Sin presupuesto: la mejor relación rendimiento / precio.
-      return pool.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, 0.85) - score(step, a.p, profile) / Math.pow(a.cost, 0.85))[0];
+      // Sin presupuesto: la mejor relación rendimiento / precio (en diseño, el procesador pesa más que el precio).
+      const k = profile === "creator" && step === "cpu" ? 0.6 : 0.85;
+      return pool.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, k) - score(step, a.p, profile) / Math.pow(a.cost, k))[0];
     }
     const fit = pool.filter((r) => r.cost <= target);
     if (!fit.length) return cheapest(pool, step);
-    return fit.slice().sort((a, b) => score(step, b.p, profile) - score(step, a.p, profile) || a.cost - b.cost)[0];
+    // Dentro de lo que le toca, rendimiento con sentido: en una gamer la placa rinde todo lo que se pueda; el
+    // procesador, lo justo para acompañarla (no un Ryzen 9 para jugar); el resto, equilibrio entre rendimiento y precio.
+    const weight = profile === "gamer" && step === "gpu" ? 0.15 : profile === "gamer" && step === "cpu" ? 0.85 : 0.5;
+    return fit.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, weight) - score(step, a.p, profile) / Math.pow(a.cost, weight))[0];
   };
 
   // 1) Una pieza por paso, con la parte del presupuesto que le toca.
   const order = ORDER_BY[profile];
   const missing = order.filter((st) => !build[st]);
   const shares = SHARE[profile];
+  // Sin presupuesto, la pieza que marca el nivel (la placa en una gamer, el procesador en el resto) se elige
+  // por rendimiento / precio, y su precio fija cuánto le toca a cada una de las demás: una PC pareja.
+  const anchor: PcStep = profile === "gamer" ? "gpu" : "cpu";
+  let plan = budget;
+  if (plan == null) {
+    if (!build[anchor] && !skipStep(anchor, build, profile)) {
+      const pick = choose(anchor, null);
+      if (pick) {
+        build[anchor] = pick.p;
+        picked.push(anchor);
+      }
+    }
+    const a = build[anchor];
+    const ac = a ? c(a) : null;
+    if (ac) plan = ac / shares[anchor];
+  }
   for (const step of order) {
     if (build[step] || skipStep(step, build, profile)) continue;
     let target: number | null = null;
-    if (budget != null) {
-      const left = budget - total();
+    if (plan != null) {
+      const left = plan - total();
       const pending = missing.filter((st) => !build[st] && !skipStep(st, build, profile));
       const weight = pending.reduce((sum, st) => sum + shares[st], 0) || 1;
       target = Math.max(0, (left * shares[step]) / weight);
@@ -269,9 +357,16 @@ export function autoBuild(input: AutoInput): AutoResult {
         const room = budget - total() + (c(current) ?? 0);
         const others: Build = { ...build };
         delete others[step];
+        // En una gamer el procesador solo sube si quedó corto para la placa, y hasta lo justo.
+        const cpuNeed = profile === "gamer" && step === "cpu" && build.gpu ? gpuScore(build.gpu) * CPU_PER_GPU : null;
+        if (cpuNeed != null && curScore >= cpuNeed) continue;
         const better = candidates(step, others)
           .filter((r) => r.cost <= room && score(step, r.p, profile) > curScore * 1.04)
-          .sort((a, b) => score(step, b.p, profile) - score(step, a.p, profile))[0];
+          .sort((a, b) =>
+            cpuNeed != null
+              ? Number(score(step, b.p, profile) >= cpuNeed) - Number(score(step, a.p, profile) >= cpuNeed) || a.cost - b.cost
+              : score(step, b.p, profile) - score(step, a.p, profile),
+          )[0];
         if (!better) continue;
         const trial: Build = { ...build, [step]: better.p };
         // Que lo demás siga siendo compatible (una placa más grande puede no entrar o pedir más fuente).

@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.17.0",
+    date: "2026-10-28",
+    title: "Armador de PC: el armado automático arma PCs parejas y de calidad",
+    changes: [
+      { kind: "improved", text: "PCs parejas: sin presupuesto, NODO elige primero la pieza que marca el nivel (la placa de video en una gamer, el procesador en las demás) y arma el resto a esa altura. Ya no junta una placa de gama alta con una fuente o un gabinete de entrada." },
+      { kind: "improved", text: "Calidad: fuentes de marca reconocida y 80 Plus Bronze o más (Gold con placas de gama alta), gabinetes y coolers de marca, y mothers con chipset B en las gamer y de diseño. Nunca elige artículos golpeados, usados ni de outlet." },
+      { kind: "improved", text: "Con presupuesto, lo que no da rendimiento va a la opción de calidad más barata y lo que sobra mejora la placa de video. El procesador acompaña a la placa sin pasarse: no pone un Ryzen 9 para jugar." },
+      { kind: "improved", text: "Mínimos por uso: gamer y diseño con disco NVMe de 1 TB; oficina con 16 GB de RAM y disco de 480 GB o más. En gamer y diseño no elige procesadores con video integrado." },
+    ],
+  },
+  {
     version: "2.16.4",
     date: "2026-10-28",
     title: "Armador de PC: el armado automático gamer queda balanceado",
