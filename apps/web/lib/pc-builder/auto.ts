@@ -87,6 +87,8 @@ const ghz = (v: string) => {
 
 /** Rendimiento relativo en juegos (1080p) por chip; lo que no está se estima por la memoria. */
 const GPU_TIERS: [RegExp, number][] = [
+  // Placas de workstation (Quadro, RTX A400…): para juegos, diseño o streaming rinden como una de entrada.
+  [/quadro|\brtx\s*a\d{3,4}\b|radeon\s*pro\b/i, 10],
   [/rtx\s*5090/i, 150], [/rtx\s*4090/i, 125], [/rtx\s*5080/i, 105], [/rtx\s*4080/i, 100], [/rx\s*7900\s*xtx/i, 100],
   [/rx\s*9070\s*xt/i, 95], [/rtx\s*5070\s*ti/i, 92], [/rx\s*7900\s*xt\b/i, 88], [/rtx\s*4070\s*ti\s*super/i, 88],
   [/rx\s*9070\s*gre|rx\s*9070\b.*\bgre\b/i, 72], [/rx\s*9070\b/i, 85], [/rtx\s*4070\s*ti/i, 82], [/rtx\s*5070\b/i, 76], [/rtx\s*4070\s*super/i, 75], [/rx\s*7900\s*gre/i, 75],
