@@ -163,11 +163,13 @@ const caseHasPsu = (b: Build) => b.case?.compat.psuIncluded === true;
 
 /** Fuente de la gama, con margen sobre lo que pide la PC (si una placa pide más, sube el tope). */
 const psuRule = (min: number, max: number, cert: number) => (b: Build): PartRule => {
-  const need = (powerNeed(b)?.recommended ?? 0) * 1.15;
-  const lo = Math.max(min, need);
+  // `recommended` ya trae el margen (30 % sobre el consumo): no se le suma otro.
+  const lo = Math.max(min, powerNeed(b)?.recommended ?? 0);
+  const hi = Math.max(max, lo + 150);
   return {
-    match: (p) => watts(lo, Math.max(max, lo + 100))(p) && certified(cert)(p),
-    prefer: [brand(GOOD_PSU)],
+    // Hasta 400 W por encima si no hay en la franja de la gama (una de 1000 W en vez de una de 850 W).
+    match: (p) => watts(lo, lo + 400)(p) && certified(cert)(p),
+    prefer: [watts(lo, hi), brand(GOOD_PSU)],
     pick: 0,
   };
 };
