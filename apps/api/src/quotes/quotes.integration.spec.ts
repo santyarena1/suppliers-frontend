@@ -77,6 +77,21 @@ d("Presupuestos contra Postgres", () => {
     await prisma.salesQuote.deleteMany({ where: { tenantId: TENANT } });
   });
 
+  it("armador con porcentaje propio: cotiza con ese margen sobre el costo y lo deja en el presupuesto", async () => {
+    // INVID no tiene regla de venta: sin el margen propio, no entraría.
+    const ownerCosts = { ...(owner as object), tenantType: "RETAILER", permissions: ["prices.viewCost", "pricing.manage"], entitlements: { enforced: true, capabilities: { sellerMode: true } } } as never;
+    const { quote, skipped } = await service.createWithItems(ownerCosts, {
+      title: "PC con mi margen",
+      marginPercent: 30,
+      items: [{ provider: "INVID", externalId: "GPU-1", qty: 1 }, { provider: "ELIT", externalId: "CPU-1", qty: 1 }],
+    });
+    expect(skipped).toEqual([]);
+    expect(quote.marginPercent).toBe(30);
+    expect(quote.items.map((it) => it.unitFinalPrice)).toEqual([157.3, 157.3]);
+    await expect(service.createWithItems(seller, { marginPercent: 30, items: [{ provider: "ELIT", externalId: "CPU-1" }] })).rejects.toThrow(/quien ve costos/);
+    await prisma.salesQuote.deleteMany({ where: { tenantId: TENANT } });
+  });
+
   it("numera sin repetir aunque se creen a la vez", async () => {
     const created = await Promise.all(Array.from({ length: 6 }, () => service.create(seller, {})));
     expect(created.map((q) => q.number).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6]);

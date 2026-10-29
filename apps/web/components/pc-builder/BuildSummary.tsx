@@ -1,6 +1,7 @@
 "use client";
 
-import { ImageOff } from "lucide-react";
+import { useState } from "react";
+import { Check, ImageOff } from "lucide-react";
 import type { ProductDTO } from "@/lib/api";
 import { formatARS, formatUSD, proxyImg } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
@@ -51,7 +52,7 @@ export function money(amount: number, currency: string) {
 
 /** Resumen fijo del armado: piezas, compatibilidad, consumo y total. */
 export default function BuildSummary({
-  build, qty, parts, offers, extras, custom, totals, split, onSplit, onGo, onQuote, onCart, busy, labor, laborOn, onLabor,
+  build, qty, parts, offers, extras, custom, totals, split, onSplit, onGo, onQuote, onCart, busy, labor, laborOn, onLabor, canSetMargin = true,
 }: {
   build: Build;
   qty: Qty;
@@ -63,13 +64,16 @@ export default function BuildSummary({
   split: "cheap" | "few";
   onSplit: (s: "cheap" | "few") => void;
   onGo: (s: StepId) => void;
-  onQuote: () => void;
+  /** `margin`: porcentaje de ganancia propio sobre el costo; null = el margen de venta configurado en el sistema. */
+  onQuote: (margin: number | null) => void;
   onCart: () => void;
   busy: boolean;
   /** Línea de armado que configuró el comercio (null = no cobra armado). */
   labor: { name: string; price: number } | null;
   laborOn: boolean;
   onLabor: (on: boolean) => void;
+  /** Solo quien ve costos pone un margen propio; el resto usa el del sistema. */
+  canSetMargin?: boolean;
 }) {
   const price = useOfferPricer();
   const { currency } = usePrefs();
@@ -86,6 +90,14 @@ export default function BuildSummary({
   const missing = PART_STEPS.filter((s) => !parts[s] && !optionalNote(s, build));
   // "Falta…" ya está en la lista de arriba: no se repite.
   const listed = cs.filter((c) => c.name !== "Falta");
+  const [ownMargin, setOwnMargin] = useState(false);
+  const [marginText, setMarginText] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const marginValue = Number(marginText.replace(",", "."));
+  const margin = ownMargin && marginText.trim() !== "" && Number.isFinite(marginValue) && marginValue >= 0 ? marginValue : null;
+  const laborAmount = labor && laborOn ? labor.price : 0;
+  const issues = listed.filter((c) => c.level !== "ok");
+  const okCount = listed.length - issues.length;
   const card = "shrink-0 overflow-hidden rounded-xl border border-surface-800 bg-surface-900";
   const head = "flex items-center justify-between gap-2 border-b border-surface-800 px-4 py-3";
 
@@ -164,9 +176,30 @@ export default function BuildSummary({
             </label>
           )}
           {totals.missing > 0 && <p className="text-[11px] text-amber-300">{totals.missing} pieza{totals.missing > 1 ? "s" : ""} sin precio o sin stock no suma{totals.missing > 1 ? "n" : ""}.</p>}
-          <p className="text-[11px] text-surface-500">Precio de tu cuenta, con los impuestos que tenés activos. El margen para el cliente se pone en el presupuesto.</p>
-          <button type="button" disabled={!count || busy} onClick={onQuote} className="h-10 rounded-lg bg-brand-600 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-40">
-            {busy ? "Creando…" : "Crear presupuesto"}
+          <div className="flex flex-col gap-2 border-t border-surface-800 pt-3">
+            <span className="text-xs text-surface-400">Ganancia para el cliente</span>
+            {canSetMargin && <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-surface-700 text-xs font-semibold" role="group" aria-label="Ganancia">
+              <button type="button" aria-pressed={!ownMargin} onClick={() => setOwnMargin(false)} className={`py-1.5 ${!ownMargin ? "bg-surface-800 text-white" : "text-surface-400 hover:text-white"}`}>Margen del sistema</button>
+              <button type="button" aria-pressed={ownMargin} onClick={() => setOwnMargin(true)} className={`py-1.5 ${ownMargin ? "bg-surface-800 text-white" : "text-surface-400 hover:text-white"}`}>Porcentaje propio</button>
+            </div>}
+            {ownMargin ? (
+              <div className="flex items-center justify-between gap-2">
+                <label className="inline-flex items-center gap-1.5 text-xs text-surface-400">
+                  <input value={marginText} onChange={(e) => setMarginText(e.target.value)} inputMode="decimal" placeholder="25" aria-label="Porcentaje de ganancia" className="h-8 w-16 rounded-md border border-surface-700 bg-surface-950 px-2 text-right font-mono text-sm text-white focus:border-brand-500 focus:outline-none" />
+                  % sobre el costo
+                </label>
+                {margin != null && (
+                  <span className="text-right text-xs text-surface-400">
+                    Venta <span className="font-mono text-sm font-semibold tabular-nums text-white">{money(totals.amount * (1 + margin / 100) + laborAmount, currency)}</span>
+                  </span>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-surface-500">Cada pieza va con el margen de venta que tenés configurado por distribuidor y categoría.</p>
+            )}
+          </div>
+          <button type="button" disabled={!count || busy || (ownMargin && margin == null)} onClick={() => onQuote(ownMargin ? margin : null)} className="h-10 rounded-lg bg-brand-600 text-sm font-semibold text-white hover:bg-brand-500 disabled:opacity-40">
+            {busy ? "Armando el presupuesto…" : "Presupuesto en PDF"}
           </button>
         </div>
       </section>
@@ -215,7 +248,7 @@ export default function BuildSummary({
         )}
         {listed.length ? (
           <ul className="m-0 list-none px-4 py-1">
-            {listed.map((c, i) => (
+            {(showAll ? listed : issues).map((c, i) => (
               <li key={i} className="flex items-start gap-2.5 border-b border-surface-800/70 py-2.5 text-[13px] leading-snug last:border-0">
                 <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${DOT[c.level]}`} />
                 <span><span className="font-semibold text-white">{c.name}</span> <span className="text-surface-300">· {c.text}</span></span>
@@ -223,7 +256,12 @@ export default function BuildSummary({
             ))}
           </ul>
         ) : !missing.length ? <p className="px-4 py-3 text-xs text-surface-500">Elegí piezas para ver los chequeos.</p> : null}
-        <p className="border-t border-surface-800 px-4 py-2.5 text-[11px] text-surface-500">Se chequea con la ficha técnica de cada producto. Si falta un dato, se marca para verificar en vez de darlo por bueno; si un dato lo estimó la IA, se avisa.</p>
+        {okCount > 0 && (
+          <button type="button" onClick={() => setShowAll((v) => !v)} className="flex w-full items-center gap-2 border-t border-surface-800 px-4 py-2.5 text-left text-xs text-surface-400 hover:text-white">
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+            {showAll ? "Ocultar los que están bien" : `${okCount} chequeo${okCount === 1 ? "" : "s"} sin problemas`}
+          </button>
+        )}
       </section>
     </aside>
   );

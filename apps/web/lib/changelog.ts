@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.19.0",
+    date: "2026-10-28",
+    title: "Armador de PC: presupuesto en PDF con tu ganancia, y una pantalla más limpia",
+    changes: [
+      { kind: "new", text: "Al terminar el armado, «Presupuesto en PDF» crea el presupuesto y abre el PDF listo para mandar. Elegí la ganancia: el margen de venta que ya tenés configurado en el sistema, o un porcentaje propio sobre el costo (te muestra el precio de venta antes de armarlo)." },
+      { kind: "improved", text: "Pantalla del armador más limpia, con el mismo estilo que la búsqueda: usa todo el ancho, los filtros son desplegables en una fila, las tarjetas son más chicas y los pasos van como pestañas." },
+      { kind: "improved", text: "En «Tu armado» solo se ven los chequeos que hay que revisar; los que están bien quedan plegados." },
+    ],
+  },
+  {
     version: "2.18.0",
     date: "2026-10-28",
     title: "Armador de PC: armado automático por gama",

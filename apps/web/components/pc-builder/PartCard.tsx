@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { BadgeCheck, Check, ChevronDown, ImageOff, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ImageOff } from "lucide-react";
 import type { ProductDTO } from "@/lib/api";
 import { proxyImg } from "@/lib/format";
 import { DistName } from "./Dist";
-import { dataQuality, keySpecs, type Level, type PcPart, type PcStep } from "@/lib/pc-builder/compat";
+import { keySpecs, type Level, type PcPart, type PcStep } from "@/lib/pc-builder/compat";
 import { inStock, offerKey, useOfferPricer } from "@/lib/pc-builder/state";
 
 const LEVEL_TEXT: Record<Level, string> = { ok: "text-emerald-300", warn: "text-amber-300", bad: "text-red-300" };
@@ -37,15 +37,14 @@ export default function PartCard({
   // La foto de la ficha va cifrada; si no carga, la del distribuidor.
   const image = (!imgFailed && part.image) || fallback;
   const blocked = verdictLevel === "bad";
-  const quality = dataQuality(step, part);
 
   return (
     <article
-      className={`flex flex-col overflow-hidden rounded-xl border bg-surface-900 transition-colors ${
+      className={`group flex flex-col overflow-hidden rounded-xl border bg-surface-900 transition-colors ${
         selected ? "border-brand-500 ring-1 ring-brand-500/40" : blocked ? "border-surface-800 opacity-60" : "border-surface-800 hover:border-surface-600"
       }`}
     >
-      <div className="relative aspect-[4/3] bg-white">
+      <div className="relative aspect-[5/4] bg-white">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={proxyImg(image)} alt="" loading="lazy" onError={() => setImgFailed(true)} className="absolute inset-0 h-full w-full object-contain p-4" />
@@ -53,29 +52,20 @@ export default function PartCard({
           <ImageOff className="absolute inset-0 m-auto h-6 w-6 text-surface-400" />
         )}
         {selected && (
-          <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-md bg-brand-600 px-2 py-1 text-[11px] font-semibold text-white">
-            <Check className="h-3 w-3" /> En tu armado
-          </span>
-        )}
-        {quality !== "partial" && (
-          <span
-            className={`absolute bottom-2 left-2.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${quality === "verified" ? "bg-emerald-600/90 text-white" : "bg-surface-800/90 text-amber-200"}`}
-            title={quality === "verified" ? "Todos los datos de compatibilidad están cargados y revisados" : "Algunos datos los completó la IA y no están revisados"}
-          >
-            {quality === "verified" ? <BadgeCheck className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
-            {quality === "verified" ? "Ficha verificada" : "Datos estimados"}
+          <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-surface-900/85 px-1.5 py-0.5 text-[11px] text-white">
+            <Check className="h-3 w-3" /> Elegido
           </span>
         )}
         {onCompare && (
-          <label className="absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 rounded-md bg-surface-900/85 px-1.5 py-1 text-[11px] font-medium text-surface-100">
+          <label className={`absolute right-2 top-2 inline-flex cursor-pointer items-center gap-1 rounded-md bg-surface-900/85 px-1.5 py-0.5 text-[11px] text-surface-100 transition-opacity ${comparing ? "opacity-100" : "opacity-0 focus-within:opacity-100 group-hover:opacity-100"}`}>
             <input type="checkbox" checked={Boolean(comparing)} onChange={onCompare} className="h-3 w-3 accent-brand-500" /> Comparar
           </label>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3.5">
-        <h3 className="line-clamp-2 min-h-[2.6em] text-sm font-semibold leading-snug text-white" title={part.name}>{part.name}</h3>
-        <p className="line-clamp-2 text-xs leading-relaxed text-surface-400">{keySpecs(step, part).join(" · ")}</p>
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        <h3 className="line-clamp-2 min-h-[2.6em] text-[13px] font-semibold leading-snug text-white" title={part.name}>{part.name}</h3>
+        <p className="line-clamp-2 text-[11px] leading-relaxed text-surface-400">{keySpecs(step, part).join(" · ")}</p>
         {verdictText && <p className={`text-xs leading-snug ${LEVEL_TEXT[verdictLevel ?? "ok"]}`}>{verdictText}</p>}
 
         <div className="mt-auto border-t border-surface-800 pt-2.5">
@@ -118,8 +108,8 @@ export default function PartCard({
           type="button"
           disabled={blocked || !best}
           onClick={() => onChoose(null)}
-          className={`mt-1 h-9 rounded-lg text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-            selected ? "border border-brand-500 text-brand-200 hover:bg-brand-600/10" : "bg-brand-600 text-white hover:bg-brand-500"
+          className={`mt-1 h-8 rounded-lg border text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            selected ? "border-brand-500 text-white" : "border-surface-700 text-surface-200 hover:border-brand-500 hover:text-white"
           }`}
         >
           {selected ? "Elegido" : blocked ? "No es compatible" : "Elegir"}

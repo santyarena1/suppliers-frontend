@@ -1192,10 +1192,10 @@ Notas por proveedor en `docs/providers/{masnet,microglobal,pc-arts}.md`.
 - **Método**: POST
 - **Ruta**: `/my/quotes/with-items`
 - **Auth**: Bearer token requerido (modo vendedor)
-- **Body / Params**: `{ title?, clientName?, …datos del cliente, items: [{ provider, externalId, qty? }] (hasta 100), custom?: [{ name, unitFinalPrice, currency, qty?, ivaPercent? }] }`
+- **Body / Params**: `{ title?, clientName?, …datos del cliente, items: [{ provider, externalId, qty? }] (hasta 100), custom?: [{ name, unitFinalPrice, currency, qty?, ivaPercent? }], marginPercent? }`
 - **Respuesta esperada**: `{ quote: Quote, skipped: [{ provider, externalId }] }`
 - **Estado**: IMPLEMENTADO
-- **Notas**: una sola escritura: el presupuesto no queda a medias. Lo que no tiene precio de venta hoy (o el distribuidor dio de baja) no entra y vuelve en `skipped`; si no entra nada, 422 y no se crea.
+- **Notas**: una sola escritura: el presupuesto no queda a medias. Lo que no tiene precio de venta hoy (o el distribuidor dio de baja) no entra y vuelve en `skipped`; si no entra nada, 422 y no se crea. `marginPercent` (opcional, solo quien ve costos; 403 si no): margen propio de todo el presupuesto sobre el costo; se guarda en el presupuesto y se usa para cotizar cada línea en vez de las reglas de venta (el armador de PC lo manda con "Porcentaje propio").
 
 ### [FEATURE] Catálogo de un distribuidor: filtros, orden y facetas
 - **Método**: GET

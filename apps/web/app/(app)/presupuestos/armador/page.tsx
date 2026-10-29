@@ -12,7 +12,8 @@ import BuildsDialog from "@/components/pc-builder/BuildsDialog";
 import BuildSummary, { useBuildTotals } from "@/components/pc-builder/BuildSummary";
 import { STEP_LABEL, checks, marks, optionalNote, worst, type PcStep } from "@/lib/pc-builder/compat";
 import { ALL_STEPS, PART_STEPS, hydrateBuild, resolveOffers, serializeDraft, usePcBuilder, useOfferPricer, type CustomLine, type StepId } from "@/lib/pc-builder/state";
-import { quotesApi, useQuotes } from "@/lib/quotes";
+import { quotesApi, useQuotes, type Quote } from "@/lib/quotes";
+import QuotePdfPreview from "@/components/quotes/QuotePdfPreview";
 import { useCart } from "@/lib/cart";
 import { getTenant } from "@/lib/auth";
 import { pcBuilderApi, type PcBuilderSettings, type ProductDTO } from "@/lib/api";
@@ -20,6 +21,8 @@ import { providerLabel } from "@/components/ProviderBadge";
 
 const LABEL: Record<StepId, string> = { ...STEP_LABEL, extras: "Extras", review: "Revisión" };
 const DOT = { ok: "bg-emerald-400", warn: "bg-amber-400", bad: "bg-red-400" } as const;
+const INPUT = "h-9 rounded-lg border border-surface-700 bg-surface-950 px-3 text-sm text-white placeholder:text-surface-500 focus:border-brand-500 focus:outline-none";
+const BUTTON = "inline-flex h-9 items-center gap-1.5 rounded-lg border border-surface-700 px-3 text-sm text-surface-300 hover:border-surface-500 hover:text-white disabled:opacity-40";
 
 export default function PcBuilderPage() {
   const router = useRouter();
@@ -34,6 +37,8 @@ export default function PcBuilderPage() {
   const [settings, setSettings] = useState<PcBuilderSettings | null>(null);
   const [manager, setManager] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string; href?: string; link?: string } | null>(null);
+  /** El presupuesto recién armado, abierto en la vista del PDF. */
+  const [pdfQuote, setPdfQuote] = useState<Quote | null>(null);
 
   useEffect(() => {
     const role = getTenant()?.role;
@@ -61,7 +66,8 @@ export default function PcBuilderPage() {
     ...draft.extras.map((e) => ({ product: e.product, qty: e.qty })),
   ];
 
-  async function createQuote() {
+  /** Arma el presupuesto (con el margen del sistema o uno propio sobre el costo) y abre el PDF. */
+  async function createQuote(margin: number | null) {
     setBusy(true);
     setNotice(null);
     try {
@@ -69,6 +75,7 @@ export default function PcBuilderPage() {
       const { data } = await quotesApi.createWithItems({
         title: draft.title.trim() || "Armado de PC",
         ...(draft.client.trim() ? { clientName: draft.client.trim() } : {}),
+        ...(margin != null ? { marginPercent: margin } : {}),
         items: lines.map((l) => ({ provider: l.product.provider, externalId: l.product.externalId, qty: l.qty })),
         custom: custom.map((c) => ({ name: c.name, unitFinalPrice: c.unitFinalPrice, currency: "ARS" as const, qty: c.qty, ivaPercent: c.ivaPercent })),
       });
@@ -76,9 +83,8 @@ export default function PcBuilderPage() {
       if (data.skipped.length) {
         const names = data.skipped.map((s) => lines.find((l) => l.product.provider === s.provider && l.product.externalId === s.externalId)?.product.name ?? `${providerLabel(s.provider)} ${s.externalId}`);
         setNotice({ ok: false, text: `Presupuesto creado, pero no tienen precio de venta hoy: ${names.join(", ")}.`, href: `/presupuestos?id=${data.quote.id}`, link: "Abrir el presupuesto" });
-      } else {
-        router.push(`/presupuestos?id=${data.quote.id}`);
       }
+      setPdfQuote(data.quote);
     } catch {
       setNotice({ ok: false, text: "No se pudo crear el presupuesto. Reintentá en un momento." });
     } finally {
@@ -137,38 +143,34 @@ export default function PcBuilderPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-5 px-4 py-5 sm:px-6">
-        <header className="flex flex-col gap-3 border-b border-surface-800 pb-4">
-          <nav className="text-xs text-surface-500" aria-label="Ubicación"><Link href="/presupuestos" className="hover:text-white">Presupuestos</Link> <span aria-hidden>›</span> <span className="text-surface-300">Armador de PC</span></nav>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="flex min-w-0 flex-wrap items-end gap-3">
-              <label className="flex flex-col gap-1 text-xs text-surface-500">
-                Armado
-                <input value={draft.title} onChange={(e) => pc.setMeta({ title: e.target.value })} placeholder="PC gamer de Tomás" className="h-10 w-[280px] max-w-full rounded-lg border border-surface-700 bg-surface-900 px-3 text-base font-semibold text-white placeholder:font-normal placeholder:text-surface-500 focus:border-brand-500 focus:outline-none" />
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-surface-500">
-                Cliente
-                <input value={draft.client} onChange={(e) => pc.setMeta({ client: e.target.value })} placeholder="Nombre del cliente" className="h-10 w-[220px] max-w-full rounded-lg border border-surface-700 bg-surface-900 px-3 text-sm text-white placeholder:text-surface-500 focus:border-brand-500 focus:outline-none" />
-              </label>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setShowBuilds(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-surface-700 px-3 text-sm font-semibold text-surface-200 hover:border-surface-500 hover:text-white">
-                <FolderOpen className="h-4 w-4" /> Armados guardados
+      <div className="flex flex-col gap-4 px-5 py-4">
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-white">Armador de PC</h1>
+            <p className="text-xs text-surface-500">
+              Elegí pieza por pieza o armala automática; NODO chequea la compatibilidad y busca cada pieza en tus distribuidores.{" "}
+              <Link href="/presupuestos" className="hover:text-white">Ver presupuestos</Link>
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={draft.title} onChange={(e) => pc.setMeta({ title: e.target.value })} placeholder="Nombre del armado" aria-label="Nombre del armado" className={`${INPUT} w-48`} />
+            <input value={draft.client} onChange={(e) => pc.setMeta({ client: e.target.value })} placeholder="Cliente" aria-label="Cliente" className={`${INPUT} w-40`} />
+            <button type="button" onClick={() => setShowBuilds(true)} className={BUTTON}>
+              <FolderOpen className="h-4 w-4" /> Guardados
+            </button>
+            <button type="button" disabled={saving || Object.keys(draft.parts).length === 0} onClick={() => void save(false)} className={BUTTON}>
+              <Save className="h-4 w-4" /> {draft.buildId ? "Guardar cambios" : "Guardar"}
+            </button>
+            {manager && (
+              <button type="button" disabled={saving || Object.keys(draft.parts).length === 0} onClick={() => void save(true)} className={BUTTON} title="El equipo la usa como punto de partida">
+                <LayoutTemplate className="h-4 w-4" /> Plantilla
               </button>
-              <button type="button" disabled={saving || Object.keys(draft.parts).length === 0} onClick={() => void save(false)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-surface-700 px-3 text-sm font-semibold text-surface-200 hover:border-surface-500 hover:text-white disabled:opacity-40">
-                <Save className="h-4 w-4" /> {draft.buildId ? "Guardar cambios" : "Guardar"}
-              </button>
-              {manager && (
-                <button type="button" disabled={saving || Object.keys(draft.parts).length === 0} onClick={() => void save(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-surface-700 px-3 text-sm font-semibold text-surface-200 hover:border-surface-500 hover:text-white disabled:opacity-40" title="El equipo la usa como punto de partida">
-                  <LayoutTemplate className="h-4 w-4" /> Guardar como plantilla
-                </button>
-              )}
-              <button type="button" onClick={() => { pc.reset(); go("cpu"); setNotice(null); }} className="h-9 rounded-lg border border-surface-700 px-3 text-sm font-semibold text-surface-300 hover:border-surface-500 hover:text-white">Empezar de cero</button>
-            </div>
+            )}
+            <button type="button" onClick={() => { pc.reset(); go("cpu"); setNotice(null); }} className={BUTTON}>Empezar de cero</button>
           </div>
         </header>
 
-        <ol className="m-0 flex list-none gap-1 overflow-x-auto rounded-xl border border-surface-800 bg-surface-900/60 p-1.5" aria-label="Pasos del armado">
+        <ol className="m-0 flex list-none gap-0.5 overflow-x-auto border-b border-surface-800" aria-label="Pasos del armado">
           {ALL_STEPS.map((s, i) => {
             const chosen = s !== "extras" && s !== "review" ? draft.parts[s as PcStep] : null;
             const issues = chosen ? cs.filter((c) => marks(c, s as PcStep)) : [];
@@ -182,15 +184,11 @@ export default function PcBuilderPage() {
                   onClick={() => go(s)}
                   aria-current={step === s ? "step" : undefined}
                   title={done && level !== "ok" ? `${level === "bad" ? "No es compatible" : "Para revisar"}: ${issues.filter((c) => c.level !== "ok").map((c) => c.text).join(" ")}` : undefined}
-                  className={`flex h-12 items-center gap-2.5 rounded-lg px-3 text-left transition-colors ${step === s ? "bg-brand-600/15 text-white ring-1 ring-brand-500/50" : "text-surface-400 hover:bg-surface-800 hover:text-white"}`}
+                  className={`-mb-px flex h-10 items-center gap-1.5 border-b-2 px-3 text-left text-[13px] transition-colors ${step === s ? "border-brand-500 text-white" : "border-transparent text-surface-400 hover:text-white"}`}
                 >
-                  <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${done ? (level === "ok" ? "bg-emerald-500/20 text-emerald-300" : level === "warn" ? "bg-amber-500/20 text-amber-300" : "bg-red-500/20 text-red-300") : "border border-surface-600 text-surface-400"}`}>
-                    {done && level === "ok" ? <Check className="h-3.5 w-3.5" /> : done ? "!" : i + 1}
-                  </span>
-                  <span className="flex flex-col">
-                    <span className="text-[13px] font-semibold leading-tight">{LABEL[s]}</span>
-                    {optional && <span className="text-[10px] leading-tight text-surface-500">Opcional</span>}
-                  </span>
+                  {done && level === "ok" ? <Check className="h-3.5 w-3.5 text-surface-500" /> : <span className="font-mono text-[11px] text-surface-600">{i + 1}</span>}
+                  <span className="whitespace-nowrap">{LABEL[s]}</span>
+                  {optional && <span className="text-[11px] text-surface-600">· opcional</span>}
                   {done && level !== "ok" && <span className={`h-1.5 w-1.5 rounded-full ${DOT[level]}`} aria-hidden />}
                 </button>
               </li>
@@ -199,12 +197,12 @@ export default function PcBuilderPage() {
         </ol>
 
         {notice && (
-          <p role="status" className={`rounded-xl border px-4 py-3 text-sm ${notice.ok ? "border-surface-800 bg-surface-900/60 text-surface-300" : "border-amber-500/20 bg-surface-900/60 text-amber-200"}`}>
+          <p role="status" className={`text-sm ${notice.ok ? "text-surface-300" : "text-amber-300"}`}>
             {notice.text} {notice.href && <Link href={notice.href} className="font-semibold underline underline-offset-2">{notice.link}</Link>}
           </p>
         )}
 
-        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="flex min-w-0 flex-col gap-5">
             {step !== "extras" && step !== "review" && Object.keys(draft.parts).length < PART_STEPS.length && (
               <AutoBuildPanel build={build} qty={qty} onApply={(parts, message) => { pc.chooseMany(parts); setNotice({ ok: !/no alcanza|No hay|sale más/.test(message), text: message }); go("review"); }} />
@@ -243,7 +241,8 @@ export default function PcBuilderPage() {
             split={draft.split}
             onSplit={(s) => pc.setMeta({ split: s })}
             onGo={go}
-            onQuote={() => void createQuote()}
+            onQuote={(margin) => void createQuote(margin)}
+            canSetMargin={manager}
             onCart={addToCart}
             busy={busy}
             labor={labor}
@@ -252,6 +251,9 @@ export default function PcBuilderPage() {
           />
         </div>
       </div>
+      {pdfQuote && (
+        <QuotePdfPreview quote={pdfQuote} onClose={() => setPdfQuote(null)} onOpen={() => router.push(`/presupuestos?id=${pdfQuote.id}`)} />
+      )}
       {showBuilds && (
         <BuildsDialog
           currentId={draft.buildId}

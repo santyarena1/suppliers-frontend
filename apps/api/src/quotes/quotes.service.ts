@@ -304,6 +304,9 @@ export class QuotesService {
     if (wanted.length + custom.length > MAX_QUOTE_ITEMS) {
       throw new BadRequestException(`Un presupuesto admite hasta ${MAX_QUOTE_ITEMS} líneas`);
     }
+    // Margen de todo el presupuesto (el armador lo manda si el comercio puso uno propio); sin él, las reglas de venta.
+    const quoteMargin = client.marginPercent != null ? parseMargin(client.marginPercent) : null;
+    if (quoteMargin != null && sellerOnly(viewer)) throw new ForbiddenException("El margen lo cambia quien ve costos.");
     const rules = await this.saleRules.get(viewer.commercialTenantId);
     const now = new Date();
     let lines: QuoteItem[] = [];
@@ -312,7 +315,7 @@ export class QuotesService {
       const provider = it.provider.toUpperCase();
       if (!isProviderKey(provider)) throw new BadRequestException(`Proveedor inválido: ${it.provider}`);
       // Un producto que el distribuidor dio de baja no frena el presupuesto: se avisa.
-      const line = await this.priceOf(viewer, rules, provider, it.externalId, null, null).catch((err: unknown) => {
+      const line = await this.priceOf(viewer, rules, provider, it.externalId, null, quoteMargin).catch((err: unknown) => {
         if (err instanceof NotFoundException) return null;
         throw err;
       });
@@ -327,6 +330,7 @@ export class QuotesService {
     }
     if (lines.length === 0) throw new UnprocessableEntityException("Ningún producto tiene precio de venta en este momento");
     const created = await this.create(viewer, client);
+    if (quoteMargin != null) await this.prisma.salesQuote.update({ where: { id: created.id }, data: { marginPercent: quoteMargin } });
     const quote = await this.mutateItems(viewer, created.id, () => lines);
     return { quote, skipped };
   }
