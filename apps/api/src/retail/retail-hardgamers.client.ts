@@ -13,8 +13,9 @@ import {
  *
  * HardGamers lista decenas de locales (la portada publica los slugs). Varios
  * (Full H4rd, XT-PC) contestan 403 a cualquier cliente que no sea un navegador.
- * Aunque no publica una API, cada página de tienda trae el listado completo
- * como JSON dentro de un `<span>` oculto: no hace falta parsear tarjetas HTML.
+ * No publica una API: hasta octubre de 2026 cada página traía el listado como
+ * JSON en un `<span>` oculto; ahora se leen las tarjetas con microdatos
+ * (`parseHardgamersCards`). Se aceptan los dos formatos.
  *
  * El sitio limita a 12 pedidos por minuto (`x-ratelimit-limit: 12`, ventana
  * rodante de 60s). Este cliente se queda por debajo a propósito y además frena
@@ -287,8 +288,49 @@ export class RetailHardgamersClient {
         storeName: p.stores?.[0]?._id?.name ?? p.docs[0]?.store?.name ?? null,
       };
     }
-    return null;
+    // Desde fines de octubre de 2026 el sitio ya no manda el JSON oculto: se leen las tarjetas.
+    return parseHardgamersCards(html);
   }
+}
+
+/**
+ * Tarjetas del listado (`<article itemtype="http://schema.org/Product">`) con
+ * microdatos: id (`venex:a3hu4a`, el mismo de antes), nombre, precio en ARS,
+ * imagen, disponibilidad y local. Los "Productos destacados" del local repiten
+ * productos del listado: se cuentan una vez. `null` si la página no trae tarjetas.
+ */
+export function parseHardgamersCards(html: string): HardgamersPage | null {
+  const text = (s: string | undefined) => (s == null ? "" : decodeEntities(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim());
+  const docs: HardgamersDoc[] = [];
+  const seen = new Set<string>();
+  let storeName: string | null = null;
+  for (const m of html.matchAll(/<article\b[^>]*schema\.org\/Product[^>]*>([\s\S]*?)<\/article>/g)) {
+    const card = m[1];
+    const id = card.match(/href="\/product\/([^"?#]+)"/)?.[1] ?? card.match(/<div id="([^"]+:[^"]+)"/)?.[1];
+    const name = text(card.match(/<p class="product-name"[^>]*>([\s\S]*?)<\/p>/)?.[1]);
+    const price = Number(card.match(/itemprop="price"\s+content="([\d.]+)"/)?.[1]);
+    if (!id || !name || !Number.isFinite(price) || price <= 0 || seen.has(id)) continue;
+    seen.add(id);
+    const store = text(card.match(/<p class="store"[^>]*>([\s\S]*?)<\/p>/)?.[1]) || null;
+    storeName ??= store;
+    const availability = card.match(/itemprop="availability"\s+href="https?:\/\/schema\.org\/(\w+)"/)?.[1];
+    docs.push({
+      _id: decodeEntities(id),
+      name,
+      price,
+      image: card.match(/<img\s+src="([^"]+)"[^>]*itemprop="image"/)?.[1] ?? null,
+      availability: availability ? /InStock|LimitedAvailability|PreOrder/i.test(availability) : true,
+      link: `${DEFAULT_BASE}/product/${id}`,
+      store: store ? { _id: id.split(":")[0], name: store } : null,
+    });
+  }
+  if (!docs.length) return null;
+  const pagination = html.match(/class="Pagination-Container"[\s\S]*?<\/(?:nav|ul|div)>\s*<\/div>/)?.[0] ?? html;
+  const pageNumbers = [...pagination.matchAll(/[?&]page=(\d+)/g)].map((x) => Number(x[1]));
+  const current = Number(html.match(/class="[^"]*Pagination-Control[^"]*Active[^"]*"[^>]*>\s*(\d+)/)?.[1]) || 1;
+  const pages = Math.max(current, ...pageNumbers, 1);
+  // El total ya no viene: se estima por páginas para no cortar el recorrido.
+  return { docs, total: pages * HG_PAGE_SIZE, page: current, pages, storeName };
 }
 
 /**

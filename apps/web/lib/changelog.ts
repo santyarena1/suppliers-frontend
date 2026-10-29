@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.19.1",
+    date: "2026-10-28",
+    title: "Los precios de los locales vuelven a actualizarse",
+    changes: [
+      { kind: "fixed", text: "HardGamers cambió su página y NODO dejó de traer los productos de los locales que salen de ahí (Venex, Maximus, Mexx, Full H4rd y otros). Ya los vuelve a leer: los precios y el stock se ponen al día en las próximas pasadas." },
+    ],
+  },
+  {
     version: "2.19.0",
     date: "2026-10-28",
     title: "Armador de PC: presupuesto en PDF con tu ganancia, y una pantalla más limpia",
