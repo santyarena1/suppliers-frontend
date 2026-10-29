@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.21.1",
+    date: "2026-10-29",
+    title: "Seguimiento de pedidos: más pedidos y sin esperas",
+    changes: [
+      { kind: "fixed", text: "El seguimiento ahora toma los pedidos de los últimos 90 días y revisa los portales apenas se actualiza NODO, sin esperar 15 minutos." },
+    ],
+  },
+  {
     version: "2.21.0",
     date: "2026-10-29",
     title: "Seguimiento de pedidos con avisos",

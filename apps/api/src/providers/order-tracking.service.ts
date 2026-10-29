@@ -20,8 +20,8 @@ import {
   type TrackingUpdate,
 } from "./order-tracking";
 
-/** Se siguen los pedidos de los últimos 45 días que todavía no se entregaron ni se anularon. */
-const TRACK_DAYS = 45;
+/** Se siguen los pedidos de los últimos 90 días que todavía no se entregaron ni se anularon. */
+const TRACK_DAYS = 90;
 /** «Actualizar estados» desde Pedidos: una vez por minuto por comercio. */
 const MANUAL_EVERY_MS = 60_000;
 
@@ -128,11 +128,26 @@ export class OrderTrackingService {
       const [tenantId, provider] = key.split("|");
       try {
         const rows = await this.portalRows(tenantId, provider as Provider, list);
-        if (rows == null) continue;
+        if (rows == null) {
+          this.logger.log(`Seguimiento ${provider} de ${tenantId}: sin cuenta cargada (${list.length} pedidos)`);
+          continue;
+        }
+        let found = 0;
         for (const order of list) {
           checked += 1;
-          if (await this.apply(order, bestUpdate(order, rows))) changed += 1;
+          const update = bestUpdate(order, rows);
+          if (update) found += 1;
+          if (await this.apply(order, update)) changed += 1;
         }
+        // Para revisar el cruce: números de NODO contra los del portal y los estados que vienen.
+        const sample = (xs: unknown[]) => JSON.stringify(xs.slice(0, 6));
+        this.logger.log(
+          `Seguimiento ${provider} de ${tenantId}: ${rows.length} filas en el portal, ${found}/${list.length} pedidos encontrados` +
+            (found < list.length
+              ? ` · NODO ${sample(list.map((o) => [o.invidOrderNumber, o.invidWebOrderNumber]))} · portal ${sample(rows.map((r) => r.numbers))}`
+              : "") +
+            ` · estados ${sample([...new Set(rows.map((r) => r.status).filter(Boolean))])}`
+        );
       } catch (err) {
         this.logger.warn(`Seguimiento ${provider} de ${tenantId}: ${msg(err)}`);
       }
