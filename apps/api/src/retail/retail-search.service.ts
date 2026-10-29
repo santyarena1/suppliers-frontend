@@ -10,6 +10,9 @@ import {
   scoreRetailMatch,
 } from "./retail-search.util";
 
+
+/** Hasta cuándo un precio de local se considera vigente sin volver a verlo. */
+export const RETAIL_FRESH_MS = 7 * 24 * 60 * 60_000;
 export interface RetailSearchHit {
   id: string;
   externalId: number;
@@ -65,6 +68,8 @@ export class RetailSearchService {
 
     const where: Prisma.RetailProductWhereInput = {
       active: true,
+      // Un precio que el local no confirmó hace más de una semana ya no se muestra (puede no tenerlo más).
+      syncedAt: { gte: new Date(Date.now() - RETAIL_FRESH_MS) },
       AND: tokenFilters,
     };
 

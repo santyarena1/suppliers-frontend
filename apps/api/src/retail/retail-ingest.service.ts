@@ -105,6 +105,8 @@ export class RetailIngestService implements OnModuleInit {
     for (const slug of targets) {
       if (budget <= 0) break;
       try {
+        const passStart = new Date();
+        let complete = true;
         const first = await this.hardgamers.fetchStorePage(slug, 1);
         budget -= 1;
         pagesRead += 1;
@@ -128,12 +130,22 @@ export class RetailIngestService implements OnModuleInit {
           const data = await this.hardgamers.fetchStorePage(slug, page);
           budget -= 1;
           pagesRead += 1;
-          if (!data || data.docs.length === 0) break;
+          if (!data || data.docs.length === 0) {
+            complete = false;
+            break;
+          }
           productsUpserted += await this.saveHardgamersDocs(store.id, data.docs, {
             reuseByName: store.reuseByName,
           });
         }
 
+        // Recorrido entero: lo que el local ya no publica deja de aparecer (antes quedaba con su precio viejo).
+        if (complete && pages <= MAX_HG_PAGES_PER_STORE) {
+          await this.prisma.retailProduct.updateMany({
+            where: { storeId: store.id, active: true, syncedAt: { lt: passStart } },
+            data: { active: false },
+          });
+        }
         await this.prisma.retailStore.update({
           where: { id: store.id },
           data: { syncedAt: new Date() },

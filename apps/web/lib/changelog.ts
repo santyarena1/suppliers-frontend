@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.19.2",
+    date: "2026-10-28",
+    title: "Precios de locales: solo los vigentes",
+    changes: [
+      { kind: "fixed", text: "La búsqueda de locales ya no muestra precios que el local no confirmó en la última semana, ni productos que el local dejó de publicar." },
+    ],
+  },
+  {
     version: "2.19.1",
     date: "2026-10-28",
     title: "Los precios de los locales vuelven a actualizarse",
