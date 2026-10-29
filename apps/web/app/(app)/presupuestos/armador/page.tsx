@@ -199,7 +199,7 @@ export default function PcBuilderPage() {
         </ol>
 
         {notice && (
-          <p role="status" className={`rounded-xl border px-4 py-3 text-sm ${notice.ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>
+          <p role="status" className={`rounded-xl border px-4 py-3 text-sm ${notice.ok ? "border-surface-800 bg-surface-900/60 text-surface-300" : "border-amber-500/20 bg-surface-900/60 text-amber-200"}`}>
             {notice.text} {notice.href && <Link href={notice.href} className="font-semibold underline underline-offset-2">{notice.link}</Link>}
           </p>
         )}
@@ -207,7 +207,7 @@ export default function PcBuilderPage() {
         <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="flex min-w-0 flex-col gap-5">
             {step !== "extras" && step !== "review" && Object.keys(draft.parts).length < PART_STEPS.length && (
-              <AutoBuildPanel build={build} qty={qty} onApply={(parts, message) => { pc.chooseMany(parts); setNotice({ ok: !/no alcanza|No hay/.test(message), text: message }); go("review"); }} />
+              <AutoBuildPanel build={build} qty={qty} onApply={(parts, message) => { pc.chooseMany(parts); setNotice({ ok: !/no alcanza|No hay|sale más/.test(message), text: message }); go("review"); }} />
             )}
             {step === "extras" ? (
               <ExtrasStep extras={draft.extras} custom={draft.custom} onAdd={pc.addExtra} onQty={pc.setExtraQty} onRemove={pc.removeExtra} onAddCustom={pc.addCustom} onRemoveCustom={pc.removeCustom} />

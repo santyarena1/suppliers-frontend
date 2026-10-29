@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.18.0",
+    date: "2026-10-28",
+    title: "Armador de PC: armado automático por gama",
+    changes: [
+      { kind: "new", text: "Elegí la gama (Oficina, Gamer entrada, media o alta, Diseño y streaming) y cada pieza sale de lo que corresponde a esa gama, con stock y al mejor precio. Por ejemplo, una de oficina va con mother A620/H610 y gabinete kit con fuente; una gamer alta, con mother B650/B850 y fuente Gold." },
+      { kind: "new", text: "«Gamer según presupuesto»: cargá cuánto querés gastar y NODO arma la gama gamer más alta que entra." },
+      { kind: "improved", text: "Si de una pieza no hay nada de esa gama con stock, te lo dice en vez de poner cualquier cosa. Las marcas reconocidas se eligen cuando cuestan casi lo mismo; si no, va la opción económica." },
+      { kind: "improved", text: "El armado automático ocupa una sola fila y no tapa el resto del armador." },
+    ],
+  },
+  {
     version: "2.17.2",
     date: "2026-10-28",
     title: "Armador de PC: menos avisos de «revisar» en placa de video y gabinete",

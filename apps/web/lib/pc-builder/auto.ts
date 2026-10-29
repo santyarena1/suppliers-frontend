@@ -1,89 +1,83 @@
 /**
- * Armado automático: con un perfil (gamer, oficina, diseño) y, si hay, un
- * presupuesto, elige las piezas que faltan entre las que tienen stock en los
- * distribuidores del comercio, compatibles con lo que ya está elegido.
- * Primero reparte el presupuesto por pieza y después usa lo que sobra para
- * mejorar lo que más rinde (la placa de video en una gamer, el procesador en diseño).
+ * Armado automático por gama, como arma un vendedor: el comercio elige la gama
+ * (oficina, gamer de entrada, media o alta, diseño) y cada pieza sale de lo que
+ * corresponde a esa gama, con stock en sus distribuidores, compatible con lo ya
+ * elegido y al mejor precio. Si de una pieza no hay nada de esa gama, lo dice en
+ * vez de poner cualquier cosa.
  */
 import type { ProductDTO } from "@/lib/api";
-import { cpuFamily, dataQuality, gpuMaker, powerNeed, verdict, type Build, type Level, type PcPart, type PcStep, type Qty } from "./compat";
+import { dataQuality, gpuMaker, powerNeed, verdict, type Build, type Level, type PcPart, type PcStep, type Qty } from "./compat";
 
+/** Para el puntaje de rendimiento (orden de "Recomendados"). */
 export type Profile = "gamer" | "office" | "creator";
 
-export const PROFILE_LABEL: Record<Profile, string> = {
-  gamer: "Gamer",
-  office: "Oficina / hogar",
+export type Tier = "office" | "gamer-entry" | "gamer-mid" | "gamer-high" | "creator";
+/** Lo que elige el comercio: una gama, o que la gamer salga del presupuesto. */
+export type TierChoice = Tier | "gamer-auto";
+
+export const TIER_CHOICES: TierChoice[] = ["office", "gamer-entry", "gamer-mid", "gamer-high", "creator", "gamer-auto"];
+
+export const TIER_LABEL: Record<TierChoice, string> = {
+  office: "Oficina",
+  "gamer-entry": "Gamer entrada",
+  "gamer-mid": "Gamer media",
+  "gamer-high": "Gamer alta",
   creator: "Diseño y streaming",
+  "gamer-auto": "Gamer según presupuesto",
 };
 
-export const PROFILE_HINT: Record<Profile, string> = {
-  gamer: "Prioriza la placa de video. 16 GB de RAM y SSD NVMe como mínimo.",
-  office: "Procesador con video integrado, sin placa de video. 16 GB de RAM y disco de 480 GB o más.",
-  creator: "Prioriza procesador y memoria (32 GB). Placa de video de gama media (RTX 4060 o similar) y disco de 1 TB.",
+export const TIER_HINT: Record<TierChoice, string> = {
+  office: "Ryzen 5 8500G/8600G o i3/i5 con video, mother A620/H610, 16 GB, 480 GB y gabinete kit con fuente.",
+  "gamer-entry": "Ryzen 5 5500/5600 o i5-12400F, B550/B760, 16 GB, RTX 3050/4060 o RX 7600, 1 TB NVMe, fuente 550–650 W Bronze.",
+  "gamer-mid": "Ryzen 5 7600/9600 o i5-14400F, B650/B760, 32 GB DDR5, RTX 5060 Ti o RX 9060 XT, 1 TB NVMe, fuente 650–750 W.",
+  "gamer-high": "Ryzen 7 7700/9700X/7800X3D o i7, B650/B850/X870, 32 GB 6000, RTX 5070 o RX 9070, fuente 750–850 W Gold.",
+  creator: "Ryzen 7/9 o i7/i9, B650/B850/X870, 32–64 GB, NVIDIA de 12–16 GB, 2 TB NVMe, fuente 750–850 W Gold.",
+  "gamer-auto": "Arma la gama gamer más alta que entra en el presupuesto (cargalo abajo).",
 };
 
-/** Qué parte del presupuesto va a cada pieza, según el perfil. */
-const SHARE: Record<Profile, Record<PcStep, number>> = {
-  gamer: { cpu: 0.16, mobo: 0.1, ram: 0.12, gpu: 0.38, ssd: 0.08, psu: 0.07, case: 0.06, cooler: 0.03 },
-  office: { cpu: 0.3, mobo: 0.2, ram: 0.14, gpu: 0, ssd: 0.14, psu: 0.08, case: 0.12, cooler: 0.02 },
-  creator: { cpu: 0.26, mobo: 0.12, ram: 0.13, gpu: 0.25, ssd: 0.1, psu: 0.07, case: 0.05, cooler: 0.02 },
+const TIER_NAME: Record<Tier, string> = {
+  office: "oficina",
+  "gamer-entry": "gamer de entrada",
+  "gamer-mid": "gamer media",
+  "gamer-high": "gamer alta",
+  creator: "diseño",
 };
 
-/** Orden en que se eligen: cada pieza se elige compatible con las anteriores; la fuente al final, con el consumo ya conocido. */
+/** Orden: cada pieza compatible con las anteriores; la fuente al final, con el consumo conocido. */
 const ORDER: PcStep[] = ["cpu", "mobo", "ram", "gpu", "ssd", "case", "cooler", "psu"];
-/** En una gamer la placa va primero: el procesador se elige a su altura. */
-const ORDER_BY: Record<Profile, PcStep[]> = {
-  gamer: ["gpu", "cpu", "mobo", "ram", "ssd", "case", "cooler", "psu"],
-  office: ORDER,
-  creator: ORDER,
-};
-/** Procesador mínimo para la placa elegida, en puntos de cpuScore por punto de gpuScore. */
-const CPU_PER_GPU = 0.8;
-/** Qué se mejora primero con lo que sobra. */
-const UPGRADE: Record<Profile, PcStep[]> = {
-  gamer: ["gpu", "cpu", "ram", "ssd"],
-  office: ["cpu", "ssd", "ram"],
-  creator: ["cpu", "gpu", "ram", "ssd"],
-};
-const PERF: PcStep[] = ["cpu", "gpu", "ram", "ssd"];
-/** Lo que se vuelve a elegir si una mejora no entra con lo que había (en este orden: la fuente al final, con el consumo nuevo). */
-const SWAPPABLE: PcStep[] = ["case", "cooler", "psu"];
 
 /*
- * Marcas con las que un comercio arma una PC para vender. Las fuentes, gabinetes y coolers
- * genéricos quedan solo si no hay otra opción.
+ * Marcas con las que un comercio arma una PC para vender. Las genéricas quedan
+ * solo si no hay otra opción de la gama.
  */
 const GOOD_PSU = /cooler\s*master|thermaltake|\basus\b|\brog\b|gigabyte|aorus|adata|\bxpg\b|corsair|\bmsi\b|evga|seasonic|be\s*quiet|deepcool|nzxt|antec|lian\s*li|super\s*flower|\bfsp\b|montech/i;
 const GOOD_CASE = /cooler\s*master|thermaltake|adata|\bxpg\b|gigabyte|aorus|corsair|\basus\b|\brog\b|\bmsi\b|nzxt|lian\s*li|deepcool|montech|antec|be\s*quiet|fractal|phanteks|hyte|jonsbo/i;
-/** Memorias y discos: marcas con garantía y repuesto; las genéricas solo si no hay otra. */
 const GOOD_MEMORY = /kingston|fury|western\s*digital|\bwd\b|samsung|crucial|adata|\bxpg\b|lexar|corsair|g\.?skill|team\s*group|t-?force|patriot|hiksemi|netac|seagate|kioxia|hynix|solidigm|gigabyte|\bmsi\b|pny/i;
 const GOOD_COOLER = /cooler\s*master|deepcool|thermalright|id-?cooling|arctic|noctua|be\s*quiet|corsair|nzxt|lian\s*li|thermaltake|\basus\b|\bmsi\b|gigabyte|\bxpg\b|montech|wraith/i;
-/** Ryzen con video integrado (5600G, 8500G…): con placa de video rinden menos que su par sin video. */
-const APU = /ryzen\s*[3579]\s*(pro\s*)?\d{4}g\b/i;
-/** Chipsets de entrada: para gamer o diseño, mejor una B o superior. */
-const ENTRY_CHIPSET = /\b(A[3-6]20|H[3-6]10|H[3-6]70)\b/i;
-const brandText = (p: PcPart) => `${p.brand ?? ""} ${p.name}`;
 /** Lo que no se le arma a un cliente: golpeado, usado, outlet, reacondicionado. */
 const NOT_NEW = /golpead|usad[oa]\b|outlet|reacondicionad|refurb|caja abierta|open box|da[ñn]ad/i;
-const certRank = (cert: string) =>
-  /titanium/i.test(cert) ? 5 : /platinum/i.test(cert) ? 4 : /gold/i.test(cert) ? 3 : /silver/i.test(cert) ? 2 : /bronze/i.test(cert) ? 1 : 0;
-/** Aplica cada preferencia en orden, mientras deje alguna opción. */
-function prefer<T>(rows: T[], ...filters: ((r: T) => boolean)[]): T[] {
-  let out = rows;
-  for (const f of filters) {
-    const next = out.filter(f);
-    if (next.length) out = next;
-  }
-  return out;
-}
 
 const num = (p: PcPart, k: string) => (typeof p.compat[k] === "number" ? (p.compat[k] as number) : null);
 const str = (p: PcPart, k: string) => (typeof p.compat[k] === "string" ? (p.compat[k] as string) : "");
+const text = (p: PcPart) => `${p.brand ?? ""} ${p.name} ${str(p, "chip")} ${str(p, "chipset")}`;
+const has = (re: RegExp) => (p: PcPart) => re.test(text(p));
+/**
+ * Preferencia de marca "blanda": solo cuenta si la de marca más barata cuesta hasta
+ * BRAND_SLACK más que la más barata de todas. Si no, gana la económica: a veces hay
+ * que ahorrar en cada pieza.
+ */
+const BRAND_SLACK = 0.15;
+type Pref = ((p: PcPart, build: Build) => boolean) & { soft?: boolean };
+const brand = (re: RegExp): Pref => Object.assign((p: PcPart) => re.test(text(p)), { soft: true });
+const certRank = (cert: string) =>
+  /titanium/i.test(cert) ? 5 : /platinum/i.test(cert) ? 4 : /gold/i.test(cert) ? 3 : /silver/i.test(cert) ? 2 : /bronze/i.test(cert) ? 1 : 0;
 const ghz = (v: string) => {
   const m = v.replace(",", ".").match(/\d+(\.\d+)?/);
   const x = m ? Number(m[0]) : 0;
   return x > 100 ? x / 1000 : x;
 };
+
+/* ── Rendimiento (también lo usa el orden "Recomendados" de cada paso) ── */
 
 /** Rendimiento relativo en juegos (1080p) por chip; lo que no está se estima por la memoria. */
 const GPU_TIERS: [RegExp, number][] = [
@@ -103,8 +97,8 @@ const GPU_TIERS: [RegExp, number][] = [
 ];
 
 export function gpuScore(p: PcPart): number {
-  const text = `${str(p, "chip")} ${p.name}`;
-  for (const [re, v] of GPU_TIERS) if (re.test(text)) return v;
+  const t = `${str(p, "chip")} ${p.name}`;
+  for (const [re, v] of GPU_TIERS) if (re.test(t)) return v;
   return Math.max(2, (num(p, "vram") ?? 2) * 4);
 }
 
@@ -135,36 +129,119 @@ export function score(step: PcStep, p: PcPart, profile: Profile): number {
   return 0;
 }
 
-/** Lo mínimo que tiene que cumplir cada pieza para ese perfil. */
-function meetsProfile(step: PcStep, p: PcPart, profile: Profile, build: Build): boolean {
-  const cap = num(p, "capacity");
-  if (step === "ram") return profile === "creator" ? (cap ?? 0) >= 32 : (cap ?? 0) >= 16;
-  if (step === "ssd") {
-    if (p.compat.hdd) return false;
-    return profile === "office" ? (cap ?? 0) >= 480 : (cap ?? 0) >= 960;
-  }
-  if (step === "cpu" && profile === "office" && !build.gpu) return p.compat.igpu === true;
-  if (step === "cpu" && (profile === "creator" || (profile === "gamer" && build.gpu))) return !APU.test(p.name);
-  if (step === "gpu") return profile !== "office" && gpuScore(p) >= (profile === "gamer" ? 18 : 40) && gpuMaker(p) != null;
-  if (step === "psu" && (profile !== "office" || build.gpu)) return !/sin cert/i.test(str(p, "cert")) && str(p, "cert") !== "";
-  if (step === "case" && profile !== "office") return (num(p, "fans") ?? 1) >= 1;
-  return true;
-}
+/* ── Reglas por gama ── */
 
-/** Pasos que no hacen falta con lo elegido y el perfil. */
-function skipStep(step: PcStep, build: Build, profile: Profile): boolean {
-  if (step === "gpu") return profile === "office" && build.cpu?.compat.igpu === true;
-  if (step === "cooler") {
-    const tdp = build.cpu ? num(build.cpu, "tdp") ?? 65 : 65;
-    return build.cpu?.compat.cooler === true && (profile === "office" || tdp <= 65);
-  }
-  if (step === "psu") return build.case?.compat.psuIncluded === true && profile === "office";
-  return false;
+/**
+ * Cómo se elige una pieza dentro de la gama:
+ * - `match`: lo que es de la gama (si no hay nada, la pieza queda sin elegir y se avisa);
+ * - `prefer`: preferencias en orden, mientras dejen alguna opción (marca, kit de 2 módulos…);
+ * - `pick`: "value" = más rendimiento por peso; un número = percentil de precio (0 = la más barata).
+ */
+interface PartRule {
+  match: (p: PcPart, build: Build) => boolean;
+  prefer?: ((p: PcPart, build: Build) => boolean)[];
+  pick: "value" | number;
 }
+/** `skip`: la pieza no va (oficina sin placa; cooler o fuente que ya vienen incluidos). */
+type TierRules = Record<PcStep, PartRule | ((build: Build) => PartRule | "skip")>;
+
+const capacity = (min: number, max = Infinity) => (p: PcPart) => {
+  const c = num(p, "capacity") ?? 0;
+  return c >= min && c <= max;
+};
+const nvme = (p: PcPart) => /nvme|pcie/i.test(`${str(p, "iface")} ${p.name}`) && !/sata/i.test(str(p, "iface"));
+const notHdd = (p: PcPart) => !p.compat.hdd;
+const watts = (min: number, max: number) => (p: PcPart) => {
+  const w = num(p, "watts") ?? 0;
+  return w >= min && w <= max;
+};
+const certified = (min: number) => (p: PcPart) => certRank(str(p, "cert")) >= min;
+const isAir = (p: PcPart) => str(p, "kind") !== "liquid" && !/water|l[ií]quid|aio\b/i.test(p.name);
+const BIG_COOLER = /dual\s*tower|doble\s*torre|ak620|pa120|phantom|peerless|nh-?d15|dark\s*rock\s*pro|\b(240|280|360)\b|aio|water|l[ií]quid/i;
+const cpuHasCooler = (b: Build) => b.cpu?.compat.cooler === true;
+const caseHasPsu = (b: Build) => b.case?.compat.psuIncluded === true;
+
+/** Fuente de la gama, con margen sobre lo que pide la PC (si una placa pide más, sube el tope). */
+const psuRule = (min: number, max: number, cert: number) => (b: Build): PartRule => {
+  const need = (powerNeed(b)?.recommended ?? 0) * 1.15;
+  const lo = Math.max(min, need);
+  return {
+    match: (p) => watts(lo, Math.max(max, lo + 100))(p) && certified(cert)(p),
+    prefer: [brand(GOOD_PSU)],
+    pick: 0,
+  };
+};
+
+const TIERS: Record<Tier, TierRules> = {
+  office: {
+    cpu: {
+      match: (p) =>
+        p.compat.igpu === true &&
+        /ryzen\s*[35]\s*(pro\s*)?(5[56]00gt?|8[3-6]00g)\b|\bi[35][\s-]*1[2-4]\d{3}\b(?!\s*f)|core\s*(ultra\s*5|i[35])\b.*\b(2[2-4]5|1[2-4][1-5]\d{2})\b/i.test(p.name) &&
+        !/\d{4,5}f\b/i.test(p.name),
+      prefer: [(p) => /ryzen\s*5\s*8[56]00g|i5/i.test(p.name)],
+      pick: 0,
+    },
+    mobo: { match: has(/\b(a[56]20|h[67]10|h510)\b/i), prefer: [has(/gigabyte|asus|msi|asrock/i)], pick: 0 },
+    ram: { match: capacity(16, 16), prefer: [brand(GOOD_MEMORY)], pick: 0 },
+    gpu: () => "skip",
+    ssd: { match: (p) => notHdd(p) && capacity(480, 1000)(p), prefer: [brand(GOOD_MEMORY), capacity(480, 520)], pick: 0 },
+    // Gabinete kit con fuente (y, si hay, teclado y mouse).
+    case: { match: (p) => p.compat.psuIncluded === true || /\+\s*\d{3}\s*w|fuente|psu|kit/i.test(p.name), prefer: [has(/kit|teclado|mouse|tec\s*\+\s*mou/i)], pick: 0 },
+    cooler: (b) => (cpuHasCooler(b) ? "skip" : { match: isAir, prefer: [brand(GOOD_COOLER)], pick: 0 }),
+    psu: (b) => (caseHasPsu(b) || /\+\s*\d{3}\s*w|fuente|psu/i.test(b.case?.name ?? "") ? "skip" : { ...psuRule(450, 600, 0)(b), prefer: [brand(GOOD_PSU)] }),
+  },
+  "gamer-entry": {
+    cpu: { match: has(/ryzen\s*5\s*(5500|5600x?|5600t)\b(?!\s*g)|\bi3[\s-]*1[2-4]100f?\b|\bi5[\s-]*1[2-4]400f?\b/i), pick: "value" },
+    mobo: { match: has(/\b(b450|b550|b660|b760)\b/i), prefer: [has(/gigabyte|asus|msi|asrock/i)], pick: 0 },
+    ram: { match: capacity(16, 16), prefer: [brand(GOOD_MEMORY), (p) => (num(p, "modules") ?? 1) >= 2], pick: 0 },
+    gpu: { match: (p) => gpuMaker(p) != null && /rtx\s*3050|rtx\s*3060\b(?!\s*ti)|rtx\s*4060\b(?!\s*ti)|rtx\s*5050|rx\s*6600|rx\s*7600\b(?!\s*xt)|arc\s*b5[78]0/i.test(text(p)), pick: "value" },
+    ssd: { match: (p) => notHdd(p) && capacity(960, 1100)(p), prefer: [nvme, brand(GOOD_MEMORY)], pick: 0 },
+    case: { match: (p) => p.compat.psuIncluded !== true && (num(p, "fans") ?? 0) >= 2, prefer: [brand(GOOD_CASE)], pick: 0 },
+    cooler: (b) => (cpuHasCooler(b) ? "skip" : { match: isAir, prefer: [brand(GOOD_COOLER)], pick: 0 }),
+    psu: psuRule(550, 650, 1),
+  },
+  "gamer-mid": {
+    cpu: { match: has(/ryzen\s*5\s*(7500f|7600x?|8400f|9600x?)\b|\bi5[\s-]*1[34](400|500|600)k?f?\b|ultra\s*5\s*2[234]5/i), pick: "value" },
+    mobo: { match: has(/\b(b650|b760|b850)\b/i), prefer: [has(/gigabyte|asus|msi|asrock/i)], pick: 0 },
+    ram: { match: capacity(32, 32), prefer: [brand(GOOD_MEMORY), (p) => (num(p, "modules") ?? 1) >= 2], pick: 0 },
+    gpu: { match: (p) => gpuMaker(p) != null && /rtx\s*(4060|5060)\s*ti|rtx\s*5060\b|rx\s*7600\s*xt|rx\s*7700\s*xt|rx\s*9060\s*xt/i.test(text(p)), pick: "value" },
+    ssd: { match: (p) => notHdd(p) && capacity(960, 1100)(p) && nvme(p), prefer: [brand(GOOD_MEMORY), (p) => (num(p, "pcie") ?? 0) >= 4], pick: 0 },
+    case: { match: (p) => p.compat.psuIncluded !== true && (num(p, "fans") ?? 0) >= 2, prefer: [brand(GOOD_CASE)], pick: 0.35 },
+    cooler: { match: (p) => isAir(p) && !BIG_COOLER.test(p.name), prefer: [brand(GOOD_COOLER)], pick: 0 },
+    psu: psuRule(650, 750, 1),
+  },
+  "gamer-high": {
+    cpu: { match: has(/ryzen\s*7\s*(5700x3d|5800x3d|7700x?|7800x3d|9700x|9800x3d)\b|\bi7[\s-]*1[34]700k?f?\b|ultra\s*7\s*2[56]5/i), pick: "value" },
+    mobo: { match: has(/\b(b650e?|b850|x670e?|x870e?|b760|z790|b860|z890)\b/i), prefer: [has(/gigabyte|aorus|asus|rog|msi|asrock/i)], pick: 0.4 },
+    ram: { match: (p) => capacity(32, 32)(p) && (num(p, "freq") ?? 0) >= 5600, prefer: [brand(GOOD_MEMORY), (p) => (num(p, "freq") ?? 0) >= 6000, (p) => (num(p, "modules") ?? 1) >= 2], pick: 0 },
+    gpu: { match: (p) => gpuMaker(p) != null && /rtx\s*(4070|5070)|rx\s*7800\s*xt|rx\s*7900|rx\s*9070/i.test(text(p)), pick: "value" },
+    ssd: { match: (p) => notHdd(p) && capacity(960, 2100)(p) && nvme(p), prefer: [brand(GOOD_MEMORY), (p) => (num(p, "pcie") ?? 0) >= 4], pick: 0 },
+    case: { match: (p) => p.compat.psuIncluded !== true && (num(p, "fans") ?? 0) >= 3, prefer: [brand(GOOD_CASE)], pick: 0.6 },
+    cooler: { match: (p) => BIG_COOLER.test(p.name), prefer: [brand(GOOD_COOLER)], pick: 0 },
+    psu: psuRule(750, 850, 3),
+  },
+  creator: {
+    cpu: { match: has(/ryzen\s*(7\s*(7700x?|9700x)|9\s*(7900x?|9900x|7950x|9950x))\b|\bi[79][\s-]*1[34]\d{3}k?f?\b|ultra\s*[79]\s*2\d5/i), pick: "value" },
+    mobo: { match: has(/\b(b650e?|b850|x670e?|x870e?|b760|z790|b860|z890)\b/i), prefer: [has(/gigabyte|aorus|asus|rog|proart|msi|asrock/i)], pick: 0.5 },
+    ram: { match: capacity(32, 64), prefer: [brand(GOOD_MEMORY), (p) => (num(p, "modules") ?? 1) >= 2], pick: 0 },
+    // NVIDIA por CUDA (Premiere, DaVinci, Blender), con 12 GB o más.
+    gpu: { match: (p) => gpuMaker(p) === "NVIDIA" && /rtx\s*(3060|4060\s*ti|5060\s*ti|4070|5070)/i.test(text(p)), prefer: [(p) => (num(p, "vram") ?? 0) >= 12], pick: "value" },
+    ssd: { match: (p) => notHdd(p) && capacity(1900, 2100)(p) && nvme(p), prefer: [brand(GOOD_MEMORY), (p) => (num(p, "pcie") ?? 0) >= 4], pick: 0 },
+    case: { match: (p) => p.compat.psuIncluded !== true && (num(p, "fans") ?? 0) >= 3, prefer: [brand(GOOD_CASE), (p) => /atx/i.test(String(p.compat.forms ?? ""))], pick: 0.6 },
+    cooler: { match: (p) => BIG_COOLER.test(p.name), prefer: [brand(GOOD_COOLER)], pick: 0 },
+    psu: psuRule(750, 850, 3),
+  },
+};
+
+const PROFILE_OF: Record<Tier, Profile> = { office: "office", "gamer-entry": "gamer", "gamer-mid": "gamer", "gamer-high": "gamer", creator: "creator" };
+const STEP_NAME: Record<PcStep, string> = {
+  cpu: "procesador", mobo: "mother", ram: "memoria", gpu: "placa de video", ssd: "disco", psu: "fuente", case: "gabinete", cooler: "refrigeración",
+};
 
 export interface AutoInput {
-  profile: Profile;
-  /** En la moneda en que se muestran los precios. null = sin tope: la mejor relación precio/calidad. */
+  tier: TierChoice;
+  /** En la moneda en que se muestran los precios. Con "gamer-auto" elige la gama; con una gama fija, avisa si se pasa. */
   budget: number | null;
   /** Lo que ya eligió el comercio: no se toca. */
   locked: Build;
@@ -181,260 +258,90 @@ export interface AutoResult {
   picked: PcStep[];
   total: number;
   notes: string[];
+  tier: Tier;
 }
 
 const RANK: Record<Level, number> = { ok: 0, warn: 1, bad: 2 };
 
-export function autoBuild(input: AutoInput): AutoResult {
-  const { profile, budget, locked, catalog, price, inStock } = input;
+function buildTier(tier: Tier, input: AutoInput): AutoResult {
+  const { locked, catalog, price, inStock } = input;
   const qty = input.qty ?? {};
-  const costOf = (p: PcPart): number | null => {
-    const prices = p.offers.filter(inStock).map((o) => price(o)?.amount).filter((x): x is number => x != null && x > 0);
-    return prices.length ? Math.min(...prices) : null;
-  };
+  const profile = PROFILE_OF[tier];
   const cost = new Map<string, number | null>();
   const c = (p: PcPart) => {
-    if (!cost.has(p.contentId)) cost.set(p.contentId, costOf(p));
+    if (!cost.has(p.contentId)) {
+      const prices = p.offers.filter(inStock).map((o) => price(o)?.amount).filter((x): x is number => x != null && x > 0);
+      cost.set(p.contentId, prices.length ? Math.min(...prices) : null);
+    }
     return cost.get(p.contentId)!;
   };
   const build: Build = { ...locked };
   const picked: PcStep[] = [];
   const notes: string[] = [];
-  const total = () => Object.entries(build).reduce((sum, [st, p]) => sum + (c(p!) ?? 0) * Math.max(1, qty[st as PcStep] ?? 1), 0);
 
-  /** Candidatos de un paso: con stock y precio, compatibles con lo elegido, que cumplen el perfil. Los "ok" antes que los "verificar". */
-  const candidates = (step: PcStep, base: Build) => {
+  for (const step of ORDER) {
+    if (build[step]) continue;
+    const raw = TIERS[tier][step];
+    const rule = typeof raw === "function" ? raw(build) : raw;
+    if (rule === "skip") continue;
+    // Con stock y precio, nuevos, de la gama y compatibles con lo elegido (lo "ok" antes que lo "para revisar").
     const rows = (catalog[step] ?? [])
-      .map((p) => ({ p, cost: c(p), v: verdict(step, p, base, qty).level }))
-      .filter((r): r is { p: PcPart; cost: number; v: Level } => r.cost != null && r.v !== "bad" && !NOT_NEW.test(r.p.name) && meetsProfile(step, r.p, profile, base));
-    const best = Math.min(...rows.map((r) => RANK[r.v]));
-    return rows.filter((r) => RANK[r.v] === best);
-  };
-
-  /** La pieza más barata que cumple; entre parecidas, la de ficha verificada. */
-  const cheapest = (rows: { p: PcPart; cost: number }[], step: PcStep) =>
-    rows.slice().sort((a, b) => a.cost * (dataQuality(step, a.p) === "verified" ? 0.97 : 1) - b.cost * (dataQuality(step, b.p) === "verified" ? 0.97 : 1))[0];
-
-  /**
-   * Piezas que no suman rendimiento (mother, fuente, gabinete, cooler): entre las de calidad, la de precio
-   * más cercano a lo que le toca. Así acompañan el nivel de la PC: ni una fuente genérica con una placa
-   * de gama alta ni un gabinete de lujo en una de oficina.
-   */
-  const nearest = (rows: { p: PcPart; cost: number }[], step: PcStep, target: number | null) => {
-    // Con presupuesto del comercio, lo que no rinde va a la opción de calidad más barata y lo que sobra
-    // mejora la placa o el procesador. Sin presupuesto, acompaña el nivel de la pieza principal.
-    if (target == null || budget != null) return cheapest(rows, step);
-    const fit = rows.filter((r) => r.cost <= target * 1.15);
-    if (!fit.length) return cheapest(rows, step);
-    return fit.slice().sort((a, b) => Math.abs(a.cost - target) - Math.abs(b.cost - target))[0];
-  };
-
-  const choose = (step: PcStep, target: number | null) => {
-    const rows = candidates(step, build);
-    if (!rows.length) return null;
-    const serious = profile !== "office" || Boolean(build.gpu);
-    if (!PERF.includes(step)) {
-      // Fuente: de marca, 80 Plus Bronze o más (Gold con placas de gama alta) y con margen sobre lo recomendado.
-      if (step === "psu") {
-        const need = powerNeed(build, qty)?.recommended ?? 0;
-        const gpu = build.gpu ? gpuScore(build.gpu) : 0;
-        const pool = prefer(
-          rows,
-          (r) => str(r.p, "cert") !== "" && !/sin cert/i.test(str(r.p, "cert")),
-          (r) => GOOD_PSU.test(brandText(r.p)),
-          (r) => certRank(str(r.p, "cert")) >= 1,
-          (r) => gpu < 70 || certRank(str(r.p, "cert")) >= 3,
-          (r) => (num(r.p, "watts") ?? 0) >= need * (serious ? 1.2 : 1.1),
-          (r) => !need || (num(r.p, "watts") ?? 0) <= need * 1.5,
-        );
-        return nearest(pool, step, target);
-      }
-      // Gabinete: de marca y con ventiladores.
-      if (step === "case") {
-        return nearest(
-          prefer(
-            rows,
-            (r) => GOOD_CASE.test(brandText(r.p)),
-            (r) => profile === "office" || (num(r.p, "fans") ?? 0) >= 2,
-            // Con fuente aparte, un gabinete que ya trae fuente es plata tirada.
-            (r) => !serious || r.p.compat.psuIncluded !== true,
-          ),
-          step,
-          target,
-        );
-      }
-      // Mother: en gamer y diseño, chipset B (o superior) antes que uno de entrada.
-      if (step === "mobo") {
-        return nearest(prefer(rows, (r) => profile === "office" || !ENTRY_CHIPSET.test(str(r.p, "chipset") + " " + r.p.name)), step, target);
-      }
-      if (step === "cooler") {
-        const tdp = build.cpu ? num(build.cpu, "tdp") ?? 65 : 65;
-        // Sin TDP informado se da por suficiente; hasta 105 W alcanza uno de aire, que es más barato.
-        const enough = rows.filter((r) => (num(r.p, "tdp") ?? tdp) >= tdp);
-        // Mejor uno que informa el socket del procesador; entre los que no lo informan, que el nombre no sea de la otra marca.
-        const socket = build.cpu ? str(build.cpu, "socket").toUpperCase().replace(/\s+/g, "") : "";
-        const sockets = (p: PcPart) => (Array.isArray(p.compat.sockets) ? (p.compat.sockets as string[]) : []);
-        const named = (p: PcPart) => (/\bAM[45]\b|\bAMD\b|ryzen|wraith/i.test(p.name) ? "AM" : /\bLGA\b|intel/i.test(p.name) ? "LGA" : null);
-        const fits = enough.filter((r) => {
-          const list = sockets(r.p);
-          if (list.length) return list.some((x) => x.toUpperCase().replace(/\s+/g, "") === socket);
-          const brand = named(r.p);
-          return !socket || !brand || socket.startsWith(brand);
-        });
-        const pool = prefer(fits.length ? fits : enough.length ? enough : rows, (r) => GOOD_COOLER.test(brandText(r.p)));
-        const air = tdp <= 105 ? pool.filter((r) => str(r.p, "kind") !== "liquid") : [];
-        // Hasta 65 W cualquier cooler de marca alcanza: no hace falta uno de torre doble.
-        return tdp <= 65 ? cheapest(air.length ? air : pool, step) : nearest(air.length ? air : pool, step, target);
-      }
-      return nearest(rows, step, target);
-    }
-    let pool = step === "ram" || step === "ssd" ? prefer(rows, (r) => GOOD_MEMORY.test(brandText(r.p))) : rows;
-    const usable = (sub: typeof rows) => sub.length > 0 && (target == null || sub.some((r) => r.cost <= target));
-    // Que el procesador no frene a la placa: con una placa de gama alta, uno barato se queda corto.
-    if (step === "cpu" && profile === "gamer" && build.gpu) {
-      const need = gpuScore(build.gpu) * CPU_PER_GPU;
-      const balanced = pool.filter((r) => cpuScore(r.p, profile) >= need);
-      if (usable(balanced)) pool = balanced;
-    }
-    // Disco: en gamer y diseño, un NVMe M.2 antes que un SATA.
-    if (step === "ssd" && profile !== "office") {
-      const nvme = pool.filter((r) => /nvme|pcie/i.test(`${str(r.p, "iface")} ${r.p.name}`) && !/sata/i.test(str(r.p, "iface")));
-      // Un NVMe aunque cueste algo más que lo que le toca: la diferencia con un SATA se nota y es poca plata.
-      if (nvme.length) pool = nvme;
-    }
-    if (target == null) {
-      // Sin presupuesto: la mejor relación rendimiento / precio (en diseño, el procesador pesa más que el precio).
-      const k = profile === "creator" && step === "cpu" ? 0.75 : 0.85;
-      return pool.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, k) - score(step, a.p, profile) / Math.pow(a.cost, k))[0];
-    }
-    const fit = pool.filter((r) => r.cost <= target);
-    if (!fit.length) return cheapest(pool, step);
-    // Dentro de lo que le toca, rendimiento con sentido: en una gamer la placa rinde todo lo que se pueda; el
-    // procesador, lo justo para acompañarla (no un Ryzen 9 para jugar); el resto, equilibrio entre rendimiento y precio.
-    const weight = profile === "gamer" && step === "gpu" ? 0.15 : profile === "gamer" && step === "cpu" ? 0.85 : 0.5;
-    return fit.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, weight) - score(step, a.p, profile) / Math.pow(a.cost, weight))[0];
-  };
-
-  // 1) Una pieza por paso, con la parte del presupuesto que le toca.
-  const order = ORDER_BY[profile];
-  const missing = order.filter((st) => !build[st]);
-  const shares = SHARE[profile];
-  // Sin presupuesto, la pieza que marca el nivel (la placa en una gamer, el procesador en el resto) se elige
-  // por rendimiento / precio, y su precio fija cuánto le toca a cada una de las demás: una PC pareja.
-  const anchor: PcStep = profile === "gamer" ? "gpu" : "cpu";
-  let plan = budget;
-  if (plan == null) {
-    if (!build[anchor] && !skipStep(anchor, build, profile)) {
-      const pick = choose(anchor, null);
-      if (pick) {
-        build[anchor] = pick.p;
-        picked.push(anchor);
-      }
-    }
-    const a = build[anchor];
-    const ac = a ? c(a) : null;
-    if (ac) plan = ac / shares[anchor];
-  }
-  for (const step of order) {
-    if (build[step] || skipStep(step, build, profile)) continue;
-    let target: number | null = null;
-    if (plan != null) {
-      const left = plan - total();
-      const pending = missing.filter((st) => !build[st] && !skipStep(st, build, profile));
-      const weight = pending.reduce((sum, st) => sum + shares[st], 0) || 1;
-      target = Math.max(0, (left * shares[step]) / weight);
-    }
-    const pick = choose(step, target);
-    if (!pick) {
-      if (step !== "gpu" && step !== "cooler") notes.push(`No hay ${STEP_NAME[step]} compatible con stock en tus distribuidores.`);
+      .filter((p) => !NOT_NEW.test(p.name) && rule.match(p, build))
+      .map((p) => ({ p, cost: c(p), v: verdict(step, p, build, qty).level }))
+      .filter((r): r is { p: PcPart; cost: number; v: Level } => r.cost != null && r.v !== "bad");
+    if (!rows.length) {
+      notes.push(`No hay ${STEP_NAME[step]} de gama ${TIER_NAME[tier]} con stock y compatible en tus distribuidores: elegila a mano.`);
       continue;
+    }
+    const best = Math.min(...rows.map((r) => RANK[r.v]));
+    let pool = rows.filter((r) => RANK[r.v] === best);
+    for (const f of rule.prefer ?? []) {
+      const next = pool.filter((r) => f(r.p, build));
+      if (!next.length) continue;
+      if ((f as Pref).soft) {
+        const cheapestAll = Math.min(...pool.map((r) => r.cost));
+        const cheapestPref = Math.min(...next.map((r) => r.cost));
+        if (cheapestPref > cheapestAll * (1 + BRAND_SLACK)) continue;
+      }
+      pool = next;
+    }
+    let pick: (typeof pool)[number];
+    if (rule.pick === "value") {
+      pick = pool.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, 0.85) - score(step, a.p, profile) / Math.pow(a.cost, 0.85))[0];
+    } else {
+      // Entre precios parecidos, la de ficha verificada.
+      const sorted = pool.slice().sort((a, b) => a.cost * (dataQuality(step, a.p) === "verified" ? 0.97 : 1) - b.cost * (dataQuality(step, b.p) === "verified" ? 0.97 : 1));
+      pick = sorted[Math.round((sorted.length - 1) * rule.pick)];
     }
     build[step] = pick.p;
     picked.push(step);
   }
 
-  /**
-   * Gabinete, cooler y fuente al día con lo elegido: vuelve a elegir los que quedaron incompatibles, los que
-   * ahora hacen falta (un procesador sin cooler) y la fuente si quedó justa. false si alguno no tiene opción.
-   */
-  const fixSupport = (): boolean => {
-    for (const st of SWAPPABLE) {
-      if (skipStep(st, build, profile)) continue;
-      const current = build[st];
-      const mine = !current || picked.includes(st);
-      if (!mine) continue;
-      const level = current ? verdict(st, current, build, qty).level : null;
-      if (current && level === "ok") continue;
-      if (current && level === "warn" && st !== "psu") continue;
-      delete build[st];
-      const again = choose(st, null);
-      if (!again) {
-        if (current) build[st] = current;
-        if (!current || level === "bad") return false;
-        continue;
-      }
-      build[st] = again.p;
-      if (!picked.includes(st)) picked.push(st);
-    }
-    return true;
-  };
-
-  // 2) Con lo que sobra, se mejora lo que más rinde, sin romper la compatibilidad.
-  if (budget != null) {
-    for (let round = 0; round < 12; round++) {
-      let improved = false;
-      for (const step of UPGRADE[profile]) {
-        if (!picked.includes(step) || !build[step]) continue;
-        const current = build[step]!;
-        const curScore = score(step, current, profile);
-        const room = budget - total() + (c(current) ?? 0);
-        // El gabinete, la fuente y el cooler que eligió NODO se pueden cambiar para que entre la mejora.
-        const others: Build = { ...build };
-        delete others[step];
-        for (const st of SWAPPABLE) if (picked.includes(st)) delete others[st];
-        // En una gamer el procesador solo sube si quedó corto para la placa, y hasta lo justo.
-        const cpuNeed = profile === "gamer" && step === "cpu" && build.gpu ? gpuScore(build.gpu) * CPU_PER_GPU : null;
-        if (cpuNeed != null && curScore >= cpuNeed) continue;
-        // Que lo que sobra no se vaya todo a una pieza (un disco de 2 TB carísimo con un gabinete de entrada):
-        // salvo la pieza principal, cada una sube hasta 1,6 veces lo que le toca del presupuesto.
-        const cap = step === anchor ? room : Math.min(room, budget * shares[step] * 1.6);
-        const better = candidates(step, others)
-          .filter((r) => r.cost <= cap && score(step, r.p, profile) > curScore * 1.04)
-          .sort((a, b) =>
-            cpuNeed != null
-              ? Number(score(step, b.p, profile) >= cpuNeed) - Number(score(step, a.p, profile) >= cpuNeed) || a.cost - b.cost
-              : score(step, b.p, profile) - score(step, a.p, profile),
-          )[0];
-        if (!better) continue;
-        const trial: Build = { ...build, [step]: better.p };
-        // Que lo demás siga siendo compatible (una placa más grande puede no entrar o pedir más fuente).
-        const broken = (Object.keys(trial) as PcStep[]).filter((st) => st !== step && verdict(st, trial[st]!, trial, qty).level === "bad");
-        if (broken.some((st) => !SWAPPABLE.includes(st) || !picked.includes(st))) continue;
-        const prev = { ...build };
-        const prevPicked = picked.slice();
-        const restore = () => {
-          for (const k of Object.keys(build) as PcStep[]) delete build[k];
-          Object.assign(build, prev);
-          picked.splice(0, picked.length, ...prevPicked);
-        };
-        Object.assign(build, trial);
-        // Con lo que pide la mejora (otra fuente, un cooler) incluido en la cuenta.
-        if (!fixSupport() || total() > budget) { restore(); continue; }
-        improved = true;
-      }
-      if (!improved) break;
-    }
-    const t = total();
-    if (t > budget) notes.push(`El presupuesto no alcanza: el armado compatible más barato con este perfil sale más.`);
-  }
-  if (profile === "gamer" && !build.gpu) notes.push("No hay placa de video con stock que entre: elegila a mano.");
-  if (build.cpu && build.mobo) {
-    const fam = cpuFamily(build.cpu);
-    if (fam && /x3d/i.test(build.cpu.name)) notes.push("Elegido un procesador X3D: rinde más en juegos.");
-  }
-  return { parts: build, picked, total: total(), notes };
+  const total = Object.entries(build).reduce((sum, [st, p]) => sum + (c(p!) ?? 0) * Math.max(1, qty[st as PcStep] ?? 1), 0);
+  return { parts: build, picked, total, notes, tier };
 }
 
-const STEP_NAME: Record<PcStep, string> = {
-  cpu: "procesador", mobo: "mother", ram: "memoria", gpu: "placa de video", ssd: "disco", psu: "fuente", case: "gabinete", cooler: "refrigeración",
-};
+/** Las gamas gamer, de la más alta a la más baja: con "según presupuesto" se usa la más alta que entra. */
+const GAMER_DOWN: Tier[] = ["gamer-high", "gamer-mid", "gamer-entry"];
+
+export function autoBuild(input: AutoInput): AutoResult {
+  const { tier, budget } = input;
+  if (tier === "gamer-auto") {
+    if (budget == null) {
+      const res = buildTier("gamer-mid", input);
+      return { ...res, notes: ["Sin presupuesto: armé una gamer media.", ...res.notes] };
+    }
+    let cheapest: AutoResult | null = null;
+    for (const t of GAMER_DOWN) {
+      const res = buildTier(t, input);
+      const complete = res.notes.length === 0;
+      if (complete && res.total <= budget) return { ...res, notes: [`Con ese presupuesto entra una ${TIER_NAME[t]}.`] };
+      if (!cheapest || res.total < cheapest.total) cheapest = res;
+    }
+    const res = cheapest!;
+    return { ...res, notes: [`El presupuesto no alcanza para una gamer completa: la de ${TIER_NAME[res.tier]} sale más.`, ...res.notes] };
+  }
+  const res = buildTier(tier, input);
+  if (budget != null && res.total > budget) res.notes.unshift(`Esta gama sale más que el presupuesto.`);
+  return res;
+}
