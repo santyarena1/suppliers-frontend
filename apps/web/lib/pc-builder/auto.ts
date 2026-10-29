@@ -56,7 +56,7 @@ const SWAPPABLE: PcStep[] = ["case", "cooler", "psu"];
 const GOOD_PSU = /cooler\s*master|thermaltake|\basus\b|\brog\b|gigabyte|aorus|adata|\bxpg\b|corsair|\bmsi\b|evga|seasonic|be\s*quiet|deepcool|nzxt|antec|lian\s*li|super\s*flower|\bfsp\b|montech/i;
 const GOOD_CASE = /cooler\s*master|thermaltake|adata|\bxpg\b|gigabyte|aorus|corsair|\basus\b|\brog\b|\bmsi\b|nzxt|lian\s*li|deepcool|montech|antec|be\s*quiet|fractal|phanteks|hyte|jonsbo/i;
 /** Memorias y discos: marcas con garantía y repuesto; las genéricas solo si no hay otra. */
-const GOOD_MEMORY = /kingston|fury|westerns*digital|wd|samsung|crucial|adata|xpg|lexar|corsair|g.?skill|teams*group|t-?force|patriot|hiksemi|netac|seagate|kioxia|hynix|solidigm|gigabyte|msi|pny/i;
+const GOOD_MEMORY = /kingston|fury|western\s*digital|\bwd\b|samsung|crucial|adata|\bxpg\b|lexar|corsair|g\.?skill|team\s*group|t-?force|patriot|hiksemi|netac|seagate|kioxia|hynix|solidigm|gigabyte|\bmsi\b|pny/i;
 const GOOD_COOLER = /cooler\s*master|deepcool|thermalright|id-?cooling|arctic|noctua|be\s*quiet|corsair|nzxt|lian\s*li|thermaltake|\basus\b|\bmsi\b|gigabyte|\bxpg\b|montech|wraith/i;
 /** Ryzen con video integrado (5600G, 8500G…): con placa de video rinden menos que su par sin video. */
 const APU = /ryzen\s*[3579]\s*(pro\s*)?\d{4}g\b/i;

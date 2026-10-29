@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.17.1",
+    date: "2026-10-28",
+    title: "Armador de PC: solo distribuidores activos y calidad en todos los usos",
+    changes: [
+      { kind: "fixed", text: "El armador muestra los mismos distribuidores que la búsqueda: ya no aparecen productos de distribuidores pausados, sin configurar o con la actualización caída." },
+      { kind: "improved", text: "Armado automático: fuente, gabinete y cooler de marca y fuente 80 Plus Bronze o más también en las PCs de oficina; memorias y discos de marca reconocida en todos los perfiles." },
+    ],
+  },
+  {
     version: "2.17.0",
     date: "2026-10-28",
     title: "Armador de PC: el armado automático arma PCs parejas y de calidad",

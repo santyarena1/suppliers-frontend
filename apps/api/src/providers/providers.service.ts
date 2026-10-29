@@ -1534,10 +1534,11 @@ export class ProvidersService implements OnModuleInit {
    */
   async pcBuilderParts(tenantId: string, step: PcStep, viewerUserId?: string) {
     const parts = await this.platformContent.pcParts(step);
+    // Los mismos distribuidores que la búsqueda: sin los pausados por la plataforma, sin configurar o con
+    // la sincronización caída (precios viejos que fallan al comprar), ni los que el comercio sacó de la búsqueda.
+    const inSearch = new Set((await this.visibility.listFor(tenantId, viewerUserId)).filter((v) => v.inSearch).map((v) => v.provider as string));
     const readable = new Map<string, boolean>();
-    for (const p of new Set(parts.flatMap((x) => x.links.map((l) => l.provider)))) {
-      readable.set(p, await this.visibility.canReadCatalog(tenantId, p as Provider, viewerUserId));
-    }
+    for (const p of new Set(parts.flatMap((x) => x.links.map((l) => l.provider)))) readable.set(p, inSearch.has(p));
     const wanted = parts.flatMap((x) => x.links.filter((l) => readable.get(l.provider)));
     const offers: Prisma.TenantProductOfferGetPayload<{ include: { product: true } }>[] = [];
     for (let i = 0; i < wanted.length; i += 500) {
