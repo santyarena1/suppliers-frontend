@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.20.1",
+    date: "2026-10-29",
+    title: "Demo nueva en la página de NODO",
+    changes: [
+      { kind: "improved", text: "El video de la página de inicio ahora muestra todo el recorrido, más pausado: buscar, comparar, el carrito, el armador de PC y cómo vender tu stock a otros comercios en NODO." },
+    ],
+  },
+  {
     version: "2.20.0",
     date: "2026-10-29",
     title: "Agregar proveedor: todo en un lugar",

@@ -22,7 +22,7 @@ export function Hero() {
               Probar 14 días gratis <ArrowRight className="h-4 w-4" aria-hidden />
             </a>
             <a href="#como-funciona" className="nl-btn nl-btn--ghost">
-              <Play className="h-4 w-4" aria-hidden /> Ver la demo · 1:30
+              <Play className="h-4 w-4" aria-hidden /> Ver la demo · 2:22
             </a>
             <a href="#planes" className="nl-btn nl-btn--ghost">
               Ver planes
