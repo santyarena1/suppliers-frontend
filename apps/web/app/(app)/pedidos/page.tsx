@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import DistributorOrders from "@/components/org/DistributorOrders";
-import { chatApi, ordersApi, type ApprovalQuote, type TenantOrder } from "@/lib/api";
+import { chatApi, ordersApi, type ApprovalQuote, type TenantOrder, type TrackingStage } from "@/lib/api";
 import { ApprovalQuotePanel } from "@/components/orders/ApprovalQuotePanel";
 import { getTenant } from "@/lib/auth";
 import { providerOrdersHref } from "@/lib/providerOrders";
@@ -13,6 +13,8 @@ import { buildSellerMessageFromOrder } from "@/lib/seller-message";
 import { formatUSD } from "@/lib/format";
 import { usePurchasePolicy } from "@/lib/purchase";
 import StorefrontPurchaseStatus from "@/components/storefront/StorefrontPurchaseStatus";
+import OrderTimeline, { STAGE_LABEL, currentStage } from "@/components/orders/OrderTimeline";
+import { ORDER_TRACKING_EVENT } from "@/components/orders/OrderTrackingWatcher";
 import {
   applySchemeToLine,
   lineAmounts,
@@ -31,13 +33,16 @@ import {
   Loader2,
   MessageSquare,
   Pencil,
+  RefreshCw,
+  BellRing,
+  Truck,
   StickyNote,
   Trash2,
   X,
   XCircle,
 } from "lucide-react";
 
-type FilterKey = "all" | "pending" | "offline" | "done" | "rejected";
+type FilterKey = "all" | "pending" | "offline" | "done" | "active" | "delivered" | "rejected";
 
 /**
  * Pedidos de la organización. Un vendedor arma el pedido y lo deja firmado acá;
@@ -69,6 +74,54 @@ function RetailerPedidosPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // Un pedido avanzó en el portal (lo detectó OrderTrackingWatcher): se recarga la lista.
+  useEffect(() => {
+    const on = () => { void load(); };
+    window.addEventListener(ORDER_TRACKING_EVENT, on);
+    return () => window.removeEventListener(ORDER_TRACKING_EVENT, on);
+  }, [load]);
+
+  // Desde un aviso: /pedidos?pedido=<id> lleva a ese pedido.
+  useEffect(() => {
+    if (loading) return;
+    const id = new URLSearchParams(window.location.search).get("pedido");
+    if (id) document.getElementById(`pedido-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [loading]);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [notifPerm, setNotifPerm] = useState<NotificationPermission | "unsupported">("unsupported");
+  useEffect(() => {
+    setNotifPerm(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
+  }, []);
+
+  async function refreshTracking() {
+    setRefreshing(true);
+    setAviso(null);
+    try {
+      const { data } = await ordersApi.refreshTracking();
+      await load();
+      setAviso({
+        ok: true,
+        text: data.skipped
+          ? "Recién se revisaron: en un minuto podés volver a pedirlo."
+          : data.changed > 0
+            ? `${data.changed} pedido${data.changed === 1 ? " avanzó" : "s avanzaron"}`
+            : data.checked > 0
+              ? "Revisamos los portales: no hay cambios todavía."
+              : "No hay pedidos abiertos para revisar.",
+      });
+    } catch {
+      setAviso({ ok: false, text: "No se pudieron revisar los portales. Probá de nuevo en un rato." });
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function askNotifications() {
+    if (typeof Notification === "undefined") return;
+    setNotifPerm(await Notification.requestPermission());
+  }
 
   useEffect(() => {
     if (!aviso) return;
@@ -124,21 +177,35 @@ function RetailerPedidosPage() {
     [orders],
   );
 
+  const online = useMemo(
+    () => orders.filter((o) => o.status === "CREATED" && !isOffline(o) && !o.storefrontStatus && o.approvalStatus !== "REJECTED"),
+    [orders],
+  );
+  const enCurso = useMemo(
+    () => online.filter((o) => !["DELIVERED", "CANCELLED"].includes(currentStage(o.tracking))),
+    [online],
+  );
+  const entregados = useMemo(() => online.filter((o) => currentStage(o.tracking) === "DELIVERED"), [online]);
+
   const filtered = useMemo(() => {
     switch (filter) {
       case "pending": return esperando;
       case "offline": return offline;
       case "rejected": return rechazados;
       case "done": return confirmados;
+      case "active": return enCurso;
+      case "delivered": return entregados;
       default: return orders;
     }
-  }, [filter, orders, esperando, offline, rechazados, confirmados]);
+  }, [filter, orders, esperando, offline, rechazados, confirmados, enCurso, entregados]);
 
   const filters: { key: FilterKey; label: string; count: number }[] = [
     { key: "all", label: "Todos", count: orders.length },
     { key: "pending", label: "Esperando", count: esperando.length },
+    { key: "active", label: "En curso", count: enCurso.length },
+    { key: "delivered", label: "Entregados", count: entregados.length },
     { key: "offline", label: "Offline", count: offline.length },
-    { key: "done", label: "Confirmados", count: confirmados.length },
+    { key: "done", label: "Enviados", count: confirmados.length },
     { key: "rejected", label: "Rechazados", count: rechazados.length },
   ];
 
@@ -152,7 +219,29 @@ function RetailerPedidosPage() {
             {canApprove ? " · podés aprobar lo que arman tus vendedores" : " · seguimiento de pedidos al proveedor"}
           </p>
         </div>
-        <PrefsPanel />
+        <div className="flex items-center gap-2">
+          {notifPerm === "default" && (
+            <button
+              type="button"
+              onClick={askNotifications}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-surface-700 px-2.5 py-1.5 text-xs text-surface-200 hover:border-surface-500 hover:text-white"
+              title="Te avisamos cuando un distribuidor confirma, factura o despacha un pedido, aunque estés en otra pestaña"
+            >
+              <BellRing className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Avisarme en el navegador</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={refreshTracking}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-surface-700 px-2.5 py-1.5 text-xs text-surface-200 hover:border-surface-500 hover:text-white disabled:opacity-60"
+            title="Mirar ahora el estado de los pedidos en los portales"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{refreshing ? "Revisando portales…" : "Actualizar estados"}</span>
+          </button>
+          <PrefsPanel />
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto">
@@ -198,18 +287,18 @@ function RetailerPedidosPage() {
                   active={filter === "pending"}
                 />
                 <StatTile
-                  label="Offline"
-                  value={offline.length}
-                  accent="muted"
-                  onClick={() => setFilter("offline")}
-                  active={filter === "offline"}
+                  label="En curso"
+                  value={enCurso.length}
+                  accent={enCurso.length > 0 ? "brand" : "muted"}
+                  onClick={() => setFilter("active")}
+                  active={filter === "active"}
                 />
                 <StatTile
-                  label="Confirmados"
-                  value={confirmados.length}
+                  label="Entregados"
+                  value={entregados.length}
                   accent="emerald"
-                  onClick={() => setFilter("done")}
-                  active={filter === "done"}
+                  onClick={() => setFilter("delivered")}
+                  active={filter === "delivered"}
                 />
                 <StatTile
                   label="Total"
@@ -356,12 +445,20 @@ function EmptyState({ filter, hasAny }: { filter: FilterKey; hasAny: boolean }) 
       title: "Nada esperando firma",
       sub: hasAny ? "No hay pedidos pendientes de aprobación." : "Cuando un vendedor deje un pedido firmado, lo ves acá.",
     },
+    active: {
+      title: "Nada en curso",
+      sub: "Los pedidos enviados a un distribuidor quedan acá hasta que se entregan.",
+    },
+    delivered: {
+      title: "Todavía no hay entregados",
+      sub: "Cuando el portal del distribuidor marca un pedido como entregado, pasa acá.",
+    },
     offline: {
       title: "Sin pedidos offline",
       sub: "Los pedidos armados para WhatsApp / vendedor aparecen en este filtro.",
     },
     done: {
-      title: "Sin confirmados aún",
+      title: "Sin enviados aún",
       sub: "Acá van los pedidos enviados al proveedor o ya aprobados offline.",
     },
     rejected: {
@@ -539,7 +636,8 @@ function OrderCard({
 
   return (
     <article
-      className={`rounded-2xl border bg-surface-900 overflow-hidden transition-colors ${
+      id={`pedido-${order.id}`}
+      className={`scroll-mt-4 rounded-2xl border bg-surface-900 overflow-hidden transition-colors ${
         esperando
           ? "border-amber-500/35 shadow-[inset_3px_0_0_0_rgb(245_158_11)]"
           : rechazado
@@ -597,7 +695,7 @@ function OrderCard({
               <span title={new Date(order.createdAt).toLocaleString("es-AR")}>{fecha(order.createdAt)}</span>
             </div>
           </div>
-          <Estado esperando={esperando} creado={creado} rechazado={rechazado} offline={offline} storefront={order.storefrontStatus} />
+          <Estado esperando={esperando} creado={creado} rechazado={rechazado} offline={offline} storefront={order.storefrontStatus} stage={creado && !offline && !order.storefrontStatus ? currentStage(order.tracking) : null} />
         </div>
 
         {/* Meta del pedido (como en carrito / checkout) */}
@@ -629,6 +727,10 @@ function OrderCard({
           <p className="text-xs text-red-300 leading-snug rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
             {order.errorMessage}
           </p>
+        )}
+
+        {creado && !offline && !order.storefrontStatus && !esperando && !rechazado && (
+          <OrderTimeline tracking={order.tracking} providerName={order.providerName} />
         )}
 
         {order.storefrontStatus && !esperando && !rechazado && (
@@ -1126,9 +1228,11 @@ function MetaChip({
 }
 
 function Estado({
-  esperando, creado, rechazado, offline, storefront,
+  esperando, creado, rechazado, offline, storefront, stage,
 }: {
   esperando: boolean; creado: boolean; rechazado: boolean; offline: boolean;
+  /** Etapa del seguimiento en el portal (pedidos online creados). */
+  stage?: TrackingStage | null;
   /** Pedido a la tienda de otro comercio: manda lo que respondió la tienda. */
   storefront?: TenantOrder["storefrontStatus"];
 }) {
@@ -1168,6 +1272,19 @@ function Estado({
     return (
       <span className={`${base} text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-500/20`}>
         <StickyNote className="w-3 h-3" /> Offline OK
+      </span>
+    );
+  }
+  if (creado && stage) {
+    const Icon = stage === "CANCELLED" ? XCircle : stage === "SHIPPED" ? Truck : CheckCircle2;
+    const tone = stage === "CANCELLED"
+      ? "text-red-300 bg-red-500/10 ring-red-500/20"
+      : stage === "SENT"
+        ? "text-sky-300 bg-sky-500/10 ring-sky-500/25"
+        : "text-emerald-300 bg-emerald-500/10 ring-emerald-500/20";
+    return (
+      <span className={`${base} ring-1 ${tone}`}>
+        <Icon className="w-3 h-3" /> {STAGE_LABEL[stage]}
       </span>
     );
   }

@@ -1143,6 +1143,34 @@ export interface TenantOrder {
   storefrontStatus?: StorefrontOrderStatus | null;
   storefrontNote?: string | null;
   storefrontRespondedAt?: string | null;
+  /** Seguimiento en el portal del distribuidor (NODO lo mira cada 15 min). */
+  tracking?: OrderTracking;
+}
+
+/** Etapas del seguimiento: Enviado → Confirmado → Facturado → Despachado → Entregado (o Anulado). */
+export type TrackingStage = "SENT" | "CONFIRMED" | "INVOICED" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+
+export interface OrderTracking {
+  /** El distribuidor publica el estado de sus pedidos y NODO sabe leerlo. */
+  supported: boolean;
+  stage: TrackingStage | null;
+  /** Estado tal como lo escribe el portal. */
+  status: string | null;
+  invoice: string | null;
+  trackingNumber: string | null;
+  carrier: string | null;
+  history: { stage: TrackingStage; at: string }[];
+  checkedAt: string | null;
+  changedAt: string | null;
+}
+
+export interface OrderTrackingUpdate {
+  id: string;
+  provider: string;
+  stage: TrackingStage;
+  at: string;
+  title: string;
+  body: string;
 }
 
 export type PurchaseChannel = "ONLINE" | "OFFLINE";
@@ -1314,6 +1342,9 @@ export interface PendingApprovals {
 export const ordersApi = {
   list: () => api.get<TenantOrder[]>("/orders"),
   pending: () => api.get<PendingApprovals>("/orders/pending-approval"),
+  trackingUpdates: (since?: string | null) =>
+    api.get<{ now: string; updates: OrderTrackingUpdate[] }>("/orders/tracking/updates", { params: since ? { since } : {} }),
+  refreshTracking: () => api.post<{ checked: number; changed: number; skipped?: boolean }>("/orders/tracking/refresh"),
   insights: (days = 90) => api.get<PurchaseInsights>("/orders/insights", { params: { days } }),
   unifyAlias: (body: { kind: OpsAliasKind; keys: string[]; label: string }) =>
     api.put<{ groupId: string; kind: OpsAliasKind; label: string; keys: string[] }>("/orders/insights/aliases", body),

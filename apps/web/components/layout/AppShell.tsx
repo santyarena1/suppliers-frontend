@@ -18,6 +18,7 @@ import SuspendedGate from "../subscription/SuspendedGate";
 import SellerRouteGate from "../sale-margins/SellerRouteGate";
 import AnnouncementGate from "../announcements/AnnouncementGate";
 import WhatsNewGate from "../changelog/WhatsNewGate";
+import OrderTrackingWatcher from "../orders/OrderTrackingWatcher";
 import { SellerPreviewBar } from "../sale-margins/SellerModeSettings";
 import { QuotesProvider } from "@/lib/quotes";
 import QuoteFloat from "../quotes/QuoteFloat";
@@ -65,6 +66,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <QuoteBuildingBar />
           <AnnouncementGate />
           <WhatsNewGate />
+          <OrderTrackingWatcher />
           <SellerPreviewBar />
         </QuotesProvider>
       </OnboardingGate>

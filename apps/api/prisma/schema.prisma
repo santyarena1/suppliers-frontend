@@ -1247,6 +1247,19 @@ model ProviderOrder {
   storefrontRespondedAt DateTime?
   storefrontNote        String?
 
+  /// Seguimiento en el portal del distribuidor (OrderTrackingService, cada 15 min):
+  /// SENT, CONFIRMED, INVOICED, SHIPPED, DELIVERED o CANCELLED. Solo avanza.
+  trackingStage     String?
+  /// Estado tal como lo escribe el portal ("En preparación", "REMITIDO Y FACTURADO").
+  trackingStatus    String?
+  trackingInvoice   String?
+  trackingNumber    String?
+  trackingCarrier   String?
+  /// [{ stage, at }]: cuándo NODO vio cada etapa por primera vez.
+  trackingHistory   Json?
+  trackingCheckedAt DateTime?
+  trackingChangedAt DateTime?
+
   @@index([userId, provider, createdAt])
   @@index([tenantId, provider, createdAt])
   @@index([status, cartReconciledAt])
@@ -1254,6 +1267,7 @@ model ProviderOrder {
   @@index([approvalStatus])
   @@index([tenantId, channel])
   @@index([provider, storefrontStatus])
+  @@index([trackingChangedAt])
 }
 
 enum OrderApprovalStatus {

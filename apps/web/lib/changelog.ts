@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.21.0",
+    date: "2026-10-29",
+    title: "Seguimiento de pedidos con avisos",
+    changes: [
+      { kind: "new", text: "Cada pedido muestra su recorrido: Enviado, Confirmado, Facturado, Despachado y Entregado. NODO lo mira en el portal de New Bytes, Elit, Invid, New Tree, Solution Box y Polytech cada 15 minutos, con la factura y el número de envío cuando el distribuidor los carga." },
+      { kind: "new", text: "Cuando un pedido avanza te aparece un aviso («Elit facturó tu pedido»), queda en Avisos y, si lo activás en Pedidos, también te avisa el navegador aunque estés en otra pestaña." },
+      { kind: "improved", text: "Pedidos tiene «Actualizar estados» para mirar los portales en el momento, y las tarjetas En curso y Entregados." },
+    ],
+  },
+  {
     version: "2.20.2",
     date: "2026-10-29",
     title: "Ir al producto en Diapstore y HDC",

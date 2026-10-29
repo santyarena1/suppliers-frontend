@@ -8,6 +8,7 @@ import { commercialId, type TenantContext } from "../tenants/tenant-context.serv
 import { TenantVisibilityService } from "../tenants/tenant-visibility.service";
 import { ChatService } from "../chat/chat.service";
 import { isOrderItemEditable } from "./offline-order";
+import { isTrackedProvider } from "../providers/order-tracking";
 
 /** Lo que devuelve el checkout cuando el pedido queda esperando una firma. */
 export interface HeldOrder {
@@ -222,6 +223,18 @@ export class OrderApprovalService {
       storefrontStatus: row.storefrontStatus ?? null,
       storefrontNote: row.storefrontNote ?? null,
       storefrontRespondedAt: row.storefrontRespondedAt?.toISOString() ?? null,
+      tracking: {
+        // El distribuidor publica el estado de sus pedidos y NODO lo sigue cada 15 min.
+        supported: isTrackedProvider(row.provider),
+        stage: row.trackingStage ?? null,
+        status: row.trackingStatus ?? null,
+        invoice: row.trackingInvoice ?? null,
+        trackingNumber: row.trackingNumber ?? null,
+        carrier: row.trackingCarrier ?? null,
+        history: Array.isArray(row.trackingHistory) ? row.trackingHistory : [],
+        checkedAt: row.trackingCheckedAt?.toISOString() ?? null,
+        changedAt: row.trackingChangedAt?.toISOString() ?? null,
+      },
       createdBy: row.createdBy?.username ?? null,
       approvedBy: row.approvedBy?.username ?? null,
       approvalDecidedAt: row.approvalDecidedAt?.toISOString() ?? null,

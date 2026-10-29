@@ -15,9 +15,11 @@ function isSubscriptionNotice(n: OrgNotice) {
   return n.landingKey?.startsWith("subscription:") ?? false;
 }
 
-/** Avisos de Vender en NODO: a dónde lleva cada uno. */
+/** Avisos de pedidos y de Vender en NODO: a dónde lleva cada uno. */
 function storefrontLink(n: OrgNotice): { href: string; label: string } | null {
   const key = n.landingKey ?? "";
+  // Seguimiento de un pedido al distribuidor (confirmado, facturado, despachado…).
+  if (key.startsWith("order:")) return { href: `/pedidos?pedido=${encodeURIComponent(key.slice(6))}`, label: "Ver el pedido" };
   if (key.startsWith("storefront-order:")) return { href: "/vender?tab=pedidos", label: "Ver pedidos de tu tienda" };
   if (key.startsWith("storefront-purchase:")) return { href: "/pedidos", label: "Ver en Pedidos" };
   if (key.startsWith("storefront-offer:")) return { href: "/configuracion#tiendas", label: "Elegir en Configuración" };

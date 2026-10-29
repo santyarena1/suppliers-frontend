@@ -41,6 +41,8 @@ import { ElitOrderService } from "./elit-order.service";
 import { OrderApprovalService } from "../orders/order-approval.service";
 import { AccountPortalCache } from "./account-portal-cache";
 import { PricingCoreModule } from "../pricing/pricing-core.module";
+import { OrderTrackingService } from "./order-tracking.service";
+import { OrderTrackingScheduler } from "./order-tracking.scheduler";
 
 @Module({
   imports: [CredentialsModule, TenantsModule, CatalogModule, ChatModule, PricingCoreModule, PlatformContentModule],
@@ -81,11 +83,14 @@ import { PricingCoreModule } from "../pricing/pricing-core.module";
     DistecnaOrderService,
     PolytechOrderService,
     OrderApprovalService,
+    OrderTrackingService,
+    OrderTrackingScheduler,
   ],
   exports: [
     ProvidersService,
     ProviderRegistry,
     OrderApprovalService,
+    OrderTrackingService,
     InvidOrderService,
     NewBytesOrderService,
     GrupoNucleoOrderService,

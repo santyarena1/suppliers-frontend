@@ -11,6 +11,7 @@ import { RejectOrderDto } from "./dto/reject-order.dto";
 import { OrderApprovalService } from "./order-approval.service";
 import { CostSensitive } from "../pricing/cost-visibility";
 import { OrdersService } from "./orders.service";
+import { OrderTrackingService } from "../providers/order-tracking.service";
 
 /** Pedidos de la organización, con la aprobación interna del comercio. */
 @UseGuards(AuthGuard("jwt"), TenantGuard)
@@ -20,12 +21,31 @@ import { OrdersService } from "./orders.service";
 export class OrdersController {
   constructor(
     private readonly orders: OrdersService,
-    private readonly approval: OrderApprovalService
+    private readonly approval: OrderApprovalService,
+    private readonly tracking: OrderTrackingService
   ) {}
 
   @Get()
   list(@CurrentTenant() tenant: TenantContext) {
     return this.orders.list(tenant);
+  }
+
+  /** Etapas que avanzaron desde `since` (la web lo muestra como cartel y aviso del navegador). */
+  @Get("tracking/updates")
+  async trackingUpdates(@CurrentTenant() tenant: TenantContext, @Query("since") since?: string) {
+    const now = new Date();
+    const parsed = since ? new Date(since) : null;
+    // Sin `since` (o muy viejo) solo se fija el punto de partida: no se repiten avisos viejos.
+    if (!parsed || Number.isNaN(parsed.getTime()) || now.getTime() - parsed.getTime() > 86_400_000) {
+      return { now: now.toISOString(), updates: [] };
+    }
+    return { now: now.toISOString(), updates: await this.tracking.updatesSince(tenant.tenantId, parsed) };
+  }
+
+  /** «Actualizar estados»: entra ya a los portales (una vez por minuto). */
+  @Post("tracking/refresh")
+  refreshTracking(@CurrentTenant() tenant: TenantContext) {
+    return this.tracking.refreshTenant(tenant.tenantId);
   }
 
   @Get("pending-approval")

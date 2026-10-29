@@ -1,0 +1,298 @@
+import { Injectable, Logger } from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
+import { type Provider, providerLabel } from "@nodo/shared";
+import { PrismaService } from "../prisma/prisma.service";
+import { CredentialsService } from "../credentials/credentials.service";
+import { NewBytesAccountService } from "./new-bytes-account.service";
+import { InvidAccountService } from "./invid-account.service";
+import { NewTreeAccountService } from "./new-tree-account.service";
+import { SolutionBoxAccountService } from "./solution-box-account.service";
+import { ElitWebClient } from "./elit-web-client";
+import { parseElitSaleNotesPayload } from "./elit-rsc.parser";
+import { PolytechClient } from "./polytech-client";
+import {
+  TRACKED_PROVIDERS,
+  advances,
+  bestUpdate,
+  trackingNotice,
+  type PortalOrderStatus,
+  type TrackingStage,
+  type TrackingUpdate,
+} from "./order-tracking";
+
+/** Se siguen los pedidos de los últimos 45 días que todavía no se entregaron ni se anularon. */
+const TRACK_DAYS = 45;
+/** «Actualizar estados» desde Pedidos: una vez por minuto por comercio. */
+const MANUAL_EVERY_MS = 60_000;
+
+type OpenOrder = {
+  id: string;
+  tenantId: string;
+  provider: string;
+  invidOrderNumber: string | null;
+  invidWebOrderNumber: string | null;
+  trackingStage: string | null;
+  trackingStatus: string | null;
+  trackingInvoice: string | null;
+  trackingNumber: string | null;
+  trackingCarrier: string | null;
+  trackingHistory: Prisma.JsonValue;
+};
+
+const POLYTECH_STAGE: Record<string, TrackingStage> = { pending: "SENT", in_process: "CONFIRMED", shipped: "SHIPPED" };
+
+function yyyymmdd(d: Date): string {
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function msg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Un código suelto ("1", "2") no es un estado que se pueda mostrar. */
+function statusText(v: unknown): string | null {
+  const s = v == null ? "" : String(v).trim();
+  return s && !/^\d+$/.test(s) ? s : null;
+}
+
+/**
+ * Seguimiento de los pedidos que NODO mandó a cada distribuidor: lee el listado de
+ * pedidos de su portal con la cuenta del comercio, cruza por número y, si la etapa
+ * avanzó (confirmado, facturado, despachado, entregado o anulado), la guarda y deja
+ * un aviso en «Avisos». La web lo muestra en Pedidos y avisa con un cartel.
+ */
+@Injectable()
+export class OrderTrackingService {
+  private readonly logger = new Logger(OrderTrackingService.name);
+  private readonly manualAt = new Map<string, number>();
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly credentials: CredentialsService,
+    private readonly newBytes: NewBytesAccountService,
+    private readonly invid: InvidAccountService,
+    private readonly newTree: NewTreeAccountService,
+    private readonly solutionBox: SolutionBoxAccountService
+  ) {}
+
+  /** Todos los comercios (lo llama el scheduler). */
+  async refreshAll(): Promise<{ checked: number; changed: number }> {
+    return this.refresh({});
+  }
+
+  /**
+   * Un comercio, desde «Actualizar estados». Si se pidió hace menos de un minuto no
+   * vuelve a entrar a los portales.
+   */
+  async refreshTenant(tenantId: string): Promise<{ checked: number; changed: number; skipped?: boolean }> {
+    const last = this.manualAt.get(tenantId) ?? 0;
+    if (Date.now() - last < MANUAL_EVERY_MS) return { checked: 0, changed: 0, skipped: true };
+    this.manualAt.set(tenantId, Date.now());
+    return this.refresh({ tenantId });
+  }
+
+  private async refresh(where: { tenantId?: string }): Promise<{ checked: number; changed: number }> {
+    const orders = await this.prisma.providerOrder.findMany({
+      where: {
+        ...where,
+        provider: { in: [...TRACKED_PROVIDERS] },
+        status: "CREATED",
+        createdAt: { gte: new Date(Date.now() - TRACK_DAYS * 86_400_000) },
+        OR: [{ trackingStage: null }, { trackingStage: { notIn: ["DELIVERED", "CANCELLED"] } }],
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        provider: true,
+        invidOrderNumber: true,
+        invidWebOrderNumber: true,
+        trackingStage: true,
+        trackingStatus: true,
+        trackingInvoice: true,
+        trackingNumber: true,
+        trackingCarrier: true,
+        trackingHistory: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 2000,
+    });
+    const groups = new Map<string, OpenOrder[]>();
+    for (const o of orders) {
+      const key = `${o.tenantId}|${o.provider}`;
+      groups.set(key, [...(groups.get(key) ?? []), o]);
+    }
+    let checked = 0;
+    let changed = 0;
+    // De a un portal por vez: son cuentas reales de los comercios.
+    for (const [key, list] of groups) {
+      const [tenantId, provider] = key.split("|");
+      try {
+        const rows = await this.portalRows(tenantId, provider as Provider, list);
+        if (rows == null) continue;
+        for (const order of list) {
+          checked += 1;
+          if (await this.apply(order, bestUpdate(order, rows))) changed += 1;
+        }
+      } catch (err) {
+        this.logger.warn(`Seguimiento ${provider} de ${tenantId}: ${msg(err)}`);
+      }
+    }
+    return { checked, changed };
+  }
+
+  /** Las credenciales viven en el comercio real (una organización espejo usa las de ese). */
+  private async credentialsFor(tenantId: string, provider: Provider): Promise<Record<string, string> | null> {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { mirrorsCommercialFromId: true } });
+    const stored = await this.credentials.findByProvider(tenant?.mirrorsCommercialFromId ?? tenantId, provider);
+    return stored ? (JSON.parse(stored.credentialsJson) as Record<string, string>) : null;
+  }
+
+  /** El listado de pedidos del portal, llevado a filas comunes. `null`: sin cuenta cargada. */
+  private async portalRows(tenantId: string, provider: Provider, orders: OpenOrder[]): Promise<PortalOrderStatus[] | null> {
+    const creds = await this.credentialsFor(tenantId, provider);
+    if (!creds) return null;
+    switch (provider) {
+      case "NEW_BYTES":
+        return this.newBytesRows(creds, orders);
+      case "ELIT": {
+        const api = await ElitWebClient.login(creds);
+        const body = await api.proxyGet("/account/salenotes?limit=50&sortBy=number:desc");
+        return parseElitSaleNotesPayload(body).map((n) => ({
+          numbers: [n.internalNumber, n.orderNumber],
+          status: n.status,
+          // El remito sale cuando lo despachan.
+          hints: [n.statusDescription, n.trackingStatus, n.dispatchNote ? "remitido" : null],
+          invoice: n.invoiceNumber,
+          trackingNumber: n.tracking,
+          carrier: n.trackingSupplier,
+        }));
+      }
+      case "INVID": {
+        const { orders: rows } = await this.invid.getOrders(creds);
+        return rows.map((o) => ({ numbers: [o.webOrderNumber, o.orderNumber], status: o.status, invoice: o.invoice }));
+      }
+      case "NEW_TREE": {
+        const from = new Date(Date.now() - (TRACK_DAYS + 5) * 86_400_000);
+        const account = await this.newTree.getAccount(tenantId, creds, { from: yyyymmdd(from) });
+        return account.orders.map((o) => ({ numbers: [o.id], status: o.status }));
+      }
+      case "SOLUTION_BOX": {
+        const account = await this.solutionBox.getAccount(tenantId, creds);
+        return account.orders.map((o) => ({
+          numbers: [o.number, `${o.number}/${o.extension}`],
+          status: o.status,
+          invoice: o.invoice,
+        }));
+      }
+      case "POLYTECH": {
+        const api = await PolytechClient.fromCredentials(creds);
+        const rows = await api.orderHistory();
+        return rows.map((o) => ({ numbers: [o.id], stage: POLYTECH_STAGE[o.bucket] ?? "SENT" }));
+      }
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * New Bytes: órdenes de compra (las que crea el checkout) y pedidos. De las
+   * órdenes de NODO que siguen abiertas se lee además su seguimiento («En preparación»…).
+   */
+  private async newBytesRows(creds: Record<string, string>, orders: OpenOrder[]): Promise<PortalOrderStatus[]> {
+    const [purchase, pedidos] = await Promise.all([
+      this.newBytes.getPurchaseOrders(creds),
+      this.newBytes.getOrders(creds).catch(() => ({ orders: [] })),
+    ]);
+    const rows: PortalOrderStatus[] = [...purchase.orders, ...pedidos.orders].map((r) => ({
+      numbers: [r.orderNumber, r.webOrderNumber, r.albNumber],
+      status: statusText(r.statusDescription) ?? statusText(r.status),
+      invoice: r.invoice,
+      trackingNumber: r.trackingNumber,
+    }));
+    for (const order of orders) {
+      const head = purchase.orders.find((r) => r.orderNumber && r.orderNumber === order.invidOrderNumber);
+      if (!head?.orderNumber || head.branch == null) continue;
+      const detail = await this.newBytes
+        .getOrderDetail(creds, head.orderNumber, "purchase", String(head.branch))
+        .catch(() => null);
+      const steps = detail && "tracking" in detail ? (detail.tracking ?? []) : [];
+      if (steps.length) {
+        rows.push({ numbers: [head.orderNumber], status: statusText(steps[steps.length - 1]?.state), hints: steps.map((s) => s.state) });
+      }
+    }
+    return rows;
+  }
+
+  /** Guarda lo nuevo. Devuelve true si la etapa avanzó (y dejó el aviso). */
+  private async apply(order: OpenOrder, update: TrackingUpdate | null): Promise<boolean> {
+    const now = new Date();
+    if (!update) {
+      await this.prisma.providerOrder.update({ where: { id: order.id }, data: { trackingCheckedAt: now } });
+      return false;
+    }
+    const moved = advances(order.trackingStage, update.stage);
+    const history = Array.isArray(order.trackingHistory) ? (order.trackingHistory as Prisma.JsonArray) : [];
+    await this.prisma.providerOrder.update({
+      where: { id: order.id },
+      data: {
+        trackingCheckedAt: now,
+        trackingStatus: update.status ?? order.trackingStatus,
+        trackingInvoice: update.invoice ?? order.trackingInvoice,
+        trackingNumber: update.trackingNumber ?? order.trackingNumber,
+        trackingCarrier: update.carrier ?? order.trackingCarrier,
+        ...(moved
+          ? {
+              trackingStage: update.stage,
+              trackingChangedAt: now,
+              trackingHistory: [...history, { stage: update.stage, at: now.toISOString() }],
+            }
+          : order.trackingStage == null
+            ? { trackingStage: "SENT" }
+            : {}),
+      },
+    });
+    if (!moved) return false;
+    const notice = trackingNotice(
+      providerLabel(order.provider as Provider) ?? order.provider,
+      order.invidWebOrderNumber || order.invidOrderNumber,
+      { ...update, invoice: update.invoice ?? order.trackingInvoice, trackingNumber: update.trackingNumber ?? order.trackingNumber }
+    );
+    await this.prisma.orgNotification.create({
+      data: { toTenantId: order.tenantId, kind: "SYSTEM", title: notice.title, body: notice.body, landingKey: `order:${order.id}` },
+    });
+    this.logger.log(`Seguimiento: ${notice.title} (${order.id} → ${update.stage})`);
+    return true;
+  }
+
+  /** Lo que cambió desde `since` en los pedidos del comercio: la web lo muestra como cartel. */
+  async updatesSince(tenantId: string, since: Date) {
+    const rows = await this.prisma.providerOrder.findMany({
+      where: { tenantId, trackingChangedAt: { gt: since } },
+      select: {
+        id: true,
+        provider: true,
+        invidOrderNumber: true,
+        invidWebOrderNumber: true,
+        trackingStage: true,
+        trackingStatus: true,
+        trackingInvoice: true,
+        trackingNumber: true,
+        trackingCarrier: true,
+        trackingChangedAt: true,
+      },
+      orderBy: { trackingChangedAt: "asc" },
+      take: 20,
+    });
+    return rows.map((r) => {
+      const stage = (r.trackingStage ?? "SENT") as TrackingStage;
+      const notice = trackingNotice(providerLabel(r.provider as Provider) ?? r.provider, r.invidWebOrderNumber || r.invidOrderNumber, {
+        stage,
+        status: r.trackingStatus,
+        invoice: r.trackingInvoice,
+        trackingNumber: r.trackingNumber,
+        carrier: r.trackingCarrier,
+      });
+      return { id: r.id, provider: r.provider, stage, at: r.trackingChangedAt!.toISOString(), ...notice };
+    });
+  }
+}
