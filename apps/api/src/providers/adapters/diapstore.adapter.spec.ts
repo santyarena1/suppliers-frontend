@@ -24,6 +24,7 @@ describe("mapDiapstoreProduct", () => {
     expect(p.price).toBeUndefined();
     expect(p.currency).toBeUndefined();
     expect(p.imageUrl).toMatch(/AIS16GD556\.png$/);
+    expect(p.productUrl).toBe("https://diapstore.com/productos/12bed98a-81e7-4f24-b4b3-361e4d18dcbb");
   });
 
   it("copia unit_price solo si es número", () => {

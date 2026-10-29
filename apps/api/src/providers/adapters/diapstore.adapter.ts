@@ -9,6 +9,8 @@ import type { NormalizedProduct, ProviderAdapter } from "../types";
 const API = "https://api.cumar.com.ar";
 const DEFAULT_ACCOUNT_ID = "bed2df35-717f-4900-a4b1-7c3a7fb59b7c";
 const PAGE_SIZE = 50;
+/** La tienda abre la ficha con el id de la API: diapstore.com/productos/<id>. */
+const SITE = "https://diapstore.com";
 
 export interface DiapstoreProduct {
   id: string;
@@ -55,6 +57,7 @@ export function mapDiapstoreProduct(p: DiapstoreProduct): NormalizedProduct {
     ivaPercent: tax,
     stock,
     imageUrl: p.image_url || p.thumbnail_url || undefined,
+    productUrl: p.id ? `${SITE}/productos/${encodeURIComponent(p.id)}` : undefined,
     raw: p,
   };
 }

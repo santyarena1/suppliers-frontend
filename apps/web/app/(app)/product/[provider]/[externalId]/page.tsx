@@ -15,7 +15,7 @@ import { ProductRichDescription, ProductSpecsTable } from "@/components/product/
 import ProviderBadge, { providerLabel } from "@/components/ProviderBadge";
 import ProductProviderLinks from "@/components/ProductProviderLinks";
 import StorefrontProductInfo, { useStorefrontItem } from "@/components/storefront/StorefrontProductInfo";
-import { safeHttpUrl } from "@/lib/providerLinks";
+import { providerProductLink, safeHttpUrl } from "@/lib/providerLinks";
 import ProductSyncedAt from "@/components/ProductSyncedAt";
 import AiImageDisclaimer from "@/components/AiImageDisclaimer";
 import {
@@ -368,7 +368,7 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
                     </span>
                   )}
                   {/* Ir al proveedor: no para el vendedor en modo vendedor (el portal es la compra, con costos). */}
-                  {!sellerSession.isSeller && <ProductProviderLinks provider={providerName} productUrl={product.productUrl} />}
+                  {!sellerSession.isSeller && <ProductProviderLinks provider={providerName} productUrl={product.productUrl} externalId={product.externalId} partNumber={product.partNumber} productName={product.name} />}
                 </div>
               </div>
               {!sellerSession.isSeller && storefrontItem && (
@@ -1036,7 +1036,8 @@ function productFacts(
   if (present(product.volume)) push("Volumen", String(product.volume));
   push("Tags", product.tags);
 
-  const fichaUrl = safeHttpUrl(product.productUrl);
+  const ficha = providerProductLink(product.provider, product);
+  const fichaUrl = ficha?.exact ? ficha.url : null;
   if (fichaUrl) {
     push("Ficha del proveedor", "Abrir enlace", { href: fichaUrl });
   }

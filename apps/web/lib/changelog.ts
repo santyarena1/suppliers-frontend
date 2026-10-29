@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.20.2",
+    date: "2026-10-29",
+    title: "Ir al producto en Diapstore y HDC",
+    changes: [
+      { kind: "improved", text: "En la ficha de un producto de Diapstore, «Ver el producto en Diapstore» abre ese producto en su tienda." },
+      { kind: "improved", text: "En los productos de HDC, «Buscarlo en HDC» abre el buscador de hdcsa.com.ar con el código del producto." },
+    ],
+  },
+  {
     version: "2.20.1",
     date: "2026-10-29",
     title: "Demo nueva en la página de NODO",
