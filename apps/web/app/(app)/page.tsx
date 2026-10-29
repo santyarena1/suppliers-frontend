@@ -70,7 +70,8 @@ function RetailerHome() {
   const { providers: allProviders, loading: loadingProviders } = useMyProviders();
   // Solo los vinculados de verdad; "configurado" = ya tiene precios del comercio.
   // Las tiendas de otros comercios (Vender en NODO) se ven en el buscador, no acá.
-  const myProviders = useMemo(() => allProviders.filter((p) => p.linked && !p.storefront), [allProviders]);
+  // Los pausados (sync caída) o que la plataforma ocultó no se muestran: no se puede buscar ni comprar ahí.
+  const myProviders = useMemo(() => allProviders.filter((p) => p.linked && !p.storefront && !p.syncPaused && !p.platformHidden), [allProviders]);
   const readyProviders = useMemo(() => myProviders.filter((p) => p.configured !== false), [myProviders]);
 
   useEffect(() => {
