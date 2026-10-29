@@ -23,7 +23,7 @@ const YOUR_WEB = 299_999;
  * el de tu propia tienda web, contra tu costo final. Es la referencia que NODO
  * muestra en cada producto (botón de precios de venta y "Tu web" en la card).
  */
-export function MarginDemo() {
+export function MarginDemo({ embedded = false }: { embedded?: boolean } = {}) {
   const { ref, inView } = useInView<HTMLDivElement>(0.35);
   const costUsd = withIva(PRODUCT.net, PRODUCT.iva) + (PRODUCT.net * PERCEPTION) / 100;
   const cost = Math.round(costUsd * DEMO_ARS_PER_USD);
@@ -35,31 +35,7 @@ export function MarginDemo() {
   const pos = (v: number) => `${((v - lo) / (hi - lo)) * 100}%`;
   const median = [...prices].sort((a, b) => a - b)[Math.floor(prices.length / 2)];
 
-  return (
-    <section className="nl-section nl-divider">
-      <div className="nl-shell grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
-        <Reveal>
-          <h2 className="nl-h2">Sabés cuánto ganás antes de comprar</h2>
-          <p className="nl-lead mt-5">
-            En cada producto ves a cuánto lo venden los locales de computación y, si cargaste tu tienda web, a cuánto lo
-            tenés publicado vos. NODO te muestra el margen contra tu costo final, con impuestos incluidos.
-          </p>
-          <ul className="mt-8 flex flex-col gap-3 text-[0.975rem] text-[var(--fg)]">
-            <li className="flex gap-3">
-              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--accent-2)]" aria-hidden />
-              Precios de venta de locales de consumidor final, para saber a cuánto se vende afuera.
-            </li>
-            <li className="flex gap-3">
-              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--accent-2)]" aria-hidden />
-              Tu precio publicado al lado de tu costo, en la búsqueda y en la ficha del producto.
-            </li>
-            <li className="flex gap-3">
-              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--accent-2)]" aria-hidden />
-              Tu tienda se elige una vez, en Configuración.
-            </li>
-          </ul>
-        </Reveal>
-
+  const panel = (
         <Reveal delay={100}>
           <div ref={ref} className="nl-surface p-5 sm:p-7">
             <div className="flex items-center gap-4">
@@ -140,6 +116,35 @@ export function MarginDemo() {
             </p>
           </div>
         </Reveal>
+  );
+  if (embedded) return panel;
+
+  return (
+    <section className="nl-section nl-divider">
+      <div className="nl-shell grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
+        <Reveal>
+          <h2 className="nl-h2">Sabés cuánto ganás antes de comprar</h2>
+          <p className="nl-lead mt-5">
+            En cada producto ves a cuánto lo venden los locales de computación y, si cargaste tu tienda web, a cuánto lo
+            tenés publicado vos. NODO te muestra el margen contra tu costo final, con impuestos incluidos.
+          </p>
+          <ul className="mt-8 flex flex-col gap-3 text-[0.975rem] text-[var(--fg)]">
+            <li className="flex gap-3">
+              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--accent-2)]" aria-hidden />
+              Precios de venta de locales de consumidor final, para saber a cuánto se vende afuera.
+            </li>
+            <li className="flex gap-3">
+              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--accent-2)]" aria-hidden />
+              Tu precio publicado al lado de tu costo, en la búsqueda y en la ficha del producto.
+            </li>
+            <li className="flex gap-3">
+              <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[var(--accent-2)]" aria-hidden />
+              Tu tienda se elige una vez, en Configuración.
+            </li>
+          </ul>
+        </Reveal>
+
+        {panel}
       </div>
     </section>
   );

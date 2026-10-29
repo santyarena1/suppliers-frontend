@@ -12,7 +12,7 @@ const SHIP_UNITS = 8;
  * Cómo se arma el precio que realmente pagás de UNA oferta: neto de lista, IVA
  * del producto, percepciones y el envío aproximado. No compara distribuidores.
  */
-export function CostDemo() {
+export function CostDemo({ embedded = false }: { embedded?: boolean } = {}) {
   const reduced = usePrefersReducedMotion();
   const { ref, inView } = useInView<HTMLDivElement>(0.45);
   const [step, setStep] = useState(4);
@@ -42,18 +42,7 @@ export function CostDemo() {
     },
   ];
 
-  return (
-    <section className="nl-section nl-divider">
-      <div className="nl-shell grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
-        <Reveal>
-          <h2 className="nl-h2">El precio que ves es el que vas a pagar</h2>
-          <p className="nl-lead mt-5">
-            Cada producto muestra el precio de lista, el IVA que le corresponde y las percepciones que te aplica ese
-            distribuidor según tu condición. Y el envío aproximado, según cómo te llega lo de ese distribuidor, repartido
-            entre lo que llevás. Sin sumar a mano.
-          </p>
-        </Reveal>
-
+  const panel = (
         <Reveal delay={100}>
           <div ref={ref} className="nl-surface p-6 sm:p-8">
             <div className="flex items-center gap-4">
@@ -105,6 +94,22 @@ export function CostDemo() {
             </p>
           </div>
         </Reveal>
+  );
+  if (embedded) return panel;
+
+  return (
+    <section className="nl-section nl-divider">
+      <div className="nl-shell grid items-center gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
+        <Reveal>
+          <h2 className="nl-h2">El precio que ves es el que vas a pagar</h2>
+          <p className="nl-lead mt-5">
+            Cada producto muestra el precio de lista, el IVA que le corresponde y las percepciones que te aplica ese
+            distribuidor según tu condición. Y el envío aproximado, según cómo te llega lo de ese distribuidor, repartido
+            entre lo que llevás. Sin sumar a mano.
+          </p>
+        </Reveal>
+
+        {panel}
       </div>
     </section>
   );

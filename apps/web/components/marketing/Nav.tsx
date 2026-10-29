@@ -4,7 +4,8 @@ import NodoWordmark from "@/components/NodoWordmark";
 
 const LINKS = [
   { href: "/#como-funciona", label: "Cómo funciona" },
-  { href: "/#ahorro", label: "Cuánto ahorrás" },
+  { href: "/#armador", label: "Armador de PC" },
+  { href: "/#funciones", label: "Funciones" },
   { href: "/#planes", label: "Planes" },
   { href: "/#preguntas", label: "Preguntas" },
 ];

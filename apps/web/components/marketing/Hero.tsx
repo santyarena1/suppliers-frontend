@@ -15,14 +15,14 @@ export function Hero() {
           </h1>
           <p className="nl-lead mt-6">
             Buscás una vez y ves quién lo tiene, con stock y precio final con impuestos. Armás un carrito y cada pedido
-            llega a su distribuidor.
+            llega a su distribuidor. Y armás la PC de tu cliente con el presupuesto en PDF, en un minuto.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
             <a href="#probar" className="nl-btn nl-btn--primary">
               Probar 14 días gratis <ArrowRight className="h-4 w-4" aria-hidden />
             </a>
             <a href="#como-funciona" className="nl-btn nl-btn--ghost">
-              <Play className="h-4 w-4" aria-hidden /> Ver la demo · 2 min
+              <Play className="h-4 w-4" aria-hidden /> Ver la demo · 1:30
             </a>
             <a href="#planes" className="nl-btn nl-btn--ghost">
               Ver planes

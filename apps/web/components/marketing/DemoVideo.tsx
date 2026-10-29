@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { Reveal, useInView, usePrefersReducedMotion } from "./Reveal";
 
 /**
- * La demo en video (2 min, sin sonido: los textos van en la imagen). No baja
+ * La demo en video (1:30, con música; arranca sin sonido y los textos van en la imagen). No baja
  * nada hasta acercarse; arranca sola al entrar en pantalla y se pausa al salir.
  * Con movimiento reducido no arranca sola.
  */
@@ -26,8 +26,9 @@ export function DemoVideo() {
         <Reveal>
           <h2 className="nl-h2 max-w-3xl">Hoy, cotizar un producto es abrir cinco pestañas</h2>
           <p className="nl-lead mt-5">
-            Portales, listas, WhatsApp y la calculadora para saber un precio final. Mirá en dos minutos cómo es lo mismo
-            con NODO: buscás, comparás, armás el carrito y el pedido llega a cada distribuidor.
+            Portales, listas, WhatsApp y la calculadora para saber un precio final. Mirá en un minuto y medio cómo es lo
+            mismo con NODO: buscás, comparás, armás el carrito, el pedido llega a cada distribuidor y armás la PC de tu
+            cliente con el presupuesto en PDF.
           </p>
         </Reveal>
 
@@ -51,7 +52,7 @@ export function DemoVideo() {
               muted
               playsInline
               controls
-              aria-label="Demo de NODO: búsqueda, precio final, carrito y pedidos a cada distribuidor"
+              aria-label="Demo de NODO: búsqueda, precio final, carrito, pedidos a cada distribuidor, armador de PC y presupuestos"
             />
           </div>
         </Reveal>
