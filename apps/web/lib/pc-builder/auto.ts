@@ -361,8 +361,11 @@ export function autoBuild(input: AutoInput): AutoResult {
         // En una gamer el procesador solo sube si quedó corto para la placa, y hasta lo justo.
         const cpuNeed = profile === "gamer" && step === "cpu" && build.gpu ? gpuScore(build.gpu) * CPU_PER_GPU : null;
         if (cpuNeed != null && curScore >= cpuNeed) continue;
+        // Que lo que sobra no se vaya todo a una pieza (un disco de 2 TB carísimo con un gabinete de entrada):
+        // salvo la pieza principal, cada una sube hasta 1,6 veces lo que le toca del presupuesto.
+        const cap = step === anchor ? room : Math.min(room, budget * shares[step] * 1.6);
         const better = candidates(step, others)
-          .filter((r) => r.cost <= room && score(step, r.p, profile) > curScore * 1.04)
+          .filter((r) => r.cost <= cap && score(step, r.p, profile) > curScore * 1.04)
           .sort((a, b) =>
             cpuNeed != null
               ? Number(score(step, b.p, profile) >= cpuNeed) - Number(score(step, a.p, profile) >= cpuNeed) || a.cost - b.cost
