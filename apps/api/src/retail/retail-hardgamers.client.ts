@@ -200,7 +200,7 @@ export class RetailHardgamersClient {
     const path = `/stores/${encodeURIComponent(slug)}?page=${page}&limit=${HG_PAGE_SIZE}`;
     const html = await this.fetchHtml(path);
     if (html == null) return null;
-    return this.parsePage(html);
+    return onlyStore(this.parsePage(html), slug);
   }
 
   /** HTML de HardGamers, por proxy o por la salida de Vercel si está configurada. */
@@ -291,6 +291,19 @@ export class RetailHardgamersClient {
     // Desde fines de octubre de 2026 el sitio ya no manda el JSON oculto: se leen las tarjetas.
     return parseHardgamersCards(html);
   }
+}
+
+/**
+ * Solo los productos de ese local (el id es `local:código`). Un local que ya no
+ * existe en HardGamers devuelve un listado general con productos de otros: sin
+ * esto se guardaban a nombre del primer local que aparecía.
+ */
+export function onlyStore(page: HardgamersPage | null, slug: string): HardgamersPage | null {
+  if (!page) return null;
+  const prefix = `${slug.toLowerCase()}:`;
+  const docs = page.docs.filter((d) => d._id.toLowerCase().startsWith(prefix));
+  if (!docs.length) return null;
+  return { ...page, docs, storeName: docs.find((d) => d.store?.name)?.store?.name ?? page.storeName };
 }
 
 /**

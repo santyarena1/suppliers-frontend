@@ -1,4 +1,4 @@
-import { hardgamersExternalId, parseHardgamersCards } from "./retail-hardgamers.client";
+import { hardgamersExternalId, onlyStore, parseHardgamersCards } from "./retail-hardgamers.client";
 
 /**
  * El id de esta fuente convive en la misma columna que el del agregador
@@ -65,5 +65,18 @@ describe("parseHardgamersCards (formato sin JSON oculto, octubre 2026)", () => {
 
   it("sin tarjetas devuelve null", () => {
     expect(parseHardgamersCards("<html><body>Sin productos</body></html>")).toBeNull();
+  });
+});
+
+describe("onlyStore", () => {
+  const page = { docs: [{ _id: "venex:a1", name: "A", store: { _id: "venex", name: "Venex" } }, { _id: "black:b2", name: "B", store: { _id: "black", name: "BLACK" } }], total: 54, page: 1, pages: 1, storeName: "Venex" };
+
+  it("deja solo los productos del local pedido y toma su nombre", () => {
+    expect(onlyStore(page, "black")).toMatchObject({ docs: [{ _id: "black:b2" }], storeName: "BLACK" });
+    expect(onlyStore(page, "Venex")!.docs.map((d) => d._id)).toEqual(["venex:a1"]);
+  });
+
+  it("un local que ya no existe (listado general) no trae nada", () => {
+    expect(onlyStore(page, "mgrtechno")).toBeNull();
   });
 });
