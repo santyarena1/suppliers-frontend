@@ -349,6 +349,32 @@ export function autoBuild(input: AutoInput): AutoResult {
     picked.push(step);
   }
 
+  /**
+   * Gabinete, cooler y fuente al día con lo elegido: vuelve a elegir los que quedaron incompatibles, los que
+   * ahora hacen falta (un procesador sin cooler) y la fuente si quedó justa. false si alguno no tiene opción.
+   */
+  const fixSupport = (): boolean => {
+    for (const st of SWAPPABLE) {
+      if (skipStep(st, build, profile)) continue;
+      const current = build[st];
+      const mine = !current || picked.includes(st);
+      if (!mine) continue;
+      const level = current ? verdict(st, current, build, qty).level : null;
+      if (current && level === "ok") continue;
+      if (current && level === "warn" && st !== "psu") continue;
+      delete build[st];
+      const again = choose(st, null);
+      if (!again) {
+        if (current) build[st] = current;
+        if (!current || level === "bad") return false;
+        continue;
+      }
+      build[st] = again.p;
+      if (!picked.includes(st)) picked.push(st);
+    }
+    return true;
+  };
+
   // 2) Con lo que sobra, se mejora lo que más rinde, sin romper la compatibilidad.
   if (budget != null) {
     for (let round = 0; round < 12; round++) {
@@ -381,21 +407,15 @@ export function autoBuild(input: AutoInput): AutoResult {
         const broken = (Object.keys(trial) as PcStep[]).filter((st) => st !== step && verdict(st, trial[st]!, trial, qty).level === "bad");
         if (broken.some((st) => !SWAPPABLE.includes(st) || !picked.includes(st))) continue;
         const prev = { ...build };
+        const prevPicked = picked.slice();
         const restore = () => {
           for (const k of Object.keys(build) as PcStep[]) delete build[k];
           Object.assign(build, prev);
+          picked.splice(0, picked.length, ...prevPicked);
         };
         Object.assign(build, trial);
-        let failed = false;
-        for (const st of SWAPPABLE) {
-          if (!broken.includes(st)) continue;
-          delete build[st];
-          const again = choose(st, null);
-          if (!again) { failed = true; break; }
-          build[st] = again.p;
-        }
-        if (failed) { restore(); continue; }
-        if (total() > budget) { restore(); continue; }
+        // Con lo que pide la mejora (otra fuente, un cooler) incluido en la cuenta.
+        if (!fixSupport() || total() > budget) { restore(); continue; }
         improved = true;
       }
       if (!improved) break;
