@@ -24,6 +24,8 @@ import {
 const TRACK_DAYS = 90;
 /** «Actualizar estados» desde Pedidos: una vez por minuto por comercio. */
 const MANUAL_EVERY_MS = 60_000;
+/** Un pedido con más de 12 h que NODO lee por primera vez no avisa (ver apply). */
+const BACKFILL_AFTER_MS = 12 * 3_600_000;
 
 type OpenOrder = {
   id: string;
@@ -37,6 +39,8 @@ type OpenOrder = {
   trackingNumber: string | null;
   trackingCarrier: string | null;
   trackingHistory: Prisma.JsonValue;
+  trackingCheckedAt: Date | null;
+  createdAt: Date;
 };
 
 const POLYTECH_STAGE: Record<string, TrackingStage> = { pending: "SENT", in_process: "CONFIRMED", shipped: "SHIPPED" };
@@ -112,6 +116,8 @@ export class OrderTrackingService {
         trackingNumber: true,
         trackingCarrier: true,
         trackingHistory: true,
+        trackingCheckedAt: true,
+        createdAt: true,
       },
       orderBy: { createdAt: "desc" },
       take: 2000,
@@ -238,7 +244,11 @@ export class OrderTrackingService {
     return rows;
   }
 
-  /** Guarda lo nuevo. Devuelve true si la etapa avanzó (y dejó el aviso). */
+  /**
+   * Guarda lo nuevo. Devuelve true si la etapa avanzó y dejó el aviso. La primera
+   * lectura de un pedido viejo (más de 12 h) es silenciosa: toma su etapa sin aviso
+   * ni cartel, así al activar el seguimiento no llegan avisos de pedidos de hace semanas.
+   */
   private async apply(order: OpenOrder, update: TrackingUpdate | null): Promise<boolean> {
     const now = new Date();
     if (!update) {
@@ -246,6 +256,7 @@ export class OrderTrackingService {
       return false;
     }
     const moved = advances(order.trackingStage, update.stage);
+    const backfill = order.trackingCheckedAt == null && Date.now() - order.createdAt.getTime() > BACKFILL_AFTER_MS;
     const history = Array.isArray(order.trackingHistory) ? (order.trackingHistory as Prisma.JsonArray) : [];
     await this.prisma.providerOrder.update({
       where: { id: order.id },
@@ -258,7 +269,7 @@ export class OrderTrackingService {
         ...(moved
           ? {
               trackingStage: update.stage,
-              trackingChangedAt: now,
+              ...(backfill ? {} : { trackingChangedAt: now }),
               trackingHistory: [...history, { stage: update.stage, at: now.toISOString() }],
             }
           : order.trackingStage == null
@@ -266,7 +277,7 @@ export class OrderTrackingService {
             : {}),
       },
     });
-    if (!moved) return false;
+    if (!moved || backfill) return false;
     const notice = trackingNotice(
       providerLabel(order.provider as Provider) ?? order.provider,
       order.invidWebOrderNumber || order.invidOrderNumber,

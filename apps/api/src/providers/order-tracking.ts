@@ -35,9 +35,13 @@ function fold(s: string): string {
 }
 
 const CANCELLED = /\b(anulad|cancelad|rechazad|vencid|baja\b)/;
-const DELIVERED = /\b(entregad|recibid|cumplid|finalizad|cerrad|cobrad)/;
+// «Armado Finalizado» (New Bytes) es armado, no entregado: «finalizad» no cuenta solo.
+const DELIVERED = /\b(entregad|recibid|cumplid|cobrad)/;
 const SHIPPED = /\b(despachad|en camino|enviad[oa] al|en transito|remitid|retirad|shipped|listo para retir|en distribucion|en reparto)/;
-const INVOICED = /\bfactur/;
+// «Cerrado» (Invid) es el pedido procesado y facturado; la entrega no la informa.
+const INVOICED = /\b(factur|cerrad)/;
+/** «No preparado», «sin despachar», «todavía no facturado»: la palabra negada no cuenta. */
+const NEGATED = /\b(todavia no|aun no|no|sin)\s+\w+/g;
 const CONFIRMED = /\b(confirmad|aprobad|aceptad|en preparacion|preparando|preparad|armando|armad|en proceso|procesad|reservad|in_process|en curso)/;
 
 export function stageRank(stage: TrackingStage | string | null | undefined): number {
@@ -48,7 +52,7 @@ export function stageRank(stage: TrackingStage | string | null | undefined): num
 
 /** "Entregado Cobrado" → DELIVERED; "REMITIDO Y FACTURADO" → SHIPPED; "Pendiente" → SENT. */
 export function stageFromText(text: string): TrackingStage {
-  const t = fold(text);
+  const t = fold(text).replace(NEGATED, " ");
   if (CANCELLED.test(t)) return "CANCELLED";
   if (DELIVERED.test(t)) return "DELIVERED";
   if (SHIPPED.test(t)) return "SHIPPED";

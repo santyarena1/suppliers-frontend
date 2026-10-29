@@ -12,6 +12,14 @@ describe("stageFromText", () => {
     ["REMITIDO Y FACTURADO", "SHIPPED"],
     ["Despachado", "SHIPPED"],
     ["Entregado Cobrado", "DELIVERED"],
+    // Textos reales vistos en producción (29/10).
+    ["No preparado", "SENT"],
+    ["Remitido", "SHIPPED"],
+    ["Armado Finalizado", "CONFIRMED"],
+    ["Entregado. Acreditacion parcial", "DELIVERED"],
+    ["Cerrado", "INVOICED"],
+    ["Vencido", "CANCELLED"],
+    ["Sin despachar", "SENT"],
     ["Anulado", "CANCELLED"],
     ["Cancelado", "CANCELLED"],
   ])("«%s» → %s", (text, stage) => {

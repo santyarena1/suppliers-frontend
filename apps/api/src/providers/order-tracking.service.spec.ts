@@ -35,6 +35,8 @@ function order(id: string, provider: string, numbers: [string | null, string | n
     trackingNumber: null,
     trackingCarrier: null,
     trackingHistory: null,
+    trackingCheckedAt: null,
+    createdAt: new Date(),
     ...extra,
   };
 }
@@ -121,5 +123,19 @@ describe("OrderTrackingService", () => {
     const { svc } = build([order("o1", "INVID", ["555", "W-9"])], { invid: [] });
     expect((await svc.refreshTenant("t1")).skipped).toBeUndefined();
     expect((await svc.refreshTenant("t1")).skipped).toBe(true);
+  });
+
+  it("la primera lectura de un pedido viejo toma la etapa sin avisar; lo que cambia después sí avisa", async () => {
+    const old = new Date(Date.now() - 3 * 86_400_000);
+    const portal = [{ webOrderNumber: "W-9", orderNumber: "555", status: "Cerrado" }];
+    const { svc, prisma } = build([order("o1", "INVID", ["555", "W-9"], { createdAt: old })], { invid: portal });
+    await svc.refreshAll();
+    expect(prisma.orders[0]).toMatchObject({ trackingStage: "INVOICED" });
+    expect(prisma.orders[0].trackingChangedAt).toBeUndefined();
+    expect(prisma.notifications).toHaveLength(0);
+    portal[0].status = "Cancelado";
+    await svc.refreshAll();
+    expect(prisma.orders[0].trackingStage).toBe("CANCELLED");
+    expect(prisma.notifications).toHaveLength(1);
   });
 });

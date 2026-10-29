@@ -103,7 +103,9 @@ export default function OrderTimeline({ tracking, providerName }: { tracking?: O
       )}
 
       <p className="mt-2 text-[10px] text-surface-600">
-        {tracking?.supported
+        {tracking?.supported && checked && tracking.stage == null
+          ? `No aparece en los últimos pedidos que muestra ${providerName} (revisado ${checked}): si es viejo, su estado lo ves en el portal`
+          : tracking?.supported
           ? checked
             ? `NODO lo revisa en ${providerName} cada 15 min · última vez ${checked}`
             : `NODO lo revisa en ${providerName} cada 15 min y te avisa cuando avanza`

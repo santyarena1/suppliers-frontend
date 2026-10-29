@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.21.2",
+    date: "2026-10-29",
+    title: "Seguimiento de pedidos: estados corregidos",
+    changes: [
+      { kind: "fixed", text: "«No preparado» de Elit ya no figura como confirmado, «Armado Finalizado» de New Bytes figura como confirmado (no entregado) y «Cerrado» de Invid como facturado." },
+      { kind: "fixed", text: "Al leer por primera vez pedidos viejos ya no llegan avisos de golpe: toman su estado en silencio y avisan solo lo que cambie de ahora en adelante." },
+      { kind: "improved", text: "Si un pedido no aparece en la lista del portal (por ser viejo), la tarjeta lo aclara en vez de quedar en Enviado sin explicación." },
+    ],
+  },
+  {
     version: "2.21.1",
     date: "2026-10-29",
     title: "Seguimiento de pedidos: más pedidos y sin esperas",
