@@ -19,7 +19,7 @@ export const PROFILE_LABEL: Record<Profile, string> = {
 export const PROFILE_HINT: Record<Profile, string> = {
   gamer: "Prioriza la placa de video. 16 GB de RAM y SSD NVMe como mínimo.",
   office: "Procesador con video integrado, sin placa de video. 16 GB de RAM y disco de 480 GB o más.",
-  creator: "Prioriza procesador y memoria (32 GB). Placa de video media y disco de 1 TB.",
+  creator: "Prioriza procesador y memoria (32 GB). Placa de video de gama media (RTX 4060 o similar) y disco de 1 TB.",
 };
 
 /** Qué parte del presupuesto va a cada pieza, según el perfil. */
@@ -145,7 +145,7 @@ function meetsProfile(step: PcStep, p: PcPart, profile: Profile, build: Build): 
   }
   if (step === "cpu" && profile === "office" && !build.gpu) return p.compat.igpu === true;
   if (step === "cpu" && (profile === "creator" || (profile === "gamer" && build.gpu))) return !APU.test(p.name);
-  if (step === "gpu") return profile !== "office" && gpuScore(p) >= (profile === "gamer" ? 18 : 15) && gpuMaker(p) != null;
+  if (step === "gpu") return profile !== "office" && gpuScore(p) >= (profile === "gamer" ? 18 : 40) && gpuMaker(p) != null;
   if (step === "psu" && (profile !== "office" || build.gpu)) return !/sin cert/i.test(str(p, "cert")) && str(p, "cert") !== "";
   if (step === "case" && profile !== "office") return (num(p, "fans") ?? 1) >= 1;
   return true;
