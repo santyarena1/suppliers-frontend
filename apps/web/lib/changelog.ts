@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.20.0",
+    date: "2026-10-29",
+    title: "Agregar proveedor: todo en un lugar",
+    changes: [
+      { kind: "new", text: "«Agregar proveedor» ahora muestra los distribuidores de NODO con los que todavía no trabajás y los locales que venden en NODO: buscás por nombre y lo sumás con un clic." },
+      { kind: "new", text: "En el mismo lugar pegás el código de acceso de un distribuidor o el link de la tienda privada de un local, y te muestra de quién es antes de sumarlo." },
+    ],
+  },
+  {
     version: "2.19.2",
     date: "2026-10-28",
     title: "Precios de locales: solo los vigentes",

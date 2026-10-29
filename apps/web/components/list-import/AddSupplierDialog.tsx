@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, FileSpreadsheet, Loader2, Plug, Plus, Search, Send, Ticket, X } from "lucide-react";
+import { CheckCircle2, FileSpreadsheet, Loader2, Plug, Plus, Search, Ticket, X } from "lucide-react";
 import RedeemAccessCode from "@/components/RedeemAccessCode";
+import AddProviderHub from "@/components/list-import/AddProviderHub";
 import CreateListProviderDialog from "@/components/list-import/CreateListProviderDialog";
 import RequestIntegrationForm from "@/components/list-import/RequestIntegrationForm";
 import { invalidateMyProviders, suppliersApi, type SupplierSearchRow } from "@/lib/api";
@@ -20,8 +21,9 @@ type Props = {
 };
 
 /**
- * "Agregar proveedor / marca" para un comercio: con un código de acceso, o
- * cargando su lista de precios. Antes de crear uno nuevo busca en el directorio
+ * "Agregar proveedor / marca" para un comercio. Un proveedor se elige de los
+ * distribuidores y locales de NODO, con un código o link, o cargando su lista;
+ * una marca, con un código de acceso o cargando su lista de precios. Antes de crear uno nuevo busca en el directorio
  * para no duplicar a alguien que ya existe.
  */
 export default function AddSupplierDialog({ open, onClose, kind, onConnected }: Props) {
@@ -93,7 +95,7 @@ export default function AddSupplierDialog({ open, onClose, kind, onConnected }: 
             <div>
               <h2 className="text-sm font-semibold text-white">Agregar {noun}</h2>
               <p className="text-xs text-surface-500 mt-0.5">
-                {step === "choose" && "¿Cómo te conectás?"}
+                {step === "choose" && (kind === "provider" ? "Distribuidores, locales que venden en NODO o con un código." : "¿Cómo te conectás?")}
                 {step === "code" && "Canjeá el código que te dieron por fuera de Nodo."}
                 {step === "search" && `Buscá ${kind === "brand" ? "la marca" : "el distribuidor"} antes de crearlo: si ya existe, te conectás a su ficha.`}
                 {step === "request" && "Pedinos que lo integremos a NODO."}
@@ -103,7 +105,22 @@ export default function AddSupplierDialog({ open, onClose, kind, onConnected }: 
           </div>
 
           <div className="overflow-y-auto px-5 py-4 flex flex-col gap-3">
-            {step === "choose" && (
+            {step === "choose" && kind === "provider" && (
+              <AddProviderHub
+                onClose={onClose}
+                onConnected={onConnected}
+                onLoadList={(q) => {
+                  setQuery(q);
+                  setStep("search");
+                }}
+                onRequest={(q) => {
+                  setQuery(q);
+                  setStep("request");
+                }}
+              />
+            )}
+
+            {step === "choose" && kind === "brand" && (
               <>
                 <button
                   type="button"
@@ -131,21 +148,6 @@ export default function AddSupplierDialog({ open, onClose, kind, onConnected }: 
                     </span>
                   </span>
                 </button>
-                {kind === "provider" && (
-                  <button
-                    type="button"
-                    onClick={() => setStep("request")}
-                    className="text-left border border-dashed border-surface-700 hover:border-brand-500 rounded-xl p-4 flex items-start gap-3 transition-colors"
-                  >
-                    <Send className="w-5 h-5 text-brand-700 dark:text-brand-400 mt-0.5" />
-                    <span>
-                      <span className="block text-sm font-semibold text-white">Quiero sumar un distribuidor que no está en la lista</span>
-                      <span className="block text-xs text-surface-500 mt-0.5">
-                        Nos decís cuál y lo integramos: catálogo, tus precios y pedidos desde NODO. Te escribimos para coordinar.
-                      </span>
-                    </span>
-                  </button>
-                )}
               </>
             )}
 
