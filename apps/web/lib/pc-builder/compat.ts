@@ -100,6 +100,20 @@ export function driveKind(p: PcPart | undefined): "m2" | "sata25" | "hdd35" | "h
 }
 
 /** Consumo estimado (todas las piezas, con cantidades) y la fuente recomendada, con margen. */
+/**
+ * Largo típico (el más largo habitual) de una placa sin el dato en su ficha: por cantidad de
+ * ventiladores y gama. Sirve para no marcar "verificar" en un gabinete donde entra cualquiera así.
+ */
+export function typicalGpuLength(p: PcPart): number {
+  const text = `${s(p, "chip") ?? ""} ${p.name}`;
+  if (/\b(low\s*profile|lp|itx|mini|single\s*fan|1\s*fan)\b/i.test(text)) return 210;
+  const top = /rtx\s*(4080|4090|5080|5090)|rx\s*7900|rx\s*9070\s*xt|rtx\s*5070\s*ti/i.test(text);
+  if (/\b(triple|trio|3\s*x|3x|x3|3\s*fan|tri-?frozr|windforce|eagle|gaming\s*x|tuf|strix|aorus|nitro|taichi|steel\s*legend|hellhound|red\s*devil|reaper)\b/i.test(text)) return top ? 340 : 310;
+  if (/\b(dual|twin|2\s*x|2x|x2|2\s*fan|challenger|ventus\s*2x|windforce\s*2|pulse|fighter)\b/i.test(text)) return top ? 300 : 260;
+  if (top) return 330;
+  return (n(p, "vram") ?? 8) <= 8 ? 250 : 290;
+}
+
 export function powerNeed(build: Build, qty: Qty = {}): { estimate: number; recommended: number } | null {
   if (!build.cpu && !build.gpu) return null;
   const cpu = n(build.cpu, "tdp") ?? 65;
@@ -221,10 +235,18 @@ const RULES: Rule[] = [
     name: "Largo de la placa",
     run: ({ gpu, case: c }) => {
       const l = n(gpu, "length"), max = n(c, "gpuMax");
-      if (!l && max) return ["warn", `La placa ${short(gpu)} no informa su largo; este gabinete admite hasta ${max} mm. Medila antes de confirmar.`];
-      if (l && !max) return ["warn", `El gabinete ${short(c)} no informa el largo máximo de placa; la placa mide ${l} mm. Revisá que entre.`];
-      if (!l || !max) return ["warn", `Ni la placa ${short(gpu)} ni el gabinete ${short(c)} informan el largo. Revisá que entre.`];
-      return l <= max ? ["ok", `${l} mm; el gabinete admite hasta ${max} mm.`] : ["bad", `La placa mide ${l} mm y el gabinete admite ${max} mm.`];
+      // Sin el dato, el largo típico de esa placa: solo se avisa si con ese largo podría no entrar.
+      const typical = l ? null : typicalGpuLength(gpu);
+      const len = l ?? typical!;
+      if (!max) {
+        // Casi cualquier gabinete de torre admite 280 mm.
+        if (len <= 280) return ["ok", l ? `${l} mm: entra en casi cualquier gabinete.` : "Placa corta: entra en casi cualquier gabinete."];
+        return ["warn", `El gabinete ${short(c)} no informa el largo máximo de placa y la placa ${l ? `mide ${l} mm` : `suele medir unos ${typical} mm`}. Revisá que entre.`];
+      }
+      if (l) return l <= max ? ["ok", `${l} mm; el gabinete admite hasta ${max} mm.`] : ["bad", `La placa mide ${l} mm y el gabinete admite ${max} mm.`];
+      return typical! <= max
+        ? ["ok", `Entra: una placa así suele medir hasta ${typical} mm y el gabinete admite ${max} mm.`]
+        : ["warn", `La placa ${short(gpu)} no informa su largo y las de su tipo suelen medir unos ${typical} mm; este gabinete admite ${max} mm. Medila antes de confirmar.`];
     },
   },
   {

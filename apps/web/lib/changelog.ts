@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.17.2",
+    date: "2026-10-28",
+    title: "Armador de PC: menos avisos de «revisar» en placa de video y gabinete",
+    changes: [
+      { kind: "improved", text: "Si la ficha de la placa de video no trae el largo, el armador usa el largo típico de una placa así (según su gama y cuántos ventiladores tiene). Solo avisa si con ese largo podría no entrar en el gabinete." },
+      { kind: "improved", text: "Pasá el mouse por un paso marcado en amarillo o rojo para ver qué hay que revisar." },
+    ],
+  },
+  {
     version: "2.17.1",
     date: "2026-10-28",
     title: "Armador de PC: solo distribuidores activos y calidad en todos los usos",

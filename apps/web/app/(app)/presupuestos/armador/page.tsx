@@ -181,6 +181,7 @@ export default function PcBuilderPage() {
                   type="button"
                   onClick={() => go(s)}
                   aria-current={step === s ? "step" : undefined}
+                  title={done && level !== "ok" ? `${level === "bad" ? "No es compatible" : "Para revisar"}: ${issues.filter((c) => c.level !== "ok").map((c) => c.text).join(" ")}` : undefined}
                   className={`flex h-12 items-center gap-2.5 rounded-lg px-3 text-left transition-colors ${step === s ? "bg-brand-600/15 text-white ring-1 ring-brand-500/50" : "text-surface-400 hover:bg-surface-800 hover:text-white"}`}
                 >
                   <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${done ? (level === "ok" ? "bg-emerald-500/20 text-emerald-300" : level === "warn" ? "bg-amber-500/20 text-amber-300" : "bg-red-500/20 text-red-300") : "border border-surface-600 text-surface-400"}`}>
