@@ -564,8 +564,6 @@ const bucket = (v: number | null, edges: number[], unit: string) => {
   for (let i = 0; i < edges.length; i++) if (v <= edges[i]) return i === 0 ? `Hasta ${edges[i]} ${unit}` : `${edges[i - 1] + 1} a ${edges[i]} ${unit}`;
   return `Más de ${edges[edges.length - 1]} ${unit}`;
 };
-const quality = (step: PcStep) => (p: PcPart) => ({ verified: "Verificada", estimated: "Con datos estimados", partial: "Incompleta" })[dataQuality(step, p)];
-const QUALITY_ORDER = ["Verificada", "Con datos estimados", "Incompleta"];
 
 /** Filtros por paso, sacados de la ficha técnica y del nombre del producto. */
 export const FACETS: Record<PcStep, Facet[]> = {
@@ -577,7 +575,6 @@ export const FACETS: Record<PcStep, Facet[]> = {
     { name: "Serie", read: (p) => (/x3d/i.test(p.name) ? "X3D" : /\d{4,5}g\b|\d{4,5}ge\b/i.test(p.name) && /ryzen|amd/i.test(p.name) ? "Serie G (con video)" : /\d{4,5}f\b/i.test(p.name) && /intel|core/i.test(p.name) ? "Serie F (sin video)" : /\d{4,5}k\b|\d{4,5}kf\b/i.test(p.name) ? "Serie K (desbloqueado)" : null) },
     { name: "Cooler incluido", read: (p) => yes(b(p, "cooler")), order: ["Sí", "No"] },
     { name: "Núcleos", read: (p) => (n(p, "cores") != null ? `${n(p, "cores")} núcleos` : null), order: "natural" },
-    { name: "Ficha", read: quality("cpu"), order: QUALITY_ORDER },
   ],
   mobo: [
     { name: "Socket", read: (p) => s(p, "socket") },
@@ -589,7 +586,6 @@ export const FACETS: Record<PcStep, Facet[]> = {
     { name: "Ranuras M.2", read: (p) => (n(p, "m2") != null ? `${n(p, "m2")} × M.2` : null), order: "natural" },
     { name: "WiFi", read: (p) => yes(b(p, "wifi")), order: ["Sí", "No"] },
     { name: "Marca", read: (p) => p.brand },
-    { name: "Ficha", read: quality("mobo"), order: QUALITY_ORDER },
   ],
   ram: [
     { name: "Tipo", read: (p) => s(p, "type"), order: ["DDR3", "DDR4", "DDR5"] },
@@ -597,7 +593,6 @@ export const FACETS: Record<PcStep, Facet[]> = {
     { name: "Módulos", read: (p) => (n(p, "modules") === 2 ? "Kit de 2" : n(p, "modules") === 1 ? "1 módulo" : null), order: ["1 módulo", "Kit de 2"] },
     { name: "Frecuencia", read: (p) => (n(p, "freq") != null ? `${ar(n(p, "freq")!)} MHz` : null), order: "natural" },
     { name: "Marca", read: (p) => p.brand },
-    { name: "Ficha", read: quality("ram"), order: QUALITY_ORDER },
   ],
   gpu: [
     { name: "Fabricante", read: gpuMaker, order: ["NVIDIA", "AMD", "Intel"] },
@@ -605,7 +600,6 @@ export const FACETS: Record<PcStep, Facet[]> = {
     { name: "Memoria", read: (p) => (n(p, "vram") != null ? `${n(p, "vram")} GB` : null), order: "natural" },
     { name: "Largo", read: (p) => bucket(n(p, "length"), [200, 250, 300], "mm"), order: ["Hasta 200 mm", "201 a 250 mm", "251 a 300 mm", "Más de 300 mm"] },
     { name: "Marca", read: (p) => p.brand },
-    { name: "Ficha", read: quality("gpu"), order: QUALITY_ORDER },
   ],
   ssd: [
     { name: "Tipo", read: (p) => (b(p, "hdd") ? "Disco rígido (HDD)" : "SSD"), order: ["SSD", "Disco rígido (HDD)"] },
@@ -613,7 +607,6 @@ export const FACETS: Record<PcStep, Facet[]> = {
     { name: "Capacidad", read: (p) => size(n(p, "capacity")), order: "natural" },
     { name: "Interfaz", read: (p) => s(p, "iface") },
     { name: "Marca", read: (p) => p.brand },
-    { name: "Ficha", read: quality("ssd"), order: QUALITY_ORDER },
   ],
   psu: [
     { name: "Potencia", read: (p) => (n(p, "watts") != null ? `${n(p, "watts")} W` : null), order: "natural" },
@@ -622,7 +615,6 @@ export const FACETS: Record<PcStep, Facet[]> = {
     { name: "Formato", read: (p) => s(p, "form"), order: ["ATX", "SFX", "SFX-L", "TFX"] },
     { name: "Conector 12V-2x6", read: (p) => yes(b(p, "hpwr")), order: ["Sí", "No"] },
     { name: "Marca", read: (p) => p.brand },
-    { name: "Ficha", read: quality("psu"), order: QUALITY_ORDER },
   ],
   case: [
     { name: "Tipo", read: (p) => s(p, "type") },
@@ -631,14 +623,12 @@ export const FACETS: Record<PcStep, Facet[]> = {
     { name: "Placa de video hasta", read: (p) => bucket(n(p, "gpuMax"), [300, 350, 400], "mm"), order: ["Hasta 300 mm", "301 a 350 mm", "351 a 400 mm", "Más de 400 mm"] },
     { name: "Ventiladores", read: (p) => (n(p, "fans") != null ? (n(p, "fans")! >= 4 ? "4 o más" : `${n(p, "fans")}`) : null), order: ["0", "1", "2", "3", "4 o más"] },
     { name: "Marca", read: (p) => p.brand },
-    { name: "Ficha", read: quality("case"), order: QUALITY_ORDER },
   ],
   cooler: [
     { name: "Tipo", read: (p) => (s(p, "kind") === "liquid" ? "Líquida" : "Aire"), order: ["Aire", "Líquida"] },
     { name: "Radiador", read: (p) => (n(p, "radiator") != null ? `${n(p, "radiator")} mm` : null), order: "natural" },
     { name: "Socket", read: (p) => list(p, "sockets") },
     { name: "Marca", read: (p) => p.brand },
-    { name: "Ficha", read: quality("cooler"), order: QUALITY_ORDER },
   ],
 };
 
