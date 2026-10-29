@@ -38,11 +38,12 @@ const CANCELLED = /\b(anulad|cancelad|rechazad|vencid|baja\b)/;
 // «Armado Finalizado» (New Bytes) es armado, no entregado: «finalizad» no cuenta solo.
 const DELIVERED = /\b(entregad|recibid|cumplid|cobrad)/;
 const SHIPPED = /\b(despachad|en camino|enviad[oa] al|en transito|remitid|retirad|shipped|listo para retir|en distribucion|en reparto)/;
-// «Cerrado» (Invid) es el pedido procesado y facturado; la entrega no la informa.
-const INVOICED = /\b(factur|cerrad)/;
+const INVOICED = /\bfactur/;
 /** «No preparado», «sin despachar», «todavía no facturado»: la palabra negada no cuenta. */
 const NEGATED = /\b(todavia no|aun no|no|sin)\s+\w+/g;
-const CONFIRMED = /\b(confirmad|aprobad|aceptad|en preparacion|preparando|preparad|armando|armad|en proceso|procesad|reservad|in_process|en curso)/;
+// «Cerrado» (Invid): el pedido web pasó a su sistema. Su columna de factura viene siempre «-»,
+// así que no dice si facturó: cuenta como confirmado.
+const CONFIRMED = /\b(confirmad|aprobad|aceptad|en preparacion|preparando|preparad|armando|armad|en proceso|procesad|reservad|in_process|en curso|cerrad)/;
 
 export function stageRank(stage: TrackingStage | string | null | undefined): number {
   if (stage === "CANCELLED") return 99;
@@ -61,14 +62,15 @@ export function stageFromText(text: string): TrackingStage {
   return "SENT";
 }
 
-function clean(v: string | null | undefined): string | null {
+/** Un dato del portal que de verdad está: Elit pone «0» donde no hay factura ni remito, Invid «-». */
+export function portalValue(v: string | null | undefined): string | null {
   const s = (v ?? "").trim();
-  return s && !/^(-|pendiente|no|sin factura|adjuntar)$/i.test(s) ? s : null;
+  return s && !/^(-|0+|pendiente|no|sin factura|adjuntar)$/i.test(s) ? s : null;
 }
 
 export function trackingFromPortal(row: PortalOrderStatus): TrackingUpdate {
-  const invoice = clean(row.invoice);
-  const trackingNumber = clean(row.trackingNumber);
+  const invoice = portalValue(row.invoice);
+  const trackingNumber = portalValue(row.trackingNumber);
   const texts = [row.status, ...(row.hints ?? [])].filter((s): s is string => Boolean(s && s.trim()));
   let stage: TrackingStage = row.stage ?? "SENT";
   for (const t of texts) {
@@ -88,7 +90,7 @@ export function trackingFromPortal(row: PortalOrderStatus): TrackingUpdate {
     status: row.status?.trim() || null,
     invoice,
     trackingNumber,
-    carrier: clean(row.carrier),
+    carrier: portalValue(row.carrier),
   };
 }
 

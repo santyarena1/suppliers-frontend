@@ -17,7 +17,7 @@ describe("stageFromText", () => {
     ["Remitido", "SHIPPED"],
     ["Armado Finalizado", "CONFIRMED"],
     ["Entregado. Acreditacion parcial", "DELIVERED"],
-    ["Cerrado", "INVOICED"],
+    ["Cerrado", "CONFIRMED"],
     ["Vencido", "CANCELLED"],
     ["Sin despachar", "SENT"],
     ["Anulado", "CANCELLED"],

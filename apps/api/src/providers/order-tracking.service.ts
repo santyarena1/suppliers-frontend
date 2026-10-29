@@ -14,6 +14,7 @@ import {
   TRACKED_PROVIDERS,
   advances,
   bestUpdate,
+  portalValue,
   trackingNotice,
   type PortalOrderStatus,
   type TrackingStage,
@@ -57,6 +58,34 @@ function msg(err: unknown): string {
 function statusText(v: unknown): string | null {
   const s = v == null ? "" : String(v).trim();
   return s && !/^\d+$/.test(s) ? s : null;
+}
+
+/** Nota de venta de Elit (/account/salenotes) → fila de seguimiento. */
+export function elitTrackingRow(n: {
+  internalNumber?: string | null;
+  orderNumber?: string | null;
+  status?: string | null;
+  statusDescription?: string | null;
+  trackingStatus?: string | null;
+  dispatchNote?: string | null;
+  invoiceNumber?: string | null;
+  tracking?: string | null;
+  trackingSupplier?: string | null;
+}): PortalOrderStatus {
+  return {
+    numbers: [n.internalNumber, n.orderNumber],
+    status: n.status,
+    // El remito sale cuando lo despachan (sin remito Elit manda «0»).
+    hints: [n.statusDescription, n.trackingStatus, portalValue(n.dispatchNote) ? "remitido" : null],
+    invoice: n.invoiceNumber,
+    trackingNumber: n.tracking,
+    carrier: n.trackingSupplier,
+  };
+}
+
+/** Fila de lista_pedidos_invid.php → fila de seguimiento. */
+export function invidTrackingRow(o: { webOrderNumber?: string | null; orderNumber?: string | null; status?: string | null; invoice?: string | null }): PortalOrderStatus {
+  return { numbers: [o.webOrderNumber, o.orderNumber], status: o.status, invoice: o.invoice };
 }
 
 /**
@@ -178,19 +207,11 @@ export class OrderTrackingService {
       case "ELIT": {
         const api = await ElitWebClient.login(creds);
         const body = await api.proxyGet("/account/salenotes?limit=50&sortBy=number:desc");
-        return parseElitSaleNotesPayload(body).map((n) => ({
-          numbers: [n.internalNumber, n.orderNumber],
-          status: n.status,
-          // El remito sale cuando lo despachan.
-          hints: [n.statusDescription, n.trackingStatus, n.dispatchNote ? "remitido" : null],
-          invoice: n.invoiceNumber,
-          trackingNumber: n.tracking,
-          carrier: n.trackingSupplier,
-        }));
+        return parseElitSaleNotesPayload(body).map(elitTrackingRow);
       }
       case "INVID": {
         const { orders: rows } = await this.invid.getOrders(creds);
-        return rows.map((o) => ({ numbers: [o.webOrderNumber, o.orderNumber], status: o.status, invoice: o.invoice }));
+        return rows.map(invidTrackingRow);
       }
       case "NEW_TREE": {
         const from = new Date(Date.now() - (TRACK_DAYS + 5) * 86_400_000);
@@ -228,17 +249,23 @@ export class OrderTrackingService {
       numbers: [r.orderNumber, r.webOrderNumber, r.albNumber],
       status: statusText(r.statusDescription) ?? statusText(r.status),
       invoice: r.invoice,
-      trackingNumber: r.trackingNumber,
+      // `trackingNumber` de New Bytes es un código interno («MIN-000210486513»), no el envío: no se usa.
     }));
     for (const order of orders) {
-      const head = purchase.orders.find((r) => r.orderNumber && r.orderNumber === order.invidOrderNumber);
-      if (!head?.orderNumber || head.branch == null) continue;
-      const detail = await this.newBytes
-        .getOrderDetail(creds, head.orderNumber, "purchase", String(head.branch))
-        .catch(() => null);
+      // Las órdenes que no entran en el listado (trae unas 80) se abren igual por número; la
+      // sucursal sale de la fila o del número web que guardó NODO («0002-10486384»).
+      const number = order.invidOrderNumber?.trim();
+      if (!number) continue;
+      const head = purchase.orders.find((r) => r.orderNumber === number);
+      const branch = head?.branch != null ? String(head.branch) : order.invidWebOrderNumber?.match(/^(\d+)-/)?.[1];
+      if (!branch) continue;
+      const detail = await this.newBytes.getOrderDetail(creds, number, "purchase", branch).catch(() => null);
       const steps = detail && "tracking" in detail ? (detail.tracking ?? []) : [];
       if (steps.length) {
-        rows.push({ numbers: [head.orderNumber], status: statusText(steps[steps.length - 1]?.state), hints: steps.map((s) => s.state) });
+        rows.push({ numbers: [number], status: statusText(steps[steps.length - 1]?.state), hints: steps.map((s) => s.state) });
+      } else if (detail?.found) {
+        // Está en el portal pero sin seguimiento todavía: queda Enviado.
+        rows.push({ numbers: [number], status: null });
       }
     }
     return rows;

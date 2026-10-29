@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.21.3",
+    date: "2026-10-29",
+    title: "Seguimiento de pedidos revisado contra los portales",
+    changes: [
+      { kind: "fixed", text: "Elit: un pedido sin factura ni remito ya no figura como despachado." },
+      { kind: "fixed", text: "New Bytes: las órdenes «Armado Finalizado» figuran como confirmadas (no despachadas) y se siguen también las que no entran en la lista del portal." },
+      { kind: "fixed", text: "Invid: «Cerrado» figura como confirmado, porque Invid no informa la factura en su lista de pedidos." },
+    ],
+  },
+  {
     version: "2.21.2",
     date: "2026-10-29",
     title: "Seguimiento de pedidos: estados corregidos",

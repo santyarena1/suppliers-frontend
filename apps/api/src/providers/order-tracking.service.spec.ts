@@ -130,12 +130,21 @@ describe("OrderTrackingService", () => {
     const portal = [{ webOrderNumber: "W-9", orderNumber: "555", status: "Cerrado" }];
     const { svc, prisma } = build([order("o1", "INVID", ["555", "W-9"], { createdAt: old })], { invid: portal });
     await svc.refreshAll();
-    expect(prisma.orders[0]).toMatchObject({ trackingStage: "INVOICED" });
+    expect(prisma.orders[0]).toMatchObject({ trackingStage: "CONFIRMED" });
     expect(prisma.orders[0].trackingChangedAt).toBeUndefined();
     expect(prisma.notifications).toHaveLength(0);
     portal[0].status = "Cancelado";
     await svc.refreshAll();
     expect(prisma.orders[0].trackingStage).toBe("CANCELLED");
     expect(prisma.notifications).toHaveLength(1);
+  });
+  it("New Bytes: una orden que no entra en el listado se abre por número con la sucursal del número web", async () => {
+    const { svc, prisma, newBytes } = build([order("o3", "NEW_BYTES", ["10486384", "0002-10486384"])], {
+      nb: { purchase: [{ orderNumber: "10487618", branch: "0002", trackingNumber: "MIN-000210487618" }], pedidos: [] },
+    });
+    newBytes.getOrderDetail.mockResolvedValueOnce({ found: true, tracking: [{ state: "Armado Finalizado" }] });
+    await svc.refreshAll();
+    expect(newBytes.getOrderDetail).toHaveBeenCalledWith({}, "10486384", "purchase", "0002");
+    expect(prisma.orders[0]).toMatchObject({ trackingStage: "CONFIRMED", trackingNumber: null });
   });
 });
