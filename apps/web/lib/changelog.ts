@@ -30,7 +30,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-10-28",
     title: "Precios de locales: solo los vigentes",
     changes: [
-      { kind: "fixed", text: "La búsqueda de locales ya no muestra precios que el local no confirmó en la última semana, ni productos que el local dejó de publicar." },
+      { kind: "fixed", text: "La búsqueda de locales ya no muestra productos que no aparecieron en el local en las últimas 24 horas (cada local se consulta varias veces por día), ni los que el local dejó de publicar." },
     ],
   },
   {
