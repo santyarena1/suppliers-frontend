@@ -46,6 +46,8 @@ const UPGRADE: Record<Profile, PcStep[]> = {
   creator: ["cpu", "gpu", "ram", "ssd"],
 };
 const PERF: PcStep[] = ["cpu", "gpu", "ram", "ssd"];
+/** Lo que se vuelve a elegir si una mejora no entra con lo que había (en este orden: la fuente al final, con el consumo nuevo). */
+const SWAPPABLE: PcStep[] = ["case", "cooler", "psu"];
 
 /*
  * Marcas con las que un comercio arma una PC para vender. Las fuentes, gabinetes y coolers
@@ -356,8 +358,10 @@ export function autoBuild(input: AutoInput): AutoResult {
         const current = build[step]!;
         const curScore = score(step, current, profile);
         const room = budget - total() + (c(current) ?? 0);
+        // El gabinete, la fuente y el cooler que eligió NODO se pueden cambiar para que entre la mejora.
         const others: Build = { ...build };
         delete others[step];
+        for (const st of SWAPPABLE) if (picked.includes(st)) delete others[st];
         // En una gamer el procesador solo sube si quedó corto para la placa, y hasta lo justo.
         const cpuNeed = profile === "gamer" && step === "cpu" && build.gpu ? gpuScore(build.gpu) * CPU_PER_GPU : null;
         if (cpuNeed != null && curScore >= cpuNeed) continue;
@@ -375,19 +379,22 @@ export function autoBuild(input: AutoInput): AutoResult {
         const trial: Build = { ...build, [step]: better.p };
         // Que lo demás siga siendo compatible (una placa más grande puede no entrar o pedir más fuente).
         const broken = (Object.keys(trial) as PcStep[]).filter((st) => st !== step && verdict(st, trial[st]!, trial, qty).level === "bad");
-        if (broken.some((st) => st !== "psu" || !picked.includes("psu"))) continue;
+        if (broken.some((st) => !SWAPPABLE.includes(st) || !picked.includes(st))) continue;
         const prev = { ...build };
         const restore = () => {
           for (const k of Object.keys(build) as PcStep[]) delete build[k];
           Object.assign(build, prev);
         };
         Object.assign(build, trial);
-        if (broken.includes("psu")) {
-          delete build.psu;
-          const psu = choose("psu", null);
-          if (!psu) { restore(); continue; }
-          build.psu = psu.p;
+        let failed = false;
+        for (const st of SWAPPABLE) {
+          if (!broken.includes(st)) continue;
+          delete build[st];
+          const again = choose(st, null);
+          if (!again) { failed = true; break; }
+          build[st] = again.p;
         }
+        if (failed) { restore(); continue; }
         if (total() > budget) { restore(); continue; }
         improved = true;
       }
