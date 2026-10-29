@@ -55,6 +55,8 @@ const SWAPPABLE: PcStep[] = ["case", "cooler", "psu"];
  */
 const GOOD_PSU = /cooler\s*master|thermaltake|\basus\b|\brog\b|gigabyte|aorus|adata|\bxpg\b|corsair|\bmsi\b|evga|seasonic|be\s*quiet|deepcool|nzxt|antec|lian\s*li|super\s*flower|\bfsp\b|montech/i;
 const GOOD_CASE = /cooler\s*master|thermaltake|adata|\bxpg\b|gigabyte|aorus|corsair|\basus\b|\brog\b|\bmsi\b|nzxt|lian\s*li|deepcool|montech|antec|be\s*quiet|fractal|phanteks|hyte|jonsbo/i;
+/** Memorias y discos: marcas con garantía y repuesto; las genéricas solo si no hay otra. */
+const GOOD_MEMORY = /kingston|fury|westerns*digital|wd|samsung|crucial|adata|xpg|lexar|corsair|g.?skill|teams*group|t-?force|patriot|hiksemi|netac|seagate|kioxia|hynix|solidigm|gigabyte|msi|pny/i;
 const GOOD_COOLER = /cooler\s*master|deepcool|thermalright|id-?cooling|arctic|noctua|be\s*quiet|corsair|nzxt|lian\s*li|thermaltake|\basus\b|\bmsi\b|gigabyte|\bxpg\b|montech|wraith/i;
 /** Ryzen con video integrado (5600G, 8500G…): con placa de video rinden menos que su par sin video. */
 const APU = /ryzen\s*[3579]\s*(pro\s*)?\d{4}g\b/i;
@@ -237,8 +239,8 @@ export function autoBuild(input: AutoInput): AutoResult {
         const pool = prefer(
           rows,
           (r) => str(r.p, "cert") !== "" && !/sin cert/i.test(str(r.p, "cert")),
-          (r) => !serious || GOOD_PSU.test(brandText(r.p)),
-          (r) => !serious || certRank(str(r.p, "cert")) >= 1,
+          (r) => GOOD_PSU.test(brandText(r.p)),
+          (r) => certRank(str(r.p, "cert")) >= 1,
           (r) => gpu < 70 || certRank(str(r.p, "cert")) >= 3,
           (r) => (num(r.p, "watts") ?? 0) >= need * (serious ? 1.2 : 1.1),
           (r) => !need || (num(r.p, "watts") ?? 0) <= need * 1.5,
@@ -250,7 +252,7 @@ export function autoBuild(input: AutoInput): AutoResult {
         return nearest(
           prefer(
             rows,
-            (r) => !serious || GOOD_CASE.test(brandText(r.p)),
+            (r) => GOOD_CASE.test(brandText(r.p)),
             (r) => profile === "office" || (num(r.p, "fans") ?? 0) >= 2,
             // Con fuente aparte, un gabinete que ya trae fuente es plata tirada.
             (r) => !serious || r.p.compat.psuIncluded !== true,
@@ -277,14 +279,14 @@ export function autoBuild(input: AutoInput): AutoResult {
           const brand = named(r.p);
           return !socket || !brand || socket.startsWith(brand);
         });
-        const pool = prefer(fits.length ? fits : enough.length ? enough : rows, (r) => !serious || GOOD_COOLER.test(brandText(r.p)));
+        const pool = prefer(fits.length ? fits : enough.length ? enough : rows, (r) => GOOD_COOLER.test(brandText(r.p)));
         const air = tdp <= 105 ? pool.filter((r) => str(r.p, "kind") !== "liquid") : [];
         // Hasta 65 W cualquier cooler de marca alcanza: no hace falta uno de torre doble.
         return tdp <= 65 ? cheapest(air.length ? air : pool, step) : nearest(air.length ? air : pool, step, target);
       }
       return nearest(rows, step, target);
     }
-    let pool = rows;
+    let pool = step === "ram" || step === "ssd" ? prefer(rows, (r) => GOOD_MEMORY.test(brandText(r.p))) : rows;
     const usable = (sub: typeof rows) => sub.length > 0 && (target == null || sub.some((r) => r.cost <= target));
     // Que el procesador no frene a la placa: con una placa de gama alta, uno barato se queda corto.
     if (step === "cpu" && profile === "gamer" && build.gpu) {
@@ -300,7 +302,7 @@ export function autoBuild(input: AutoInput): AutoResult {
     }
     if (target == null) {
       // Sin presupuesto: la mejor relación rendimiento / precio (en diseño, el procesador pesa más que el precio).
-      const k = profile === "creator" && step === "cpu" ? 0.6 : 0.85;
+      const k = profile === "creator" && step === "cpu" ? 0.75 : 0.85;
       return pool.slice().sort((a, b) => score(step, b.p, profile) / Math.pow(b.cost, k) - score(step, a.p, profile) / Math.pow(a.cost, k))[0];
     }
     const fit = pool.filter((r) => r.cost <= target);
