@@ -10,10 +10,13 @@ export default function AccessCodeQr({
   code,
   label,
   orgName,
+  redeemIn = "Proveedores",
 }: {
   code: string;
   label?: string | null;
   orgName?: string | null;
+  /** Dónde se canjea: los códigos de marca van en Marcas. */
+  redeemIn?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [src, setSrc] = useState("");
@@ -34,8 +37,10 @@ export default function AccessCodeQr({
   }, [code]);
 
   function printQr() {
-    const w = window.open("", "_blank", "noopener,noreferrer,width=480,height=640");
+    // Con noopener, window.open devuelve null y no había dónde escribir: se corta el vínculo a mano.
+    const w = window.open("", "_blank", "width=480,height=640");
     if (!w) return;
+    w.opener = null;
     w.document.write(`<!doctype html><html><head><title>Código NODO</title>
       <style>
         body { font-family: ui-sans-serif, system-ui, sans-serif; text-align: center; padding: 32px; color: #0f172a; }
@@ -46,14 +51,12 @@ export default function AccessCodeQr({
       </style></head><body>
       <h1>NODO</h1>
       <p>${orgName ? `Código de ${escapeHtml(orgName)}` : "Código de vinculación"}</p>
-      <img src="${src}" alt="QR" />
+      <img src="${src}" alt="QR" onload="window.focus(); window.print();" />
       <code>${escapeHtml(code)}</code>
       ${label ? `<p>${escapeHtml(label)}</p>` : ""}
-      <p>Canjealo en Proveedores. Hasta que salga bien, NODO no dice de quién es.</p>
+      <p>Canjealo en ${escapeHtml(redeemIn)}. Hasta que salga bien, NODO no dice de quién es.</p>
       </body></html>`);
     w.document.close();
-    w.focus();
-    w.print();
   }
 
   if (!src) return null;

@@ -29,3 +29,17 @@ export function proxyImg(url: string | undefined | null, opts?: { trim?: boolean
   if (url.startsWith("/img-proxy?")) return `${url}${trim}`;
   return `/img-proxy?url=${encodeURIComponent(url)}${trim}`;
 }
+
+const ORDER_STATUS_LABEL: Record<string, string> = {
+  PENDING: "Enviando",
+  PENDING_APPROVAL: "Esperando firma",
+  CREATED: "Enviado al portal",
+  OFFLINE: "Por mensaje",
+  REJECTED: "Rechazado",
+  FAILED: "Falló",
+};
+
+/** Estado de un pedido de NODO en palabras, para las pantallas del distribuidor. */
+export function orderStatusLabel(status: string): string {
+  return ORDER_STATUS_LABEL[status] ?? status;
+}

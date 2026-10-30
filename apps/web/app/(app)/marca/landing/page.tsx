@@ -261,6 +261,7 @@ export default function BrandEspacioPage() {
                     type="button"
                     onClick={() => {
                       if (!landing) return;
+                      if (landing.html?.trim() && !window.confirm("La plantilla reemplaza el HTML que tenés ahora. ¿Seguir?")) return;
                       setLanding({ ...landing, html: BRAND_LANDING_HTML_TEMPLATE });
                       void save({ html: BRAND_LANDING_HTML_TEMPLATE });
                     }}

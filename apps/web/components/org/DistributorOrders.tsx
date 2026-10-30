@@ -5,7 +5,7 @@ import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
 import { getTenant } from "@/lib/auth";
 import { myApi, type OwnClientOrder } from "@/lib/api";
-import { formatUSD } from "@/lib/format";
+import { formatUSD, orderStatusLabel } from "@/lib/format";
 import { ClipboardList, Loader2, MessageSquare } from "lucide-react";
 
 function errMsg(err: unknown, fallback: string) {
@@ -86,7 +86,7 @@ export default function DistributorOrders() {
               <option value="ALL">Todos los estados</option>
               {statuses.map((value) => (
                 <option key={value} value={value}>
-                  {value}
+                  {orderStatusLabel(value)}
                 </option>
               ))}
             </select>
@@ -130,7 +130,7 @@ export default function DistributorOrders() {
                   {order.inBrandScope === false && (
                     <span className="text-[10px] uppercase tracking-wide text-surface-500">Otra marca</span>
                   )}
-                  <span className="text-[11px] text-surface-400">{order.status}</span>
+                  <span className="text-[11px] text-surface-400">{orderStatusLabel(order.status)}</span>
                   <span className="text-[11px] text-surface-400 tabular-nums">
                     {order.total != null ? formatUSD(order.total) : "—"}
                   </span>

@@ -6,6 +6,7 @@ import { CheckCircle2, ClipboardList, Copy, ExternalLink, Loader2 } from "lucide
 import { ordersApi, type TenantOrder } from "@/lib/api";
 import { buildSellerMessageFromOrder } from "@/lib/seller-message";
 import { getTenant } from "@/lib/auth";
+import { orderStatusLabel } from "@/lib/format";
 import { useMyProviders } from "@/lib/myProviders";
 
 /**
@@ -86,7 +87,7 @@ export default function NodoOrdersPanel({ provider }: { provider: string }) {
                     <td className="px-4 py-2 text-surface-300 whitespace-nowrap">{new Date(o.createdAt).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}</td>
                     <td className="px-3 py-2 text-surface-300 tabular-nums">{(o.items ?? []).length}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-surface-100">{o.total == null ? "—" : Number(o.total).toLocaleString("es-AR", { maximumFractionDigits: 2 })}</td>
-                    <td className="px-3 py-2 text-xs text-amber-400">{o.channel === "OFFLINE" || o.status === "OFFLINE" ? "Por mensaje" : o.status}</td>
+                    <td className="px-3 py-2 text-xs text-amber-400">{o.channel === "OFFLINE" ? "Por mensaje" : orderStatusLabel(o.status)}</td>
                     <td className="px-3 py-2 text-xs text-surface-400">{o.createdBy ?? "—"}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <button type="button" onClick={() => copy(o)} className="inline-flex items-center gap-1 text-[11px] font-medium text-surface-400 hover:text-white">

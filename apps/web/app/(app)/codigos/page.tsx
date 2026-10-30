@@ -122,11 +122,12 @@ export default function CodigosPage() {
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
-                      <AccessCodeQr code={code.code} label={code.label} orgName={orgName} />
+                      <AccessCodeQr code={code.code} label={code.label} orgName={orgName} redeemIn={getTenant()?.type === "BRAND" ? "Marcas" : "Proveedores"} />
                       {canManage && (
                         <button
                           type="button"
                           onClick={async () => {
+                            if (!window.confirm(`¿Anular el código ${code.code}? Ya no se va a poder canjear.`)) return;
                             try {
                               await myApi.revokeAccessCode(code.id);
                               setAviso({ ok: true, text: "Código revocado" });

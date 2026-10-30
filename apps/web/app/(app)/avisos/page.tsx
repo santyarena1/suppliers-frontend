@@ -15,7 +15,7 @@ function isSubscriptionNotice(n: OrgNotice) {
   return n.landingKey?.startsWith("subscription:") ?? false;
 }
 
-/** Avisos de pedidos y de Vender en NODO: a dónde lleva cada uno. */
+/** Avisos de pedidos, de Vender en NODO y del sistema: a dónde lleva cada uno. */
 function storefrontLink(n: OrgNotice): { href: string; label: string } | null {
   const key = n.landingKey ?? "";
   // Seguimiento de un pedido al distribuidor (confirmado, facturado, despachado…).
@@ -25,6 +25,17 @@ function storefrontLink(n: OrgNotice): { href: string; label: string } | null {
   if (key.startsWith("storefront-offer:")) return { href: "/configuracion#tiendas", label: "Elegir en Configuración" };
   if (key === "storefront:audience") return { href: "/vender?tab=datos", label: "Ver quién ve tu tienda" };
   if (key.startsWith("storefront:")) return { href: "/vender", label: "Ir a Vender en NODO" };
+  // Avisos del sistema sobre listas y sincronización: van al proveedor, no a una landing.
+  if (key.startsWith("list-overdue:")) return { href: `/proveedores/${encodeURIComponent(key.slice(13))}?tab=lists`, label: "Ver las listas" };
+  if (key.startsWith("list-import:")) {
+    const parts = key.split(":");
+    return parts.length > 2
+      ? { href: `/proveedores/${encodeURIComponent(parts[1])}?tab=lists`, label: "Revisar la lista" }
+      : { href: "/proveedores", label: "Ir a Proveedores" };
+  }
+  if (key.startsWith("sync-paused:")) return { href: `/proveedores/${encodeURIComponent(key.slice(12))}?tab=sync`, label: "Ver la sincronización" };
+  if (key.startsWith("catalog-api-webhook:")) return { href: "/configuracion/api", label: "Ver la API de catálogo" };
+  if (key.startsWith("join-request:") || key.startsWith("team-invite:")) return { href: "/equipo", label: "Ir a Equipo" };
   return null;
 }
 
@@ -112,7 +123,7 @@ export default function AvisosPage() {
                   <Link href="/suscripcion" className="inline-block mt-2 text-[11px] text-brand-400">
                     Ver suscripción
                   </Link>
-                ) : (
+                ) : n.kind === "SYSTEM" ? null : (
                   <>
                     {n.kind !== "NEWS" && n.landingKey && (
                       <a href={`/m/${n.landingKey}`} target="_blank" rel="noreferrer" className="inline-block mt-2 text-[11px] text-brand-400">

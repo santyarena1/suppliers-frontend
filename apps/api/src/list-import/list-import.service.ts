@@ -1099,7 +1099,7 @@ export class ListImportService {
         kind: "SYSTEM" as const,
         title: `Lista de ${supplier?.name ?? record.provider} en revisión`,
         body: `${record.originalFileName}: ${reasons[0]}${reasons.length > 1 ? ` (+${reasons.length - 1})` : ""}`,
-        landingKey: `list-import:${record.id}`,
+        landingKey: `list-import:${record.provider}:${record.id}`,
       })),
     });
   }

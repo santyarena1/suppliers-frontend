@@ -232,7 +232,9 @@ function ItemEditor({
             </button>
             <button
               type="button"
-              onClick={() => void actions.remove(item.id)}
+              onClick={() => {
+                if (window.confirm(`¿Quitar ${item.name} de tus productos?`)) void actions.remove(item.id);
+              }}
               className="inline-flex items-center gap-1 text-xs text-surface-400 hover:text-red-400"
             >
               <Trash2 className="w-3.5 h-3.5" />

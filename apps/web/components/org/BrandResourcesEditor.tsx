@@ -123,6 +123,7 @@ export default function BrandResourcesEditor({
 
   async function remove(id: string) {
     if (!canWrite) return;
+    if (!window.confirm("¿Borrar este archivo? No se puede deshacer.")) return;
     try {
       await brandApi.removeResource(id);
       setItems((prev) => prev.filter((item) => item.id !== id));

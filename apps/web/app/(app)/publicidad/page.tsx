@@ -87,6 +87,8 @@ export default function PublicidadPage() {
         subtitle: campaign.subtitle,
         imageUrl: campaign.imageUrl ?? undefined,
         linkUrl: campaign.linkUrl ?? undefined,
+        // El hero de noticias exige su nota: sin esto, «Activar» siempre fallaba.
+        articleId: campaign.articleId ?? undefined,
         status,
       });
       await load();

@@ -22,9 +22,9 @@ import { formatARS, formatUSD } from "@/lib/format";
 import { usePrefs } from "@/lib/prefs";
 import { useIibbRatesEpoch } from "@/lib/iibb-rates";
 import { usePurchasePolicies } from "@/lib/purchase";
-import { purchaseLinePricing, type PriceMode } from "@/lib/purchase-price";
+import { type PriceMode } from "@/lib/purchase-price";
 import { displayTaxTitle } from "@/lib/display-price";
-import { compareEntrySortArs } from "@/lib/compare-price";
+import { compareEntrySortArs, wholesaleUnitDisplayUsd } from "@/lib/compare-price";
 import {
   loadCompareEntries,
   loadManualOrder,
@@ -126,12 +126,22 @@ export default function ComparadorPage() {
     [withIva, withIibb, usdArs, policies, iibbEpoch]
   );
 
+  // El margen contra un local se mide sobre el costo como se ve (con o sin impuestos), igual que en la ficha.
+  const costOf = useCallback(
+    (product: ProductDTO, mode: PriceMode) =>
+      wholesaleUnitDisplayUsd(product, sortCtx.policies[product.provider], mode, { withIva: sortCtx.withIva, withIibb: sortCtx.withIibb }),
+    [sortCtx]
+  );
+
   const displayed = useMemo(() => {
-    if (manualOrder) return entries;
-    return [...entries].sort(
+    const priced = entries.map((e) =>
+      e.kind === "retail" && e.sourceProduct ? { ...e, costUsd: costOf(e.sourceProduct, e.sourceMode ?? "list") } : e
+    );
+    if (manualOrder) return priced;
+    return priced.sort(
       (a, b) => compareEntrySortArs(a, sortCtx) - compareEntrySortArs(b, sortCtx)
     );
-  }, [entries, manualOrder, sortCtx]);
+  }, [entries, manualOrder, sortCtx, costOf]);
 
   const addProvider = useCallback(
     (product: ProductDTO, mode: PriceMode) => {
@@ -172,11 +182,7 @@ export default function ComparadorPage() {
               ? from.sourceProduct
               : null;
         const costUsd = source
-          ? purchaseLinePricing(
-              source,
-              policies[source.provider],
-              from?.kind === "provider" ? from.mode : from?.sourceMode ?? "list"
-            ).unitNet
+          ? costOf(source, from?.kind === "provider" ? from.mode : from?.sourceMode ?? "list")
           : null;
         return [
           ...prev,
@@ -190,7 +196,7 @@ export default function ComparadorPage() {
       });
       showFlash(duplicate ? "Ese local ya está en el tablero" : `Local agregado · ${hit.store.name}`);
     },
-    [policies, showFlash]
+    [costOf, showFlash]
   );
 
   const replaceWithRetail = useCallback(
@@ -208,7 +214,7 @@ export default function ComparadorPage() {
           if (e.kind === "provider") {
             return newRetailEntry(hit, {
               id: e.id,
-              costUsd: purchaseLinePricing(e.product, policies[e.product.provider], e.mode).unitNet,
+              costUsd: costOf(e.product, e.mode),
               linkedName: e.product.name,
               sourceProduct: e.product,
               sourceMode: e.mode,
@@ -219,11 +225,7 @@ export default function ComparadorPage() {
             hit,
             costUsd:
               e.sourceProduct
-                ? purchaseLinePricing(
-                    e.sourceProduct,
-                    policies[e.sourceProduct.provider],
-                    e.sourceMode ?? "list"
-                  ).unitNet
+                ? costOf(e.sourceProduct, e.sourceMode ?? "list")
                 : e.costUsd,
           };
         });
@@ -232,7 +234,7 @@ export default function ComparadorPage() {
       else if (replaced) showFlash(`Columna en local · ${hit.store.name}`);
       setRetailForId(null);
     },
-    [policies, showFlash]
+    [costOf, showFlash]
   );
 
   const remove = useCallback((id: string) => {
@@ -485,11 +487,7 @@ export default function ComparadorPage() {
           }
           costUsd={
             retailFor.kind === "provider"
-              ? purchaseLinePricing(
-                  retailFor.product,
-                  policies[retailFor.product.provider],
-                  retailFor.mode
-                ).unitNet
+              ? costOf(retailFor.product, retailFor.mode)
               : retailFor.costUsd
           }
           existingRetailIds={existingRetailIds}

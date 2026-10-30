@@ -256,6 +256,8 @@ function QuotesPageInner() {
       setSort("updated");
       setList((prev) => [q, ...prev.filter((x) => x.id !== q.id)]);
       setTotal((t) => t + 1);
+      // Sin esto, con el primer presupuesto la página seguía en «cómo funciona» y no abría el editor.
+      setCounts((c) => (c ? { ...c, ALL: c.ALL + 1, [q.status]: (c[q.status] ?? 0) + 1 } : c));
       setFreshId(q.id);
       select(q.id);
     } catch (err) {

@@ -12,7 +12,7 @@ import {
   type OwnPortfolio,
   type TenantLinkStatus,
 } from "@/lib/api";
-import { formatUSD } from "@/lib/format";
+import { formatUSD, orderStatusLabel } from "@/lib/format";
 import { ArrowLeft, Loader2, MessageSquare, ShoppingCart } from "lucide-react";
 
 const inputClass =
@@ -239,7 +239,7 @@ export default function ClienteDetallePage() {
                     {detail.orders.map((order) => (
                       <div key={order.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                         <p className="text-sm text-surface-200 flex-1 min-w-[120px]">{order.providerName}</p>
-                        <span className="text-[11px] text-surface-400">{order.status}</span>
+                        <span className="text-[11px] text-surface-400">{orderStatusLabel(order.status)}</span>
                         <span className="text-[11px] text-surface-400 tabular-nums">
                           {order.total != null ? formatUSD(order.total) : "—"}
                         </span>

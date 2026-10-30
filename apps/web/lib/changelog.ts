@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.21.4",
+    date: "2026-10-30",
+    title: "Arreglos en presupuestos, pedidos, comparador y avisos",
+    changes: [
+      { kind: "fixed", text: "Presupuestos: el primer presupuesto se abre en el editor apenas lo creás, sin tener que recargar." },
+      { kind: "fixed", text: "Rechazar un pedido que espera tu firma pide el motivo, y queda a la vista en el pedido." },
+      { kind: "fixed", text: "Comparador: el margen contra los locales se calcula sobre el mismo costo que ves (con o sin impuestos), igual que en la ficha del producto." },
+      { kind: "fixed", text: "Notificaciones: los avisos de listas vencidas, listas en revisión, sincronización pausada y equipo llevan a la pantalla que corresponde." },
+      { kind: "fixed", text: "Distribuidores: en Pedidos y en la ficha de cada cliente los estados se leen en castellano («Esperando firma», «Enviado al portal», «Por mensaje»)." },
+      { kind: "fixed", text: "Códigos de vinculación: «Imprimir» en el QR abre la hoja para imprimir, y los de marca dicen que se canjean en Marcas." },
+      { kind: "fixed", text: "Publicidad: «Activar» funciona en el Hero de Noticias." },
+      { kind: "improved", text: "Anular un código, borrar un material, quitar un producto de marca o aplicar la plantilla de la landing piden confirmación antes." },
+    ],
+  },
+  {
     version: "2.21.3",
     date: "2026-10-29",
     title: "Seguimiento de pedidos revisado contra los portales",

@@ -130,7 +130,9 @@ function RetailerPedidosPage() {
   }, [aviso]);
 
   async function decidir(order: TenantOrder, accion: "aprobar" | "rechazar") {
-    if (accion === "rechazar" && !confirm(`¿Rechazar el pedido de ${order.providerName}?`)) return;
+    // El motivo queda a la vista en el pedido; cancelar el cuadro no rechaza nada.
+    const motivo = accion === "rechazar" ? prompt(`¿Por qué rechazás el pedido de ${order.providerName}? (opcional)`, "") : null;
+    if (accion === "rechazar" && motivo === null) return;
     setWorking(order.id);
     setAviso(null);
     try {
@@ -143,7 +145,7 @@ function RetailerPedidosPage() {
             : res.data.message || `Pedido enviado a ${order.providerName}`,
         });
       } else {
-        await ordersApi.reject(order.id);
+        await ordersApi.reject(order.id, motivo?.trim().slice(0, 500) || undefined);
         setAviso({ ok: true, text: `Pedido de ${order.providerName} rechazado` });
       }
       await load();
