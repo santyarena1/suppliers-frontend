@@ -489,21 +489,23 @@ export default function ProductCard({
 
   if (layout === "row") {
     return (
-      <article className="pl group" data-tour="product-card">
-        {shot}
-        <div className="pl__main">{details}</div>
-        <div className="pl__side">
-          {priceBlock}
-          {webHint}
-          {actions}
-        </div>
-        <SalePricePanel
-          open={saleOpen}
-          onClose={() => setSaleOpen(false)}
-          seedQuery={product.name}
-          costUsd={shownUsd}
-        />
-      </article>
+      <div className="pl-wrap">
+        <article className="pl group" data-tour="product-card">
+          {shot}
+          <div className="pl__main">{details}</div>
+          <div className="pl__side">
+            {priceBlock}
+            {webHint}
+            {actions}
+          </div>
+          <SalePricePanel
+            open={saleOpen}
+            onClose={() => setSaleOpen(false)}
+            seedQuery={product.name}
+            costUsd={shownUsd}
+          />
+        </article>
+      </div>
     );
   }
 

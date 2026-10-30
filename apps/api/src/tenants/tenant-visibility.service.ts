@@ -285,8 +285,8 @@ export class TenantVisibilityService {
       });
     }
 
-    // Directorio abierto: todo comercio ve los distribuidores de NODO de los que
-    // alguien ya obtuvo el catálogo (sincronizando su cuenta o subiendo una lista) y
+    // Directorio abierto: todo comercio ve los distribuidores de NODO con integración
+    // real y los de los que alguien ya obtuvo el catálogo (subiendo una lista), y
     // se conecta con su cuenta o con su propia lista; ve sus precios, no los de otro.
     // Los códigos de acceso siguen funcionando igual; con PROVIDER_DIRECTORY_OPEN=false
     // se vuelve a que solo aparezca lo vinculado por código o publicidad.
@@ -303,7 +303,8 @@ export class TenantVisibilityService {
         const key = d.providerKey as Provider;
         if (isDemoDistributorKey(key)) continue;
         if (visibles.has(key) || d.id === tenantId) continue;
-        if (!withCatalog.has(key)) continue;
+        // Con integración real alcanza: el primer comercio que cargue su cuenta trae el catálogo.
+        if (!withCatalog.has(key) && !providerHasCatalogAdapter(key)) continue;
         visibles.set(key, {
           provider: key,
           name: d.name,

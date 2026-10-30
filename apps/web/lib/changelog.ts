@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.21.5",
+    date: "2026-10-30",
+    title: "Más distribuidores para sumar y la lista compacta arreglada",
+    changes: [
+      { kind: "fixed", text: "«Agregar proveedor» muestra todos los distribuidores integrados con NODO, aunque todavía nadie se haya conectado a ellos (por ejemplo, Microglobal). Lo sumás, cargás tu cuenta y lo configurás." },
+      { kind: "fixed", text: "Búsqueda: la vista «Lista compacta» ya no se desarma en pantallas de computadora medianas." },
+    ],
+  },
+  {
     version: "2.21.4",
     date: "2026-10-30",
     title: "Arreglos en presupuestos, pedidos, comparador y avisos",
