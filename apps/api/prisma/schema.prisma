@@ -216,7 +216,8 @@ model Tenant {
   cartItems          CartItem[]
   orgCart            OrgCart?
   orders             ProviderOrder[]
-  opsAliases         TenantOpsAlias[]
+  paymentReceipts    ProviderPaymentReceipt[]
+  opsAliases        TenantOpsAlias[]
   adCampaigns        AdCampaign[]
   brandLanding       BrandLanding?
   brandActions       BrandAction[]
@@ -1200,6 +1201,20 @@ model CartItem {
 // INVID: el POST de "CONFIRMAR PEDIDO" deja el pedido pendiente.
 // NEW_BYTES: POST /carrito/process crea la orden en la cuenta (retiro por defecto).
 // `invidOrderNumber` / `invidWebOrderNumber` guardan el nro. externo del proveedor.
+/// Comprobante de pago cargado desde NODO. `orderNumber` es el del portal: el pedido puede no haber salido de NODO.
+model ProviderPaymentReceipt {
+  id              String   @id @default(uuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider        String
+  orderNumber     String
+  bank            String?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId, provider, orderNumber])
+}
+
 model ProviderOrder {
   id                  String              @id @default(uuid())
   userId              String

@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import axios from "axios";
-import { applyInvidOrderRates, INVID_PAYMENT_NOTICE, parseAccountStatement, parseInvidPaymentForm, parseOrdersTable } from "./invid-order.parser";
+import { applyInvidOrderRates, INVID_PAYMENT_NOTICE, invidPaymentRejection, parseAccountStatement, parseInvidPageAlerts, parseInvidPaymentForm, parseOrdersTable } from "./invid-order.parser";
+import { PrismaService } from "../prisma/prisma.service";
 import { parseFileUploadForms } from "./html-table";
 import { documentFile } from "./document-file";
 import { assertHttpsHost } from "./safe-url";
@@ -13,6 +14,8 @@ const INVID_HOSTS = ["www.invidcomputers.com", "invidcomputers.com"];
 @Injectable()
 export class InvidAccountService {
   private readonly logger = new Logger(InvidAccountService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
 
   private async login(username: string, password: string): Promise<string> {
     try {
@@ -66,6 +69,20 @@ export class InvidAccountService {
       note: paymentForm || paymentUploads.length > 0
         ? undefined
         : "Si Invid muestra Adjuntar en un pedido, se abre el formulario de comprobantes acá (banco, observaciones y archivos). Si no, el alta se hace desde su portal.",
+    };
+  }
+
+  /** Suma a cada pedido cuándo se cargó su comprobante desde NODO: el portal no lo muestra. */
+  async withPaymentReceipts<T extends { orders: { orderNumber: string }[] }>(tenantId: string, payload: T) {
+    const receipts = await this.prisma.providerPaymentReceipt.findMany({
+      where: { tenantId, provider: "INVID", orderNumber: { in: payload.orders.map((o) => o.orderNumber) } },
+      orderBy: { createdAt: "asc" },
+      select: { orderNumber: true, createdAt: true },
+    });
+    const sentAt = new Map(receipts.map((r) => [r.orderNumber, r.createdAt]));
+    return {
+      ...payload,
+      orders: payload.orders.map((o) => ({ ...o, paymentSentAt: sentAt.get(o.orderNumber)?.toISOString() })),
     };
   }
 
@@ -125,6 +142,7 @@ export class InvidAccountService {
   }
 
   async attachPayment(
+    owner: { tenantId: string; userId: string },
     credentials: Record<string, string>,
     files: { field?: string; filename: string; mimetype: string; buffer: Buffer }[],
     extraFields?: Record<string, string>
@@ -169,11 +187,11 @@ export class InvidAccountService {
     const merged: Record<string, string> = {
       ...(generic?.fields ?? {}),
       ...(form?.fields ?? {}),
-      ...(extraFields ?? {}),
     };
-    delete merged.paymentHref;
-    if (form?.orderField && extraFields?.orderNumber && !merged[form.orderField]) {
-      merged[form.orderField] = extraFields.orderNumber;
+    const portalOrder = extraFields?.paymentOrderId?.trim() || extraFields?.orderNumber?.trim();
+    if (form?.orderField && !merged[form.orderField]) {
+      if (!portalOrder) throw new BadRequestException("Falta el número de pedido");
+      merged[form.orderField] = portalOrder;
     }
     if (form?.bankField && extraFields?.bank) merged[form.bankField] = extraFields.bank;
     if (form?.notesField && extraFields?.notes) merged[form.notesField] = extraFields.notes;
@@ -181,23 +199,47 @@ export class InvidAccountService {
       if (k === "file" || k === "files" || /^file\d+$/i.test(k)) continue;
       body.append(k, v);
     }
+    // Por orden y no por nombre: Invid exige el primero aunque se haya elegido solo el segundo selector.
     files.slice(0, fileFields.length).forEach((file, i) => {
-      const field = file.field && fileFields.includes(file.field) ? file.field : fileFields[i] || fileFields[0];
       body.append(
-        field,
+        fileFields[i],
         new Blob([new Uint8Array(file.buffer)], { type: file.mimetype || "application/octet-stream" }),
         file.filename
       );
     });
-    const res = await axios.post<string>(actionUrl.toString(), body, {
+    const res = await axios.post<ArrayBuffer>(actionUrl.toString(), body, {
       headers: { Cookie: cookie },
       timeout: 45_000,
       maxRedirects: 5,
+      responseType: "arraybuffer",
       validateStatus: (s) => s < 500,
     });
     if (res.status >= 400) {
       throw new BadGatewayException(`Invid no aceptó el comprobante (${res.status})`);
     }
-    return { ok: true, status: res.status };
+    const reply = decodeHttpText(res.data, res.headers["content-type"]);
+    const rejection = invidPaymentRejection(reply, pageHtml);
+    const order = extraFields?.orderNumber?.trim() || portalOrder || "";
+    // Todavía no vimos la respuesta real de Invid a un envío: queda registrada para poder revisarla.
+    const row = parseOrdersTable(reply).orders.find((o) => o.orderNumber === order);
+    this.logger.log(
+      `Invid comprobante pedido ${order}: ${res.status}, ${reply.length} bytes, fila «${row?.invoice ?? "sin fila"}», avisos ${JSON.stringify(parseInvidPageAlerts(reply).map((a) => a.text.slice(0, 160)))}`
+    );
+    if (rejection) throw new BadGatewayException(`Invid no aceptó el comprobante: ${rejection}`);
+    const sentAt = await this.recordReceipt(owner, order, extraFields?.bank);
+    return { ok: true, status: res.status, sentAt };
+  }
+
+  /** Invid ya lo recibió: si falla el registro no se informa error, porque llevaría a mandarlo de nuevo. */
+  private async recordReceipt(owner: { tenantId: string; userId: string }, orderNumber: string, bank?: string) {
+    const sentAt = new Date();
+    try {
+      await this.prisma.providerPaymentReceipt.create({
+        data: { tenantId: owner.tenantId, provider: "INVID", orderNumber, bank, createdByUserId: owner.userId, createdAt: sentAt },
+      });
+    } catch (err) {
+      this.logger.warn(`No se registró el comprobante del pedido ${orderNumber}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return sentAt.toISOString();
   }
 }

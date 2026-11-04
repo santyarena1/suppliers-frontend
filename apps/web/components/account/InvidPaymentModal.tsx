@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { CheckCircle2, X } from "lucide-react";
 import {
   CheckoutField,
   CheckoutSelect,
@@ -18,13 +18,12 @@ const FALLBACK_FORM: InvidPaymentForm = {
   method: "post",
   fields: {},
   banks: [
-    { value: "Macro", label: "Macro" },
-    { value: "Galicia", label: "Galicia" },
-    { value: "Mercado Pago", label: "Mercado Pago" },
+    { value: "M", label: "Macro" },
+    { value: "G", label: "Galicia" },
   ],
   bankField: "banco",
   notesField: "observaciones",
-  fileFields: ["archivo1", "archivo2", "archivo3"],
+  fileFields: ["archivo", "archivo2", "archivo3"],
   notice:
     "No envíes el comprobante si necesitás que se realicen cambios en el pedido, primero contactate con nosotros. Usá Observaciones si el pago es parcial, usás saldo a favor o te queda efectivo. Si pagaste por más de un banco, elegí donde depositaste más. Echeq: Galicia. Después de las 17:00 hs rige el TC del día siguiente.",
 };
@@ -38,7 +37,7 @@ export default function InvidPaymentModal({
   order: InvidOrder;
   form?: InvidPaymentForm | null;
   onClose: () => void;
-  onSent?: () => void;
+  onSent?: (sentAt: string) => void;
 }) {
   const schema = form ?? FALLBACK_FORM;
   const slots = schema.fileFields.length > 0 ? schema.fileFields.slice(0, 3) : FALLBACK_FORM.fileFields;
@@ -69,18 +68,23 @@ export default function InvidPaymentModal({
       setError("Adjuntá al menos un comprobante");
       return;
     }
+    if (attached.some(({ file }) => !/\.(pdf|jpe?g|png)$/i.test(file.name))) {
+      setError("Invid solo acepta archivos PDF, JPG o PNG");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await uploadAuthedFiles("/providers/INVID/payments/attach", attached, {
+      const res = (await uploadAuthedFiles("/providers/INVID/payments/attach", attached, {
         bank,
         notes: notes.trim(),
         orderNumber: order.orderNumber,
         webOrderNumber: order.webOrderNumber,
+        ...(order.paymentOrderId ? { paymentOrderId: order.paymentOrderId } : {}),
         ...(order.paymentHref ? { paymentHref: order.paymentHref } : {}),
-      });
+      })) as { sentAt?: string };
       setOk(true);
-      onSent?.();
+      onSent?.(res.sentAt ?? new Date().toISOString());
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "No se pudo enviar el comprobante");
     } finally {
@@ -113,15 +117,30 @@ export default function InvidPaymentModal({
         </div>
 
         <div className="px-5 py-4 flex flex-col gap-4">
-          <div className="rounded-sm border border-red-500/25 bg-red-500/8 px-3 py-2.5 text-[12px] text-red-200 leading-relaxed">
-            <p className="font-semibold text-red-300 mb-1">Importante</p>
-            <p>{schema.notice || FALLBACK_FORM.notice}</p>
-          </div>
-
           {ok ? (
-            <p className="text-sm text-emerald-400">Comprobante enviado a Invid.</p>
+            <div className="flex flex-col items-start gap-3">
+              <p className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-400">
+                <CheckCircle2 className="w-4 h-4" />
+                Comprobante cargado
+              </p>
+              <p className="text-xs text-surface-400">
+                Se envió a Invid para el pedido {order.orderNumber}. Lo vas a ver marcado en Mis pedidos.
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-9 px-3 rounded-sm text-[13px] font-medium border border-surface-700 text-surface-200 hover:text-white hover:border-surface-500"
+              >
+                Cerrar
+              </button>
+            </div>
           ) : (
             <>
+              <div className="rounded-sm border border-red-500/25 bg-red-500/8 px-3 py-2.5 text-[12px] text-red-200 leading-relaxed">
+                <p className="font-semibold text-red-300 mb-1">Importante</p>
+                <p>{schema.notice || FALLBACK_FORM.notice}</p>
+              </div>
+
               <CheckoutField label="Banco *" htmlFor="invid-bank">
                 <CheckoutSelect
                   id="invid-bank"
@@ -155,7 +174,7 @@ export default function InvidPaymentModal({
                     <input
                       key={field}
                       type="file"
-                      accept=".pdf,image/*,.jpg,.jpeg,.png"
+                      accept=".pdf,.jpg,.jpeg,.png"
                       className="text-xs text-surface-300 file:mr-2 file:rounded-sm file:border-0 file:bg-surface-800 file:px-2 file:py-1 file:text-xs file:text-white"
                       onChange={(e) => setFile(i, e.target.files?.[0] ?? null)}
                     />

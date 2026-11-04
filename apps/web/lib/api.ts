@@ -1886,6 +1886,9 @@ export interface InvidOrder {
   amountArs?: number;
   canAttachPayment?: boolean;
   paymentHref?: string;
+  paymentOrderId?: string;
+  /** Cuándo se cargó el comprobante desde NODO. */
+  paymentSentAt?: string;
 }
 export interface InvidPaymentBank {
   value: string;

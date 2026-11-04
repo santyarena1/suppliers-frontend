@@ -65,7 +65,9 @@ function parseRadios(html: string, name: string): InvidRadioOption[] {
       : null;
     const siblingLabel = after.match(/<label[^>]*>([\s\S]*?)<\/label>/i);
     const cellText = after.match(/>([^<]{2,80})</);
-    const rawLabel = labelFor?.[1] ?? siblingLabel?.[1] ?? cellText?.[1] ?? "";
+    // Radio dentro de su <label>: su texto es el que le sigue, no el de la etiqueta siguiente.
+    const wrapped = after.slice(tag.length).match(/^([^<]*)<\/label>/i);
+    const rawLabel = labelFor?.[1] ?? wrapped?.[1] ?? siblingLabel?.[1] ?? cellText?.[1] ?? "";
     const label = stripTags(rawLabel) || KNOWN_PAYMENT_LABELS[value] || `Opción ${value}`;
     options.push({ value, label, id });
   }
@@ -148,9 +150,8 @@ function isBankCaption(label: string): boolean {
 }
 
 const DEFAULT_INVID_BANKS: { value: string; label: string }[] = [
-  { value: "Macro", label: "Macro" },
-  { value: "Galicia", label: "Galicia" },
-  { value: "Mercado Pago", label: "Mercado Pago" },
+  { value: "M", label: "Macro" },
+  { value: "G", label: "Galicia" },
 ];
 
 function findSelectName(html: string, hint: RegExp): string | undefined {
@@ -436,6 +437,8 @@ export interface InvidOrderRow {
   amountArs?: number;
   canAttachPayment?: boolean;
   paymentHref?: string;
+  /** Valor de `pedido` en el formulario de comprobantes (botón `data-portal-comprobante`). */
+  paymentOrderId?: string;
 }
 
 const LINE_STATUS = /^(abierto|cerrado|cancelado|pendiente|pedido|vencido|anulado|facturado)$/i;
@@ -850,6 +853,44 @@ export function parseInvidPaymentForm(html: string): InvidPaymentForm | null {
   };
 }
 
+/** Avisos de la página (`.alert`), sin contar los que son parte fija de un formulario o diálogo. */
+export function parseInvidPageAlerts(html: string): { isError: boolean; text: string }[] {
+  const page = html
+    .replace(/<(script|style|dialog|form)\b[\s\S]*?<\/\1>/gi, "");
+  const alerts: { isError: boolean; text: string }[] = [];
+  const re = /<(div|p|span)\b[^>]*class=["']([^"']*\balert\b[^"']*)["'][^>]*>([\s\S]*?)<\/\1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(page))) {
+    const text = stripTags(m[3].replace(/<br\s*\/?>/gi, " "));
+    if (text) alerts.push({ isError: /alert-(danger|error|warning)/i.test(m[2]), text });
+  }
+  return alerts;
+}
+
+/**
+ * Motivo por el que Invid rechazó un comprobante, o null si no hay señales de rechazo.
+ * `before` es la página antes de enviar: lo que ya estaba ahí no es una respuesta al envío.
+ */
+export function invidPaymentRejection(response: string, before: string): string | null {
+  const body = response.trim();
+  if (body.startsWith("{")) {
+    try {
+      const json = JSON.parse(body) as { exito?: boolean; mensaje?: string };
+      if (json.exito === false) return stripTags(json.mensaje ?? "") || "Invid no aceptó el comprobante";
+    } catch {
+      // No era JSON: se sigue mirando como página.
+    }
+  }
+  const loginField = /name=["']passwd["']/i;
+  if (loginField.test(body) && !loginField.test(before)) return "Invid cerró la sesión antes de recibir el comprobante";
+  if (!/<(html|body|table|div)\b/i.test(body) && /error|inv[aá]lid|no se pudo|no permitid/i.test(body)) {
+    return stripTags(body).slice(0, 300);
+  }
+  const known = new Set(parseInvidPageAlerts(before).map((a) => a.text));
+  const rejected = parseInvidPageAlerts(body).find((a) => a.isError && !known.has(a.text));
+  return rejected?.text ?? null;
+}
+
 function parseOutlineBlock(html: string): Pick<
   InvidOrderRow,
   "items" | "delivery" | "payment" | "links" | "totals" | "exchangeRate"
@@ -929,6 +970,7 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
     const paymentHref = extractPopupHref(invoiceCell)
       || invoiceHrefs.find((h) => /comprob|adjunt|pago/i.test(h));
     const canAttachPayment = /adjuntar/i.test(invoice) || Boolean(paymentHref);
+    const paymentOrderId = invoiceCell.match(/data-portal-comprobante=["']([^"']+)["']/i)?.[1];
 
     orders.push({
       orderNumber,
@@ -946,6 +988,7 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
       exchangeRate: outline.exchangeRate,
       canAttachPayment,
       paymentHref,
+      paymentOrderId,
     });
   }
   return { orders };

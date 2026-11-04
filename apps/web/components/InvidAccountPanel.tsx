@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { loadAccountCached, clearAccountCache } from "@/lib/account-portal-cache";
 import NodoSpinner from "@/components/NodoSpinner";
-import { Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, Wallet, XCircle } from "lucide-react";
 import Link from "next/link";
 import AccountRowDetail, { VerMasButton } from "@/components/account/AccountRowDetail";
 import { draftItems, draftLines, draftTotals } from "@/components/account/draftDetail";
@@ -81,7 +81,7 @@ const SECTIONS = [
 
 const CACHE = {
   cta: "INVID:cta",
-  orders: "INVID:orders:v3",
+  orders: "INVID:orders:v4",
   nodo: "INVID:nodo",
 } as const;
 
@@ -178,6 +178,13 @@ export default function InvidAccountPanel() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function markPaymentSent(order: InvidOrder, sentAt: string) {
+    const sent = (o: InvidOrder) => (o.orderNumber === order.orderNumber ? { ...o, paymentSentAt: sentAt } : o);
+    setOrders((prev) => prev?.map(sent) ?? prev);
+    setDetail((prev) => (prev?.kind === "order" ? { ...prev, row: sent(prev.row) } : prev));
+    clearAccountCache("INVID:");
   }
 
   const nodoNumbers = invidNodoNumbers(drafts);
@@ -366,6 +373,7 @@ export default function InvidAccountPanel() {
           order={paymentOrder}
           form={paymentForm}
           onClose={() => setPaymentOrder(null)}
+          onSent={(sentAt) => markPaymentSent(paymentOrder, sentAt)}
         />
       )}
     </>
@@ -382,6 +390,18 @@ function canAttachInvidPayment(
     || row.paymentHref
     || /adjuntar/i.test(row.invoice)
     || ((paymentForm || paymentUploads.length > 0) && !/cerrado|cancelado|vencido/i.test(row.status))
+  );
+}
+
+function PaymentSentBadge({ sentAt }: { sentAt: string }) {
+  return (
+    <span
+      title={`Enviado a Invid el ${new Date(sentAt).toLocaleString("es-AR")}`}
+      className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 whitespace-nowrap"
+    >
+      <CheckCircle2 className="w-3.5 h-3.5" />
+      Comprobante cargado
+    </span>
   );
 }
 
@@ -430,14 +450,19 @@ function InvidOrderDetail({
           })),
       ]}
       extra={
-        canAttach ? (
-          <button
-            type="button"
-            onClick={onAttach}
-            className="h-10 px-3 inline-flex items-center justify-center rounded-sm text-[13px] font-medium border border-sky-500/40 text-sky-300 hover:border-sky-300 hover:text-white"
-          >
-            Adjuntar comprobante
-          </button>
+        canAttach || row.paymentSentAt ? (
+          <div className="flex flex-wrap items-center gap-3">
+            {row.paymentSentAt && <PaymentSentBadge sentAt={row.paymentSentAt} />}
+            {canAttach && (
+              <button
+                type="button"
+                onClick={onAttach}
+                className="h-10 px-3 inline-flex items-center justify-center rounded-sm text-[13px] font-medium border border-sky-500/40 text-sky-300 hover:border-sky-300 hover:text-white"
+              >
+                {row.paymentSentAt ? "Adjuntar otro comprobante" : "Adjuntar comprobante"}
+              </button>
+            )}
+          </div>
         ) : null
       }
       note={[...amounts.notes, note || ""].filter(Boolean).join(" ")}
@@ -532,13 +557,14 @@ function OrdersTable({
               <td className="px-2 py-2 text-right tabular-nums text-surface-200">{o.amount || "—"}</td>
               <td className="px-2 py-2 text-right">
                 <div className="flex items-center justify-end gap-3">
+                  {o.paymentSentAt && <PaymentSentBadge sentAt={o.paymentSentAt} />}
                   {(o.canAttachPayment || /adjuntar/i.test(o.invoice)) && (
                     <button
                       type="button"
                       onClick={() => onAttach(o)}
                       className="text-[11px] font-medium text-emerald-400 hover:text-white underline underline-offset-2 whitespace-nowrap"
                     >
-                      Adjuntar
+                      {o.paymentSentAt ? "Adjuntar otro" : "Adjuntar"}
                     </button>
                   )}
                   <VerMasButton onClick={() => onOpen(o)} />

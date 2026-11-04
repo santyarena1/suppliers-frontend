@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.23.0",
+    date: "2026-11-04",
+    title: "Invid: comprobantes de pago",
+    changes: [
+      { kind: "fixed", text: "Invid: al adjuntar un comprobante, los bancos aparecían con el nombre cambiado. Ahora Macro y Galicia se ven y se envían bien." },
+      { kind: "fixed", text: "Invid: si Invid rechaza el comprobante, NODO te muestra el motivo en vez de darlo por enviado." },
+      { kind: "new", text: "Invid: los pedidos muestran «Comprobante cargado» cuando lo subís desde NODO, y podés adjuntar otro si hace falta." },
+    ],
+  },
+  {
     version: "2.22.3",
     date: "2026-11-04",
     title: "Invid: carrito y pedidos con su página nueva",

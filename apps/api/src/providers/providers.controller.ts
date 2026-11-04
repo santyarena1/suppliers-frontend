@@ -120,9 +120,10 @@ export class ProvidersController {
     @Query("refresh") refresh?: string
   ) {
     const key = `${tenant.tenantId}:INVID:orders`;
-    return this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
+    const data = await this.accountCache.wrap(key, wantsRefresh(refresh), async () =>
       this.invidAccountService.getOrders(await this.invidCredentials(tenant))
     );
+    return this.invidAccountService.withPaymentReceipts(tenant.tenantId, data);
   }
 
   /** Saldo y movimientos reales de cuenta corriente de Invid (solo lectura). */
@@ -171,11 +172,14 @@ export class ProvidersController {
     if (!notes?.trim()) throw new BadRequestException("Completá las observaciones");
     extra.bank = bank;
     extra.notes = notes;
-    return this.invidAccountService.attachPayment(
+    const result = await this.invidAccountService.attachPayment(
+      { tenantId: tenant.tenantId, userId: tenant.userId },
       await this.invidCredentials(tenant),
       files,
       extra
     );
+    this.accountCache.invalidate(`${tenant.tenantId}:INVID:orders`);
+    return result;
   }
 
   @RequiresCapability("directCheckout")
