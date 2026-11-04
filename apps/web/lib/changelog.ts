@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.22.3",
+    date: "2026-11-04",
+    title: "Invid: carrito y pedidos con su página nueva",
+    changes: [
+      { kind: "fixed", text: "Invid cambió su página de carrito y NODO no podía cotizar ni confirmar pedidos. Ya funciona con el checkout nuevo: precios, IVA, impuestos internos, percepciones y envío salen directo de la cotización de Invid." },
+      { kind: "fixed", text: "Invid: si pedís más de lo que hay, el carrito te dice qué producto y cuántas unidades tiene." },
+      { kind: "fixed", text: "Invid: Mis pedidos y el seguimiento vuelven a reconocer los pedidos con el listado nuevo." },
+    ],
+  },
+  {
     version: "2.22.2",
     date: "2026-11-04",
     title: "New Bytes: stock real al pedir más de una unidad",

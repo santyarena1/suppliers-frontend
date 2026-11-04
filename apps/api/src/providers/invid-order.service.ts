@@ -5,28 +5,28 @@ import { PrismaService } from "../prisma/prisma.service";
 import { PortalCartSnapshotService } from "./portal-cart-snapshot.service";
 import { decodeHttpText } from "./http-text";
 import { mapProviderDraft, orderOwner, type OrderAuthor } from "./provider-draft";
+import { portalAccountKey, withPortalCartLock } from "./portal-cart-lock";
 import {
   decodeEntities,
-  parseCheckoutForm,
   parseOrdersTable,
   parseSubmitResult,
   pickPickupDelivery,
-  computeInvidTotals,
   stripHtmlMessage,
-  parseInvidMoney,
-  parseXmlCost,
-  parseQuotedShipping,
-  collectFormFields,
-  invidLineFromCumulative,
-  parseCartLines,
   reconcilePortalCart,
   nextCartSnapshot,
   type CartSyncChanges,
   type PortalReconcileFor,
-  type InvidCartCumulative,
-  invidLineIvaWithoutInternos,
   type InvidRadioOption,
 } from "./invid-order.parser";
+import {
+  normalizeInvidQuote,
+  parseInvidAction,
+  parseInvidCheckoutPage,
+  type InvidCheckoutAddress,
+  type InvidCheckoutPage,
+  type InvidCheckoutRow,
+  type InvidQuote,
+} from "./invid-checkout.parser";
 
 const SITE_BASE = "https://www.invidcomputers.com";
 const LOGIN_URL = `${SITE_BASE}/login.php`;
@@ -36,7 +36,7 @@ const BROWSER_UA =
 const HTML_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
 /**
- * Formas de pago reales del checkout de Invid (radio `opcionPago`).
+ * Formas de pago reales del checkout de Invid (radio `pago`).
  * Tarjeta (132) no se ofrece como borrador: abre MercadoPago y no queda
  * pendiente para que el vendedor contacte por WhatsApp.
  */
@@ -54,7 +54,11 @@ export const INVID_DELIVERY_OPTIONS = [
   { value: "6", label: "Entrega Express 24hs (AMBA)" },
 ] as const;
 
-const DRAFT_PAYMENT_VALUES = new Set(INVID_PAYMENT_OPTIONS.map((p) => p.value));
+const DRAFT_PAYMENT_VALUES = new Set<string>(INVID_PAYMENT_OPTIONS.map((p) => p.value));
+
+/** `confirmar` dio éxito pero no se pudo leer el número: reintentar podría duplicar el pedido. */
+const ACCEPTED_WITHOUT_NUMBER =
+  "Invid aceptó el pedido pero NODO no pudo leer el número. Revisá Mis pedidos en Invid antes de volver a intentarlo, para no duplicarlo.";
 
 function round2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -73,22 +77,42 @@ interface AddressField {
   Pais: string;
 }
 
+function addressField(a: InvidCheckoutAddress): AddressField {
+  const street = a.addressLine.split(" - ")[0] ?? a.addressLine;
+  return {
+    Identificador: a.label,
+    Direccion: street,
+    NroPuerta: street.match(/(\d+)\s*$/)?.[1] ?? "",
+    Localidad: a.localidad,
+    Ciudad: a.localidad,
+    CodPostal: a.cp,
+    CodProvincia: a.provincia,
+    Provincia: a.provinciaNombre,
+    CodPais: "AR",
+    Pais: "Argentina",
+  };
+}
+
+type PreparedItem = {
+  code: string;
+  qty: number;
+  name: string;
+  price: number;
+  subtotal: number;
+  iva: number;
+  internos: number;
+  percepciones: number;
+};
+
 interface PreparedCart {
   cookie: string;
-  items: {
-    code: string;
-    qty: number;
-    name: string;
-    price: number;
-    subtotal: number;
-    iva: number;
-    internos: number;
-    percepciones: number;
-  }[];
+  csrf: string;
+  items: PreparedItem[];
   address: AddressField;
   addressId: string;
   paymentOption: string;
   paymentLabel: string;
+  delivery: InvidRadioOption;
   stockOk: boolean;
   stockMessage?: string;
   itemErrors: { code: string; name?: string; message: string }[];
@@ -103,7 +127,8 @@ interface PreparedCart {
   expresoCompanies: InvidRadioOption[];
   payments: InvidRadioOption[];
   taxLines: { nroItem: string; internos: number; subtotal: number; total: number }[];
-  cartHtml: string;
+  /** Cotización vigente de Invid: `clave` es lo que pide `confirmar`. */
+  quote: InvidQuote | null;
   /** Cambios hechos en el portal que NODO tiene que reflejar (solo al verificar). */
   sync?: CartSyncChanges;
 }
@@ -120,14 +145,37 @@ export interface InvidDraftInput {
   background?: boolean;
 }
 
+/** Lo pedido que Invid cotizó con menos unidades o que no tiene stock para cubrir. */
+export function invidShortLines(
+  requested: { code: string; qty: number; name?: string }[],
+  quote: InvidQuote
+): { code: string; name: string; requested: number; available: number }[] {
+  const out: { code: string; name: string; requested: number; available: number }[] = [];
+  for (const req of requested) {
+    const quoted = quote.items.filter((i) => i.articulo === req.code);
+    const got = quoted.reduce((s, i) => s + i.cantidad, 0);
+    const stock = quote.stocks_validacion?.[req.code] ?? quoted[0]?.stock;
+    const available = Math.min(got, stock ?? got);
+    if (available < req.qty) {
+      out.push({ code: req.code, name: req.name || quoted[0]?.nombre || req.code, requested: req.qty, available: Math.max(0, available) });
+    }
+  }
+  return out;
+}
+
 /**
  * Crea un borrador de pedido en el portal de Invid desde Nodo.
  *
  * Invid documenta el flujo así: confirmar en el carrito deja el pedido
  * *pendiente de procesamiento* y el vendedor de la cuenta contacta al
  * cliente (WhatsApp / mail). No cobra solo: si no se informa el pago
- * en 24 h, Invid da de baja el pedido. Ese POST (`iniciar_pago=S` a
- * carrito.php) es el borrador — no un cobro.
+ * en 24 h, Invid da de baja el pedido.
+ *
+ * Desde el 2/11/2026 el checkout es `carrito.php` con acciones JSON
+ * (`accion_invid` + `csrf`): `eliminar`, `cotizar` (valida stock e impuestos
+ * y devuelve una `clave` que vence) y `confirmar` con esa clave. Ver
+ * invid-checkout.parser.ts. Los productos se siguen cargando con
+ * `servicios.php?servicio=sumar_a_carrito`.
  */
 @Injectable()
 export class InvidOrderService {
@@ -189,7 +237,7 @@ export class InvidOrderService {
     cookie: string,
     method: "GET" | "POST",
     url: string,
-    opts: { params?: Record<string, string | number>; body?: string; timeout?: number } = {}
+    opts: { params?: Record<string, string | number>; body?: string; timeout?: number; accept?: string } = {}
   ): Promise<{ cookie: string; data: string; status: number; location?: string }> {
     const res: AxiosResponse<ArrayBuffer> = await axios.request({
       method,
@@ -202,13 +250,14 @@ export class InvidOrderService {
         Referer: CART_URL,
         Origin: SITE_BASE,
         "User-Agent": BROWSER_UA,
-        Accept: HTML_ACCEPT,
+        Accept: opts.accept ?? HTML_ACCEPT,
         "Accept-Language": "es-AR,es;q=0.9",
       },
       timeout: opts.timeout ?? 20_000,
       responseType: "arraybuffer",
       maxRedirects: 0,
-      validateStatus: (s) => s < 400 || s === 302,
+      // El checkout responde 4xx con JSON `{ exito: false, mensaje }`: se lee igual.
+      validateStatus: (s) => s < 500,
     });
     return {
       cookie: this.mergeCookies(cookie, res.headers["set-cookie"]),
@@ -216,6 +265,31 @@ export class InvidOrderService {
       status: res.status,
       location: typeof res.headers.location === "string" ? res.headers.location : undefined,
     };
+  }
+
+  /** `carrito.php` autenticado: csrf, filas, direcciones, entregas y pagos. */
+  private async cartPage(cookie: string): Promise<{ cookie: string; page: InvidCheckoutPage }> {
+    const res = await this.request(cookie, "GET", CART_URL);
+    return { cookie: res.cookie, page: parseInvidCheckoutPage(res.data) };
+  }
+
+  /** Una acción del checkout (POST carrito.php con `accion_invid` y `csrf`). */
+  private async action<T = Record<string, unknown>>(
+    cookie: string,
+    csrf: string,
+    accion: string,
+    datos: Record<string, string>,
+    timeout = 40_000
+  ) {
+    const body = new URLSearchParams(datos);
+    body.set("accion_invid", accion);
+    body.set("csrf", csrf);
+    const res = await this.request(cookie, "POST", CART_URL, {
+      body: body.toString(),
+      accept: "application/json",
+      timeout,
+    });
+    return { cookie: res.cookie, status: res.status, ...parseInvidAction<T>(res.data) };
   }
 
   paymentOptions() {
@@ -226,73 +300,52 @@ export class InvidOrderService {
     return INVID_DELIVERY_OPTIONS.map((d) => ({ value: d.value, label: d.label }));
   }
 
-  /** Direcciones guardadas reales de la cuenta — solo lectura. */
+  /**
+   * Direcciones guardadas reales de la cuenta — solo lectura. Con productos en
+   * el carrito salen del checkout (con la elegida); si no, de `select_direcciones.php`.
+   */
   async getAddresses(credentials: Record<string, string>) {
     const { username, password } = credentials;
     if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
     const cookie = await this.login(username, password);
 
-    const res = await this.request(cookie, "GET", `${SITE_BASE}/select_direcciones.php`);
-    const addresses: { id: string; label: string; addressLine: string; isDefault: boolean }[] = [];
-    const re = /<input type="radio" name="dir_selected" id="dir_selected_(\d+)" value="\d+" ?(checked="checked")? ?> ?\s*<label[^>]*><b>([^<]*)<\/b><\/label> ([^<]*)<br\/>/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(res.data))) {
-      addresses.push({
-        id: m[1],
-        label: decodeEntities(m[3].trim()),
-        addressLine: decodeEntities(m[4].trim()),
-        isDefault: !!m[2],
-      });
+    const cart = await this.cartPage(cookie);
+    if (cart.page.addresses.length > 0) {
+      return cart.page.addresses.map((a) => ({ id: a.id, label: a.label, addressLine: a.addressLine, isDefault: a.isDefault }));
     }
-    return addresses;
-  }
-
-  private async getAddressDetail(cookie: string, addressId: string): Promise<{ cookie: string; address: AddressField }> {
-    const res = await this.request(cookie, "GET", `${SITE_BASE}/ajaxDatosPersonales.php`, {
-      params: { funcion: "getDatosDireccion", id: addressId },
-    });
-    const xml = res.data;
-    const field = (tag: string) => xml.match(new RegExp(`<${tag}>(.*?)</${tag}>`))?.[1] ?? "";
-    const address: AddressField = {
-      Identificador: decodeEntities(field("identificador")),
-      Direccion: decodeEntities(field("direccion")),
-      NroPuerta: field("nroPuerta"),
-      Localidad: decodeEntities(field("localidad")),
-      Ciudad: decodeEntities(field("ciudad")),
-      CodPostal: field("cod_postal"),
-      CodProvincia: field("provincia"),
-      Provincia: decodeEntities(field("provincia_nombre")),
-      CodPais: field("pais"),
-      Pais: decodeEntities(field("pais_nombre")),
-    };
-    if (!address.Direccion || !address.CodPostal || !address.CodProvincia) {
-      throw new BadRequestException("La dirección seleccionada es inválida o está incompleta en Invid");
-    }
-    return { cookie: res.cookie, address };
+    const res = await this.request(cart.cookie, "GET", `${SITE_BASE}/select_direcciones.php`);
+    return parseSelectAddresses(res.data);
   }
 
   /** Vacía el carrito real de Invid para esta sesión antes de armar el pedido nuevo. */
-  private async clearCart(cookie: string): Promise<string> {
-    let current = cookie;
-    for (let i = 0; i < 50; i++) {
-      const cart = await this.request(current, "GET", CART_URL);
-      current = cart.cookie;
-      // Se mira lo que de verdad queda (las filas), no solo el botón de la primera:
-      // con un resto en el carrito el IVA de la primera línea salía cualquier cosa.
-      const rows = parseCartLines(cart.data);
-      const hasRemoveButton = /sacarItemCarrito\(\s*["']?\d+["']?\s*\)/.test(cart.data);
-      if (rows.length === 0 || !hasRemoveButton) {
-        if (rows.length > 0) this.logger.warn(`Invid clearCart: quedaron ${rows.length} filas sin poder sacar`);
-        else if (i > 0) this.logger.log(`Invid clearCart: ${i} filas sacadas`);
-        return current;
-      }
-      const removed = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-        params: { funcion: "sacar_carrito", indice: rows[0].index },
-      });
-      current = removed.cookie;
+  private async clearCart(cookie: string): Promise<{ cookie: string; csrf: string | null }> {
+    const cart = await this.cartPage(cookie);
+    let current = cart.cookie;
+    const csrf = cart.page.csrf;
+    let rows: { index: number; qty: number }[] = cart.page.rows;
+    if (rows.length === 0) return { cookie: current, csrf };
+    if (!csrf) {
+      this.logger.warn(`Invid clearCart: ${rows.length} filas y la página no trae csrf`);
+      return { cookie: current, csrf };
     }
-    this.logger.warn("clearCart de Invid alcanzó el tope de 50 iteraciones — puede haber quedado algo en el carrito");
-    return current;
+    for (let i = 0; i < 60 && rows.length > 0; i++) {
+      const removed = await this.action<{ carrito?: { items?: { indice: number; cantidad: number }[] } }>(
+        current,
+        csrf,
+        "eliminar",
+        { indice: String(rows[0].index), cantidad: String(rows[0].qty) },
+        20_000
+      );
+      current = removed.cookie;
+      if (!removed.exito) {
+        this.logger.warn(`Invid clearCart: no se pudo sacar la fila ${rows[0].index}: ${removed.mensaje ?? "sin mensaje"}`);
+        break;
+      }
+      const left = removed.data.carrito?.items;
+      rows = Array.isArray(left) ? left.map((it) => ({ index: Number(it.indice), qty: Number(it.cantidad) || 1 })) : [];
+    }
+    if (rows.length > 0) this.logger.warn(`Invid clearCart: quedaron ${rows.length} filas sin poder sacar`);
+    return { cookie: current, csrf };
   }
 
   /** Alícuota de cada producto según el catálogo de Invid (es del producto, igual para todos los comercios). */
@@ -312,10 +365,9 @@ export class InvidOrderService {
   }
 
   /**
-   * El IVA de la línea sale de restar acumulados del carrito del portal; si algo
-   * quedó cargado de antes o dos cotizaciones se cruzaron, da cualquier cosa
-   * (400 %). Solo se acepta si es una alícuota que existe; si no, se usa la del
-   * catálogo (o 21 %, la general) y queda en el log.
+   * Invid informa la alícuota de cada renglón. Solo se acepta si es una que
+   * existe (21 %, 10,5 %...); si no, se usa la del catálogo (o 21 %, la
+   * general) y queda en el log.
    */
   private checkedLineIva(code: string, subtotal: number, iva: number, catalogRates: Map<string, number>): number {
     if (!(subtotal > 0)) return iva;
@@ -329,54 +381,64 @@ export class InvidOrderService {
     return fixed;
   }
 
-  private async addItem(cookie: string, code: string, qty: number, prev: InvidCartCumulative) {
+  private async addItem(cookie: string, code: string, qty: number) {
     const res = await this.request(cookie, "GET", `${SITE_BASE}/servicios.php`, {
       params: { servicio: "sumar_a_carrito", producto: code, cantidad: qty },
     });
     const xml = res.data;
     const field = (tag: string) => xml.match(new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`))?.[1] ?? "";
     const nombre = decodeEntities(field("nombre"));
-    const monto = Number(field("monto"));
     const xmlError = stripHtmlMessage(field("error") || field("mensaje") || field("msg"));
-    if (!nombre || !Number.isFinite(monto)) {
-      throw new BadRequestException(
-        xmlError || `Invid rechazó el producto ${code} (sin stock o código inválido)`
-      );
+    if (xmlError || !nombre) {
+      throw new BadRequestException(xmlError || `Invid rechazó el producto ${code} (sin stock o código inválido)`);
     }
-    // `cantidad` y `monto` son el acumulado del carrito, no la línea — ver invidLineFromCumulative.
-    const { line, next } = invidLineFromCumulative(
-      prev,
-      { precio: Number(field("precio")), monto, cantidad: Number(field("cantidad")) },
-      qty
-    );
-    return {
-      cookie: res.cookie,
-      cumulative: next,
-      item: { code, name: nombre, ...line, internos: 0, percepciones: 0 },
-    };
-  }
-
-  private async validateStock(cookie: string, paymentOption: string, codProvincia: string) {
-    const res = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-      params: { funcion: "ValidarStockInvid", opcionPago: paymentOption, codprov: codProvincia },
-    });
-    let parsed: {
-      resultado: boolean;
-      mensaje?: string;
-      impint?: { impuesto: string; subtotal: string; total: string; nroItem: string }[];
-      percepcion?: number;
-      domicilioFiscal?: boolean;
-    };
-    try {
-      parsed = JSON.parse(res.data);
-    } catch {
-      throw new BadGatewayException("Invid no devolvió un JSON válido al validar stock");
-    }
-    return { cookie: res.cookie, validation: parsed };
+    return { cookie: res.cookie, name: nombre };
   }
 
   /**
-   * Arma el carrito real del portal con lo que hay que cotizar.
+   * Cotiza el carrito ya cargado con la dirección, la entrega y el pago:
+   * Invid valida stock, calcula IVA, internos, percepciones y envío y
+   * devuelve la `clave` para confirmar. Express 24 hs y Puerta a puerta se
+   * cotizan antes aparte, como hace la página.
+   */
+  private async quoteCart(
+    cookie: string,
+    csrf: string,
+    input: { addressId: string; delivery: string; expresoId?: string; paymentOption: string; notes?: string; payerName?: string; payerEmail?: string }
+  ): Promise<{ cookie: string; quote: InvidQuote | null; message?: string }> {
+    let current = cookie;
+    const pre =
+      input.delivery === "6"
+        ? await this.action(current, csrf, "cotizar_entrega", { direccion: input.addressId, entrega: "6" })
+        : input.delivery === "5"
+          ? await this.action(current, csrf, "cotizar_envio_cp", { direccion: input.addressId, entrega: "5" })
+          : input.delivery === "3" && input.expresoId
+            ? await this.action(current, csrf, "cotizar_expreso", { direccion: input.addressId, entrega: "3", expreso: input.expresoId })
+            : null;
+    if (pre) {
+      current = pre.cookie;
+      if (!pre.exito) return { cookie: current, quote: null, message: pre.mensaje || "Invid no pudo cotizar el envío" };
+    }
+    const [nombre, ...apellido] = (input.payerName ?? "").trim().split(/\s+/).filter(Boolean);
+    const res = await this.action<{ cotizacion?: unknown }>(current, csrf, "cotizar", {
+      direccion: input.addressId,
+      direccion_opcion: input.addressId,
+      entrega: input.delivery,
+      expreso: input.expresoId ?? "",
+      pago: input.paymentOption,
+      nombre_pagador: nombre ?? "",
+      apellido_pagador: apellido.join(" "),
+      email_pagador: input.payerEmail ?? "",
+      notas: input.notes ?? "",
+    });
+    if (!res.exito) return { cookie: res.cookie, quote: null, message: stripHtmlMessage(res.mensaje) || "Invid no validó el stock de este pedido" };
+    const quote = normalizeInvidQuote(res.data.cotizacion);
+    if (!quote) return { cookie: res.cookie, quote: null, message: "Invid devolvió una cotización que NODO no puede leer" };
+    return { cookie: res.cookie, quote };
+  }
+
+  /**
+   * Arma el carrito real del portal con lo que hay que cotizar y lo cotiza.
    *
    * Con `reconcileFor` (verificación desde el carrito de NODO) primero se lee
    * lo que el portal tiene y se unifica con NODO: lo compartido se suma y lo
@@ -385,15 +447,15 @@ export class InvidOrderService {
    */
   private async prepareCart(
     credentials: Record<string, string>,
-    requested: { code: string; qty: number; name?: string }[],
-    addressId: string,
-    paymentOption: string,
+    input: InvidDraftInput,
     reconcileFor?: PortalReconcileFor
   ): Promise<PreparedCart> {
     const { username, password } = credentials;
+    const requested = input.items;
+    const paymentOption = input.paymentOption;
     if (!username || !password) throw new BadGatewayException("Credenciales de Invid incompletas");
     if (requested.length === 0) throw new BadRequestException("No hay productos de Invid en el pedido");
-    if (!DRAFT_PAYMENT_VALUES.has(paymentOption as typeof INVID_PAYMENT_OPTIONS[number]["value"])) {
+    if (!DRAFT_PAYMENT_VALUES.has(paymentOption)) {
       throw new BadRequestException("Esa forma de pago no sirve para un borrador (la tarjeta se cobra en MercadoPago)");
     }
 
@@ -403,9 +465,9 @@ export class InvidOrderService {
     let sync: CartSyncChanges | undefined;
     let previousSnapshot: Record<string, number> | null = null;
     if (reconcileFor) {
-      const cart = await this.request(cookie, "GET", CART_URL);
+      const cart = await this.cartPage(cookie);
       cookie = cart.cookie;
-      const portalLines = parseCartLines(cart.data);
+      const portalLines: InvidCheckoutRow[] = cart.page.rows;
       previousSnapshot = await this.cartSnapshots.load(reconcileFor.tenantId, "INVID");
       const reconciled = reconcilePortalCart(requested, portalLines, previousSnapshot, {
         sessionScoped: true,
@@ -416,22 +478,19 @@ export class InvidOrderService {
       this.logger.log(
         `Invid conciliación: portal=${JSON.stringify(portalLines.map((l) => [l.code, l.qty]))} ` +
         `nodo=${JSON.stringify(requested.map((i) => [i.code, i.qty]))} foto=${JSON.stringify(previousSnapshot)} ` +
-        `→ ${JSON.stringify(items.map((i) => [i.code, i.qty]))} cambios=${JSON.stringify(sync)} ` +
-        `(html ${cart.data.length} bytes, filas item_=${(cart.data.match(/id=["']item_\d+/g) ?? []).length})`
+        `→ ${JSON.stringify(items.map((i) => [i.code, i.qty]))} cambios=${JSON.stringify(sync)}`
       );
     }
 
-    cookie = await this.clearCart(cookie);
+    cookie = (await this.clearCart(cookie)).cookie;
 
-    const addedItems: PreparedCart["items"] = [];
+    const added: { code: string; qty: number; name: string }[] = [];
     const itemErrors: PreparedCart["itemErrors"] = [];
-    let cumulative: InvidCartCumulative = { qty: 0, gross: 0 };
     for (const item of items) {
       try {
-        const added = await this.addItem(cookie, item.code, item.qty, cumulative);
-        cookie = added.cookie;
-        cumulative = added.cumulative;
-        addedItems.push(added.item);
+        const res = await this.addItem(cookie, item.code, item.qty);
+        cookie = res.cookie;
+        added.push({ code: item.code, qty: item.qty, name: res.name });
       } catch (err) {
         const message = err instanceof BadRequestException
           ? String(err.message)
@@ -440,291 +499,143 @@ export class InvidOrderService {
       }
     }
 
-    const addr = await this.getAddressDetail(cookie, addressId);
-    cookie = addr.cookie;
+    const cart = await this.cartPage(cookie);
+    cookie = cart.cookie;
+    const page = cart.page;
+    if (!page.csrf) throw new BadGatewayException("Invid no devolvió el checkout (sin csrf): puede que haya cambiado la página otra vez");
+    let pageAddress = page.addresses.find((a) => a.id === input.addressId);
+    if (!pageAddress && page.rows.length === 0) {
+      // Con el carrito vacío (Invid rechazó todo) el checkout no muestra direcciones.
+      const res = await this.request(cookie, "GET", `${SITE_BASE}/select_direcciones.php`);
+      cookie = res.cookie;
+      const listed = parseSelectAddresses(res.data).find((a) => a.id === input.addressId);
+      if (listed) {
+        pageAddress = { ...listed, provincia: "", provinciaNombre: "", cp: listed.addressLine.match(/\((\d{4})\)/)?.[1] ?? "", localidad: "" };
+      }
+    }
+    if (!pageAddress) throw new BadRequestException("Esa dirección no está en tu cuenta de Invid");
 
-    let stockOk = false;
+    const deliveries = page.deliveries.length > 0 ? page.deliveries : this.deliveryOptions();
+    const delivery = deliveries.find((d) => d.value === input.deliveryOption)
+      ?? this.deliveryOptions().find((d) => d.value === input.deliveryOption)
+      ?? pickPickupDelivery(deliveries)
+      ?? this.deliveryOptions()[0];
+
+    let quote: InvidQuote | null = null;
     let stockMessage: string | undefined;
-    let taxLines: PreparedCart["taxLines"] = [];
-    let percepcionPercent = 0;
-
-    if (addedItems.length > 0 && itemErrors.length === 0) {
-      const stock = await this.validateStock(cookie, paymentOption, addr.address.CodProvincia);
-      cookie = stock.cookie;
-      const validation = stock.validation;
-      stockOk = Boolean(validation.resultado);
-      stockMessage = stockOk
-        ? (stripHtmlMessage(validation.mensaje) || "Se han validado los stocks de los productos")
-        : (stripHtmlMessage(validation.mensaje) || "Invid no validó el stock de este pedido");
-      taxLines = (validation.impint ?? []).map((i) => ({
-        nroItem: i.nroItem,
-        internos: Number(i.impuesto) || 0,
-        subtotal: Number(i.subtotal) || 0,
-        total: Number(i.total) || 0,
-      }));
-      percepcionPercent = Number(validation.percepcion) || 0;
+    if (added.length > 0 && itemErrors.length === 0) {
+      const quoted = await this.quoteCart(cookie, page.csrf, {
+        addressId: input.addressId,
+        delivery: delivery.value === "3" && !input.expresoId ? "1" : delivery.value,
+        expresoId: input.expresoId,
+        paymentOption,
+        notes: input.notes,
+        payerName: input.payerName,
+        payerEmail: input.payerEmail,
+      });
+      cookie = quoted.cookie;
+      quote = quoted.quote;
+      stockMessage = quoted.message;
     } else if (itemErrors.length > 0) {
       stockMessage = itemErrors.length === 1
         ? itemErrors[0].message
         : `${itemErrors.length} productos no se pudieron cargar en Invid.`;
     }
 
-    const cart = await this.request(cookie, "GET", CART_URL);
-    cookie = cart.cookie;
-    const checkout = parseCheckoutForm(cart.data);
+    // Con el nombre que tiene en NODO, que es como el comercio lo reconoce.
+    const short = quote
+      ? invidShortLines(added.map((a) => ({ ...a, name: items.find((i) => i.code === a.code)?.name || a.name })), quote)
+      : [];
+    if (short.length > 0) {
+      stockMessage = `Invid no tiene stock para todo: ${short
+        .map((s) => `${s.name}: pediste ${s.requested}, hay ${s.available}`)
+        .join(" · ")}`;
+    }
+    const stockOk = Boolean(quote) && short.length === 0 && itemErrors.length === 0;
+    if (quote && stockOk && !stockMessage) stockMessage = "Se han validado los stocks de los productos";
 
     // Lo que quedó cargado en el portal es la foto para la próxima verificación.
     if (reconcileFor && sync) {
-      await this.cartSnapshots.save(reconcileFor.tenantId, "INVID", nextCartSnapshot(addedItems, sync, previousSnapshot));
+      await this.cartSnapshots.save(reconcileFor.tenantId, "INVID", nextCartSnapshot(added, sync, previousSnapshot));
     }
 
-    const catalogRates = await this.catalogIvaRates(addedItems.map((item) => item.code));
-    const preparedItems = addedItems.map((item, idx) => {
-      const tax = taxLines.find((t) => String(t.nroItem) === String(idx + 1))
-        ?? taxLines[idx];
-      const internos = tax?.internos ?? 0;
-      const percepciones = round2(item.subtotal * (percepcionPercent / 100));
-      const iva = invidLineIvaWithoutInternos(item.iva, internos);
-      return { ...item, iva: this.checkedLineIva(item.code, item.subtotal, iva, catalogRates), internos, percepciones };
-    });
+    const percepcionPercent = quote?.porcentaje_percepcion ?? 0;
+    const catalogRates = await this.catalogIvaRates(added.map((item) => item.code));
+    const preparedItems: PreparedItem[] = quote
+      ? quote.items.map((q) => {
+          const req = added.find((a) => a.code === q.articulo);
+          const iva = knownIvaRate(q.iva) !== undefined ? round2(q.iva_importe) : this.checkedLineIva(q.articulo, q.subtotal, q.iva_importe, catalogRates);
+          return {
+            code: q.articulo,
+            qty: q.cantidad,
+            name: q.nombre || req?.name || q.articulo,
+            price: q.precio,
+            subtotal: round2(q.subtotal),
+            iva,
+            internos: round2(q.impuesto_interno_importe),
+            percepciones: round2(q.subtotal * (percepcionPercent / 100)),
+          };
+        })
+      : added.map((a) => ({ code: a.code, qty: a.qty, name: a.name, price: 0, subtotal: 0, iva: 0, internos: 0, percepciones: 0 }));
 
-    const net = preparedItems.reduce((s, i) => s + i.subtotal, 0);
-    const ivaProducts = preparedItems.reduce((s, i) => s + i.iva, 0);
-    const internos = preparedItems.reduce((s, i) => s + i.internos, 0);
-    const totals = computeInvidTotals({
-      net,
-      ivaProducts,
-      internos,
-      percepcionPercent,
-      shipping: 0,
-    });
-
+    const t = quote?.totales;
+    const address = addressField(pageAddress);
+    const payments = page.payments.length > 0
+      ? page.payments.filter((p) => DRAFT_PAYMENT_VALUES.has(p.value))
+      : this.paymentOptions();
     return {
       cookie,
+      csrf: page.csrf,
       items: preparedItems,
-      address: addr.address,
-      addressId,
+      address,
+      addressId: input.addressId,
       paymentOption,
-      paymentLabel: INVID_PAYMENT_OPTIONS.find((p) => p.value === paymentOption)?.label ?? paymentOption,
+      paymentLabel: payments.find((p) => p.value === paymentOption)?.label
+        ?? INVID_PAYMENT_OPTIONS.find((p) => p.value === paymentOption)?.label
+        ?? paymentOption,
+      delivery,
       stockOk,
       stockMessage,
       itemErrors,
-      subtotal: net,
-      iva: ivaProducts,
-      impuestos: internos,
+      subtotal: round2(t?.subtotal ?? 0),
+      iva: round2(t?.iva ?? 0),
+      impuestos: round2(t?.impuestos_internos ?? 0),
       percepcionPercent,
-      percepciones: totals.percepciones,
-      shippingCost: 0,
-      total: totals.total,
-      deliveries: checkout.deliveries.length > 0 ? checkout.deliveries : this.deliveryOptions(),
-      expresoCompanies: checkout.expresoCompanies,
-      payments: checkout.payments.length > 0
-        ? checkout.payments.filter((p) => DRAFT_PAYMENT_VALUES.has(p.value as typeof INVID_PAYMENT_OPTIONS[number]["value"]))
-        : this.paymentOptions(),
-      taxLines,
-      cartHtml: cart.data,
+      percepciones: round2(t?.percepciones ?? 0),
+      shippingCost: round2(t?.envio ?? 0),
+      total: round2(t?.total ?? 0),
+      deliveries,
+      expresoCompanies: page.expresoCompanies,
+      payments,
+      taxLines: (quote?.items ?? []).map((q) => ({
+        nroItem: String(q.indice),
+        internos: round2(q.impuesto_interno_importe),
+        subtotal: round2(q.subtotal),
+        total: round2(q.total),
+      })),
+      quote,
       sync,
     };
   }
 
-  private resolveDelivery(prepared: PreparedCart, deliveryOption?: string) {
-    const selected = prepared.deliveries.find((d) => d.value === deliveryOption)
-      ?? this.deliveryOptions().find((d) => d.value === deliveryOption);
-    if (selected) return selected;
-    return pickPickupDelivery(prepared.deliveries) ?? this.deliveryOptions()[0];
-  }
-
-  private async quoteShipping(
-    cookie: string,
-    delivery: InvidRadioOption,
-    address: AddressField,
-    expresoId?: string,
-    paymentOption?: string
-  ): Promise<{ cookie: string; shippingCost: number }> {
-    let current = cookie;
-    let shippingCost = 0;
-
-    try {
-      const setDelivery = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-        params: { funcion: "setearDelivery", tipo_delivery: delivery.value },
-      });
-      current = setDelivery.cookie;
-    } catch (err) {
-      this.logger.warn(`setearDelivery falló (${delivery.value}): ${err instanceof Error ? err.message : String(err)}`);
-    }
-
-    if (delivery.value === "1") {
-      shippingCost = await this.quoteDeliveryXml(current, "1") ?? 0;
-    } else if (delivery.value === "5") {
-      const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-        params: { funcion: "getCostoEnvioXCP", cod_postal: address.CodPostal },
-      });
-      current = quoted.cookie;
-      const parsed = this.parseQuotePayload(quoted.data);
-      if (parsed.error) throw new BadRequestException(String(parsed.error));
-      shippingCost = parsed.costo;
-      if (shippingCost <= 0) {
-        const cart = await this.request(current, "GET", CART_URL);
-        current = cart.cookie;
-        shippingCost = parseQuotedShipping(cart.data, "5") ?? 0;
-      }
-      if (shippingCost <= 0) {
-        throw new BadRequestException(
-          `Invid no cotizó Puerta a puerta para el CP ${address.CodPostal}. Probá otra dirección o RETIRA.`
-        );
-      }
-    } else if (delivery.value === "3") {
-      if (expresoId) {
-        try {
-          const quoted = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-            params: { funcion: "getCostoEnvioExpreso" },
-          });
-          current = quoted.cookie;
-          const parsed = this.parseQuotePayload(quoted.data);
-          if (!parsed.error) shippingCost = parsed.costo;
-        } catch (err) {
-          this.logger.warn(`getCostoEnvioExpreso: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-    } else if (delivery.value === "6") {
-      const express = await this.quoteExpressAmba(current, address, paymentOption);
-      current = express.cookie;
-      shippingCost = express.costo;
-      const cart = await this.request(current, "GET", CART_URL);
-      current = cart.cookie;
-      const fromHtml = parseQuotedShipping(cart.data, "6");
-      if (fromHtml != null && fromHtml > 0) shippingCost = fromHtml;
-      if (shippingCost <= 0) {
-        throw new BadRequestException(
-          "Invid no cotizó Entrega Express 24hs para esa dirección. Elegí Puerta a puerta o RETIRA."
-        );
-      }
-    }
-
-    return { cookie: current, shippingCost: round2(shippingCost) };
-  }
-
-  private parseQuotePayload(data: string): { costo: number; error?: string; moneda?: string; valor?: number } {
-    const trimmed = data.replace(/^\uFEFF/, "").trim();
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      try {
-        const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-        return {
-          costo: parseInvidMoney(parsed.costo ?? parsed.valor),
-          error: parsed.error != null ? String(parsed.error) : undefined,
-          moneda: parsed.mon != null ? String(parsed.mon) : parsed.moneda != null ? String(parsed.moneda) : undefined,
-          valor: parseInvidMoney(parsed.valor),
-        };
-      } catch {
-        return { costo: parseXmlCost(trimmed) };
-      }
-    }
-    return { costo: parseXmlCost(trimmed) };
-  }
-
-  private async quoteDeliveryXml(cookie: string, tipo: string): Promise<number | null> {
-    try {
-      const quoted = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-        params: { funcion: "getDelivery", tipo_delivery: tipo },
-      });
-      return parseXmlCost(quoted.data);
-    } catch (err) {
-      this.logger.warn(`getDelivery(${tipo}): ${err instanceof Error ? err.message : String(err)}`);
-      return null;
-    }
-  }
-
-  private isUsdMoney(moneda?: string) {
-    if (!moneda) return true;
-    const m = moneda.trim();
-    if (m === "1") return true;
-    return /us\$|usd|u\$s/i.test(m);
-  }
-
-  private async getTipoCambio(cookie: string, paymentOption?: string): Promise<number> {
-    const opcion = paymentOption && DRAFT_PAYMENT_VALUES.has(paymentOption as typeof INVID_PAYMENT_OPTIONS[number]["value"])
-      ? paymentOption
-      : "67";
-    const res = await this.request(cookie, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-      params: { funcion: "traerCotizacionOpcionPago", opcion },
-    });
-    try {
-      const parsed = JSON.parse(res.data) as { cotizacion?: number | string; cotizac?: number | string };
-      const n = Number(parsed.cotizacion ?? parsed.cotizac);
-      return Number.isFinite(n) && n > 0 ? n : 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  private async quoteExpressAmba(
-    cookie: string,
-    address: AddressField,
-    paymentOption?: string
-  ): Promise<{ cookie: string; costo: number }> {
-    const quoted = await this.request(cookie, "POST", `${SITE_BASE}/cotizarOpcionesEntregar.php`, {
-      body: new URLSearchParams({
-        direccion: address.Direccion,
-        localidad: address.Localidad || address.Ciudad,
-        codPostal: address.CodPostal,
-        provincia: address.Provincia,
-        grabar: "S",
-        directo: "S",
-      }).toString(),
-      timeout: 40_000,
-    });
-    let first: { status?: string; mensaje?: string };
-    try {
-      first = JSON.parse(quoted.data);
-    } catch {
-      throw new BadGatewayException("Invid no pudo cotizar Express 24hs");
-    }
-    if (first.status !== "ok") {
-      throw new BadRequestException(first.mensaje || "Invid no pudo cotizar Express 24hs para esa dirección");
-    }
-
-    const saved = await this.request(quoted.cookie, "POST", `${SITE_BASE}/guardarOpcionesEntregar.php`, {
-      body: new URLSearchParams({ grabar: "S" }).toString(),
-      timeout: 40_000,
-    });
-    const parsed = this.parseQuotePayload(saved.data);
-    let costo = parsed.valor || parsed.costo;
-    if (costo > 0 && !this.isUsdMoney(parsed.moneda)) {
-      try {
-        const tc = await this.getTipoCambio(saved.cookie, paymentOption);
-        if (tc > 0) costo = round2(costo / tc);
-      } catch (err) {
-        this.logger.warn(`tipo de cambio Express: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-    return { cookie: saved.cookie, costo };
-  }
-
   /**
    * Arma el carrito real de Invid y devuelve resumen + formas de entrega
-   * leídas del HTML autenticado. No crea el pedido.
+   * leídas del checkout autenticado. No crea el pedido.
    */
-  async preview(credentials: Record<string, string>, input: InvidDraftInput, reconcileFor?: PortalReconcileFor) {
-    const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption, reconcileFor);
-    const delivery = this.resolveDelivery(prepared, input.deliveryOption);
-    // Si en el portal borraron todo, no hay nada que cotizar: se devuelve el
-    // carrito vacío con los cambios para que NODO vacíe el suyo.
-    const quoted = prepared.items.length > 0
-      ? await this.quoteShipping(prepared.cookie, delivery, prepared.address, input.expresoId, prepared.paymentOption)
-      : { cookie: prepared.cookie, shippingCost: 0 };
-    const totals = computeInvidTotals({
-      net: prepared.subtotal,
-      ivaProducts: prepared.iva,
-      internos: prepared.impuestos,
-      percepcionPercent: prepared.percepcionPercent,
-      shipping: quoted.shippingCost,
-    });
+  preview(credentials: Record<string, string>, input: InvidDraftInput, reconcileFor?: PortalReconcileFor) {
+    return withPortalCartLock(portalAccountKey("INVID", credentials.username), () =>
+      this.previewUnlocked(credentials, input, reconcileFor)
+    );
+  }
+
+  private async previewUnlocked(credentials: Record<string, string>, input: InvidDraftInput, reconcileFor?: PortalReconcileFor) {
+    const prepared = await this.prepareCart(credentials, input, reconcileFor);
     // El carrito de Invid es por sesión de login y el portal a veces hereda el
     // de una sesión vencida: si esta queda cargada, el comercio puede entrar
     // al portal y encontrarse los productos de NODO sumados a los suyos. Se
     // deja vacía; el borrador la vuelve a armar al confirmar.
     try {
-      await this.clearCart(quoted.cookie);
+      await this.clearCart(prepared.cookie);
     } catch (err) {
       this.logger.warn(`No se pudo vaciar el carrito de Invid después de cotizar: ${String(err)}`);
     }
@@ -737,18 +648,18 @@ export class InvidOrderService {
       payments: prepared.payments,
       deliveries: prepared.deliveries,
       expresoCompanies: prepared.expresoCompanies,
-      suggestedDelivery: delivery,
+      suggestedDelivery: prepared.delivery,
       stockOk: prepared.stockOk,
       stockMessage: prepared.stockMessage,
       itemErrors: prepared.itemErrors,
       subtotal: prepared.subtotal,
-      iva: totals.iva,
+      iva: prepared.iva,
       impuestos: prepared.impuestos,
       percepcionPercent: prepared.percepcionPercent,
-      percepciones: totals.percepciones,
-      shippingCost: totals.shipping,
+      percepciones: prepared.percepciones,
+      shippingCost: prepared.shippingCost,
       taxLines: prepared.taxLines,
-      total: totals.total,
+      total: prepared.total,
       note: "Esto todavía no crea el pedido. Al confirmar, Invid deja un borrador pendiente y el vendedor de la cuenta te contacta.",
     };
   }
@@ -818,114 +729,73 @@ export class InvidOrderService {
     return this.fulfillDraft(author, credentials, input, orderId);
   }
 
-  private async fulfillDraft(
+  /** De vaciar el carrito a `confirmar`, nadie más toca la cuenta: una cotización en el medio cambiaría el pedido. */
+  private fulfillDraft(
     author: OrderAuthor,
     credentials: Record<string, string>,
     input: InvidDraftInput,
     existingId?: string
   ) {
-    const prepared = await this.prepareCart(credentials, input.items, input.addressId, input.paymentOption);
+    return withPortalCartLock(portalAccountKey("INVID", credentials.username), () =>
+      this.fulfillDraftUnlocked(author, credentials, input, existingId)
+    );
+  }
+
+  private async fulfillDraftUnlocked(
+    author: OrderAuthor,
+    credentials: Record<string, string>,
+    input: InvidDraftInput,
+    existingId?: string
+  ) {
+    if (input.deliveryOption === "3" && !input.expresoId) {
+      throw new BadRequestException("Para EXPRESO tenés que elegir la empresa de transporte");
+    }
+    const prepared = await this.prepareCart(credentials, input);
     if (prepared.itemErrors.length > 0) {
       throw new BadRequestException(prepared.itemErrors.map((e) => e.message).join(" · "));
     }
-    if (!prepared.stockOk) {
+    if (!prepared.stockOk || !prepared.quote?.clave) {
       throw new BadRequestException(prepared.stockMessage || "Invid no validó el stock de este pedido");
     }
 
-    const delivery = this.resolveDelivery(prepared, input.deliveryOption);
-    if (delivery.value === "3" && !input.expresoId) {
-      throw new BadRequestException("Para EXPRESO tenés que elegir la empresa de transporte");
-    }
-    const quoted = await this.quoteShipping(
-      prepared.cookie,
-      delivery,
-      prepared.address,
-      input.expresoId,
-      prepared.paymentOption
-    );
-    let cookie = quoted.cookie;
-    const totals = computeInvidTotals({
-      net: prepared.subtotal,
-      ivaProducts: prepared.iva,
-      internos: prepared.impuestos,
-      percepcionPercent: prepared.percepcionPercent,
-      shipping: quoted.shippingCost,
-    });
-    const shippingCost = totals.shipping;
-    const total = totals.total;
-
-    const stock = await this.validateStock(cookie, prepared.paymentOption, prepared.address.CodProvincia);
-    cookie = stock.cookie;
-    if (!stock.validation.resultado) {
-      throw new BadRequestException(
-        stripHtmlMessage(stock.validation.mensaje) || "Invid no validó el stock de este pedido"
-      );
-    }
-
-    const rate = await this.getTipoCambio(cookie, prepared.paymentOption);
-    const pesosHidden = rate > 0 ? (total * rate).toFixed(2) : total.toFixed(2);
-    if (rate <= 0) {
-      this.logger.warn("Invid no devolvió cotización ARS; prcmoninv1 va en USD y el portal puede rechazar el POST");
-    }
-
-    const cartPage = await this.request(cookie, "GET", CART_URL);
-    cookie = cartPage.cookie;
-
-    const fields = collectFormFields(cartPage.data);
-    const body = new URLSearchParams(fields);
-    body.set("iniciar_pago", "S");
-    body.set("dir_entrega", prepared.addressId);
-    body.set("identificador_seleccionado", prepared.address.Identificador);
-    body.set("direccion_seleccionado", prepared.address.Direccion);
-    body.set("nropuerta_seleccionado", prepared.address.NroPuerta);
-    body.set("localidad_seleccionado", prepared.address.Localidad);
-    body.set("ciudad_seleccionado", prepared.address.Ciudad);
-    body.set("codpostal_seleccionado", prepared.address.CodPostal);
-    body.set("codprovincia_seleccionado", prepared.address.CodProvincia);
-    body.set("provincia_seleccionado", prepared.address.Provincia);
-    body.set("codpais_seleccionado", prepared.address.CodPais);
-    body.set("pais_seleccionado", prepared.address.Pais);
-    body.set("opcionPago", prepared.paymentOption);
-    body.set("entrega", delivery.value);
-    body.set("costo_envio", String(shippingCost));
-    body.set("usa_imi", "true");
-    body.set("usa_iva", "true");
-    body.set("valida_delivery", fields.valida_delivery || "1");
-    // El pedido es en USD. El hidden prcmoninv1 lo llena el portal en pesos
-    // (total USD × cotización) antes de CONFIRMAR; sin eso el POST no impacta.
-    body.set("prcmoninv1", pesosHidden);
-    body.set("percepcionHidden", String(prepared.percepcionPercent));
-    body.set("cp_entrega", prepared.address.CodPostal);
-    body.set("localidad_entrega", prepared.address.Localidad);
-    body.set("provincia_entrega", prepared.address.Provincia);
-    if (input.expresoId) body.set("expreso_entrega", input.expresoId);
-    if (input.notes) body.set("observaciones", input.notes);
-    if (input.payerName) body.set("nombre_pagador", input.payerName);
-    if (input.payerEmail) body.set("mail_pagador", input.payerEmail);
-    if (fields.termYCond != null || /termYCond/i.test(cartPage.data)) body.set("termYCond", "on");
-
+    const delivery = prepared.delivery;
+    const total = prepared.total;
+    let cookie = prepared.cookie;
     this.logger.log(
-      `Invid POST iniciar_pago entrega=${delivery.value} pago=${prepared.paymentOption} usd=${total.toFixed(2)} ars=${pesosHidden} loc=?`
+      `Invid confirmar entrega=${delivery.value} pago=${prepared.paymentOption} usd=${total.toFixed(2)} items=${prepared.items.length}`
     );
 
-    let html = "";
-    const submit = await this.request(cookie, "POST", CART_URL, { body: body.toString(), timeout: 40_000 });
-    cookie = submit.cookie;
-    html = submit.data;
+    const confirmed = await this.action<{ pedido?: string | number; redireccion?: string; pago?: Record<string, unknown> }>(
+      cookie,
+      prepared.csrf,
+      "confirmar",
+      { clave: prepared.quote.clave },
+      60_000
+    );
+    cookie = confirmed.cookie;
 
-    if (submit.status === 302 && submit.location) {
-      const next = submit.location.startsWith("http")
-        ? submit.location
-        : `${SITE_BASE}/${submit.location.replace(/^\//, "")}`;
-      const followed = await this.request(cookie, "GET", next);
-      cookie = followed.cookie;
-      html = followed.data;
+    let webOrderNumber = confirmed.data.pedido != null && String(confirmed.data.pedido).trim() ? String(confirmed.data.pedido).trim() : undefined;
+    let orderNumber: string | undefined;
+    let errorMessage = confirmed.exito ? undefined : stripHtmlMessage(confirmed.mensaje) || "Invid no confirmó el pedido";
+    // Algunos pagos terminan en otra página (mensaje.php con el número de pedido web).
+    if (confirmed.exito && !webOrderNumber && confirmed.data.redireccion) {
+      const loc = confirmed.data.redireccion;
+      const next = loc.startsWith("http") ? loc : `${SITE_BASE}/${loc.replace(/^\//, "")}`;
+      try {
+        const followed = await this.request(cookie, "GET", next);
+        cookie = followed.cookie;
+        const parsed = parseSubmitResult(followed.data);
+        webOrderNumber = parsed.webOrderNumber;
+        orderNumber = parsed.orderNumber;
+      } catch (err) {
+        this.logger.warn(`Invid: no se pudo leer la página después de confirmar: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
-
-    const parsed = parseSubmitResult(html);
-    let orderNumber = parsed.orderNumber;
-    let webOrderNumber = parsed.webOrderNumber;
-    const created = Boolean(parsed.appearsSuccessful && webOrderNumber);
+    const created = Boolean(confirmed.exito && webOrderNumber && !errorMessage);
+    if (confirmed.exito && !webOrderNumber) {
+      errorMessage = ACCEPTED_WITHOUT_NUMBER;
+      this.logger.warn(`Invid confirmar sin número: claves ${Object.keys(confirmed.data).join(",")}`);
+    }
 
     if (created) {
       // El pedido se llevó el carrito del portal: la foto vieja ya no describe nada.
@@ -948,9 +818,7 @@ export class InvidOrderService {
     }
 
     if (!created) {
-      this.logger.warn(
-        `Invid no confirmó el pedido: status=${submit.status} loc=${submit.location ?? "-"} ${parsed.errorMessage || "sin Nro. de PEDIDO WEB"}`
-      );
+      this.logger.warn(`Invid no confirmó el pedido: status=${confirmed.status} ${errorMessage ?? ""}`);
     }
 
     const payload = {
@@ -964,15 +832,15 @@ export class InvidOrderService {
       notes: input.notes,
       subtotal: prepared.subtotal,
       impuestos: prepared.impuestos,
-      percepciones: totals.percepciones,
+      percepciones: prepared.percepciones,
       total,
-      errorMessage: created ? null : (parsed.errorMessage ?? "Invid no devolvió número de pedido web"),
+      errorMessage: created ? null : (errorMessage ?? "Invid no devolvió número de pedido web"),
       items: prepared.items,
       addressSnapshot: {
         id: prepared.addressId,
         ...prepared.address,
         vat: prepared.iva,
-        perceptions: totals.percepciones,
+        perceptions: prepared.percepciones,
         internalTax: prepared.impuestos,
         subtotal: prepared.subtotal,
         total,
@@ -1000,8 +868,8 @@ export class InvidOrderService {
       address: prepared.address,
       subtotal: prepared.subtotal,
       impuestos: prepared.impuestos,
-      percepciones: totals.percepciones,
-      shippingCost,
+      percepciones: prepared.percepciones,
+      shippingCost: prepared.shippingCost,
       total,
       message: webOrderNumber
         ? `Pedido confirmado en Invid. Pedido web ${webOrderNumber}. El vendedor de la cuenta te contacta; si no se informa el pago en 24 h, Invid lo da de baja. En Mis pedidos puede tardar un rato en aparecer.`
@@ -1025,4 +893,24 @@ export class InvidOrderService {
     }
     return null;
   }
+}
+
+/**
+ * `select_direcciones.php`: `<input type="radio" name="dir_selected" value="N"> <b>Nombre</b><br>Calle - Localidad (CP)<br>`.
+ * Se usa cuando el carrito está vacío y el checkout no muestra las direcciones.
+ */
+export function parseSelectAddresses(html: string): { id: string; label: string; addressLine: string; isDefault: boolean }[] {
+  const out: { id: string; label: string; addressLine: string; isDefault: boolean }[] = [];
+  const re = /<input\b[^>]*name=["']dir_selected["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const tag = m[0];
+    const id = tag.match(/\bvalue=["'](\d+)["']/i)?.[1];
+    if (!id) continue;
+    const after = html.slice(m.index + tag.length).split(/<\/li>|<input\b/i)[0] ?? "";
+    const label = decodeEntities(after.match(/<b\b[^>]*>([\s\S]*?)<\/b>/i)?.[1]?.replace(/<[^>]*>/g, "").trim() ?? "");
+    const line = decodeEntities(after.replace(/<b\b[^>]*>[\s\S]*?<\/b>/i, "").split(/<br\s*\/?>/i).map((s) => s.replace(/<[^>]*>/g, "").trim()).filter(Boolean)[0] ?? "");
+    out.push({ id, label: label || line || `Dirección ${id}`, addressLine: line, isDefault: /\bchecked\b/i.test(tag) });
+  }
+  return out;
 }

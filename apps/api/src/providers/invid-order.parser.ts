@@ -883,7 +883,8 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
     if (/cartTableHeader/i.test(trTag) || /cartTableHeader/i.test(m[0])) continue;
     const cells = extractTdHtml(m[2]);
     if (cells.length === 0) continue;
-    const firstIsChrome = /<img/i.test(cells[0]) || stripTags(cells[0]) === "";
+    // Primera celda de adorno: imagen, vacía o (desde 11/2026) el botón "+" que despliega el detalle.
+    const firstIsChrome = /<img|<button/i.test(cells[0]) || stripTags(cells[0]) === "";
     const data = (firstIsChrome ? cells.slice(1) : cells).map(stripTags);
     if (data.length < 4) continue;
 
@@ -912,7 +913,8 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
     const after = html.slice(m.index + m[0].length);
     const nextOrder = after.search(/<tr\b[^>]*class="[^"]*CartProduct/i);
     const outlineHtml = nextOrder >= 0 ? after.slice(0, nextOrder) : after.slice(0, 20_000);
-    const outline = /id=["']menu\d+outline["']/i.test(outlineHtml)
+    // El detalle venía en `menuNoutline`; desde 11/2026 en `<tr id="portal-pedido-N">`.
+    const outline = /id=["'](?:menu\d+outline|portal-pedido-\d+)["']/i.test(outlineHtml)
       ? parseOutlineBlock(outlineHtml)
       : {
           items: [] as InvidOrderItem[],
