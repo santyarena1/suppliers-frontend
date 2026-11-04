@@ -659,7 +659,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                   <div className="grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start" data-tour="provider-tab-content">
                     <nav aria-label="Secciones de la configuración" className="flex gap-1 overflow-x-auto rounded-xl border border-surface-800 bg-surface-900/60 p-1.5 lg:sticky lg:top-4 lg:flex-col lg:overflow-visible">
                       {[
-                        ...(!listBased ? [["cfg-cuenta", "Cuenta y conexión"]] : []),
+                        ...(!listBased || demo ? [["cfg-cuenta", "Cuenta y conexión"]] : []),
                         ...(isRetailer ? [["cfg-compra", "Impuestos, pago y envío"]] : []),
                         ...(!listBased ? [["cfg-actualizacion", "Actualización automática"]] : []),
                         ["cfg-stock", "Stock y catálogo"],
@@ -680,7 +680,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                       ))}
                     </nav>
                     <div className="flex min-w-0 max-w-3xl flex-col gap-5">
-                    {!listBased && (
+                    {(!listBased || demo) && (
                       <section id="cfg-cuenta" className="scroll-mt-4 flex flex-col gap-3">
                         <h2 className="text-base font-semibold text-white">Cuenta y conexión</h2>
                         {demo ? (

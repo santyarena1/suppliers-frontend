@@ -41,6 +41,7 @@ export type OnboardingStepId =
   | "seller-view"
   | "quotes"
   | "team"
+  | "plan-payment"
   | "done";
 
 export type OnboardingStepKind = "setup" | "tour" | "finish";
@@ -100,7 +101,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   tour({
     id: "search",
     title: "Buscá una vez, te responden todos",
-    body: "Una búsqueda consulta a todos tus distribuidores a la vez. El mismo producto aparece en Demo Norte y Demo Sur con distinto precio y stock: comparás sin abrir ningún portal.",
+    body: "Una búsqueda consulta a todos tus distribuidores a la vez. El mismo producto aparece en Demo Norte y Demo Sur con distinto precio y stock: comparás sin abrir ningún portal. Arriba elegís verlo en tarjetas con foto o en lista compacta, una fila por producto.",
     href: "/search?q={demoSearch}",
     spotlight: '[data-tour="search-results"]',
   }),
@@ -136,7 +137,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     id: "add-to-cart",
     costSensitive: true,
     title: "Sumá un producto al carrito",
-    body: "Tocá + en cualquier tarjeta. Apenas lo agregues, seguimos.",
+    body: "Tocá + en cualquier producto, en tarjeta o en la lista. Apenas lo agregues, seguimos.",
     href: "/search?q={demoSearch}",
     spotlight: '[data-tour="add-to-cart"]',
     ctaLabel: "Ya lo agregué",
@@ -146,7 +147,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     id: "cart",
     costSensitive: true,
     title: "Tu carrito, separado por distribuidor",
-    body: "Cada distribuidor tiene su pedido con precios, IVA y percepciones. El carrito es del local: lo ve todo tu equipo. Desde acá confirmás el pedido o se lo mandás al vendedor.",
+    body: "Cada distribuidor tiene su pedido con precios, IVA y percepciones. El carrito es del local: lo ve y lo suma todo tu equipo, desde cualquier PC o pestaña, sin pisarse. Desde acá confirmás el pedido en el portal del distribuidor o se lo mandás al vendedor.",
     href: "/cart",
     spotlight: '[data-tour="cart-list"]',
   }),
@@ -154,7 +155,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     id: "orders",
     costSensitive: true,
     title: "Tus pedidos",
-    body: "Acá queda todo lo que pediste: los que salieron por el portal del distribuidor y los que cargaste offline. Te dejamos varios de ejemplo de los últimos meses.",
+    body: "Acá queda todo lo que pediste: los que salieron por el portal del distribuidor y los que cargaste offline. NODO sigue cada pedido en el portal y te avisa cuando cambia de estado (preparado, despachado, entregado). Te dejamos varios de ejemplo.",
     href: "/pedidos",
     spotlight: '[data-tour="orders-list"]',
   }),
@@ -186,7 +187,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   tour({
     id: "providers",
     title: "Tus distribuidores",
-    body: "Acá están todos tus distribuidores. Los reales se suman con tu usuario de cada uno, con su lista de precios en Excel o con el código que te da el vendedor.",
+    body: "Acá están todos tus distribuidores. En «Agregar proveedor» ves todos los que NODO tiene integrados: elegís uno, cargás tu usuario del portal y listo. Los que no están integrados se suman con su lista de precios en Excel o con el código que te da el vendedor.",
     href: "/proveedores",
     spotlight: '[data-tour="add-provider"]',
     roles: MANAGERS,
@@ -202,9 +203,9 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   tour({
     id: "provider-account",
     title: "Tu cuenta en el distribuidor",
-    body: "Con los que tienen integración cargás tu usuario del portal y NODO trae tus precios y stock solo, cada hora.",
+    body: "En Configuración, «Cuenta y conexión»: con los que tienen integración cargás tu usuario del portal y NODO trae tus precios y stock solo, cada hora.",
     href: "/proveedores/{demoProvider}?tab=credentials",
-    spotlight: '[data-tour="provider-tab-content"]',
+    spotlight: "#cfg-cuenta",
     roles: MANAGERS,
   }),
   tour({
@@ -218,7 +219,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   tour({
     id: "provider-config",
     title: "Configuración del distribuidor",
-    body: "Tu margen, el stock mínimo, qué hacer con lo que no tiene stock, formas de envío y si le comprás offline o en esquema. Cada distribuidor con su regla.",
+    body: "Todo el distribuidor en un solo lugar: impuestos, forma de pago y envío, si le comprás offline o en esquema, el stock mínimo y qué hacer con lo que no tiene stock. Cada distribuidor con su regla.",
     href: "/proveedores/{demoProvider}?tab=config",
     spotlight: '[data-tour="provider-tab-content"]',
     roles: MANAGERS,
@@ -260,7 +261,7 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
   tour({
     id: "quotes",
     title: "Presupuestos para tus clientes",
-    body: "Armá un presupuesto con precios de venta, cargale el nombre y el teléfono del cliente y mandáselo por WhatsApp. Si lo acepta, lo pasás al carrito y comprás. Cada vendedor ve los suyos; vos, los de todo el equipo.",
+    body: "Armá un presupuesto con precios de venta, cargale el nombre y el teléfono del cliente y mandáselo por WhatsApp o en PDF. Para una PC completa usá el Armador de PC: elegís el uso y la gama y la arma sola, con piezas compatibles. Si el cliente acepta, lo pasás al carrito y comprás.",
     href: "/presupuestos",
     spotlight: '[data-tour="quotes-new"]',
     capability: "sellerMode",
@@ -272,6 +273,14 @@ export const RETAILER_ONBOARDING_STEPS: OnboardingStep[] = [
     href: "/equipo",
     spotlight: '[data-tour="team-add"]',
     roles: MANAGERS,
+  }),
+  tour({
+    id: "plan-payment",
+    title: "Tu plan",
+    body: "En Plan y facturación ves tu plan y cuándo vence. Lo pagás con Mercado Pago y avisás con «Ya pagué», o coordinás una transferencia por WhatsApp.",
+    href: "/suscripcion",
+    spotlight: '[data-tour="plan-payment"]',
+    roles: ["OWNER"],
   }),
   {
     id: "done",

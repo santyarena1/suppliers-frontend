@@ -450,6 +450,7 @@ export type OnboardingStepId =
   | "seller-view"
   | "quotes"
   | "team"
+  | "plan-payment"
   | "done";
 
 export type OnboardingStepKind = "setup" | "tour" | "finish";

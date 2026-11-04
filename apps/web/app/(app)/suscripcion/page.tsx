@@ -305,7 +305,7 @@ function PaymentNotice({ sub, onMessage }: { sub: MySubscription; onMessage: (m:
   }
 
   return (
-    <section className={`rounded-2xl border p-5 ${urgent ? "border-amber-500/30" : "border-surface-800"}`}>
+    <section data-tour="plan-payment" className={`rounded-2xl border p-5 ${urgent ? "border-amber-500/30" : "border-surface-800"}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-white">Pagá tu plan</h2>

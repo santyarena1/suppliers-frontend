@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.22.1",
+    date: "2026-11-03",
+    title: "Recorrido de bienvenida al día",
+    changes: [
+      { kind: "improved", text: "El recorrido de bienvenida muestra lo nuevo: la lista compacta en la búsqueda, todos los distribuidores integrados en «Agregar proveedor», el seguimiento de pedidos con avisos, el Armador de PC y cómo pagar tu plan." },
+      { kind: "fixed", text: "Recorrido: el paso «Tu cuenta en el distribuidor» ahora señala la sección «Cuenta y conexión»." },
+    ],
+  },
+  {
     version: "2.22.0",
     date: "2026-11-03",
     title: "Pagá tu plan con Mercado Pago",
