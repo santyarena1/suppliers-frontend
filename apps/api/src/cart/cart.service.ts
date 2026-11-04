@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import type { TenantContext } from "../tenants/tenant-context.service";
@@ -25,6 +25,8 @@ type OrgCartPayload = {
   updatedAt: string | null;
   /** Nombre de cada integrante que figura en `by` de las líneas. Solo para el equipo del comercio. */
   people?: Record<string, string>;
+  /** Pestaña que hizo el cambio (ver UpsertOrgCartDto.clientId). */
+  clientId?: string | null;
 };
 
 function providerOf(entry: Prisma.JsonValue): string | null {
@@ -76,11 +78,15 @@ export class CartService {
 
   async putOrgCart(tenant: TenantContext, userId: string, dto: UpsertOrgCartDto) {
     this.assertRetailer(tenant);
-    const row = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cartLockKey(tenant.tenantId)}))`;
-      const prev = await tx.orgCart.findUnique({ where: { tenantId: tenant.tenantId }, select: { items: true } });
+      const prev = await tx.orgCart.findUnique({ where: { tenantId: tenant.tenantId } });
+      // El cambio se hizo sobre otra versión: se devuelve la actual sin tocar nada.
+      if (dto.baseUpdatedAt !== undefined && (prev?.updatedAt.toISOString() ?? null) !== dto.baseUpdatedAt) {
+        return { conflict: prev };
+      }
       const items = attributeCartItems(Array.isArray(prev?.items) ? prev.items : [], dto.items, userId);
-      return tx.orgCart.upsert({
+      return { row: await tx.orgCart.upsert({
       where: { tenantId: tenant.tenantId },
       create: {
         tenantId: tenant.tenantId,
@@ -93,10 +99,17 @@ export class CartService {
         schemes: (dto.schemes ?? []) as Prisma.InputJsonValue,
         updatedByUserId: userId,
       },
-      });
+      }) };
     });
-    const payload = await this.withPeople(this.serializeOrg(row, tenant.tenantId));
-    await this.broadcast(tenant.tenantId, payload);
+    if ("conflict" in result) {
+      throw new ConflictException({
+        message: "El carrito cambió en otra pestaña o PC. Se juntan los cambios.",
+        code: "CART_CONFLICT",
+        details: { cart: await this.withPeople(this.serializeOrg(result.conflict ?? null, tenant.tenantId)) },
+      });
+    }
+    const payload = await this.withPeople(this.serializeOrg(result.row, tenant.tenantId));
+    await this.broadcast(tenant.tenantId, { ...payload, clientId: dto.clientId ?? null });
     return payload;
   }
 

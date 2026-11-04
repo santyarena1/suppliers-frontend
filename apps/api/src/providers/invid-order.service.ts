@@ -1,3 +1,4 @@
+import { knownIvaRate } from "../common/iva-rates";
 import { BadGatewayException, BadRequestException, Injectable, Logger } from "@nestjs/common";
 import axios, { type AxiosResponse } from "axios";
 import { PrismaService } from "../prisma/prisma.service";
@@ -276,17 +277,56 @@ export class InvidOrderService {
     for (let i = 0; i < 50; i++) {
       const cart = await this.request(current, "GET", CART_URL);
       current = cart.cookie;
-      if (!/sacarItemCarrito\(\s*["']?1["']?\s*\)/.test(cart.data)) {
-        this.logger.log(`Invid clearCart: ${i} filas sacadas; quedan ${parseCartLines(cart.data).length}`);
+      // Se mira lo que de verdad queda (las filas), no solo el botón de la primera:
+      // con un resto en el carrito el IVA de la primera línea salía cualquier cosa.
+      const rows = parseCartLines(cart.data);
+      const hasRemoveButton = /sacarItemCarrito\(\s*["']?\d+["']?\s*\)/.test(cart.data);
+      if (rows.length === 0 || !hasRemoveButton) {
+        if (rows.length > 0) this.logger.warn(`Invid clearCart: quedaron ${rows.length} filas sin poder sacar`);
+        else if (i > 0) this.logger.log(`Invid clearCart: ${i} filas sacadas`);
         return current;
       }
       const removed = await this.request(current, "GET", `${SITE_BASE}/ajaxCarrito.php`, {
-        params: { funcion: "sacar_carrito", indice: 1 },
+        params: { funcion: "sacar_carrito", indice: rows[0].index },
       });
       current = removed.cookie;
     }
     this.logger.warn("clearCart de Invid alcanzó el tope de 50 iteraciones — puede haber quedado algo en el carrito");
     return current;
+  }
+
+  /** Alícuota de cada producto según el catálogo de Invid (es del producto, igual para todos los comercios). */
+  private async catalogIvaRates(codes: string[]): Promise<Map<string, number>> {
+    if (codes.length === 0) return new Map();
+    const rows = await this.prisma.tenantProductOffer.findMany({
+      where: { provider: "INVID", externalId: { in: codes }, ivaPercent: { not: null } },
+      select: { externalId: true, ivaPercent: true },
+      orderBy: { syncedAt: "desc" },
+    });
+    const out = new Map<string, number>();
+    for (const row of rows) {
+      const rate = knownIvaRate(Number(row.ivaPercent));
+      if (rate !== undefined && !out.has(row.externalId)) out.set(row.externalId, rate);
+    }
+    return out;
+  }
+
+  /**
+   * El IVA de la línea sale de restar acumulados del carrito del portal; si algo
+   * quedó cargado de antes o dos cotizaciones se cruzaron, da cualquier cosa
+   * (400 %). Solo se acepta si es una alícuota que existe; si no, se usa la del
+   * catálogo (o 21 %, la general) y queda en el log.
+   */
+  private checkedLineIva(code: string, subtotal: number, iva: number, catalogRates: Map<string, number>): number {
+    if (!(subtotal > 0)) return iva;
+    const percent = (iva / subtotal) * 100;
+    if (knownIvaRate(percent) !== undefined) return iva;
+    const fallback = catalogRates.get(code) ?? 21;
+    const fixed = round2(subtotal * (fallback / 100));
+    this.logger.warn(
+      `Invid IVA fuera de rango en ${code}: ${iva} sobre ${subtotal} (${percent.toFixed(1)} %); se usa ${fallback} % = ${fixed}`
+    );
+    return fixed;
   }
 
   private async addItem(cookie: string, code: string, qty: number, prev: InvidCartCumulative) {
@@ -438,12 +478,14 @@ export class InvidOrderService {
       await this.cartSnapshots.save(reconcileFor.tenantId, "INVID", nextCartSnapshot(addedItems, sync, previousSnapshot));
     }
 
+    const catalogRates = await this.catalogIvaRates(addedItems.map((item) => item.code));
     const preparedItems = addedItems.map((item, idx) => {
       const tax = taxLines.find((t) => String(t.nroItem) === String(idx + 1))
         ?? taxLines[idx];
       const internos = tax?.internos ?? 0;
       const percepciones = round2(item.subtotal * (percepcionPercent / 100));
-      return { ...item, iva: invidLineIvaWithoutInternos(item.iva, internos), internos, percepciones };
+      const iva = invidLineIvaWithoutInternos(item.iva, internos);
+      return { ...item, iva: this.checkedLineIva(item.code, item.subtotal, iva, catalogRates), internos, percepciones };
     });
 
     const net = preparedItems.reduce((s, i) => s + i.subtotal, 0);

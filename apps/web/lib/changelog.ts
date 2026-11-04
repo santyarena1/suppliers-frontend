@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.21.6",
+    date: "2026-11-03",
+    title: "El carrito ya no pierde productos y el IVA de Invid queda bien",
+    changes: [
+      { kind: "fixed", text: "Carrito: si lo tenés abierto en varias pestañas o PCs, o lo usa más de una persona del equipo, ya no se pisan entre sí. Antes, al agregar algo desde una pestaña vieja, desaparecían productos o volvían otros que ya habías pedido. Ahora se juntan los cambios de todos." },
+      { kind: "fixed", text: "Carrito: al volver a la pestaña después de un rato, o si se cortó internet, se pone al día solo con lo último, y los distribuidores se vuelven a cotizar." },
+      { kind: "fixed", text: "Invid: el IVA ya no puede salir con porcentajes que no existen (como 400 %). Solo se usan las alícuotas reales (21 %, 10,5 %, etc.)." },
+      { kind: "fixed", text: "Si una pantalla tiene un error, ahora se puede reintentar sin perder lo que tenías, en vez de quedar en blanco." },
+    ],
+  },
+  {
     version: "2.21.5",
     date: "2026-10-30",
     title: "Más distribuidores para sumar y la lista compacta arreglada",

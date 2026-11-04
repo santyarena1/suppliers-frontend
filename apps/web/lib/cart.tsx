@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
-import { orgCartApi, ProductDTO } from "@/lib/api";
+import { orgCartApi, ProductDTO, type OrgCartSnapshot } from "@/lib/api";
+import { isOlder, mergeCartItems, mergeSchemes, sameCart, type CartVersion } from "@/lib/cartSync";
 import { SESSION_EVENT, getImpersonator, getTenant, getUser } from "@/lib/auth";
 import { subscribeChatEvents } from "@/components/chat/ChatRealtime";
 import { extractTaxLines } from "@/lib/tax";
@@ -230,6 +231,21 @@ function withoutPeople(item: CartItem, filter: OrderFilter): CartItem[] {
   return qty > 0 ? [{ ...item, qty, by: left }] : [];
 }
 
+/** Identifica esta pestaña: el aviso de un cambio que guardó ella misma se ignora. */
+const CART_TAB_ID =
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `tab_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+function versionOf(snapshot: OrgCartSnapshot): CartVersion<CartItem, CartScheme> {
+  const items = Array.isArray(snapshot.items) ? (snapshot.items as CartItem[]) : [];
+  return {
+    items: items.map((it) => ({ ...it, channel: it.channel === "offline" ? "offline" : "online", schemeId: it.schemeId ?? null })),
+    schemes: Array.isArray(snapshot.schemes) ? (snapshot.schemes as CartScheme[]) : [],
+    updatedAt: snapshot.updatedAt ?? null,
+  };
+}
+
 function nextSchemeName(existing: CartScheme[], provider: string): string {
   const n = existing.filter((s) => s.provider === provider).length + 1;
   return `Esquema ${n}`;
@@ -242,8 +258,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [people, setPeople] = useState<Record<string, string>>({});
   const [orderFilter, setOrderFilter] = useState<OrderFilter>(ALL_PEOPLE);
   const [fxTick, setFxTick] = useState(0);
-  const skipPush = useRef(true);
   const saveTimer = useRef<number | null>(null);
+  // Lo último que se sabe del carrito del servidor. Cada guardado dice sobre qué
+  // versión se hizo; si hay otra más nueva, se juntan (lib/cartSync.ts).
+  const baseRef = useRef<CartVersion<CartItem, CartScheme> | null>(null);
+  const localRef = useRef<{ items: CartItem[]; schemes: CartScheme[] }>({ items: [], schemes: [] });
+  const savingRef = useRef(false);
+  const saveAgainRef = useRef(false);
+  const remoteSyncRef = useRef(false);
+  localRef.current = { items, schemes };
   // El carrito es de quien está logueado: si cambia la sesión sin recargar la
   // página, se descarta el de la sesión anterior y se carga el de la nueva.
   const [sessionUserId, setSessionUserId] = useState<string | null>(() =>
@@ -272,15 +295,97 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const setBase = useCallback((version: CartVersion<CartItem, CartScheme>) => {
+    // Una respuesta lenta no hace volver a una versión más vieja.
+    if (baseRef.current && isOlder(version.updatedAt, baseRef.current.updatedAt)) return;
+    baseRef.current = version;
+    writeSyncedAt(version.updatedAt);
+  }, []);
+
+  /**
+   * Llega el carrito del servidor (otra pestaña, otra PC, otra persona, un
+   * pedido que se concilió). Si acá no hay nada sin guardar se toma tal cual;
+   * si lo hay, se juntan los dos y el resultado se guarda.
+   */
+  const applyRemote = useCallback((snapshot: OrgCartSnapshot) => {
+    if (snapshot.people) setPeople(snapshot.people);
+    const remote = versionOf(snapshot);
+    const base = baseRef.current;
+    if (base && (remote.updatedAt === base.updatedAt || isOlder(remote.updatedAt, base.updatedAt))) return;
+    const local = localRef.current;
+    const pristine = base !== null && sameCart(local, base);
+    const next = pristine
+      ? { items: remote.items, schemes: remote.schemes }
+      : {
+          items: mergeCartItems(base?.items ?? null, local.items, remote.items, withQty),
+          schemes: mergeSchemes(base?.schemes ?? null, local.schemes, remote.schemes),
+        };
+    setBase(remote);
+    localRef.current = next;
+    setItems(next.items);
+    setSchemes(next.schemes);
+  }, [setBase]);
+
+  const pushNow = useCallback(async () => {
+    if (getTenant()?.type !== "RETAILER") return;
+    if (savingRef.current) {
+      saveAgainRef.current = true;
+      return;
+    }
+    const base = baseRef.current;
+    const local = localRef.current;
+    if (base && sameCart(local, base)) return;
+    savingRef.current = true;
+    try {
+      const res = await orgCartApi.save({
+        items: local.items,
+        schemes: local.schemes,
+        ...(base ? { baseUpdatedAt: base.updatedAt } : {}),
+        clientId: CART_TAB_ID,
+      });
+      setBase(versionOf(res.data));
+    } catch (err: unknown) {
+      const res = (err as { response?: { status?: number; data?: { code?: string; details?: { cart?: OrgCartSnapshot } } } })?.response;
+      if (res?.status === 409 && res.data?.code === "CART_CONFLICT" && res.data.details?.cart) {
+        applyRemote(res.data.details.cart);
+        saveAgainRef.current = true;
+      }
+      // Sin red queda en este navegador y se reintenta al volver o al próximo cambio.
+    } finally {
+      savingRef.current = false;
+      if (saveAgainRef.current) {
+        saveAgainRef.current = false;
+        if (saveTimer.current) window.clearTimeout(saveTimer.current);
+        saveTimer.current = window.setTimeout(() => void pushNow(), 150);
+      }
+    }
+  }, [applyRemote, setBase]);
+
+  /** Vuelve a leer el carrito del servidor (al volver a la pestaña, al reconectar). */
+  const pullRemote = useCallback(async () => {
+    if (getTenant()?.type !== "RETAILER" || remoteSyncRef.current) return;
+    remoteSyncRef.current = true;
+    try {
+      const res = await orgCartApi.get();
+      applyRemote(res.data);
+      // Lo local que todavía no llegó al servidor (p. ej. se cortó la red) se sube ahora.
+      void pushNow();
+    } catch {
+      /* sin red: se reintenta en el próximo aviso */
+    } finally {
+      remoteSyncRef.current = false;
+    }
+  }, [applyRemote, pushNow]);
+
   useEffect(() => {
     let cancelled = false;
     // Hasta terminar de cargar el carrito de esta sesión no se guarda ni se sube nada.
-    skipPush.current = true;
     setHydrated(false);
     setItems([]);
     setSchemes([]);
     setPeople({});
     setOrderFilter(ALL_PEOPLE);
+    baseRef.current = null;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     async function boot() {
       const tenant = getTenant();
@@ -290,43 +395,31 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         if (tenant?.type === "RETAILER") {
           try {
             const remote = await orgCartApi.get();
-            const remoteItems = Array.isArray(remote.data.items) ? (remote.data.items as CartItem[]) : [];
-            const remoteSchemes = Array.isArray(remote.data.schemes) ? (remote.data.schemes as CartScheme[]) : [];
-            const remoteAt = remote.data.updatedAt ?? null;
-            if (!cancelled && remote.data.people) setPeople(remote.data.people);
-            if (remoteItems.length > 0 || remoteSchemes.length > 0) {
-              if (!cancelled) {
-                setItems(remoteItems.map((it) => ({ ...it, channel: it.channel === "offline" ? "offline" : "online" })));
-                setSchemes(remoteSchemes);
-              }
-              writeSyncedAt(remoteAt);
-            } else if (local.items.length > 0 || local.schemes.length > 0) {
-              // El remoto está vacío. Si cambió desde la última vez que nos
-              // sincronizamos, lo vaciaron a propósito (un pedido, otra sesión)
-              // y hay que respetarlo. Si no cambió, lo local es una edición
-              // nuestra que todavía no llegó al servidor y se sube.
-              const enSincronia = readSyncedAt() === remoteAt;
-              if (enSincronia) {
-                if (!cancelled) {
-                  setItems(local.items);
-                  setSchemes(local.schemes);
-                }
-                // Si mientras tanto cambió la sesión, no se sube nada con el token nuevo.
-                if (cancelled) return;
-                const saved = await orgCartApi.save({ items: local.items, schemes: local.schemes });
-                writeSyncedAt(saved.data?.updatedAt ?? null);
-              } else {
-                if (!cancelled) {
-                  setItems([]);
-                  setSchemes([]);
-                }
-                writeSyncedAt(remoteAt);
-              }
+            if (cancelled) return;
+            const version = versionOf(remote.data);
+            if (remote.data.people) setPeople(remote.data.people);
+            if (version.items.length > 0 || version.schemes.length > 0) {
+              baseRef.current = version;
+              writeSyncedAt(version.updatedAt);
+              localRef.current = { items: version.items, schemes: version.schemes };
+              setItems(version.items);
+              setSchemes(version.schemes);
+            } else if ((local.items.length > 0 || local.schemes.length > 0) && readSyncedAt() === version.updatedAt) {
+              // El remoto está vacío y no cambió desde la última vez: lo local es
+              // una edición nuestra que todavía no llegó al servidor y se sube.
+              // Si cambió, lo vaciaron a propósito (un pedido, otra sesión).
+              baseRef.current = version;
+              localRef.current = { items: local.items, schemes: local.schemes };
+              setItems(local.items);
+              setSchemes(local.schemes);
             } else {
-              writeSyncedAt(remoteAt);
+              baseRef.current = version;
+              writeSyncedAt(version.updatedAt);
             }
           } catch {
+            // Sin servidor se trabaja con lo de este navegador; al volver se junta (pullRemote).
             if (!cancelled) {
+              localRef.current = { items: local.items, schemes: local.schemes };
               setItems(local.items);
               setSchemes(local.schemes);
             }
@@ -338,10 +431,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch { /* ignore */ }
-      if (!cancelled) {
-        skipPush.current = false;
-        setHydrated(true);
-      }
+      if (!cancelled) setHydrated(true);
     }
     void boot();
     return () => {
@@ -351,43 +441,57 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(storageKey(), JSON.stringify({ items, schemes }));
-    const tenant = getTenant();
-    if (tenant?.type !== "RETAILER" || skipPush.current) return;
+    try {
+      localStorage.setItem(storageKey(), JSON.stringify({ items, schemes }));
+    } catch {
+      /* storage lleno o bloqueado: el carrito sigue en el servidor */
+    }
+    if (getTenant()?.type !== "RETAILER") return;
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      void orgCartApi
-        .save({ items, schemes })
-        .then((res) => writeSyncedAt(res.data?.updatedAt ?? null))
-        .catch(() => {
-          /* si falla, queda el localStorage y se reintenta en el próximo cambio */
-        });
+      if (baseRef.current) void pushNow();
+      else void pullRemote();
     }, 450);
     return () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
     };
-  }, [items, schemes, hydrated]);
+  }, [items, schemes, hydrated, pushNow, pullRemote]);
 
   useEffect(() => {
-    return subscribeChatEvents((type, payload) => {
+    if (!hydrated) return;
+    const unsubscribe = subscribeChatEvents((type, payload) => {
+      // Al (re)conectar el aviso en vivo pudo perderse cambios: se relee.
+      if (type === "hello") {
+        void pullRemote();
+        return;
+      }
       if (type !== "cart_updated") return;
-      const me = getUser()?.id;
-      const data = payload.data as {
-        items?: CartItem[];
-        schemes?: CartScheme[];
-        updatedByUserId?: string | null;
-        people?: Record<string, string>;
-      };
-      if (data?.people) setPeople(data.people);
-      if (!data || data.updatedByUserId === me) return;
-      skipPush.current = true;
-      if (Array.isArray(data.items)) setItems(data.items);
-      if (Array.isArray(data.schemes)) setSchemes(data.schemes);
-      requestAnimationFrame(() => {
-        skipPush.current = false;
-      });
+      const data = payload.data as (OrgCartSnapshot & { clientId?: string | null }) | null;
+      if (!data) return;
+      if (data.people) setPeople(data.people);
+      // Lo guardó esta misma pestaña. Otra pestaña o PC del mismo usuario sí se aplica.
+      if (data.clientId === CART_TAB_ID) return;
+      if (!Array.isArray(data.items)) return;
+      applyRemote(data);
+      void pushNow();
     });
-  }, []);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pullRemote();
+    };
+    const onOnline = () => void pullRemote();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    // Por si el aviso en vivo se cae sin enterarse (Wi-Fi, suspensión de la PC).
+    const poll = window.setInterval(() => {
+      if (document.visibilityState === "visible") void pullRemote();
+    }, 60_000);
+    return () => {
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      window.clearInterval(poll);
+    };
+  }, [hydrated, applyRemote, pushNow, pullRemote]);
 
   const add = useCallback((product: ProductDTO, qty = 1, opts: AddToCartOpts = {}): CartItem => {
     const ref = normalizeRef({

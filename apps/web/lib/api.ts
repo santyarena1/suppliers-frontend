@@ -939,7 +939,9 @@ export interface RecentProviderOrder {
 export const orgCartApi = {
   get: () => api.get<OrgCartSnapshot>("/cart/org"),
   recentOrders: (hours = 6) => api.get<RecentProviderOrder[]>("/cart/org/recent-orders", { params: { hours } }),
-  save: (data: { items: unknown[]; schemes: unknown[] }) => api.put<OrgCartSnapshot>("/cart/org", data),
+  /** `baseUpdatedAt`: versión sobre la que se hizo el cambio; si ya hay otra, 409 CART_CONFLICT con la actual. */
+  save: (data: { items: unknown[]; schemes: unknown[]; baseUpdatedAt?: string | null; clientId?: string }) =>
+    api.put<OrgCartSnapshot>("/cart/org", data),
   client: (linkId: string) => api.get<OrgCartSnapshot>(`/cart/clients/${linkId}`),
 };
 

@@ -123,6 +123,38 @@ describe("aviso en vivo al guardar el carrito", () => {
   });
 });
 
+describe("dos pestañas o PCs guardando a la vez", () => {
+  const retailerCtx = { tenantId: "t-retail", tenantType: "RETAILER", tenantRole: "OWNER", userId: "u-retail" } as never;
+  it("si el carrito cambió desde la versión de la pestaña, no lo pisa y devuelve el actual", async () => {
+    const { service, prisma, hub } = setup(null, []);
+    const err = await service
+      .putOrgCart(retailerCtx, "u-retail", { items: [], schemes: [], baseUpdatedAt: "2026-09-30T10:00:00.000Z" } as never)
+      .catch((e: unknown) => e);
+    expect((err as { getStatus: () => number }).getStatus()).toBe(409);
+    const body = (err as { getResponse: () => { code: string; details: { cart: { items: unknown[]; updatedAt: string } } } }).getResponse();
+    expect(body.code).toBe("CART_CONFLICT");
+    expect(body.details.cart.items).toHaveLength(3);
+    expect(body.details.cart.updatedAt).toBe("2026-10-01T10:00:00.000Z");
+    expect(prisma.orgCart.upsert).not.toHaveBeenCalled();
+    expect(hub.emitToUsers).not.toHaveBeenCalled();
+  });
+
+  it("sobre la versión actual guarda y avisa qué pestaña lo hizo", async () => {
+    const { service, prisma, hub } = setup(null, []);
+    await service.putOrgCart(retailerCtx, "u-retail", {
+      items: CART.items, schemes: CART.schemes, baseUpdatedAt: "2026-10-01T10:00:00.000Z", clientId: "tab-1",
+    } as never);
+    expect(prisma.orgCart.upsert).toHaveBeenCalledTimes(1);
+    expect(hub.emitToUsers.mock.calls[0][1].data.clientId).toBe("tab-1");
+  });
+
+  it("sin carrito guardado, la versión base es null", async () => {
+    const { service, prisma } = setup(null, []);
+    prisma.orgCart.findUnique.mockResolvedValueOnce(null);
+    await service.putOrgCart(retailerCtx, "u-retail", { items: [], schemes: [], baseUpdatedAt: null } as never);
+    expect(prisma.orgCart.upsert).toHaveBeenCalledTimes(1);
+  });
+});
 describe("pedidos creados salen del carrito compartido", () => {
   it("descuenta lo pedido, guarda sin autor (lo aplican todas las PCs) y marca el pedido", async () => {
     const { service, prisma, hub } = setup(null, []);

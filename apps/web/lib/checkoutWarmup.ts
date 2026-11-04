@@ -123,8 +123,13 @@ type Slot = {
   errorCode?: string | null;
   errorDetails?: Record<string, unknown> | null;
   data: unknown;
+  /** Cuándo quedó lista: pasado WARM_TTL_MS se vuelve a armar (el portal pudo cambiar). */
+  readyAt?: number;
   timer: ReturnType<typeof setTimeout> | null;
 };
+
+/** Un carrito armado hace rato ya no refleja el portal (precios, stock, sesión). */
+const WARM_TTL_MS = 8 * 60 * 1000;
 
 const slots: Record<string, Slot> = {};
 
@@ -300,7 +305,8 @@ export function ensureCheckoutWarmup(
 
   const itemsKey = cartItemsKey(items);
   const current = slots[provider];
-  if (current && current.itemsKey === itemsKey && (current.status === "ready" || current.status === "loading")) {
+  const fresh = current?.status === "loading" || (current?.status === "ready" && Date.now() - (current.readyAt ?? 0) < WARM_TTL_MS);
+  if (current && current.itemsKey === itemsKey && fresh) {
     return;
   }
   if (current?.timer) clearTimeout(current.timer);
@@ -322,6 +328,7 @@ export function ensureCheckoutWarmup(
       const slot = slots[provider];
       if (!slot || slot.generation !== generation) return;
       slot.status = "ready";
+      slot.readyAt = Date.now();
       slot.data = data;
       slot.error = null;
       emit();

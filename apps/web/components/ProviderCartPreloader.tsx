@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useCart } from "@/lib/cart";
 import { getToken, isTokenExpired } from "@/lib/auth";
 import {
@@ -13,6 +13,16 @@ import { capabilityAllowed, loadSubscription } from "@/lib/subscription";
 
 export default function ProviderCartPreloader() {
   const { orderOnlineByProvider: onlineByProvider, hydrated } = useCart();
+
+  // Al volver a la pestaña después de un rato se vuelve a armar lo que ya venció (WARM_TTL_MS).
+  const [visibleTick, setVisibleTick] = useState(0);
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setVisibleTick((t) => t + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
 
   useEffect(() => {
     if (!hydrated || !getToken() || isTokenExpired()) return;
@@ -33,7 +43,7 @@ export default function ProviderCartPreloader() {
     return () => {
       alive = false;
     };
-  }, [hydrated, onlineByProvider]);
+  }, [hydrated, onlineByProvider, visibleTick]);
 
   return null;
 }

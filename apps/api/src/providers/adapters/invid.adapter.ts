@@ -1,3 +1,4 @@
+import { knownIvaRate } from "../../common/iva-rates";
 import { Injectable, BadGatewayException } from "@nestjs/common";
 import axios from "axios";
 import * as XLSX from "xlsx";
@@ -378,18 +379,17 @@ function mapProduct(row: unknown[]): NormalizedProduct {
  * "IVA" de 80 veces el neto, que guardados como alícuota se convertían en un
  * millón de pesos de impuesto inventado en el carrito. Se acepta un porcentaje
  * creíble o un importe del que salga uno; cualquier otra cosa se descarta, y el
- * producto queda sin alícuota, que es la verdad.
+ * producto queda sin alícuota, que es la verdad. Solo valen las alícuotas que
+ * existen (`KNOWN_IVA_RATES`).
  */
-const MAX_IVA_PERCENT = 30;
-
 export function invidIvaPercent(net?: number, raw?: number): number | undefined {
   if (raw == null || !Number.isFinite(raw) || raw < 0) return undefined;
   if (raw === 0) return 0;
-  if (raw <= MAX_IVA_PERCENT) return raw;
+  // Primero como porcentaje; si no es una alícuota real, como importe sobre el neto.
+  const asPercent = knownIvaRate(raw);
+  if (asPercent !== undefined) return asPercent;
   if (net == null || !(net > 0)) return undefined;
-  const derivado = (raw / net) * 100;
-  if (!Number.isFinite(derivado) || derivado <= 0 || derivado > MAX_IVA_PERCENT) return undefined;
-  return Math.round(derivado * 100) / 100;
+  return knownIvaRate((raw / net) * 100);
 }
 
 function sumInvidTaxes(net?: number, iva?: number, internos?: number): number | undefined {

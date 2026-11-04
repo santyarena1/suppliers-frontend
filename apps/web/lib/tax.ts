@@ -88,6 +88,39 @@ function plausibleTaxPercent(percent: number | null): boolean {
   return percent == null || (Number.isFinite(percent) && percent <= MAX_TAX_PERCENT);
 }
 
+/**
+ * Alícuotas de IVA que existen. Otro porcentaje es un error de lectura (se
+ * vieron IVA de 400 % en Invid) y no se muestra ni se suma al costo.
+ */
+export const KNOWN_IVA_PERCENTS = [0, 2.5, 5, 10.5, 21, 27] as const;
+
+export function knownIvaPercent(percent: number | null | undefined, tolerance = 0.6): number | null {
+  if (percent == null || !Number.isFinite(percent)) return null;
+  let best: number | null = null;
+  for (const rate of KNOWN_IVA_PERCENTS) {
+    if (Math.abs(percent - rate) <= tolerance && (best == null || Math.abs(percent - rate) < Math.abs(percent - best))) {
+      best = rate;
+    }
+  }
+  return best;
+}
+
+/**
+ * Una línea de IVA con una alícuota que no existe se reemplaza por la del
+ * catálogo (`ivaPercent`) o, sin dato, por la general de 21 %. Vale también
+ * para lo que quedó guardado en el carrito de antes.
+ */
+function withKnownIva(lines: TaxLine[], net: number, catalogPercent: unknown): TaxLine[] {
+  if (!lines.some((l) => l.kind === "iva" && l.percent != null && knownIvaPercent(l.percent) == null)) return lines;
+  const catalogRate = taxRateFromPercent(catalogPercent as string | number | null | undefined);
+  const fallback = knownIvaPercent(catalogRate != null ? catalogRate * 100 : null) ?? 21;
+  return lines.map((l) =>
+    l.kind === "iva" && l.percent != null && knownIvaPercent(l.percent) == null
+      ? { ...l, percent: fallback, unitAmount: round4(net * (fallback / 100)) }
+      : l
+  );
+}
+
 function foldAccents(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -261,9 +294,13 @@ function fallbackLines(p: TaxableProduct, net: number): TaxLine[] {
 
 /** Líneas fiscales del producto (unitarias). No inventa IIBB si el proveedor no lo mandó. */
 export function extractTaxLines(p: TaxableProduct): TaxLine[] {
+  const net = parsePrice(p.price);
+  return withKnownIva(rawTaxLines(p, net), net, p.ivaPercent);
+}
+
+function rawTaxLines(p: TaxableProduct, net: number): TaxLine[] {
   if (p.taxes && p.taxes.length > 0) return p.taxes;
 
-  const net = parsePrice(p.price);
   const raw = p.raw;
 
   if (Array.isArray(raw)) {
@@ -346,14 +383,11 @@ export function applyInvidCheckoutTaxes(
     const tolerance = Math.max(0.02, unitNet * 0.005);
     if (Math.abs(ivaOnly - catalogIva.unitAmount) <= tolerance) lineIva = lineIva - quotedInternos;
   }
-  if (lineIva != null && lineIva > 0.0001) {
-    const unit = round4(lineIva / safeQty);
-    lines.push({
-      kind: "iva",
-      label: "IVA",
-      percent: unitNet > 0 ? round4((unit / unitNet) * 100) : null,
-      unitAmount: unit,
-    });
+  const quotedUnitIva = lineIva != null && lineIva > 0.0001 ? round4(lineIva / safeQty) : null;
+  const quotedPercent = quotedUnitIva != null && unitNet > 0 ? round4((quotedUnitIva / unitNet) * 100) : null;
+  // Si la cotización trae una alícuota que no existe, manda la del catálogo.
+  if (quotedUnitIva != null && (quotedPercent == null || knownIvaPercent(quotedPercent) != null)) {
+    lines.push({ kind: "iva", label: "IVA", percent: quotedPercent, unitAmount: quotedUnitIva });
   } else {
     const prev = keep("iva");
     if (prev) lines.push(prev);

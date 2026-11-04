@@ -61,7 +61,10 @@ export default function ChatRealtime() {
 
     function connect() {
       if (stopped) return;
-      const url = `${API_BASE}/my/chat/stream?token=${encodeURIComponent(token!)}`;
+      // El token se renueva solo (SessionKeepAlive): al reconectar va el de ahora, no el del arranque.
+      const current = getToken();
+      if (!current) return;
+      const url = `${API_BASE}/my/chat/stream?token=${encodeURIComponent(current)}`;
       source = new EventSource(url);
       source.onopen = () => {
         retry = 1000;
