@@ -91,7 +91,9 @@ interface PreparedCart {
   loaded: CartLine[] | null;
   /** Solo nombres de campos de `GET carrito`, para el log cuando no se puede leer. */
   cartShape: string;
-  items: { code: string; qty: number; name: string; price: number; subtotal: number; ivaPercent?: number }[];
+  items: { code: string; qty: number; name: string; price: number; subtotal: number; ivaPercent?: number; stock?: number; inCart: number }[];
+  /** Lo que New Bytes no puede vender en la cantidad pedida (stock real del carrito). */
+  short: NbShortLine[];
   payments: NbPaymentOption[];
   addresses: NbAddress[];
   subtotales: NbSubtotales;
@@ -99,20 +101,62 @@ interface PreparedCart {
 }
 
 /**
- * Renglones realmente cargados según `GET carrito` (`{ productId, amount }`).
- * `null` si algún renglón no trae esos datos: no se puede afirmar qué quedó.
+ * Código y cantidad de un renglón de `GET carrito`. New Bytes devuelve
+ * `{ Cart, items }` con cada renglón como el producto del catálogo
+ * (`id`, `amountInCart`); la forma vieja era `{ productId, amount }`.
+ */
+function nbCartRow(row: unknown): { code?: string; qty?: number; rec: Record<string, unknown> } {
+  const rec = asRecord(row) ?? {};
+  const product = asRecord(rec.product);
+  const code = asString(rec.productId) || asString(product?.id) || asString(rec.id);
+  const qty = asNumber(rec.amountInCart) ?? asNumber(rec.amount) ?? asNumber(rec.qty);
+  return { code, qty, rec };
+}
+
+/**
+ * Stock que New Bytes deja comprar de ese renglón: `amountStock`. El sitio
+ * muestra `availableStock` ("10 o más"), pero `carrito/process` rechaza lo
+ * que pase de `amountStock` ("no tienen suficiente stock").
+ */
+export function nbCartRowStock(rec: Record<string, unknown>): number | undefined {
+  const product = asRecord(rec.product) ?? rec;
+  return asNumber(product.amountStock) ?? asNumber(rec.amountStock) ?? asNumber(product.availableStock);
+}
+
+/**
+ * Renglones realmente cargados según `GET carrito`.
+ * `null` si algún renglón no trae código y cantidad: no se puede afirmar qué quedó.
  */
 export function nbLoadedLines(body: unknown): CartLine[] | null {
   const list = unwrapNbList(body);
   const lines: CartLine[] = [];
   for (const row of list) {
-    const rec = asRecord(row) ?? {};
-    const code = asString(rec.productId);
-    const qty = asNumber(rec.amount);
+    const { code, qty } = nbCartRow(row);
     if (!code || qty == null) return null;
     lines.push({ code, qty });
   }
   return lines;
+}
+
+export interface NbShortLine {
+  code: string;
+  name: string;
+  requested: number;
+  available: number;
+}
+
+/** Lo pedido que supera el stock que New Bytes deja comprar, según el carrito cargado. */
+export function nbShortLines(
+  items: { code: string; qty: number; name: string; stock?: number }[],
+  requested: { code: string; qty: number; name?: string }[]
+): NbShortLine[] {
+  const stockByCode = new Map(items.filter((it) => it.stock != null).map((it) => [it.code, { stock: it.stock as number, name: it.name }]));
+  const out: NbShortLine[] = [];
+  for (const req of requested) {
+    const got = stockByCode.get(req.code);
+    if (got && got.stock < req.qty) out.push({ code: req.code, name: req.name || got.name, requested: req.qty, available: Math.max(0, got.stock) });
+  }
+  return out;
 }
 
 /** Forma de `GET carrito` sin valores: tipo, claves de arriba, cantidad de renglones y claves del primero. */
@@ -185,17 +229,24 @@ function cartItemsFromBody(
       name: it.name || it.code,
       price: 0,
       subtotal: 0,
+      inCart: it.qty,
     }));
   }
   return list.map((row, i) => {
-    const rec = asRecord(row) ?? {};
+    const parsed = nbCartRow(row);
+    const rec = parsed.rec;
     const product = asRecord(rec.product) ?? rec;
-    const code = asString(rec.productId) || asString(product.id) || requested[i]?.code || "";
-    const qty = asNumber(rec.amount) ?? asNumber(rec.qty) ?? requested[i]?.qty ?? 1;
-    const name = asString(product.title) || asString(rec.title) || asString(rec.name) || requested[i]?.name || code;
+    const code = parsed.code || requested[i]?.code || "";
+    // Por código, no por posición: New Bytes no devuelve los renglones en el orden en que se cargaron.
+    const asked = parsed.code ? requested.find((it) => it.code === code) : requested[i];
+    const inCart = parsed.qty ?? asked?.qty ?? 1;
+    const stock = nbCartRowStock(rec);
+    // Lo que se puede comprar de verdad: el carrito acepta más, pero el pedido no.
+    const qty = stock != null && stock >= 0 ? Math.min(inCart, stock) : inCart;
+    const name = asString(product.title) || asString(rec.title) || asString(rec.name) || asked?.name || code;
     const priceObj = asRecord(product.price) ?? asRecord(rec.price);
     const price = asNumber(priceObj?.value) ?? asNumber(rec.price) ?? 0;
-    const line = asNumber(rec.subtotal) ?? price * qty;
+    const line = qty === inCart ? asNumber(rec.subtotal) ?? price * qty : price * qty;
     const ivaPercent = asNumber(priceObj?.iva);
     return {
       code,
@@ -204,6 +255,8 @@ function cartItemsFromBody(
       price,
       subtotal: line,
       ...(ivaPercent != null ? { ivaPercent } : {}),
+      ...(stock != null ? { stock: Math.max(0, stock) } : {}),
+      inCart,
     };
   });
 }
@@ -358,11 +411,13 @@ export class NewBytesOrderService {
       api.get("miCuenta/shippingAddress").catch(() => []),
     ]);
 
+    const quoted = cartItemsFromBody(cartBody, items);
     return {
       api,
       loaded: nbLoadedLines(cartBody),
       cartShape: nbCartShape(cartBody),
-      items: cartItemsFromBody(cartBody, items),
+      items: quoted,
+      short: nbShortLines(quoted, items),
       payments: unwrapNbList(paymentsRaw).map(mapPaymentOption).filter((p): p is NbPaymentOption => p != null),
       addresses: unwrapNbList(addressesRaw).map(mapAddress).filter((a): a is NbAddress => a != null),
       subtotales: parseNbSubtotales(subtotalesRaw),
@@ -427,7 +482,7 @@ export class NewBytesOrderService {
       addresses: prepared.addresses.map(publicAddress),
       subtotales: prepared.subtotales.raw,
       availability: prepared.availability,
-      stockOk: prepared.availability.ok,
+      stockOk: prepared.availability.ok && prepared.short.length === 0,
       subtotal,
       iva,
       perceptions: perc,
@@ -462,9 +517,10 @@ export class NewBytesOrderService {
     return {
       items: portalOnlyLines(
         mergeNbLines(
+          // Lo que hay cargado tal cual, sin recortar al stock: es lo que el comercio dejó en el portal.
           cartItemsFromBody(body, [])
             .filter((line) => line.code)
-            .map((line) => ({ code: line.code, qty: line.qty, name: line.name }))
+            .map((line) => ({ code: line.code, qty: line.inCart, name: line.name }))
         ),
         snapshot
       ),
@@ -650,6 +706,12 @@ export class NewBytesOrderService {
     }
 
     const prepared = await this.prepareCart(credentials, input.items, author.tenantId);
+    if (prepared.short.length > 0) {
+      const detail = prepared.short
+        .map((s) => `${s.name}: pediste ${s.requested}, New Bytes tiene ${s.available}`)
+        .join(" · ");
+      throw new BadRequestException(`No se envió el pedido: New Bytes no tiene stock para todo. ${detail}. Bajá la cantidad y volvé a confirmar.`);
+    }
     // Si New Bytes no aceptó algo, no sale un pedido distinto del carrito.
     if (prepared.loaded) assertPortalCartMatches("New Bytes", mergeNbLines(input.items), prepared.loaded);
     else this.logger.warn(`New Bytes: no se pudo leer el carrito para verificarlo antes de confirmar (${prepared.cartShape})`);

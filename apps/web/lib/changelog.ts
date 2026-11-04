@@ -26,6 +26,16 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.22.2",
+    date: "2026-11-04",
+    title: "New Bytes: stock real al pedir más de una unidad",
+    changes: [
+      { kind: "fixed", text: "New Bytes: al pedir más de una unidad, el carrito avisaba poco stock en productos que figuraban con «10 o más», y el pedido salía rechazado. Ahora NODO lee bien el carrito de New Bytes y muestra cuántas unidades te deja comprar de verdad, con «Dejar N» para ajustar." },
+      { kind: "fixed", text: "New Bytes: si una cantidad supera lo que New Bytes tiene, el pedido no se manda y te dice qué producto y cuántas unidades hay, en vez del error genérico del portal." },
+      { kind: "fixed", text: "Carrito: al cambiar una cantidad de New Bytes ya no queda el aviso de stock de la cotización anterior mientras se vuelve a cotizar." },
+    ],
+  },
+  {
     version: "2.22.1",
     date: "2026-11-03",
     title: "Recorrido de bienvenida al día",

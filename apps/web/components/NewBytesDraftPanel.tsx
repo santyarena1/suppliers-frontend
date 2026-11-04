@@ -94,7 +94,8 @@ export default function NewBytesDraftPanel({
   useEffect(() => {
     seeded.current = null;
     setLoadingMeta(true);
-  }, [cartKey]);
+    onPreviewed?.(null);
+  }, [cartKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (warm.itemsKey !== cartKey) return;
