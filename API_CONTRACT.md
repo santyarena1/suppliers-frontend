@@ -417,7 +417,7 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Ruta**: `/providers/INVID/orders`
 - **Auth**: Bearer, organización comercio con cuenta Invid cargada
 - **Body / Params**: `refresh=1` opcional para saltear cache
-- **Respuesta esperada**: `{ orders: InvidOrder[], currentExchangeRate?, paymentForm?, paymentUploads?, note? }`. Cada pedido incluye `items[]` (código, nombre, precio s/IVA, cantidad, total de línea), `totals?`, `exchangeRate?`, `exchangeRateSource`, `amountArs?`, `canAttachPayment?` y `paymentHref?`. `paymentForm` trae los bancos del HTML de Invid (Macro, Galicia, Mercado Pago; no el título «Banco: *»), observaciones y hasta 3 `fileFields`.
+- **Respuesta esperada**: `{ orders: InvidOrder[], currentExchangeRate?, paymentForm?, paymentUploads?, note? }`. Cada pedido incluye `items[]` (código, nombre, precio s/IVA, cantidad, total de línea), `totals?`, `exchangeRate?`, `exchangeRateSource`, `amountArs?`, `canAttachPayment?`, `paymentHref?`, `paymentOrderId?` (el `pedido` del formulario) y `paymentSentAt?` (cuándo se cargó el comprobante desde NODO; no sale del portal). `paymentForm` trae los bancos del HTML de Invid (valor `M`/`G`, Macro y Galicia; no el título «Banco: *»), observaciones y hasta 3 `fileFields`.
 - **Estado**: IMPLEMENTADO
 - **Notas**: El HTML del portal a veces pone el estado de línea (Abierto) en una columna: el parser identifica producto / precio / cantidad por contenido, no por posición. No se inventan alícuotas. Si Invid no discrimina IVA/IIBB, `taxes` es el resto entre el neto de las líneas y el total. El TC del HTML del pedido manda; si no viene, se usa la cotización actual de Invid (`traerCotizacionOpcionPago`) y se etiqueta como actual, no histórica.
 
@@ -425,10 +425,10 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Método**: POST
 - **Ruta**: `/providers/INVID/payments/attach`
 - **Auth**: Bearer, organización comercio con cuenta Invid cargada
-- **Body / Params**: `multipart/form-data` con `bank` (Macro/Galicia), `notes` (observaciones), `orderNumber`, `paymentHref?` y hasta 3 archivos (`archivo1`… o los `fileFields` del portal). Banco, observaciones y al menos un archivo son obligatorios.
-- **Respuesta esperada**: `{ ok: true, status }`
+- **Body / Params**: `multipart/form-data` con `bank` (el `value` de `paymentForm.banks`), `notes` (observaciones), `orderNumber`, `paymentOrderId?`, `paymentHref?` y hasta 3 archivos. Banco, observaciones y al menos un archivo son obligatorios.
+- **Respuesta esperada**: `{ ok: true, status, sentAt }`. Si Invid rechaza el envío responde 502 con el motivo.
 - **Estado**: IMPLEMENTADO
-- **Notas**: Replica el popup «Comprobantes de Pago» de Invid. El POST rellena los hidden del form scrapeado y manda los archivos a los mismos `name` del portal. Un informe después de las 17:00 lo toma Invid con el TC del día siguiente (aviso en la UI). Echeq = Galicia.
+- **Notas**: Replica el formulario «Comprobantes de Pago» de Invid. El POST rellena los hidden del form scrapeado y manda los archivos por orden a los `name` del portal (el primero es obligatorio). Cada envío aceptado queda en `ProviderPaymentReceipt`. Un informe después de las 17:00 lo toma Invid con el TC del día siguiente (aviso en la UI). Echeq = Galicia.
 
 ### [FEATURE] Informes de pago Elit (banco, tipo, fecha, importe, un archivo)
 - **Método**: GET | POST
