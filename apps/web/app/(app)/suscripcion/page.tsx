@@ -11,6 +11,7 @@ import { formatUsd, PLAN_CATALOG, type MySubscription, type TenantPlan } from "@
 import { invalidateSubscription, useSubscription } from "@/lib/subscription";
 import WhatsAppButton from "@/components/WhatsAppButton";
 import { NODO_WHATSAPP_LABEL } from "@/lib/contact";
+import MercadoPagoButton from "@/components/subscription/MercadoPagoButton";
 
 function errMsg(err: unknown, fallback: string) {
   return (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? fallback;
@@ -307,14 +308,15 @@ function PaymentNotice({ sub, onMessage }: { sub: MySubscription; onMessage: (m:
     <section className={`rounded-2xl border p-5 ${urgent ? "border-amber-500/30" : "border-surface-800"}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-white">Coordinemos el pago</h2>
+          <h2 className="text-sm font-semibold text-white">Pagá tu plan</h2>
           <p className="mt-1 text-xs text-surface-400 max-w-[60ch]">
-            Por ahora el pago se arregla directo con NODO: escribinos por WhatsApp al {NODO_WHATSAPP_LABEL} y te pasamos los
-            datos. Si ya pagaste, informalo con el número de transferencia o comprobante y lo registramos.
+            Pagá con Mercado Pago (tarjeta, débito o dinero en cuenta) y después tocá «Ya pagué» con el número de operación
+            para que lo registremos. Si preferís transferencia, escribinos por WhatsApp al {NODO_WHATSAPP_LABEL}.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <WhatsAppButton forPayment size="sm" label="Coordinar por WhatsApp" />
+          <MercadoPagoButton size="sm" onClick={() => setOpen(true)} />
+          <WhatsAppButton forPayment size="sm" label="Transferencia por WhatsApp" />
         {!open && (
           <button
             type="button"
@@ -331,7 +333,7 @@ function PaymentNotice({ sub, onMessage }: { sub: MySubscription; onMessage: (m:
           <input
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            placeholder="Nº de transferencia o comprobante"
+            placeholder="Nº de operación de Mercado Pago o de transferencia"
             className="w-full rounded-md border border-surface-700 bg-surface-800 px-2.5 py-1.5 text-sm text-white placeholder-surface-600 focus:border-brand-500 focus:outline-none"
           />
           <textarea

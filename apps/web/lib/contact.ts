@@ -4,6 +4,9 @@ import { whatsappNumber } from "./phone";
 export const NODO_WHATSAPP = "5491140859342";
 export const NODO_WHATSAPP_LABEL = "+54 9 11 4085-9342";
 
+/** Link de pago de Mercado Pago para los planes de NODO (Plan y facturación). */
+export const NODO_MERCADOPAGO_URL = "https://mpago.la/1UXHapj";
+
 export function whatsappUrl(text?: string): string {
   const base = `https://wa.me/${NODO_WHATSAPP}`;
   return text ? `${base}?text=${encodeURIComponent(text)}` : base;

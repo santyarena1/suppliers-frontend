@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AlertTriangle, Lock } from "lucide-react";
 import { useSubscription } from "@/lib/subscription";
 import WhatsAppButton from "@/components/WhatsAppButton";
+import MercadoPagoButton from "@/components/subscription/MercadoPagoButton";
 
 /**
  * Aviso de vencimiento para el comercio. Vencida o en gracia sigue operando; con
@@ -36,6 +37,7 @@ export default function SubscriptionBanner() {
             ? "Tu cuenta está suspendida. Tus datos siguen intactos: coordiná el pago con NODO para volver a operar."
             : "Tu suscripción venció. Coordiná el pago con NODO para mantenerla activa."}
         </p>
+        <MercadoPagoButton size="sm" label="Pagar" />
         <WhatsAppButton forPayment size="sm" label="Coordinar pago" />
         <Link
           href="/suscripcion"

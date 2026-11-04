@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.22.0",
+    date: "2026-11-03",
+    title: "Pagá tu plan con Mercado Pago",
+    changes: [
+      { kind: "new", text: "En «Plan y facturación» podés pagar tu plan con Mercado Pago (tarjeta, débito o dinero en cuenta). Después tocá «Ya pagué» con el número de operación y lo registramos. También está en el aviso de vencimiento." },
+    ],
+  },
+  {
     version: "2.21.6",
     date: "2026-11-03",
     title: "El carrito ya no pierde productos y el IVA de Invid queda bien",
