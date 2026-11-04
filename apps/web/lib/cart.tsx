@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef } from "react";
 import { orgCartApi, ProductDTO, type OrgCartSnapshot } from "@/lib/api";
 import { isOlder, mergeCartItems, mergeSchemes, sameCart, type CartVersion } from "@/lib/cartSync";
 import { SESSION_EVENT, getImpersonator, getTenant, getUser } from "@/lib/auth";
@@ -266,7 +266,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const savingRef = useRef(false);
   const saveAgainRef = useRef(false);
   const remoteSyncRef = useRef(false);
-  localRef.current = { items, schemes };
+  const pushRef = useRef<() => Promise<void>>(async () => undefined);
+  // Lo que se ve en pantalla, para leerlo fuera del render (avisos en vivo, guardados).
+  useLayoutEffect(() => {
+    localRef.current = { items, schemes };
+  }, [items, schemes]);
   // El carrito es de quien está logueado: si cambia la sesión sin recargar la
   // página, se descarta el de la sesión anterior y se carga el de la nueva.
   const [sessionUserId, setSessionUserId] = useState<string | null>(() =>
@@ -356,10 +360,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (saveAgainRef.current) {
         saveAgainRef.current = false;
         if (saveTimer.current) window.clearTimeout(saveTimer.current);
-        saveTimer.current = window.setTimeout(() => void pushNow(), 150);
+        saveTimer.current = window.setTimeout(() => void pushRef.current(), 150);
       }
     }
   }, [applyRemote, setBase]);
+  useEffect(() => {
+    pushRef.current = pushNow;
+  }, [pushNow]);
 
   /** Vuelve a leer el carrito del servidor (al volver a la pestaña, al reconectar). */
   const pullRemote = useCallback(async () => {
