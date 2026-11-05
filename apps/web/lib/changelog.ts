@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.23.1",
+    date: "2026-11-05",
+    title: "New Bytes: productos agotados en el carrito",
+    changes: [
+      { kind: "fixed", text: "New Bytes: un producto agotado hacía rechazar el pedido entero sin decir cuál era. Ahora el carrito controla el stock real antes de confirmar, te marca qué producto no hay y lo deja afuera del pedido." },
+    ],
+  },
+  {
     version: "2.23.0",
     date: "2026-11-04",
     title: "Invid: comprobantes de pago",

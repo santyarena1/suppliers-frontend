@@ -35,6 +35,7 @@ import { portalAccountKey, withPortalCartLock } from "./portal-cart-lock";
 
 /** Cuántos productos recuerda la foto de New Bytes (lo último que cargó NODO). */
 const NB_SNAPSHOT_MAX_CODES = 300;
+const NB_CATALOG_CACHE_MS = 60_000;
 
 function nbAccountKey(credentials: Record<string, string>): string {
   return portalAccountKey("NEW_BYTES", parseNbCredentials(credentials).user);
@@ -92,8 +93,9 @@ interface PreparedCart {
   /** Solo nombres de campos de `GET carrito`, para el log cuando no se puede leer. */
   cartShape: string;
   items: { code: string; qty: number; name: string; price: number; subtotal: number; ivaPercent?: number; stock?: number; inCart: number }[];
-  /** Lo que New Bytes no puede vender en la cantidad pedida (stock real del carrito). */
+  /** Lo que New Bytes no puede vender en la cantidad pedida, según su catálogo. */
   short: NbShortLine[];
+  catalog: Map<string, NbCatalogStock> | null;
   payments: NbPaymentOption[];
   addresses: NbAddress[];
   subtotales: NbSubtotales;
@@ -113,14 +115,63 @@ function nbCartRow(row: unknown): { code?: string; qty?: number; rec: Record<str
   return { code, qty, rec };
 }
 
+export interface NbCatalogStock {
+  amount?: number;
+  available?: number;
+  /** Tope de lo que informa: en el tope significa "N o más". */
+  limit?: number;
+}
+
 /**
- * Stock que New Bytes deja comprar de ese renglón: `amountStock`. El sitio
- * muestra `availableStock` ("10 o más"), pero `carrito/process` rechaza lo
- * que pase de `amountStock` ("no tienen suficiente stock").
+ * Stock por producto según el catálogo (`GET /`). `GET carrito` no trae stock, y
+ * `carrito/process` rechaza todo el pedido sin decir qué producto falta.
+ * `null` si el catálogo no se pudo leer: no se sabe nada, no que no haya stock.
  */
-export function nbCartRowStock(rec: Record<string, unknown>): number | undefined {
-  const product = asRecord(rec.product) ?? rec;
-  return asNumber(product.amountStock) ?? asNumber(rec.amountStock) ?? asNumber(product.availableStock);
+export function nbCatalogStock(body: unknown): Map<string, NbCatalogStock> | null {
+  const rows = unwrapNbList(body);
+  if (rows.length === 0) return null;
+  const catalog = new Map<string, NbCatalogStock>();
+  for (const row of rows) {
+    const rec = asRecord(row);
+    const code = asString(rec?.id);
+    if (!rec || !code) continue;
+    catalog.set(code, {
+      amount: asNumber(rec.amountStock),
+      available: asNumber(rec.availableStock),
+      limit: asNumber(rec.stockDisplayLimit),
+    });
+  }
+  return catalog.size > 0 ? catalog : null;
+}
+
+/**
+ * Unidades seguras de un producto, o `undefined` si no hay un número firme.
+ * Si no está en el catálogo es 0: los pedidos rechazados tenían un producto así.
+ * `amountStock` y `availableStock` pueden no coincidir (5 y 10, 20 y 10): para
+ * frenar un pedido se toma el mayor, y en el tope es "N o más", que no es un límite.
+ */
+export function nbSellableStock(catalog: Map<string, NbCatalogStock> | null, code: string): number | undefined {
+  if (!catalog) return undefined;
+  const entry = catalog.get(code);
+  if (!entry) return 0;
+  if (entry.amount == null && entry.available == null) return undefined;
+  const most = Math.max(entry.amount ?? 0, entry.available ?? 0);
+  return entry.limit != null && most >= entry.limit ? undefined : most;
+}
+
+/** Para cuando New Bytes rechaza por stock sin decir cuál: lo que el catálogo informa por debajo de lo pedido. */
+export function nbStockRejectionMessage(
+  items: { code: string; name: string; inCart: number }[],
+  catalog: Map<string, NbCatalogStock> | null
+): string {
+  const suspects = items.flatMap((it) => {
+    const entry = catalog?.get(it.code);
+    const low = Math.min(entry?.amount ?? Infinity, entry?.available ?? Infinity);
+    return entry && low < it.inCart ? [`${it.name}: pediste ${it.inCart}, informa ${low}`] : [];
+  });
+  return suspects.length > 0
+    ? `New Bytes rechazó el pedido por falta de stock. No dice en qué producto; lo más probable: ${suspects.join(" · ")}. No se creó ningún pedido.`
+    : "New Bytes rechazó el pedido por falta de stock en algún producto, pero no dice cuál. No se creó ningún pedido: probá bajar cantidades o sacar lo último que agregaste.";
 }
 
 /**
@@ -145,7 +196,7 @@ export interface NbShortLine {
   available: number;
 }
 
-/** Lo pedido que supera el stock que New Bytes deja comprar, según el carrito cargado. */
+/** Lo pedido que supera el stock que New Bytes deja comprar, según su catálogo. */
 export function nbShortLines(
   items: { code: string; qty: number; name: string; stock?: number }[],
   requested: { code: string; qty: number; name?: string }[]
@@ -219,7 +270,8 @@ function publicAddress(address: NbAddress) {
 
 function cartItemsFromBody(
   body: unknown,
-  requested: { code: string; qty: number; name?: string }[]
+  requested: { code: string; qty: number; name?: string }[],
+  catalog: Map<string, NbCatalogStock> | null = null
 ): PreparedCart["items"] {
   const list = unwrapNbList(body);
   if (list.length === 0) {
@@ -240,7 +292,7 @@ function cartItemsFromBody(
     // Por código, no por posición: New Bytes no devuelve los renglones en el orden en que se cargaron.
     const asked = parsed.code ? requested.find((it) => it.code === code) : requested[i];
     const inCart = parsed.qty ?? asked?.qty ?? 1;
-    const stock = nbCartRowStock(rec);
+    const stock = nbSellableStock(catalog, code);
     // Lo que se puede comprar de verdad: el carrito acepta más, pero el pedido no.
     const qty = stock != null && stock >= 0 ? Math.min(inCart, stock) : inCart;
     const name = asString(product.title) || asString(rec.title) || asString(rec.name) || asked?.name || code;
@@ -274,6 +326,8 @@ function cartItemsFromBody(
 @Injectable()
 export class NewBytesOrderService {
   private readonly logger = new Logger(NewBytesOrderService.name);
+  /** El catálogo pesa: varias cotizaciones seguidas de la misma cuenta lo comparten un minuto. */
+  private readonly catalogCache = new Map<string, { at: number; catalog: Map<string, NbCatalogStock> }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -377,6 +431,20 @@ export class NewBytesOrderService {
     }
   }
 
+  private async readCatalogStock(api: NewBytesApiClient, account: string, fresh: boolean) {
+    const hit = this.catalogCache.get(account);
+    if (!fresh && hit && Date.now() - hit.at < NB_CATALOG_CACHE_MS) return hit.catalog;
+    try {
+      const catalog = nbCatalogStock(await api.get("/"));
+      if (catalog) this.catalogCache.set(account, { at: Date.now(), catalog });
+      else this.logger.warn("New Bytes: catálogo vacío, no se puede controlar el stock");
+      return catalog;
+    } catch (err) {
+      this.logger.warn(`New Bytes: no se pudo leer el catálogo para controlar el stock: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
   /**
    * El carrito de NewBytes es siempre exactamente el de NODO: se vacía y se
    * carga con cada línea una sola vez. Lo que el comercio haya dejado solo en
@@ -385,13 +453,15 @@ export class NewBytesOrderService {
   private async prepareCart(
     credentials: Record<string, string>,
     requested: NewBytesCartItems["items"],
-    tenantId?: string
+    tenantId?: string,
+    freshStock = false
   ): Promise<PreparedCart> {
     const items = mergeNbLines(requested);
     if (items.length === 0) throw new BadRequestException("No hay productos de NewBytes en el pedido");
     const api = await this.login(credentials);
 
     await this.resetCart(api);
+    const catalog = await this.readCatalogStock(api, nbAccountKey(credentials), freshStock);
     await api.post(
       "carrito/item",
       items.map((it) => ({
@@ -411,13 +481,14 @@ export class NewBytesOrderService {
       api.get("miCuenta/shippingAddress").catch(() => []),
     ]);
 
-    const quoted = cartItemsFromBody(cartBody, items);
+    const quoted = cartItemsFromBody(cartBody, items, catalog);
     return {
       api,
       loaded: nbLoadedLines(cartBody),
       cartShape: nbCartShape(cartBody),
       items: quoted,
       short: nbShortLines(quoted, items),
+      catalog,
       payments: unwrapNbList(paymentsRaw).map(mapPaymentOption).filter((p): p is NbPaymentOption => p != null),
       addresses: unwrapNbList(addressesRaw).map(mapAddress).filter((a): a is NbAddress => a != null),
       subtotales: parseNbSubtotales(subtotalesRaw),
@@ -705,7 +776,7 @@ export class NewBytesOrderService {
       throw new BadRequestException("El dropshipping de NewBytes solo aplica cuando hay envío, no en retiro");
     }
 
-    const prepared = await this.prepareCart(credentials, input.items, author.tenantId);
+    const prepared = await this.prepareCart(credentials, input.items, author.tenantId, true);
     if (prepared.short.length > 0) {
       const detail = prepared.short
         .map((s) => `${s.name}: pediste ${s.requested}, New Bytes tiene ${s.available}`)
@@ -771,7 +842,12 @@ export class NewBytesOrderService {
       }
       processResult = extractProcessResult(body);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      let message = err instanceof Error ? err.message : String(err);
+      if (/suficiente stock/i.test(message)) {
+        const lines = prepared.items.map((it) => ({ code: it.code, inCart: it.inCart, ...prepared.catalog?.get(it.code) }));
+        this.logger.warn(`New Bytes rechazó por stock con el control pasado: ${JSON.stringify(lines)}`);
+        message = nbStockRejectionMessage(prepared.items, prepared.catalog);
+      }
       const failed = {
         status: "FAILED",
         invidOrderNumber: null as string | null,
