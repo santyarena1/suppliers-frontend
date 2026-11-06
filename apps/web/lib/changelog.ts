@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.24.0",
+    date: "2026-11-06",
+    title: "Tutoriales en video en cada módulo",
+    changes: [
+      { kind: "new", text: "Arriba de cada módulo hay un botón «Ver tutorial» que abre su video ahí mismo." },
+    ],
+  },
+  {
     version: "2.23.1",
     date: "2026-11-05",
     title: "New Bytes: productos agotados en el carrito",

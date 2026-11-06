@@ -23,6 +23,7 @@ import { SellerPreviewBar } from "../sale-margins/SellerModeSettings";
 import { QuotesProvider } from "@/lib/quotes";
 import QuoteFloat from "../quotes/QuoteFloat";
 import QuoteBuildingBar from "../quotes/QuoteBuildingBar";
+import TutorialBar from "../tutorials/TutorialBar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -53,6 +54,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               )}
               <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden min-w-0 pt-12 lg:pt-0">
+                <TutorialBar />
                 <TenantRouteGate>
                   <SuspendedGate>
                     <SellerRouteGate>{children}</SellerRouteGate>
