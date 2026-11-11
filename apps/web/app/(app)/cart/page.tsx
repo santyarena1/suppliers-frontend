@@ -65,6 +65,7 @@ import UpsellNotice from "@/components/subscription/UpsellNotice";
 import StorefrontCartAction from "@/components/storefront/StorefrontCartAction";
 import { capabilityAllowed, useSubscription } from "@/lib/subscription";
 import { csvText } from "@/lib/csv";
+import { PurchaseHistoryButton } from "@/components/orders/PurchaseHistorySearch";
 
 type PerceptionLine = { label: string; amount: number };
 
@@ -1037,6 +1038,7 @@ function CartPageInner() {
             </div>
             <div className="flex flex-wrap items-center gap-1.5 justify-end">
               <OrderPeopleFilter />
+              <PurchaseHistoryButton />
               <PrefsPanel />
               <div className="relative" ref={pedidosRef}>
                 <button

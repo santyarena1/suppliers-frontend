@@ -57,6 +57,19 @@ export class OrdersController {
     };
   }
 
+  /** «¿Cuándo lo compré?»: busca en los pedidos ya hechos. */
+  @Get("purchase-history")
+  purchaseHistory(@CurrentTenant() tenant: TenantContext, @Query("q") q?: string) {
+    return this.orders.purchaseHistory(tenant, q);
+  }
+
+  /** Fecha de la última compra de cada producto (sin precios: también la ve el vendedor). */
+  @CostSensitive(false)
+  @Get("last-purchases")
+  lastPurchases(@CurrentTenant() tenant: TenantContext) {
+    return this.orders.lastPurchases(tenant);
+  }
+
   /** Compras del comercio de la sesión. Nunca cruza con otro local. */
   @RequiresCapability("advancedAnalytics")
   @Get("insights")

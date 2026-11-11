@@ -43,6 +43,7 @@ import {
 import { indexOpsAliases, isAliasable, parseOpsGroupKey, type OpsAliasKind } from "./purchase-ops-aliases";
 import { DEMO_DISTRIBUTORS, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
 import { normalizeApprovalQuote } from "./approval-quote";
+import { buildLastPurchaseIndex, searchPurchaseHistory } from "./purchase-history";
 
 /**
  * Aprobar un pedido online es mandarlo al proveedor con los mismos datos con los
@@ -362,6 +363,37 @@ export class OrdersService {
       catalogStats,
       opsAliases: indexOpsAliases(aliasRows),
     });
+  }
+
+  /** Pedidos que cuentan como compra (mismo criterio que el tablero), sin los de ejemplo fuera del recorrido. */
+  private async purchasedOrders(tenant: TenantContext) {
+    const showDemo = await this.viewerSeesDemo(tenant.userId);
+    return this.prisma.providerOrder.findMany({
+      where: {
+        tenantId: tenant.tenantId,
+        status: { in: [...COUNTED_ORDER_STATUSES] },
+        ...(showDemo
+          ? {}
+          : {
+              provider: { notIn: DEMO_DISTRIBUTORS.map((d) => d.providerKey) as string[] },
+              OR: [{ notes: null }, { NOT: { notes: { contains: "[DEMO]" } } }],
+            }),
+      },
+      orderBy: { createdAt: "desc" },
+      take: MAX_INSIGHT_ORDERS,
+      select: { id: true, provider: true, status: true, channel: true, items: true, createdAt: true },
+    });
+  }
+
+  /** «¿Cuándo lo compré?»: compras del comercio que coinciden con la búsqueda. */
+  async purchaseHistory(tenant: TenantContext, query?: string) {
+    if (!query || query.trim().length < 2) return searchPurchaseHistory([], "");
+    return searchPurchaseHistory(await this.purchasedOrders(tenant), query);
+  }
+
+  /** Última compra de cada producto, para marcarla en el buscador. */
+  async lastPurchases(tenant: TenantContext) {
+    return buildLastPurchaseIndex(await this.purchasedOrders(tenant));
   }
 
   private async viewerSeesDemo(userId: string): Promise<boolean> {

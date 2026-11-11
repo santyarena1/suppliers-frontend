@@ -1342,6 +1342,37 @@ export interface PendingApprovals {
   orders: TenantOrder[];
 }
 
+/** «¿Cuándo lo compré?»: compras del comercio que coinciden con una búsqueda. */
+export interface PurchaseHistoryResult {
+  query: string;
+  lines: {
+    orderId: string;
+    provider: string;
+    providerName: string;
+    channel: "ONLINE" | "OFFLINE";
+    createdAt: string;
+    sku: string;
+    name: string;
+    qty: number;
+    unitUsd: number;
+  }[];
+  total: number;
+  lastByProvider: { provider: string; providerName: string; createdAt: string; name: string; qty: number }[];
+}
+
+export interface LastPurchase {
+  at: string;
+  qty: number;
+  provider: string;
+  name: string;
+}
+
+/** Última compra de cada producto: por `PROVEEDOR::código` y por nombre normalizado. */
+export interface LastPurchaseIndex {
+  bySku: Record<string, LastPurchase>;
+  byName: Record<string, LastPurchase>;
+}
+
 export const ordersApi = {
   list: () => api.get<TenantOrder[]>("/orders"),
   pending: () => api.get<PendingApprovals>("/orders/pending-approval"),
@@ -1349,6 +1380,8 @@ export const ordersApi = {
     api.get<{ now: string; updates: OrderTrackingUpdate[] }>("/orders/tracking/updates", { params: since ? { since } : {} }),
   refreshTracking: () => api.post<{ checked: number; changed: number; skipped?: boolean }>("/orders/tracking/refresh"),
   insights: (days = 90) => api.get<PurchaseInsights>("/orders/insights", { params: { days } }),
+  purchaseHistory: (q: string) => api.get<PurchaseHistoryResult>("/orders/purchase-history", { params: { q } }),
+  lastPurchases: () => api.get<LastPurchaseIndex>("/orders/last-purchases"),
   unifyAlias: (body: { kind: OpsAliasKind; keys: string[]; label: string }) =>
     api.put<{ groupId: string; kind: OpsAliasKind; label: string; keys: string[] }>("/orders/insights/aliases", body),
   renameAlias: (groupId: string, label: string) =>

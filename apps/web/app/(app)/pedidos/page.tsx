@@ -9,6 +9,7 @@ import { ApprovalQuotePanel } from "@/components/orders/ApprovalQuotePanel";
 import { getTenant } from "@/lib/auth";
 import { providerOrdersHref } from "@/lib/providerOrders";
 import ProviderBadge from "@/components/ProviderBadge";
+import { PurchaseHistorySection } from "@/components/orders/PurchaseHistorySearch";
 import { buildSellerMessageFromOrder } from "@/lib/seller-message";
 import { formatUSD } from "@/lib/format";
 import { usePurchasePolicy } from "@/lib/purchase";
@@ -271,6 +272,8 @@ function RetailerPedidosPage() {
               </button>
             </div>
           )}
+
+          <PurchaseHistorySection />
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">

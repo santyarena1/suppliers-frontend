@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.25.0",
+    date: "2026-11-11",
+    title: "¿Cuándo lo compré?",
+    changes: [
+      {
+        kind: "new",
+        text: "En Pedidos y en el Carrito podés buscar un producto (por ejemplo «5600G») y ver cuándo lo compraste, a qué distribuidor, cuántas unidades y a qué precio.",
+      },
+      {
+        kind: "new",
+        text: "En el buscador, los productos que ya compraste muestran la fecha de la última compra.",
+      },
+    ],
+  },
+  {
     version: "2.24.0",
     date: "2026-11-06",
     title: "Tutoriales en video en cada módulo",

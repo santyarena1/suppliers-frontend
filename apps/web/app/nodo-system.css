@@ -406,6 +406,12 @@ a.pc__name:hover { color: var(--pc-accent); }
   text-decoration: none;
 }
 .pc__sync-warn:hover { text-decoration: underline; }
+.pc__bought {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--pc-accent);
+  line-height: 0.9rem;
+}
 
 /* Dos columnas en el telefono: precio, impuestos y codigo bajan de
    linea; el stepper va debajo del codigo, no le come el ancho. */

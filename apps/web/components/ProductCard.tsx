@@ -36,6 +36,7 @@ import { OwnStorePriceHint } from "./OwnStoreCompare";
 import ProductSyncedAt from "./ProductSyncedAt";
 import { ListOverdueHint } from "@/components/list-import/ListFreshnessHints";
 import ArsPriceHint from "./ArsPriceHint";
+import LastPurchaseHint from "./orders/LastPurchaseHint";
 
 import { isStorefrontProvider, providerLabel } from "@/components/ProviderBadge";
 /**
@@ -412,6 +413,7 @@ export default function ProductCard({
         <ProductSyncedAt syncedAt={product.syncedAt} className="pc__sync-line" compact />
         <ListOverdueHint provider={product.provider} className="pc__sync-warn" />
         <ArsPriceHint product={product} className="pc__sync-warn" />
+        <LastPurchaseHint product={product} className="pc__bought" />
       </div>
     </>
   );
@@ -652,6 +654,7 @@ export default function ProductCard({
           <ProductSyncedAt syncedAt={product.syncedAt} className="pc__sync-line" />
           <ListOverdueHint provider={product.provider} className="pc__sync-warn" />
           <ArsPriceHint product={product} className="pc__sync-warn" />
+          <LastPurchaseHint product={product} className="pc__bought" />
         </div>
       </div>
 

@@ -264,6 +264,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 - **Estado**: IMPLEMENTADO
 - **Notas**: Cuenta pedidos `CREATED` y `OFFLINE` hechos por NODO (hasta 5000 por consulta). Una línea es de la marca si su código está asociado a un producto de la marca (y entonces se agrupa en él) o si el distribuidor lo publica con esa marca. El comercio solo ve sus propias compras; `byAccount` es solo para la marca y solo de cuentas vinculadas. UI: sección "Tus compras de {marca}" en `/marcas/:linkId` y `/marca/estadisticas`.
 
+### [FEATURE] ¿Cuándo lo compré? (historial de compras por producto)
+- **Método**: GET
+- **Ruta**: `/orders/purchase-history?q=`, `/orders/last-purchases`
+- **Auth**: Bearer usuario con organización · `purchase-history` es sensible a costos (no lo ve el modo vendedor); `last-purchases` no trae precios y lo ve cualquiera
+- **Body / Params**: `q` texto libre (mín. 2 caracteres); todas las palabras tienen que estar en el nombre o el código
+- **Respuesta esperada**: `purchase-history` → `{ query, total, lines: [{ orderId, provider, providerName, channel, createdAt, sku, name, qty, unitUsd }], lastByProvider: [{ provider, providerName, createdAt, name, qty }] }` (hasta 60 líneas, la más nueva primero) · `last-purchases` → `{ bySku: { "PROVEEDOR::sku": { at, qty, provider, name } }, byName: { "<nombre normalizado>": {…} } }`
+- **Estado**: IMPLEMENTADO
+- **Notas**: Mismo criterio que insights: solo pedidos `CREATED`/`OFFLINE` del `tenantId` de la sesión, sin los de ejemplo. Solo ve pedidos hechos desde NODO, no los que se hicieron directo en el portal. `byName` solo indexa nombres de 12+ caracteres.
+
 ### [FEATURE] Pedidos de la organización y aprobación
 - **Método**: GET | POST
 - **Ruta**: `/orders`, `/orders/pending-approval`, `/orders/insights`, `/orders/:id/approve`, `/orders/:id/reject`
