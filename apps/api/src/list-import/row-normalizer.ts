@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { NormalizedProduct } from "../providers/types";
+import { normalizeHeader } from "./column-aliases";
 import {
   NUMERIC_FIELDS,
   type CellValue,
@@ -65,8 +66,15 @@ const IVA_DEFAULT_PERCENT = 21;
  * vez de un número: eso es un producto sin stock, no una fila rota.
  */
 const OUT_OF_STOCK_TEXT =
-  /\b(agotad[oa]s?|sin\s*stock|s\/\s*stock|no\s*hay|no\s*disponible|consultar|a\s*consultar|pr[oó]ximamente|discontinuad[oa]|sin\s*existencia)\b/i;
-const IN_STOCK_TEXT = /^\s*(s[ií]|hay|disponible|en\s*stock|ok|x|✓|✔)\s*$/i;
+  /\b(agotad[oa]s?|sin\s*stock|s\/\s*stock|no\s*hay|no\s*disponible|consultar|a\s*consultar|pr[oó]ximamente|discontinuad[oa]|sin\s*existencia|ingresando|en\s*camino|en\s*tr[aá]nsito|a\s*ingresar|por\s*ingresar)\b/i;
+const IN_STOCK_TEXT =
+  /^\s*(s[ií]|hay|disponible|en\s*stock|con\s*stock|[uú]ltimas?\s*unidades|pocas\s*unidades|stock\s*bajo|bajo\s*stock|ok|x|✓|✔)\s*$/i;
+
+/** Palabras que algunas listas ponen en la columna de marca y no son una marca. */
+const NOT_A_BRAND = /^\s*(pr[oó]ximamente|nuevo|nuevos|novedad|oferta|liquidaci[oó]n|discontinuado)\s*$/i;
+
+/** Encabezados que son un código de barras (si esa columna hace de código, el EAN también se guarda). */
+const EAN_HEADERS = new Set(["ean", "ean13", "upc", "gtin", "codigobarras", "codigodebarras", "barcode"]);
 
 export type AvailabilityText = { stock: number | null; stockStatus: string };
 
@@ -99,6 +107,7 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
 
   const fieldByColumn = sheet.headers.map((header) => profile.columnMap[header] ?? null);
   const hasExplicitCode = fieldByColumn.some((f) => f === "externalId");
+  const eanCodeColumn = fieldByColumn.findIndex((f, col) => f === "externalId" && EAN_HEADERS.has(normalizeHeader(sheet.headers[col] ?? "")));
 
   for (const dataRow of sheet.dataRows) {
     const rowNumber = dataRow.index + 1;
@@ -130,6 +139,13 @@ export function normalizeRows(sheet: SheetAnalysis, profile: ImportProfileSpec):
       }
     });
 
+
+    if (typeof mapped.brand === "string" && NOT_A_BRAND.test(mapped.brand)) delete mapped.brand;
+    // El EAN usado como código del producto también es el EAN: sirve para enriquecer la ficha.
+    if (mapped.ean === undefined && eanCodeColumn >= 0) {
+      const code = String(dataRow.cells[eanCodeColumn] ?? "").trim();
+      if (/^\d{8,14}$/.test(code)) mapped.ean = code;
+    }
 
     const name = typeof mapped.name === "string" ? mapped.name : "";
     if (!name) {

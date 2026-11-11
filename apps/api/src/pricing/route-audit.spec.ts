@@ -71,6 +71,8 @@ describe("auditoría de rutas con precios", () => {
   ])("%s: todo cerrado salvo lo liberado a propósito", (_label, controller) => {
     const list = routes(controller as never);
     const open = list.filter((r) => !blocked(r)).map((r) => r.path);
-    expect(open).toEqual(controller === ListImportController ? ["providers/:provider/freshness"] : []);
+    // Liberadas a propósito: frescura de la lista y fecha de la última compra (sin precios).
+    const released: Record<string, string[]> = { ListImportController: ["providers/:provider/freshness"], OrdersController: ["last-purchases"] };
+    expect(open).toEqual(released[(controller as { name: string }).name] ?? []);
   });
 });

@@ -1,7 +1,7 @@
 import { ManufacturerConnector } from "../types";
 import { asusConnector } from "./asus";
 import { lenovoConnector } from "./lenovo";
-import { hyperxConnector, redragonConnector } from "./shopify";
+import { atkConnector, aulaConnector, hyperxConnector, irokConnector, redragonConnector } from "./shopify";
 import { tplinkConnector } from "./tplink";
 
 /**
@@ -16,6 +16,9 @@ export const MANUFACTURER_CONNECTORS: readonly ManufacturerConnector[] = [
   tplinkConnector,
   hyperxConnector,
   redragonConnector,
+  aulaConnector,
+  irokConnector,
+  atkConnector,
 ];
 
 /**

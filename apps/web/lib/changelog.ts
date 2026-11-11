@@ -26,6 +26,25 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.26.0",
+    date: "2026-11-11",
+    title: "Listas de Aula, IROK y ATK",
+    changes: [
+      {
+        kind: "new",
+        text: "La lista gremio de Aula se carga sola: NODO reconoce sus columnas (precio en dólares sin IVA, IVA de cada producto, stock y link a la ficha) sin que tengas que configurar nada.",
+      },
+      {
+        kind: "improved",
+        text: "En las listas por Excel, «Ingresando» cuenta como sin stock por ahora y «Últimas unidades» como disponible.",
+      },
+      {
+        kind: "improved",
+        text: "Las fichas de Aula, IROK y ATK toman las fotos de la tienda oficial, del color exacto de cada producto.",
+      },
+    ],
+  },
+  {
     version: "2.25.0",
     date: "2026-11-11",
     title: "¿Cuándo lo compré?",

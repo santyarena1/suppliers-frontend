@@ -181,6 +181,7 @@ export class EnrichmentPipelineService {
       name: master.name,
       // Los conectores de fabricantes buscan por estos códigos: van también los candidatos.
       hints: uniq([...codes, ...[master.name, ...fichas.map((f) => f.name)].flatMap((n) => modelTokens(n))]).slice(0, 8),
+      productUrls: uniq(fichas.map((f) => f.productUrl).filter((u): u is string => !!u)),
     };
   }
 

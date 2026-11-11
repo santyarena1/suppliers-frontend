@@ -22,6 +22,7 @@ import { readGrid } from "./grid-reader";
 import { normalizeRows } from "./row-normalizer";
 import { ProfileLearner } from "./profile-learner";
 import { evaluateSanity, type SanityInput } from "./sanity-checks";
+import { knownFormatIn } from "./known-formats";
 import { analyzeStructure, fingerprintOf } from "./structure-analyzer";
 import {
   NORMALIZED_FIELDS,
@@ -338,6 +339,18 @@ export class ListImportService {
         const profile = picked && picked.sheetIndex !== active.sheetIndex ? await this.rememberSheet(active, picked) : active;
         return { profile, spec: specOf(profile), sheet, match };
       }
+    }
+    // Planilla de un formato que ya conocemos: se lee directo, sin IA ni revisión.
+    const known = knownFormatIn(analysis, chosen);
+    if (known) {
+      await this.prisma.importProfile.updateMany({ where: { provider, tenantId: owner, status: "ACTIVE" }, data: { status: "ARCHIVED" } });
+      const created = await this.createProfileVersion(provider, owner, known.spec, known.sheet, sheetCount, {
+        status: "ACTIVE",
+        proposedByAi: false,
+        aiReasoning: `Formato conocido: ${known.format.label}.`,
+        approvedByUserId: null,
+      });
+      return { profile: created, spec: known.spec, sheet: known.sheet, match: "EXACT" as const };
     }
     const pending = await this.prisma.importProfile.findFirst({
       where: { provider, tenantId: owner, status: "PROPOSED", fingerprint: fingerprintOf(sheetCount, chosen) },

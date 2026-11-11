@@ -58,6 +58,8 @@ export interface LookupQuery {
   hints: string[];
   /** Otros códigos del fabricante para probar si el primero no existe. */
   altPartNumbers?: string[];
+  /** Links a la ficha que trajo la lista del proveedor (van directo al producto, sin buscar). */
+  productUrls?: string[];
 }
 
 export interface ManufacturerConnector {
