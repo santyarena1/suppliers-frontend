@@ -32,6 +32,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     changes: [
       {
         kind: "new",
+        text: "Aula ya está en NODO: buscalo en «Agregar proveedor», tocá «Conectar por lista» y subí tu lista gremio.",
+      },
+      {
+        kind: "new",
         text: "La lista gremio de Aula se carga sola: NODO reconoce sus columnas (precio en dólares sin IVA, IVA de cada producto, stock y link a la ficha) sin que tengas que configurar nada.",
       },
       {
