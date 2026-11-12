@@ -2,11 +2,11 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { domainEvents } from "../common/events/domain-events";
 import { OFFICIAL_STORE_NO_PHOTO_ERROR, OFFICIAL_STORE_PENDING_ERROR } from "../images/image-sync-candidates";
 import { PrismaService } from "../prisma/prisma.service";
-import { OFFICIAL_STORE_HOSTS, officialStoreLink, pickOfficialImages } from "./official-store-images";
+import { fromCatalogJson, OFFICIAL_STORE_HOSTS, officialStoreLink, pickOfficialImages } from "./official-store-images";
 import { httpGet } from "./sources/http";
 import { ShopifyProduct } from "./sources/manufacturers/shopify";
 
-/** Pausa entre fichas de una misma tienda (Shopify corta con 429 si vamos rápido). */
+/** Pausa entre páginas del catálogo (Shopify corta con 429 si vamos rápido). */
 const GAP_MS = 1500;
 const RETRY_WAIT_MS = [20_000, 60_000];
 const BOOT_DELAY_MS = 45_000;
@@ -14,14 +14,19 @@ const BOOT_DELAY_MS = 45_000;
 const PENDING_RETRY_MS = 30 * 60_000;
 
 /** Sube al cambiar cómo se eligen las fotos: vuelve a revisar lo ya resuelto con la versión anterior. */
-const PICK_VERSION = "v2";
+const PICK_VERSION = "v3";
+/** Productos por página de /products.json (máximo de Shopify) y tope de páginas. */
+const PAGE_SIZE = 250;
+const MAX_PAGES = 20;
+const MAX_CATALOG_BYTES = 20 * 1024 * 1024;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Fotos de Aula, IROK y ATK desde su tienda oficial. Las listas traen el link a
- * la ficha de cada producto: se lee esa ficha y se toma solo la foto de su
- * variante (color, idioma, switch). Si no hay certeza, queda sin foto y Serper
+ * Fotos de Aula, IROK y ATK desde su tienda oficial. Se lee el catálogo entero de
+ * la tienda y cada producto de la lista se busca por modelo y color (el link de
+ * la lista solo desempata: muchas veces apunta a otro producto). Se toma solo la
+ * foto de su variante (color, idioma, switch). Si no hay certeza, queda sin foto y Serper
  * no la completa con una de Google.
  *
  * Corre al aplicar una lista y al arrancar el servidor (lo pendiente). No pisa
@@ -96,48 +101,42 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     });
     if (todo.length === 0) return { filled: 0, withoutPhoto: 0, pending: 0 };
 
-    const byHandle = new Map<string, typeof todo>();
-    for (const r of todo) {
-      const link = officialStoreLink(r.productUrl);
-      if (!link) continue;
-      const key = `${link.store.origin}|${link.handle}`;
-      byHandle.set(key, [...(byHandle.get(key) ?? []), r]);
-    }
-
+    const catalogs = new Map<string, ShopifyProduct[] | "unavailable">();
     let filled = 0;
     let withoutPhoto = 0;
     let pending = 0;
-    for (const [key, items] of byHandle) {
-      const [origin, handle] = key.split("|");
-      const product = await this.fetchProduct(origin, handle);
-      if (product && product !== "unavailable") {
-        const variants = (product.variants ?? []).map((v) => `«${v.title ?? ""}» ean=${v.barcode || "-"} sku=${v.sku || "-"} foto=${v.featured_image?.src ? "sí" : "no"}`);
-        this.logger.log(`[ficha] ${handle} «${product.title ?? ""}» ${(product.images ?? []).length} fotos · ${variants.join(" | ")}`);
+    for (const r of todo) {
+      const link = officialStoreLink(r.productUrl);
+      if (!link) continue;
+      const origin = link.store.origin;
+      if (!catalogs.has(origin)) {
+        const catalog = await this.fetchCatalog(origin);
+        catalogs.set(origin, catalog);
+        if (catalog !== "unavailable") this.logger.log(`Catálogo de ${origin}: ${catalog.length} productos`);
       }
-      for (const r of items) {
-        const previous = r.imageFills[0]?.source ?? "";
-        // La foto anterior la puso Serper o esta misma revisión: se puede sacar si ya no es segura.
-        const replaceable = previous.startsWith("serper") || previous.startsWith("official:");
-        const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}` };
-        const source = `official:${new URL(origin).host}`;
-        if (product === "unavailable") {
-          pending += 1;
-          await this.saveFill(r.id, { ...base, source, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_PENDING_ERROR });
-          continue;
-        }
-        const pick = product ? pickOfficialImages(product, { name: r.name, ean: r.ean }) : { images: [], note: "la ficha del link ya no existe" };
-        if (pick.images.length) {
-          await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: pick.images[0] } });
-          await this.saveFill(r.id, { ...base, source, status: "filled", imageUrl: pick.images[0], error: null });
-          this.logger.log(`[foto] ${r.provider} ${r.externalId} «${r.name}» → ${pick.note}: ${pick.images[0]}`);
-          filled += 1;
-        } else {
-          // Una foto de Google puede ser de otro color: si la había puesto Serper, se saca.
-          if (replaceable && r.imageUrl) await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: null } });
-          await this.saveFill(r.id, { ...base, source, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
-          this.logger.log(`[sin foto] ${r.provider} ${r.externalId} «${r.name}» → ${pick.note} (${r.productUrl})`);
-          withoutPhoto += 1;
-        }
+      const catalog = catalogs.get(origin)!;
+      const previous = r.imageFills[0]?.source ?? "";
+      // La foto anterior la puso Serper o esta misma revisión: se puede sacar si ya no es segura.
+      const replaceable = previous.startsWith("serper") || previous.startsWith("official:");
+      const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}` };
+      const source = `official:${new URL(origin).host}`;
+      if (catalog === "unavailable") {
+        pending += 1;
+        await this.saveFill(r.id, { ...base, source, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_PENDING_ERROR });
+        continue;
+      }
+      const pick = pickOfficialImages(catalog, { name: r.name, ean: r.ean, linkedHandle: link.handle });
+      if (pick.images.length) {
+        await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: pick.images[0] } });
+        await this.saveFill(r.id, { ...base, source, status: "filled", imageUrl: pick.images[0], error: null });
+        this.logger.log(`[foto] ${r.provider} ${r.externalId} «${r.name}» → ${pick.note}: ${pick.images[0]}`);
+        filled += 1;
+      } else {
+        // Una foto que no es segura (de Google o de una revisión anterior) se saca.
+        if (replaceable && r.imageUrl) await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: null } });
+        await this.saveFill(r.id, { ...base, source, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
+        this.logger.log(`[sin foto] ${r.provider} ${r.externalId} «${r.name}» → ${pick.note} (link: ${link.handle})`);
+        withoutPhoto += 1;
       }
     }
     if (pending > 0 && !this.retryTimer) {
@@ -150,15 +149,25 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     return { filled, withoutPhoto, pending };
   }
 
-  /** La ficha `.js` de Shopify; `null` si no existe, "unavailable" si la tienda no respondió. */
-  private async fetchProduct(origin: string, handle: string): Promise<ShopifyProduct | null | "unavailable"> {
-    const url = `${origin}/products/${encodeURIComponent(handle)}.js`;
+  /** Todo el catálogo público de la tienda (`/products.json`), o "unavailable" si no respondió. */
+  private async fetchCatalog(origin: string): Promise<ShopifyProduct[] | "unavailable"> {
+    const all: ShopifyProduct[] = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const body = await this.fetchJson(`${origin}/products.json?limit=${PAGE_SIZE}&page=${page}`);
+      if (body === "unavailable") return "unavailable";
+      const products = fromCatalogJson(body);
+      all.push(...products);
+      if (products.length < PAGE_SIZE) break;
+    }
+    return all;
+  }
+
+  private async fetchJson(url: string): Promise<unknown | "unavailable"> {
     for (let attempt = 0; ; attempt++) {
       await sleep(GAP_MS);
       try {
-        const res = await httpGet(url);
-        if (res.status === 200) return JSON.parse(res.buffer.toString("utf8")) as ShopifyProduct;
-        if (res.status === 404) return null;
+        const res = await httpGet(url, { maxBytes: MAX_CATALOG_BYTES });
+        if (res.status === 200) return JSON.parse(res.buffer.toString("utf8"));
         if (attempt >= RETRY_WAIT_MS.length) {
           this.logger.warn(`${url} respondió ${res.status}`);
           return "unavailable";
