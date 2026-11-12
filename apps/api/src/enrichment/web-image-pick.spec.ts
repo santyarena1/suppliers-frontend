@@ -60,3 +60,39 @@ describe("web-image-pick", () => {
     expect(webImageQuery("F75 Wireless Black-Blue-Orange Español", "AULA")).toBe("AULA F75 Wireless Black-Blue-Orange");
   });
 });
+
+describe("pickSecondaryImages", () => {
+  const { pickSecondaryImages } = require("./web-image-pick");
+  const v = (id: number, options: string[], src: string | null) => ({ id, title: options.join(" / "), options, barcode: null, sku: null, featured_image: src ? { src } : null });
+  const hero = {
+    title: "AULA HERO 68 HE Magnetic Switch Gaming Keyboard",
+    handle: "aula-hero68-he",
+    images: ["https://cdn/pink.jpg", "https://cdn/white.jpg", "https://cdn/black.jpg"],
+    variants: [v(1, ["Pink"], "https://cdn/pink.jpg"), v(2, ["White Translucent"], "https://cdn/white.jpg"), v(3, ["Black Red"], "https://cdn/black.jpg")],
+  };
+  const item = (name: string) => ({ name, brand: "AULA", brandInTitle: false });
+
+  it("toma la foto de la variante del mismo modelo y color", () => {
+    const r = pickSecondaryImages([hero], item("Hero 68 HE White Translucent Wired Ingles"));
+    expect(r.images[0]).toBe("https://cdn/white.jpg");
+  });
+
+  it("no usa el HE para un Hero 68 sin HE", () => {
+    expect(pickSecondaryImages([hero], item("Hero 68 Pink Wired Ingles")).images).toEqual([]);
+  });
+
+  it("no usa una ficha de un solo color que no es el del nombre", () => {
+    const white = { title: "AULA F75 White", handle: "f75-white", images: ["https://cdn/w.jpg"], variants: [v(9, ["Default Title"], null)] };
+    expect(pickSecondaryImages([white], item("F75 Wireless Black-Blue-Orange Español")).images).toEqual([]);
+  });
+
+  it("no usa una ficha de un solo variante sin color", () => {
+    const plain = { title: "AULA F75 Wireless", handle: "f75", images: ["https://cdn/x.jpg"], variants: [v(9, ["Default Title"], null)] };
+    expect(pickSecondaryImages([plain], item("F75 Wireless Black-Blue-Orange Español")).images).toEqual([]);
+  });
+
+  it("exige la marca en el título en tiendas que venden varias marcas", () => {
+    const epo = { ...hero, title: "Epomaker HERO 68 HE" };
+    expect(pickSecondaryImages([epo], { ...item("Hero 68 HE Pink"), brandInTitle: true }).images).toEqual([]);
+  });
+});

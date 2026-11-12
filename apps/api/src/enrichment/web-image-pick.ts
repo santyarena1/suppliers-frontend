@@ -1,4 +1,6 @@
-import { codesIn, LOOKS, words } from "./official-store-images";
+import { codesIn, LOOKS, variantFor, words } from "./official-store-images";
+import { https } from "./sources/manufacturers/common";
+import { ShopifyProduct, shopifyImagesFor } from "./sources/manufacturers/shopify";
 
 /**
  * Segunda búsqueda de fotos para Aula, IROK y ATK: cuando la tienda oficial no
@@ -124,4 +126,65 @@ export function pickWebImages(hits: WebImageHit[], item: { name: string; brand: 
 export function webImageQuery(name: string, brand: string): string {
   const clean = name.replace(/\b(ingl[eé]s|espa[nñ]ol|english|spanish)\b/gi, " ").replace(/\s+/g, " ").trim();
   return `${brand} ${clean}`.slice(0, 200);
+}
+
+// ---------- Tiendas oficiales de la marca en otros países ----------
+
+/** Tiendas Shopify de la marca afuera (o socias oficiales) donde buscar lo que la de Argentina no tiene. */
+export const SECONDARY_STORES: Record<string, { origin: string; brandInTitle: boolean }[]> = {
+  aula: [
+    { origin: "https://aulagear.com", brandInTitle: false },
+    { origin: "https://epomaker.com", brandInTitle: true },
+  ],
+};
+
+/** El título del producto nombra el mismo modelo que la lista (sin mirar colores, que van en las variantes). */
+export function sameModelTitle(title: string | null | undefined, name: string, brand: string, brandInTitle: boolean): boolean {
+  const raw = title ?? "";
+  if (brandInTitle && !raw.toLowerCase().includes(brand.toLowerCase())) return false;
+  const req = webRequirements(name);
+  const model = req.required.filter((w) => !LOOKS.has(w));
+  if (model.length === 0) return false;
+  const t = index(raw);
+  if (!model.every((w) => has(t, w))) return false;
+  if ([...t.set].some((w) => QUALIFIERS.has(w) && !req.all.has(w))) return false;
+  // Un producto por color ("AULA F75 White"): el color del título tiene que ser del nombre.
+  if ([...t.set].some((w) => (COLORS.has(w) || LOOKS.has(w)) && !req.all.has(w))) return false;
+  const nameCodes = codesIn(name);
+  if (codesIn(raw).some((c) => !nameCodes.includes(c) && nameCodes.some((n) => letters(n) === letters(c) && !c.startsWith(n)))) return false;
+  return true;
+}
+
+/**
+ * Foto de la variante en otra tienda de la marca: el producto tiene que ser del
+ * mismo modelo y la variante cerrar con todos los colores del nombre (las mismas
+ * reglas que en la tienda de Argentina). Si hay dos productos posibles, ninguno.
+ */
+export function pickSecondaryImages(
+  catalog: ShopifyProduct[],
+  item: { name: string; brand: string; brandInTitle: boolean }
+): { images: string[]; note: string } {
+  const models = catalog.filter((p) => sameModelTitle(p.title, item.name, item.brand, item.brandInTitle));
+  if (models.length === 0) return { images: [], note: "ningún producto del mismo modelo" };
+  const withVariant = models
+    .map((p) => ({ p, v: variantFor(p, { name: item.name, ean: null }) }))
+    .filter((x) => x.v.variant);
+  if (withVariant.length === 0) {
+    return { images: [], note: `${models.map((p) => `«${p.title}»`).join(", ")}: ${variantFor(models[0], { name: item.name, ean: null }).how}` };
+  }
+  if (withVariant.length > 1) return { images: [], note: `varios productos posibles: ${withVariant.map((x) => `«${x.p.title}»`).join(", ")}` };
+  const { p, v } = withVariant[0];
+  // Ficha de una sola variante: el color lo tiene que decir el título o la variante.
+  if ((p.variants ?? []).length <= 1) {
+    const own = index(`${p.title ?? ""} ${v.variant!.title ?? ""}`);
+    const missing = webRequirements(item.name).colors.filter((c) => !has(own, c));
+    if (missing.length) return { images: [], note: `«${p.title}» no dice el color (${missing.join(", ")})` };
+  }
+  // Con varias variantes, solo la foto propia de la variante: sin ella no hay certeza del color.
+  if ((p.variants ?? []).length > 1 && !v.variant!.featured_image?.src) {
+    return { images: [], note: `«${p.title}» variante «${v.variant!.title}» no tiene foto propia` };
+  }
+  const images = shopifyImagesFor(p, v.variant).map(https);
+  if (images.length === 0) return { images: [], note: `«${p.title}» sin fotos` };
+  return { images, note: `«${p.title}» variante «${v.variant!.title}» por ${v.how}` };
 }
