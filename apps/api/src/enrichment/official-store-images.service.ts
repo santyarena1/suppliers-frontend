@@ -13,6 +13,9 @@ const BOOT_DELAY_MS = 45_000;
 /** Si una tienda no respondió, se reintenta más tarde. */
 const PENDING_RETRY_MS = 30 * 60_000;
 
+/** Sube al cambiar cómo se eligen las fotos: vuelve a revisar lo ya resuelto con la versión anterior. */
+const PICK_VERSION = "v2";
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -85,7 +88,9 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     const todo = rows.filter((r) => {
       const fill = r.imageFills[0];
       const hasImage = Boolean(r.imageUrl?.trim());
-      if (fill?.source.startsWith("official:") && fill.query === r.productUrl && fill.error !== OFFICIAL_STORE_PENDING_ERROR) return false;
+      if (fill?.source.startsWith("official:") && fill.query === `${r.productUrl}#${PICK_VERSION}` && fill.error !== OFFICIAL_STORE_PENDING_ERROR) return false;
+      // Resuelto con otra versión o con otro link: se vuelve a revisar.
+      if (fill?.source.startsWith("official:")) return true;
       if (!hasImage) return true;
       return Boolean(fill && fill.source.startsWith("serper") && fill.status === "filled");
     });
@@ -105,9 +110,15 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     for (const [key, items] of byHandle) {
       const [origin, handle] = key.split("|");
       const product = await this.fetchProduct(origin, handle);
+      if (product && product !== "unavailable") {
+        const variants = (product.variants ?? []).map((v) => `«${v.title ?? ""}» ean=${v.barcode || "-"} sku=${v.sku || "-"} foto=${v.featured_image?.src ? "sí" : "no"}`);
+        this.logger.log(`[ficha] ${handle} «${product.title ?? ""}» ${(product.images ?? []).length} fotos · ${variants.join(" | ")}`);
+      }
       for (const r of items) {
-        const fromSerper = r.imageFills[0]?.source.startsWith("serper") ?? false;
-        const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: r.productUrl ?? "" };
+        const previous = r.imageFills[0]?.source ?? "";
+        // La foto anterior la puso Serper o esta misma revisión: se puede sacar si ya no es segura.
+        const replaceable = previous.startsWith("serper") || previous.startsWith("official:");
+        const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}` };
         const source = `official:${new URL(origin).host}`;
         if (product === "unavailable") {
           pending += 1;
@@ -122,7 +133,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
           filled += 1;
         } else {
           // Una foto de Google puede ser de otro color: si la había puesto Serper, se saca.
-          if (fromSerper) await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: null } });
+          if (replaceable && r.imageUrl) await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: null } });
           await this.saveFill(r.id, { ...base, source, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
           this.logger.log(`[sin foto] ${r.provider} ${r.externalId} «${r.name}» → ${pick.note} (${r.productUrl})`);
           withoutPhoto += 1;
