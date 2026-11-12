@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AssetsModule } from "../assets/assets.module";
 import { CatalogModule } from "../catalog/catalog.module";
+import { ImagesModule } from "../images/images.module";
 import { EnrichmentController } from "./enrichment.controller";
 import { GroupingService } from "./grouping.service";
 import { MastersService } from "./masters.service";
@@ -11,7 +12,7 @@ import { SourceCacheService } from "./source-cache.service";
 
 /** Productos enriquecidos (superadmin). Ver docs/PLAN_ENRIQUECIMIENTO.md. */
 @Module({
-  imports: [CatalogModule, AssetsModule],
+  imports: [CatalogModule, AssetsModule, ImagesModule],
   controllers: [EnrichmentController],
   providers: [SourceCacheService, EnrichmentPipelineService, GroupingService, MastersService, RunsService, OfficialStoreImagesService],
 })

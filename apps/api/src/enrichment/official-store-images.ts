@@ -46,7 +46,7 @@ const ALIASES: Record<string, string> = {
 };
 
 /** Palabras de aspecto: si el nombre dice una, la variante (o el título) también. */
-const LOOKS = new Set([
+export const LOOKS = new Set([
   "negro", "blanco", "rosa", "violeta", "azul", "rojo", "verde", "gris", "plateado", "amarillo", "naranja", "marron",
   "beige", "celeste", "dorado", "light", "dark", "degrade", "contour", "frosted", "transparent", "translucent",
   "milk", "coffe", "coffee", "shadow", "petal", "lake", "comic", "semi",
@@ -262,7 +262,7 @@ export function pickOfficialImages(
 }
 
 /** Códigos de modelo del nombre: tokens con letras y números (F75, N9, T650). */
-function codesIn(name: string): string[] {
+export function codesIn(name: string): string[] {
   return name
     .split(/[^A-Za-z0-9]+/)
     .map((t) => t.toUpperCase())

@@ -3,7 +3,11 @@ import { domainEvents } from "../common/events/domain-events";
 import { OFFICIAL_STORE_NO_PHOTO_ERROR, OFFICIAL_STORE_PENDING_ERROR } from "../images/image-sync-candidates";
 import { PrismaService } from "../prisma/prisma.service";
 import { fromCatalogJson, OFFICIAL_STORE_HOSTS, officialStoreLink, pickOfficialImages } from "./official-store-images";
+import { ImageSyncService } from "../images/image-sync.service";
+import { probeLiveImage } from "../images/live-image";
+import { isSerperBlockingError } from "../images/serper-images.client";
 import { httpGet } from "./sources/http";
+import { pickWebImages, webImageQuery } from "./web-image-pick";
 import { ShopifyProduct } from "./sources/manufacturers/shopify";
 
 /** Pausa entre páginas del catálogo (Shopify corta con 429 si vamos rápido). */
@@ -15,6 +19,13 @@ const PENDING_RETRY_MS = 30 * 60_000;
 
 /** Sube al cambiar cómo se eligen las fotos: vuelve a revisar lo ya resuelto con la versión anterior. */
 const PICK_VERSION = "v4";
+/** Marca de que ya se hizo la segunda búsqueda (Google) para ese producto. */
+const WEB_MARK = "+web";
+/**
+ * Segunda búsqueda en Google para lo que la tienda oficial no tiene. En `false`
+ * solo deja en el log qué foto elegiría (para revisarlo antes de activarlo).
+ */
+const WEB_LIVE = false;
 /** Productos por página de /products.json (máximo de Shopify) y tope de páginas. */
 const PAGE_SIZE = 250;
 const MAX_PAGES = 20;
@@ -41,7 +52,10 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
   private bootTimer: NodeJS.Timeout | null = null;
   private retryTimer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly imageSync: ImageSyncService
+  ) {}
 
   onModuleInit() {
     this.unsubscribes.push(domainEvents.on("list.applied", () => this.schedule()));
@@ -74,6 +88,12 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
   }
 
   async run(): Promise<{ filled: number; withoutPhoto: number; pending: number }> {
+    const official = await this.officialPass();
+    await this.webPass();
+    return official;
+  }
+
+  private async officialPass(): Promise<{ filled: number; withoutPhoto: number; pending: number }> {
     const rows = await this.prisma.providerSyncCache.findMany({
       where: { OR: OFFICIAL_STORE_HOSTS.map((host) => ({ productUrl: { contains: host } })) },
       select: {
@@ -93,7 +113,9 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     const todo = rows.filter((r) => {
       const fill = r.imageFills[0];
       const hasImage = Boolean(r.imageUrl?.trim());
-      if (fill?.source.startsWith("official:") && fill.query === `${r.productUrl}#${PICK_VERSION}` && fill.error !== OFFICIAL_STORE_PENDING_ERROR) return false;
+      if (fill?.source.startsWith("official:") && fill.query?.startsWith(`${r.productUrl}#${PICK_VERSION}`) && fill.error !== OFFICIAL_STORE_PENDING_ERROR) return false;
+      // Foto encontrada en la segunda búsqueda (Google), ya revisada.
+      if (fill?.source.startsWith("web:") && fill.query?.startsWith(`${r.productUrl}#${PICK_VERSION}`)) return false;
       // Resuelto con otra versión o con otro link: se vuelve a revisar.
       if (fill?.source.startsWith("official:")) return true;
       if (!hasImage) return true;
@@ -117,7 +139,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
       const catalog = catalogs.get(origin)!;
       const previous = r.imageFills[0]?.source ?? "";
       // La foto anterior la puso Serper o esta misma revisión: se puede sacar si ya no es segura.
-      const replaceable = previous.startsWith("serper") || previous.startsWith("official:");
+      const replaceable = previous.startsWith("serper") || previous.startsWith("official:") || previous.startsWith("web:");
       const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}` };
       const source = `official:${new URL(origin).host}`;
       if (catalog === "unavailable") {
@@ -147,6 +169,63 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     }
     this.logger.log(`Fotos de tiendas oficiales: ${filled} con foto de su variante, ${withoutPhoto} sin foto segura, ${pending} pendientes`);
     return { filled, withoutPhoto, pending };
+  }
+
+  /**
+   * Lo que la tienda oficial no tiene: se busca en Google Imágenes y se toma una
+   * foto solo si el título de la página dice el mismo modelo y los mismos colores
+   * (ver web-image-pick). Una vez por producto.
+   */
+  private async webPass() {
+    const rows = await this.prisma.providerSyncCache.findMany({
+      where: {
+        OR: OFFICIAL_STORE_HOSTS.map((host) => ({ productUrl: { contains: host } })),
+        imageFills: { some: { source: { startsWith: "official:" }, error: OFFICIAL_STORE_NO_PHOTO_ERROR } },
+      },
+      select: { id: true, provider: true, externalId: true, name: true, brand: true, productUrl: true, imageUrl: true, imageFills: { select: { query: true } } },
+    });
+    const todo = rows.filter((r) => !r.imageUrl?.trim() && !(r.imageFills[0]?.query ?? "").endsWith(WEB_MARK));
+    if (todo.length === 0) return;
+    const tag = WEB_LIVE ? "[web]" : "[web prueba]";
+    let found = 0;
+    for (const r of todo) {
+      const link = officialStoreLink(r.productUrl);
+      if (!link) continue;
+      const brand = link.store.source.toUpperCase();
+      const query = webImageQuery(r.name, brand);
+      let hits;
+      try {
+        hits = await this.imageSync.searchImages(query, 20);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(`Segunda búsqueda de fotos cortada: ${msg}`);
+        if (isSerperBlockingError(msg) || /api key/i.test(msg)) return;
+        continue;
+      }
+      const { candidates, rejected } = pickWebImages(hits, { name: r.name, brand });
+      let chosen: (typeof candidates)[number] | null = null;
+      for (const c of candidates.slice(0, 5)) {
+        if (await probeLiveImage(c.imageUrl)) {
+          chosen = c;
+          break;
+        }
+      }
+      const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}${WEB_MARK}` };
+      if (chosen) {
+        found += 1;
+        this.logger.log(`${tag} [foto] ${r.provider} ${r.externalId} «${r.name}» → ${chosen.note}: ${chosen.imageUrl}`);
+        if (WEB_LIVE) {
+          await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: chosen.imageUrl } });
+          await this.saveFill(r.id, { ...base, source: `web:${chosen.source ?? "google"}`.slice(0, 120), status: "filled", imageUrl: chosen.imageUrl, error: null });
+        }
+      } else {
+        this.logger.log(`${tag} [sin foto] ${r.provider} ${r.externalId} «${r.name}» (búsqueda: ${query}) → ${rejected.slice(0, 4).join(" | ") || "sin resultados"}`);
+        if (WEB_LIVE) {
+          await this.saveFill(r.id, { ...base, source: `official:${new URL(link.store.origin).host}`, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
+        }
+      }
+    }
+    this.logger.log(`${tag} Segunda búsqueda de fotos: ${found} de ${todo.length} con foto segura de internet`);
   }
 
   /** Todo el catálogo público de la tienda (`/products.json`), o "unavailable" si no respondió. */
