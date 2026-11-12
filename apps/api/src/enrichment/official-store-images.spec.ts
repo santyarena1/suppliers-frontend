@@ -53,6 +53,13 @@ const AULA: ShopifyProduct[] = [
   product("aula-sc620", "Aula SC620", ["SC620 - Negro", "SC620 - Blanco", "SC620 - Black Contour", "SC620 - White Contour"]),
   product("aula-s6", "Aula S6", ["S6 - Negro", "S6 - Blanco", "S6 - Azul Blanco", "S6 - Beige / Milk"]),
   product("combo-kit-4-en-1-aula-t650", "Combo Kit 4 en 1 Aula T650", ["Default Title"]),
+  product("teclado-aula-f108-pro", "Teclado Aula F108 Pro", [
+    "F108 PRO - Black Degradé", "F108 PRO - Black Pink Degradé", "F108 PRO - LIGHT BLUE / WHITE / DARK PURPLE",
+    "F108 PRO - Negro Degradé - Idioma Español", "F108 PRO - Light Blue / White / Dark Purple - Idioma Español",
+    "F108 PRO - White / Blue / Black - Idioma Español", "F108 PRO - Red / Dark Blue / White - Idioma Español",
+  ]),
+  product("teclado-aula-s75-pro", "Teclado Aula S75 Pro", ["S75 Pro - Black Degradé", "S75 Pro - Pink Degradé", "S75 Pro - Blue/White/Dark Blue", "S75 PRO - Negro / Gris / Rosa"]),
+  product("teclado-aula-nova-75", "Teclado Aula Nova 75", ["NOVA75 - Negro", "NOVA75 - GREY / WHITE / RED", "NOVA75 - GREY/WHITE"]),
 ];
 
 const ATK: ShopifyProduct[] = [
@@ -64,6 +71,7 @@ const ATK: ShopifyProduct[] = [
   product("dragonfly-a9-se-2-0", "Dragonfly A9 SE 2.0", ["Default Title"]),
   product("ghost-extreme", "Ghost Extreme", ["Ghost Extreme - Negro", "Ghost Extreme - Púrpura"]),
   product("ghost-ultimate", "Ghost Ultimate", ["Ghost Ultimate - Plateado", "Ghost Ultimate - Negro", "Ghost Ultimate - Rojo"]),
+  product("ghost-ultimate-plus", "Ghost Ultimate+", ["Ghost Ultimate+ - Negro", "Ghost Ultimate+ - Blanco"]),
   product("vxe-r1-se", "VXE R1 SE+", ["VXE R1 SE+ - Blanco", "VXE R1 SE+ - Negro"]),
   product("vxe-r1-pro-max", "VXE R1 PRO MAX", ["VXE R1 PRO MAX - Negro", "VXE R1 PRO MAX - Blanco"]),
   product("zero", "ZERO", ["Zero - Frosted Purple", "Zero - Frosted White", "Zero - Negro", "Zero - Blanco"]),
@@ -122,7 +130,8 @@ describe("fotos de la tienda oficial", () => {
     expect(pick(AULA, "Mini60 HE Wireless Black Ingles")).toBe("aula-mini60-he#0");
     expect(pick(AULA, "Mini60 HE Pro Wireless White Ingles", "aula-mini60-he")).toBe("aula-mini60-he-pro#0");
     expect(pick(AULA, "Mini60 HE Pro Wireless Black Ingles")).toBe("aula-mini60-he-pro#2");
-    expect(pick(AULA, "Mini60 HE Max Wireless Black Contour Lines Ingles")).toBe("aula-mini60-he-pro#1");
+    expect(pick(AULA, "Mini60 HE Max Wireless Black Contour Lines Ingles")).toBeNull(); // la tienda tiene MAX negro, no «Contour»
+    expect(pick(AULA, "Mini60 HE Max Wireless Black Ingles")).toBe("aula-mini60-he-pro#1");
     expect(pick(AULA, "S99 Pro Wireless Gris Retro Español", "teclado-aula-s99")).toBeNull();
     expect(pick(AULA, "S12pro White Wired", "aula-s12-pro")).toBe("aula-s12-pro#1"); // empata con «S12 Wired»: desempata el link
     expect(pick(AULA, "S12pro White Wired")).toBeNull();
@@ -144,6 +153,23 @@ describe("fotos de la tienda oficial", () => {
     expect(pick(AULA, "F2088 Air Grey Wireless Ingles")).toBeNull();
   });
 
+  it("todo el aspecto del nombre tiene que estar en la variante", () => {
+    // La tienda tiene Light Blue/White/Dark Purple y White/Blue/Black: ninguna es Light Blue/White/Black/Purple.
+    expect(pick(AULA, "F108 Pro Wireless Light Blue White Black Purple Español")).toBeNull();
+    expect(pick(AULA, "F108 Pro Wireless White Blue Black Español")).toBe("teclado-aula-f108-pro#5");
+    expect(pick(AULA, "F108 Pro Wireless Black Degrade Español")).toBe("teclado-aula-f108-pro#3");
+    expect(pick(AULA, "S75 Pro Wireless Pink-White Degrade Ingles")).toBeNull(); // la tienda dice «Pink Degradé», sin blanco
+    expect(pick(AULA, "S75 Pro Wireless Grey Black Pink Ingles")).toBe("teclado-aula-s75-pro#3");
+    expect(pick(AULA, "Nova 75 Wireless Black Transparent Ingles")).toBeNull();
+    expect(pick(AULA, "Nova 75 Wireless Grey White Ingles")).toBe("teclado-aula-nova-75#2");
+    expect(pick(AULA, "Nova 75 Wireless Grey-White-Red Ingles")).toBe("teclado-aula-nova-75#1");
+  });
+
+  it("el switch del nombre (después de SW) no cuenta como aspecto", () => {
+    const rs6: ShopifyProduct[] = [product("rs6-air", "RS6 Air", ["RS6 Air - Negro", "RS6 Air - Blanco"])];
+    expect(pick(rs6, "RS6 Air White Sw Zenith Frosted")).toBe("rs6-air#1");
+  });
+
   it("título distinto al nombre: el link vale solo si trae el código de modelo", () => {
     expect(pick(AULA, "T650 Combo Teclado Auricular Mousepad y Mouse", "combo-kit-4-en-1-aula-t650")).toBe("combo-kit-4-en-1-aula-t650#0");
     expect(pick(ATK, "N9 Pro Black", "auriculares-n9-neptune")).toBe("auriculares-n9-neptune#0");
@@ -152,6 +178,7 @@ describe("fotos de la tienda oficial", () => {
 
   it("ATK: los links corridos de la lista no confunden", () => {
     expect(pick(ATK, "Ghost Ultimate Black", "ghost-extreme")).toBe("ghost-ultimate#1");
+    expect(pick(ATK, "Ghost Ultimate+ White")).toBe("ghost-ultimate-plus#1");
     expect(pick(ATK, "Ghost Extreme Purple", "vxe-r1-se")).toBe("ghost-extreme#1");
     expect(pick(ATK, "VXE R1 SE + Black", "vxe-r1-pro-max")).toBe("vxe-r1-se#1");
     expect(pick(ATK, "VXE R1 PRO MAX White", "zero")).toBe("vxe-r1-pro-max#1");

@@ -14,7 +14,7 @@ const BOOT_DELAY_MS = 45_000;
 const PENDING_RETRY_MS = 30 * 60_000;
 
 /** Sube al cambiar cómo se eligen las fotos: vuelve a revisar lo ya resuelto con la versión anterior. */
-const PICK_VERSION = "v3";
+const PICK_VERSION = "v4";
 /** Productos por página de /products.json (máximo de Shopify) y tope de páginas. */
 const PAGE_SIZE = 250;
 const MAX_PAGES = 20;

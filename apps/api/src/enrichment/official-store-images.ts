@@ -45,6 +45,13 @@ const ALIASES: Record<string, string> = {
   blak: "negro",
 };
 
+/** Palabras de aspecto: si el nombre dice una, la variante (o el título) también. */
+const LOOKS = new Set([
+  "negro", "blanco", "rosa", "violeta", "azul", "rojo", "verde", "gris", "plateado", "amarillo", "naranja", "marron",
+  "beige", "celeste", "dorado", "light", "dark", "degrade", "contour", "frosted", "transparent", "translucent",
+  "milk", "coffe", "coffee", "shadow", "petal", "lake", "comic", "semi",
+]);
+
 /** No distinguen productos ni variantes. */
 const NOISE = new Set([
   "teclado", "mecanico", "aula", "irok", "atk", "mouse", "auricular", "auriculares", "mousepad", "idioma",
@@ -65,8 +72,26 @@ export function words(text: string | null | undefined): string[] {
     .split(/[^a-z0-9]+/)
     .filter(Boolean)
     .map((w) => ALIASES[w] ?? w)
+    .filter((w) => !NOISE.has(w))
     .map(singular)
     .filter((w) => !NOISE.has(w));
+}
+
+/** "Mini+", "SE+", "Ultimate+": el "+" pegado al modelo es parte del modelo. */
+function withTitlePlus(title: string | null | undefined): string {
+  return (title ?? "").replace(/([A-Za-z0-9])\+/g, "$1 plus ");
+}
+
+/** En los nombres de la lista el "+" suele ir suelto ("A9 mini + Pink"). */
+function withNamePlus(name: string): string {
+  return name.replace(/\+/g, " plus ");
+}
+
+/** Aspecto que dice el nombre, sin lo que va después de "SW" (el switch: "SW Zenith Frosted"). */
+function looksIn(name: string): string[] {
+  const ws = words(withNamePlus(name));
+  const sw = ws.indexOf("switch");
+  return (sw >= 0 ? ws.slice(0, sw) : ws).filter((w) => LOOKS.has(w));
 }
 
 /** Lo que dice el nombre de la lista, para comparar palabra por palabra o pegado ("Hero 68" = "HERO68"). */
@@ -76,7 +101,7 @@ interface NameIndex {
 }
 
 function indexName(name: string): NameIndex {
-  const ws = words(name);
+  const ws = words(withNamePlus(name));
   return { set: new Set(ws), compact: ws.join("") };
 }
 
@@ -90,7 +115,7 @@ function has(name: NameIndex, w: string): boolean {
 /** Grupos de alternativas ("PRO/MAX" → [["pro","max"]]); el resto, una palabra por grupo. */
 function titleRequirements(title: string | null | undefined): string[][] {
   const reqs: string[][] = [];
-  for (const chunk of (title ?? "").split(/\s+/).filter(Boolean)) {
+  for (const chunk of withTitlePlus(title).split(/\s+/).filter(Boolean)) {
     if (chunk.includes("/")) {
       const alternatives = chunk.split("/").flatMap((p) => words(p));
       if (alternatives.length) reqs.push(alternatives);
@@ -166,6 +191,15 @@ export function variantFor(product: ShopifyProduct, item: { name: string; ean: s
     if (ok) fits.push({ variant: v, score, key: keyParts.join(" / ") });
   }
   if (fits.length === 0) return { variant: null, how: "ninguna variante coincide con el nombre" };
+  // Un color o terminación del nombre que la variante no tiene: es otra (o la tienda no la tiene).
+  const looks = looksIn(item.name);
+  const covering = fits.filter((f) => {
+    const own = optionValues(f.variant).flatMap((v) => words(v));
+    const ownCompact = own.join("");
+    return looks.every((w) => titleWords.has(w) || own.includes(w) || ownCompact.includes(w));
+  });
+  if (covering.length === 0) return { variant: null, how: `a ninguna variante le cierra todo el aspecto del nombre (${looks.join(", ")})` };
+  fits.splice(0, fits.length, ...covering);
   const best = Math.max(...fits.map((f) => f.score));
   const top = fits.filter((f) => f.score === best);
   const keys = new Set(top.map((f) => f.key));
