@@ -38,7 +38,7 @@ const ALIASES: Record<string, string> = {
   yellow: "amarillo", amarilla: "amarillo",
   orange: "naranja",
   brown: "marron",
-  english: "ingles", us: "ingles",
+  english: "ingles", us: "ingles", ansi: "ingles",
   spanish: "espanol", esp: "espanol",
   sw: "switch", switches: "switch",
   degradado: "degrade",
@@ -56,7 +56,7 @@ export const LOOKS = new Set([
 const NOISE = new Set([
   "teclado", "mecanico", "aula", "irok", "atk", "mouse", "auricular", "auriculares", "mousepad", "idioma",
   "default", "title", "basic", "standard", "estandar", "version", "y", "de", "con", "the", "and", "gaming",
-  "series", "serie", "line", "kit", "en",
+  "series", "serie", "line", "kit", "en", "layout",
 ]);
 
 function singular(w: string): string {

@@ -96,3 +96,24 @@ describe("pickSecondaryImages", () => {
     expect(pickSecondaryImages([epo], { ...item("Hero 68 HE Pink"), brandInTitle: true }).images).toEqual([]);
   });
 });
+
+describe("pickSecondaryImages con distribución ANSI", () => {
+  const { pickSecondaryImages } = require("./web-image-pick");
+  const v = (id: number, options: string[], src: string | null) => ({ id, title: options.join(" / "), options, barcode: null, sku: null, featured_image: src ? { src } : null });
+  const max = {
+    title: "AULA F75 MAX",
+    handle: "aula-f75-max",
+    images: ["https://cdn/black.jpg", "https://cdn/blackred.jpg"],
+    variants: [
+      v(1, ["ANSI Layout", "Black", "LEOBOG Reaper Switch"], "https://cdn/black.jpg"),
+      v(2, ["ANSI Layout", "Black Red", "LEOBOG Reaper Switch"], "https://cdn/blackred.jpg"),
+      v(3, ["ISO-DE", "Black", "LEOBOG Reaper Switch"], "https://cdn/black.jpg"),
+    ],
+  };
+  it("ANSI es el teclado en inglés", () => {
+    expect(pickSecondaryImages([max], { name: "F75 Max Wireless Black-Red Ingles", brand: "AULA", brandInTitle: false }).images[0]).toBe("https://cdn/blackred.jpg");
+  });
+  it("no toma el ANSI para uno en español", () => {
+    expect(pickSecondaryImages([max], { name: "F75 Max Wireless Black-Red Español", brand: "AULA", brandInTitle: false }).images).toEqual([]);
+  });
+});
