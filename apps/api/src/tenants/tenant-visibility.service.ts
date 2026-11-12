@@ -14,6 +14,7 @@ import {
 } from "@nodo/shared";
 import { domainEvents } from "../common/events/domain-events";
 import { isDemoDistributorKey, viewerSeesDemoCatalog } from "../onboarding/onboarding-demo";
+import { CURATED_LIST_PROVIDERS } from "../list-import/known-formats";
 import { PrismaService } from "../prisma/prisma.service";
 import { snapshotJson } from "../providers/json-value";
 import { storefrontHiddenReason, storefrontPublicName, type StorefrontStatusValue } from "../storefront/storefront-rules";
@@ -304,7 +305,8 @@ export class TenantVisibilityService {
         if (isDemoDistributorKey(key)) continue;
         if (visibles.has(key) || d.id === tenantId) continue;
         // Con integración real alcanza: el primer comercio que cargue su cuenta trae el catálogo.
-        if (!withCatalog.has(key) && !providerHasCatalogAdapter(key)) continue;
+        // Igual con los de lista que dio de alta la plataforma (Aula): el primero que la sube trae el catálogo.
+        if (!withCatalog.has(key) && !providerHasCatalogAdapter(key) && !CURATED_LIST_PROVIDERS.has(key)) continue;
         visibles.set(key, {
           provider: key,
           name: d.name,

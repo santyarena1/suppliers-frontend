@@ -9,6 +9,8 @@ import type { ImportProfileSpec, NormalizedField, SheetAnalysis, StructureAnalys
 export interface KnownListFormat {
   key: string;
   label: string;
+  /** Proveedor por lista que la plataforma dio de alta para esta planilla: va al directorio aunque nadie la haya subido todavía. */
+  providerKey?: string;
   /** Encabezado normalizado → campo (o `null`: se ignora). Todos tienen que estar en la hoja. */
   columns: Record<string, NormalizedField | null>;
   currency: string | null;
@@ -22,6 +24,7 @@ export const KNOWN_LIST_FORMATS: readonly KnownListFormat[] = [
     // «Lista Gremio» de Aula (Aula, IROK y ATK), revisada el 2026-11-11.
     key: "aula-gremio",
     label: "Lista gremio de Aula",
+    providerKey: "LIST_AULA",
     columns: {
       marca: "brand",
       ean: "externalId",
@@ -40,6 +43,11 @@ export const KNOWN_LIST_FORMATS: readonly KnownListFormat[] = [
     dividerMeaning: "IGNORE",
   },
 ];
+
+/** Proveedores por lista dados de alta por la plataforma con su planilla conocida. */
+export const CURATED_LIST_PROVIDERS: ReadonlySet<string> = new Set(
+  KNOWN_LIST_FORMATS.flatMap((f) => (f.providerKey ? [f.providerKey] : []))
+);
 
 /** El formato conocido de una hoja y su perfil, o `null` si no coincide con ninguno. */
 export function knownFormatSpec(sheet: SheetAnalysis): { format: KnownListFormat; spec: ImportProfileSpec } | null {

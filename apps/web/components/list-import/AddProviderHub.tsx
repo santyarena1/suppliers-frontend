@@ -49,7 +49,7 @@ export default function AddProviderHub({
   useEffect(() => {
     let alive = true;
     loadMyProviders()
-      .then((list) => alive && setProviders(list.filter((p) => !p.linked && !p.storefront)))
+      .then((list) => alive && setProviders(list.filter((p) => !p.storefront)))
       .catch(() => alive && setProviders([]));
     storefrontApi
       .offers()
@@ -64,8 +64,13 @@ export default function AddProviderHub({
   const shownProviders = useMemo(
     () =>
       (providers ?? [])
-        .filter((p) => !needle || p.name.toLowerCase().includes(needle))
+        .filter((p) => !p.linked && (!needle || p.name.toLowerCase().includes(needle)))
         .sort((a, b) => Number(connectsByList(a.provider)) - Number(connectsByList(b.provider)) || a.name.localeCompare(b.name, "es")),
+    [providers, needle]
+  );
+  // Los que ya tenés no se vuelven a sumar, pero si los buscás te decimos dónde están.
+  const alreadyHave = useMemo(
+    () => (needle ? (providers ?? []).filter((p) => p.linked && p.name.toLowerCase().includes(needle)) : []),
     [providers, needle]
   );
   // Primero las que te propusieron y todavía no contestaste.
@@ -109,7 +114,7 @@ export default function AddProviderHub({
   }
 
   const loading = providers === null || stores === null;
-  const nothing = !loading && shownProviders.length === 0 && shownStores.length === 0;
+  const nothing = !loading && shownProviders.length === 0 && shownStores.length === 0 && alreadyHave.length === 0;
 
   return (
     <div className="flex flex-col gap-4">
@@ -162,6 +167,28 @@ export default function AddProviderHub({
                         <KeyRound className="w-3 h-3" /> Conectar mi cuenta
                       </Link>
                     )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {alreadyHave.length > 0 && (
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-widest text-surface-500 mb-2">Ya lo tenés</h3>
+              <div className="border border-surface-800 rounded-xl divide-y divide-surface-800">
+                {alreadyHave.map((p) => (
+                  <div key={p.provider} className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <ProviderBadge provider={p.provider} label={p.name} variant="inline" size="sm" />
+                    </div>
+                    <Link
+                      href={`/proveedores/${encodeURIComponent(p.provider)}${connectsByList(p.provider) ? "?tab=lists" : ""}`}
+                      onClick={onClose}
+                      className="flex flex-shrink-0 items-center gap-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300"
+                    >
+                      <CheckCircle2 className="w-3 h-3" /> Ir
+                    </Link>
                   </div>
                 ))}
               </div>

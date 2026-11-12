@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.26.1",
+    date: "2026-11-12",
+    title: "Aula aparece en «Agregar proveedor»",
+    changes: [
+      {
+        kind: "fixed",
+        text: "Aula aparece al buscarlo en «Agregar proveedor» aunque nadie haya subido su lista todavía.",
+      },
+      {
+        kind: "improved",
+        text: "Si buscás un proveedor que ya tenés, «Agregar proveedor» te lo muestra con un botón para ir a él.",
+      },
+    ],
+  },
+  {
     version: "2.26.0",
     date: "2026-11-11",
     title: "Listas de Aula, IROK y ATK",
