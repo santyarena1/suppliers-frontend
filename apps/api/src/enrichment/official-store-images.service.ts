@@ -21,11 +21,13 @@ const PENDING_RETRY_MS = 30 * 60_000;
 const PICK_VERSION = "v4";
 /** Marca de que ya se hizo la segunda búsqueda (Google) para ese producto. */
 const WEB_MARK = "+web";
+/** Fotos de las tiendas de la marca en otros países: revisadas en prueba (12/11), activas. */
+const SECONDARY_LIVE = true;
 /**
- * Segunda búsqueda en Google para lo que la tienda oficial no tiene. En `false`
- * solo deja en el log qué foto elegiría (para revisarlo antes de activarlo).
+ * Búsqueda en Google (Serper) para lo que ninguna tienda de la marca tiene. En
+ * `false` solo deja en el log qué foto elegiría (para revisarlo antes de activarlo).
  */
-const WEB_LIVE = false;
+const GOOGLE_LIVE = false;
 /** Productos por página de /products.json (máximo de Shopify) y tope de páginas. */
 const PAGE_SIZE = 250;
 const MAX_PAGES = 20;
@@ -186,7 +188,6 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     });
     const todo = rows.filter((r) => !r.imageUrl?.trim() && !(r.imageFills[0]?.query ?? "").endsWith(WEB_MARK));
     if (todo.length === 0) return;
-    const tag = WEB_LIVE ? "[web]" : "[web prueba]";
     const catalogs = new Map<string, ShopifyProduct[] | "unavailable">();
     let found = 0;
     let serperOff = false;
@@ -196,7 +197,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
       if (!link) continue;
       const brand = link.store.source.toUpperCase();
       const notes: string[] = [];
-      let chosen: { imageUrl: string; source: string | null; note: string } | null = null;
+      let chosen: { imageUrl: string; source: string | null; note: string; live: boolean } | null = null;
 
       // 1) La misma marca en sus tiendas de otros países: foto de la variante exacta.
       for (const store of SECONDARY_STORES[link.store.source] ?? []) {
@@ -205,7 +206,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
           catalogs.set(store.origin, catalog);
           this.logger.log(`Catálogo de ${store.origin}: ${catalog === "unavailable" ? "no respondió" : `${catalog.length} productos`}`);
           // En prueba: qué productos de la marca tiene, para revisar lo que no se encuentra.
-          if (!WEB_LIVE && catalog !== "unavailable") {
+          if (!GOOGLE_LIVE && catalog !== "unavailable") {
             const own = catalog.filter((p) => !store.brandInTitle || (p.title ?? "").toLowerCase().includes(brand.toLowerCase()));
             this.logger.log(`[web prueba] productos de ${store.origin}: ${own.map((p) => `${p.title} [${(p.variants ?? []).map((v) => v.title).join(" | ")}]`).join(" ;; ").slice(0, 60000)}`);
           }
@@ -215,7 +216,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
         const pick = pickSecondaryImages(catalog, { name: r.name, brand, brandInTitle: store.brandInTitle });
         const host = new URL(store.origin).host;
         if (pick.images.length && (await probeLiveImage(pick.images[0]))) {
-          chosen = { imageUrl: pick.images[0], source: host, note: `${host} ${pick.note}` };
+          chosen = { imageUrl: pick.images[0], source: host, note: `${host} ${pick.note}`, live: SECONDARY_LIVE };
           break;
         }
         notes.push(`${host}: ${pick.note}`);
@@ -229,7 +230,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
           const { candidates, rejected } = pickWebImages(hits, { name: r.name, brand });
           for (const c of candidates.slice(0, 5)) {
             if (await probeLiveImage(c.imageUrl)) {
-              chosen = c;
+              chosen = { ...c, live: GOOGLE_LIVE };
               break;
             }
           }
@@ -244,20 +245,20 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
       const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}${WEB_MARK}` };
       if (chosen) {
         found += 1;
-        this.logger.log(`${tag} [foto] ${r.provider} ${r.externalId} «${r.name}» → ${chosen.note}: ${chosen.imageUrl}`);
-        if (WEB_LIVE) {
+        this.logger.log(`${chosen.live ? "[web]" : "[web prueba]"} [foto] ${r.provider} ${r.externalId} «${r.name}» → ${chosen.note}: ${chosen.imageUrl}`);
+        if (chosen.live) {
           await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: chosen.imageUrl } });
           await this.saveFill(r.id, { ...base, source: `web:${chosen.source ?? "google"}`.slice(0, 120), status: "filled", imageUrl: chosen.imageUrl, error: null });
         }
       } else {
-        this.logger.log(`${tag} [sin foto] ${r.provider} ${r.externalId} «${r.name}» (búsqueda: ${query}) → ${notes.join(" || ") || "sin resultados"}`);
+        this.logger.log(`[web] [sin foto] ${r.provider} ${r.externalId} «${r.name}» (búsqueda: ${query}) → ${notes.join(" || ") || "sin resultados"}`);
         // Sin Google (sin créditos) no se marca: se reintenta cuando vuelva.
-        if (WEB_LIVE && !serperOff) {
+        if (GOOGLE_LIVE && !serperOff) {
           await this.saveFill(r.id, { ...base, source: `official:${new URL(link.store.origin).host}`, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
         }
       }
     }
-    this.logger.log(`${tag} Segunda búsqueda de fotos: ${found} de ${todo.length} con foto segura de internet${pendingSerper ? ` (${pendingSerper} esperan a Google: Serper sin créditos)` : ""}`);
+    this.logger.log(`[web] Segunda búsqueda de fotos: ${found} de ${todo.length} con foto segura de internet${pendingSerper ? ` (${pendingSerper} esperan a Google: Serper sin créditos)` : ""}`);
   }
 
   /** Todo el catálogo público de la tienda (`/products.json`), o "unavailable" si no respondió. */

@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.26.3",
+    date: "2026-11-12",
+    title: "Más fotos de Aula",
+    changes: [
+      {
+        kind: "improved",
+        text: "Cuando la tienda de Aula en Argentina no tiene un color, NODO lo busca en las tiendas oficiales de AULA de afuera y toma la foto de ese mismo modelo y color.",
+      },
+    ],
+  },
+  {
     version: "2.26.2",
     date: "2026-11-12",
     title: "Fotos oficiales de Aula, IROK y ATK",
