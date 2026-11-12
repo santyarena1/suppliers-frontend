@@ -9,6 +9,13 @@ import {
 } from "./image-sync-candidates";
 import { isSerperBlockingError } from "./serper-images.client";
 
+const NOT_OFFICIAL_STORE = {
+  OR: [
+    { productUrl: null },
+    { NOT: { OR: ["aulagaming.com.ar", "irokgaming.com.ar", "atkgaming.com.ar"].map((host) => ({ productUrl: { contains: host } })) } },
+  ],
+};
+
 describe("image-sync-candidates", () => {
   it("prioriza el catálogo con stock mientras quede alguno", () => {
     expect(resolveRunPriority(12)).toBe("visible");
@@ -34,6 +41,7 @@ describe("image-sync-candidates", () => {
                 },
               ],
             },
+            NOT_OFFICIAL_STORE,
           ],
         },
         { offers: { some: { active: true, OR: [{ stock: null }, { stock: { gt: 0 } }] } } },
@@ -60,6 +68,7 @@ describe("image-sync-candidates", () => {
                 },
               ],
             },
+            NOT_OFFICIAL_STORE,
           ],
         },
         { offers: { none: { active: true, OR: [{ stock: null }, { stock: { gt: 0 } }] } } },

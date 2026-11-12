@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import type { Provider } from "@nodo/shared";
+import { OFFICIAL_STORE_HOSTS } from "../enrichment/official-store-images";
 
 const missingImage: Prisma.ProviderSyncCacheWhereInput = {
   OR: [{ imageUrl: null }, { imageUrl: "" }],
@@ -35,9 +36,19 @@ export const NO_USABLE_PHOTO_ERROR = "Serper no devolvió una foto que cargue";
 export const NO_USABLE_PHOTO_EXHAUSTED_ERROR =
   "Serper no devolvió una foto que cargue · sin más reintentos";
 
+/**
+ * Producto con ficha en la tienda oficial (Aula, IROK, ATK): las fotos salen de
+ * ahí y solo de su variante. Serper no lo toca, ni cuando la tienda no tiene una
+ * foto segura (mejor sin foto que con la de otro color).
+ */
+export const OFFICIAL_STORE_NO_PHOTO_ERROR = "Tienda oficial: sin foto segura de esta variante";
+export const OFFICIAL_STORE_PENDING_ERROR = "Tienda oficial: pendiente de leer";
+
 export const NON_RETRYABLE_ERRORS: string[] = [
   PERMANENT_SKIP_ERROR,
   NO_USABLE_PHOTO_EXHAUSTED_ERROR,
+  OFFICIAL_STORE_NO_PHOTO_ERROR,
+  OFFICIAL_STORE_PENDING_ERROR,
 ];
 
 /** Si ya falló una vez con “sin foto usable”, el próximo fallo queda agotado. */
@@ -78,8 +89,13 @@ export function candidateWhere(
       },
     ],
   };
+  // Los que linkean a una tienda oficial los completa OfficialStoreImagesService, no Serper.
+  const notOfficialStore: Prisma.ProviderSyncCacheWhereInput = {
+    // Sin link también vale: en SQL, NOT (NULL LIKE …) no es verdadero.
+    OR: [{ productUrl: null }, { NOT: { OR: OFFICIAL_STORE_HOSTS.map((host) => ({ productUrl: { contains: host } })) } }],
+  };
   const base: Prisma.ProviderSyncCacheWhereInput = {
-    AND: [missingWhere(provider), retryable],
+    AND: [missingWhere(provider), retryable, notOfficialStore],
   };
   if (priority === "visible") {
     return { AND: [base, { offers: visibleInCatalogOffer }] };

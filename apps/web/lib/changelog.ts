@@ -26,6 +26,17 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.26.2",
+    date: "2026-11-12",
+    title: "Fotos oficiales de Aula, IROK y ATK",
+    changes: [
+      {
+        kind: "improved",
+        text: "Los productos de Aula, IROK y ATK toman la foto de su tienda oficial, del color exacto. Si no hay certeza, quedan sin foto antes que con la de otro color.",
+      },
+    ],
+  },
+  {
     version: "2.26.1",
     date: "2026-11-12",
     title: "Aula aparece en «Agregar proveedor»",

@@ -4,6 +4,7 @@ import { CatalogModule } from "../catalog/catalog.module";
 import { EnrichmentController } from "./enrichment.controller";
 import { GroupingService } from "./grouping.service";
 import { MastersService } from "./masters.service";
+import { OfficialStoreImagesService } from "./official-store-images.service";
 import { EnrichmentPipelineService } from "./pipeline.service";
 import { RunsService } from "./runs.service";
 import { SourceCacheService } from "./source-cache.service";
@@ -12,6 +13,6 @@ import { SourceCacheService } from "./source-cache.service";
 @Module({
   imports: [CatalogModule, AssetsModule],
   controllers: [EnrichmentController],
-  providers: [SourceCacheService, EnrichmentPipelineService, GroupingService, MastersService, RunsService],
+  providers: [SourceCacheService, EnrichmentPipelineService, GroupingService, MastersService, RunsService, OfficialStoreImagesService],
 })
 export class EnrichmentModule {}
