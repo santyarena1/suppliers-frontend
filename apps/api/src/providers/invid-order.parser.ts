@@ -644,6 +644,37 @@ function parseOutlineTotals(html: string): { totals: InvidOrderTotals; exchangeR
   return { totals, exchangeRate };
 }
 
+/**
+ * La columna de precio del detalle de Invid a veces es el unitario y a veces el
+ * total de la línea (pedido 641143: 10 pen drives a "US$ 204.60" con un pedido
+ * de US$ 391.43 en total). Se decide con los importes del pedido: el neto de
+ * las líneas no puede pasar el total, y si Invid informa el subtotal, tiene que
+ * coincidir con él.
+ */
+export function reconcileInvidItemPrices(items: InvidOrderItem[], parsed: InvidOrderTotals, orderAmount: string): InvidOrderItem[] {
+  const lines = items.map((it) => ({
+    it,
+    value: parseInvidMoney(it.price),
+    qty: Number(String(it.qty ?? "").replace(/[^\d]/g, "")),
+  }));
+  if (!lines.some((l) => l.value > 0 && l.qty > 1)) return items;
+  const asUnit = round2(lines.reduce((sum, l) => sum + (l.value > 0 && l.qty > 0 ? l.value * l.qty : l.value), 0));
+  const asLine = round2(lines.reduce((sum, l) => sum + l.value, 0));
+  const net = parsed.net && parsed.net > 0 ? parsed.net : 0;
+  const total = parsed.total && parsed.total > 0 ? parsed.total : parseInvidMoney(orderAmount);
+  const near = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.05, b * 0.01);
+
+  let lineTotals = false;
+  if (net > 0) lineTotals = near(asLine, net) && !near(asUnit, net);
+  else if (total > 0) lineTotals = asUnit > total * 1.001 && asLine <= total * 1.001;
+  if (!lineTotals) return items;
+
+  return lines.map(({ it, value, qty }) => {
+    if (!(value > 0 && qty > 0)) return it;
+    return { ...it, price: formatUsMoney(value / qty), total: formatUsMoney(value) };
+  });
+}
+
 function finalizeTotals(orderAmount: string, items: InvidOrderItem[], parsed: InvidOrderTotals): InvidOrderTotals | undefined {
   const totals: InvidOrderTotals = { ...parsed };
   const lineNet = round2(items.reduce((sum, it) => {
@@ -971,6 +1002,7 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
       || invoiceHrefs.find((h) => /comprob|adjunt|pago/i.test(h));
     const canAttachPayment = /adjuntar/i.test(invoice) || Boolean(paymentHref);
     const paymentOrderId = invoiceCell.match(/data-portal-comprobante=["']([^"']+)["']/i)?.[1];
+    const items = reconcileInvidItemPrices(outline.items, outline.totals ?? {}, amount);
 
     orders.push({
       orderNumber,
@@ -982,9 +1014,9 @@ export function parseOrdersTable(html: string): { orders: InvidOrderRow[] } {
       invoiceHrefs,
       delivery: outline.delivery,
       payment: outline.payment,
-      items: outline.items,
+      items,
       links: outline.links,
-      totals: finalizeTotals(amount, outline.items, outline.totals ?? {}),
+      totals: finalizeTotals(amount, items, outline.totals ?? {}),
       exchangeRate: outline.exchangeRate,
       canAttachPayment,
       paymentHref,

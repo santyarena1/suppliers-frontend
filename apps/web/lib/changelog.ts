@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.27.1",
+    date: "2026-11-16",
+    title: "Pedidos de Invid con los importes bien",
+    changes: [
+      {
+        kind: "fixed",
+        text: "En el detalle de un pedido de Invid, una línea con varias unidades mostraba el total de la línea como precio unitario y el «Total sin imp.» salía inflado. Ahora el precio unitario, el total de cada línea y el neto coinciden con el pedido.",
+      },
+      {
+        kind: "fixed",
+        text: "La aclaración del tipo de cambio ya no aparece dos veces.",
+      },
+    ],
+  },
+  {
     version: "2.27.0",
     date: "2026-11-16",
     title: "Errores que se entienden",

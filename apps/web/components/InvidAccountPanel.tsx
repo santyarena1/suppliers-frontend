@@ -318,21 +318,10 @@ export default function InvidAccountPanel() {
               : undefined
           }
           canAttach={canAttachInvidPayment(detail.row, paymentForm, paymentUploads)}
-          note={[
-            ...invidOrderAmountLines(
-              detail.row,
-              detail.row.exchangeRate
-                ? undefined
-                : currentExchangeRate
-                  ? { rate: currentExchangeRate, label: "TC actual Invid" }
-                  : prefs.currentRate?.venta
-                    ? { rate: prefs.currentRate.venta, label: `Cotización ${prefs.dollarLabel(prefs.dollarType)} (Nodo)` }
-                    : undefined
-            ).notes,
-            !canAttachInvidPayment(detail.row, paymentForm, paymentUploads)
-              ? (uploadNote || "")
-              : "",
-          ].filter(Boolean).join(" ")}
+          note={
+            // Las notas de importes las suma InvidOrderDetail: acá solo la del comprobante.
+            !canAttachInvidPayment(detail.row, paymentForm, paymentUploads) ? uploadNote || "" : ""
+          }
           onAttach={() => setPaymentOrder(detail.row)}
           onClose={() => setDetail(null)}
         />

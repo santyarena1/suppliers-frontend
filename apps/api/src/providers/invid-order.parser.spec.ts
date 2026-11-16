@@ -612,3 +612,52 @@ describe("invidLineIvaWithoutInternos", () => {
     expect(invidLineIvaWithoutInternos(5, 15.1)).toBe(0);
   });
 });
+
+describe("precio de las líneas de un pedido de Invid", () => {
+  const order = (rows: string, extra = "") => `
+      <tr class="CartProduct" id="tr1">
+        <td><img onclick="showhide('menu1outline','imgm1','tr1')" /></td>
+        <td class="valorizar">641143</td>
+        <td class="valorizar">222987</td>
+        <td class="text-center">Abierto</td>
+        <td class="text-center">16-11-2026</td>
+        <td class="text-right">US$ 391.43</td>
+        <td>Adjuntar</td>
+      </tr>
+      <tr id="menu1outline" style="display:none">
+        <td colspan="7">
+          <table class="tablaped">
+            <tr><td><b>Producto</b></td><td><b>Estado</b></td><td><b>Precio</b></td><td><b>Cant.</b></td></tr>
+            ${rows}
+            ${extra}
+          </table>
+        </td>
+      </tr>`;
+  const rows641143 = `
+            <tr><td><a href="x---det--0410441">(0410441) Mouse Logitech Wir M170 Red Blister</a></td><td>Abierto</td><td>US$ 6.50</td><td>1</td></tr>
+            <tr><td><a href="x---det--0416272">(0416272) Pen Drive HIKSEMI 128Gb E307C Dual Slim</a></td><td>Abierto</td><td>US$ 204.60</td><td>10</td></tr>
+            <tr><td><a href="x---det--0417929">(0417929) Silla Gamer Raptor Throne S10 Negra</a></td><td>Abierto</td><td>US$ 89.10</td><td>1</td></tr>`;
+
+  it("pedido 641143: la columna es el total de la línea (10 pen drives no valen US$ 2046 en un pedido de US$ 391)", () => {
+    const o = parseOrdersTable(order(rows641143)).orders[0];
+    const pen = o.items.find((i) => i.code === "0416272")!;
+    expect(pen.price).toBe("US$ 20.46");
+    expect(pen.total).toBe("US$ 204.60");
+    expect(o.totals?.net).toBe(300.2);
+    expect(o.totals?.total).toBe(391.43);
+    expect(o.totals?.taxes).toBe(91.23);
+  });
+
+  it("con subtotal de Invid decide por el subtotal", () => {
+    const o = parseOrdersTable(order(rows641143, `<tr><td>Subtotal</td><td></td><td></td><td>US$ 300.20</td></tr>`)).orders[0];
+    expect(o.items.find((i) => i.code === "0416272")!.price).toBe("US$ 20.46");
+  });
+
+  it("si la columna es el unitario, no cambia", () => {
+    const rows = `
+            <tr><td><a href="x---det--0416272">(0416272) Pen Drive</a></td><td>Abierto</td><td>US$ 20.46</td><td>10</td></tr>`;
+    const o = parseOrdersTable(order(rows).replace("US$ 391.43", "US$ 260.00")).orders[0];
+    expect(o.items[0].price).toBe("US$ 20.46");
+    expect(o.items[0].total).toBe("US$ 204.60");
+  });
+});
