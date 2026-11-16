@@ -1,5 +1,7 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
+import { PROVIDER_LABELS } from "@/lib/api";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
@@ -339,7 +341,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
       });
       setHistoryKey((n) => n + 1);
     } else {
-      setSyncResult({ ok: false, msg: run.errorMessage || "Error al sincronizar" });
+      setSyncResult({ ok: false, msg: friendlyErrorMessage(run.errorMessage, { provider: PROVIDER_LABELS[provider], fallback: "Error al sincronizar" }) });
     }
     setSyncing(false);
   }, [status?.currentRun]);
@@ -879,7 +881,7 @@ export default function ProviderDetailPage({ params }: { params: Promise<{ provi
                         {config.lastSyncError && (
                           <div className="flex items-start gap-2.5 bg-red-500/8 border border-red-500/20 text-red-400 text-xs rounded-lg px-3.5 py-2.5">
                             <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                            Último error de sincronización: {config.lastSyncError}
+                            Último error de sincronización: {friendlyErrorMessage(config.lastSyncError, { provider: PROVIDER_LABELS[provider] })}
                           </div>
                         )}
 

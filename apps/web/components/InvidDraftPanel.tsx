@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   invidCheckoutApi,
@@ -218,7 +219,7 @@ export default function InvidDraftPanel({
         message: job.message,
       } : prev);
     } else {
-      setError(job.errorMessage || "No se pudo crear el borrador en Invid");
+      setError(friendlyErrorMessage(job.errorMessage, { provider: "Invid", fallback: "No se pudo crear el borrador en Invid" }));
       setResult(null);
     }
   }, [jobs, result?.id, result?.status]);

@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { XCircle } from "lucide-react";
@@ -215,7 +216,7 @@ export default function SolutionBoxAccountPanel() {
           lines={draftLines(detail.row)}
           items={draftItems(detail.row)}
           totals={draftTotals(detail.row)}
-          note={detail.row.errorMessage ?? undefined}
+          note={detail.row.errorMessage ? friendlyErrorMessage(detail.row.errorMessage, { provider: "Solution Box" }) : undefined}
           onClose={() => setDetail(null)}
         />
       )}

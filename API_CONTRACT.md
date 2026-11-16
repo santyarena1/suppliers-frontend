@@ -4,6 +4,15 @@ Contrato entre `apps/web` y `apps/api`. Actualizado con el rediseño del buscado
 
 ## Implementado
 
+### [FEATURE] Errores explicados (todas las rutas)
+- **Método**: cualquiera
+- **Ruta**: todas (filtro global `HttpExceptionFilter`)
+- **Auth**: igual que cada ruta
+- **Body / Params**: —
+- **Respuesta esperada**: en un error técnico de proveedor (timeout, conexión caída, `→ 5xx`, `Request failed with status code …`) el envelope trae `message` en texto para el comercio (`friendlyError` de `@nodo/shared`) y `details.technical` con el original. Un timeout sin envolver responde 504 (antes 500 «Error interno del servidor»); una conexión caída, 502.
+- **Estado**: IMPLEMENTADO
+- **Notas**: la web aplica la misma traducción (`lib/friendlyError.ts`, espejo) al `message` de cada error, a los que no llegan a la API (sin internet, NODO que no responde) y a los errores guardados que muestra (pedidos, sincronización, borradores). Mensajes ya escritos para el comercio pasan igual.
+
 ### [FEATURE] Verificación de email (código)
 - **Método**: POST
 - **Ruta**: `/auth/register` · `/auth/verify-email` · `/auth/resend-verification` · `/auth/login`

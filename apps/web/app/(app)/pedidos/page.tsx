@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
@@ -730,7 +731,7 @@ function OrderCard({
 
         {order.errorMessage && (
           <p className="text-xs text-red-300 leading-snug rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
-            {order.errorMessage}
+            {friendlyErrorMessage(order.errorMessage)}
           </p>
         )}
 

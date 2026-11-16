@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { ArrowRightLeft, X } from "lucide-react";
 import type { PortalPendingLine, PortalSyncNotice as Notice } from "@/lib/portalCartSync";
 
@@ -64,7 +65,7 @@ export default function PortalSyncNotice({
                   >
                     Sacar de {providerLabel}
                   </button>
-                  {item.error && <span className="text-amber-400/90">{item.error}</span>}
+                  {item.error && <span className="text-amber-400/90">{friendlyErrorMessage(item.error, { provider: providerLabel })}</span>}
                 </div>
               );
             })}

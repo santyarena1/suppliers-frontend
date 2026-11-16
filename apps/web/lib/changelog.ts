@@ -26,6 +26,21 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.27.0",
+    date: "2026-11-16",
+    title: "Errores que se entienden",
+    changes: [
+      {
+        kind: "improved",
+        text: "Cuando un proveedor falla, NODO te dice qué pasó y qué hacer: por ejemplo «New Bytes tardó demasiado en responder, probá de nuevo en unos minutos» en vez de «timeout of 30000ms exceeded». Vale para envíos, carritos, pedidos y sincronizaciones.",
+      },
+      {
+        kind: "improved",
+        text: "Si se corta tu internet o NODO no responde, también te lo avisa con un mensaje claro.",
+      },
+    ],
+  },
+  {
     version: "2.26.3",
     date: "2026-11-12",
     title: "Más fotos de Aula",

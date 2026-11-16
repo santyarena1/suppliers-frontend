@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger, Optional } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { RequestMetricsService } from "../../monitoring/request-metrics.service";
-import type { ApiFailure, ApiFieldError } from "@nodo/shared";
+import { friendlyError, type ApiFailure, type ApiFieldError } from "@nodo/shared";
 import { dbOutageStatus } from "../../prisma/recovery-gate";
 
 @Catch()
@@ -48,9 +48,22 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (outage) {
         status = outage.status;
         message = outage.message;
+      } else if (friendlyError(exception.message).technical) {
+        // Un proveedor que no respondió (timeout, conexión caída) llega acá sin envolver:
+        // se explica abajo en vez de "Error interno del servidor".
+        message = exception.message;
+        status = /timeout|ETIMEDOUT|aborted/i.test(exception.message) ? HttpStatus.GATEWAY_TIMEOUT : HttpStatus.BAD_GATEWAY;
       }
     } else {
       this.logger.error("Excepción no controlada", String(exception));
+    }
+
+    // Errores técnicos de proveedores ("timeout of 30000ms exceeded", "→ 503: {…}"): texto
+    // que el comercio entiende; el original queda en details.technical para soporte.
+    const friendly = friendlyError(message);
+    if (friendly.technical) {
+      message = friendly.message;
+      details = { ...(details ?? {}), technical: friendly.technical };
     }
 
     const body: ApiFailure = {

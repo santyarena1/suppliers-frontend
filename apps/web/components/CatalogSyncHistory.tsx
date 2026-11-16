@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -215,7 +216,7 @@ export default function CatalogSyncHistory({
                 {open && (
                   <div className="border-t border-surface-800 px-3 py-3 flex flex-col gap-2 bg-surface-950/50">
                     {run.errorMessage && (
-                      <p className="text-[11px] text-red-400">{run.errorMessage}</p>
+                      <p className="text-[11px] text-red-400">{friendlyErrorMessage(run.errorMessage)}</p>
                     )}
                     {isLiveSyncRun(run) && (
                       <p className="text-[11px] text-sky-400">Esta corrida todavía está en curso.</p>

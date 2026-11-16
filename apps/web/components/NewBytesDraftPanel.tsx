@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   newBytesCheckoutApi,
@@ -247,7 +248,7 @@ export default function NewBytesDraftPanel({
         message: job.message,
       } : prev);
     } else {
-      setError(job.errorMessage || "No se pudo procesar el carrito en NewBytes");
+      setError(friendlyErrorMessage(job.errorMessage, { provider: "New Bytes", fallback: "No se pudo procesar el carrito en New Bytes" }));
       setResult(null);
     }
   }, [jobs, result?.id, result?.status]);

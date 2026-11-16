@@ -1,4 +1,5 @@
 import axios from "axios";
+import { friendlyErrorMessage } from "./friendlyError";
 import { SESSION_EVENT, getToken, isTokenExpired, persistAuthCookie, stopImpersonation } from "./auth";
 import type { PaymentOption } from "./payment-options";
 import type { ShippingMethod } from "./shipping";
@@ -128,9 +129,35 @@ api.interceptors.response.use(
       document.cookie = "tgs_auth=; Path=/; Max-Age=0; SameSite=Lax";
       window.location.href = "/login?expired=1";
     }
+    explainError(error);
     return Promise.reject(error);
   }
 );
+
+/**
+ * Errores técnicos pasados a texto para el comercio, en el mismo lugar donde las
+ * pantallas los leen (`response.data.message` o `error.message`). La API ya los
+ * traduce; esto cubre lo que no llega a la API (sin internet, NODO que no responde).
+ */
+function explainError(error: unknown) {
+  const e = error as {
+    message?: string;
+    code?: string;
+    response?: { data?: { message?: unknown } };
+  } | null;
+  if (!e || typeof e !== "object") return;
+  const data = e.response?.data;
+  if (data && typeof data === "object" && typeof data.message === "string") {
+    data.message = friendlyErrorMessage(data.message);
+    return;
+  }
+  if (e.response) return;
+  if (e.code === "ECONNABORTED" || e.code === "ETIMEDOUT" || /timeout of \d+ ?ms exceeded/i.test(e.message ?? "")) {
+    e.message = "NODO tardó demasiado en responder. Puede ser tu conexión o que un proveedor esté lento: probá de nuevo en un momento.";
+  } else if (e.code === "ERR_NETWORK" || /Network Error/i.test(e.message ?? "")) {
+    e.message = "No hay conexión con NODO. Revisá tu internet y probá de nuevo.";
+  }
+}
 
 export async function downloadAuthedFile(pathWithQuery: string, filename: string) {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;

@@ -1,5 +1,7 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
+import { PROVIDER_LABELS } from "@/lib/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PrefsPanel from "@/components/PrefsPanel";
@@ -107,7 +109,7 @@ export default function ProveedoresPage() {
     } else {
       setSyncResult((prev) => ({
         ...prev,
-        [provider]: { ok: false, msg: run.errorMessage || "Error al sincronizar" },
+        [provider]: { ok: false, msg: friendlyErrorMessage(run.errorMessage, { provider: PROVIDER_LABELS[provider], fallback: "Error al sincronizar" }) },
       }));
     }
     setSyncing(null);

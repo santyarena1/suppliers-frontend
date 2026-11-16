@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyErrorMessage } from "@/lib/friendlyError";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { distecnaCheckoutApi, DistecnaCheckoutPreview, DistecnaDraftResult } from "@/lib/api";
@@ -154,7 +155,7 @@ export default function DistecnaCheckoutPanel({
       {rejected.length > 0 && (
         <CheckoutError>
           Distecna rechazó {rejected.length === 1 ? "un ítem" : `${rejected.length} ítems`}:{" "}
-          {rejected.map((it) => `${it.name} (${it.error})`).join(" · ")}. Sacalos del carrito para continuar.
+          {rejected.map((it) => `${it.name} (${friendlyErrorMessage(it.error, { provider: "Distecna" })})`).join(" · ")}. Sacalos del carrito para continuar.
         </CheckoutError>
       )}
       {changes.length > 0 && (
