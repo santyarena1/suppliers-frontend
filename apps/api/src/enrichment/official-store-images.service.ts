@@ -2,7 +2,19 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/commo
 import { domainEvents } from "../common/events/domain-events";
 import { OFFICIAL_STORE_NO_PHOTO_ERROR, OFFICIAL_STORE_PENDING_ERROR } from "../images/image-sync-candidates";
 import { PrismaService } from "../prisma/prisma.service";
-import { fromCatalogJson, OFFICIAL_STORE_HOSTS, officialStoreLink, pickOfficialImages } from "./official-store-images";
+import { Prisma } from "@prisma/client";
+import {
+  fromCatalogJson,
+  OFFICIAL_LIST_PROVIDERS,
+  OFFICIAL_STORE_HOSTS,
+  OFFICIAL_STORES,
+  officialStoreForBrand,
+  officialStoreLink,
+  OfficialImagePick,
+  OfficialStore,
+  pickOfficialImages,
+} from "./official-store-images";
+import { officialStoreContent } from "./official-store-content";
 import { ImageSyncService } from "../images/image-sync.service";
 import { probeLiveImage } from "../images/live-image";
 import { isSerperBlockingError } from "../images/serper-images.client";
@@ -18,7 +30,9 @@ const BOOT_DELAY_MS = 45_000;
 const PENDING_RETRY_MS = 30 * 60_000;
 
 /** Sube al cambiar cómo se eligen las fotos: vuelve a revisar lo ya resuelto con la versión anterior. */
-const PICK_VERSION = "v4";
+const PICK_VERSION = "v5";
+/** Ficha de datos (descripción y especificaciones) de la tienda oficial, en la ficha enriquecida. */
+export const OFFICIAL_STORE_CONTENT_SOURCE = "OFFICIAL_STORE";
 /** Marca de que ya se hizo la segunda búsqueda (Google) para ese producto. */
 const WEB_MARK = "+web";
 /** Fotos de las tiendas de la marca en otros países: revisadas en prueba (12/11), activas. */
@@ -34,6 +48,24 @@ const MAX_PAGES = 20;
 const MAX_CATALOG_BYTES = 20 * 1024 * 1024;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Filas de la lista de estas marcas: con link a la tienda oficial, o del proveedor de la lista aunque no lo traigan. */
+const ROWS_WHERE: Prisma.ProviderSyncCacheWhereInput = {
+  OR: [...OFFICIAL_STORE_HOSTS.map((host) => ({ productUrl: { contains: host } })), { provider: { in: OFFICIAL_LIST_PROVIDERS } }],
+};
+
+/**
+ * En qué tienda se busca una fila: la del link de la lista o, sin link, la de su
+ * marca (todo el catálogo). Sin marca conocida (la lista pone «PROXIMAMENTE»),
+ * en las tres: vale solo si una sola tiene el modelo. `key` identifica la búsqueda
+ * para no repetirla.
+ */
+export function officialPlaceOf(r: { productUrl: string | null; brand: string | null }): { stores: OfficialStore[]; handle: string | null; key: string } {
+  const link = officialStoreLink(r.productUrl);
+  if (link) return { stores: [link.store], handle: link.handle, key: r.productUrl! };
+  const store = officialStoreForBrand(r.brand);
+  return store ? { stores: [store], handle: null, key: `marca:${store.source}` } : { stores: [...OFFICIAL_STORES], handle: null, key: "sin-marca" };
+}
 
 /**
  * Fotos de Aula, IROK y ATK desde su tienda oficial. Se lee el catálogo entero de
@@ -97,7 +129,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
 
   private async officialPass(): Promise<{ filled: number; withoutPhoto: number; pending: number }> {
     const rows = await this.prisma.providerSyncCache.findMany({
-      where: { OR: OFFICIAL_STORE_HOSTS.map((host) => ({ productUrl: { contains: host } })) },
+      where: ROWS_WHERE,
       select: {
         id: true,
         provider: true,
@@ -113,11 +145,14 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
 
     // Pendientes: sin foto o con la de Serper, y no resueltos ya con este mismo link.
     const todo = rows.filter((r) => {
+      const place = officialPlaceOf(r);
+
       const fill = r.imageFills[0];
       const hasImage = Boolean(r.imageUrl?.trim());
-      if (fill?.source.startsWith("official:") && fill.query?.startsWith(`${r.productUrl}#${PICK_VERSION}`) && fill.error !== OFFICIAL_STORE_PENDING_ERROR) return false;
+      const done = `${place.key}#${PICK_VERSION}`;
+      if (fill?.source.startsWith("official:") && fill.query?.startsWith(done) && fill.error !== OFFICIAL_STORE_PENDING_ERROR) return false;
       // Foto encontrada en la segunda búsqueda (Google), ya revisada.
-      if (fill?.source.startsWith("web:") && fill.query?.startsWith(`${r.productUrl}#${PICK_VERSION}`)) return false;
+      if (fill?.source.startsWith("web:") && fill.query?.startsWith(done)) return false;
       // Resuelto con otra versión o con otro link: se vuelve a revisar.
       if (fill?.source.startsWith("official:")) return true;
       if (!hasImage) return true;
@@ -129,27 +164,52 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     let filled = 0;
     let withoutPhoto = 0;
     let pending = 0;
+    let withContent = 0;
     for (const r of todo) {
-      const link = officialStoreLink(r.productUrl);
-      if (!link) continue;
-      const origin = link.store.origin;
-      if (!catalogs.has(origin)) {
-        const catalog = await this.fetchCatalog(origin);
-        catalogs.set(origin, catalog);
-        if (catalog !== "unavailable") this.logger.log(`Catálogo de ${origin}: ${catalog.length} productos`);
+      const link = officialPlaceOf(r);
+      const item = { name: r.name, ean: r.ean, linkedHandle: link.handle };
+      let store = link.stores[0];
+      let catalog = await this.catalogFor(catalogs, store.origin);
+      let pick: OfficialImagePick | null = catalog === "unavailable" ? null : pickOfficialImages(catalog, item);
+      if (link.stores.length > 1) {
+        const found: { store: OfficialStore; pick: OfficialImagePick }[] = [];
+        let unavailable = false;
+        for (const s of link.stores) {
+          const c = await this.catalogFor(catalogs, s.origin);
+          if (c === "unavailable") unavailable = true;
+          else {
+            const p = pickOfficialImages(c, item);
+            if (p.product) found.push({ store: s, pick: p });
+          }
+        }
+        if (found.length === 1) {
+          store = found[0].store;
+          catalog = [];
+          pick = found[0].pick;
+        } else if (unavailable) {
+          catalog = "unavailable";
+        } else {
+          catalog = [];
+          const note = found.length ? `el modelo está en varias tiendas (${found.map((f) => f.store.source).join(", ")})` : "ninguna tienda tiene ese modelo";
+          pick = { images: [], note, handle: null, product: null };
+        }
       }
-      const catalog = catalogs.get(origin)!;
+      const origin = store.origin;
       const previous = r.imageFills[0]?.source ?? "";
       // La foto anterior la puso Serper o esta misma revisión: se puede sacar si ya no es segura.
       const replaceable = previous.startsWith("serper") || previous.startsWith("official:") || previous.startsWith("web:");
-      const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}` };
+      const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${link.key}#${PICK_VERSION}` };
       const source = `official:${new URL(origin).host}`;
-      if (catalog === "unavailable") {
+      if (catalog === "unavailable" || !pick) {
         pending += 1;
         await this.saveFill(r.id, { ...base, source, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_PENDING_ERROR });
         continue;
       }
-      const pick = pickOfficialImages(catalog, { name: r.name, ean: r.ean, linkedHandle: link.handle });
+      try {
+        if (await this.saveContent(r, pick)) withContent += 1;
+      } catch (err) {
+        this.logger.warn(`Ficha de la tienda oficial de ${r.provider} ${r.externalId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
       if (pick.images.length) {
         await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: pick.images[0] } });
         await this.saveFill(r.id, { ...base, source, status: "filled", imageUrl: pick.images[0], error: null });
@@ -159,7 +219,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
         // Una foto que no es segura (de Google o de una revisión anterior) se saca.
         if (replaceable && r.imageUrl) await this.prisma.providerSyncCache.update({ where: { id: r.id }, data: { imageUrl: null } });
         await this.saveFill(r.id, { ...base, source, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
-        this.logger.log(`[sin foto] ${r.provider} ${r.externalId} «${r.name}» → ${pick.note} (link: ${link.handle})`);
+        this.logger.log(`[sin foto] ${r.provider} ${r.externalId} «${r.name}» → ${pick.note} (link: ${link.handle ?? "sin link, por marca"})`);
         withoutPhoto += 1;
       }
     }
@@ -169,7 +229,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
         this.schedule();
       }, PENDING_RETRY_MS);
     }
-    this.logger.log(`Fotos de tiendas oficiales: ${filled} con foto de su variante, ${withoutPhoto} sin foto segura, ${pending} pendientes`);
+    this.logger.log(`Fotos de tiendas oficiales: ${filled} con foto de su variante, ${withoutPhoto} sin foto segura, ${pending} pendientes; ${withContent} con ficha de datos`);
     return { filled, withoutPhoto, pending };
   }
 
@@ -181,10 +241,10 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
   private async webPass() {
     const rows = await this.prisma.providerSyncCache.findMany({
       where: {
-        OR: OFFICIAL_STORE_HOSTS.map((host) => ({ productUrl: { contains: host } })),
+        ...ROWS_WHERE,
         imageFills: { some: { source: { startsWith: "official:" }, error: OFFICIAL_STORE_NO_PHOTO_ERROR } },
       },
-      select: { id: true, provider: true, externalId: true, name: true, brand: true, productUrl: true, imageUrl: true, imageFills: { select: { query: true } } },
+      select: { id: true, provider: true, externalId: true, name: true, brand: true, productUrl: true, imageUrl: true, imageFills: { select: { query: true, source: true } } },
     });
     const todo = rows.filter((r) => !r.imageUrl?.trim() && !(r.imageFills[0]?.query ?? "").endsWith(WEB_MARK));
     if (todo.length === 0) return;
@@ -193,14 +253,15 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     let serperOff = false;
     let pendingSerper = 0;
     for (const r of todo) {
-      const link = officialStoreLink(r.productUrl);
-      if (!link) continue;
-      const brand = link.store.source.toUpperCase();
+      const link = officialPlaceOf(r);
+      // La tienda en la que se buscó (sin marca, la que tenía el modelo).
+      const own = OFFICIAL_STORES.find((s) => r.imageFills[0]?.source === `official:${new URL(s.origin).host}`) ?? link.stores[0];
+      const brand = own.source.toUpperCase();
       const notes: string[] = [];
       let chosen: { imageUrl: string; source: string | null; note: string; live: boolean } | null = null;
 
       // 1) La misma marca en sus tiendas de otros países: foto de la variante exacta.
-      for (const store of SECONDARY_STORES[link.store.source] ?? []) {
+      for (const store of SECONDARY_STORES[own.source] ?? []) {
         if (!catalogs.has(store.origin)) {
           const catalog = await this.fetchCatalog(store.origin);
           catalogs.set(store.origin, catalog);
@@ -242,7 +303,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
         }
       }
       if (!chosen && serperOff) pendingSerper += 1;
-      const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${r.productUrl ?? ""}#${PICK_VERSION}${WEB_MARK}` };
+      const base = { provider: r.provider, externalId: r.externalId, name: r.name, brand: r.brand, query: `${link.key}#${PICK_VERSION}${WEB_MARK}` };
       if (chosen) {
         found += 1;
         this.logger.log(`${chosen.live ? "[web]" : "[web prueba]"} [foto] ${r.provider} ${r.externalId} «${r.name}» → ${chosen.note}: ${chosen.imageUrl}`);
@@ -254,11 +315,68 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
         this.logger.log(`[web] [sin foto] ${r.provider} ${r.externalId} «${r.name}» (búsqueda: ${query}) → ${notes.join(" || ") || "sin resultados"}`);
         // Sin Google (sin créditos) no se marca: se reintenta cuando vuelva.
         if (GOOGLE_LIVE && !serperOff) {
-          await this.saveFill(r.id, { ...base, source: `official:${new URL(link.store.origin).host}`, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
+          await this.saveFill(r.id, { ...base, source: `official:${new URL(own.origin).host}`, status: "skipped", imageUrl: null, error: OFFICIAL_STORE_NO_PHOTO_ERROR });
         }
       }
     }
     this.logger.log(`[web] Segunda búsqueda de fotos: ${found} de ${todo.length} con foto segura de internet${pendingSerper ? ` (${pendingSerper} esperan a Google: Serper sin créditos)` : ""}`);
+  }
+
+  /**
+   * La descripción y las especificaciones de la página del producto en la tienda
+   * oficial, con las fotos de su color, como ficha enriquecida de esa fila. Valen
+   * aunque no se sepa el color: son del modelo. No pisa una ficha de AcuStock.
+   */
+  private async saveContent(
+    r: { provider: string; externalId: string; name: string; brand: string | null; ean: string | null },
+    pick: OfficialImagePick
+  ): Promise<boolean> {
+    const key = { provider: r.provider, externalId: r.externalId };
+    const sourceId = `${r.provider}:${r.externalId}`;
+    const link = await this.prisma.platformProductContentLink.findUnique({
+      where: { provider_externalId: key },
+      select: { content: { select: { source: true } } },
+    });
+    if (link && link.content.source !== OFFICIAL_STORE_CONTENT_SOURCE) return false;
+    const content = pick.product ? officialStoreContent(pick.product.description) : null;
+    if (!content || (!content.descriptionHtml && !content.specs.length)) {
+      await this.prisma.platformProductContent.deleteMany({ where: { source: OFFICIAL_STORE_CONTENT_SOURCE, sourceId } });
+      return false;
+    }
+    const data = {
+      name: [r.brand, r.name].filter(Boolean).join(" "),
+      brand: r.brand,
+      ean: r.ean,
+      partNumber: null,
+      category: [],
+      shortDescription: content.shortDescription,
+      descriptionHtml: content.descriptionHtml,
+      specs: content.specs as unknown as Prisma.InputJsonValue,
+      // Solo las fotos de su variante: sin color seguro, la ficha usa la foto de la fila.
+      images: pick.images.map((url) => ({ url, alt: null })) as unknown as Prisma.InputJsonValue,
+      warrantyMonths: null,
+    };
+    const saved = await this.prisma.platformProductContent.upsert({
+      where: { source_sourceId: { source: OFFICIAL_STORE_CONTENT_SOURCE, sourceId } },
+      create: { source: OFFICIAL_STORE_CONTENT_SOURCE, sourceId, ...data },
+      update: data,
+    });
+    await this.prisma.platformProductContentLink.upsert({
+      where: { provider_externalId: key },
+      create: { ...key, contentId: saved.id, matchedBy: OFFICIAL_STORE_CONTENT_SOURCE },
+      update: { contentId: saved.id, matchedBy: OFFICIAL_STORE_CONTENT_SOURCE },
+    });
+    return true;
+  }
+
+  /** El catálogo de una tienda, una vez por corrida. */
+  private async catalogFor(catalogs: Map<string, ShopifyProduct[] | "unavailable">, origin: string): Promise<ShopifyProduct[] | "unavailable"> {
+    if (!catalogs.has(origin)) {
+      const catalog = await this.fetchCatalog(origin);
+      catalogs.set(origin, catalog);
+      if (catalog !== "unavailable") this.logger.log(`Catálogo de ${origin}: ${catalog.length} productos`);
+    }
+    return catalogs.get(origin)!;
   }
 
   /** Todo el catálogo público de la tienda (`/products.json`), o "unavailable" si no respondió. */

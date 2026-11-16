@@ -169,7 +169,11 @@ export default function ProductPage({ params }: { params: Promise<{ provider: st
   const gallery = storefrontItem?.item.images.length
     ? storefrontItem.item.images
     : richImages.length
-      ? [...richImages, ...(product?.imageUrl && !richImages.includes(product.imageUrl) ? [product.imageUrl] : [])]
+      ? [
+          ...richImages,
+          // Con la ficha de la tienda oficial, la foto de la fila es la primera de la galería (llega por el proxy): no se repite.
+          ...(product?.imageUrl && !richImages.includes(product.imageUrl) && product.platformContent?.source !== "OFFICIAL_STORE" ? [product.imageUrl] : []),
+        ]
       : product?.imageUrl
         ? [product.imageUrl]
         : [];

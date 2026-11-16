@@ -26,6 +26,15 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.28.0",
+    date: "2026-11-16",
+    title: "Aula, IROK y ATK con ficha completa y más fotos",
+    changes: [
+      { kind: "new", text: "Los productos de Aula, IROK y ATK muestran la descripción y la tabla de especificaciones de la tienda oficial de cada marca, con todas las fotos de su color." },
+      { kind: "improved", text: "Más productos de Aula con la foto de su color: también los que vienen sin link en la lista y los que la tienda nombra con un color de más (por ejemplo «Black Pink Degradé» para «Black-Pink»)." },
+    ],
+  },
+  {
     version: "2.27.1",
     date: "2026-11-16",
     title: "Pedidos de Invid con los importes bien",

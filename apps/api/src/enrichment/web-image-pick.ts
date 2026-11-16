@@ -33,7 +33,7 @@ const QUALIFIERS = new Set(["pro", "max", "he", "plus", "mini", "ultra", "air", 
 const OPTIONAL = new Set(["ingles", "ingle", "espanol", "latam", "latino", "wireless", "wired", "inalambrico", "cableado", "switch"]);
 
 /** Tamaños de mousepad: la foto es la misma en todos. */
-const SIZES = new Set(["large", "mini", "medium", "small", "xl", "xxl", "grande", "chico", "mediano"]);
+const SIZES = new Set(["large", "l", "m", "mini", "medium", "small", "xl", "xxl", "grande", "chico", "mediano"]);
 const SIZE_PATTERN = /\b\d{2,4}\s*[xX×]\s*\d{2,4}\b/g;
 
 /** Sitios cuyas fotos suelen ser collages de varios colores o no son de una tienda. */

@@ -1144,6 +1144,7 @@ registrarse alguien (sin mail), al crear un comercio, con `POST /my/subscription
 - **Respuesta esperada**: `{ text }` — nombre, bajada, descripción sin HTML y especificaciones agrupadas, en texto plano.
 - **Estado**: IMPLEMENTADO
 - **Notas**: 429 pasadas las 100 copias por usuario y día (hora de Argentina). La ficha (`GET /providers/:provider/products/:externalId`) devuelve `platformContent: null` y `platformContentLimited: true` cuando el usuario ya vio 300 fichas completas distintas en el día (las ya vistas se siguen viendo). Cada vista y copia queda en `PlatformContentAccess`. El contenido enriquecido no sale por la API de catálogo (`/v1`).
+- **Tiendas oficiales (2026-11-16)**: `platformContent.source` puede ser `"OFFICIAL_STORE"`: descripción y especificaciones de la página del producto en aulagaming / irokgaming / atkgaming.com.ar para las filas de la lista de Aula (`LIST_AULA` o con link a esas tiendas). `images` trae solo las fotos de la variante elegida (vacío si el color no es seguro); la primera es la misma que `imageUrl` de la fila, así que la web no la repite. Sin endpoint nuevo.
 - **Fotos (2026-10-21)**: `platformContent.images[].url` llega como `/img-proxy?t=<token>`: la dirección original va cifrada (AES-256-GCM, `CONTENT_IMAGE_KEY` igual en API y web) y vence entre 6 y 12 h. Sin clave configurada la API no manda fotos.
 
 ## Masnet, Microglobal y PC Arts — solo catálogo (2026-10-22)

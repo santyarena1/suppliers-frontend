@@ -105,7 +105,8 @@ describe("fotos de la tienda oficial", () => {
     expect(pick(AULA, "F75 Wireless Comic Español")).toBe("teclado-aula-f75#22");
     expect(pick(AULA, "F75 Wireless White Contour Lines Ingles")).toBe("teclado-aula-f75#18");
     expect(pick(AULA, "F75 Wireless Blue-White-Purple Español")).toBe("teclado-aula-f75#8");
-    expect(pick(AULA, "F75 Wireless Degrade Pink Ingles")).toBeNull(); // la tienda tiene «Black Pink», no «Pink»
+    // La tienda tiene «Black Pink Degradé»: un color de más, y es el único rosa degradé.
+    expect(pick(AULA, "F75 Wireless Degrade Pink Ingles")).toBe("teclado-aula-f75#2");
   });
 
   it("el link de la lista no manda: un F75 inalámbrico linkeado al F75 Wired toma la foto del inalámbrico", () => {
@@ -118,7 +119,7 @@ describe("fotos de la tienda oficial", () => {
     expect(pick(AULA, "F75 Max Wireless Black Degrade Contour Lines Ingles")).toBe("teclado-aula-f75-max#3");
     expect(pick(AULA, "F75 Max Wireless Black Degrade Ingles")).toBe("teclado-aula-f75-max#0");
     expect(pick(AULA, "F75 Max Wireless Black Degrade Español")).toBe("teclado-aula-f75-max#5");
-    expect(pick(AULA, "F75 Max Wireless Black-Red Ingles")).toBeNull();
+    expect(pick(AULA, "F75 Max Wireless Black-Red Ingles")).toBe("teclado-aula-f75-max#4"); // «Black Grey Red»
     expect(pick(AULA, "F75 HE Black Contour")).toBe("f75-he#2");
     expect(pick(AULA, "F75 Wrist Rest Blue Apoyamuñecas")).toBe("aula-f75-wrist-rest#1");
   });
@@ -147,9 +148,12 @@ describe("fotos de la tienda oficial", () => {
     expect(pick(AULA, "SC620 White Wireless")).toBe("aula-sc620#1");
   });
 
+  it("un color de más en la tienda vale si es el único posible", () => {
+    expect(pick(AULA, "S6 Blue Wireless")).toBe("aula-s6#2"); // «Azul Blanco»
+    expect(pick(AULA, "S6 Milk Wireless")).toBe("aula-s6#3"); // «Beige / Milk»
+  });
+
   it("si la tienda no tiene ese color, sin foto", () => {
-    expect(pick(AULA, "S6 Blue Wireless")).toBeNull();
-    expect(pick(AULA, "S6 Milk Wireless")).toBeNull();
     expect(pick(AULA, "F2088 Air Grey Wireless Ingles")).toBeNull();
   });
 
@@ -188,7 +192,8 @@ describe("fotos de la tienda oficial", () => {
     expect(pick(ATK, "Zero Frosted White", "zero-extreme")).toBe("zero#1");
     expect(pick(ATK, "Zero White", "zero-extreme")).toBe("zero#3");
     expect(pick(ATK, "Zero Extreme Frosted Black", "mousepad-sky-xsoft")).toBe("zero-extreme#1");
-    expect(pick(ATK, "SKY Black Large 490 X 420", "mousepad-sky-xsoft")).toBeNull();
+    // "Sky" es el "Sky XSoft" de la tienda; "Large" es su "L".
+    expect(pick(ATK, "SKY Black Large 490 X 420", "mousepad-sky-xsoft")).toBe("mousepad-sky-xsoft#0");
   });
 
   it("ATK Dragonfly: Mini+, Pro Max 2.0, Plus 2.0, SE y el A9 a secas", () => {

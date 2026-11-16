@@ -13,6 +13,15 @@ export type OfficialStore = (typeof OFFICIAL_STORES)[number];
 
 export const OFFICIAL_STORE_HOSTS = OFFICIAL_STORES.map((s) => new URL(s.origin).host);
 
+/** Proveedores por lista de estas marcas: sus productos se buscan en la tienda aunque la fila no traiga link. */
+export const OFFICIAL_LIST_PROVIDERS = ["LIST_AULA"];
+
+/** La tienda oficial de una marca de la lista (AULA, IROK, ATK). */
+export function officialStoreForBrand(brand: string | null | undefined): OfficialStore | null {
+  const b = (brand ?? "").trim().toLowerCase();
+  return OFFICIAL_STORES.find((s) => s.source === b) ?? null;
+}
+
 /** La tienda y el producto (handle) de un link de la lista, o `null` si no es de una tienda oficial. */
 export function officialStoreLink(url: string | null | undefined): { store: OfficialStore; handle: string } | null {
   for (const store of OFFICIAL_STORES) {
@@ -43,20 +52,28 @@ const ALIASES: Record<string, string> = {
   sw: "switch", switches: "switch",
   degradado: "degrade",
   blak: "negro",
+  // Tamaños de mousepad: la lista dice "Large", la tienda "L".
+  large: "l", medium: "m",
+  ice: "icy",
 };
 
 /** Palabras de aspecto: si el nombre dice una, la variante (o el título) también. */
 export const LOOKS = new Set([
   "negro", "blanco", "rosa", "violeta", "azul", "rojo", "verde", "gris", "plateado", "amarillo", "naranja", "marron",
   "beige", "celeste", "dorado", "light", "dark", "degrade", "contour", "frosted", "transparent", "translucent",
-  "milk", "coffe", "coffee", "shadow", "petal", "lake", "comic", "semi",
+  "milk", "coffe", "coffee", "shadow", "petal", "lake", "comic", "semi", "icy",
 ]);
+
+/** Terminaciones: no alcanzan para decir que dos colores son el mismo. */
+const FINISHES = new Set(["light", "dark", "degrade", "contour", "frosted", "transparent", "translucent", "semi", "shadow"]);
 
 /** No distinguen productos ni variantes. */
 const NOISE = new Set([
   "teclado", "mecanico", "aula", "irok", "atk", "mouse", "auricular", "auriculares", "mousepad", "idioma",
   "default", "title", "basic", "standard", "estandar", "version", "y", "de", "con", "the", "and", "gaming",
   "series", "serie", "line", "kit", "en", "layout",
+  // Línea de mousepads de ATK: la tienda la pone en el título ("Sky XSoft"), la lista no.
+  "xsoft",
 ]);
 
 function singular(w: string): string {
@@ -176,37 +193,62 @@ export function variantFor(product: ShopifyProduct, item: { name: string; ean: s
   for (let d = 1; d < dims; d++) {
     if (!variants.some((v) => valueFits(optionValues(v)[d] ?? ""))) ignored.add(d);
   }
-  const fits: VariantFit[] = [];
-  for (const v of variants) {
-    const values = optionValues(v);
-    let score = 0;
-    let ok = true;
-    const keyParts: string[] = [];
-    values.forEach((value, d) => {
-      if (ignored.has(d)) return;
-      if (!valueFits(value)) ok = false;
-      score += words(value).filter((w) => !titleWords.has(w)).length;
-      keyParts.push(value);
-    });
-    if (ok) fits.push({ variant: v, score, key: keyParts.join(" / ") });
-  }
-  if (fits.length === 0) return { variant: null, how: "ninguna variante coincide con el nombre" };
-  // Un color o terminación del nombre que la variante no tiene: es otra (o la tienda no la tiene).
+  /**
+   * `slack`: el color de la variante puede tener UNA palabra de aspecto que el
+   * nombre no dice ("Black Pink Degradé" para "Black-Pink", "Negro / Gris /
+   * Amarillo" para "Grey Yellow"). Solo se usa si ninguna coincide entera.
+   */
+  const collect = (slack: boolean): VariantFit[] => {
+    const out: VariantFit[] = [];
+    for (const v of variants) {
+      const values = optionValues(v);
+      let score = 0;
+      let ok = true;
+      const keyParts: string[] = [];
+      values.forEach((value, d) => {
+        if (ignored.has(d)) return;
+        if (!valueFits(value)) {
+          const missing = words(value).filter((w) => !has(idx, w) && !titleWords.has(w));
+          const tolerated = slack && d === 0 && missing.length === 1 && LOOKS.has(missing[0]) && words(value).some((w) => has(idx, w) && LOOKS.has(w) && !FINISHES.has(w));
+          if (!tolerated) ok = false;
+        }
+        score += words(value).filter((w) => !titleWords.has(w)).length;
+        keyParts.push(value);
+      });
+      if (ok) out.push({ variant: v, score, key: keyParts.join(" / ") });
+    }
+    return out;
+  };
   const looks = looksIn(item.name);
-  const covering = fits.filter((f) => {
-    const own = optionValues(f.variant).flatMap((v) => words(v));
-    const ownCompact = own.join("");
-    return looks.every((w) => titleWords.has(w) || own.includes(w) || ownCompact.includes(w));
-  });
+  const coveringOf = (list: VariantFit[]) =>
+    list.filter((f) => {
+      const own = optionValues(f.variant).flatMap((v) => words(v));
+      const ownCompact = own.join("");
+      return looks.every((w) => titleWords.has(w) || own.includes(w) || ownCompact.includes(w));
+    });
+
+  let fits = collect(false);
+  let how = "nombre";
+  if (fits.length === 0) {
+    // Con tolerancia, vale solo si queda un único color posible.
+    const loose = coveringOf(collect(true));
+    if (loose.length === 0 || new Set(loose.map((f) => f.key.split(" / ")[0])).size > 1) {
+      return { variant: null, how: "ninguna variante coincide con el nombre" };
+    }
+    fits = loose;
+    how = "nombre, con un color de más en la tienda";
+  }
+  // Un color o terminación del nombre que la variante no tiene: es otra (o la tienda no la tiene).
+  const covering = coveringOf(fits);
   if (covering.length === 0) return { variant: null, how: `a ninguna variante le cierra todo el aspecto del nombre (${looks.join(", ")})` };
-  fits.splice(0, fits.length, ...covering);
+  fits = covering;
   const best = Math.max(...fits.map((f) => f.score));
   const top = fits.filter((f) => f.score === best);
   const keys = new Set(top.map((f) => f.key));
   if (keys.size > 1) return { variant: null, how: `empate entre ${[...keys].map((k) => `«${k}»`).join(" y ")}` };
   // Mismo color con distinto switch: la del que tenga foto.
   const chosen = top.find((f) => f.variant.featured_image?.src) ?? top[0];
-  return { variant: chosen.variant, how: "nombre" };
+  return { variant: chosen.variant, how };
 }
 
 // ---------- Elección ----------
@@ -216,6 +258,8 @@ export interface OfficialImagePick {
   /** De qué producto y variante salió (o por qué ninguna). */
   note: string;
   handle: string | null;
+  /** El producto de la tienda (aunque no se sepa la variante): su ficha vale para todos los colores. */
+  product: ShopifyProduct | null;
 }
 
 /**
@@ -242,7 +286,7 @@ export function pickOfficialImages(
     if (linked && codesIn(item.name).length > 0 && codesIn(item.name).every((c) => compactTitle(linked).includes(c))) {
       return finish(linked, item);
     }
-    return { images: [], note: "ningún producto de la tienda coincide con el modelo", handle: null };
+    return { images: [], note: "ningún producto de la tienda coincide con el modelo", handle: null, product: null };
   }
   const best = Math.max(...scored.map((s) => s.fit));
   let top = scored.filter((s) => s.fit === best);
@@ -254,7 +298,7 @@ export function pickOfficialImages(
     // Varios productos con el mismo modelo: vale solo si exactamente uno tiene la variante.
     const withVariant = top.filter((s) => variantFor(s.p, item).variant);
     if (withVariant.length !== 1) {
-      return { images: [], note: `varios productos posibles: ${top.map((s) => `«${s.p.title}»`).join(", ")}`, handle: null };
+      return { images: [], note: `varios productos posibles: ${top.map((s) => `«${s.p.title}»`).join(", ")}`, handle: null, product: null };
     }
     top = withVariant;
   }
@@ -276,11 +320,11 @@ function compactTitle(p: ShopifyProduct): string {
 function finish(p: ShopifyProduct, item: { name: string; ean: string | null }): OfficialImagePick {
   const { variant, how } = variantFor(p, item);
   const label = `«${p.title ?? p.handle}»`;
-  if (!variant) return { images: [], note: `${label}: ${how}`, handle: p.handle ?? null };
+  if (!variant) return { images: [], note: `${label}: ${how}`, handle: p.handle ?? null, product: p };
   const images = shopifyImagesFor(p, variant).map(https);
   const vname = (p.variants ?? []).length > 1 ? ` variante «${variant.title}»` : "";
-  if (images.length === 0) return { images: [], note: `${label}${vname} (${how}) no tiene foto propia`, handle: p.handle ?? null };
-  return { images, note: `${label}${vname} por ${how}`, handle: p.handle ?? null };
+  if (images.length === 0) return { images: [], note: `${label}${vname} (${how}) no tiene foto propia`, handle: p.handle ?? null, product: p };
+  return { images, note: `${label}${vname} por ${how}`, handle: p.handle ?? null, product: p };
 }
 
 // ---------- products.json ----------
@@ -298,6 +342,7 @@ interface CatalogVariant {
 
 interface CatalogProduct {
   title?: string;
+  body_html?: string | null;
   handle?: string;
   images?: { src?: string }[];
   variants?: CatalogVariant[];
@@ -310,6 +355,7 @@ export function fromCatalogJson(body: unknown): ShopifyProduct[] {
   return products.map((p) => ({
     title: p.title,
     handle: p.handle,
+    description: p.body_html ?? undefined,
     images: (p.images ?? []).map((i) => i.src).filter((s): s is string => Boolean(s)),
     variants: (p.variants ?? []).map((v) => ({
       id: v.id,
