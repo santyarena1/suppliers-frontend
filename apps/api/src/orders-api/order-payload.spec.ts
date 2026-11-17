@@ -170,6 +170,22 @@ describe("pedido para la API", () => {
   });
 });
 
+describe("datos guardados desde la etapa 1b", () => {
+  it("Elit trae cada percepción; Invid el porcentaje; New Bytes la cotización y la etiqueta", () => {
+    const elit = buildOrderPayload(base({ percepciones: 3, addressSnapshot: { vat: 21, perceptions: 3, perceptionLines: [{ label: "Percepción IIBB ARBA", amount: 3 }] } }), ctx());
+    expect(elit.percepciones_detalle).toEqual([{ concepto: "Percepción IIBB ARBA", jurisdiccion: "Buenos Aires", monto: 3 }]);
+    const invid = buildOrderPayload(base({ provider: "INVID", percepciones: 3, addressSnapshot: { vat: 21, perceptionPercent: 3, shippingCost: 11.19 } }), ctx());
+    expect(invid).toMatchObject({ envio: { monto: 11.19, moneda: "USD" }, percepciones_detalle: [{ concepto: "Percepciones 3 %", jurisdiccion: null, monto: 3 }] });
+    const nb = buildOrderPayload(base({ provider: "NEW_BYTES", percepciones: 2, addressSnapshot: { vat: 21, exchangeRate: 1455, perceptionLabel: "Percepción IIBB CABA" } }), ctx());
+    expect(nb).toMatchObject({ cotizacion: 1455, percepciones_detalle: [{ concepto: "Percepción IIBB CABA", jurisdiccion: "CABA", monto: 2 }] });
+  });
+
+  it("Solution Box: envío en dólares", () => {
+    const sb = buildOrderPayload(base({ provider: "SOLUTION_BOX", addressSnapshot: { vat: 21, shippingCost: 8 } }), ctx());
+    expect(sb.envio).toEqual({ monto: 8, moneda: "USD" });
+  });
+});
+
 describe("estado del pedido", () => {
   it("traduce aprobación, seguimiento y tienda", () => {
     const o = { status: "CREATED", approvalStatus: "NOT_REQUIRED", storefrontStatus: null, trackingStage: null, channel: "ONLINE" };

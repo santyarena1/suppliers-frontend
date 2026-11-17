@@ -371,6 +371,11 @@ export function totalsFor(o: OrderRow, lines: OrderLine[]): Totals {
       t.internos = r2n(num(snap.internalTax));
       const ship = num(snap.shippingCost);
       if (ship != null && ship > EPS) t.envio = { monto: r2(ship), moneda: "USD" };
+      if (o.provider === "ELIT") t.percepcionesDetalle = perceptionLines(snap.perceptionLines);
+      const pct = num(snap.perceptionPercent);
+      if (o.provider === "INVID" && pct != null && pct > 0 && percep != null && percep > EPS) {
+        t.percepcionesDetalle = [{ concepto: `Percepciones ${String(r2(pct)).replace(".", ",")} %`, jurisdiccion: null, monto: r2(percep) }];
+      }
       break;
     }
     case "NEW_BYTES": {
@@ -379,6 +384,9 @@ export function totalsFor(o: OrderRow, lines: OrderLine[]): Totals {
       const quote = rec(snap.quote);
       const ship = num(quote.total);
       if (ship != null && ship > EPS) t.envio = { monto: r2(ship), moneda: "ARS" };
+      t.cotizacion = num(snap.exchangeRate);
+      const label = text(snap.perceptionLabel);
+      if (label && percep != null && percep > EPS) t.percepcionesDetalle = [{ concepto: label, jurisdiccion: jurisdictionIn(label), monto: r2(percep) }];
       break;
     }
     case "SOLUTION_BOX": {
@@ -390,6 +398,8 @@ export function totalsFor(o: OrderRow, lines: OrderLine[]): Totals {
       }
       t.percepcionesDetalle = perceptionLines(snap.perceptionLines);
       t.cotizacion = num(snap.exchange);
+      const ship = num(snap.shippingCost);
+      if (ship != null && ship > EPS) t.envio = { monto: r2(ship), moneda: "USD" };
       break;
     }
     case "DISTECNA": {

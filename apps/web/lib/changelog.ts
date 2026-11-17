@@ -26,6 +26,14 @@ export const CHANGE_KIND_LABEL: Record<ChangeKind, string> = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.28.2",
+    date: "2026-11-16",
+    title: "IVA correcto en la API de catálogo",
+    changes: [
+      { kind: "fixed", text: "La API de catálogo ya no informa alícuotas de IVA que no existen (como un 400 % leído de Invid): usa la del producto o la general, igual que el carrito." },
+    ],
+  },
+  {
     version: "2.28.0",
     date: "2026-11-16",
     title: "Aula, IROK y ATK con ficha completa y más fotos",

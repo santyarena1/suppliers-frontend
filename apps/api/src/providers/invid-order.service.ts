@@ -841,6 +841,8 @@ export class InvidOrderService {
         ...prepared.address,
         vat: prepared.iva,
         perceptions: prepared.percepciones,
+        perceptionPercent: prepared.percepcionPercent,
+        shippingCost: prepared.shippingCost,
         internalTax: prepared.impuestos,
         subtotal: prepared.subtotal,
         total,

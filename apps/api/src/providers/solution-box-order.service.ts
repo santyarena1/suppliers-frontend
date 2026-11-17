@@ -278,6 +278,7 @@ export class SolutionBoxOrderService {
         vat: preview.vat,
         perceptions: preview.perceptions,
         perceptionLines: preview.perceptionLines,
+        shippingCost: preview.shippingCost,
         proformaNumber: proforma.number,
         raw: outcome.raw ?? null,
       }),

@@ -385,6 +385,7 @@ export class ElitOrderService {
           vat: preview.vat,
           internalTax: preview.internalTax,
           perceptions: preview.perceptions,
+          perceptionLines: preview.perceptionLines,
           shippingCost: preview.shippingCost,
         }),
       };
@@ -425,6 +426,7 @@ export class ElitOrderService {
         vat: preview.vat,
         internalTax: preview.internalTax,
         perceptions: preview.perceptions,
+        perceptionLines: preview.perceptionLines,
         shippingCost: preview.shippingCost,
       }),
     };
