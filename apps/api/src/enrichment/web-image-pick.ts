@@ -47,9 +47,19 @@ const PREFERRED_SOURCES = ["aulagear", "aula", "irok", "atk", "epomaker", "bestb
 
 const plus = (text: string) => text.replace(/\+/g, " plus ");
 
+/** «68HE», «75PRO»: la versión pegada al número también cuenta como versión. */
+function withGluedVersions(ws: string[]): Set<string> {
+  const set = new Set(ws);
+  for (const w of ws) {
+    const m = /^\d+([a-z]+)$/.exec(w);
+    if (m && QUALIFIERS.has(m[1])) set.add(m[1]);
+  }
+  return set;
+}
+
 function index(text: string): { set: Set<string>; compact: string } {
   const ws = words(plus(text));
-  return { set: new Set(ws), compact: ws.join("") };
+  return { set: withGluedVersions(ws), compact: ws.join("") };
 }
 
 function has(idx: { set: Set<string>; compact: string }, w: string): boolean {
@@ -66,7 +76,7 @@ export function webRequirements(name: string): { required: string[]; colors: str
   const sw = all.indexOf("switch");
   const own = sw >= 0 ? all.slice(0, sw) : all;
   const required = [...new Set(own.filter((w) => !OPTIONAL.has(w) && !(sized && SIZES.has(w))))];
-  return { required, colors: required.filter((w) => COLORS.has(w)), all: new Set(all), sized };
+  return { required, colors: required.filter((w) => COLORS.has(w)), all: withGluedVersions(all), sized };
 }
 
 /** Por qué este resultado no sirve, o `null` si sirve. */
@@ -89,6 +99,16 @@ export function webHitProblem(hit: WebImageHit, item: { name: string; brand: str
   if (extraLooks.length) return `dice otra terminación (${extraLooks.join(", ")})`;
   const extraVersion = [...t.set].filter((w) => QUALIFIERS.has(w) && !req.all.has(w));
   if (extraVersion.length) return `es otra versión (${extraVersion.join(", ")})`;
+
+  // Mousepads: sin tamaño en el título sirve; con otro tamaño, no (Mini 360x300 no es el L 490x420).
+  const sizesOf = (text: string, ws: Iterable<string>) => {
+    const out = new Set([...ws].filter((w) => SIZES.has(w)).map((w) => (w === "large" || w === "grande" ? "l" : w === "medium" || w === "mediano" ? "m" : w)));
+    for (const m of text.matchAll(/\b(\d{2,4})\s*[xX×]\s*(\d{2,4})/g)) out.add(`${m[1]}x${m[2]}`);
+    return out;
+  };
+  const nameSizes = sizesOf(item.name, req.all);
+  const titleSizes = sizesOf(title, t.set);
+  if (nameSizes.size && titleSizes.size && ![...titleSizes].some((s) => nameSizes.has(s))) return "es otro tamaño";
 
   const nameWireless = req.all.has("wireless") || req.all.has("inalambrico");
   const nameWired = req.all.has("wired") || req.all.has("cableado");
@@ -187,4 +207,31 @@ export function pickSecondaryImages(
   const images = shopifyImagesFor(p, v.variant).map(https);
   if (images.length === 0) return { images: [], note: `«${p.title}» sin fotos` };
   return { images, note: `«${p.title}» variante «${v.variant!.title}» por ${v.how}` };
+}
+
+// ---------- Hardgamers (comparador de precios de tiendas argentinas) ----------
+
+export const HARDGAMERS_ORIGIN = "https://www.hardgamers.com.ar";
+
+const decodeHtml = (s: string) =>
+  s.replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+
+/** Las tarjetas del buscador de Hardgamers: foto, tienda y título de la publicación. */
+export function hardgamersHits(html: string): WebImageHit[] {
+  const out: WebImageHit[] = [];
+  const re = /<img src="([^"]+)"[^>]*itemprop="image"[\s\S]*?<p class="store">([\s\S]*?)<\/p>[\s\S]*?<p class="product-name" itemprop="name">([\s\S]*?)<\/p>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    const imageUrl = decodeHtml(m[1]);
+    if (!/^https:\/\//i.test(imageUrl)) continue;
+    out.push({ imageUrl, source: decodeHtml(m[2]), title: decodeHtml(m[3]) });
+  }
+  return out;
+}
+
+/** Dos búsquedas: el nombre completo (sin idioma ni conexión) y el modelo solo. */
+export function hardgamersQueries(name: string, brand: string): string[] {
+  const full = name.replace(/\b(ingl[eé]s|espa[nñ]ol|english|spanish|wired|wireless)\b/gi, " ").replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  const model = name.split(/\s+/).slice(0, 2).join(" ");
+  return [...new Set([`${brand} ${full}`, `${brand} ${model}`].map((q) => q.toLowerCase()))];
 }

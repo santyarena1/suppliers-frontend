@@ -19,7 +19,7 @@ import { ImageSyncService } from "../images/image-sync.service";
 import { probeLiveImage } from "../images/live-image";
 import { isSerperBlockingError } from "../images/serper-images.client";
 import { httpGet } from "./sources/http";
-import { pickSecondaryImages, pickWebImages, SECONDARY_STORES, webImageQuery } from "./web-image-pick";
+import { HARDGAMERS_ORIGIN, hardgamersHits, hardgamersQueries, pickSecondaryImages, pickWebImages, SECONDARY_STORES, webImageQuery, type WebImageHit } from "./web-image-pick";
 import { ShopifyProduct } from "./sources/manufacturers/shopify";
 
 /** Pausa entre páginas del catálogo (Shopify corta con 429 si vamos rápido). */
@@ -37,6 +37,14 @@ export const OFFICIAL_STORE_CONTENT_SOURCE = "OFFICIAL_STORE";
 const WEB_MARK = "+web";
 /** Fotos de las tiendas de la marca en otros países: revisadas en prueba (12/11), activas. */
 const SECONDARY_LIVE = true;
+/**
+ * Hardgamers: el comparador junta las publicaciones de las tiendas de Argentina.
+ * Se acepta una foto con la misma regla que Google (título con el mismo modelo y
+ * colores, sin versiones, colores ni tamaños de más). Probado en lectura el 16/11:
+ * 12 de 36 sin foto, todas del color correcto.
+ */
+const HARDGAMERS_LIVE = true;
+const HARDGAMERS_GAP_MS = 4000;
 /**
  * Búsqueda en Google (Serper) para lo que ninguna tienda de la marca tiene. En
  * `false` solo deja en el log qué foto elegiría (para revisarlo antes de activarlo).
@@ -251,6 +259,7 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
     const catalogs = new Map<string, ShopifyProduct[] | "unavailable">();
     let found = 0;
     let serperOff = false;
+    let hardgamersOff = false;
     let pendingSerper = 0;
     for (const r of todo) {
       const link = officialPlaceOf(r);
@@ -283,7 +292,23 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
         notes.push(`${host}: ${pick.note}`);
       }
 
-      // 2) Google Imágenes, con el título de la página como control.
+      // 2) Hardgamers: las publicaciones de las tiendas argentinas.
+      if (!chosen && !hardgamersOff) {
+        const hits = await this.hardgamersSearch(r.name, brand);
+        if (hits === "unavailable") hardgamersOff = true;
+        else {
+          const { candidates, rejected } = pickWebImages(hits, { name: r.name, brand });
+          for (const c of candidates.slice(0, 5)) {
+            if (await probeLiveImage(c.imageUrl)) {
+              chosen = { ...c, source: `hardgamers:${c.source ?? "?"}`, note: `Hardgamers ${c.note}`, live: HARDGAMERS_LIVE };
+              break;
+            }
+          }
+          if (!chosen) notes.push(`Hardgamers: ${rejected.slice(0, 4).join(" | ") || "sin resultados"}`);
+        }
+      }
+
+      // 3) Google Imágenes, con el título de la página como control.
       const query = webImageQuery(r.name, brand);
       if (!chosen && !serperOff) {
         try {
@@ -367,6 +392,32 @@ export class OfficialStoreImagesService implements OnModuleInit, OnModuleDestroy
       update: { contentId: saved.id, matchedBy: OFFICIAL_STORE_CONTENT_SOURCE },
     });
     return true;
+  }
+
+  /** Publicaciones de Hardgamers para el producto, o "unavailable" si no respondió. */
+  private async hardgamersSearch(name: string, brand: string): Promise<WebImageHit[] | "unavailable"> {
+    const hits: WebImageHit[] = [];
+    const seen = new Set<string>();
+    for (const q of hardgamersQueries(name, brand)) {
+      await sleep(HARDGAMERS_GAP_MS);
+      try {
+        // Sin hacerse pasar por un navegador.
+        const res = await httpGet(`${HARDGAMERS_ORIGIN}/search?text=${encodeURIComponent(q)}`, { headers: { "User-Agent": "NODO-catalogo/1.0" } });
+        if (res.status !== 200) {
+          this.logger.warn(`Hardgamers respondió ${res.status}`);
+          return "unavailable";
+        }
+        for (const h of hardgamersHits(res.buffer.toString("utf8"))) {
+          if (seen.has(h.imageUrl)) continue;
+          seen.add(h.imageUrl);
+          hits.push(h);
+        }
+      } catch (err) {
+        this.logger.warn(`Hardgamers: ${err instanceof Error ? err.message : String(err)}`);
+        return "unavailable";
+      }
+    }
+    return hits;
   }
 
   /** El catálogo de una tienda, una vez por corrida. */

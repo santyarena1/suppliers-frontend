@@ -10,6 +10,8 @@ describe("web-image-pick", () => {
 
   it("rechaza otra versión del modelo (HE cuando la lista no dice HE)", () => {
     expect(webHitProblem(hit("AULA HERO68 HE 60% Key Wired Hall Effect Gaming Keyboard - Pink"), aula("Hero 68 Pink Wired Ingles"))).toMatch(/otra versión/);
+    expect(webHitProblem(hit("TECLADO AULA HERO 68HE RGB PINK MAGNETIC ENGLISH"), aula("Hero 68 Pink Wired Ingles"))).toMatch(/otra versión/);
+    expect(webHitProblem(hit("Teclado Aula WIN68HE Black Degrade"), aula("WIN68HE Black Degradé"))).toBeNull();
   });
 
   it("rechaza páginas con colores de más (varias variantes en la foto)", () => {
@@ -41,6 +43,8 @@ describe("web-image-pick", () => {
   it("en mousepads no exige el tamaño pero sí que no diga otro", () => {
     expect(webHitProblem(hit("AULA SKY Mousepad Orange"), aula("SKY Orange Large 490 X 420"))).toBeNull();
     expect(webHitProblem(hit("AULA SKY Mousepad Orange Mini"), aula("SKY Orange Large 490 X 420"))).toMatch(/otra versión/);
+    expect(webHitProblem(hit("MOUSEPAD ATK SKY XSOFT ORANGE L 490X420X4.5MM"), { name: "SKY Orange Mini 360 X 300", brand: "ATK" })).toMatch(/otro tamaño/);
+    expect(webHitProblem(hit("MOUSEPAD ATK SKY ORANGE 360X300"), { name: "SKY Orange Mini 360 X 300", brand: "ATK" })).toBeNull();
   });
 
   it("rechaza otra terminación (transparente, degradé)", () => {
@@ -115,5 +119,20 @@ describe("pickSecondaryImages con distribución ANSI", () => {
   });
   it("no toma el ANSI para uno en español", () => {
     expect(pickSecondaryImages([max], { name: "F75 Max Wireless Black-Red Español", brand: "AULA", brandInTitle: false }).images).toEqual([]);
+  });
+});
+
+describe("Hardgamers", () => {
+  const { hardgamersHits, hardgamersQueries } = require("./web-image-pick");
+  const card = (img: string, store: string, title: string) =>
+    `<a href="/product/x" class="img-container"><img src="${img}" loading="lazy" itemprop="image" class="img" alt="x"></a></div><div class="info-container"><p class="store">\n ${store}\n</p><p class="product-name" itemprop="name">\n ${title}\n</p>`;
+
+  it("lee foto, tienda y título de cada tarjeta", () => {
+    const html = card("https://portalstore.com.ar/f.webp", "Portal Tech &amp; Gaming", "TECLADO AULA S75 PRO PINK WHITE DEGRADE WIRELESS") + card("/public/img.png", "X", "sin foto absoluta");
+    expect(hardgamersHits(html)).toEqual([{ imageUrl: "https://portalstore.com.ar/f.webp", source: "Portal Tech & Gaming", title: "TECLADO AULA S75 PRO PINK WHITE DEGRADE WIRELESS" }]);
+  });
+
+  it("busca el nombre sin idioma ni conexión y el modelo solo", () => {
+    expect(hardgamersQueries("Hero 84 White-Purple Wired Ingles", "AULA")).toEqual(["aula hero 84 white purple", "aula hero 84"]);
   });
 });
