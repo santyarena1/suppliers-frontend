@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, ChevronDown, KeyRound, Loader2, Rss, Settings2, ShieldAlert, Webhook } from "lucide-react";
 import { catalogApiAdmin } from "@/lib/api";
-import { CATALOG_API_SCOPES, CATALOG_API_SCOPE_LABELS, type ApiClientConfig, type ApiClientView, type CatalogApiScope } from "@/lib/catalog-api";
+import { CATALOG_API_SCOPE_LABELS, visibleScopes, type ApiClientConfig, type ApiClientView, type CatalogApiScope } from "@/lib/catalog-api";
 import ConfigEditor from "./ConfigEditor";
 import UsageChart from "./UsageChart";
 import WebhooksPanel from "./WebhooksPanel";
@@ -45,6 +45,7 @@ export default function ClientCard({
   defaultOpen,
   onChange,
   onMessage,
+  ordersAvailable,
 }: {
   client: ApiClientView;
   providers: { key: string; label: string }[];
@@ -52,6 +53,7 @@ export default function ClientCard({
   defaultOpen?: boolean;
   onChange: (next: ApiClientView) => void;
   onMessage: (ok: boolean, text: string) => void;
+  ordersAvailable?: boolean;
 }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const [tab, setTab] = useState<Tab>("config");
@@ -176,6 +178,7 @@ export default function ClientCard({
             {tab === "access" && (
               <AccessTab
                 client={client}
+                ordersAvailable={ordersAvailable}
                 readOnly={readOnly}
                 busy={busy}
                 onRotate={async () => {
@@ -230,8 +233,10 @@ function AccessTab({
   onRotateFeed,
   onRevoke,
   onSaveAccess,
+  ordersAvailable,
 }: {
   client: ApiClientView;
+  ordersAvailable?: boolean;
   readOnly: boolean;
   busy: string | null;
   onRotate: () => void;
@@ -307,7 +312,7 @@ function AccessTab({
         </Field>
         <Field label="Permisos">
           <div className="flex flex-col gap-1.5">
-            {CATALOG_API_SCOPES.map((s) => (
+            {visibleScopes(ordersAvailable || client.scopes.includes("orders:read")).map((s) => (
               <label key={s} className={`flex items-center gap-2 text-xs ${readOnly ? "" : "cursor-pointer"}`}>
                 <input
                   type="checkbox"

@@ -1217,6 +1217,8 @@ model ProviderPaymentReceipt {
 
 model ProviderOrder {
   id                  String              @id @default(uuid())
+  /// Número legible por comercio (NODO-<n>). Lo asigna la API de pedidos.
+  number              Int?
   userId              String
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenantId            String
@@ -1283,6 +1285,7 @@ model ProviderOrder {
   @@index([tenantId, channel])
   @@index([provider, storefrontStatus])
   @@index([trackingChangedAt])
+  @@unique([tenantId, number])
 }
 
 enum OrderApprovalStatus {
@@ -2657,6 +2660,8 @@ model ApiWebhookEndpoint {
   active              Boolean              @default(true)
   /// Último ApiCatalogEvent.id ya encolado para este endpoint.
   cursor              BigInt?
+  /// Último ApiOrderEvent.id ya encolado (avisos de pedidos).
+  orderCursor         BigInt?
   consecutiveFailures Int                  @default(0)
   disabledAt          DateTime?
   disabledReason      String?
@@ -3197,5 +3202,39 @@ model PcBuilderSettings {
   /// Precio final en pesos, con IVA.
   laborPrice   Decimal? @db.Decimal(14, 2)
   laborIva     Decimal  @default(21) @db.Decimal(5, 2)
+  updatedAt    DateTime @updatedAt
+}
+
+/// API de pedidos: última versión publicada de cada pedido (para avisar solo cuando cambia algo).
+model ApiOrderState {
+  orderId   String   @id
+  tenantId  String
+  /// Hash del pedido tal como lo ve la API (sin campos internos que cambian solos).
+  hash      String
+  version   Int      @default(1)
+  /// Cuándo cambió por última vez lo que expone la API.
+  changedAt DateTime
+  cancelled Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, changedAt])
+}
+
+/// API de pedidos: cada cambio publicado (pedido.creado / pedido.actualizado / pedido.cancelado).
+model ApiOrderEvent {
+  id        BigInt   @id @default(autoincrement())
+  tenantId  String
+  orderId   String
+  type      String
+  version   Int
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, id])
+}
+
+/// API de pedidos: hasta dónde se revisaron los pedidos de un comercio.
+model ApiOrderTracker {
+  tenantId     String   @id
+  checkedUntil DateTime
   updatedAt    DateTime @updatedAt
 }

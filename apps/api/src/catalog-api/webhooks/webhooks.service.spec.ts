@@ -56,7 +56,7 @@ function setup(endpointPatch: Record<string, unknown> = {}) {
     $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
   };
   const crypto = { decrypt: () => "whsec_x", encrypt: (s: string) => s };
-  const service = new WebhooksService(prisma as never, crypto as never, {} as never, {} as never);
+  const service = new WebhooksService(prisma as never, crypto as never, {} as never, {} as never, {} as never);
   return { service, updates, notifications };
 }
 

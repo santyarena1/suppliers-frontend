@@ -30,7 +30,8 @@ d("API de catálogo contra Postgres", () => {
   const resolver = new ApiClientResolver(prisma as never);
   const tracker = new ChangeTrackerService(prisma as never, snapshots);
   const changes = new ChangesFeedService(prisma as never, query);
-  const webhooks = new WebhooksService(prisma as never, { encrypt: (s: string) => s, decrypt: (s: string) => s } as never, resolver, changes);
+  const ordersStub = { isAllowedTenant: async () => false, currentEventId: async () => BigInt(0) };
+  const webhooks = new WebhooksService(prisma as never, { encrypt: (s: string) => s, decrypt: (s: string) => s } as never, resolver, changes, ordersStub as never);
 
   async function cleanup() {
     await prisma.apiCatalogEvent.deleteMany({ where: { tenantId: TENANT } });

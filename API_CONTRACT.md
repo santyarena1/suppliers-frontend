@@ -1229,3 +1229,39 @@ Notas por proveedor en `docs/providers/{masnet,microglobal,pc-arts}.md`.
 - **Auth**: Bearer token requerido
 - **Respuesta esperada**: `{ total, items: CatalogSyncRun[] }`. `only=new`: corridas con productos nuevos; `only=error`: con error.
 - **Estado**: IMPLEMENTADO
+
+### [FEATURE] API de pedidos (Sistema TGS → AcuStock) — 2026-11-16
+
+Solo para la organización del Sistema TGS (`testuser1`, `TgsAccessService`) y con
+una key que tenga el permiso nuevo `orders:read`. Cualquier otra organización recibe
+`403 orders_unavailable`; el permiso tampoco se puede dar a otra (`config-input.ts`)
+y la web solo lo muestra si `GET /catalog-api` devuelve `ordersAvailable: true`.
+
+- `GET /v1/pedidos?desde=<ISO>&cursor=&limit=1..100&estado=` → `{ data: Pedido[], meta: { count, hasMore, nextCursor } }`.
+  Ordenados por fecha de cambio (`actualizado`); con `cursor` sigue la página anterior.
+- `GET /v1/pedidos/:id` (id o `NODO-<n>`) → `{ data: Pedido }`.
+- Webhooks (`POST /v1/webhooks`) aceptan `pedido.creado`, `pedido.actualizado`,
+  `pedido.cancelado`. Cada entrega: `{ id: "evt_…", type, createdAt, data: { pedido } }`,
+  firmada igual que las de catálogo (`Nodo-Signature`, `whsec_…`, HMAC SHA-256 de
+  `<timestamp>.<cuerpo>`), con `Nodo-Event-Id` para descartar duplicados y los mismos
+  reintentos. Siempre el pedido completo como está en ese momento.
+
+Cómo se detectan los cambios: `OrdersApiService` revisa cada minuto los
+`ProviderOrder` del comercio con `updatedAt` nuevo, arma el pedido
+(`orders-api/order-payload.ts`) y compara un hash; si cambió algo visible sube
+`version` y deja un `ApiOrderEvent`. La primera revisión registra la historia sin
+avisos. Un intento que falló o se está mandando (`FAILED`/`PENDING`) no se publica.
+
+`Pedido`: `id`, `numero` (`NODO-<n>`, correlativo por comercio, `ProviderOrder.number`),
+`version`, `actualizado`, `estado` (`pendiente_aprobacion | creado | enviado | rechazado |
+cancelado | fallido`), `canal` (`online | offline`), `distribuidor { clave, nombre, cuit }`
+(`cuit` solo si está confirmado: `DISTRIBUTOR_CUIT`), `numero_pedido_distribuidor`,
+`numero_pedido_web_distribuidor`, `fecha`, `creado_por`, `aprobado_por`, `aprobado_en`,
+`motivo_rechazo`, `moneda` (USD), `cotizacion`, `subtotal_neto`, `iva`, `iva_105`, `iva_21`,
+`impuestos_internos`, `percepciones`, `percepciones_detalle[] { concepto, jurisdiccion, monto }`,
+`envio { monto, moneda }`, `total`, `desglose_cuadra`, `entrega { tipo, detalle }`,
+`forma_pago`, `notas`, `seguimiento { etapa, estado_portal, factura, numero_envio,
+transporte, actualizado }`, `renglones[] { codigo_distribuidor, sku, part_number, ean,
+marca, nombre, cantidad, precio_unitario_neto, moneda, iva_porcentaje,
+impuestos_internos { porcentaje, monto }, descuento, total_linea, garantia, producto_nodo }`.
+Lo que el distribuidor no da va en `null` (no se estima).

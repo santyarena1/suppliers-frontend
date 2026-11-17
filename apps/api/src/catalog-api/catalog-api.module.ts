@@ -26,6 +26,9 @@ import { V1FeedsController, V1SyncController } from "./v1/v1-sync.controller";
 import { V1UsageInterceptor } from "./v1/v1-usage.interceptor";
 import { V1WebhooksController } from "./v1/v1-webhooks.controller";
 import { WebhooksService } from "./webhooks/webhooks.service";
+import { OrdersApiService } from "./orders/orders-api.service";
+import { V1OrdersController } from "./v1/v1-orders.controller";
+import { TgsAccessService } from "../tgs/tgs.access";
 
 const SERVICES = [
   ApiClientResolver,
@@ -42,6 +45,8 @@ const SERVICES = [
   ExportService,
   WebhooksService,
   CatalogApiCleanupService,
+  TgsAccessService,
+  OrdersApiService,
 ];
 
 /**
@@ -50,7 +55,7 @@ const SERVICES = [
  */
 @Module({
   imports: [ProvidersModule, TenantsModule, CatalogModule, CryptoModule, PricingCoreModule],
-  controllers: [V1CatalogController, V1SyncController, V1FeedsController, V1WebhooksController, OpenApiController],
+  controllers: [V1CatalogController, V1SyncController, V1FeedsController, V1WebhooksController, V1OrdersController, OpenApiController],
   providers: SERVICES,
   exports: SERVICES,
 })

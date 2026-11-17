@@ -107,12 +107,15 @@ export function parseConfigInput(raw: unknown, current: unknown, validProviders:
   return merged;
 }
 
-export function parseScopes(raw: unknown): CatalogApiScope[] {
+export function parseScopes(raw: unknown, ordersAvailable = false): CatalogApiScope[] {
   if (raw === undefined) return DEFAULT_SCOPES;
   if (!Array.isArray(raw) || raw.length === 0) throw new ConfigInputError(["Elegí al menos un permiso."]);
   const valid = new Set<string>(CATALOG_API_SCOPES);
   const bad = raw.filter((s) => !valid.has(String(s)));
   if (bad.length) throw new ConfigInputError([`Permisos desconocidos: ${bad.join(", ")}.`]);
+  if (!ordersAvailable && raw.some((s) => String(s) === "orders:read")) {
+    throw new ConfigInputError(["El permiso de pedidos todavía no está disponible para tu organización."]);
+  }
   return [...new Set(raw.map(String))] as CatalogApiScope[];
 }
 

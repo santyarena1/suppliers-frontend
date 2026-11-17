@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { catalogApiAdmin } from "@/lib/api";
-import { CATALOG_API_SCOPES, CATALOG_API_SCOPE_LABELS, type ApiClientView, type CatalogApiScope } from "@/lib/catalog-api";
+import { CATALOG_API_SCOPES, CATALOG_API_SCOPE_LABELS, ORDERS_SCOPE, visibleScopes, type ApiClientView, type CatalogApiScope } from "@/lib/catalog-api";
 import { Field, Modal, apiMessage, ghostBtn, inputClass, primaryBtn } from "./ui";
 
 const PRESETS: { key: string; label: string; hint: string; scopes: CatalogApiScope[] }[] = [
   { key: "store", label: "Tienda online", hint: "Lee el catálogo y recibe cambios.", scopes: ["catalog:read", "changes:read", "webhooks:manage"] },
-  { key: "erp", label: "ERP / sistema interno", hint: "Todo, incluido exportar.", scopes: [...CATALOG_API_SCOPES] },
+  { key: "erp", label: "ERP / sistema interno", hint: "Todo, incluido exportar.", scopes: CATALOG_API_SCOPES.filter((s) => s !== ORDERS_SCOPE) },
   { key: "feeds", label: "Google / Meta", hint: "Solo los feeds de producto.", scopes: ["feeds:read"] },
 ];
 
@@ -26,9 +26,11 @@ export function parseIpList(text: string): { ips: string[]; invalid: string[] } 
 export default function CreateClientModal({
   onClose,
   onCreated,
+  ordersAvailable,
 }: {
   onClose: () => void;
   onCreated: (client: ApiClientView, secret: string) => void;
+  ordersAvailable?: boolean;
 }) {
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<CatalogApiScope[]>(PRESETS[0].scopes);
@@ -86,7 +88,7 @@ export default function CreateClientModal({
 
         <Field label="Permisos">
           <div className="flex flex-col gap-1.5">
-            {CATALOG_API_SCOPES.map((s) => (
+            {visibleScopes(ordersAvailable).map((s) => (
               <label key={s} className="flex items-center gap-2 text-xs cursor-pointer">
                 <input
                   type="checkbox"

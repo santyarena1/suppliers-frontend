@@ -252,7 +252,7 @@ export default function DevelopersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {CATALOG_API_SCOPES.map((s) => (
+                    {CATALOG_API_SCOPES.filter((s) => s !== "orders:read").map((s) => (
                       <tr key={s}>
                         <td>
                           <code>{s}</code>

@@ -16,6 +16,7 @@ import { hashSecret, last4, newFeedToken, newPublicKey, newSecret } from "../aut
 import { CatalogSnapshotService } from "../core/catalog-snapshot.service";
 import { docsUrl, publicApiUrl } from "../core/public-urls";
 import { WebhooksService } from "../webhooks/webhooks.service";
+import { TgsAccessService } from "../../tgs/tgs.access";
 import { ConfigInputError, parseConfigInput, parseIpAllowlist, parseScopes } from "./config-input";
 
 export const MAX_KEYS_PER_TENANT = 20;
@@ -71,8 +72,14 @@ export class CatalogApiManageService {
     private readonly visibility: TenantVisibilityService,
     private readonly resolver: ApiClientResolver,
     private readonly webhooks: WebhooksService,
-    private readonly snapshots: CatalogSnapshotService
+    private readonly snapshots: CatalogSnapshotService,
+    private readonly tgs: TgsAccessService
   ) {}
+
+  /** Pedidos por la API: por ahora solo la organización del Sistema TGS. */
+  async ordersAvailable(tenantId: string): Promise<boolean> {
+    return (await this.tgs.allowedTenantId()) === tenantId;
+  }
 
   canManage(tenant: TenantContext): boolean {
     return tenant.tenantType === "RETAILER" && (tenant.tenantRole === "OWNER" || hasPermission(tenant, "integrations.manage"));
@@ -100,6 +107,7 @@ export class CatalogApiManageService {
       providers,
       docsUrl: docsUrl(),
       baseUrl: publicApiUrl(),
+      ordersAvailable: await this.ordersAvailable(tenant.tenantId),
     };
   }
 
@@ -278,6 +286,7 @@ export class CatalogApiManageService {
   private async parse(tenant: TenantContext, input: ClientInput, current: ApiClient | null) {
     try {
       const providers = (await this.connectedProviders(tenant)).map((p) => p.key);
+      const ordersOk = await this.ordersAvailable(tenant.tenantId);
       // Una key vieja puede tener un distribuidor que después se desconectó: se tolera lo que ya tenía.
       const known = [...new Set([...providers, ...resolveApiClientConfig(current?.config).providers.keys])];
       const name = input.name === undefined ? undefined : String(input.name).trim().slice(0, 80);
@@ -292,7 +301,7 @@ export class CatalogApiManageService {
       return {
         name,
         config: parseConfigInput(input.config, current?.config ?? null, known),
-        scopes: input.scopes === undefined && current ? (current.scopes as CatalogApiScope[]) : parseScopes(input.scopes),
+        scopes: input.scopes === undefined && current ? (current.scopes as CatalogApiScope[]) : parseScopes(input.scopes, ordersOk),
         ipAllowlist: input.ipAllowlist === undefined && current ? current.ipAllowlist : parseIpAllowlist(input.ipAllowlist),
         expiresAt,
       };

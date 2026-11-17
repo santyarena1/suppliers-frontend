@@ -172,6 +172,7 @@ export default function CatalogApiPage() {
                           client={c}
                           providers={data.providers}
                           canManage={data.canManage}
+                          ordersAvailable={data.ordersAvailable}
                           defaultOpen={i === 0 && active.length === 1}
                           onChange={replaceClient}
                           onMessage={onMessage}
@@ -187,7 +188,7 @@ export default function CatalogApiPage() {
                         {showRevoked && (
                           <div className="mt-3 flex flex-col gap-3">
                             {revoked.map((c) => (
-                              <ClientCard key={c.id} client={c} providers={data.providers} canManage={data.canManage} onChange={replaceClient} onMessage={onMessage} />
+                              <ClientCard key={c.id} client={c} providers={data.providers} canManage={data.canManage} ordersAvailable={data.ordersAvailable} onChange={replaceClient} onMessage={onMessage} />
                             ))}
                           </div>
                         )}
@@ -213,6 +214,7 @@ export default function CatalogApiPage() {
       {creating && (
         <CreateClientModal
           onClose={() => setCreating(false)}
+          ordersAvailable={data?.ordersAvailable}
           onCreated={(client, secret) => {
             setCreating(false);
             setData((prev) => (prev ? { ...prev, clients: [client, ...prev.clients] } : prev));

@@ -9,8 +9,17 @@ export const CATALOG_API_SCOPES = [
   "export:read",
   "feeds:read",
   "webhooks:manage",
+  "orders:read",
 ] as const;
 export type CatalogApiScope = (typeof CATALOG_API_SCOPES)[number];
+
+/** Pedidos: por ahora solo para The Gamer Shop (`ordersAvailable` en el resumen). */
+export const ORDERS_SCOPE: CatalogApiScope = "orders:read";
+
+/** Los permisos que se ofrecen en pantalla para esta organización. */
+export function visibleScopes(ordersAvailable: boolean | undefined): CatalogApiScope[] {
+  return CATALOG_API_SCOPES.filter((s) => s !== ORDERS_SCOPE || ordersAvailable);
+}
 
 export const CATALOG_API_SCOPE_LABELS: Record<CatalogApiScope, string> = {
   "catalog:read": "Leer productos, ofertas y taxonomía",
@@ -18,6 +27,7 @@ export const CATALOG_API_SCOPE_LABELS: Record<CatalogApiScope, string> = {
   "export:read": "Exportar el catálogo (CSV, XLSX, JSON)",
   "feeds:read": "Feeds de Google Merchant y Meta",
   "webhooks:manage": "Administrar webhooks por API",
+  "orders:read": "Leer pedidos y recibir sus avisos (solo The Gamer Shop)",
 };
 
 export const CATALOG_API_WEBHOOK_EVENTS = [
@@ -174,4 +184,6 @@ export interface CatalogApiOverview {
   providers: { key: string; label: string }[];
   docsUrl: string;
   baseUrl: string;
+  /** La organización puede leer pedidos por la API (hoy, solo The Gamer Shop). */
+  ordersAvailable?: boolean;
 }

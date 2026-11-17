@@ -10,12 +10,14 @@ import { ApiKeyGuard } from "../auth/api-key.guard";
 import { ApiScopes, CurrentApiClient, type ApiPrincipal } from "../auth/api-principal";
 import { ApiError, Errors } from "../core/api-error";
 import { WebhooksService } from "../webhooks/webhooks.service";
+import { ORDER_WEBHOOK_EVENTS } from "../orders/orders-api.service";
 import { WebhookSchema } from "./dto/schemas";
 import { CommonErrors } from "./v1-catalog.controller";
 import { V1ExceptionFilter } from "./v1-exception.filter";
 import { V1UsageInterceptor } from "./v1-usage.interceptor";
 
-const EVENTS = CATALOG_API_WEBHOOK_EVENTS as unknown as string[];
+/** Los de pedidos solo los acepta una key con `orders:read` de la organización habilitada. */
+const EVENTS = [...CATALOG_API_WEBHOOK_EVENTS, ...ORDER_WEBHOOK_EVENTS] as unknown as string[];
 
 export class CreateWebhookDto {
   @ApiProperty({ example: "https://mi-tienda.com/webhooks/nodo", description: "https obligatorio." })
