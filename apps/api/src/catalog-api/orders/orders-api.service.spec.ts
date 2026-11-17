@@ -108,15 +108,20 @@ describe("revisión de pedidos para la API", () => {
     await service.refresh("tgs", new Date("2026-11-16T10:09:00Z"));
     expect(events).toHaveLength(1);
 
-    // El portal lo facturó: avisa con versión 2.
+    // El portal lo facturó: pedido.facturado con versión 2.
     Object.assign(orders[0], { trackingStage: "INVOICED", trackingInvoice: "A-0001-00001234", updatedAt: new Date("2026-11-16T10:10:00Z") });
     await service.refresh("tgs", new Date("2026-11-16T10:11:00Z"));
-    expect(events.at(-1)).toMatchObject({ orderId: "a", type: "pedido.actualizado", version: 2 });
+    expect(events.at(-1)).toMatchObject({ orderId: "a", type: "pedido.facturado", version: 2 });
+
+    // Después, un cambio de etapa ya no repite el aviso de factura.
+    Object.assign(orders[0], { trackingStage: "SHIPPED", updatedAt: new Date("2026-11-16T10:11:30Z") });
+    await service.refresh("tgs", new Date("2026-11-16T10:11:40Z"));
+    expect(events.at(-1)).toMatchObject({ orderId: "a", type: "pedido.actualizado" });
 
     // El portal lo anuló: pedido.cancelado.
     Object.assign(orders[0], { trackingStage: "CANCELLED", updatedAt: new Date("2026-11-16T10:12:00Z") });
     await service.refresh("tgs", new Date("2026-11-16T10:13:00Z"));
-    expect(events.at(-1)).toMatchObject({ orderId: "a", type: "pedido.cancelado", version: 3 });
+    expect(events.at(-1)).toMatchObject({ orderId: "a", type: "pedido.cancelado", version: 4 });
   });
 
   it("un intento de compra que falló no se publica ni se numera", async () => {

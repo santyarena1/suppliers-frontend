@@ -1,4 +1,4 @@
-import { buildOrderPayload, distributorCuit, isPublishable, orderState, payloadHash, validCuit, type OrderRow } from "./order-payload";
+import { buildOrderPayload, distributorCuit, parseInvoiceNumber, isPublishable, orderState, payloadHash, validCuit, type OrderRow } from "./order-payload";
 
 const base = (over: Partial<OrderRow>): OrderRow => ({
   id: "o1",
@@ -211,5 +211,23 @@ describe("CUIT", () => {
     expect(validCuit("30-70933244-4")).toBe(false);
     expect(distributorCuit("GRUPO_NUCLEO")).toBe("30-70933244-5");
     expect(distributorCuit("ELIT")).toBeNull();
+  });
+});
+
+describe("factura", () => {
+  it("separa tipo, punto de venta y número cuando el portal da el número fiscal", () => {
+    expect(parseInvoiceNumber("A 0003-00018422")).toEqual({ tipo: "A", punto_venta: 3, numero: 18422 });
+    expect(parseInvoiceNumber("B-0001-00000009")).toEqual({ tipo: "B", punto_venta: 1, numero: 9 });
+    expect(parseInvoiceNumber("2000240284")).toEqual({ tipo: null, punto_venta: null, numero: null });
+    expect(parseInvoiceNumber("  ")).toBeNull();
+  });
+
+  it("sale en el pedido con la fecha en que NODO la vio", () => {
+    const p = buildOrderPayload(
+      base({ trackingStage: "INVOICED", trackingInvoice: "A 0003-00018422", trackingHistory: [{ stage: "SENT", at: "2026-11-16T12:00:00.000Z" }, { stage: "INVOICED", at: "2026-11-17T09:00:00.000Z" }] }),
+      ctx()
+    );
+    expect(p.factura).toEqual({ numero_portal: "A 0003-00018422", tipo: "A", punto_venta: 3, numero: 18422, fecha: "2026-11-17T09:00:00.000Z" });
+    expect(buildOrderPayload(base({}), ctx()).factura).toBeNull();
   });
 });

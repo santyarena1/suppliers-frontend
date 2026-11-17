@@ -3215,6 +3215,8 @@ model ApiOrderState {
   /// Cuándo cambió por última vez lo que expone la API.
   changedAt DateTime
   cancelled Boolean  @default(false)
+  /// Ya se avisó la factura (pedido.facturado sale una sola vez).
+  invoiced  Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([tenantId, changedAt])

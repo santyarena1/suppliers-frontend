@@ -1265,3 +1265,11 @@ transporte, actualizado }`, `renglones[] { codigo_distribuidor, sku, part_number
 marca, nombre, cantidad, precio_unitario_neto, moneda, iva_porcentaje,
 impuestos_internos { porcentaje, monto }, descuento, total_linea, garantia, producto_nodo }`.
 Lo que el distribuidor no da va en `null` (no se estima).
+
+**2026-11-17 — etapa 1b y factura.** Los pedidos nuevos guardan envío y % de
+percepción (Invid), envío (Solution Box), cotización y etiqueta de percepción
+(New Bytes) y cada percepción (Elit); salen en `envio`, `cotizacion` y
+`percepciones_detalle`. Nuevo campo `factura { numero_portal, tipo, punto_venta,
+numero, fecha }` desde el seguimiento (tipo/punto/número solo si el portal da el
+número fiscal; Elit da un número interno) y aviso `pedido.facturado`, una sola vez
+por pedido (`ApiOrderState.invoiced`). CAE y PDF todavía no.

@@ -20,7 +20,7 @@ import { ApiError, Errors } from "../core/api-error";
 import { CatalogSnapshotService } from "../core/catalog-snapshot.service";
 import { cleanGtin, groupKeyFor, productIdFor } from "../core/ids";
 
-export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado"] as const;
+export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado", "pedido.facturado"] as const;
 export type OrderWebhookEvent = (typeof ORDER_WEBHOOK_EVENTS)[number];
 
 /** Se vuelve a mirar un rato hacia atrás: un pedido guardado justo al cortar no se pierde. */
@@ -59,6 +59,7 @@ const ORDER_SELECT = {
   trackingNumber: true,
   trackingCarrier: true,
   trackingChangedAt: true,
+  trackingHistory: true,
   createdAt: true,
   updatedAt: true,
   createdBy: { select: { id: true, username: true } },
@@ -180,24 +181,26 @@ export class OrdersApiService {
     const hash = payloadHash(this.payloadOf(row, { version: 1, changedAt: ctx.now, facts: new Map(), names: ctx.names }));
     if (state && state.hash === hash) return 0;
     const cancelled = orderState(row) === "cancelado";
+    const invoiced = Boolean(row.trackingInvoice?.trim());
 
     if (!state) {
       const changedAt = ctx.firstRun ? order.updatedAt : ctx.now;
       if (ctx.firstRun) {
-        await this.prisma.apiOrderState.create({ data: { orderId: order.id, tenantId: order.tenantId, hash, version: 1, changedAt, cancelled } });
+        await this.prisma.apiOrderState.create({ data: { orderId: order.id, tenantId: order.tenantId, hash, version: 1, changedAt, cancelled, invoiced } });
         return 0;
       }
       await this.prisma.$transaction([
-        this.prisma.apiOrderState.create({ data: { orderId: order.id, tenantId: order.tenantId, hash, version: 1, changedAt, cancelled } }),
+        this.prisma.apiOrderState.create({ data: { orderId: order.id, tenantId: order.tenantId, hash, version: 1, changedAt, cancelled, invoiced } }),
         this.prisma.apiOrderEvent.create({ data: { tenantId: order.tenantId, orderId: order.id, type: "pedido.creado", version: 1 } }),
       ]);
       return 1;
     }
 
     const version = state.version + 1;
-    const type: OrderWebhookEvent = cancelled && !state.cancelled ? "pedido.cancelado" : "pedido.actualizado";
+    const type: OrderWebhookEvent =
+      cancelled && !state.cancelled ? "pedido.cancelado" : invoiced && !state.invoiced ? "pedido.facturado" : "pedido.actualizado";
     await this.prisma.$transaction([
-      this.prisma.apiOrderState.update({ where: { orderId: order.id }, data: { hash, version, changedAt: ctx.now, cancelled } }),
+      this.prisma.apiOrderState.update({ where: { orderId: order.id }, data: { hash, version, changedAt: ctx.now, cancelled, invoiced } }),
       this.prisma.apiOrderEvent.create({ data: { tenantId: order.tenantId, orderId: order.id, type, version } }),
     ]);
     return 1;

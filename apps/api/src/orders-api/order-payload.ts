@@ -42,6 +42,7 @@ export interface OrderRow {
   trackingNumber: string | null;
   trackingCarrier: string | null;
   trackingChangedAt: Date | null;
+  trackingHistory?: unknown;
   createdAt: Date;
   createdBy: { id: string; username: string } | null;
   approvedBy: { id: string; username: string } | null;
@@ -116,6 +117,14 @@ export interface OrderPayload {
   entrega: { tipo: string | null; detalle: string | null };
   forma_pago: string | null;
   notas: string | null;
+  /** Factura que informó el portal (seguimiento). CAE y PDF todavía no se guardan. */
+  factura: {
+    numero_portal: string;
+    tipo: string | null;
+    punto_venta: number | null;
+    numero: number | null;
+    fecha: string | null;
+  } | null;
   seguimiento: {
     etapa: string | null;
     estado_portal: string | null;
@@ -497,6 +506,11 @@ export function buildOrderPayload(
     entrega: { tipo: text(o.deliveryOption), detalle: text(o.deliveryLabel) },
     forma_pago: text(o.paymentLabel) ?? (o.paymentOption && o.paymentOption !== "OFFLINE" ? text(o.paymentOption) : null),
     notas: text(o.notes),
+    factura: (() => {
+      const parsed = parseInvoiceNumber(o.trackingInvoice);
+      if (!parsed || !o.trackingInvoice) return null;
+      return { numero_portal: o.trackingInvoice.trim(), ...parsed, fecha: invoicedAt(o.trackingHistory) };
+    })(),
     seguimiento: tracked
       ? {
           etapa: text(o.trackingStage),
@@ -509,6 +523,27 @@ export function buildOrderPayload(
       : null,
     renglones: lines,
   };
+}
+
+/**
+ * Número de factura tal como lo escribe el portal. Con formato fiscal
+ * ("A 0003-00018422", "B-0001-00000009") se separa tipo, punto de venta y número;
+ * un número interno del distribuidor (Elit: "2000240284") queda solo como está.
+ */
+export function parseInvoiceNumber(raw: string | null | undefined): { tipo: string | null; punto_venta: number | null; numero: number | null } | null {
+  const t = text(raw);
+  if (!t) return null;
+  const m = /^(?:fc|fac|factura)?\s*([ABCEM])\s*[-\s]?\s*(\d{1,5})\s*-\s*(\d{1,8})$/i.exec(t);
+  if (!m) return { tipo: null, punto_venta: null, numero: null };
+  return { tipo: m[1].toUpperCase(), punto_venta: Number(m[2]), numero: Number(m[3]) };
+}
+
+function invoicedAt(history: unknown): string | null {
+  for (const h of Array.isArray(history) ? history : []) {
+    const r = rec(h);
+    if (r.stage === "INVOICED" && typeof r.at === "string") return r.at;
+  }
+  return null;
 }
 
 /** Hash de lo que importa a quien lee: sin la versión ni la fecha de cambio (las pone la API). */
