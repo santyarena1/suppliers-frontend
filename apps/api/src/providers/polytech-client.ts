@@ -392,6 +392,11 @@ export class PolytechClient {
     return out;
   }
 
+  /** Respuesta cruda de historial y detalle (solo lectura; para ver qué campos publica Polytech). */
+  async rawRead(path: "/orders/history" | "/orders/detail", body: Record<string, string> = {}): Promise<unknown> {
+    return this.post(path, body);
+  }
+
   async orderDetail(input: { stateId?: string; salesOrderId?: string }): Promise<PolytechDetailLine[]> {
     const body: Record<string, string> = {};
     if (input.stateId) body.state_id = input.stateId;

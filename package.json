@@ -13,5 +13,10 @@
     "build:api": "pnpm build:shared && pnpm --filter @nodo/api build",
     "test:api": "pnpm build:shared && pnpm --filter @nodo/api prisma:generate && pnpm --filter @nodo/api test",
     "lint:web": "pnpm --filter @nodo/web lint"
+  },
+  "pnpm": {
+    "neverBuiltDependencies": [
+      "canvas"
+    ]
   }
 }

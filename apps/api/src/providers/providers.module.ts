@@ -42,6 +42,8 @@ import { OrderApprovalService } from "../orders/order-approval.service";
 import { AccountPortalCache } from "./account-portal-cache";
 import { PricingCoreModule } from "../pricing/pricing-core.module";
 import { OrderTrackingService } from "./order-tracking.service";
+import { OrderDocumentsProbe } from "./order-documents.probe";
+import { TgsAccessService } from "../tgs/tgs.access";
 import { OrderTrackingScheduler } from "./order-tracking.scheduler";
 
 @Module({
@@ -85,6 +87,8 @@ import { OrderTrackingScheduler } from "./order-tracking.scheduler";
     OrderApprovalService,
     OrderTrackingService,
     OrderTrackingScheduler,
+    TgsAccessService,
+    OrderDocumentsProbe,
   ],
   exports: [
     ProvidersService,
