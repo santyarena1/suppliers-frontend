@@ -185,6 +185,7 @@ export class OrderDocumentsService {
           const cands = await withTimeout(this.candidates(provider, tenantId, creds, list, since), 4 * 60_000);
           res.candidates = cands.length;
           const pending = await this.pending(tenantId, provider, cands);
+          res.linked += await this.relinkFromLines(tenantId, provider, list);
           // Un tope por distribuidor: la historia de uno no frena al resto.
           let left = Math.min(budget, PER_PROVIDER_PER_RUN);
           for (const item of pending.lines) {
@@ -207,7 +208,7 @@ export class OrderDocumentsService {
           this.log.warn(`Facturas ${provider}: ${err instanceof Error ? err.message : String(err)}`);
         }
         out.push(res);
-        if (res.saved || res.errors || res.lines) {
+        if (res.saved || res.errors || res.lines || res.linked) {
           this.log.log(`Facturas ${provider}: ${res.saved} guardados (${res.linked} unidos a un pedido), ${res.errors} con error, ${res.lines} con renglones completados, ${res.candidates} en el portal`);
         }
       }
@@ -316,7 +317,7 @@ export class OrderDocumentsService {
           const voucherUrl = String(v.voucherUrl);
           const nbLinesOf = async () => {
             const data = await fetchNbVoucher(voucherUrl);
-            return nbInvoiceLines(data.detalle, data.kits, nbFiscal(data).fiscal.moneda);
+            return this.noteIgnored("NEW_BYTES", nbInvoiceLines(data.detalle, data.kits, nbFiscal(data).fiscal.moneda));
           };
           out.push({
             orderId: null,
@@ -409,6 +410,32 @@ export class OrderDocumentsService {
       else if (d.assetId && !d.linesFetchedAt && d.kind !== "REMITO" && c.lines) lines.push({ c, id: d.id, assetId: d.assetId });
     }
     return { fetch: out, lines };
+  }
+
+  /**
+   * New Bytes y Air: vuelve a buscar el pedido de los comprobantes sueltos que ya
+   * tienen renglones (la regla de unión cambió, o el pedido llegó después). Sin ir al portal.
+   */
+  private async relinkFromLines(tenantId: string, provider: string, orders: OrderRef[]): Promise<number> {
+    if (provider !== "NEW_BYTES" && provider !== "AIR") return 0;
+    const loose = await this.prisma.providerOrderDocument.findMany({
+      where: { tenantId, provider, orderId: null, linesFetchedAt: { not: null }, kind: { in: ["FACTURA", "NOTA_DEBITO"] } },
+      select: { id: true, lines: true, fechaEmision: true },
+      take: 500,
+    });
+    if (loose.length === 0) return 0;
+    const byLines: OrderLines[] = orders.map((o) => ({ id: o.id, createdAt: o.createdAt, lines: orderLines(o.items) }));
+    let linked = 0;
+    for (const d of loose) {
+      const lines: Lines = new Map();
+      for (const l of Array.isArray(d.lines) ? (d.lines as { codigo?: string; cantidad?: number }[]) : []) addLine(lines, l.codigo, l.cantidad);
+      if (lines.size === 0) continue;
+      const m = matchByLines({ lines, date: parseDay(d.fechaEmision) }, byLines, { ignore: IGNORED_CODES[provider] });
+      if (!m.orderId) continue;
+      await this.prisma.providerOrderDocument.update({ where: { id: d.id }, data: { orderId: m.orderId, link: linkLabel(m.how) } });
+      linked++;
+    }
+    return linked;
   }
 
   /** Completa los renglones de un comprobante ya guardado (el PDF se lee de NODO, no del portal). */

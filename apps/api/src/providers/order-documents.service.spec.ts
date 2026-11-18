@@ -35,7 +35,9 @@ function setup() {
       ]),
     },
     providerOrderDocument: {
-      findMany: jest.fn(async (a: { where: { provider: string; portalRef: { in: string[] } } }) => docs.filter((d) => d.provider === a.where.provider && a.where.portalRef.in.includes(d.portalRef as string))),
+      findMany: jest.fn(async (a: { where: { provider: string; portalRef?: { in: string[] }; orderId?: null } }) =>
+        docs.filter((d) => d.provider === a.where.provider && (a.where.portalRef ? a.where.portalRef.in.includes(d.portalRef as string) : d.orderId == null && d.linesFetchedAt != null))
+      ),
       findFirst: jest.fn(async (a: { where: { provider: string; portalRef: string } }) => docs.find((d) => d.provider === a.where.provider && d.portalRef === a.where.portalRef) ?? null),
       create: jest.fn(async (a: { data: Record<string, unknown> }) => docs.push({ id: `d${docs.length + 1}`, ...a.data })),
       update: jest.fn(async (a: { where: { id: string }; data: Record<string, unknown> }) => Object.assign(docs.find((d) => d.id === a.where.id)!, a.data)),
@@ -107,9 +109,12 @@ describe("facturas y remitos desde los portales", () => {
     expect(assets.every((a) => a.isPrivate === true && a.ownerTenantId === "tgs" && a.mimeType === "application/pdf")).toBe(true);
     expect(docs.find((d) => d.provider === "SOLUTION_BOX")).toMatchObject({ fetchError: "el portal devolvió el archivo vacío", orderId: "o2" });
 
+    // Una factura suelta ya guardada con renglones: se vuelve a buscar su pedido sin ir al portal (parcial de NODO-o3).
+    docs.push({ id: 'suelta', tenantId: 'tgs', provider: 'NEW_BYTES', portalRef: 'NB|99', orderId: null, kind: 'FACTURA', linesFetchedAt: new Date(), fechaEmision: '2026-11-15', lines: [{ codigo: '119024', cantidad: 1 }, { codigo: '102048', cantidad: 1 }] });
     // Segunda vuelta: lo guardado no se vuelve a bajar y el error espera 6 horas.
     const again = await service.sync("tgs", new Date("2026-11-18T12:30:00Z"));
     expect(again.map((r) => r.saved + r.errors)).toEqual([0, 0, 0]);
     expect(solutionBox.getInvoice).toHaveBeenCalledTimes(1);
+    expect(docs.find((d) => d.id === "suelta")).toMatchObject({ orderId: "o3", link: "factura parcial del pedido" });
   });
 });
