@@ -57,6 +57,7 @@ interface DocResult {
   nombraPedidos: number;
   textLen?: number;
   qrCuit?: string | null;
+  qrKeys?: string | null;
   lineas?: string[];
   imagenes?: string[];
   error?: string;
@@ -105,6 +106,7 @@ function qrField(url: string | undefined, key: string): string | null {
     if (!url) return null;
     const p = new URL(url).searchParams.get("p") ?? "";
     const j = JSON.parse(Buffer.from(p.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")) as Record<string, unknown>;
+    if (key === "*") return Object.keys(j).join(",");
     return j[key] == null ? null : `${typeof j[key]}:${String(j[key])}`;
   } catch {
     return null;
@@ -254,6 +256,11 @@ export class OrderDocumentsProbe {
   }
 
   /** Cómo pide los datos el visor de New Bytes (createPDF) y qué responde la API de lio.red (solo claves). */
+  private nbNumbers: string[] = [];
+  private nbMentions(body: string): string {
+    return mentionedNumbers(body, this.nbNumbers).length + "/" + this.nbNumbers.length;
+  }
+
   private async nbViewerData(url: unknown): Promise<Record<string, unknown>> {
     try {
       if (typeof url !== "string" || !url) return { error: "sin url" };
@@ -282,11 +289,14 @@ export class OrderDocumentsProbe {
         try {
           const j = JSON.parse(body) as Record<string, unknown>;
           const d = (j.data ?? j) as Record<string, unknown>;
-          keys = `${Object.keys(j).join(",")} / data: ${Object.keys(d).join(",")} / cabecera: ${Object.keys((d.cabecera ?? {}) as object).join(",")} / recursos: ${Object.keys((d.recursos ?? {}) as object).join(",")}`;
+          const sub = (o: unknown) => (o && typeof o === "object" ? (Array.isArray(o) ? `[${o.length}] ${Object.keys((o[0] ?? {}) as object).join(",")}` : Object.entries(o as Record<string, unknown>).map(([k, v]) => `${k}:${v == null ? "null" : typeof v === "object" ? "{…}" : typeof v === "string" && v.length > 40 ? `str(${v.slice(0, 40)}…)` : `${typeof v}`}`).join(",")) : String(o));
+          const cab = (d.cabecera ?? {}) as Record<string, unknown>;
+          keys = `pie: ${sub(d.pie)} || totales: ${sub(d.totales)} || detalle: ${sub(d.detalle)} || cliente: ${Object.keys((d.cliente ?? {}) as object).join(",")} || kits: ${sub(d.kits)} || qr: ${String(((d.recursos ?? {}) as Record<string, unknown>).qr ?? "").slice(0, 70)} || cab: ${["letraComprobante", "codigoComprobante", "tipoComprobante", "numeroComprobante", "numeroPuntoVenta", "fechaComprobante", "cuitEmpresa", "tipoCmp"].map((k) => `${k}=${String(cab[k] ?? "")}`).join(" ")} || nombraPedidos: ${this.nbMentions(body)}`;
         } catch {
           keys = body.slice(0, 80).replace(/\s+/g, " ");
         }
-        tries.push(`${g.replace(token, "…")} → ${r.status} ${r.headers.get("content-type") ?? ""} ${keys}`.slice(0, 700));
+        tries.push(`${g.replace(token, "…")} → ${r.status} ${r.headers.get("content-type") ?? ""} ${keys}`.slice(0, 2500));
+        if (r.ok) break;
       }
       return { code: code.slice(0, 8), tries };
     } catch (err) {
@@ -421,7 +431,7 @@ export class OrderDocumentsProbe {
           ejemploFacturaEnPedidos: [...ord.orders, ...pur.orders].map((o) => o.invoice).filter((x) => x && String(x).trim() && String(x).trim() !== "-").slice(0, 6),
           pedidosNodoEnPortal: [...ord.orders, ...pur.orders].filter((o) => orderOf([o.orderNumber, o.webOrderNumber, o.albNumber])).length,
           visor: await this.nbViewerCode(vouchers[0]?.voucherUrl),
-          visorDatos: await this.nbViewerData(vouchers[0]?.voucherUrl),
+          visorDatos: await ((this.nbNumbers = [...ord.orders, ...pur.orders].flatMap((o) => [o.orderNumber, o.webOrderNumber, o.albNumber]).filter((x): x is string => !!x)), this.nbViewerData(vouchers[0]?.voucherUrl)),
         };
         for (const r of [...ord.orders, ...pur.orders]) {
           const nodo = orderOf([r.orderNumber, r.webOrderNumber, r.albNumber]);
@@ -588,6 +598,7 @@ export class OrderDocumentsProbe {
           nombraPedidos: mentionedNumbers(a.text, allNumbers).length,
           textLen: a.text.length,
           qrCuit: qrField(a.qrUrls[0], "cuit"),
+          qrKeys: qrField(a.qrUrls[0], "*"),
           lineas: a.origen === "qr" ? undefined : fiscalLines(a.text),
           imagenes: a.qrFrom ? undefined : a.images.slice(0, 6),
           error: a.error ?? (a.isPdf ? undefined : `no es PDF (${buf.length} bytes, empieza «${buf.toString("utf8", 0, 30).replace(/\s+/g, " ")}»)`),
