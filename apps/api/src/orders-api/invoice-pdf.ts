@@ -153,35 +153,51 @@ async function pageImages(page: PdfPage): Promise<PdfImage[]> {
   return [...out.filter(square), ...out.filter((i) => !square(i))];
 }
 
-/** Pasa la imagen de pdf.js a RGBA, con margen blanco y agrandada si es chica, y prueba jsQR. */
+/**
+ * Busca un QR en una imagen de pdf.js. Primero la imagen entera (con margen
+ * blanco, agrandada si es chica o achicada si es enorme); si es una página
+ * escaneada, después por partes superpuestas a resolución completa (en una
+ * hoja entera el QR queda muy chico para leerlo de una).
+ */
 export function decodeQr(img: PdfImage): string | null {
-  let rgba = toRgba(img);
+  const rgba = toRgba(img);
   if (!rgba) return null;
-  // Una página escaneada entera: se achica para que jsQR no tarde una eternidad.
-  const big = Math.max(img.width, img.height);
-  if (big > 1800) {
-    const k = Math.ceil(big / 1800);
-    const w2 = Math.floor(img.width / k);
-    const h2 = Math.floor(img.height / k);
-    const small = new Uint8ClampedArray(w2 * h2 * 4);
-    for (let y = 0; y < h2; y++) for (let x = 0; x < w2; x++) small.set(rgba.subarray(((y * k) * img.width + x * k) * 4, ((y * k) * img.width + x * k) * 4 + 4), (y * w2 + x) * 4);
-    rgba = small;
-    img = { ...img, width: w2, height: h2, kind: pdfjs.ImageKind.RGBA_32BPP };
+  const W = img.width;
+  const H = img.height;
+  const big = Math.max(W, H);
+  const whole = scanRegion(rgba, W, 0, 0, W, H, big > 1800 ? Math.ceil(big / 1800) : 1);
+  if (whole || big <= 600) return whole;
+  const tile = 640;
+  const step = 320;
+  for (let y0 = 0; y0 < H; y0 += step) {
+    for (let x0 = 0; x0 < W; x0 += step) {
+      const hit = scanRegion(rgba, W, x0, y0, Math.min(tile, W - x0), Math.min(tile, H - y0), 1);
+      if (hit) return hit;
+      if (x0 + tile >= W) break;
+    }
+    if (y0 + tile >= H) break;
   }
-  const scale = Math.max(1, Math.min(8, Math.ceil(240 / Math.max(img.width, img.height))));
+  return null;
+}
+
+/** Un recorte (x0, y0, rw × rh) de la imagen, muestreado cada `k` píxeles, con margen y agrandado si queda chico. */
+function scanRegion(rgba: Uint8ClampedArray, W: number, x0: number, y0: number, rw: number, rh: number, k: number): string | null {
+  const iw = Math.floor(rw / k);
+  const ih = Math.floor(rh / k);
+  if (iw < 21 || ih < 21) return null;
+  const scale = Math.max(1, Math.min(8, Math.ceil(240 / Math.max(iw, ih))));
   const pad = 4 * scale;
-  const w = img.width * scale + pad * 2;
-  const h = img.height * scale + pad * 2;
+  const w = iw * scale + pad * 2;
+  const h = ih * scale + pad * 2;
   const out = new Uint8ClampedArray(w * h * 4).fill(255);
-  for (let y = 0; y < img.height * scale; y++) {
-    const sy = Math.floor(y / scale);
-    for (let x = 0; x < img.width * scale; x++) {
-      const s = (sy * img.width + Math.floor(x / scale)) * 4;
+  for (let y = 0; y < ih * scale; y++) {
+    const sy = y0 + Math.floor(y / scale) * k;
+    for (let x = 0; x < iw * scale; x++) {
+      const s = (sy * W + x0 + Math.floor(x / scale) * k) * 4;
       const d = ((y + pad) * w + x + pad) * 4;
       out[d] = rgba[s];
       out[d + 1] = rgba[s + 1];
       out[d + 2] = rgba[s + 2];
-      out[d + 3] = 255;
     }
   }
   const hit = jsQR(out, w, h, { inversionAttempts: "attemptBoth" });

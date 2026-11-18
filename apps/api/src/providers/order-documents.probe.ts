@@ -184,6 +184,54 @@ export class OrderDocumentsProbe {
     }
   }
 
+  /** La página pública del comprobante de New Bytes (lio.red): scripts y rutas que suenan a PDF o API. */
+  private async nbVoucherPage(url: unknown): Promise<Record<string, unknown>> {
+    try {
+      if (typeof url !== "string" || !url) return { error: "sin url" };
+      const page = new URL(url);
+      const res = await fetch(page, { redirect: "manual" });
+      const html = await res.text();
+      const srcs = [...html.matchAll(/<(?:script|link)\b[^>]*(?:src|href)="([^"]+)"/gi)].map((m) => m[1]).slice(0, 15);
+      const inline = [...html.matchAll(/["'`](\/?[\w./-]*(?:api|pdf|download|voucher|comprobante)[\w./?=&-]*)["'`]/gi)].map((m) => m[1]).slice(0, 20);
+      const hits = new Set<string>();
+      for (const src of srcs.filter((x) => /\.js(\?|$)/.test(x)).slice(0, 6)) {
+        const js = await fetch(new URL(src, page)).then((r) => r.text()).catch(() => "");
+        for (const m of js.slice(0, 3_000_000).matchAll(/["'`]([^"'`\s]{0,80}(?:\/api\/|pdf|download|\/voucher)[^"'`\s]{0,80})["'`]/gi)) {
+          hits.add(m[1]);
+          if (hits.size >= 30) break;
+        }
+      }
+      return { status: res.status, path: page.pathname.replace(/[0-9a-f]{16,}/gi, "…"), srcs, inline, enJs: [...hits] };
+    } catch (err) {
+      return { error: (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+    }
+  }
+
+  /** Scripts de la página de comprobantes de Air y las rutas .php que llaman. */
+  private async airScripts(creds: Record<string, string>): Promise<Record<string, unknown>> {
+    try {
+      const api = await AirPortalClient.login(creds);
+      const base = `${AIR_COMPROBANTES_URL}?t=250213`;
+      const html = await api.getText(base);
+      const srcs = [...html.matchAll(/<script\b[^>]*src="([^"]+)"/gi)].map((m) => m[1]).slice(0, 12);
+      const inlineJs = [...html.matchAll(/<script\b(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).join("\n");
+      const php = new Set<string>();
+      const collect = (js: string) => {
+        for (const m of js.matchAll(/["'`]([^"'`\s]{0,100}\.php[^"'`\s]{0,100})["'`]/gi)) php.add(m[1]);
+      };
+      collect(inlineJs);
+      for (const src of srcs.slice(0, 8)) {
+        const u = new URL(src, base);
+        if (!/air-intra\.com$/i.test(u.hostname)) continue;
+        collect(await api.getText(u.toString()).catch(() => ""));
+      }
+      const opciones = [...html.matchAll(/<option\b[^>]*value="([^"]*)"[^>]*>([^<]*)</gi)].map((m) => `${m[1]}=${m[2].trim()}`).slice(0, 12);
+      return { srcs, php: [...php].slice(0, 30), opciones, inlineChars: inlineJs.length };
+    } catch (err) {
+      return { error: (err instanceof Error ? err.message : String(err)).slice(0, 200) };
+    }
+  }
+
   /** Qué devuelve la página de comprobantes de Air (texto visible y campos del formulario), para ver por qué no hay tabla. */
   private async airPage(creds: Record<string, string>): Promise<string> {
     try {
@@ -275,6 +323,7 @@ export class OrderDocumentsProbe {
           ejemploComprobantes: st.movements.slice(0, 4).map((m) => `${m.branch ?? ""}|${m.invoiceNumber ?? ""}|${m.invoiceLabel ?? ""}`),
           ejemploFacturaEnPedidos: [...ord.orders, ...pur.orders].map((o) => o.invoice).filter((x) => x && String(x).trim() && String(x).trim() !== "-").slice(0, 6),
           pedidosNodoEnPortal: [...ord.orders, ...pur.orders].filter((o) => orderOf([o.orderNumber, o.webOrderNumber, o.albNumber])).length,
+          voucherPagina: await this.nbVoucherPage(vouchers[0]?.voucherUrl),
         };
         for (const r of [...ord.orders, ...pur.orders]) {
           const nodo = orderOf([r.orderNumber, r.webOrderNumber, r.albNumber]);
@@ -333,6 +382,9 @@ export class OrderDocumentsProbe {
           movimientosConLink: st.movements.filter((m) => m.hrefs.length).length,
           celdasFactura: ord.orders.map((o) => o.invoice).filter(Boolean).slice(0, 6),
           filaFC: await this.invidRow(creds),
+          internosQueSonPedidos: st.movements.filter((m) => orderOf([m.internalNumber, m.docNumber])).length,
+          ejemploNumerosNodo: [...allNumbers].slice(0, 4),
+          ejemploInternos: st.movements.map((m) => m.internalNumber).slice(0, 4),
         };
         for (const o of ord.orders) {
           const nodo = orderOf([o.webOrderNumber, o.orderNumber]);
@@ -364,7 +416,7 @@ export class OrderDocumentsProbe {
         const acc = await this.air.getAccount(tenantId, creds);
         report.comprobantesPortal = acc.invoices.length;
         const headers = keysOf(acc.invoices[0]).filter((k) => k !== "_links");
-        report.estructura = { pagina: await this.airPage(creds), avisos: acc.warnings, columnas: headers, conLink: acc.invoices.filter((r) => r._links?.length).length, ejemploLinks: (acc.invoices.find((r) => r._links?.length)?._links ?? []).map((l) => l.href.replace(/[?#].*$/, "")).slice(0, 3) };
+        report.estructura = { scripts: await this.airScripts(creds), pagina: await this.airPage(creds), avisos: acc.warnings, columnas: headers, conLink: acc.invoices.filter((r) => r._links?.length).length, ejemploLinks: (acc.invoices.find((r) => r._links?.length)?._links ?? []).map((l) => l.href.replace(/[?#].*$/, "")).slice(0, 3) };
         for (const r of acc.invoices.filter((x) => x._links?.length).slice(0, PER_PROVIDER_DOCS)) {
           const href = (r._links ?? [])[0].href;
           cands.push({ kind: "factura", link: null, label: `muestra ${headers.slice(0, 3).map((h) => String(r[h] ?? "")).join(" ")}`.slice(0, 80), fetch: async () => toBuffer(await this.air.getDocument(creds, href)) });
