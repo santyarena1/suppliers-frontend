@@ -5,7 +5,7 @@ import { providerLabel } from "@nodo/shared";
 import { cronsAreGloballyEnabled } from "../../common/cron-window";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TgsAccessService } from "../../tgs/tgs.access";
-import { storesDocuments } from "../../orders-api/document-providers";
+import { invoicedByDocuments } from "../../orders-api/document-providers";
 import {
   buildOrderPayload,
   distributorCuit,
@@ -24,8 +24,10 @@ import { CatalogSnapshotService } from "../core/catalog-snapshot.service";
 import { cleanGtin, groupKeyFor, productIdFor } from "../core/ids";
 import { publicApiUrl } from "../core/public-urls";
 
-export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado", "pedido.facturado"] as const;
+export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado", "pedido.facturado", "factura.nueva", "factura.actualizada"] as const;
 export type OrderWebhookEvent = (typeof ORDER_WEBHOOK_EVENTS)[number];
+/** Los avisos `factura.*` usan la misma cola (`ApiOrderEvent`): `orderId` es el id del comprobante. */
+export const isInvoiceEvent = (type: string) => type.startsWith("factura.");
 
 /** Se vuelve a mirar un rato hacia atrás: un pedido guardado justo al cortar no se pierde. */
 const OVERLAP_MS = 2 * 60_000;
@@ -35,7 +37,7 @@ const MAX_PAGE = 100;
  * Versión del armado del pedido. Al sumar campos (2: facturas y remitos), el
  * hash de cada pedido se recalcula una vez sin avisar: no cambió el pedido.
  */
-export const PAYLOAD_SCHEMA = 2;
+export const PAYLOAD_SCHEMA = 3;
 
 const DOCUMENT_SELECT = {
   id: true,
@@ -54,6 +56,7 @@ const DOCUMENT_SELECT = {
   cotizacion: true,
   origen: true,
   assetId: true,
+  generated: true,
   createdAt: true,
 } satisfies Prisma.ProviderOrderDocumentSelect;
 
@@ -199,7 +202,7 @@ export class OrdersApiService {
         orderBy: { updatedAt: "asc" },
         take: ORDERS_PER_TICK,
       });
-      const docOrderIds = [...new Set(changedDocs.map((d) => d.orderId))].filter((id) => !seen.has(id));
+      const docOrderIds = [...new Set(changedDocs.map((d) => d.orderId))].filter((id): id is string => !!id && !seen.has(id));
       if (docOrderIds.length) {
         const orders = await this.prisma.providerOrder.findMany({ where: { tenantId, id: { in: docOrderIds } }, select: ORDER_SELECT });
         const names = await this.distributorNames(orders.map((o) => o.provider));
@@ -233,7 +236,7 @@ export class OrdersApiService {
     const hash = payloadHash(payload);
     const cancelled = orderState(row) === "cancelado";
     // Elit y Solution Box: facturado = hay datos fiscales guardados. El resto: el portal mostró la factura.
-    const invoiced = storesDocuments(row.provider) ? hasFiscalInvoice(payload) : Boolean(row.trackingInvoice?.trim());
+    const invoiced = invoicedByDocuments(row.provider) ? hasFiscalInvoice(payload) : hasFiscalInvoice(payload) || Boolean(row.trackingInvoice?.trim());
     if (state && (state.schema ?? 1) < PAYLOAD_SCHEMA) {
       // El armado sumó campos: se recalcula el hash sin avisar ni subir la versión.
       await this.prisma.apiOrderState.update({ where: { orderId: order.id }, data: { hash, schema: PAYLOAD_SCHEMA, invoiced: state.invoiced && invoiced } });
@@ -421,7 +424,7 @@ export class OrdersApiService {
     const out = new Map<string, OrderDocumentRow[]>();
     if (orderIds.length === 0) return out;
     const rows = await this.prisma.providerOrderDocument.findMany({ where: { orderId: { in: orderIds } }, select: DOCUMENT_SELECT });
-    for (const r of rows) out.set(r.orderId, [...(out.get(r.orderId) ?? []), r]);
+    for (const r of rows) if (r.orderId) out.set(r.orderId, [...(out.get(r.orderId) ?? []), r]);
     return out;
   }
 

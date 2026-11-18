@@ -52,6 +52,7 @@ interface MatchReport {
   /** Facturas cuyos códigos aparecen en algún pedido de NODO (aunque no calcen exacto). */
   codigoEnNodo: number;
   ejemplos: string[];
+  parecidos?: string[];
   codigosNodo: string[];
   codigosPortal: string[];
   columnas?: unknown;
@@ -171,6 +172,21 @@ export class OrderDocumentsMatchProbe {
       else report.sinPedido++;
       if (report.ejemplos.length < 6 && (m.order || m.candidates > 1)) {
         report.ejemplos.push(`${inv.ref} ${inv.date?.toISOString().slice(0, 10) ?? "?"} → ${m.order ? `NODO-${m.order.number ?? "?"} (${m.order.createdAt.toISOString().slice(0, 10)})` : `${m.candidates} candidatos`}`);
+      }
+      // Diagnóstico: el pedido que más se parece y en qué difiere (solo cantidades, sin nombres).
+      if (!m.order && (report.parecidos?.length ?? 0) < 25) {
+        let best: { o: OrderLines; common: number } | null = null;
+        for (const o of orders) {
+          const common = [...inv.lines.keys()].filter((c) => o.lines.has(c)).length;
+          if (common > 0 && (!best || common > best.common)) best = { o, common };
+        }
+        if (best) {
+          const sameQty = [...inv.lines].filter(([c, q]) => best!.o.lines.get(c) === q).length;
+          const days = inv.date ? Math.round((inv.date.getTime() - best.o.createdAt.getTime()) / DAY) : null;
+          const extraInv = [...inv.lines.keys()].filter((c) => !best!.o.lines.has(c)).slice(0, 4);
+          const extraOrd = [...best.o.lines.keys()].filter((c) => !inv.lines.has(c)).slice(0, 4);
+          (report.parecidos ??= []).push(`fac ${inv.lines.size} / ped ${best.o.lines.size} / comunes ${best.common} / igual cant ${sameQty} / días ${days} / solo fac [${extraInv}] / solo ped [${extraOrd}]`);
+        }
       }
     }
     return report;

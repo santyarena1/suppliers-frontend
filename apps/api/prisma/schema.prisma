@@ -3237,20 +3237,35 @@ model ApiOrderEvent {
   @@index([tenantId, id])
 }
 
+/// API de facturas: lo que se publicó de cada comprobante (como ApiOrderState).
+model ApiInvoiceState {
+  documentId String   @id
+  tenantId   String
+  hash       String
+  version    Int      @default(1)
+  changedAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, changedAt])
+}
+
 /// API de pedidos: hasta dónde se revisaron los pedidos de un comercio.
 model ApiOrderTracker {
+  /// Hasta dónde se revisaron los comprobantes (API de facturas).
+  invoicesCheckedUntil DateTime?
   tenantId     String   @id
   checkedUntil DateTime
   updatedAt    DateTime @updatedAt
 }
 
-/// Factura, nota de crédito/débito o remito de un pedido, bajado del portal del
-/// distribuidor. El PDF se guarda en NODO (`StoredAsset` privado); los datos
-/// fiscales salen del QR de ARCA o del texto del PDF (lo que no se lee, null).
+/// Factura, nota de crédito/débito o remito bajado del portal del distribuidor,
+/// unido a un pedido de NODO o suelto (`orderId` null). El PDF se guarda en NODO
+/// (`StoredAsset` privado); los datos fiscales salen del QR de ARCA o del texto
+/// del PDF (lo que no se lee, null).
 model ProviderOrderDocument {
   id             String   @id @default(uuid())
   tenantId       String
-  orderId        String
+  orderId        String?
   provider       String
   /// FACTURA | NOTA_CREDITO | NOTA_DEBITO | REMITO
   kind           String
@@ -3258,8 +3273,10 @@ model ProviderOrderDocument {
   portalRef      String
   /// Número tal como lo muestra el portal.
   portalNumber   String?
-  /// Cómo se unió al pedido (pedido→factura, remito, texto del PDF…).
-  link           String
+  /// Cómo se unió al pedido (pedido → factura, mismos productos…); null = suelto.
+  link           String?
+  /// PDF armado por NODO con los datos oficiales (New Bytes no publica el original).
+  generated      Boolean  @default(false)
   tipo           String?
   tipoCodigo     Int?
   puntoVenta     Int?
@@ -3283,7 +3300,7 @@ model ProviderOrderDocument {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([orderId, portalRef])
+  @@unique([tenantId, provider, portalRef])
   @@index([tenantId, provider])
   @@index([orderId])
   @@index([tenantId, updatedAt])

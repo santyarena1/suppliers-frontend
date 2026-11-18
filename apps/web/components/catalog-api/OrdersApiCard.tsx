@@ -130,7 +130,7 @@ export default function OrdersApiCard({
       </div>
 
       <p className="text-[11px] text-surface-500 border-t border-surface-800 pt-3">
-        Elit y Solution Box traen la factura con CAE y su PDF (y Elit, el remito), guardados en NODO. New Bytes, Air, Invid y New Tree por ahora solo traen el número de factura que muestra el portal. Lo que el distribuidor no informa va vacío: nunca se estima.
+        Todas las facturas de Elit, Solution Box, New Bytes y Air llegan con CAE y PDF guardado en NODO, aunque no sean de un pedido hecho por NODO (<code>GET /v1/facturas</code>; las sueltas traen <code>pedido: null</code>). New Bytes no publica el PDF original: NODO lo arma con sus datos oficiales y el QR. Invid y New Tree por ahora solo dan el número de factura. Lo que el distribuidor no informa va vacío: nunca se estima.
       </p>
     </section>
   );

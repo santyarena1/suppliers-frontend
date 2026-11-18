@@ -52,13 +52,15 @@ export const CATALOG_API_WEBHOOK_EVENT_LABELS: Record<CatalogApiWebhookEvent, st
 };
 
 /** Avisos de pedidos (solo con el permiso `orders:read`, hoy solo The Gamer Shop). */
-export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado", "pedido.facturado"] as const;
+export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado", "pedido.facturado", "factura.nueva", "factura.actualizada"] as const;
 export type OrderWebhookEvent = (typeof ORDER_WEBHOOK_EVENTS)[number];
 export const ORDER_WEBHOOK_EVENT_LABELS: Record<OrderWebhookEvent, string> = {
   "pedido.creado": "Entra un pedido nuevo",
   "pedido.actualizado": "Cambia un pedido (estado, seguimiento, importes)",
   "pedido.cancelado": "Se anula un pedido",
   "pedido.facturado": "El distribuidor factura un pedido",
+  "factura.nueva": "Aparece una factura en un portal (de un pedido de NODO o no)",
+  "factura.actualizada": "Cambia una factura (se une a un pedido, se corrige un dato)",
 };
 export type ApiWebhookEvent = CatalogApiWebhookEvent | OrderWebhookEvent;
 

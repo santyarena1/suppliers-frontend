@@ -17,7 +17,8 @@ import { eventId } from "../core/ids";
 import { ChangesFeedService } from "../changes/changes-feed.service";
 import { assertWebhookUrl, UnsafeWebhookUrlError } from "./ssrf";
 import { postWebhook } from "./webhook-http";
-import { ORDER_WEBHOOK_EVENTS, OrdersApiService } from "../orders/orders-api.service";
+import { InvoicesApiService } from "../orders/invoices-api.service";
+import { isInvoiceEvent, ORDER_WEBHOOK_EVENTS, OrdersApiService } from "../orders/orders-api.service";
 import { DISABLE_AFTER_FAILURES, ITEMS_PER_DELIVERY, itemsFor, nextAttemptAfter } from "./webhook-events";
 
 export const MAX_WEBHOOKS_PER_KEY = 10;
@@ -93,7 +94,8 @@ export class WebhooksService {
     private readonly crypto: CryptoService,
     private readonly resolver: ApiClientResolver,
     private readonly changes: ChangesFeedService,
-    private readonly orders: OrdersApiService
+    private readonly orders: OrdersApiService,
+    private readonly invoices: InvoicesApiService
   ) {}
 
   /** La key puede suscribirse a avisos de pedidos. */
@@ -256,15 +258,18 @@ export class WebhooksService {
     if (events.length === 0) return 0;
     const wanted = new Set(endpoint.events);
     const relevant = events.filter((e) => wanted.has(e.type));
-    const states = await this.prisma.apiOrderState.findMany({ where: { orderId: { in: [...new Set(relevant.map((e) => e.orderId))] } } });
+    const orderEvents = relevant.filter((e) => !isInvoiceEvent(e.type));
+    const states = await this.prisma.apiOrderState.findMany({ where: { orderId: { in: [...new Set(orderEvents.map((e) => e.orderId))] } } });
     const payloads = new Map((await this.orders.payloads(tenantId, states)).map((p) => [p.id, p]));
+    const invoiceEvents = relevant.filter((e) => isInvoiceEvent(e.type));
+    const invoices = invoiceEvents.length ? await this.invoices.payloadsById(tenantId, invoiceEvents.map((e) => e.orderId)) : new Map();
     const writes: Prisma.PrismaPromise<unknown>[] = [];
     for (const e of relevant) {
-      const pedido = payloads.get(e.orderId);
-      if (!pedido) continue;
+      // Siempre el pedido (o la factura) como está ahora: si cambió dos veces seguidas, llega la última versión.
+      const data = isInvoiceEvent(e.type) ? (invoices.get(e.orderId) ? { factura: invoices.get(e.orderId) } : null) : payloads.get(e.orderId) ? { pedido: payloads.get(e.orderId) } : null;
+      if (!data) continue;
       const evt = eventId();
-      // Siempre el pedido como está ahora (si cambió dos veces seguidas, llega la última versión).
-      const payload = { id: evt, type: e.type, createdAt: now.toISOString(), data: { pedido } };
+      const payload = { id: evt, type: e.type, createdAt: now.toISOString(), data };
       writes.push(
         this.prisma.apiWebhookDelivery.create({
           data: { endpointId: endpoint.id, eventId: evt, type: e.type, payload: payload as unknown as Prisma.InputJsonValue, nextAttemptAt: now },

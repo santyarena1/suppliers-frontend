@@ -1304,7 +1304,39 @@ con QR leído por partes.
   `pedido.facturado` con el número del seguimiento lo vuelven a avisar una vez, ya con CAE.
 - `ApiOrderState.schema` (`PAYLOAD_SCHEMA = 2`): al sumar campos al pedido, el hash se
   recalcula una vez para todos sin avisar ni subir la versión.
-- Pendiente: New Bytes (datos completos en `ms-comprobantes.lio.red/v2/F/{id}/{token}`,
+- Pendiente (resuelto en (b) para New Bytes y Air): New Bytes (datos completos en `ms-comprobantes.lio.red/v2/F/{id}/{token}`,
   sin PDF original; falta unir cada comprobante a su pedido), Air (PDF y QR sí, el portal no
   dice de qué pedido es cada factura), Invid (sin PDF), New Tree (Cloudflare bloquea la IP
   del servidor: falta `NEW_TREE_PROXY_URL`).
+**2026-11-18 (b) — todas las facturas, unidas o no a un pedido.** Pedido del dueño:
+que a AcuStock lleguen todas las facturas del portal aunque no coincidan con un
+pedido de NODO. `OrderDocumentsService` ahora guarda todos los comprobantes de los
+últimos 120 días (`ProviderOrderDocument.orderId` puede ser null; único por
+`tenantId + provider + portalRef`):
+- Elit: todos los movimientos de cuenta corriente factura/nota; se unen por la nota de venta.
+- Solution Box: la factura de cada pedido del portal.
+- New Bytes: cada comprobante del listado; datos oficiales de
+  `ms-comprobantes.lio.red/v2/{tipo}/{id}/{token}` + QR; PDF armado por NODO
+  (`generated = true`, `pdf_generado_por_nodo`), marcado «Generado por NODO».
+- Air: facturas de venta (FV, `comprobantes.php?q=FV`) con su PDF (`2025/pdf/index.php?q=`).
+- New Bytes y Air se unen a un pedido solo con los mismos códigos y cantidades, pedido
+  entre 30 días antes y 1 día después de la factura, y único candidato
+  (`orders-api/invoice-match.ts`); si no, quedan sueltas.
+
+API (`orders:read`, solo la organización habilitada):
+- `GET /v1/facturas?desde=&cursor=&limit=&pedido=con|sin&distribuidor=` →
+  `{ data: Factura[], meta: { count, hasMore, nextCursor } }`, por fecha de cambio.
+- `GET /v1/facturas/:id` → `{ data: Factura }`; `GET /v1/facturas/:id/pdf` → el PDF.
+- `Factura`: `id`, `version`, `actualizado`, `distribuidor { clave, nombre, cuit }`, `clase`,
+  `numero_portal`, `tipo`, `punto_venta`, `numero`, `fecha_emision`, `cae`, `cae_vencimiento`,
+  `cuit_emisor`, `importe_total`, `moneda`, `cotizacion`, `pdf_url`, `pdf_generado_por_nodo`,
+  `origen`, `pedido { id, numero, union } | null`.
+- Avisos `factura.nueva` y `factura.actualizada` (`data: { factura }`), en la misma cola
+  que los de pedidos (`ApiOrderEvent.orderId` = id del comprobante). Un comprobante
+  emitido hace más de 7 días que NODO recién encuentra se registra sin aviso (historia:
+  se lee con `GET /v1/facturas`). Estado publicado: `ApiInvoiceState`;
+  `ApiOrderTracker.invoicesCheckedUntil`.
+- En el pedido, cada `facturas[]` suma `id` (el de `/v1/facturas/:id`) y
+  `pdf_generado_por_nodo` (`PAYLOAD_SCHEMA = 3`, hash recalculado sin avisos).
+- `pedido.facturado` de New Bytes y Air: cuando se une una factura con datos fiscales o,
+  como antes, cuando el seguimiento muestra la factura.

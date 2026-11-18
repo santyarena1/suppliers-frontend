@@ -76,6 +76,8 @@ export interface OrderDocumentRow {
   cotizacion: unknown;
   origen: string | null;
   assetId: string | null;
+  /** PDF armado por NODO con los datos oficiales (New Bytes). */
+  generated?: boolean;
   createdAt: Date;
 }
 
@@ -156,6 +158,8 @@ export interface OrderPayload {
 }
 
 export interface InvoicePayload {
+  /** Id del comprobante en NODO (el mismo de `GET /v1/facturas/:id`); null si solo es el número del seguimiento. */
+  id: string | null;
   clase: "factura" | "nota_credito" | "nota_debito";
   /** Número tal como lo muestra el portal. */
   numero_portal: string | null;
@@ -172,6 +176,8 @@ export interface InvoicePayload {
   cotizacion: number | null;
   /** Copia del PDF guardada en NODO (se pide con la misma API key). */
   pdf_url: string | null;
+  /** El PDF lo armó NODO con los datos oficiales (el distribuidor no publica el original). */
+  pdf_generado_por_nodo: boolean;
   /** De dónde salieron los datos: QR de ARCA, texto del PDF, o solo el número que mostró el portal. */
   origen: "qr" | "texto" | "portal";
 }
@@ -604,33 +610,13 @@ export function documentsPayload(
     (a, b) => (a.fechaEmision ?? "9").localeCompare(b.fechaEmision ?? "9") || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)
   );
   // Un comprobante cuyo PDF todavía no se pudo bajar no aporta nada.
-  const facturas: InvoicePayload[] = sorted
-    .filter((d) => CLASS_OF[d.kind] && d.assetId)
-    .map((d) => {
-      const fiscal = d.origen === "qr" || d.origen === "texto";
-      const fromPortal = parseInvoiceNumber(d.portalNumber);
-      return {
-        clase: CLASS_OF[d.kind],
-        numero_portal: text(d.portalNumber),
-        tipo: fiscal ? d.tipo : fromPortal?.tipo ?? null,
-        punto_venta: fiscal ? d.puntoVenta : fromPortal?.punto_venta ?? null,
-        numero: fiscal ? d.numero : fromPortal?.numero ?? null,
-        fecha_emision: fiscal ? d.fechaEmision : null,
-        cae: fiscal ? d.cae : null,
-        cae_vencimiento: fiscal ? d.caeVencimiento : null,
-        cuit_emisor: fiscal ? d.cuitEmisor : null,
-        importe_total: fiscal ? r2n(num(d.importeTotal)) : null,
-        moneda: fiscal ? d.moneda : null,
-        cotizacion: fiscal ? num(d.cotizacion) : null,
-        pdf_url: url(d),
-        origen: fiscal ? (d.origen as "qr" | "texto") : "portal",
-      };
-    });
+  const facturas: InvoicePayload[] = sorted.filter((d) => isFiscalDocument(d)).map((d) => invoiceFromDocument(d, url(d)));
   if (!facturas.some((f) => f.clase === "factura")) {
     const portal = text(o.trackingInvoice);
     const parsed = parseInvoiceNumber(portal);
     if (portal && parsed) {
       facturas.unshift({
+        id: null,
         clase: "factura",
         numero_portal: portal,
         ...parsed,
@@ -642,6 +628,7 @@ export function documentsPayload(
         moneda: null,
         cotizacion: null,
         pdf_url: null,
+        pdf_generado_por_nodo: false,
         origen: "portal",
       });
     }
@@ -650,6 +637,35 @@ export function documentsPayload(
     .filter((d) => d.kind === "REMITO" && d.assetId)
     .map((d) => ({ numero: text(d.portalNumber), fecha: d.fechaEmision, pdf_url: url(d) }));
   return { facturas, remitos };
+}
+
+/** Factura o nota (no remito) con su PDF ya guardado. */
+export function isFiscalDocument(d: Pick<OrderDocumentRow, "kind" | "assetId">): boolean {
+  return !!CLASS_OF[d.kind] && !!d.assetId;
+}
+
+/** Un comprobante guardado → como sale en la API. Sin datos fiscales leídos, solo el número del portal. */
+export function invoiceFromDocument(d: OrderDocumentRow, pdfUrl: string | null): InvoicePayload {
+  const fiscal = d.origen === "qr" || d.origen === "texto";
+  const fromPortal = parseInvoiceNumber(d.portalNumber);
+  return {
+    id: d.id,
+    clase: CLASS_OF[d.kind] ?? "factura",
+    numero_portal: text(d.portalNumber),
+    tipo: fiscal ? d.tipo : fromPortal?.tipo ?? null,
+    punto_venta: fiscal ? d.puntoVenta : fromPortal?.punto_venta ?? null,
+    numero: fiscal ? d.numero : fromPortal?.numero ?? null,
+    fecha_emision: fiscal ? d.fechaEmision : null,
+    cae: fiscal ? d.cae : null,
+    cae_vencimiento: fiscal ? d.caeVencimiento : null,
+    cuit_emisor: fiscal ? d.cuitEmisor : null,
+    importe_total: fiscal ? r2n(num(d.importeTotal)) : null,
+    moneda: fiscal ? d.moneda : null,
+    cotizacion: fiscal ? num(d.cotizacion) : null,
+    pdf_url: pdfUrl,
+    pdf_generado_por_nodo: !!d.generated,
+    origen: fiscal ? (d.origen as "qr" | "texto") : "portal",
+  };
 }
 
 /** ¿El pedido ya tiene una factura con datos fiscales (QR o texto del PDF)? */

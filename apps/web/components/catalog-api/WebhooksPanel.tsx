@@ -195,7 +195,7 @@ export default function WebhooksPanel({
                   <code className="truncate text-xs text-surface-200">{h.url}</code>
                 </div>
                 <p className="mt-1 text-[11px] text-surface-500">
-                  {h.events.some((e) => e.startsWith("pedido.")) && "Pedidos · "}
+                  {h.events.some((e) => e.startsWith("pedido.") || e.startsWith("factura.")) && "Pedidos · "}
                   {h.events.length} {h.events.length === 1 ? "evento" : "eventos"} · última entrega{" "}
                   {h.lastDelivery ? `${fmtAgo(h.lastDelivery.createdAt)} (${h.lastDelivery.lastStatusCode ?? h.lastDelivery.status})` : "nunca"}
                 </p>
