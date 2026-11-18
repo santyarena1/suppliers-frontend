@@ -4,7 +4,7 @@ import { CredentialsService } from "../credentials/credentials.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { TgsAccessService } from "../tgs/tgs.access";
 import { AirPortalClient, AIR_COMPROBANTES_URL } from "./air-portal-client";
-import { parseHtmlTables, stripTags } from "./html-table";
+import { stripTags } from "./html-table";
 import { NewBytesAccountService } from "./new-bytes-account.service";
 
 /**
@@ -81,6 +81,18 @@ function parseDay(raw: unknown): Date | null {
   m = /(\d{1,2})[-/](\d{1,2})[-/](\d{4})/.exec(s);
   if (m) return new Date(`${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}T12:00:00-03:00`);
   return null;
+}
+
+/**
+ * Renglones de un comprobante de Air (`q=r`), del texto de la página:
+ * «54211 UPS HIKVISION DS 3000VA 1 0 311,471.04 311,471.04 SUC06».
+ * Código, descripción, cantidad, cantidad pendiente, precio, total y sucursal.
+ */
+export function parseAirItems(text: string): { code: string; qty: number }[] {
+  const t = text.replace(/\s+/g, " ");
+  const out: { code: string; qty: number }[] = [];
+  for (const m of t.matchAll(/(?:^|\s)(\d{2,7}) (.+?) (\d+) \d+ [\d.,]+ [\d.,]+ SUC\d+/g)) out.push({ code: m[1], qty: Number(m[3]) });
+  return out;
 }
 
 /** El pedido de NODO que calza (o por qué no). */
@@ -177,7 +189,8 @@ export class OrderDocumentsMatchProbe {
       const d = (data ?? {}) as Record<string, unknown>;
       for (const raw of Array.isArray(d.detalle) ? d.detalle : []) {
         const it = (raw ?? {}) as Record<string, unknown>;
-        addLine(lines, it.sku, it.cantidad);
+        // `id` es el código interno de New Bytes (el mismo que usa NODO); `sku` es el part number.
+        addLine(lines, it.id ?? it.sku, it.cantidad);
       }
       if (!report.columnas && Array.isArray(d.detalle) && d.detalle[0]) report.columnas = { detalle0: Object.fromEntries(Object.entries(d.detalle[0] as Record<string, unknown>).filter(([k]) => ["sku", "cantidad", "kitId", "id"].includes(k))) };
       const cab = (d.cabecera ?? {}) as Record<string, unknown>;
@@ -203,28 +216,20 @@ export class OrderDocumentsMatchProbe {
     const from = since.toISOString().slice(0, 10);
     const to = new Date().toISOString().slice(0, 10);
     const html = await api.getText(`${AIR_COMPROBANTES_URL}?q=FV&qd=${from}&qh=${to}`);
-    const rows = html.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+    // El listado no es una tabla: cada comprobante es un bloque con `nrocompro="…"` y su fecha cerca.
     const dateOf = new Map<string, Date | null>();
-    for (const r of rows) {
-      const code = /nrocompro="([^"]+)"/i.exec(r)?.[1];
-      if (code && /FV/i.test(code) && !dateOf.has(code)) dateOf.set(code, parseDay(stripTags(r)));
+    for (const m of html.matchAll(/nrocompro="([^"]+)"/gi)) {
+      const code = m[1];
+      if (!/FV/i.test(code) || dateOf.has(code)) continue;
+      const near = stripTags(html.slice(Math.max(0, (m.index ?? 0) - 400), (m.index ?? 0) + 600));
+      dateOf.set(code, parseDay(near));
     }
     const out: InvoiceLines[] = [];
     for (const [code, date] of [...dateOf].slice(0, 120)) {
       const itemsHtml = await api.getText(`${AIR_COMPROBANTES_URL}?q=r&nrocompro=${encodeURIComponent(code)}`).catch(() => "");
       const lines: Lines = new Map();
-      const tables = parseHtmlTables(itemsHtml);
-      const t = tables.find((x) => x.rows.length > 0);
-      if (t) {
-        if (!report.columnas) report.columnas = { headers: t.headers, fila: t.rows[0] };
-        const h = t.headers.map((x) => x.toLowerCase());
-        const ci = h.findIndex((x) => /c[oó]d|art/.test(x));
-        const qi = h.findIndex((x) => /cant/.test(x));
-        for (const row of t.rows) {
-          const cells = row;
-          addLine(lines, cells[ci >= 0 ? ci : 0], cells[qi >= 0 ? qi : 2]);
-        }
-      }
+      for (const it of parseAirItems(stripTags(itemsHtml))) addLine(lines, it.code, it.qty);
+      if (!report.columnas) report.columnas = { texto: stripTags(itemsHtml).replace(/\s+/g, " ").slice(0, 200), renglones: [...lines] };
       out.push({ ref: code, date, lines });
     }
     return out;
