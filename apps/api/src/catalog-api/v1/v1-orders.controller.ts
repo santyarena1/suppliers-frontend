@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Query, UseFilters, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Controller, Get, Param, Query, StreamableFile, UseFilters, UseGuards, UseInterceptors } from "@nestjs/common";
+import { safeFilename } from "../../providers/safe-url";
 import { SkipThrottle } from "@nestjs/throttler";
 import { ApiBasicAuth, ApiOperation, ApiParam, ApiPropertyOptional, ApiSecurity, ApiTags } from "@nestjs/swagger";
 import { Type } from "class-transformer";
@@ -78,5 +79,18 @@ export class V1OrdersController {
   @CommonErrors()
   async get(@CurrentApiClient() principal: ApiPrincipal, @Param("id") id: string) {
     return { data: await this.orders.get(principal, id) };
+  }
+
+  @Get(":id/documentos/:documentId")
+  @ApiOperation({
+    summary: "PDF de una factura o un remito del pedido",
+    description: "La copia que NODO guardó del portal del distribuidor. Es el `pdf_url` de `facturas[]` y `remitos[]`; se pide con la misma API key.",
+  })
+  @ApiParam({ name: "id" })
+  @ApiParam({ name: "documentId" })
+  @CommonErrors()
+  async document(@CurrentApiClient() principal: ApiPrincipal, @Param("id") id: string, @Param("documentId") documentId: string) {
+    const file = await this.orders.document(principal, id, documentId);
+    return new StreamableFile(file.data, { type: file.mimeType, disposition: `inline; filename="${safeFilename(file.filename)}"` });
   }
 }

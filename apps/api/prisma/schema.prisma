@@ -3217,6 +3217,9 @@ model ApiOrderState {
   cancelled Boolean  @default(false)
   /// Ya se avisó la factura (pedido.facturado sale una sola vez).
   invoiced  Boolean  @default(false)
+  /// Versión del armado del pedido con la que se calculó el hash. Si el armado
+  /// suma campos, el hash se recalcula una vez sin avisar (no es un cambio del pedido).
+  schema    Int      @default(1)
   createdAt DateTime @default(now())
 
   @@index([tenantId, changedAt])
@@ -3239,4 +3242,49 @@ model ApiOrderTracker {
   tenantId     String   @id
   checkedUntil DateTime
   updatedAt    DateTime @updatedAt
+}
+
+/// Factura, nota de crédito/débito o remito de un pedido, bajado del portal del
+/// distribuidor. El PDF se guarda en NODO (`StoredAsset` privado); los datos
+/// fiscales salen del QR de ARCA o del texto del PDF (lo que no se lee, null).
+model ProviderOrderDocument {
+  id             String   @id @default(uuid())
+  tenantId       String
+  orderId        String
+  provider       String
+  /// FACTURA | NOTA_CREDITO | NOTA_DEBITO | REMITO
+  kind           String
+  /// Clave estable del comprobante en el portal (voucherId, tipo+número, link…).
+  portalRef      String
+  /// Número tal como lo muestra el portal.
+  portalNumber   String?
+  /// Cómo se unió al pedido (pedido→factura, remito, texto del PDF…).
+  link           String
+  tipo           String?
+  tipoCodigo     Int?
+  puntoVenta     Int?
+  numero         Int?
+  /// AAAA-MM-DD (fiscal: la del comprobante).
+  fechaEmision   String?
+  cae            String?
+  caeVencimiento String?
+  cuitEmisor     String?
+  importeTotal   Decimal? @db.Decimal(18, 2)
+  moneda         String?
+  cotizacion     Decimal? @db.Decimal(18, 6)
+  /// qr | texto | portal (de dónde salieron los datos fiscales).
+  origen         String?
+  assetId        String?
+  sha256         String?
+  byteSize       Int?
+  /// Último intento de bajar o leer el PDF y su error (si lo hubo).
+  fetchedAt      DateTime?
+  fetchError     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([orderId, portalRef])
+  @@index([tenantId, provider])
+  @@index([orderId])
+  @@index([tenantId, updatedAt])
 }

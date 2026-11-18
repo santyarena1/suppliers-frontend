@@ -1,4 +1,4 @@
-import { buildOrderPayload, distributorCuit, parseInvoiceNumber, isPublishable, orderState, payloadHash, validCuit, type OrderRow } from "./order-payload";
+import { buildOrderPayload, distributorCuit, hasFiscalInvoice, parseInvoiceNumber, type OrderDocumentRow, isPublishable, orderState, payloadHash, validCuit, type OrderRow } from "./order-payload";
 
 const base = (over: Partial<OrderRow>): OrderRow => ({
   id: "o1",
@@ -210,7 +210,10 @@ describe("CUIT", () => {
     expect(validCuit("30-70933244-5")).toBe(true);
     expect(validCuit("30-70933244-4")).toBe(false);
     expect(distributorCuit("GRUPO_NUCLEO")).toBe("30-70933244-5");
-    expect(distributorCuit("ELIT")).toBeNull();
+    expect(distributorCuit("ELIT")).toBe("30-65165551-6");
+    expect(distributorCuit("SOLUTION_BOX")).toBe("30-70797502-0");
+    expect(distributorCuit("NEW_BYTES")).toBe("30-70865519-4");
+    expect(distributorCuit("INVID")).toBeNull();
   });
 });
 
@@ -222,12 +225,58 @@ describe("factura", () => {
     expect(parseInvoiceNumber("  ")).toBeNull();
   });
 
-  it("sale en el pedido con la fecha en que NODO la vio", () => {
-    const p = buildOrderPayload(
-      base({ trackingStage: "INVOICED", trackingInvoice: "A 0003-00018422", trackingHistory: [{ stage: "SENT", at: "2026-11-16T12:00:00.000Z" }, { stage: "INVOICED", at: "2026-11-17T09:00:00.000Z" }] }),
-      ctx()
-    );
-    expect(p.factura).toEqual({ numero_portal: "A 0003-00018422", tipo: "A", punto_venta: 3, numero: 18422, fecha: "2026-11-17T09:00:00.000Z" });
-    expect(buildOrderPayload(base({}), ctx()).factura).toBeNull();
+  it("sin PDF guardado: solo el número que mostró el portal (origen portal)", () => {
+    const p = buildOrderPayload(base({ trackingStage: "INVOICED", trackingInvoice: "A 0003-00018422" }), ctx());
+    expect(p.factura).toMatchObject({ clase: "factura", numero_portal: "A 0003-00018422", tipo: "A", punto_venta: 3, numero: 18422, cae: null, fecha_emision: null, pdf_url: null, origen: "portal" });
+    expect(p.facturas).toHaveLength(1);
+    expect(hasFiscalInvoice(p)).toBe(false);
+    const empty = buildOrderPayload(base({}), ctx());
+    expect(empty).toMatchObject({ factura: null, facturas: [], remito: null, remitos: [] });
+  });
+
+  const doc = (over: Partial<OrderDocumentRow>): OrderDocumentRow => ({
+    id: "d1",
+    kind: "FACTURA",
+    portalNumber: "2000240284",
+    tipo: "A",
+    puntoVenta: 22,
+    numero: 18422,
+    fechaEmision: "2026-11-17",
+    cae: "76123456789012",
+    caeVencimiento: null,
+    cuitEmisor: "30-65165551-6",
+    importeTotal: 121.5,
+    moneda: "USD",
+    cotizacion: 1450,
+    origen: "qr",
+    assetId: "a1",
+    createdAt: new Date("2026-11-18T10:00:00Z"),
+    ...over,
+  });
+  const url = (o: string, d: string) => `/v1/pedidos/${o}/documentos/${d}`;
+
+  it("con el PDF guardado: datos fiscales del QR, PDF, notas de crédito y remito", () => {
+    const p = buildOrderPayload(base({ trackingInvoice: "2000240284" }), {
+      ...ctx(),
+      documentUrl: url,
+      documents: [
+        doc({ id: "nc", kind: "NOTA_CREDITO", portalNumber: "NC 1", fechaEmision: "2026-11-19", numero: 77, importeTotal: 10 }),
+        doc({}),
+        doc({ id: "f2", portalNumber: "2000240300", fechaEmision: "2026-11-20", numero: 18500 }),
+        doc({ id: "r1", kind: "REMITO", portalNumber: "R-55", fechaEmision: null, origen: null }),
+        doc({ id: "sin-pdf", portalNumber: "2000240999", assetId: null, origen: null }),
+      ],
+    });
+    expect(p.factura).toMatchObject({ clase: "factura", tipo: "A", punto_venta: 22, numero: 18422, fecha_emision: "2026-11-17", cae: "76123456789012", cuit_emisor: "30-65165551-6", importe_total: 121.5, moneda: "USD", cotizacion: 1450, origen: "qr", pdf_url: `/v1/pedidos/${p.id}/documentos/d1` });
+    expect(p.facturas.map((f) => [f.clase, f.numero])).toEqual([["factura", 18422], ["nota_credito", 77], ["factura", 18500]]);
+    expect(p.remito).toEqual({ numero: "R-55", fecha: null, pdf_url: `/v1/pedidos/${p.id}/documentos/r1` });
+    expect(hasFiscalInvoice(p)).toBe(true);
+  });
+
+  it("PDF guardado pero sin datos legibles: queda el número del portal y el PDF, nada estimado", () => {
+    const p = buildOrderPayload(base({}), { ...ctx(), documentUrl: url, documents: [doc({ origen: null, portalNumber: "A 0003-00018422", cae: "x", tipo: "B" })] });
+    expect(p.factura).toMatchObject({ origen: "portal", tipo: "A", punto_venta: 3, numero: 18422, cae: null, cuit_emisor: null, importe_total: null });
+    expect(p.factura?.pdf_url).toContain("/documentos/d1");
+    expect(hasFiscalInvoice(p)).toBe(false);
   });
 });

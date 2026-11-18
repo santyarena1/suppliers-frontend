@@ -5,13 +5,16 @@ import { providerLabel } from "@nodo/shared";
 import { cronsAreGloballyEnabled } from "../../common/cron-window";
 import { PrismaService } from "../../prisma/prisma.service";
 import { TgsAccessService } from "../../tgs/tgs.access";
+import { storesDocuments } from "../../orders-api/document-providers";
 import {
   buildOrderPayload,
   distributorCuit,
+  hasFiscalInvoice,
   isPublishable,
   orderState,
   payloadHash,
   type CatalogFacts,
+  type OrderDocumentRow,
   type OrderPayload,
   type OrderRow,
 } from "../../orders-api/order-payload";
@@ -19,6 +22,7 @@ import type { ApiPrincipal } from "../auth/api-principal";
 import { ApiError, Errors } from "../core/api-error";
 import { CatalogSnapshotService } from "../core/catalog-snapshot.service";
 import { cleanGtin, groupKeyFor, productIdFor } from "../core/ids";
+import { publicApiUrl } from "../core/public-urls";
 
 export const ORDER_WEBHOOK_EVENTS = ["pedido.creado", "pedido.actualizado", "pedido.cancelado", "pedido.facturado"] as const;
 export type OrderWebhookEvent = (typeof ORDER_WEBHOOK_EVENTS)[number];
@@ -27,6 +31,33 @@ export type OrderWebhookEvent = (typeof ORDER_WEBHOOK_EVENTS)[number];
 const OVERLAP_MS = 2 * 60_000;
 const ORDERS_PER_TICK = 500;
 const MAX_PAGE = 100;
+/**
+ * Versión del armado del pedido. Al sumar campos (2: facturas y remitos), el
+ * hash de cada pedido se recalcula una vez sin avisar: no cambió el pedido.
+ */
+export const PAYLOAD_SCHEMA = 2;
+
+const DOCUMENT_SELECT = {
+  id: true,
+  orderId: true,
+  kind: true,
+  portalNumber: true,
+  tipo: true,
+  puntoVenta: true,
+  numero: true,
+  fechaEmision: true,
+  cae: true,
+  caeVencimiento: true,
+  cuitEmisor: true,
+  importeTotal: true,
+  moneda: true,
+  cotizacion: true,
+  origen: true,
+  assetId: true,
+  createdAt: true,
+} satisfies Prisma.ProviderOrderDocumentSelect;
+
+type Ctx = { version: number; changedAt: Date; facts: Map<string, CatalogFacts>; names: Map<string, string>; docs: Map<string, OrderDocumentRow[]> };
 
 const ORDER_SELECT = {
   id: true,
@@ -135,9 +166,12 @@ export class OrdersApiService {
     try {
       const tracker = await this.prisma.apiOrderTracker.findUnique({ where: { tenantId } });
       const firstRun = !tracker;
+      if (!firstRun) await this.rebaseline(tenantId, now);
       let emitted = 0;
-      let since = tracker ? new Date(tracker.checkedUntil.getTime() - OVERLAP_MS) : new Date(0);
+      const startedFrom = tracker ? new Date(tracker.checkedUntil.getTime() - OVERLAP_MS) : new Date(0);
+      let since = startedFrom;
       let lastSeen = tracker?.checkedUntil ?? new Date(0);
+      const seen = new Set<string>();
       for (;;) {
         const orders = await this.prisma.providerOrder.findMany({
           where: { tenantId, updatedAt: { gte: since } },
@@ -146,10 +180,11 @@ export class OrdersApiService {
           select: ORDER_SELECT,
         });
         if (orders.length === 0) break;
-        const facts = await this.catalogFacts(tenantId, orders);
         const names = await this.distributorNames(orders.map((o) => o.provider));
+        const docs = await this.documentsOf(orders.map((o) => o.id));
         for (const order of orders) {
-          emitted += await this.track(order, { firstRun, facts, names, now });
+          seen.add(order.id);
+          emitted += await this.track(order, { firstRun, names, docs, now });
           if (order.updatedAt > lastSeen) lastSeen = order.updatedAt;
         }
         if (orders.length < ORDERS_PER_TICK) break;
@@ -157,6 +192,21 @@ export class OrdersApiService {
         // Página llena con todos del mismo instante: se avanza 1 ms para no quedar en un bucle.
         since = last.getTime() === since.getTime() ? new Date(last.getTime() + 1) : last;
       }
+      // Pedidos sin cambios propios a los que se les guardó una factura o un remito.
+      const changedDocs = await this.prisma.providerOrderDocument.findMany({
+        where: { tenantId, updatedAt: { gte: startedFrom } },
+        select: { orderId: true, updatedAt: true },
+        orderBy: { updatedAt: "asc" },
+        take: ORDERS_PER_TICK,
+      });
+      const docOrderIds = [...new Set(changedDocs.map((d) => d.orderId))].filter((id) => !seen.has(id));
+      if (docOrderIds.length) {
+        const orders = await this.prisma.providerOrder.findMany({ where: { tenantId, id: { in: docOrderIds } }, select: ORDER_SELECT });
+        const names = await this.distributorNames(orders.map((o) => o.provider));
+        const docs = await this.documentsOf(orders.map((o) => o.id));
+        for (const order of orders) emitted += await this.track(order, { firstRun, names, docs, now });
+      }
+      for (const d of changedDocs) if (d.updatedAt > lastSeen) lastSeen = d.updatedAt;
       await this.prisma.apiOrderTracker.upsert({
         where: { tenantId },
         create: { tenantId, checkedUntil: lastSeen.getTime() > 0 ? lastSeen : now },
@@ -171,26 +221,35 @@ export class OrdersApiService {
 
   private async track(
     order: LoadedOrder,
-    ctx: { firstRun: boolean; facts: Map<string, CatalogFacts>; names: Map<string, string>; now: Date }
+    ctx: { firstRun: boolean; names: Map<string, string>; docs: Map<string, OrderDocumentRow[]>; now: Date }
   ): Promise<number> {
     const state = await this.prisma.apiOrderState.findUnique({ where: { orderId: order.id } });
     if (!state && !isPublishable(order)) return 0;
     const number = order.number ?? (await this.assignNumber(order.tenantId, order.id));
     const row = { ...order, number } as unknown as OrderRow;
-    // El hash no mira el catálogo: que cambie una marca o un EAN no es un cambio del pedido.
-    const hash = payloadHash(this.payloadOf(row, { version: 1, changedAt: ctx.now, facts: new Map(), names: ctx.names }));
-    if (state && state.hash === hash) return 0;
+    // El hash no mira el catálogo (que cambie una marca o un EAN no es un cambio del pedido)
+    // ni el dominio de la API (los links de los PDF van sin dominio).
+    const payload = this.payloadOf(row, { version: 1, changedAt: ctx.now, facts: new Map(), names: ctx.names, docs: ctx.docs }, true);
+    const hash = payloadHash(payload);
     const cancelled = orderState(row) === "cancelado";
-    const invoiced = Boolean(row.trackingInvoice?.trim());
+    // Elit y Solution Box: facturado = hay datos fiscales guardados. El resto: el portal mostró la factura.
+    const invoiced = storesDocuments(row.provider) ? hasFiscalInvoice(payload) : Boolean(row.trackingInvoice?.trim());
+    if (state && (state.schema ?? 1) < PAYLOAD_SCHEMA) {
+      // El armado sumó campos: se recalcula el hash sin avisar ni subir la versión.
+      await this.prisma.apiOrderState.update({ where: { orderId: order.id }, data: { hash, schema: PAYLOAD_SCHEMA, invoiced: state.invoiced && invoiced } });
+      return 0;
+    }
+    if (state && state.hash === hash) return 0;
 
     if (!state) {
       const changedAt = ctx.firstRun ? order.updatedAt : ctx.now;
+      const data = { orderId: order.id, tenantId: order.tenantId, hash, version: 1, changedAt, cancelled, invoiced, schema: PAYLOAD_SCHEMA };
       if (ctx.firstRun) {
-        await this.prisma.apiOrderState.create({ data: { orderId: order.id, tenantId: order.tenantId, hash, version: 1, changedAt, cancelled, invoiced } });
+        await this.prisma.apiOrderState.create({ data });
         return 0;
       }
       await this.prisma.$transaction([
-        this.prisma.apiOrderState.create({ data: { orderId: order.id, tenantId: order.tenantId, hash, version: 1, changedAt, cancelled, invoiced } }),
+        this.prisma.apiOrderState.create({ data }),
         this.prisma.apiOrderEvent.create({ data: { tenantId: order.tenantId, orderId: order.id, type: "pedido.creado", version: 1 } }),
       ]);
       return 1;
@@ -204,6 +263,30 @@ export class OrdersApiService {
       this.prisma.apiOrderEvent.create({ data: { tenantId: order.tenantId, orderId: order.id, type, version } }),
     ]);
     return 1;
+  }
+
+  /**
+   * Cuando el armado del pedido suma campos (`PAYLOAD_SCHEMA`), recalcula el hash
+   * de todos los pedidos ya publicados sin avisar: si no, el primer cambio real de
+   * cada pedido se confundiría con el cambio de armado.
+   */
+  private async rebaseline(tenantId: string, now: Date) {
+    for (;;) {
+      const old = await this.prisma.apiOrderState.findMany({ where: { tenantId, schema: { lt: PAYLOAD_SCHEMA } }, take: ORDERS_PER_TICK, select: { orderId: true } });
+      if (old.length === 0) return;
+      const orders = await this.prisma.providerOrder.findMany({ where: { tenantId, id: { in: old.map((s) => s.orderId) } }, select: ORDER_SELECT });
+      const names = await this.distributorNames(orders.map((o) => o.provider));
+      const docs = await this.documentsOf(orders.map((o) => o.id));
+      const found = new Set<string>();
+      for (const order of orders) {
+        found.add(order.id);
+        await this.track(order, { firstRun: false, names, docs, now });
+      }
+      // Pedidos que ya no existen: se marcan igual para no volver a buscarlos.
+      const gone = old.map((s) => s.orderId).filter((id) => !found.has(id));
+      if (gone.length) await this.prisma.apiOrderState.updateMany({ where: { orderId: { in: gone } }, data: { schema: PAYLOAD_SCHEMA } });
+      if (old.length < ORDERS_PER_TICK) return;
+    }
   }
 
   /** NODO-<n>: el siguiente número del comercio. Reintenta si otro pedido tomó el mismo. */
@@ -279,13 +362,34 @@ export class OrdersApiService {
     const byId = new Map(orders.map((o) => [o.id, o]));
     const facts = await this.catalogFacts(tenantId, orders);
     const names = await this.distributorNames(orders.map((o) => o.provider));
+    const docs = await this.documentsOf(orders.map((o) => o.id));
     const out: OrderPayload[] = [];
     for (const s of states) {
       const o = byId.get(s.orderId);
       if (!o) continue;
-      out.push(this.payloadOf(o as unknown as OrderRow, { version: s.version, changedAt: s.changedAt, facts, names }));
+      out.push(this.payloadOf(o as unknown as OrderRow, { version: s.version, changedAt: s.changedAt, facts, names, docs }));
     }
     return out;
+  }
+
+  /**
+   * `GET /v1/pedidos/:id/documentos/:docId`: el PDF guardado de una factura o un
+   * remito del pedido. Solo los del comercio de la key.
+   */
+  async document(principal: ApiPrincipal, idOrNumber: string, documentId: string): Promise<{ mimeType: string; filename: string; data: Buffer }> {
+    await this.assertAllowed(principal);
+    const tenantId = principal.tenantId;
+    const n = /^NODO-(\d+)$/i.exec(idOrNumber.trim())?.[1];
+    const order = await this.prisma.providerOrder.findFirst({ where: n ? { tenantId, number: Number(n) } : { tenantId, id: idOrNumber }, select: { id: true } });
+    if (!order) throw Errors.notFound("El pedido");
+    const doc = await this.prisma.providerOrderDocument.findFirst({ where: { id: documentId, orderId: order.id, tenantId }, select: { assetId: true } });
+    if (!doc?.assetId) throw Errors.notFound("El comprobante");
+    const asset = await this.prisma.storedAsset.findFirst({
+      where: { id: doc.assetId, ownerTenantId: tenantId },
+      select: { mimeType: true, filename: true, data: true },
+    });
+    if (!asset) throw Errors.notFound("El comprobante");
+    return { mimeType: asset.mimeType, filename: asset.filename, data: Buffer.from(asset.data) };
   }
 
   /** Eventos nuevos del comercio, para los webhooks. */
@@ -300,13 +404,25 @@ export class OrdersApiService {
 
   // ---------- Armado ----------
 
-  private payloadOf(o: OrderRow, ctx: { version: number; changedAt: Date; facts: Map<string, CatalogFacts>; names: Map<string, string> }): OrderPayload {
+  private payloadOf(o: OrderRow, ctx: Ctx, relativeUrls = false): OrderPayload {
+    const base = relativeUrls ? "" : publicApiUrl();
     return buildOrderPayload(o, {
       version: ctx.version,
       changedAt: ctx.changedAt,
       distributor: { name: ctx.names.get(o.provider) ?? providerLabel(o.provider), cuit: distributorCuit(o.provider) },
       catalog: (code) => ctx.facts.get(`${o.provider}|${code}`) ?? null,
+      documents: ctx.docs.get(o.id) ?? [],
+      documentUrl: (orderId, documentId) => `${base}/v1/pedidos/${orderId}/documentos/${documentId}`,
     });
+  }
+
+  /** Facturas y remitos guardados de cada pedido. */
+  private async documentsOf(orderIds: string[]): Promise<Map<string, OrderDocumentRow[]>> {
+    const out = new Map<string, OrderDocumentRow[]>();
+    if (orderIds.length === 0) return out;
+    const rows = await this.prisma.providerOrderDocument.findMany({ where: { orderId: { in: orderIds } }, select: DOCUMENT_SELECT });
+    for (const r of rows) out.set(r.orderId, [...(out.get(r.orderId) ?? []), r]);
+    return out;
   }
 
   private async distributorNames(providers: string[]): Promise<Map<string, string>> {

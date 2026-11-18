@@ -1241,7 +1241,7 @@ y la web solo lo muestra si `GET /catalog-api` devuelve `ordersAvailable: true`.
   Ordenados por fecha de cambio (`actualizado`); con `cursor` sigue la página anterior.
 - `GET /v1/pedidos/:id` (id o `NODO-<n>`) → `{ data: Pedido }`.
 - Webhooks (`POST /v1/webhooks`) aceptan `pedido.creado`, `pedido.actualizado`,
-  `pedido.cancelado`. Cada entrega: `{ id: "evt_…", type, createdAt, data: { pedido } }`,
+  `pedido.cancelado`, `pedido.facturado`. Cada entrega: `{ id: "evt_…", type, createdAt, data: { pedido } }`,
   firmada igual que las de catálogo (`Nodo-Signature`, `whsec_…`, HMAC SHA-256 de
   `<timestamp>.<cuerpo>`), con `Nodo-Event-Id` para descartar duplicados y los mismos
   reintentos. Siempre el pedido completo como está en ese momento.
@@ -1273,3 +1273,38 @@ percepción (Invid), envío (Solution Box), cotización y etiqueta de percepció
 numero, fecha }` desde el seguimiento (tipo/punto/número solo si el portal da el
 número fiscal; Elit da un número interno) y aviso `pedido.facturado`, una sola vez
 por pedido (`ApiOrderState.invoiced`). CAE y PDF todavía no.
+**2026-11-18 — facturas y remitos con PDF.** `OrderDocumentsService` (cron `7,37 * * * *`,
+solo el comercio del Sistema TGS, `ORDER_DOCS=off` lo apaga) baja de los portales,
+solo leyendo, la factura, las notas de crédito o débito y el remito de cada pedido
+`CREATED` de los últimos 120 días, y los guarda en `ProviderOrderDocument` con el
+PDF como `StoredAsset` privado (`purpose=order-document`). Hasta 25 descargas por
+vuelta; un comprobante ya guardado no se vuelve a bajar; uno que falló se reintenta
+a las 6 h. Por ahora **Elit** (nota de venta → número de factura = movimiento de
+cuenta corriente; notas atadas al mismo remito; PDF del remito) y **Solution Box**
+(factura del pedido). Los datos fiscales salen del QR de ARCA (`orders-api/arca-invoice.ts`,
+`invoice-pdf.ts`) y, lo que el QR no trae, del texto del PDF; lo que no se lee, `null`.
+Prueba en modo lectura previa (18/11): Elit 4/4 PDF con QR, Solution Box PDF escaneado
+con QR leído por partes.
+
+- `factura` ahora es `{ clase (factura|nota_credito|nota_debito), numero_portal, tipo,
+  punto_venta, numero, fecha_emision, cae, cae_vencimiento, cuit_emisor, importe_total,
+  moneda, cotizacion, pdf_url, origen (qr|texto|portal) } | null` (la primera factura).
+  `facturas[]` trae todas (entregas parciales y notas), de la más vieja a la más nueva.
+  Sin PDF guardado queda el número que mostró el seguimiento con `origen: "portal"`.
+  Se quitó `factura.fecha` (era cuándo NODO vio la factura, no la fecha fiscal).
+- `remito { numero, fecha, pdf_url } | null` y `remitos[]`. Elit no da la fecha del remito.
+- `GET /v1/pedidos/:id/documentos/:documentId` → el PDF (`inline`), con la misma API key
+  y `orders:read`. Es el `pdf_url`.
+- `distribuidor.cuit`: suma Elit `30-65165551-6` y Solution Box `30-70797502-0` (QR de sus
+  facturas) y New Bytes `30-70865519-4` (datos oficiales de sus comprobantes).
+- Avisos: para Elit y Solution Box `pedido.facturado` sale cuando hay una factura con
+  datos fiscales (QR o texto); para el resto, como antes, cuando el seguimiento muestra
+  la factura. Un remito o una nota que llega después, o un dato corregido, es
+  `pedido.actualizado`. Los pedidos de Elit/Solution Box que ya habían avisado
+  `pedido.facturado` con el número del seguimiento lo vuelven a avisar una vez, ya con CAE.
+- `ApiOrderState.schema` (`PAYLOAD_SCHEMA = 2`): al sumar campos al pedido, el hash se
+  recalcula una vez para todos sin avisar ni subir la versión.
+- Pendiente: New Bytes (datos completos en `ms-comprobantes.lio.red/v2/F/{id}/{token}`,
+  sin PDF original; falta unir cada comprobante a su pedido), Air (PDF y QR sí, el portal no
+  dice de qué pedido es cada factura), Invid (sin PDF), New Tree (Cloudflare bloquea la IP
+  del servidor: falta `NEW_TREE_PROXY_URL`).

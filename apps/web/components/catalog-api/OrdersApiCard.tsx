@@ -130,7 +130,7 @@ export default function OrdersApiCard({
       </div>
 
       <p className="text-[11px] text-surface-500 border-t border-surface-800 pt-3">
-        Todavía no salen el CAE, el PDF de la factura ni el remito. El CUIT del distribuidor solo está confirmado para Grupo Núcleo. Lo que el distribuidor no informa va vacío: nunca se estima.
+        Elit y Solution Box traen la factura con CAE y su PDF (y Elit, el remito), guardados en NODO. New Bytes, Air, Invid y New Tree por ahora solo traen el número de factura que muestra el portal. Lo que el distribuidor no informa va vacío: nunca se estima.
       </p>
     </section>
   );

@@ -59,6 +59,26 @@ export interface CatalogFacts {
   productId: string | null;
 }
 
+/** Factura, nota o remito guardado en NODO (`ProviderOrderDocument`). */
+export interface OrderDocumentRow {
+  id: string;
+  kind: string;
+  portalNumber: string | null;
+  tipo: string | null;
+  puntoVenta: number | null;
+  numero: number | null;
+  fechaEmision: string | null;
+  cae: string | null;
+  caeVencimiento: string | null;
+  cuitEmisor: string | null;
+  importeTotal: unknown;
+  moneda: string | null;
+  cotizacion: unknown;
+  origen: string | null;
+  assetId: string | null;
+  createdAt: Date;
+}
+
 export interface DistributorFacts {
   name: string;
   cuit: string | null;
@@ -117,14 +137,13 @@ export interface OrderPayload {
   entrega: { tipo: string | null; detalle: string | null };
   forma_pago: string | null;
   notas: string | null;
-  /** Factura que informó el portal (seguimiento). CAE y PDF todavía no se guardan. */
-  factura: {
-    numero_portal: string;
-    tipo: string | null;
-    punto_venta: number | null;
-    numero: number | null;
-    fecha: string | null;
-  } | null;
+  /** La factura del pedido (la primera, si hay entregas parciales). */
+  factura: InvoicePayload | null;
+  /** Todas las facturas y notas de crédito o débito del pedido, de la más vieja a la más nueva. */
+  facturas: InvoicePayload[];
+  /** El remito del pedido (el primero, si hay varios). */
+  remito: DeliveryNotePayload | null;
+  remitos: DeliveryNotePayload[];
   seguimiento: {
     etapa: string | null;
     estado_portal: string | null;
@@ -134,6 +153,33 @@ export interface OrderPayload {
     actualizado: string | null;
   } | null;
   renglones: OrderLine[];
+}
+
+export interface InvoicePayload {
+  clase: "factura" | "nota_credito" | "nota_debito";
+  /** Número tal como lo muestra el portal. */
+  numero_portal: string | null;
+  tipo: string | null;
+  punto_venta: number | null;
+  numero: number | null;
+  /** AAAA-MM-DD, la fecha fiscal del comprobante. */
+  fecha_emision: string | null;
+  cae: string | null;
+  cae_vencimiento: string | null;
+  cuit_emisor: string | null;
+  importe_total: number | null;
+  moneda: string | null;
+  cotizacion: number | null;
+  /** Copia del PDF guardada en NODO (se pide con la misma API key). */
+  pdf_url: string | null;
+  /** De dónde salieron los datos: QR de ARCA, texto del PDF, o solo el número que mostró el portal. */
+  origen: "qr" | "texto" | "portal";
+}
+
+export interface DeliveryNotePayload {
+  numero: string | null;
+  fecha: string | null;
+  pdf_url: string | null;
 }
 
 // ---------- Utilidades ----------
@@ -467,8 +513,13 @@ export function buildOrderPayload(
     changedAt: Date;
     distributor: DistributorFacts;
     catalog: (code: string) => CatalogFacts | null;
+    /** Comprobantes guardados del pedido. */
+    documents?: OrderDocumentRow[];
+    /** URL del PDF guardado (la arma la API). */
+    documentUrl?: (orderId: string, documentId: string) => string;
   }
 ): OrderPayload {
+  const docs = documentsPayload(o, ctx.documents ?? [], ctx.documentUrl);
   const lines = (Array.isArray(o.items) ? o.items : []).map((it) => lineOf(it, ctx.catalog)).filter((l): l is OrderLine => l !== null);
   const t = totalsFor(o, lines);
   const total = num(o.total);
@@ -506,11 +557,10 @@ export function buildOrderPayload(
     entrega: { tipo: text(o.deliveryOption), detalle: text(o.deliveryLabel) },
     forma_pago: text(o.paymentLabel) ?? (o.paymentOption && o.paymentOption !== "OFFLINE" ? text(o.paymentOption) : null),
     notas: text(o.notes),
-    factura: (() => {
-      const parsed = parseInvoiceNumber(o.trackingInvoice);
-      if (!parsed || !o.trackingInvoice) return null;
-      return { numero_portal: o.trackingInvoice.trim(), ...parsed, fecha: invoicedAt(o.trackingHistory) };
-    })(),
+    factura: docs.facturas.find((f) => f.clase === "factura") ?? docs.facturas[0] ?? null,
+    facturas: docs.facturas,
+    remito: docs.remitos[0] ?? null,
+    remitos: docs.remitos,
     seguimiento: tracked
       ? {
           etapa: text(o.trackingStage),
@@ -538,12 +588,73 @@ export function parseInvoiceNumber(raw: string | null | undefined): { tipo: stri
   return { tipo: m[1].toUpperCase(), punto_venta: Number(m[2]), numero: Number(m[3]) };
 }
 
-function invoicedAt(history: unknown): string | null {
-  for (const h of Array.isArray(history) ? history : []) {
-    const r = rec(h);
-    if (r.stage === "INVOICED" && typeof r.at === "string") return r.at;
+const CLASS_OF: Record<string, InvoicePayload["clase"]> = { FACTURA: "factura", NOTA_CREDITO: "nota_credito", NOTA_DEBITO: "nota_debito" };
+
+/**
+ * Facturas y remitos del pedido: los guardados en NODO y, si no hay ninguna
+ * factura guardada, la que informó el seguimiento del portal (solo el número).
+ */
+export function documentsPayload(
+  o: Pick<OrderRow, "id" | "trackingInvoice">,
+  documents: OrderDocumentRow[],
+  documentUrl?: (orderId: string, documentId: string) => string
+): { facturas: InvoicePayload[]; remitos: DeliveryNotePayload[] } {
+  const url = (d: OrderDocumentRow) => (d.assetId && documentUrl ? documentUrl(o.id, d.id) : null);
+  const sorted = [...documents].sort(
+    (a, b) => (a.fechaEmision ?? "9").localeCompare(b.fechaEmision ?? "9") || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id)
+  );
+  // Un comprobante cuyo PDF todavía no se pudo bajar no aporta nada.
+  const facturas: InvoicePayload[] = sorted
+    .filter((d) => CLASS_OF[d.kind] && d.assetId)
+    .map((d) => {
+      const fiscal = d.origen === "qr" || d.origen === "texto";
+      const fromPortal = parseInvoiceNumber(d.portalNumber);
+      return {
+        clase: CLASS_OF[d.kind],
+        numero_portal: text(d.portalNumber),
+        tipo: fiscal ? d.tipo : fromPortal?.tipo ?? null,
+        punto_venta: fiscal ? d.puntoVenta : fromPortal?.punto_venta ?? null,
+        numero: fiscal ? d.numero : fromPortal?.numero ?? null,
+        fecha_emision: fiscal ? d.fechaEmision : null,
+        cae: fiscal ? d.cae : null,
+        cae_vencimiento: fiscal ? d.caeVencimiento : null,
+        cuit_emisor: fiscal ? d.cuitEmisor : null,
+        importe_total: fiscal ? r2n(num(d.importeTotal)) : null,
+        moneda: fiscal ? d.moneda : null,
+        cotizacion: fiscal ? num(d.cotizacion) : null,
+        pdf_url: url(d),
+        origen: fiscal ? (d.origen as "qr" | "texto") : "portal",
+      };
+    });
+  if (!facturas.some((f) => f.clase === "factura")) {
+    const portal = text(o.trackingInvoice);
+    const parsed = parseInvoiceNumber(portal);
+    if (portal && parsed) {
+      facturas.unshift({
+        clase: "factura",
+        numero_portal: portal,
+        ...parsed,
+        fecha_emision: null,
+        cae: null,
+        cae_vencimiento: null,
+        cuit_emisor: null,
+        importe_total: null,
+        moneda: null,
+        cotizacion: null,
+        pdf_url: null,
+        origen: "portal",
+      });
+    }
   }
-  return null;
+  const remitos: DeliveryNotePayload[] = sorted
+    .filter((d) => d.kind === "REMITO" && d.assetId)
+    .map((d) => ({ numero: text(d.portalNumber), fecha: d.fechaEmision, pdf_url: url(d) }));
+  return { facturas, remitos };
+}
+
+/** ¿El pedido ya tiene una factura con datos fiscales (QR o texto del PDF)? */
+export function hasFiscalInvoice(p: Pick<OrderPayload, "facturas">): boolean {
+  return p.facturas.some((f) => f.clase === "factura" && f.origen !== "portal");
 }
 
 /** Hash de lo que importa a quien lee: sin la versión ni la fecha de cambio (las pone la API). */
@@ -573,6 +684,11 @@ export function validCuit(raw: string): boolean {
 export const DISTRIBUTOR_CUIT: Record<string, string> = {
   // Página de información al consumidor de HP Argentina (Grupo Nucleo S.A.).
   GRUPO_NUCLEO: "30-70933244-5",
+  // QR de ARCA de sus facturas (prueba en modo lectura, 18/11/2026).
+  ELIT: "30-65165551-6",
+  SOLUTION_BOX: "30-70797502-0",
+  // Datos oficiales de sus comprobantes (lio.red, el sistema de facturación de New Bytes).
+  NEW_BYTES: "30-70865519-4",
 };
 
 export function distributorCuit(provider: string): string | null {

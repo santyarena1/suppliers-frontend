@@ -43,7 +43,7 @@ function order(id: string, over: Partial<Order> = {}): Order {
   };
 }
 
-function setup(initial: Order[]) {
+function setup(initial: Order[], documents: Record<string, unknown>[] = []) {
   const orders = [...initial];
   const states = new Map<string, Record<string, unknown>>();
   const events: { id: bigint; tenantId: string; orderId: string; type: string; version: number }[] = [];
@@ -71,7 +71,16 @@ function setup(initial: Order[]) {
       findUnique: jest.fn(async () => tracker),
       upsert: jest.fn(async (args: { create: { tenantId: string; checkedUntil: Date } }) => (tracker = args.create)),
     },
+    providerOrderDocument: {
+      findMany: jest.fn(async (args: { where: { orderId?: { in: string[] }; tenantId?: string; updatedAt?: { gte: Date } } }) =>
+        documents.filter((d) => (!args.where.orderId || args.where.orderId.in.includes(d.orderId as string)) && (!args.where.updatedAt || (d.updatedAt as Date) >= args.where.updatedAt.gte))
+      ),
+    },
     apiOrderState: {
+      findMany: jest.fn(async (args: { where: { schema?: { lt: number } } }) =>
+        [...states.values()].filter((s) => !args.where.schema || ((s.schema as number) ?? 1) < args.where.schema.lt)
+      ),
+      updateMany: jest.fn(async () => ({ count: 0 })),
       findUnique: jest.fn(async (args: { where: { orderId: string } }) => states.get(args.where.orderId) ?? null),
       create: jest.fn(async (args: { data: Record<string, unknown> }) => states.set(args.data.orderId as string, { ...args.data })),
       update: jest.fn(async (args: { where: { orderId: string }; data: Record<string, unknown> }) =>
@@ -88,12 +97,13 @@ function setup(initial: Order[]) {
   const tgs = { allowedTenantId: async () => "tgs" };
   const snapshots = { get: async () => ({ rows: [] }) };
   const service = new OrdersApiService(prisma as never, tgs as never, snapshots as never);
-  return { service, orders, states, events };
+  return { service, orders, states, events, documents };
 }
 
 describe("revisión de pedidos para la API", () => {
   it("la primera vez registra la historia sin avisar; después avisa lo nuevo y lo que cambia", async () => {
-    const { service, orders, states, events } = setup([order("a", { number: 1 })]);
+    // Invid: el portal no da PDF, «facturado» sale con el número que muestra el seguimiento.
+    const { service, orders, states, events } = setup([order("a", { number: 1, provider: "INVID" })]);
     await service.refresh("tgs", new Date("2026-11-16T10:05:00Z"));
     expect(states.get("a")).toMatchObject({ version: 1 });
     expect(events).toHaveLength(0);
@@ -122,6 +132,34 @@ describe("revisión de pedidos para la API", () => {
     Object.assign(orders[0], { trackingStage: "CANCELLED", updatedAt: new Date("2026-11-16T10:12:00Z") });
     await service.refresh("tgs", new Date("2026-11-16T10:13:00Z"));
     expect(events.at(-1)).toMatchObject({ orderId: "a", type: "pedido.cancelado", version: 4 });
+  });
+
+  it("Elit: facturado cuando se guardan los datos fiscales del PDF; el remito después es una actualización", async () => {
+    const { service, orders, events, documents } = setup([order("e", { number: 1 })]);
+    await service.refresh("tgs", new Date("2026-11-16T10:05:00Z"));
+    // El seguimiento muestra el número interno de la factura: todavía no es «facturado».
+    Object.assign(orders[0], { trackingStage: "INVOICED", trackingInvoice: "2000240284", updatedAt: new Date("2026-11-16T10:06:00Z") });
+    await service.refresh("tgs", new Date("2026-11-16T10:07:00Z"));
+    expect(events.at(-1)).toMatchObject({ orderId: "e", type: "pedido.actualizado", version: 2 });
+    // Se guardó el PDF con el QR (sin cambio en el pedido mismo).
+    const fiscal = { orderId: "e", kind: "FACTURA", portalNumber: "2000240284", tipo: "A", puntoVenta: 22, numero: 1, fechaEmision: "2026-11-16", cae: "761", caeVencimiento: null, cuitEmisor: "30-65165551-6", importeTotal: 121, moneda: "USD", cotizacion: 1450, origen: "qr", assetId: "a1" };
+    documents.push({ id: "d1", createdAt: new Date("2026-11-16T10:08:00Z"), updatedAt: new Date("2026-11-16T10:08:00Z"), ...fiscal });
+    await service.refresh("tgs", new Date("2026-11-16T10:09:00Z"));
+    expect(events.at(-1)).toMatchObject({ orderId: "e", type: "pedido.facturado", version: 3 });
+    documents.push({ id: "r1", orderId: "e", kind: "REMITO", portalNumber: "R-1", fechaEmision: null, origen: null, assetId: "a2", createdAt: new Date("2026-11-16T10:10:00Z"), updatedAt: new Date("2026-11-16T10:10:00Z") });
+    await service.refresh("tgs", new Date("2026-11-16T10:11:00Z"));
+    expect(events.at(-1)).toMatchObject({ orderId: "e", type: "pedido.actualizado", version: 4 });
+    expect(events).toHaveLength(3);
+  });
+
+  it("al sumar campos al pedido recalcula el hash sin avisar", async () => {
+    const { service, states, events, orders } = setup([order("a", { number: 1 })]);
+    await service.refresh("tgs", new Date("2026-11-16T10:05:00Z"));
+    states.set("a", { ...states.get("a"), schema: 1, hash: "viejo" });
+    orders[0].updatedAt = new Date("2026-11-16T10:06:00Z");
+    await service.refresh("tgs", new Date("2026-11-16T10:07:00Z"));
+    expect(events).toHaveLength(0);
+    expect(states.get("a")).toMatchObject({ version: 1, schema: 2 });
   });
 
   it("un intento de compra que falló no se publica ni se numera", async () => {

@@ -42,7 +42,7 @@ import { OrderApprovalService } from "../orders/order-approval.service";
 import { AccountPortalCache } from "./account-portal-cache";
 import { PricingCoreModule } from "../pricing/pricing-core.module";
 import { OrderTrackingService } from "./order-tracking.service";
-import { OrderDocumentsProbe } from "./order-documents.probe";
+import { OrderDocumentsService } from "./order-documents.service";
 import { TgsAccessService } from "../tgs/tgs.access";
 import { OrderTrackingScheduler } from "./order-tracking.scheduler";
 
@@ -88,7 +88,7 @@ import { OrderTrackingScheduler } from "./order-tracking.scheduler";
     OrderTrackingService,
     OrderTrackingScheduler,
     TgsAccessService,
-    OrderDocumentsProbe,
+    OrderDocumentsService,
   ],
   exports: [
     ProvidersService,
