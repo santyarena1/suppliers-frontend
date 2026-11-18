@@ -19,6 +19,7 @@ export interface InvoiceAnalysis {
   /** Campos con dato. */
   filled: (keyof FiscalData)[];
   text: string;
+  images: string[];
   error?: string;
 }
 
@@ -27,16 +28,16 @@ export function filledFields(f: FiscalData): (keyof FiscalData)[] {
 }
 
 export async function analyzeInvoicePdf(buf: Buffer): Promise<InvoiceAnalysis> {
-  if (!isPdf(buf)) return { isPdf: false, pages: 0, qrFrom: null, qrCount: 0, fiscal: { ...EMPTY_FISCAL }, origen: null, filled: [], text: "" };
+  if (!isPdf(buf)) return { isPdf: false, pages: 0, qrFrom: null, qrCount: 0, fiscal: { ...EMPTY_FISCAL }, origen: null, filled: [], text: "", images: [] };
   try {
     const r = await readInvoicePdf(buf);
     const qr = r.qrUrls.map(parseArcaQr).find((x) => x != null) ?? null;
     const text = parseInvoiceText(r.text);
     const fiscal = mergeFiscal(qr, text);
     const origen: FiscalOrigin | null = qr ? "qr" : hasFiscalData(text) ? "texto" : null;
-    return { isPdf: true, pages: r.pages, qrFrom: qr ? r.qrFrom : null, qrCount: r.qrUrls.length, fiscal: origen ? fiscal : { ...EMPTY_FISCAL }, origen, filled: origen ? filledFields(fiscal) : [], text: r.text };
+    return { isPdf: true, pages: r.pages, qrFrom: qr ? r.qrFrom : null, qrCount: r.qrUrls.length, fiscal: origen ? fiscal : { ...EMPTY_FISCAL }, origen, filled: origen ? filledFields(fiscal) : [], text: r.text, images: r.images };
   } catch (err) {
-    return { isPdf: true, pages: 0, qrFrom: null, qrCount: 0, fiscal: { ...EMPTY_FISCAL }, origen: null, filled: [], text: "", error: err instanceof Error ? err.message : String(err) };
+    return { isPdf: true, pages: 0, qrFrom: null, qrCount: 0, fiscal: { ...EMPTY_FISCAL }, origen: null, filled: [], text: "", images: [], error: err instanceof Error ? err.message : String(err) };
   }
 }
 

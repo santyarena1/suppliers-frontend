@@ -43,6 +43,8 @@ export interface PdfReading {
   qrUrls: string[];
   /** De dónde salió el primer QR. */
   qrFrom: "link" | "texto" | "imagen" | null;
+  /** Imágenes casi cuadradas revisadas para el QR (ancho×alto/tipo), para diagnóstico. */
+  images: string[];
 }
 
 export const MAX_PDF_BYTES = 15 * 1024 * 1024;
@@ -64,7 +66,7 @@ export async function readInvoicePdf(buf: Buffer): Promise<PdfReading> {
     useSystemFonts: false,
     verbosity: 0,
   });
-  const out: PdfReading = { pages: 0, text: "", qrUrls: [], qrFrom: null };
+  const out: PdfReading = { pages: 0, text: "", qrUrls: [], qrFrom: null, images: [] };
   const add = (url: string, from: NonNullable<PdfReading["qrFrom"]>) => {
     const u = decodeURIComponentSafe(url.trim());
     if (!isArcaQrUrl(u) || out.qrUrls.includes(u)) return;
@@ -89,6 +91,7 @@ export async function readInvoicePdf(buf: Buffer): Promise<PdfReading> {
       for (let n = 1; n <= pages && out.qrUrls.length === 0; n++) {
         const page = await doc.getPage(n);
         for (const img of await pageImages(page)) {
+          out.images.push(`${img.width}x${img.height}/${img.kind ?? "?"}/${img.data?.length ?? 0}`);
           const url = decodeQr(img);
           if (url) add(url, "imagen");
         }
@@ -143,7 +146,8 @@ async function pageImages(page: PdfPage): Promise<PdfImage[]> {
     }
     const im = img as PdfImage | null;
     // Un QR es casi cuadrado y no es diminuto.
-    if (im?.data && im.width >= 21 && im.height >= 21 && Math.abs(im.width / im.height - 1) < 0.2) out.push(im);
+    if (im && !im.data) out.push({ ...im, width: im.width ?? 0, height: im.height ?? 0 });
+    else if (im?.data && im.width >= 21 && im.height >= 21 && Math.abs(im.width / im.height - 1) < 0.2) out.push(im);
   }
   return out;
 }

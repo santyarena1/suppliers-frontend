@@ -53,6 +53,9 @@ interface DocResult {
   cuit: string | null;
   /** Números de pedidos de NODO que aparecen en el texto del PDF. */
   nombraPedidos: number;
+  textLen?: number;
+  lineas?: string[];
+  imagenes?: string[];
   error?: string;
 }
 
@@ -91,6 +94,16 @@ function interestingPaths(o: unknown, prefix = "", out: string[] = [], depth = 0
     } else if (v && typeof v === "object") interestingPaths(v, p, out, depth + 1);
   }
   return out;
+}
+
+/** Líneas del texto con etiquetas fiscales (sin nombres ni domicilios), para ver cómo viene el PDF. */
+function fiscalLines(text: string): string[] {
+  return text
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter((l) => /CAE|Comp|Punto|Fecha|Factura|FACTURA|Total|COD|C.U.I.T|CUIT|Vto|Moneda|Cotiz/i.test(l))
+    .slice(0, 14)
+    .map((l) => l.slice(0, 120));
 }
 
 @Injectable()
@@ -152,6 +165,22 @@ export class OrderDocumentsProbe {
     }
     this.log.log(`${TAG} resumen\n${this.table(reports)}`);
     return reports;
+  }
+
+  /** El HTML de la primera fila «FC» de la cuenta corriente de Invid (solo etiquetas y atributos, sin textos largos). */
+  private async invidRow(creds: Record<string, string>): Promise<string | null> {
+    try {
+      const svc = this.invid as unknown as { login: (u: string, p: string) => Promise<string>; creds: (c: Record<string, string>) => { username: string; password: string } };
+      const { username, password } = svc.creds.call(this.invid, creds);
+      const cookie = await svc.login.call(this.invid, username, password);
+      const res = await fetch("https://www.invidcomputers.com/lista_ctacte_invid.php", { headers: { Cookie: cookie } });
+      const html = await res.text();
+      const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) ?? [];
+      const fc = rows.find((r) => />\s*FC\s*</.test(r));
+      return fc ? fc.replace(/\s+/g, " ").slice(0, 1500) : `sin fila FC (${rows.length} filas)`;
+    } catch (err) {
+      return `error: ${err instanceof Error ? err.message : String(err)}`.slice(0, 200);
+    }
   }
 
   private table(reports: ProviderReport[]): string {
@@ -226,6 +255,11 @@ export class OrderDocumentsProbe {
           comprobanteClaves: keysOf(st.movements[0]),
           pedidoClaves: keysOf(ord.orders[0] ?? pur.orders[0]),
           tiposComprobante: [...new Set(st.movements.map((m) => m.invoiceType))].slice(0, 10),
+          voucherHosts: [...new Set(vouchers.map((m) => { try { const u = new URL(String(m.voucherUrl), "https://api.nb.com.ar/v1/"); return u.host + u.pathname.replace(/[0-9a-f-]{8,}/gi, "…").slice(0, 60); } catch { return "?"; } }))].slice(0, 4),
+          conCae: st.movements.filter((m) => m.cae).length,
+          ejemploComprobantes: st.movements.slice(0, 4).map((m) => `${m.branch ?? ""}|${m.invoiceNumber ?? ""}|${m.invoiceLabel ?? ""}`),
+          ejemploFacturaEnPedidos: [...ord.orders, ...pur.orders].map((o) => o.invoice).filter((x) => x && String(x).trim() && String(x).trim() !== "-").slice(0, 6),
+          pedidosNodoEnPortal: [...ord.orders, ...pur.orders].filter((o) => orderOf([o.orderNumber, o.webOrderNumber, o.albNumber])).length,
         };
         for (const r of [...ord.orders, ...pur.orders]) {
           const nodo = orderOf([r.orderNumber, r.webOrderNumber, r.albNumber]);
@@ -248,12 +282,20 @@ export class OrderDocumentsProbe {
           movimientoClaves: keysOf(acc.movements[0]),
           movimientosConRemito: acc.movements.filter((m) => digits(m.remito)).length,
           notasConRemito: acc.orders.filter((o) => digits(o.dispatchNote)).length,
+          notasNodoEnPortal: acc.orders.filter((o) => orderOf([o.internalNumber, o.orderNumber])).length,
+          notasNodoConFactura: acc.orders.filter((o) => orderOf([o.internalNumber, o.orderNumber]) && digits(o.invoiceNumber)).length,
+          facturaCtaIgualNota: invoices.filter((m) => acc.orders.some((o) => digits(o.invoiceNumber) && digits(o.invoiceNumber) === digits(m.number))).length,
+          formularios: [...new Set(acc.movements.map((m) => m.form))].slice(0, 10),
         };
         for (const n of acc.orders) {
           const nodo = orderOf([n.internalNumber, n.orderNumber]);
           if (!nodo) continue;
           const remito = digits(n.dispatchNote);
-          const inv = invoices.find((m) => remito && digits(m.remito) === remito);
+          const inv = invoices.find((m) => (remito && digits(m.remito) === remito) || (digits(n.invoiceNumber) && digits(m.number) === digits(n.invoiceNumber)));
+          if (!inv && digits(n.invoiceNumber) && cands.filter((c) => c.link === "pedido→factura").length < 2) {
+            linked.add(nodo.id);
+            cands.push({ kind: "factura", link: "pedido→factura", label: `FACTURA A ${n.invoiceNumber}`, fetch: async () => toBuffer(await this.elit.getDocument(creds, { form: "FACTURA A", number: n.invoiceNumber })) });
+          }
           if (inv) {
             linked.add(nodo.id);
             cands.push({ kind: "factura", link: "remito", label: `${inv.form} ${inv.number}`, fetch: async () => toBuffer(await this.elit.getDocument(creds, { form: inv.form, number: inv.number })) });
@@ -274,6 +316,8 @@ export class OrderDocumentsProbe {
           pedidosConLinkFactura: ord.orders.filter((o) => o.invoiceHrefs?.length).length,
           tiposComprobante: [...new Set(st.movements.map((m) => m.docType))].slice(0, 10),
           movimientosConLink: st.movements.filter((m) => m.hrefs.length).length,
+          celdasFactura: ord.orders.map((o) => o.invoice).filter(Boolean).slice(0, 6),
+          filaFC: await this.invidRow(creds),
         };
         for (const o of ord.orders) {
           const nodo = orderOf([o.webOrderNumber, o.orderNumber]);
@@ -305,7 +349,7 @@ export class OrderDocumentsProbe {
         const acc = await this.air.getAccount(tenantId, creds);
         report.comprobantesPortal = acc.invoices.length;
         const headers = keysOf(acc.invoices[0]).filter((k) => k !== "_links");
-        report.estructura = { columnas: headers, conLink: acc.invoices.filter((r) => r._links?.length).length, ejemploLinks: (acc.invoices.find((r) => r._links?.length)?._links ?? []).map((l) => l.href.replace(/[?#].*$/, "")).slice(0, 3) };
+        report.estructura = { avisos: acc.warnings, columnas: headers, conLink: acc.invoices.filter((r) => r._links?.length).length, ejemploLinks: (acc.invoices.find((r) => r._links?.length)?._links ?? []).map((l) => l.href.replace(/[?#].*$/, "")).slice(0, 3) };
         for (const r of acc.invoices.filter((x) => x._links?.length).slice(0, PER_PROVIDER_DOCS)) {
           const href = (r._links ?? [])[0].href;
           cands.push({ kind: "factura", link: null, label: `muestra ${headers.slice(0, 3).map((h) => String(r[h] ?? "")).join(" ")}`.slice(0, 80), fetch: async () => toBuffer(await this.air.getDocument(creds, href)) });
@@ -316,7 +360,10 @@ export class OrderDocumentsProbe {
       case "POLYTECH": {
         const api = await PolytechClient.fromCredentials(creds);
         const hist = await api.rawRead("/orders/history");
-        const nodoIds = orders.map((o) => o.invidOrderNumber).filter((x): x is string => !!x).slice(0, 2);
+        const histRec = (hist ?? {}) as Record<string, { id?: unknown }[]>;
+        const portalIds = ["shippeds", "in_process", "pendings"].flatMap((k) => (Array.isArray(histRec[k]) ? histRec[k] : []).map((x) => String(x?.id ?? ""))).filter(Boolean);
+        const nodoIds = [...orders.map((o) => o.invidOrderNumber).filter((x): x is string => !!x), ...portalIds].slice(0, 2);
+        report.comprobantesPortal = portalIds.length;
         const details = await Promise.all(nodoIds.map((id) => api.rawRead("/orders/detail", { sales_order_id: id }).catch((e: Error) => ({ error: e.message }))));
         report.estructura = { historial: interestingPaths(hist), historialClaves: keysOf(hist), detalle: details.map((d) => interestingPaths(d)), detalleClaves: details.map(keysOf) };
         report.nota = "solo se miran los campos que publica la API (no hay PDF conocido)";
@@ -347,6 +394,9 @@ export class OrderDocumentsProbe {
           tipo: a.fiscal.tipo,
           cuit: a.fiscal.cuit_emisor,
           nombraPedidos: mentionedNumbers(a.text, allNumbers).length,
+          textLen: a.text.length,
+          lineas: a.origen === "qr" ? undefined : fiscalLines(a.text),
+          imagenes: a.qrFrom ? undefined : a.images.slice(0, 6),
           error: a.error ?? (a.isPdf ? undefined : `no es PDF (${buf.length} bytes, empieza «${buf.toString("utf8", 0, 30).replace(/\s+/g, " ")}»)`),
         });
       } catch (err) {
