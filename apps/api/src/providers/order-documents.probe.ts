@@ -56,6 +56,7 @@ interface DocResult {
   /** Números de pedidos de NODO que aparecen en el texto del PDF. */
   nombraPedidos: number;
   textLen?: number;
+  qrCuit?: string | null;
   lineas?: string[];
   imagenes?: string[];
   error?: string;
@@ -99,6 +100,17 @@ function interestingPaths(o: unknown, prefix = "", out: string[] = [], depth = 0
 }
 
 /** Líneas del texto con etiquetas fiscales (sin nombres ni domicilios), para ver cómo viene el PDF. */
+function qrField(url: string | undefined, key: string): string | null {
+  try {
+    if (!url) return null;
+    const p = new URL(url).searchParams.get("p") ?? "";
+    const j = JSON.parse(Buffer.from(p.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8")) as Record<string, unknown>;
+    return j[key] == null ? null : `${typeof j[key]}:${String(j[key])}`;
+  } catch {
+    return null;
+  }
+}
+
 function fiscalLines(text: string): string[] {
   return text
     .split(/\n/)
@@ -257,7 +269,7 @@ export class OrderDocumentsProbe {
         if (code.length > 8) break;
       }
       const api = "https://ms-comprobantes.lio.red/v2";
-      const guesses = [`${api}/voucher/${kind}/${id}/${token}`, `${api}/vouchers/${kind}/${id}/${token}`, `${api}/voucher/${id}/${token}`, `${api}/comprobantes/${kind}/${id}/${token}`];
+      const guesses = [`${api}/${kind}/${id}/${token}`, `${api}/voucher/${kind}/${id}/${token}`, `${api}/vouchers/${kind}/${id}/${token}`, `${api}/voucher/${id}/${token}`, `${api}/comprobantes/${kind}/${id}/${token}`];
       const tries: string[] = [];
       for (const g of guesses) {
         const r = await fetch(g, { headers: { Accept: "application/json" } }).catch(() => null);
@@ -524,6 +536,8 @@ export class OrderDocumentsProbe {
           nodoEnFacturas: orders.filter((o) => o.invidOrderNumber && fvHtml.includes(o.invidOrderNumber)).length,
           itemsTexto: stripTags(items).replace(/\s+/g, " ").slice(0, 700),
           itemsCodigos: codes(items).slice(0, 8),
+          resumenTexto: stripTags(resumenHtml).replace(/\s+/g, " ").slice(0, 900),
+          nvItems: await Promise.all(codes(resumenHtml).filter((c) => /NV/i.test(c)).slice(0, 2).map(async (c) => { const t = stripTags(await api.getText(`${AIR_COMPROBANTES_URL}?q=r&nrocompro=${encodeURIComponent(c)}`).catch(() => "")).replace(/\s+/g, " "); return `${c}: ${t.slice(0, 500)} | nodo:${orders.filter((o) => o.invidOrderNumber && t.includes(o.invidOrderNumber)).length}`; })),
         };
         for (const code of fv.slice(0, PER_PROVIDER_DOCS)) {
           cands.push({ kind: "factura", link: null, label: `muestra ${code}`, fetch: async () => (await api.getBuffer(`https://www.air-intra.com/2025/pdf/index.php?q=${encodeURIComponent(code)}`)).buffer });
@@ -573,6 +587,7 @@ export class OrderDocumentsProbe {
           cuit: a.fiscal.cuit_emisor,
           nombraPedidos: mentionedNumbers(a.text, allNumbers).length,
           textLen: a.text.length,
+          qrCuit: qrField(a.qrUrls[0], "cuit"),
           lineas: a.origen === "qr" ? undefined : fiscalLines(a.text),
           imagenes: a.qrFrom ? undefined : a.images.slice(0, 6),
           error: a.error ?? (a.isPdf ? undefined : `no es PDF (${buf.length} bytes, empieza «${buf.toString("utf8", 0, 30).replace(/\s+/g, " ")}»)`),
