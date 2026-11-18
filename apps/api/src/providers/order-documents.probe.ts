@@ -207,6 +207,49 @@ export class OrderDocumentsProbe {
     }
   }
 
+  /** Fragmentos de código alrededor de ciertas palabras (para ver cómo un visor pide el PDF). */
+  private snippets(js: string, needles: string[], max = 3): string[] {
+    const out: string[] = [];
+    for (const n of needles) {
+      let from = 0;
+      for (let k = 0; k < max; k++) {
+        const i = js.indexOf(n, from);
+        if (i < 0) break;
+        out.push(`${n}: ${js.slice(Math.max(0, i - 260), i + 260).replace(/\s+/g, " ")}`);
+        from = i + n.length;
+      }
+    }
+    return out;
+  }
+
+  private async nbViewerCode(url: unknown): Promise<string[]> {
+    try {
+      if (typeof url !== "string" || !url) return ["sin url"];
+      const page = new URL(url);
+      const html = await fetch(page).then((r) => r.text());
+      const srcs = [...new Set([...html.matchAll(/<script\b[^>]*src="([^"]+)"/gi)].map((m) => m[1]))].slice(0, 12);
+      const out: string[] = [];
+      for (const src of srcs) {
+        const js = await fetch(new URL(src, page)).then((r) => r.text()).catch(() => "");
+        out.push(...this.snippets(js, ["srcPDF=", "Comprobantes-pdf", "baseURL", "lio.red"], 2).map((s) => `${src}: ${s}`));
+        if (out.length > 14) break;
+      }
+      return out.slice(0, 14);
+    } catch (err) {
+      return [`error: ${(err instanceof Error ? err.message : String(err)).slice(0, 200)}`];
+    }
+  }
+
+  private async airViewerCode(creds: Record<string, string>): Promise<string[]> {
+    try {
+      const api = await AirPortalClient.login(creds);
+      const js = await api.getText(new URL("comprobantes.js", `${AIR_COMPROBANTES_URL}`).toString());
+      return [`chars ${js.length}`, ...this.snippets(js, ["comprobantes.php?q=", "pdf/index.php?q=", "pdf_lite/index.php?q=", "#tipos", "desde"], 3)].slice(0, 16);
+    } catch (err) {
+      return [`error: ${(err instanceof Error ? err.message : String(err)).slice(0, 200)}`];
+    }
+  }
+
   /** Scripts de la página de comprobantes de Air y las rutas .php que llaman. */
   private async airScripts(creds: Record<string, string>): Promise<Record<string, unknown>> {
     try {
@@ -323,7 +366,7 @@ export class OrderDocumentsProbe {
           ejemploComprobantes: st.movements.slice(0, 4).map((m) => `${m.branch ?? ""}|${m.invoiceNumber ?? ""}|${m.invoiceLabel ?? ""}`),
           ejemploFacturaEnPedidos: [...ord.orders, ...pur.orders].map((o) => o.invoice).filter((x) => x && String(x).trim() && String(x).trim() !== "-").slice(0, 6),
           pedidosNodoEnPortal: [...ord.orders, ...pur.orders].filter((o) => orderOf([o.orderNumber, o.webOrderNumber, o.albNumber])).length,
-          voucherPagina: await this.nbVoucherPage(vouchers[0]?.voucherUrl),
+          visor: await this.nbViewerCode(vouchers[0]?.voucherUrl),
         };
         for (const r of [...ord.orders, ...pur.orders]) {
           const nodo = orderOf([r.orderNumber, r.webOrderNumber, r.albNumber]);
@@ -416,7 +459,7 @@ export class OrderDocumentsProbe {
         const acc = await this.air.getAccount(tenantId, creds);
         report.comprobantesPortal = acc.invoices.length;
         const headers = keysOf(acc.invoices[0]).filter((k) => k !== "_links");
-        report.estructura = { scripts: await this.airScripts(creds), pagina: await this.airPage(creds), avisos: acc.warnings, columnas: headers, conLink: acc.invoices.filter((r) => r._links?.length).length, ejemploLinks: (acc.invoices.find((r) => r._links?.length)?._links ?? []).map((l) => l.href.replace(/[?#].*$/, "")).slice(0, 3) };
+        report.estructura = { visor: await this.airViewerCode(creds), avisos: acc.warnings, columnas: headers, conLink: acc.invoices.filter((r) => r._links?.length).length, ejemploLinks: (acc.invoices.find((r) => r._links?.length)?._links ?? []).map((l) => l.href.replace(/[?#].*$/, "")).slice(0, 3) };
         for (const r of acc.invoices.filter((x) => x._links?.length).slice(0, PER_PROVIDER_DOCS)) {
           const href = (r._links ?? [])[0].href;
           cands.push({ kind: "factura", link: null, label: `muestra ${headers.slice(0, 3).map((h) => String(r[h] ?? "")).join(" ")}`.slice(0, 80), fetch: async () => toBuffer(await this.air.getDocument(creds, href)) });
